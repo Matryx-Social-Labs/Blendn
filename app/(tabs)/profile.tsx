@@ -218,6 +218,15 @@ export default function Profile() {
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity 
+          style={[styles.actionItem, { backgroundColor: '#f0f8ff' }]} 
+          onPress={() => router.push('/test-features' as any)}
+        >
+          <Text style={styles.actionIcon}>🧪</Text>
+          <Text style={[styles.actionText, { color: '#FF6B6B' }]}>Test Features</Text>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.actionItem} onPress={() => Alert.alert('Coming Soon!', 'Settings feature will be available soon!')}>
           <Text style={styles.actionIcon}>⚙️</Text>
           <Text style={styles.actionText}>Settings</Text>
