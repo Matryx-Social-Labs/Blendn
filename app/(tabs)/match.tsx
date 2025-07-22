@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
+// Remove expo-linear-gradient import - using native solution instead
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -168,10 +168,7 @@ export default function Match() {
             resizeMode="cover"
           />
           
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
-            style={styles.gradient}
-          />
+          <View style={styles.gradient} />
           
           <View style={styles.profileInfo}>
             <View style={styles.nameSection}>
@@ -381,6 +378,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '50%',
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   profileInfo: {
     position: 'absolute',
