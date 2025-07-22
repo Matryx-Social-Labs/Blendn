@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.matrixsociallabs.blendn",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "GIDClientID": "438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com"
       }
     },
     "android": {
@@ -20,7 +21,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.matrixsociallabs.blendn"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +38,12 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f"
         }
       ]
     ],
