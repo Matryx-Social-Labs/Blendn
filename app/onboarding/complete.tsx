@@ -1,4 +1,4 @@
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
@@ -14,6 +14,12 @@ import { supabase } from '../../lib/supabase'
 export default function Complete() {
   const [loading, setLoading] = useState(false)
   const [animationStep, setAnimationStep] = useState(0)
+  const params = useLocalSearchParams()
+
+  // Extract photo URLs from route params
+  const photoUrls = params.photoUrls 
+    ? JSON.parse(params.photoUrls as string) 
+    : []
 
   useEffect(() => {
     // Simple animation sequence
@@ -42,8 +48,8 @@ export default function Complete() {
         .from('profiles')
         .update({ 
           onboarded: true,
-          name: 'Demo User', // In real app, this would come from the onboarding form data
-          age: 25, // In real app, this would come from the onboarding form data
+          name: 'Demo User', // TODO: Collect from basic-info step
+          age: 25, // TODO: Collect from basic-info step
         })
         .eq('id', user.id)
 
@@ -53,24 +59,28 @@ export default function Complete() {
         return
       }
 
-      // Update the user_profile for matching system
+      // Update the user_profile for matching system with photos
       const { error: userProfileError } = await supabase
         .from('user_profiles')
         .update({ 
-          display_name: 'Demo User', // In real app, this would come from form data
-          bio: 'Just joined Blendn!', // In real app, this would come from form data
-          age: 25, // In real app, this would come from form data
-          interests: ['🎵 Music', '🎬 Movies'], // In real app, this would come from form data
+          display_name: 'Demo User', // TODO: Collect from basic-info step
+          bio: 'Just joined Blendn!', // TODO: Collect from basic-info step
+          age: 25, // TODO: Collect from basic-info step
+          interests: ['🎵 Music', '🎬 Movies'], // TODO: Collect from interests step
+          profile_photos: photoUrls, // Save the uploaded photo URLs
         })
         .eq('user_id', user.id)
 
       if (userProfileError) {
         console.error('User profile update error:', userProfileError)
         // Don't fail the onboarding if this fails, just log it
+        console.log('Photo URLs that failed to save:', photoUrls)
+      } else {
+        console.log('Successfully saved profile photos:', photoUrls)
       }
 
       // Navigate to main app
-              router.replace('/(tabs)/events' as any)
+      router.replace('/(tabs)/events' as any)
       
     } catch (error) {
       console.error('Onboarding completion error:', error)
@@ -109,6 +119,17 @@ export default function Complete() {
             <View style={styles.feature}>
               <Text style={styles.checkmark}>✅</Text>
               <Text style={styles.featureText}>Interests selected</Text>
+            </View>
+            <View style={styles.feature}>
+              <Text style={styles.checkmark}>
+                {photoUrls.length > 0 ? '✅' : '⏳'}
+              </Text>
+              <Text style={styles.featureText}>
+                {photoUrls.length > 0 
+                  ? `${photoUrls.length} photo${photoUrls.length !== 1 ? 's' : ''} added`
+                  : 'Photos (optional)'
+                }
+              </Text>
             </View>
             <View style={styles.feature}>
               <Text style={styles.checkmark}>✅</Text>

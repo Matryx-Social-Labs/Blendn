@@ -1,0 +1,599 @@
+import { Ionicons } from '@expo/vector-icons'
+import { router } from 'expo-router'
+import React, { useEffect, useState } from 'react'
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native'
+import { PhotoUploadResult, selectAndUploadPhoto } from '../lib/photoUtils'
+import { supabase } from '../lib/supabase'
+
+interface UserProfile {
+  id: string
+  name?: string
+  age?: number
+  location?: string
+  phone?: string
+  interests?: string[]
+  display_name?: string
+  bio?: string
+  profile_photos?: string[]
+}
+
+export default function EditProfile() {
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  // Form state
+  const [name, setName] = useState('')
+  const [age, setAge] = useState('')
+  const [location, setLocation] = useState('')
+  const [phone, setPhone] = useState('')
+  const [bio, setBio] = useState('')
+  const [interests, setInterests] = useState<string[]>([])
+  const [photos, setPhotos] = useState<string[]>([])
+
+  useEffect(() => {
+    loadProfile()
+  }, [])
+
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        Alert.alert('Error', 'Please sign in to edit your profile')
+        router.back()
+        return
+      }
+
+      setCurrentUser(user)
+
+      // Load profiles data
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error loading profile:', profileError)
+      }
+
+      // Load user_profiles data
+      const { data: userProfileData, error: userProfileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (userProfileError && userProfileError.code !== 'PGRST116') {
+        console.error('Error loading user profile:', userProfileError)
+      }
+
+      // Combine data
+      const combinedProfile = {
+        id: user.id,
+        name: profileData?.name || user.user_metadata?.full_name || '',
+        age: profileData?.age || userProfileData?.age || '',
+        location: profileData?.location || '',
+        phone: profileData?.phone || '',
+        interests: profileData?.interests || userProfileData?.interests || [],
+        display_name: userProfileData?.display_name || '',
+        bio: userProfileData?.bio || '',
+        profile_photos: userProfileData?.profile_photos || []
+      }
+
+      setProfile(combinedProfile)
+
+      // Set form values
+      setName(combinedProfile.name || '')
+      setAge(combinedProfile.age?.toString() || '')
+      setLocation(combinedProfile.location || '')
+      setPhone(combinedProfile.phone || '')
+      setBio(combinedProfile.bio || '')
+      setInterests(combinedProfile.interests || [])
+      setPhotos(combinedProfile.profile_photos || [])
+
+    } catch (error) {
+      console.error('Error loading profile:', error)
+      Alert.alert('Error', 'Failed to load profile data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddPhoto = async () => {
+    if (photos.length >= 6) {
+      Alert.alert('Photo Limit', 'You can only have up to 6 photos')
+      return
+    }
+
+    if (!currentUser) return
+
+    setUploading(true)
+    try {
+      const result: PhotoUploadResult = await selectAndUploadPhoto(currentUser.id)
+
+      if (result.success && result.url) {
+        setPhotos(prev => [...prev, result.url!])
+      } else if (result.error && result.error !== 'User cancelled') {
+        Alert.alert('Upload Failed', result.error)
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error)
+      Alert.alert('Error', 'Failed to upload photo')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemovePhoto = (index: number) => {
+    Alert.alert(
+      'Remove Photo',
+      'Are you sure you want to remove this photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setPhotos(prev => prev.filter((_, i) => i !== index))
+          }
+        }
+      ]
+    )
+  }
+
+  const handleAddInterest = () => {
+    Alert.prompt(
+      'Add Interest',
+      'Enter a new interest:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Add',
+          onPress: (value) => {
+            if (value && value.trim()) {
+              const newInterest = value.trim()
+              if (!interests.includes(newInterest)) {
+                setInterests(prev => [...prev, newInterest])
+              }
+            }
+          }
+        }
+      ],
+      'plain-text'
+    )
+  }
+
+  const handleRemoveInterest = (interest: string) => {
+    setInterests(prev => prev.filter(i => i !== interest))
+  }
+
+  const handleSave = async () => {
+    if (!currentUser) return
+
+    setSaving(true)
+    try {
+      // Validate required fields
+      if (!name.trim()) {
+        Alert.alert('Validation Error', 'Name is required')
+        setSaving(false)
+        return
+      }
+
+      const ageNum = parseInt(age)
+      if (age && (isNaN(ageNum) || ageNum < 18 || ageNum > 120)) {
+        Alert.alert('Validation Error', 'Please enter a valid age (18-120)')
+        setSaving(false)
+        return
+      }
+
+      // Update profiles table
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          name: name.trim(),
+          age: ageNum || null,
+          location: location.trim() || null,
+          phone: phone.trim() || null,
+          interests: interests,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id)
+
+      if (profileError) {
+        console.error('Error updating profile:', profileError)
+        throw profileError
+      }
+
+      // Update user_profiles table
+      const { error: userProfileError } = await supabase
+        .from('user_profiles')
+        .update({
+          display_name: name.trim(),
+          bio: bio.trim() || null,
+          age: ageNum || null,
+          interests: interests,
+          profile_photos: photos,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', currentUser.id)
+
+      if (userProfileError) {
+        console.error('Error updating user profile:', userProfileError)
+        throw userProfileError
+      }
+
+      Alert.alert(
+        'Profile Updated',
+        'Your profile has been successfully updated!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back()
+          }
+        ]
+      )
+
+    } catch (error) {
+      console.error('Error saving profile:', error)
+      Alert.alert('Error', 'Failed to save profile. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const renderPhotoGrid = () => (
+    <View style={styles.photoGrid}>
+      {Array.from({ length: 6 }).map((_, index) => {
+        const photo = photos[index]
+        return (
+          <TouchableOpacity
+            key={index}
+            style={styles.photoSlot}
+            onPress={() => photo ? handleRemovePhoto(index) : handleAddPhoto()}
+            disabled={uploading}
+          >
+            {photo ? (
+              <>
+                <Image source={{ uri: photo }} style={styles.photo} />
+                <View style={styles.removePhotoOverlay}>
+                  <Ionicons name="close-circle" size={24} color="#fff" />
+                </View>
+              </>
+            ) : (
+              <View style={styles.addPhotoContainer}>
+                {uploading && index === photos.length ? (
+                  <ActivityIndicator size="small" color="#FF6B6B" />
+                ) : (
+                  <Ionicons name="add" size={24} color="#ccc" />
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+        )
+      })}
+    </View>
+  )
+
+  const renderInterests = () => (
+    <View style={styles.interestsContainer}>
+      {interests.map((interest, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.interestTag}
+          onPress={() => handleRemoveInterest(interest)}
+        >
+          <Text style={styles.interestText}>{interest}</Text>
+          <Ionicons name="close" size={16} color="#666" />
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity
+        style={styles.addInterestButton}
+        onPress={handleAddInterest}
+      >
+        <Ionicons name="add" size={16} color="#FF6B6B" />
+        <Text style={styles.addInterestText}>Add Interest</Text>
+      </TouchableOpacity>
+    </View>
+  )
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B6B" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <TouchableOpacity
+            onPress={handleSave}
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Photos</Text>
+            <Text style={styles.sectionSubtitle}>Add up to 6 photos</Text>
+            {renderPhotoGrid()}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Basic Information</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your name"
+                maxLength={50}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Age</Text>
+              <TextInput
+                style={styles.input}
+                value={age}
+                onChangeText={setAge}
+                placeholder="Enter your age"
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Location</Text>
+              <TextInput
+                style={styles.input}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="City, State"
+                maxLength={100}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Phone number"
+                keyboardType="phone-pad"
+                maxLength={20}
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About You</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Bio</Text>
+              <TextInput
+                style={[styles.input, styles.bioInput]}
+                value={bio}
+                onChangeText={setBio}
+                placeholder="Tell people about yourself..."
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+              />
+              <Text style={styles.characterCount}>{bio.length}/500</Text>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Interests</Text>
+            <Text style={styles.sectionSubtitle}>What are you into?</Text>
+            {renderInterests()}
+          </View>
+
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  saveButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  section: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  photoSlot: {
+    width: '30%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  photo: {
+    width: '100%',
+    height: '100%',
+  },
+  removePhotoOverlay: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+  },
+  addPhotoContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+  },
+  bioInput: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  characterCount: {
+    textAlign: 'right',
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  interestsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  interestTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  interestText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  addInterestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0F0',
+    borderColor: '#FF6B6B',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  addInterestText: {
+    fontSize: 14,
+    color: '#FF6B6B',
+  },
+  bottomPadding: {
+    height: 32,
+  },
+}) 

@@ -78,9 +78,16 @@ export default function Chat() {
   }
 
   const loadPersonalChats = async (userId: string) => {
-    // TODO: Implement get_user_private_chats RPC function
-    // For now, showing empty state
-    setPersonalChats([])
+    const { data, error } = await supabase.rpc('get_user_private_conversations', {
+      p_user_id: userId
+    })
+
+    if (error) {
+      console.error('Error loading private chats:', error)
+      return
+    }
+
+    setPersonalChats(data || [])
   }
 
   const onRefresh = async () => {
@@ -194,8 +201,14 @@ export default function Chat() {
     <TouchableOpacity
       style={styles.chatItem}
       onPress={() => {
-        // TODO: Navigate to private chat
-        Alert.alert('Coming Soon!', 'Private messaging will be available soon!')
+        router.push({
+          pathname: '/private-chat/[conversationId]' as any,
+          params: {
+            conversationId: item.conversation_id,
+            otherUserName: item.other_user_name,
+            otherUserId: item.other_user_id
+          }
+        })
       }}
     >
       <View style={styles.chatIcon}>

@@ -2,7 +2,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import type { User } from '@supabase/supabase-js'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { supabase } from '../../lib/supabase'
 
 interface UserProfile {
@@ -12,6 +12,7 @@ interface UserProfile {
   location: string
   interests: string[]
   onboarded: boolean
+  profile_photos?: string[]
 }
 
 export default function Profile() {
@@ -29,16 +30,20 @@ export default function Profile() {
       setUser(user)
 
       if (user) {
-        const { data: profileData, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
+        // Fetch both profiles table and user_profiles table for complete data
+        const [{ data: profileData }, { data: userProfileData }] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
+          supabase.from('user_profiles').select('profile_photos, display_name, bio, interests').eq('user_id', user.id).single()
+        ])
 
-        if (error) {
-          console.error('Error fetching profile:', error)
-        } else {
-          setProfile(profileData)
+        if (profileData) {
+          setProfile({
+            ...profileData,
+            profile_photos: userProfileData?.profile_photos || [],
+            // Use display_name from user_profiles if available, fall back to name from profiles
+            name: userProfileData?.display_name || profileData.name,
+            interests: userProfileData?.interests || []
+          })
         }
       }
     } catch (error) {
@@ -80,7 +85,36 @@ export default function Profile() {
   }
 
   const handleEditProfile = () => {
-    Alert.alert('Coming Soon!', 'Profile editing feature will be available soon!')
+    router.push('/edit-profile' as any)
+  }
+
+  const renderAvatar = () => {
+    const hasPhotos = profile?.profile_photos && profile.profile_photos.length > 0
+    const photoUrl = hasPhotos ? profile.profile_photos![0] : null
+    const initials = (profile?.name || user?.user_metadata?.full_name || user?.email || 'U')[0].toUpperCase()
+
+    if (photoUrl) {
+      return (
+        <View style={styles.avatarContainer}>
+          <Image 
+            source={{ uri: photoUrl }} 
+            style={styles.avatarImage}
+            onError={() => {
+              // If image fails to load, we'll fall back to text avatar
+              console.log('Profile photo failed to load:', photoUrl)
+            }}
+          />
+        </View>
+      )
+    }
+
+    return (
+      <View style={styles.avatarContainer}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
+      </View>
+    )
   }
 
   if (loading) {
@@ -100,19 +134,18 @@ export default function Profile() {
 
       {user && (
         <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}
-              </Text>
-            </View>
-          </View>
+          {renderAvatar()}
 
           <View style={styles.userInfo}>
             <Text style={styles.userName}>
               {profile?.name || user.user_metadata?.full_name || 'New User'}
             </Text>
             <Text style={styles.userEmail}>{user.email}</Text>
+            {profile?.profile_photos && profile.profile_photos.length > 0 && (
+              <Text style={styles.photoCount}>
+                {profile.profile_photos.length} photo{profile.profile_photos.length !== 1 ? 's' : ''}
+              </Text>
+            )}
           </View>
 
           <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
@@ -146,6 +179,16 @@ export default function Profile() {
           </View>
 
           <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Photos</Text>
+            <Text style={styles.detailValue}>
+              {profile.profile_photos && profile.profile_photos.length > 0 
+                ? `${profile.profile_photos.length} uploaded`
+                : 'None uploaded'
+              }
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
             <Text style={styles.detailLabel}>Profile Status</Text>
             <Text style={[
               styles.detailValue,
@@ -163,6 +206,15 @@ export default function Profile() {
         <TouchableOpacity style={styles.actionItem} onPress={handleEditProfile}>
           <Text style={styles.actionIcon}>✏️</Text>
           <Text style={styles.actionText}>Edit Profile</Text>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionItem} 
+          onPress={() => router.push('/blocked-users' as any)}
+        >
+          <Text style={styles.actionIcon}>🛡️</Text>
+          <Text style={styles.actionText}>Blocked Users</Text>
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
 
@@ -249,6 +301,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
   avatarText: {
     fontSize: 32,
     fontWeight: 'bold',
@@ -267,6 +324,12 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 16,
     color: '#666',
+    marginBottom: 4,
+  },
+  photoCount: {
+    fontSize: 14,
+    color: '#FF6B6B',
+    fontWeight: '500',
   },
   editButton: {
     backgroundColor: '#FF6B6B',

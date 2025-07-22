@@ -13,6 +13,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
+import { NotificationHelpers } from '../../lib/notifications'
+import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { supabase } from '../../lib/supabase'
 
 const { width, height } = Dimensions.get('window')
@@ -78,6 +80,38 @@ export default function Match() {
     }
   }
 
+  const startPrivateConversation = async (candidate: UserProfile) => {
+    try {
+      const { data, error } = await supabase.rpc('get_or_create_private_conversation', {
+        p_user1_id: currentUser.id,
+        p_user2_id: candidate.user_id
+      })
+
+      if (error) {
+        console.error('Error creating conversation:', error)
+        Alert.alert('Error', 'Failed to start conversation')
+        return
+      }
+
+      const result = data[0]
+      if (result.success) {
+        router.push({
+          pathname: '/private-chat/[conversationId]' as any,
+          params: {
+            conversationId: result.conversation_id,
+            otherUserName: candidate.name,
+            otherUserId: candidate.user_id
+          }
+        })
+      } else {
+        Alert.alert('Error', result.message)
+      }
+    } catch (error) {
+      console.error('Error starting conversation:', error)
+      Alert.alert('Error', 'Something went wrong')
+    }
+  }
+
   const handleSwipe = async (isLike: boolean) => {
     if (!currentUser || currentIndex >= candidates.length) return
 
@@ -101,6 +135,16 @@ export default function Match() {
       
       if (result.success) {
         if (result.is_match) {
+          // Send match notification to the other user
+          try {
+            await NotificationHelpers.matchNotification(
+              'Someone', // We don't have current user's name here, could be improved
+              currentCandidate.user_id
+            );
+          } catch (error) {
+            console.error('Failed to send match notification:', error);
+          }
+
           Alert.alert(
             '🎉 It\'s a Match!',
             `You and ${currentCandidate.name} liked each other! Start chatting now.`,
@@ -108,9 +152,8 @@ export default function Match() {
               { text: 'Keep Swiping', style: 'cancel' },
               { 
                 text: 'Start Chat', 
-                onPress: () => {
-                  // TODO: Navigate to private chat with this user
-                  Alert.alert('Coming Soon!', 'Private messaging will be available soon!')
+                onPress: async () => {
+                  await startPrivateConversation(currentCandidate)
                 }
               }
             ]
@@ -216,6 +259,8 @@ export default function Match() {
   const renderActionButtons = () => {
     if (currentIndex >= candidates.length) return null
 
+    const currentCandidate = candidates[currentIndex]
+
     return (
       <View style={styles.actionsContainer}>
         <TouchableOpacity
@@ -224,6 +269,25 @@ export default function Match() {
           disabled={swipeLoading}
         >
           <Ionicons name="close" size={32} color="#FF6B6B" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.actionButton, styles.safetyButton]}
+          onPress={() => showUserSafetyActions(
+            currentCandidate.name, 
+            currentCandidate.user_id,
+            () => {
+              // On block, move to next candidate
+              if (currentIndex < candidates.length - 1) {
+                setCurrentIndex(currentIndex + 1)
+              } else {
+                loadCandidates(currentUser.id)
+              }
+            }
+          )}
+          disabled={swipeLoading}
+        >
+          <Ionicons name="shield-outline" size={24} color="#666" />
         </TouchableOpacity>
         
         <TouchableOpacity
@@ -481,6 +545,14 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
+  },
+  safetyButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
   },
   likeButton: {
     backgroundColor: '#fff',

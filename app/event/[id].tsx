@@ -1,5 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import * as Location from 'expo-location';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -12,16 +13,9 @@ import {
     Text,
     TouchableOpacity,
     View
-} from 'react-native'
-import { supabase } from '../../lib/supabase'
-
-// Conditional import for expo-location
-let Location: any = null
-try {
-  Location = require('expo-location')
-} catch (error) {
-  console.log('ExpoLocation not available, using fallback')
-}
+} from 'react-native';
+import { NotificationHelpers } from '../../lib/notifications';
+import { supabase } from '../../lib/supabase';
 
 interface EventDetail {
   id: string
@@ -283,31 +277,31 @@ export default function EventDetail() {
         if (data.success) {
           Alert.alert(
             'Check-in Successful! 🎉',
-            `${data.message}\n\nYou are ${Math.round(data.distance_meters)}m from ${data.venue_name}`,
+            `Welcome to ${event?.title || 'this event'}! You can now chat with other attendees and start matching.`,
             [
-              { 
-                text: 'Join Group Chat', 
-                onPress: () => {
-                  if (data.chat_info && data.chat_info.success) {
-                    router.push({
-                      pathname: '/chat/[id]' as any,
-                      params: { 
-                        id: data.chat_info.chat_room_id,
-                        roomName: data.chat_info.room_name,
-                        eventTitle: event?.title || 'Event Chat'
-                      }
-                    })
-                  } else {
-                    Alert.alert('Coming Soon!', 'Group chat will be available soon!')
-                  }
-                }
+              {
+                text: 'Start Matching',
+                onPress: () => router.push('/(tabs)/match' as any)
               },
               {
-                text: 'Stay Here',
-                style: 'cancel'
-              }
+                text: 'Join Chat',
+                onPress: () => router.push('/(tabs)/chat' as any)
+              },
+              { text: 'OK', style: 'default' }
             ]
           )
+
+          // Send check-in success notification to the user
+          try {
+            await NotificationHelpers.checkInNotification(
+              event?.title || 'Event',
+              user.id
+            )
+          } catch (notificationError) {
+            console.error('Failed to send check-in notification:', notificationError)
+            // Don't fail check-in if notification fails
+          }
+
           // Refresh check-in status
           await checkUserCheckInStatus()
         } else {
