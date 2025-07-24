@@ -15,13 +15,16 @@ export default function RootLayout() {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('📱 [ROOT_LAYOUT] Initial session loaded:', session?.user?.id || 'none');
       setSession(session);
+      // No caching needed - using direct auth calls as per official docs
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
+      console.log('📱 [ROOT_LAYOUT] Auth state changed:', event, session?.user?.id || 'none');
       setSession(session);
+      // No caching needed - using direct auth calls as per official docs
       
       // Handle push notifications based on auth state
       if (event === 'SIGNED_IN' && session) {

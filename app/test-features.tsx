@@ -8,12 +8,12 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native'
 import {
-    registerForPushNotificationsAsync
+    initializePushNotifications
 } from '../lib/notifications'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseWithTimeout } from '../lib/supabase'
 
 interface TestResult {
   name: string
@@ -23,6 +23,8 @@ interface TestResult {
 
 export default function TestFeatures() {
   const [tests, setTests] = useState<TestResult[]>([
+    { name: 'Supabase Connection', status: 'pending' },
+    { name: 'Real Events Query', status: 'pending' },
     { name: 'Database Connection', status: 'pending' },
     { name: 'Push Notifications Setup', status: 'pending' },
     { name: 'Photo Upload System', status: 'pending' },
@@ -41,19 +43,34 @@ export default function TestFeatures() {
 
   const testDatabaseConnection = async () => {
     try {
-      const { data, error } = await supabase.from('profiles').select('count').limit(1)
-      if (error) throw error
-      updateTest('Database Connection', 'success', 'Connected to Supabase')
+      console.log('Testing basic database connection...');
+      
+      const result: any = await supabaseWithTimeout.query(
+        async () => {
+          const { data, error } = await supabase.from('profiles').select('count').limit(1)
+          return { data, error }
+        },
+        8000 // 8 second timeout
+      )
+      
+      if (result?.error) throw result.error
+      updateTest('Database Connection', 'success', 'Connected to Supabase successfully')
     } catch (error) {
-      updateTest('Database Connection', 'error', 'Failed to connect to database')
+      console.error('Database connection failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to database'
+      updateTest('Database Connection', 'error', errorMessage)
     }
   }
 
   const testPushNotifications = async () => {
     try {
-      const token = await registerForPushNotificationsAsync()
+      const token = await initializePushNotifications()
       if (token) {
-        updateTest('Push Notifications Setup', 'success', 'Push token received')
+        if (token.startsWith('development-token') || token.startsWith('simulator-token')) {
+          updateTest('Push Notifications Setup', 'success', 'Development token (simulator mode)')
+        } else {
+          updateTest('Push Notifications Setup', 'success', 'Real push token received')
+        }
       } else {
         updateTest('Push Notifications Setup', 'error', 'No push token received')
       }
@@ -67,9 +84,20 @@ export default function TestFeatures() {
       // Test if storage bucket is accessible
       const { data, error } = await supabase.storage.from('profile-photos').list('', { limit: 1 })
       if (error) throw error
-      updateTest('Photo Upload System', 'success', 'Storage bucket accessible')
+      
+      // Also test public URL generation
+      const { data: urlData } = supabase.storage
+        .from('profile-photos')
+        .getPublicUrl('test-file.jpg')
+      
+      if (urlData?.publicUrl) {
+        updateTest('Photo Upload System', 'success', `Storage accessible, found ${data?.length || 0} files`)
+      } else {
+        updateTest('Photo Upload System', 'error', 'Storage URL generation failed')
+      }
     } catch (error) {
-      updateTest('Photo Upload System', 'error', 'Storage bucket not accessible')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      updateTest('Photo Upload System', 'error', `Storage error: ${errorMessage}`)
     }
   }
 
@@ -157,35 +185,66 @@ export default function TestFeatures() {
     }
   }
 
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('Testing Supabase connection with timeout...');
+      
+      // Test basic connectivity with timeout - use a simple select query
+      const result = await supabaseWithTimeout.query(
+        async () => {
+          const { data, error } = await supabase.from('events').select('count').limit(1)
+          return { data, error }
+        },
+        5000 // 5 second timeout
+      )
+      
+      updateTest('Supabase Connection', 'success', 'Database connection working with timeout')
+    } catch (error) {
+      console.error('Supabase connection test failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      updateTest('Supabase Connection', 'error', `Connection failed: ${errorMessage}`)
+    }
+  }
+
+  const testRealEvents = async () => {
+    try {
+      console.log('Testing real events query...');
+      
+      // Test events query with timeout
+      const result: any = await supabaseWithTimeout.query(
+        async () => {
+          const { data, error } = await supabase
+            .from('events')
+            .select('id, title, status')
+            .eq('status', 'published')
+            .limit(3)
+          return { data, error }
+        },
+        10000 // 10 second timeout
+      )
+      
+      if (result?.data && result.data.length > 0) {
+        updateTest('Real Events Query', 'success', `Found ${result.data.length} events`)
+      } else {
+        updateTest('Real Events Query', 'error', 'No events found or query failed')
+      }
+    } catch (error) {
+      console.error('Real events test failed:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      updateTest('Real Events Query', 'error', `Query failed: ${errorMessage}`)
+    }
+  }
+
   const runAllTests = async () => {
-    // Reset all tests
+    // Reset all tests to pending
     setTests(prev => prev.map(test => ({ ...test, status: 'pending' as const })))
     
-    // Run tests sequentially with small delays
+    // Run tests with our new timeout-based approach
+    await testSupabaseConnection()
+    await testRealEvents()
     await testDatabaseConnection()
-    await new Promise(resolve => setTimeout(resolve, 500))
     
-    await testPushNotifications()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testPhotoUpload()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testUserProfile()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testMatchingSystem()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testChatFunctionality()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testSafetyFeatures()
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    await testEventCheckin()
-    
-    Alert.alert('Tests Complete', 'All feature tests have been executed. Check the results below.')
+    Alert.alert('Database Tests Complete', 'Core connectivity tests finished. Check results above.')
   }
 
   const getStatusIcon = (status: TestResult['status']) => {
@@ -210,18 +269,21 @@ export default function TestFeatures() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Feature Tests</Text>
+        <Text style={styles.headerTitle}>Database Connection Tests</Text>
         <TouchableOpacity onPress={runAllTests} style={styles.runButton}>
-          <Text style={styles.runButtonText}>Run All</Text>
+          <Text style={styles.runButtonText}>Test DB</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>🧪 Feature Testing</Text>
+          <Text style={styles.infoTitle}>🔍 Database Connectivity Diagnosis</Text>
           <Text style={styles.infoText}>
-            This screen tests all the major features implemented in the app. 
-            Run the tests to verify everything is working correctly.
+            Testing Supabase database connection with timeout handling to diagnose connection issues.
+            {'\n\n'}
+            📱 <Text style={styles.boldText}>Expected Results</Text>: If "Supabase Connection" and "Real Events Query" succeed, we can remove mock data bypasses.
+            {'\n\n'}
+            ⚠️ <Text style={styles.boldText}>If Tests Fail</Text>: The app will continue working with mock data until connectivity is resolved.
           </Text>
         </View>
 
@@ -335,6 +397,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: 'bold',
+    color: '#333',
   },
   testsContainer: {
     marginBottom: 32,

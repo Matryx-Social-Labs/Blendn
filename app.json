@@ -53,8 +53,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "blendn-dating-app"
+        "projectId": "25c4d3a8-0ffd-494f-931a-e286c649ce96"
       }
-    }
+    },
+    "owner": "hemanthr04"
   }
 }

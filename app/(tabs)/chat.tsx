@@ -2,16 +2,16 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { AuthHelper, supabase } from '../../lib/supabase'
 
 interface GroupChat {
   chat_room_id: string
@@ -48,46 +48,171 @@ export default function Chat() {
 
   const loadChats = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      if (activeTab === 'group') {
-        await loadGroupChats(user.id)
+      console.log('🔍 [CHAT] Starting loadChats...');
+      console.log('🔍 [CHAT] Supabase client initialized:', !!supabase);
+      
+      console.log('🔍 [CHAT] Getting authenticated user...');
+      const authStartTime = Date.now();
+      
+      // Try cached session first, fallback to network call if needed
+      let user = AuthHelper.getCurrentUser()
+      
+      if (user) {
+        console.log('✅ [CHAT] Using cached user session:', user.id);
+        const authEndTime = Date.now();
+        console.log(`🔍 [CHAT] Auth query completed in ${authEndTime - authStartTime}ms (cached)`);
       } else {
-        await loadPersonalChats(user.id)
+        console.log('⚠️ [CHAT] No cached session, falling back to network call...');
+        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
+        const authEndTime = Date.now();
+        console.log(`🔍 [CHAT] Auth query completed in ${authEndTime - authStartTime}ms (network)`);
+        
+        if (error) {
+          console.error('❌ [CHAT] Auth error:', error);
+          Alert.alert('Error', 'Unable to load chats. Please restart the app.')
+          return
+        }
+        
+        user = networkUser
       }
+      
+      if (!user) {
+        console.error('❌ [CHAT] No authenticated user found');
+        Alert.alert('Error', 'Please sign in to access chats')
+        return
+      }
+
+      console.log('✅ [CHAT] Authenticated user found:', user.id);
+      console.log('🔍 [CHAT] Loading both group and private chats...');
+      
+      // Load both types of chats concurrently
+      const loadStartTime = Date.now();
+      await Promise.all([
+        loadGroupChats(user.id),
+        loadPersonalChats(user.id)
+      ])
+      const loadEndTime = Date.now();
+      console.log(`🔍 [CHAT] Both chat types loaded in ${loadEndTime - loadStartTime}ms`);
+      
     } catch (error) {
-      console.error('Error loading chats:', error)
+      console.error('💥 [CHAT] Unexpected error in loadChats:', error);
+      console.error('💥 [CHAT] Error type:', typeof error);
+      console.error('💥 [CHAT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       Alert.alert('Error', 'Failed to load chats')
     } finally {
+      console.log('🏁 [CHAT] loadChats completed');
       setLoading(false)
     }
   }
 
   const loadGroupChats = async (userId: string) => {
-    const { data, error } = await supabase.rpc('get_user_event_chats', {
-      p_user_id: userId
-    })
+    try {
+      console.log('🔍 [GROUP_CHAT] Starting loadGroupChats...');
+      console.log('🔍 [GROUP_CHAT] User ID:', userId);
+      console.log('🔍 [GROUP_CHAT] Supabase client initialized:', !!supabase);
+      
+      console.log('🔍 [GROUP_CHAT] Calling RPC: get_user_event_chats');
+      console.log('🔍 [GROUP_CHAT] Parameters:', { p_user_id: userId });
+      
+      const rpcStartTime = Date.now();
+      
+      // Add timeout wrapper to prevent infinite hanging
+      const rpcPromise = supabase.rpc('get_user_event_chats', {
+        p_user_id: userId
+      })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Group chats RPC timeout after 8000ms')), 8000)
+      )
+      
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
 
-    if (error) {
-      console.error('Error loading group chats:', error)
-      return
+      const rpcEndTime = Date.now();
+      console.log(`🔍 [GROUP_CHAT] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
+
+      if (error) {
+        console.error('❌ [GROUP_CHAT] RPC error:', error);
+        console.error('❌ [GROUP_CHAT] Error code:', error.code);
+        console.error('❌ [GROUP_CHAT] Error message:', error.message);
+        console.error('❌ [GROUP_CHAT] Error details:', error.details);
+        console.log('🔄 [GROUP_CHAT] Setting empty group chats array');
+        setGroupChats([]);
+        return
+      }
+
+      console.log('✅ [GROUP_CHAT] SUCCESS: get_user_event_chats worked!');
+      console.log('✅ [GROUP_CHAT] Raw group chats data:', data);
+      console.log('✅ [GROUP_CHAT] Data type:', typeof data);
+      console.log('✅ [GROUP_CHAT] Group chats count:', data?.length || 0);
+      
+      if (data && data.length > 0) {
+        console.log('✅ [GROUP_CHAT] First group chat sample:', JSON.stringify(data[0], null, 2));
+      }
+
+      setGroupChats(data || [])
+      console.log(`✅ [GROUP_CHAT] Successfully loaded ${data?.length || 0} group chats from database`);
+    } catch (error) {
+      console.error('💥 [GROUP_CHAT] Unexpected error:', error);
+      console.error('💥 [GROUP_CHAT] Error type:', typeof error);
+      console.error('💥 [GROUP_CHAT] Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.log('🔄 [GROUP_CHAT] Setting empty group chats array due to error');
+      setGroupChats([]);
     }
-
-    setGroupChats(data || [])
   }
 
   const loadPersonalChats = async (userId: string) => {
-    const { data, error } = await supabase.rpc('get_user_private_conversations', {
-      p_user_id: userId
-    })
+    try {
+      console.log('🔍 [PRIVATE_CHAT] Starting loadPersonalChats...');
+      console.log('🔍 [PRIVATE_CHAT] User ID:', userId);
+      console.log('🔍 [PRIVATE_CHAT] Supabase client initialized:', !!supabase);
+      
+      console.log('🔍 [PRIVATE_CHAT] Calling RPC: get_user_private_conversations');
+      console.log('🔍 [PRIVATE_CHAT] Parameters:', { p_user_id: userId });
+      
+      const rpcStartTime = Date.now();
+      
+      // Add timeout wrapper to prevent infinite hanging
+      const rpcPromise = supabase.rpc('get_user_private_conversations', {
+        p_user_id: userId
+      })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Private chats RPC timeout after 8000ms')), 8000)
+      )
+      
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
 
-    if (error) {
-      console.error('Error loading private chats:', error)
-      return
+      const rpcEndTime = Date.now();
+      console.log(`🔍 [PRIVATE_CHAT] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
+
+      if (error) {
+        console.error('❌ [PRIVATE_CHAT] RPC error:', error);
+        console.error('❌ [PRIVATE_CHAT] Error code:', error.code);
+        console.error('❌ [PRIVATE_CHAT] Error message:', error.message);
+        console.error('❌ [PRIVATE_CHAT] Error details:', error.details);
+        console.log('🔄 [PRIVATE_CHAT] Setting empty private chats array');
+        setPersonalChats([]);
+        return
+      }
+
+      console.log('✅ [PRIVATE_CHAT] SUCCESS: get_user_private_conversations worked!');
+      console.log('✅ [PRIVATE_CHAT] Raw private chats data:', data);
+      console.log('✅ [PRIVATE_CHAT] Data type:', typeof data);
+      console.log('✅ [PRIVATE_CHAT] Private chats count:', data?.length || 0);
+      
+      if (data && data.length > 0) {
+        console.log('✅ [PRIVATE_CHAT] First private chat sample:', JSON.stringify(data[0], null, 2));
+      }
+
+      setPersonalChats(data || [])
+      console.log(`✅ [PRIVATE_CHAT] Successfully loaded ${data?.length || 0} private chats from database`);
+    } catch (error) {
+      console.error('💥 [PRIVATE_CHAT] Unexpected error:', error);
+      console.error('💥 [PRIVATE_CHAT] Error type:', typeof error);
+      console.error('💥 [PRIVATE_CHAT] Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.log('🔄 [PRIVATE_CHAT] Setting empty private chats array due to error');
+      setPersonalChats([]);
     }
-
-    setPersonalChats(data || [])
   }
 
   const onRefresh = async () => {

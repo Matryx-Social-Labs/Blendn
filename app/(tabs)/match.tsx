@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-// Remove expo-linear-gradient import - using native solution instead
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -15,7 +14,7 @@ import {
 } from 'react-native'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { supabase } from '../../lib/supabase'
+import { AuthHelper, supabase } from '../../lib/supabase'
 
 const { width, height } = Dimensions.get('window')
 const CARD_HEIGHT = height * 0.7
@@ -45,38 +44,114 @@ export default function Match() {
 
   const loadInitialData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      console.log('🔍 [MATCH_INIT] Starting loadInitialData...');
+      console.log('🔍 [MATCH_INIT] Supabase client initialized:', !!supabase);
+      
+      console.log('🔍 [MATCH_INIT] Getting authenticated user...');
+      const authStartTime = Date.now();
+      
+      // Try cached session first, fallback to network call if needed
+      let user = AuthHelper.getCurrentUser()
+      
+      if (user) {
+        console.log('✅ [MATCH_INIT] Using cached user session:', user.id);
+        const authEndTime = Date.now();
+        console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms (cached)`);
+      } else {
+        console.log('⚠️ [MATCH_INIT] No cached session, falling back to network call...');
+        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
+        const authEndTime = Date.now();
+        console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms (network)`);
+        
+        if (error) {
+          console.error('❌ [MATCH_INIT] Auth error:', error);
+          Alert.alert('Error', 'Unable to load matching data. Please restart the app.')
+          return
+        }
+        
+        user = networkUser
+      }
+      
       if (!user) {
+        console.error('❌ [MATCH_INIT] No authenticated user found');
         Alert.alert('Error', 'Please sign in to continue')
         return
       }
 
+      console.log('✅ [MATCH_INIT] Authenticated user found:', user.id);
+      console.log('✅ [MATCH_INIT] User email:', user.email);
+      
       setCurrentUser(user)
+      console.log('🔍 [MATCH_INIT] Loading swipe candidates...');
       await loadCandidates(user.id)
     } catch (error) {
-      console.error('Error loading initial data:', error)
+      console.error('💥 [MATCH_INIT] Unexpected error:', error);
+      console.error('💥 [MATCH_INIT] Error type:', typeof error);
+      console.error('💥 [MATCH_INIT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       Alert.alert('Error', 'Failed to load matching data')
     } finally {
+      console.log('🏁 [MATCH_INIT] loadInitialData completed');
       setLoading(false)
     }
   }
 
   const loadCandidates = async (userId: string) => {
     try {
-      const { data, error } = await supabase.rpc('get_swipe_candidates', {
+      console.log('🔍 [MATCH] Starting loadCandidates...');
+      console.log('🔍 [MATCH] User ID:', userId);
+      console.log('🔍 [MATCH] Supabase client initialized:', !!supabase);
+      
+      console.log('🔍 [MATCH] Calling RPC: get_swipe_candidates');
+      console.log('🔍 [MATCH] Parameters:', {
+        p_user_id: userId,
+        p_limit: 10
+      });
+      
+      const rpcStartTime = Date.now();
+      
+      // Add timeout wrapper to prevent infinite hanging
+      const rpcPromise = supabase.rpc('get_swipe_candidates', {
         p_user_id: userId,
         p_limit: 10
       })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Match candidates RPC timeout after 8000ms')), 8000)
+      )
+      
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
+
+      const rpcEndTime = Date.now();
+      console.log(`🔍 [MATCH] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
 
       if (error) {
-        console.error('Error loading candidates:', error)
-        throw error
+        console.error('❌ [MATCH] RPC error:', error);
+        console.error('❌ [MATCH] Error code:', error.code);
+        console.error('❌ [MATCH] Error message:', error.message);
+        console.error('❌ [MATCH] Error details:', error.details);
+        console.log('🔄 [MATCH] Setting empty candidates array');
+        setCandidates([]);
+        return
+      }
+
+      console.log('✅ [MATCH] SUCCESS: get_swipe_candidates worked!');
+      console.log('✅ [MATCH] Raw candidates data:', data);
+      console.log('✅ [MATCH] Data type:', typeof data);
+      console.log('✅ [MATCH] Candidates count:', data?.length || 0);
+      
+      if (data && data.length > 0) {
+        console.log('✅ [MATCH] First candidate sample:', JSON.stringify(data[0], null, 2));
       }
 
       setCandidates(data || [])
       setCurrentIndex(0)
+      console.log(`✅ [MATCH] Successfully loaded ${data?.length || 0} candidates from database`);
     } catch (error) {
-      console.error('Failed to load candidates:', error)
+      console.error('💥 [MATCH] Unexpected error:', error);
+      console.error('💥 [MATCH] Error type:', typeof error);
+      console.error('💥 [MATCH] Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.log('🔄 [MATCH] Setting empty candidates array due to error');
+      setCandidates([]);
     }
   }
 

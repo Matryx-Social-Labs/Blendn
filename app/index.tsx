@@ -1,6 +1,10 @@
-import { router } from 'expo-router'
+import {
+  GoogleSignin,
+  GoogleSigninButton,
+  statusCodes,
+} from '@react-native-google-signin/google-signin'
 import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { supabase } from '../lib/supabase'
 
 export default function Index() {
@@ -8,83 +12,97 @@ export default function Index() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
+    // Configure Google Sign In
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID!,
+      iosClientId: '438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com',
+      offlineAccess: true,
+    })
+
     checkAuthStatus()
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      
+      if (event === 'SIGNED_IN' && session) {
+        setIsAuthenticated(true)
+        setLoading(false)
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false)
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const checkAuthStatus = async () => {
     try {
-      console.log('Checking auth status...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        setLoading(false);
-        return;
-      }
-      
-      console.log('Session data:', session?.user?.id ? 'User found' : 'No user');
+      const { data: { session } } = await supabase.auth.getSession()
       
       if (session) {
-        console.log('User authenticated, checking onboarding status...');
-        console.log('User ID:', session.user.id);
-        
-        try {
-          // User is authenticated, now check if they've completed onboarding
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('onboarded')
-            .eq('id', session.user.id)
-            .single()
-
-          console.log('Profile query completed');
-          console.log('Profile data:', profile);
-          console.log('Profile error:', profileError);
-
-          if (profileError) {
-            console.error('Error checking profile:', profileError)
-            // If profile doesn't exist, it will be created by the trigger
-            // Route to onboarding
-            console.log('Redirecting to onboarding (no profile)...');
-            router.replace('/onboarding/welcome' as any)
-          } else {
-            if (profile && profile.onboarded) {
-              // User has completed onboarding, go to main app
-              console.log('User is onboarded, redirecting to main app...');
-              setIsAuthenticated(true)
-              router.replace('/(tabs)/events' as any)
-            } else {
-              // User needs to complete onboarding
-              console.log('User not onboarded, redirecting to onboarding...');
-              router.replace('/onboarding/welcome' as any)
-            }
-          }
-        } catch (profileQueryError) {
-          console.error('Profile query failed:', profileQueryError);
-          console.log('Falling back to onboarding...');
-          router.replace('/onboarding/welcome' as any);
-        }
+        setIsAuthenticated(true)
       } else {
-        // User is not authenticated, stay on login screen
-        console.log('User not authenticated, staying on login screen...');
         setIsAuthenticated(false)
       }
     } catch (error) {
       console.error('Error checking auth status:', error)
+      setIsAuthenticated(false)
     } finally {
-      console.log('Setting loading to false...');
       setLoading(false)
     }
   }
 
-  const handleLoginPress = () => {
-    router.push('/(auth)/google-signin' as any)
+  const handleGoogleSignIn = async () => {
+    try {
+      await GoogleSignin.hasPlayServices()
+      const userInfo = await GoogleSignin.signIn()
+      
+      if (userInfo.data?.idToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: userInfo.data.idToken,
+        })
+        console.log(error, data)
+      } else {
+        throw new Error('no ID token present!')
+      }
+    } catch (error: any) {
+      console.error('Google Sign In Error:', error)
+      
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled the login flow
+        console.log('User cancelled sign in')
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // operation (e.g. sign in) is in progress already
+        console.log('Sign in already in progress')
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // play services not available or outdated
+        console.log('Google Play Services not available')
+      } else {
+        // some other error happened
+        console.log('Other error:', error)
+      }
+    }
   }
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#4285F4" />
         <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    )
+  }
+
+  if (isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Welcome to Blendn!</Text>
+          <Text style={styles.subtitle}>You are successfully authenticated</Text>
+        </View>
       </View>
     )
   }
@@ -97,9 +115,12 @@ export default function Index() {
           Connect with others using secure Google authentication
         </Text>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLoginPress}>
-          <Text style={styles.loginButtonText}>Sign in with Google</Text>
-        </TouchableOpacity>
+        <GoogleSigninButton
+          size={GoogleSigninButton.Size.Wide}
+          color={GoogleSigninButton.Color.Dark}
+          onPress={handleGoogleSignIn}
+          style={styles.googleButton}
+        />
 
         <Text style={styles.footerText}>
           By continuing, you agree to our Terms of Service and Privacy Policy
@@ -129,6 +150,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
@@ -144,25 +166,10 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 22,
   },
-  loginButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+  googleButton: {
+    width: 250,
+    height: 48,
     marginBottom: 30,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
   },
   footerText: {
     fontSize: 12,
