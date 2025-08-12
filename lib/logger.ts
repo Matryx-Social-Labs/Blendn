@@ -39,7 +39,7 @@ export const Logger = {
     baseLog('error', tag, message, details)
   },
   // Journey helper for consistent tagging
-  journey(flow: 'checkin' | 'proximity' | 'auth' | 'events' | 'chat', step: string, details?: Record<string, unknown>) {
+  journey(flow: 'checkin' | 'proximity' | 'auth' | 'events' | 'chat' | 'interest', step: string, details?: Record<string, unknown>) {
     baseLog('info', `🧭 JOURNEY:${flow}`, step, details)
   },
 }

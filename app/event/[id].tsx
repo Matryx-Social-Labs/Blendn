@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
-import { EventChat, EventCheckout, supabase } from '../../lib/supabase';
+import { EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase';
 
 interface EventDetail {
   id: string
@@ -66,12 +66,15 @@ export default function EventDetail() {
   const [checkingIn, setCheckingIn] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   const [proximityStatus, setProximityStatus] = useState<any>(null)
+  const [interestCount, setInterestCount] = useState<number>(0)
+  const [userInterested, setUserInterested] = useState<boolean>(false)
 
   useEffect(() => {
     if (id) {
       Logger.journey('events', 'detail:mount', { eventId: String(id) })
       fetchEventDetails()
       checkUserCheckInStatus()
+      loadInterestInfo()
     }
   }, [id])
 
@@ -96,6 +99,34 @@ export default function EventDetail() {
           (payload) => {
             if (payload.new?.event_id === id || payload.old?.event_id === id) {
               checkUserCheckInStatus()
+            }
+          }
+        )
+        .subscribe()
+    }
+    subscribe()
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [id])
+
+  // Realtime: update interest count and status for this event
+  useEffect(() => {
+    let channel: any
+    const subscribe = async () => {
+      if (!id) return
+      const { data: { user } } = await supabase.auth.getUser()
+      channel = supabase
+        .channel(`event_interests_detail_${id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'event_interests', filter: `event_id=eq.${id}` },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT') setInterestCount(prev => prev + 1)
+            if (payload.eventType === 'DELETE') setInterestCount(prev => Math.max(0, prev - 1))
+            const changedUserId = payload?.new?.user_id || payload?.old?.user_id
+            if (user && changedUserId === user.id) {
+              setUserInterested(payload.eventType === 'INSERT')
             }
           }
         )
@@ -155,6 +186,18 @@ export default function EventDetail() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadInterestInfo = async () => {
+    try {
+      if (!id) return
+      const [count, interested] = await Promise.all([
+        EventInterest.getSingleEventInterestCount(String(id)),
+        EventInterest.isInterested(String(id)),
+      ])
+      setInterestCount(count)
+      setUserInterested(interested)
+    } catch {}
   }
 
   const checkUserCheckInStatus = async () => {
@@ -486,6 +529,7 @@ export default function EventDetail() {
 
   const spotsLeft = event.max_capacity - event.current_capacity
   const isCheckedIn = checkInStatus?.checked_in || false
+  const isEnded = new Date(event.end_time).getTime() < Date.now()
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -647,6 +691,28 @@ export default function EventDetail() {
                   </>
                 )}
               </TouchableOpacity>
+
+              {!isEnded && (
+                <TouchableOpacity 
+                  style={[styles.interestButton, userInterested && styles.interestButtonActive]}
+                  onPress={async () => {
+                    try {
+                      const res = await EventInterest.toggleInterest(String(id))
+                      if (res) {
+                        setUserInterested(res.interested)
+                        setInterestCount(res.count)
+                        Logger.journey('interest', res.interested ? 'detail:markInterested' : 'detail:unmarkInterested', { eventId: String(id) })
+                      } else {
+                        Alert.alert('Error', 'Failed to update interest')
+                      }
+                    } catch {}
+                  }}
+                >
+                  <Text style={[styles.interestButtonText, userInterested && { color: '#C2185B' }]}>
+                    {userInterested ? '♥︎' : '♡'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.directionsButton} onPress={openInMaps}>
                 <Text style={styles.directionsButtonText}>🗺️ Get Directions</Text>
@@ -851,6 +917,21 @@ const styles = StyleSheet.create({
   },
   directionsButtonText: {
     color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  interestButton: {
+    backgroundColor: '#fde7ef',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  interestButtonActive: {
+    backgroundColor: '#f8cfe0',
+  },
+  interestButtonText: {
+    color: '#D81B60',
     fontSize: 16,
     fontWeight: '600',
   },

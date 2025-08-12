@@ -566,3 +566,110 @@ export const EventChat = {
     }
   }
 }
+
+// Event interest helpers: toggle, fetch counts, and fetch user interest set
+export const EventInterest = {
+  async toggleInterest(eventId: string): Promise<{ interested: boolean; count: number } | null> {
+    try {
+      const { data, error } = await supabase.rpc('toggle_event_interest', { p_event_id: eventId })
+      if (error) {
+        console.error('❌ [EVENT_INTEREST] toggle RPC error:', error)
+        return null
+      }
+      const row: any = Array.isArray(data) ? data[0] : data
+      return { interested: !!row?.interested, count: Number(row?.interest_count || 0) }
+    } catch (e) {
+      console.error('💥 [EVENT_INTEREST] toggle exception:', e)
+      return null
+    }
+  },
+
+  async getUserInterestedEventIds(eventIds?: string[]): Promise<Set<string>> {
+    try {
+      const { data: userRes } = await supabase.auth.getUser()
+      const userId = userRes?.user?.id
+      if (!userId) return new Set()
+      let query = supabase.from('event_interests').select('event_id').eq('user_id', userId)
+      if (eventIds && eventIds.length > 0) {
+        query = query.in('event_id', eventIds)
+      }
+      const { data, error } = await query
+      if (error) {
+        console.error('❌ [EVENT_INTEREST] getUserInterestedEventIds error:', error)
+        return new Set()
+      }
+      const set = new Set<string>()
+      ;(data || []).forEach((row: any) => {
+        if (row?.event_id) set.add(String(row.event_id))
+      })
+      return set
+    } catch (e) {
+      console.error('💥 [EVENT_INTEREST] getUserInterestedEventIds exception:', e)
+      return new Set()
+    }
+  },
+
+  async getEventInterestCounts(eventIds: string[]): Promise<Record<string, number>> {
+    try {
+      if (!eventIds || eventIds.length === 0) return {}
+      const { data, error } = await supabase
+        .from('event_interests')
+        .select('event_id')
+        .in('event_id', Array.from(new Set(eventIds)))
+      if (error) {
+        console.error('❌ [EVENT_INTEREST] getEventInterestCounts error:', error)
+        return {}
+      }
+      const counts: Record<string, number> = {}
+      ;(data || []).forEach((row: any) => {
+        const eid = String(row.event_id)
+        counts[eid] = (counts[eid] || 0) + 1
+      })
+      // Ensure all eventIds present (default 0)
+      for (const eid of eventIds) {
+        if (!counts[eid]) counts[eid] = 0
+      }
+      return counts
+    } catch (e) {
+      console.error('💥 [EVENT_INTEREST] getEventInterestCounts exception:', e)
+      return {}
+    }
+  },
+
+  async getSingleEventInterestCount(eventId: string): Promise<number> {
+    try {
+      const { data, error } = await supabase.rpc('get_event_interest_count', { p_event_id: eventId })
+      if (error) {
+        console.error('❌ [EVENT_INTEREST] getSingleEventInterestCount error:', error)
+        return 0
+      }
+      // data can be number or array depending on RPC; normalize
+      if (Array.isArray(data)) {
+        const row: any = data[0]
+        return Number(row?.count || row?.interest_count || 0)
+      }
+      return Number(data || 0)
+    } catch (e) {
+      console.error('💥 [EVENT_INTEREST] getSingleEventInterestCount exception:', e)
+      return 0
+    }
+  },
+
+  async isInterested(eventId: string): Promise<boolean> {
+    try {
+      const { data: userRes } = await supabase.auth.getUser()
+      const userId = userRes?.user?.id
+      if (!userId) return false
+      const { data, error } = await supabase
+        .from('event_interests')
+        .select('event_id')
+        .eq('event_id', eventId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (error) return false
+      return !!data
+    } catch {
+      return false
+    }
+  }
+}

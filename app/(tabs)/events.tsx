@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../../lib/logger'
-import { EventChat, supabase } from '../../lib/supabase'
+import { EventChat, EventInterest, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
 interface Event {
@@ -45,6 +45,7 @@ export default function Events() {
   const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
   const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
+  const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -61,6 +62,7 @@ export default function Events() {
   useEffect(() => {
     if (events.length > 0 && user) {
       loadCheckinStatusesBatch()
+      loadInterestData()
     }
   }, [events, user])
 
@@ -87,6 +89,37 @@ export default function Events() {
         () => {
           loadCheckinStatusesBatch()
           loadCheckedInEvents()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, events.length])
+
+  // Realtime: update interests when any interest row changes
+  useEffect(() => {
+    if (!user || events.length === 0) return
+    const channel = supabase
+      .channel(`events_interests_${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_interests' },
+        (payload: any) => {
+          const affectedEventId = String(payload?.new?.event_id || payload?.old?.event_id || '')
+          if (!affectedEventId) return
+          const isVisible = events.some(e => String(e.id) === affectedEventId)
+          if (!isVisible) return
+
+          const changedUserId = payload?.new?.user_id || payload?.old?.user_id
+          if (changedUserId && changedUserId === user.id) {
+            setInterestStatuses(prev => {
+              if (payload.eventType === 'INSERT') return { ...prev, [affectedEventId]: true }
+              if (payload.eventType === 'DELETE') return { ...prev, [affectedEventId]: false }
+              return prev
+            })
+          }
         }
       )
       .subscribe()
@@ -154,6 +187,42 @@ export default function Events() {
           <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
               <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+            )}
+            <View style={styles.carouselContent}>
+              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+              <Text style={styles.carouselTime}>
+                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  )
+
+  const renderInterestedCarousel = (items: Event[]) => (
+    <View style={styles.carouselContainer}>
+      <Text style={styles.carouselTitle}>Your interested events</Text>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            {item.cover_image_url && (
+              <>
+                <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+                <TouchableOpacity
+                  onPress={() => toggleInterest(item)}
+                  style={styles.carouselHeartButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+                </TouchableOpacity>
+              </>
             )}
             <View style={styles.carouselContent}>
               <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
@@ -300,6 +369,46 @@ export default function Events() {
     }
   }
 
+  const loadInterestData = async () => {
+    try {
+      if (!user || events.length === 0) return
+      const eventIds = events.map(e => e.id)
+      const userSet = await EventInterest.getUserInterestedEventIds(eventIds)
+      const statuses: { [eventId: string]: boolean } = {}
+      eventIds.forEach(id => {
+        statuses[id] = userSet.has(id)
+      })
+      setInterestStatuses(statuses)
+    } catch (e) {
+      console.warn('⚠️ [EVENTS] loadInterestData failed:', e)
+      setInterestStatuses({})
+    }
+  }
+
+  const toggleInterest = async (event: Event) => {
+    try {
+      if (!user) {
+        Alert.alert('Sign in required', 'Please sign in to save events')
+        return
+      }
+      const prevInterested = !!interestStatuses[event.id]
+      // Optimistic update
+      setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
+
+      const res = await EventInterest.toggleInterest(event.id)
+      if (!res) {
+        // rollback
+        setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
+        Alert.alert('Error', 'Failed to update interest')
+        return
+      }
+      setInterestStatuses(prev => ({ ...prev, [event.id]: res.interested }))
+      Logger.journey('events', res.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update interest')
+    }
+  }
+
   const onRefresh = async () => {
     setRefreshing(true)
     await fetchEvents()
@@ -375,6 +484,8 @@ export default function Events() {
     const proximity = proximityData[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
     const canCheckIn = proximity?.within_radius && !isCheckedIn
+    const interested = !!interestStatuses[event.id]
+    const isEnded = new Date(event.end_time).getTime() < Date.now()
 
     return (
       <TouchableOpacity 
@@ -433,6 +544,17 @@ export default function Events() {
                 </Text>
               </View>
             )}
+
+            {!isEnded && (
+              <TouchableOpacity 
+                style={[styles.interestButton, interested && styles.interestButtonActive]}
+                onPress={() => toggleInterest(event)}
+              >
+                <Text style={[styles.interestButtonText, interested && { color: '#C2185B' }]}>
+                  {interested ? '♥︎' : '♡'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -451,8 +573,21 @@ export default function Events() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {checkedInEvents.length > 0 && renderCheckedInCarousel()}
+      {
+        (() => {
+          const now = Date.now()
+          const interestedItems = events.filter(e => !!interestStatuses[e.id] && new Date(e.end_time).getTime() >= now)
+          return interestedItems.length > 0 ? renderInterestedCarousel(interestedItems) : null
+        })()
+      }
       <FlatList
-        data={events}
+        data={(() => {
+          const now = Date.now()
+          const interestedIds = new Set<string>(Object.entries(interestStatuses).filter(([, v]) => v).map(([k]) => k))
+          const interestedItems = events.filter(e => interestedIds.has(e.id) && new Date(e.end_time).getTime() >= now)
+          if (interestedItems.length === 0) return events
+          return events.filter(e => !interestedIds.has(e.id))
+        })()}
         renderItem={renderEventItem}
         keyExtractor={(item) => item.id}
         refreshControl={
@@ -460,7 +595,7 @@ export default function Events() {
         }
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={checkedInEvents.length > 0 ? <View style={{ height: 8 }} /> : undefined}
+        ListHeaderComponent={(checkedInEvents.length > 0) ? <View style={{ height: 8 }} /> : undefined}
       />
     </SafeAreaView>
   )
@@ -514,6 +649,20 @@ const styles = StyleSheet.create({
   carouselImage: {
     width: '100%',
     height: 120,
+  },
+  carouselHeartButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  carouselHeartText: {
+    fontSize: 16,
+    color: '#D81B60',
+    fontWeight: '800',
   },
   carouselContent: {
     padding: 12,
@@ -610,6 +759,20 @@ const styles = StyleSheet.create({
   },
   checkinButtonText: {
     color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  interestButton: {
+    backgroundColor: '#fde7ef',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  interestButtonActive: {
+    backgroundColor: '#f8cfe0',
+  },
+  interestButtonText: {
+    color: '#D81B60',
     fontSize: 14,
     fontWeight: '600',
   },
