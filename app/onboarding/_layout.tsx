@@ -1,6 +1,17 @@
-import { Stack } from 'expo-router'
+import { router, Stack } from 'expo-router'
+import { useEffect } from 'react'
+import { useAuth } from '../../lib/useAuth'
 
 export default function OnboardingLayout() {
+  const { user, loading } = useAuth()
+
+  useEffect(() => {
+    // Guard onboarding routes: if unauthenticated, go to login
+    if (!loading && !user) {
+      router.replace('/')
+    }
+  }, [loading, user])
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="welcome" />

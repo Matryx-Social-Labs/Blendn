@@ -105,14 +105,14 @@ export default function GroupChat() {
       
       if (error) {
         console.error('❌ [CHAT_USER] Auth error:', error);
-        // Redirect to main app if user is not authenticated
-        router.replace('/(tabs)/events')
+        // Redirect to login if user is not authenticated
+        router.replace('/')
         return
       }
       
       if (!user) {
         console.log('⚠️ [CHAT_USER] No authenticated user found, redirecting...');
-        router.replace('/(tabs)/events')
+        router.replace('/')
         return
       }
       
@@ -132,14 +132,14 @@ export default function GroupChat() {
       
       if (error) {
         console.error('❌ [CHAT_MESSAGES] Auth error:', error);
-        // Redirect to main app if user is not authenticated
-        router.replace('/(tabs)/events')
+        // Redirect to login if user is not authenticated
+        router.replace('/')
         return
       }
       
       if (!user) {
         console.log('⚠️ [CHAT_MESSAGES] No authenticated user found, redirecting...');
-        router.replace('/(tabs)/events')
+        router.replace('/')
         return
       }
 
@@ -198,8 +198,8 @@ export default function GroupChat() {
       }
     } catch (error) {
       console.error('💥 [CHAT_MESSAGES] Unexpected error:', error)
-      // Redirect to main app on any unexpected error
-      router.replace('/(tabs)/events')
+      // Redirect to login on any unexpected error
+      router.replace('/')
     } finally {
       setLoading(false)
     }

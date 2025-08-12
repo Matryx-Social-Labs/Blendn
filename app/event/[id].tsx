@@ -584,6 +584,22 @@ export default function EventDetail() {
                   <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
+                  style={[styles.swipeButton, { backgroundColor: '#007AFF' }]}
+                  onPress={async () => {
+                    try {
+                      const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
+                      if (ensured?.chatRoomId) {
+                        const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+                        router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+                      } else {
+                        router.push('/(tabs)/chat' as any)
+                      }
+                    } catch {}
+                  }}
+                >
+                  <Text style={styles.swipeButtonText}>Join Event Chat 💬</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
                   style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
                   onPress={async () => {
                     try {

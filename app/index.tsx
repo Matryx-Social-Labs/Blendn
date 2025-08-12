@@ -24,28 +24,10 @@ export default function Index() {
   }, [])
 
   useEffect(() => {
-    const checkOnboardingAndNavigate = async () => {
-      if (!user) return
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('onboarded')
-          .eq('id', user.id)
-          .single()
-        if (!profile || profile.onboarded === false) {
-          console.log('🔐 [INDEX] User not onboarded, navigating to onboarding')
-          router.replace('/onboarding/welcome')
-        } else {
-          console.log('🔐 [INDEX] User onboarded, navigating to events')
-          router.replace('/(tabs)/events')
-        }
-      } catch (e) {
-        console.log('⚠️ [INDEX] Onboarding check failed, defaulting to events')
-        router.replace('/(tabs)/events')
-      }
-    }
+    // After sign-in, defer route decisions to root layout gate.
+    // Navigate to tabs; non-onboarded users will be redirected to onboarding by RootLayout.
     if (!loading && user) {
-      checkOnboardingAndNavigate()
+      router.replace('/(tabs)/events')
     }
   }, [loading, user])
 

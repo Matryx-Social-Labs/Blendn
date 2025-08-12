@@ -63,6 +63,14 @@ export default function PrivateChat() {
 
   const loadMessages = async () => {
     try {
+      // Redirect unauthenticated users to login for consistency
+      if (!currentUser) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.replace('/')
+          return
+        }
+      }
       const { data, error } = await supabase.rpc('get_private_conversation_messages', {
         p_conversation_id: conversationId,
         p_limit: 50,
