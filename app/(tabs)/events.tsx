@@ -1,5 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -12,7 +13,8 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { EventChat, EventCheckout, supabase } from '../../lib/supabase'
+import { Logger } from '../../lib/logger'
+import { EventChat, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
 interface Event {
@@ -42,12 +44,16 @@ export default function Events() {
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
+  const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
 
   useEffect(() => {
     if (!authLoading && user) {
+      Logger.journey('events', 'mount:authorized', { userId: user.id })
       fetchEvents()
       getCurrentLocationQuietly()
+      loadCheckedInEvents()
     } else if (!authLoading && !user) {
+      Logger.journey('auth', 'redirect:unauthorized')
       router.replace('/')
     }
   }, [user, authLoading])
@@ -57,6 +63,110 @@ export default function Events() {
       loadCheckinStatusesBatch()
     }
   }, [events, user])
+
+  // Refresh statuses when the screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user && events.length > 0) {
+        loadCheckinStatusesBatch()
+      }
+      if (user) {
+        loadCheckedInEvents()
+      }
+    }, [user, events.length])
+  )
+
+  // Realtime: refresh when this user's check-in rows change
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel(`events_checkins_${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${user.id}` },
+        () => {
+          loadCheckinStatusesBatch()
+          loadCheckedInEvents()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, events.length])
+
+  const loadCheckedInEvents = async () => {
+    if (!user) return
+    try {
+      Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
+      // Get active check-ins for this user
+      const { data: checkins, error } = await supabase
+        .from('event_checkins')
+        .select('event_id')
+        .eq('user_id', user.id)
+        .is('checked_out_at', null)
+
+      if (error) {
+        Logger.error('❌ [CHECKED_IN]', 'Error fetching active check-ins', { error })
+        setCheckedInEvents([])
+        return
+      }
+
+      const eventIds = Array.from(new Set((checkins || []).map((c: any) => String(c.event_id)))).filter(Boolean)
+      if (eventIds.length === 0) {
+        Logger.journey('checkin', 'loadActiveCheckins:none')
+        setCheckedInEvents([])
+        return
+      }
+
+      const { data: eventRows, error: eventsError } = await supabase
+        .from('events')
+        .select('*')
+        .in('id', eventIds)
+
+      if (eventsError) {
+        Logger.error('❌ [CHECKED_IN]', 'Error fetching events', { error: eventsError })
+        setCheckedInEvents([])
+        return
+      }
+
+      // Optional: sort by start_time ascending
+      const sorted = (eventRows || []).slice().sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      setCheckedInEvents(sorted as Event[])
+      Logger.journey('checkin', 'loadActiveCheckins:success', { count: sorted.length })
+    } catch (e) {
+      Logger.error('💥 [CHECKED_IN]', 'Unexpected error', { error: e as any })
+      setCheckedInEvents([])
+    }
+  }
+
+  const renderCheckedInCarousel = () => (
+    <View style={styles.carouselContainer}>
+      <Text style={styles.carouselTitle}>You're checked in</Text>
+      <FlatList
+        data={checkedInEvents}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            {item.cover_image_url && (
+              <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+            )}
+            <View style={styles.carouselContent}>
+              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+              <Text style={styles.carouselTime}>
+                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  )
 
   useEffect(() => {
     if (userLocation && events.length > 0) {
@@ -68,13 +178,26 @@ export default function Events() {
     if (!user || events.length === 0) return
 
     try {
-      console.log('🔍 [CHECKIN_STATUS] Loading checkin statuses via RPC for all events');
-      const results = await Promise.all(
-        events.map(async (event) => {
-          const status = await EventCheckout.getCheckinStatus(event.id)
-          return [event.id, status] as const
-        })
-      )
+      Logger.journey('checkin', 'statusBatch:start', { eventCount: events.length })
+      // Query statuses directly to avoid stale caches when resetting check-ins
+      const { data: rawStatuses, error: statusError } = await supabase
+        .from('event_checkins')
+        .select('event_id, checked_in_at, checked_out_at')
+        .eq('user_id', user.id)
+
+      if (statusError) {
+        throw statusError
+      }
+
+      // Map: checked_in if a row exists for that event where checked_out_at is null
+      const activeMap = new Map<string, boolean>()
+      ;(rawStatuses || []).forEach((row: any) => {
+        const eid = String(row.event_id)
+        const isActive = !row.checked_out_at
+        if (eid && isActive) activeMap.set(eid, true)
+      })
+
+      const results = events.map((ev) => [ev.id, { status: activeMap.get(String(ev.id)) ? 'checked_in' : 'not_checked_in' } as any] as const)
 
       const statusMap: { [eventId: string]: any } = {}
       for (const [eventId, status] of results) {
@@ -82,9 +205,9 @@ export default function Events() {
       }
 
       setCheckinStatuses(statusMap)
-      console.log(`✅ [CHECKIN_STATUS] Loaded statuses for ${results.length} events via RPC`)
+      Logger.journey('checkin', 'statusBatch:success', { count: results.length })
     } catch (error) {
-      console.error('💥 [CHECKIN_STATUS] Unexpected error:', error)
+      Logger.error('💥 [CHECKIN_STATUS]', 'Unexpected error', { error: error as any })
       setCheckinStatuses({})
     }
   }
@@ -98,6 +221,7 @@ export default function Events() {
         longitude: 72.8777
       }
       setUserLocation(testLocation)
+      Logger.journey('proximity', 'quietLocation:fallbackSet', { lat: testLocation.latitude, lon: testLocation.longitude })
     } catch (error) {
       console.log('⚠️ [LOCATION] Using fallback location');
       // Use fallback location for testing
@@ -105,6 +229,7 @@ export default function Events() {
         latitude: 19.076,
         longitude: 72.8777
       })
+      Logger.warn('📍 [LOCATION]', 'quietLocation:error', { error: error as any })
     }
   }
 
@@ -112,7 +237,7 @@ export default function Events() {
     if (!userLocation || !user) return
 
     try {
-      console.log('🔍 [PROXIMITY] Checking proximity for all events');
+      Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
       
       // Use the actual function that exists: check_user_proximity_status
       const { data: proximityData, error } = await supabase
@@ -123,7 +248,7 @@ export default function Events() {
         })
 
       if (error) {
-        console.error('❌ [PROXIMITY] Error checking proximity:', error);
+        Logger.error('❌ [PROXIMITY]', 'Error checking proximity', { error })
         return
       }
 
@@ -141,33 +266,34 @@ export default function Events() {
       }
 
       setProximityData(proximityMap)
-      console.log(`✅ [PROXIMITY] Checked proximity for ${events.length} events`);
+      Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: proximityData?.nearby_events?.length || 0 })
     } catch (error) {
-      console.error('💥 [PROXIMITY] Proximity check failed:', error);
+      Logger.error('💥 [PROXIMITY]', 'Proximity check failed', { error: error as any })
     }
   }
 
   const fetchEvents = async () => {
     try {
       setLoading(true)
-      console.log('🔍 [EVENTS] Fetching events...');
+      Logger.journey('events', 'fetch:start')
       
       const { data: eventsData, error } = await supabase
         .from('events')
         .select('*')
         .eq('status', 'published')
+        .gte('end_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .order('start_time', { ascending: true })
 
       if (error) {
-        console.error('❌ [EVENTS] Error fetching events:', error);
+        Logger.error('❌ [EVENTS]', 'Error fetching events', { error })
         Alert.alert('Error', 'Failed to load events')
         return
       }
 
       setEvents(eventsData || [])
-      console.log(`✅ [EVENTS] Loaded ${eventsData?.length || 0} events`);
+      Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
-      console.error('💥 [EVENTS] Unexpected error:', error);
+      Logger.error('💥 [EVENTS]', 'Unexpected error', { error: error as any })
       Alert.alert('Error', 'Failed to load events')
     } finally {
       setLoading(false)
@@ -186,31 +312,35 @@ export default function Events() {
 
   const handleCheckIn = async (event: Event) => {
     try {
-      console.log('🔍 [CHECK_IN] Starting check-in for event:', event.id)
+      Logger.journey('checkin', 'start', { eventId: event.id })
       if (!user) {
+        Logger.journey('auth', 'blocked:notSignedIn')
         Alert.alert('Sign in required', 'Please sign in to check in to events')
         return
       }
       
       // Call standardized production check-in RPC
+      const params = {
+        p_event_id: event.id,
+        p_user_id: user.id,
+        p_user_latitude: userLocation?.latitude || 19.076,
+        p_user_longitude: userLocation?.longitude || 72.8777,
+        p_gps_accuracy: 50,
+      }
+      Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
       const { data, error } = await supabase
         .rpc('check_in_to_event_production', {
-          p_event_id: event.id,
-          // When listing, we may only have approximate location; still pass if available
-          p_user_id: user.id,
-          p_user_latitude: userLocation?.latitude || 19.076,
-          p_user_longitude: userLocation?.longitude || 72.8777,
-          p_gps_accuracy: 50,
+          ...params
         })
 
       if (error) {
-        console.error('❌ [CHECK_IN] Error:', error)
+        Logger.error('❌ [CHECK_IN]', 'RPC error', { error })
         Alert.alert('Check-in Failed', error.message)
         return
       }
 
       if (data?.success) {
-        console.log('✅ [CHECK_IN] Success')
+        Logger.journey('checkin', 'success', { eventId: event.id })
         // Ensure user is in the event chat in the background
         EventChat.ensureUserInEventChat(event.id, event.title).then((ensured) => {
           if (ensured?.chatRoomId) {
@@ -231,11 +361,11 @@ export default function Events() {
         // Refresh the checkin status for this event
         loadCheckinStatusesBatch()
       } else {
-        console.log('⚠️ [CHECK_IN] Failed:', data?.message)
+        Logger.warn('⚠️ [CHECK_IN]', 'Failed', { message: data?.message })
         Alert.alert('Check-in Failed', data?.message || 'Unknown error')
       }
     } catch (error) {
-      console.error('💥 [CHECK_IN] Unexpected error:', error)
+      Logger.error('💥 [CHECK_IN]', 'Unexpected error', { error: error as any })
       Alert.alert('Error', 'Failed to check in')
     }
   }
@@ -320,6 +450,7 @@ export default function Events() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {checkedInEvents.length > 0 && renderCheckedInCarousel()}
       <FlatList
         data={events}
         renderItem={renderEventItem}
@@ -329,6 +460,7 @@ export default function Events() {
         }
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={checkedInEvents.length > 0 ? <View style={{ height: 8 }} /> : undefined}
       />
     </SafeAreaView>
   )
@@ -352,6 +484,54 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
+  },
+  carouselContainer: {
+    paddingTop: 12,
+  },
+  carouselTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#333',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  carouselList: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  carouselCard: {
+    width: 260,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginHorizontal: 4,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  carouselImage: {
+    width: '100%',
+    height: 120,
+  },
+  carouselContent: {
+    padding: 12,
+  },
+  carouselEventTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  carouselVenue: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  carouselTime: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 6,
   },
   eventCard: {
     backgroundColor: '#fff',

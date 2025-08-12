@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,8 +16,9 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
-import { EventChat, supabase } from '../../lib/supabase';
+import { EventChat, EventCheckout, supabase } from '../../lib/supabase';
 
 interface EventDetail {
   id: string
@@ -67,6 +69,7 @@ export default function EventDetail() {
 
   useEffect(() => {
     if (id) {
+      Logger.journey('events', 'detail:mount', { eventId: String(id) })
       fetchEventDetails()
       checkUserCheckInStatus()
     }
@@ -79,10 +82,36 @@ export default function EventDetail() {
     }
   }, [userLocation, event])
 
+  // Realtime: update when this user's check-in rows change (for this event)
+  useEffect(() => {
+    let channel: any
+    const subscribe = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || !id) return
+      channel = supabase
+        .channel(`event_checkins_detail_${user.id}_${id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            if (payload.new?.event_id === id || payload.old?.event_id === id) {
+              checkUserCheckInStatus()
+            }
+          }
+        )
+        .subscribe()
+    }
+    subscribe()
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [id])
+
   const checkProximityStatus = async () => {
     if (!userLocation || !event) return
     
     try {
+      Logger.journey('proximity', 'detail:check:start', { eventId: event.id, lat: userLocation.latitude, lon: userLocation.longitude })
       const { data: userRes } = await supabase.auth.getUser()
       const currentUserId = userRes?.user?.id
       if (!currentUserId) return
@@ -95,17 +124,19 @@ export default function EventDetail() {
         })
 
       if (error) {
-        console.error('Error checking proximity:', error)
+        Logger.error('❌ [PROXIMITY]', 'detail:check:error', { error })
       } else {
         setProximityStatus(data)
+        Logger.journey('proximity', 'detail:check:success', { nearbyCount: data?.nearby_events?.length || 0 })
       }
     } catch (error) {
-      console.error('Proximity check error:', error)
+      Logger.error('💥 [PROXIMITY]', 'detail:check:exception', { error: error as any })
     }
   }
 
   const fetchEventDetails = async () => {
     try {
+      Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
       const { data, error } = await supabase
         .from('events')
         .select('*')
@@ -113,13 +144,14 @@ export default function EventDetail() {
         .single()
 
       if (error) {
-        console.error('Error fetching event:', error)
+        Logger.error('❌ [EVENTS]', 'detail:fetch:error', { error })
         Alert.alert('Error', 'Failed to load event details')
       } else {
         setEvent(data)
+        Logger.journey('events', 'detail:fetch:success', { eventId: data?.id })
       }
     } catch (error) {
-      console.error('Error:', error)
+      Logger.error('💥 [EVENTS]', 'detail:fetch:exception', { error: error as any })
     } finally {
       setLoading(false)
     }
@@ -127,29 +159,43 @@ export default function EventDetail() {
 
   const checkUserCheckInStatus = async () => {
     try {
+      Logger.journey('checkin', 'detail:status:start', { eventId: String(id) })
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
-        .rpc('get_check_in_status', {
-          p_event_id: id,
-          p_user_id: user.id
-        })
+        .from('event_checkins')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('event_id', id)
+        .is('checked_out_at', null)
+        .limit(1)
 
       if (error) {
-        console.error('Error checking status:', error)
-      } else {
-        setCheckInStatus(data)
+        Logger.error('❌ [CHECKIN]', 'detail:status:error', { error })
+        return
       }
+
+      const checkedIn = Array.isArray(data) && data.length > 0
+      setCheckInStatus({ success: true, checked_in: checkedIn })
+      Logger.journey('checkin', 'detail:status:success', { checkedIn })
     } catch (error) {
-      console.error('Error:', error)
+      Logger.error('💥 [CHECKIN]', 'detail:status:exception', { error: error as any })
     }
   }
+
+  // Refresh check-in status on focus
+  useFocusEffect(
+    useCallback(() => {
+      checkUserCheckInStatus()
+    }, [id])
+  )
 
   const getCurrentLocation = async () => {
     try {
       // Fallback if expo-location is not available
       if (!Location) {
+        Logger.warn('📍 [LOCATION]', 'moduleUnavailable')
         Alert.alert(
           'Location Service Not Available',
           'For the best experience, please use the latest version of this app with location services enabled.',
@@ -168,6 +214,7 @@ export default function EventDetail() {
           ]
         )
         // Return demo coordinates for testing only
+        Logger.journey('proximity', 'detail:location:demoFallback')
         return {
           latitude: 18.5204,
           longitude: 73.8567
@@ -177,6 +224,7 @@ export default function EventDetail() {
       // Check if location services are enabled
       const serviceEnabled = await Location.hasServicesEnabledAsync()
       if (!serviceEnabled) {
+        Logger.warn('📍 [LOCATION]', 'servicesDisabled')
         Alert.alert(
           'Location Services Disabled',
           'Please enable location services in your device settings to check in to events.',
@@ -191,6 +239,7 @@ export default function EventDetail() {
       // Request permission with better messaging
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
+        Logger.warn('📍 [LOCATION]', 'permissionDenied')
         Alert.alert(
           'Location Permission Required',
           'Blendn needs location access to verify you\'re at events. This ensures authentic meetups and prevents fake check-ins.',
@@ -212,6 +261,7 @@ export default function EventDetail() {
       // Validate GPS accuracy for production
       const accuracy = location.coords.accuracy || 999
       if (accuracy > 50) {
+        Logger.warn('📍 [LOCATION]', 'lowAccuracy', { accuracy })
         Alert.alert(
           'GPS Signal Weak',
           `GPS accuracy is ${Math.round(accuracy)}m. For accurate check-ins, please move to a location with better GPS signal.`,
@@ -231,7 +281,7 @@ export default function EventDetail() {
         longitude: location.coords.longitude
       }
     } catch (error) {
-      console.error('Error getting location:', error)
+      Logger.error('📍 [LOCATION]', 'getCurrentLocation:error', { error: error as any })
       
       // Handle specific location errors for production
       const errorCode = (error as any)?.code
@@ -250,15 +300,29 @@ export default function EventDetail() {
     setCheckingIn(true)
     
     try {
+      Logger.journey('checkin', 'detail:start', { eventId: String(id) })
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
+        Logger.journey('auth', 'detail:blocked:notSignedIn')
         Alert.alert('Error', 'Please sign in to check in to events')
         return
       }
 
+      // Guard: if UI thinks we are not checked in, ensure backend also has no active check-ins
+      // This prevents the "Already Checked In" path from stale rows
+      try {
+        const { ensureNoActiveCheckins } = await import('../../lib/supabase') as any
+        if (ensureNoActiveCheckins && typeof ensureNoActiveCheckins === 'function') {
+          Logger.journey('checkin', 'detail:ensureNoActiveCheckins:start')
+          await ensureNoActiveCheckins(String(id))
+          Logger.journey('checkin', 'detail:ensureNoActiveCheckins:done')
+        }
+      } catch {}
+
       // Get current location
       const location = await getCurrentLocation()
       if (!location) {
+        Logger.warn('checkin', 'detail:location:unavailable')
         setCheckingIn(false)
         return
       }
@@ -276,10 +340,11 @@ export default function EventDetail() {
         })
 
       if (error) {
-        console.error('Check-in error:', error)
+        Logger.error('❌ [CHECK_IN]', 'detail:rpc:error', { error })
         Alert.alert('Error', 'Failed to check in. Please try again.')
       } else {
         if (data.success) {
+          Logger.journey('checkin', 'detail:success', { eventId: String(id) })
           // Ensure the user is added to the event group chat in the background
           const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
 
@@ -313,18 +378,26 @@ export default function EventDetail() {
               user.id
             )
           } catch (notificationError) {
-            console.error('Failed to send check-in notification:', notificationError)
+            Logger.warn('🔔 [NOTIFICATIONS]', 'checkInNotification:failed', { error: notificationError as any })
             // Don't fail check-in if notification fails
           }
 
           // Refresh check-in status
           await checkUserCheckInStatus()
         } else {
-          handleCheckInError(data)
+          // If server says already checked-in, re-sync UI by re-checking status and surface a consistent message
+          if (data.code === 'ALREADY_CHECKED_IN') {
+            Logger.journey('checkin', 'detail:alreadyCheckedIn')
+            await checkUserCheckInStatus()
+            Alert.alert('Already Checked In', 'You are already checked in to this event.')
+          } else {
+            Logger.warn('❗ [CHECK_IN]', 'detail:failed', { code: data.code, message: data.error || data.message })
+            handleCheckInError(data)
+          }
         }
       }
     } catch (error) {
-      console.error('Check-in error:', error)
+      Logger.error('💥 [CHECK_IN]', 'detail:exception', { error: error as any })
       Alert.alert('Error', 'Something went wrong. Please try again.')
     } finally {
       setCheckingIn(false)
@@ -503,12 +576,32 @@ export default function EventDetail() {
                 You checked in {checkInStatus?.distance_meters ? 
                   `${Math.round(checkInStatus.distance_meters)}m` : ''} from the venue
               </Text>
-              <TouchableOpacity 
-                style={styles.swipeButton}
-                onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
-              >
-                <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity 
+                  style={styles.swipeButton}
+                  onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
+                >
+                  <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
+                  onPress={async () => {
+                    try {
+                      const res = await EventCheckout.checkoutFromEvent(String(id))
+                      if (res.success) {
+                        Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
+                        await checkUserCheckInStatus()
+                      } else {
+                        Alert.alert('Checkout Failed', res.message || 'Please try again.')
+                      }
+                    } catch (e: any) {
+                      Alert.alert('Error', e?.message || 'Unknown error')
+                    }
+                  }}
+                >
+                  <Text style={styles.swipeButtonText}>Check Out</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <>

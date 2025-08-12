@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient } from '@supabase/supabase-js'
 import { AppState } from 'react-native'
 import 'react-native-url-polyfill/auto'
+import { Logger } from './logger'
 
 // Validate environment variables
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
@@ -251,7 +252,7 @@ export const EventCheckout = {
       
       // Use the database function we created
       const { data, error } = await supabase
-        .rpc('checkout_user_from_event', { event_id: eventId })
+        .rpc('checkout_user_from_event', { p_event_id: eventId })
 
       if (error) {
         console.error('❌ [CHECKOUT] Error:', error);
@@ -315,8 +316,71 @@ export const EventCheckout = {
       console.error('❌ [CHECKOUT] Error getting checkin status:', error);
       return { status: 'error' }
     }
+  },
+
+  // Convenience alias so callers can reset all check-ins via EventCheckout
+  async checkoutFromAllEvents() {
+    return EventChat.checkoutFromAllEvents()
+  },
+
+  // Ensure there is no active check-in for this user for the given event
+  async ensureNoActiveCheckins(eventId: string) {
+    try {
+      Logger.journey('checkin', 'ensureNoActive:start', { eventId })
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return { success: false, message: 'Not authenticated' }
+
+      // Attempt server-side checkout first
+      try {
+        const rpcRes: any = await supabase.rpc('checkout_user_from_event', { p_event_id: eventId })
+        if (rpcRes?.error) {
+          Logger.warn('CHECKOUT_RPC', 'ensureNoActive:rpcFailed', { error: rpcRes.error?.message })
+        } else {
+          Logger.journey('checkin', 'ensureNoActive:rpcOk')
+        }
+      } catch (e: any) {
+        Logger.warn('CHECKOUT_RPC', 'ensureNoActive:rpcException', { error: e?.message || String(e) })
+      }
+
+      // Fallback: hard update any lingering active rows
+      const now = new Date().toISOString()
+      const { error: updateErr } = await supabase
+        .from('event_checkins')
+        .update({ checked_out_at: now })
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .is('checked_out_at', null)
+      if (updateErr) {
+        Logger.warn('CHECKOUT_FALLBACK', 'ensureNoActive:updateFailed', { error: updateErr.message })
+      } else {
+        Logger.journey('checkin', 'ensureNoActive:updateOk')
+      }
+
+      // Verify
+      const { data: stillActive, error } = await supabase
+        .from('event_checkins')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .is('checked_out_at', null)
+        .limit(1)
+
+      if (error) {
+        Logger.error('CHECKOUT_VERIFY', 'ensureNoActive:verifyError', { error: error.message })
+        return { success: false, message: error.message }
+      }
+      const noneLeft = !Array.isArray(stillActive) || stillActive.length === 0
+      Logger.journey('checkin', 'ensureNoActive:verify', { noneLeft })
+      return { success: noneLeft, message: noneLeft ? 'No active check-ins' : 'Active check-in remains' }
+    } catch (e: any) {
+      Logger.error('CHECKOUT_ENSURE', 'ensureNoActive:exception', { error: e?.message || String(e) })
+      return { success: false, message: e?.message || 'Unknown error' }
+    }
   }
 } 
+
+// Named export alias to match dynamic import usage in UI screens
+export const ensureNoActiveCheckins = EventCheckout.ensureNoActiveCheckins
 
 // Event chat helpers: create/find the event chat room and ensure the current user is a participant
 export const EventChat = {
@@ -332,7 +396,7 @@ export const EventChat = {
       // 1) Find existing active chat room for this event
       const { data: existingRoom, error: findError } = await supabase
         .from('chat_rooms')
-        .select('chat_room_id, room_name, is_active')
+        .select('id, name, is_active')
         .eq('event_id', eventId)
         .eq('is_active', true)
         .limit(1)
@@ -343,16 +407,16 @@ export const EventChat = {
         // Continue to try creating below
       }
 
-      let chatRoomId = existingRoom?.chat_room_id as string | undefined
-      let roomName = existingRoom?.room_name as string | undefined
+      let chatRoomId = existingRoom?.id as string | undefined
+      let roomName = (existingRoom as any)?.name as string | undefined
 
       // 2) Create room if none exists
       if (!chatRoomId) {
         const proposedName = eventTitle ? `Chat for ${eventTitle}` : 'Event Chat'
         const { data: created, error: createError } = await supabase
           .from('chat_rooms')
-          .insert({ event_id: eventId, room_name: proposedName, is_active: true })
-          .select('chat_room_id, room_name')
+          .insert({ event_id: eventId, name: proposedName, is_active: true })
+          .select('id, name')
           .single()
 
         if (createError) {
@@ -360,8 +424,8 @@ export const EventChat = {
           return null
         }
 
-        chatRoomId = created.chat_room_id
-        roomName = created.room_name
+        chatRoomId = created.id
+        roomName = (created as any).name
       }
 
       // 3) Ensure current user is a participant
@@ -391,6 +455,114 @@ export const EventChat = {
     } catch (error) {
       console.error('💥 [EVENT_CHAT] Unexpected error ensuring chat membership:', error)
       return null
+    }
+  },
+
+  async checkoutFromAllEvents() {
+    try {
+      // Get authenticated user
+      const { data: { user }, error: authError } = await AuthHelper.getUserWithFallback(4000, 1)
+      if (authError || !user) {
+        return { success: false, message: authError?.message || 'Not authenticated' }
+      }
+
+      // Find all active check-ins for this user
+      const { data: checkins, error: fetchError } = await supabase
+        .from('event_checkins')
+        .select('event_id')
+        .eq('user_id', user.id)
+        .is('checked_out_at', null)
+
+      if (fetchError) {
+        console.error('❌ [CHECKOUT_ALL] Error fetching check-ins:', fetchError)
+        return { success: false, message: fetchError.message }
+      }
+
+      const eventIds = Array.from(new Set((checkins || []).map(c => c.event_id as string))).filter(Boolean)
+      if (eventIds.length === 0) {
+        return { success: true, message: 'No active check-ins found', count: 0 }
+      }
+
+      // Checkout from each event via RPC to preserve server-side logic
+      const results = await Promise.allSettled(
+        eventIds.map(eventId =>
+          supabase.rpc('checkout_user_from_event', { p_event_id: eventId })
+        )
+      )
+
+      let successCount = 0
+      const errors: string[] = []
+      for (const res of results) {
+        if (res.status === 'fulfilled') {
+          const val: any = res.value
+          if (!val.error) successCount++
+          else errors.push(val.error.message || 'Unknown RPC error')
+        } else {
+          errors.push(res.reason?.message || 'Unknown error')
+        }
+      }
+
+      // If RPCs failed or none succeeded, try a direct update fallback
+      if (successCount === 0 && errors.length > 0) {
+        const now = new Date().toISOString()
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('event_checkins')
+          .update({ checked_out_at: now })
+          .eq('user_id', user.id)
+          .is('checked_out_at', null)
+          .select('event_id')
+
+        if (!updateError) {
+          successCount = (updatedRows || []).length
+          return { success: true, message: 'Checkout complete (fallback)', count: successCount, errors: [] }
+        }
+      }
+
+      return { success: errors.length === 0, message: 'Checkout complete', count: successCount, errors }
+    } catch (error) {
+      console.error('💥 [CHECKOUT_ALL] Unexpected error:', error)
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+  ,
+  async leaveAllEventChats() {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        return { success: false, message: authError?.message || 'Not authenticated' }
+      }
+
+      // Get all group chat participations for this user
+      const { data: participations, error: listError } = await supabase
+        .from('chat_participants')
+        .select('chat_room_id')
+        .eq('user_id', user.id)
+
+      if (listError) {
+        console.error('❌ [EVENT_CHAT] Error listing participations:', listError)
+        return { success: false, message: listError.message }
+      }
+
+      const chatRoomIds = Array.from(new Set((participations || []).map(p => p.chat_room_id as string))).filter(Boolean)
+      if (chatRoomIds.length === 0) {
+        return { success: true, message: 'No group chats to leave', count: 0 }
+      }
+
+      const { error: deleteError } = await supabase
+        .from('chat_participants')
+        .delete()
+        .in('chat_room_id', chatRoomIds)
+        .eq('user_id', user.id)
+
+      if (deleteError) {
+        console.error('❌ [EVENT_CHAT] Error leaving chats:', deleteError)
+        return { success: false, message: deleteError.message }
+      }
+
+      return { success: true, message: 'Left all group chats', count: chatRoomIds.length }
+    } catch (error) {
+      console.error('💥 [EVENT_CHAT] Unexpected error leaving chats:', error)
+      return { success: false, message: error instanceof Error ? error.message : 'Unknown error' }
     }
   }
 }

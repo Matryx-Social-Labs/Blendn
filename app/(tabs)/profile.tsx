@@ -237,6 +237,13 @@ export default function Profile() {
         >
           <Text style={styles.secondaryActionText}>Sign Out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.devActionButton}
+          onPress={() => router.push('/test-features')}
+        >
+          <Text style={styles.devActionText}>Test Features</Text>
+        </TouchableOpacity>
       </View>
       </ScrollView>
     </SafeAreaView>
@@ -409,5 +416,17 @@ const styles = StyleSheet.create({
     color: '#333',
     fontSize: 16,
     fontWeight: '600',
+  },
+  devActionButton: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#e6f0ff',
+  },
+  devActionText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 }) 

@@ -75,7 +75,7 @@ const testSetup = {
   createChatRoom: async (eventId, eventTitle) => {
     const chatRoomData = {
       event_id: eventId,
-      room_name: `Chat for ${eventTitle}`,
+      name: `Chat for ${eventTitle}`,
       is_active: true
     };
 
@@ -91,7 +91,7 @@ const testSetup = {
       });
 
       const chatRoom = await response.json();
-      console.log('✅ Chat room created:', chatRoom);
+    console.log('✅ Chat room created:', chatRoom);
       return chatRoom;
     } catch (error) {
       console.error('❌ Error creating chat room:', error);
@@ -173,15 +173,15 @@ const testSetup = {
     if (!chatRoom) return;
     
     // Step 4: Add user to chat
-    const participant = await testSetup.addUserToChat(chatRoom.chat_room_id);
+    const participant = await testSetup.addUserToChat(chatRoom.id || chatRoom.chat_room_id);
     if (!participant) return;
     
     // Step 5: Send welcome message
-    const message = await testSetup.sendWelcomeMessage(chatRoom.chat_room_id, event.title);
+    const message = await testSetup.sendWelcomeMessage(chatRoom.id || chatRoom.chat_room_id, event.title);
     
     console.log('\n🎉 SETUP COMPLETE!');
     console.log(`📅 Event: ${event.title} (ID: ${event.id})`);
-    console.log(`💬 Chat Room: ${chatRoom.room_name} (ID: ${chatRoom.chat_room_id})`);
+    console.log(`💬 Chat Room: ${chatRoom.name} (ID: ${chatRoom.id || chatRoom.chat_room_id})`);
     console.log(`👤 User: ${USER_ID} is checked in and in chat`);
     console.log('\n📱 You can now test the chat in your app!');
   }

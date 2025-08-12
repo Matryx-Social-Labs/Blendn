@@ -64,7 +64,7 @@ async function checkinUserToEvent() {
     console.log('💬 Creating chat room for event...');
     const chatRoomData = {
       event_id: event.id,
-      room_name: `Chat for ${event.title}`,
+      name: `Chat for ${event.title}`,
       is_active: true
     };
 
@@ -79,12 +79,12 @@ async function checkinUserToEvent() {
       return;
     }
 
-    console.log('✅ Chat room created:', chatRoom.chat_room_id);
+    console.log('✅ Chat room created:', chatRoom.id);
 
     // Step 4: Add user to chat participants
     console.log('👥 Adding user to chat participants...');
     const participantData = {
-      chat_room_id: chatRoom.chat_room_id,
+      chat_room_id: chatRoom.id,
       user_id: USER_ID,
       joined_at: new Date().toISOString()
     };
@@ -105,7 +105,7 @@ async function checkinUserToEvent() {
     // Step 5: Send a welcome message
     console.log('💬 Sending welcome message...');
     const welcomeMessage = {
-      chat_room_id: chatRoom.chat_room_id,
+      chat_room_id: chatRoom.id,
       sender_id: 'system',
       message_text: `Welcome to ${event.title}! You've been automatically checked in and added to the group chat.`,
       message_type: 'system'
@@ -127,11 +127,11 @@ async function checkinUserToEvent() {
     // Summary
     console.log('\n🎉 SUCCESS! User has been:');
     console.log(`   ✅ Checked into event: ${event.title}`);
-    console.log(`   ✅ Added to chat room: ${chatRoom.room_name}`);
+    console.log(`   ✅ Added to chat room: ${chatRoom.name}`);
     console.log(`   ✅ Welcome message sent`);
     console.log(`\n📱 You can now test the chat functionality in your app!`);
     console.log(`   Event ID: ${event.id}`);
-    console.log(`   Chat Room ID: ${chatRoom.chat_room_id}`);
+    console.log(`   Chat Room ID: ${chatRoom.id}`);
 
   } catch (error) {
     console.error('💥 Unexpected error:', error);

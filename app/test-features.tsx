@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { AuthHelper, supabase } from '../lib/supabase'
+import { AuthHelper, EventChat, EventCheckout, supabase } from '../lib/supabase'
 
 export default function TestFeatures() {
   const [loading, setLoading] = useState(false)
@@ -59,6 +59,28 @@ export default function TestFeatures() {
       console.error('💥 Network test error:', error)
       setNetworkStatus('Network Test Failed')
       Alert.alert('Network Test', 'Network connectivity test failed')
+    }
+  }
+
+  const checkoutFromAllEvents = async () => {
+    try {
+      setLoading(true)
+      console.log('🔍 Checking out from all events...')
+
+      const checkoutRes = await EventCheckout.checkoutFromAllEvents()
+      console.log('✅ Checkout RPC results:', checkoutRes)
+
+      // Also leave all event group chats so the Chat list is clean for testing
+      const leaveRes = await EventChat.leaveAllEventChats()
+      console.log('✅ Left group chats:', leaveRes)
+
+      const msg = `Checked out from ${checkoutRes.count || 0} event(s).\nLeft ${leaveRes.count || 0} chat(s).`
+      Alert.alert('Reset Complete', msg)
+    } catch (error) {
+      console.error('💥 Checkout all error:', error)
+      Alert.alert('Error', 'Failed to reset. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -145,7 +167,7 @@ export default function TestFeatures() {
           chat_room_id,
           joined_at,
           chat_rooms!inner(
-            room_name,
+            name,
             is_active,
             events!inner(
               title,
@@ -166,7 +188,7 @@ export default function TestFeatures() {
 
       if (groupChats && groupChats.length > 0) {
         const chatList = groupChats.map((chat: any, index) => 
-          `${index + 1}. ${chat.chat_rooms.events.title} - ${chat.chat_rooms.room_name}`
+          `${index + 1}. ${chat.chat_rooms.events.title} - ${chat.chat_rooms.name}`
         ).join('\n')
 
         Alert.alert(
@@ -249,7 +271,7 @@ export default function TestFeatures() {
       // Step 3: Create chat room
       const chatRoomData = {
         event_id: event.id,
-        room_name: `Chat for ${event.title}`,
+        name: `Chat for ${event.title}`,
         is_active: true
       }
 
@@ -265,11 +287,11 @@ export default function TestFeatures() {
         return
       }
 
-      console.log('✅ Chat room created:', chatRoom.chat_room_id)
+      console.log('✅ Chat room created:', chatRoom.id)
 
       // Step 4: Add user to chat participants
       const participantData = {
-        chat_room_id: chatRoom.chat_room_id,
+        chat_room_id: chatRoom.id,
         user_id: user.id,
         joined_at: new Date().toISOString()
       }
@@ -290,7 +312,7 @@ export default function TestFeatures() {
 
       // Step 5: Send welcome message
       const welcomeMessage = {
-        chat_room_id: chatRoom.chat_room_id,
+        chat_room_id: chatRoom.id,
         sender_id: 'system',
         message_text: `Welcome to ${event.title}! You've been automatically checked in and added to the group chat.`,
         message_type: 'system'
@@ -368,7 +390,7 @@ export default function TestFeatures() {
       // Step 2: Create chat room
       const chatRoomData = {
         event_id: event.id,
-        room_name: `Team Chat for ${event.title}`,
+        name: `Team Chat for ${event.title}`,
         is_active: true
       }
 
@@ -384,11 +406,11 @@ export default function TestFeatures() {
         return
       }
 
-      console.log('✅ Chat room created:', chatRoom.chat_room_id)
+      console.log('✅ Chat room created:', chatRoom.id)
 
       // Step 3: Add current user to chat
       const currentUserParticipant = {
-        chat_room_id: chatRoom.chat_room_id,
+        chat_room_id: chatRoom.id,
         user_id: user.id,
         joined_at: new Date().toISOString()
       }
@@ -423,7 +445,7 @@ export default function TestFeatures() {
         
         // Add placeholder user to chat participants
         const placeholderParticipant = {
-          chat_room_id: chatRoom.chat_room_id,
+          chat_room_id: chatRoom.id,
           user_id: placeholderUser.id,
           joined_at: new Date().toISOString()
         }
@@ -442,7 +464,7 @@ export default function TestFeatures() {
         
         // Add the found user to chat participants
         const otherUserParticipant = {
-          chat_room_id: chatRoom.chat_room_id,
+          chat_room_id: chatRoom.id,
           user_id: otherUser.id,
           joined_at: new Date().toISOString()
         }
@@ -460,14 +482,14 @@ export default function TestFeatures() {
 
       // Step 5: Send welcome messages
       const welcomeMessage1 = {
-        chat_room_id: chatRoom.chat_room_id,
+        chat_room_id: chatRoom.id,
         sender_id: 'system',
         message_text: `Welcome to ${event.title}! This is a multi-user chat room.`,
         message_type: 'system'
       }
 
       const welcomeMessage2 = {
-        chat_room_id: chatRoom.chat_room_id,
+        chat_room_id: chatRoom.id,
         sender_id: 'system',
         message_text: `Users ${user.email} and hemanth@unbothered.studio are now in this chat.`,
         message_type: 'system'
@@ -480,7 +502,7 @@ export default function TestFeatures() {
 
       Alert.alert(
         'Multi-User Chat Setup Complete!', 
-        `Event: ${event.title}\nChat Room: ${chatRoom.room_name}\n\nUsers in chat:\n- ${user.email}\n- hemanth@unbothered.studio\n\nYou can now test multi-user chat functionality.`,
+        `Event: ${event.title}\nChat Room: ${chatRoom.name}\n\nUsers in chat:\n- ${user.email}\n- hemanth@unbothered.studio\n\nYou can now test multi-user chat functionality.`,
         [
           { text: 'OK', onPress: () => console.log('Multi-user setup complete') }
         ]
@@ -511,6 +533,16 @@ export default function TestFeatures() {
         onPress={checkSupabaseConfig}
       >
         <Text style={styles.buttonText}>Check Supabase Config</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, styles.warningButton, loading && styles.buttonDisabled]}
+        onPress={checkoutFromAllEvents}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Resetting...' : 'Checkout from All Events (and Leave Chats)'}
+        </Text>
       </TouchableOpacity>
       
       <TouchableOpacity
