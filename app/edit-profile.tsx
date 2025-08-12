@@ -7,7 +7,6 @@ import {
     Image,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { PhotoUploadResult, selectAndUploadPhoto } from '../lib/photoUtils'
 import { supabase } from '../lib/supabase'
 
@@ -314,7 +314,7 @@ export default function EditProfile() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B6B" />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -324,7 +324,7 @@ export default function EditProfile() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

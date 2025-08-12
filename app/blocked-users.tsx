@@ -6,12 +6,12 @@ import {
     Alert,
     FlatList,
     Image,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
 
 export default function BlockedUsers() {
@@ -117,7 +117,7 @@ export default function BlockedUsers() {
   )
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton} 

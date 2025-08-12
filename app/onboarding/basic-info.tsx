@@ -40,7 +40,12 @@ export default function BasicInfo() {
       await supabase.from('profiles').update({ name: displayName.trim(), age: parseInt(age) }).eq('id', user.id)
       await supabase
         .from('user_profiles')
-        .upsert({ user_id: user.id, display_name: displayName.trim(), age: parseInt(age) }, { onConflict: 'user_id' })
+        .upsert({ 
+          user_id: user.id, 
+          display_name: displayName.trim(), 
+          age: parseInt(age),
+          bio: bio.trim() || null,
+        }, { onConflict: 'user_id' })
       router.push('./interests' as any)
     } catch (e) {
       console.error('basic-info save error', e)

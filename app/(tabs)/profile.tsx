@@ -1,21 +1,25 @@
+import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
-interface UserProfile {
+interface UserProfileViewModel {
   id: string
   name?: string
   bio?: string
   age?: number
   interests?: string[]
   profile_photos?: string[]
+  goals?: string[]
+  looking_for?: string[]
 }
 
 export default function Profile() {
   const { user, loading: authLoading } = useAuth()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,10 +38,10 @@ export default function Profile() {
       setLoading(true)
       setError(null)
 
-      // Get user profile from database
-      const { data: profileData, error: profileError } = await supabase
+      // Load core profile
+      const { data: baseProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, age')
         .eq('id', user.id)
         .single()
 
@@ -47,14 +51,38 @@ export default function Profile() {
         return
       }
       
-      if (!profileData) {
+      if (!baseProfile) {
         console.log('⚠️ [PROFILE] No profile found, redirecting to onboarding')
         router.replace('/onboarding/welcome')
         return
       }
       
+      // Load extended onboarding details
+      const { data: userProfile, error: userProfileError } = await supabase
+        .from('user_profiles')
+        .select('bio, interests, profile_photos, photos, goals, looking_for')
+        .eq('user_id', user.id)
+        .single()
+
+      if (userProfileError) {
+        console.warn('⚠️ [PROFILE] user_profiles fetch warning:', userProfileError.message)
+      }
+
+      const viewModel: UserProfileViewModel = {
+        id: baseProfile.id,
+        name: baseProfile.name ?? undefined,
+        age: baseProfile.age ?? undefined,
+        bio: userProfile?.bio ?? undefined,
+        interests: userProfile?.interests ?? undefined,
+        profile_photos: (userProfile?.profile_photos && userProfile.profile_photos.length > 0)
+          ? userProfile.profile_photos
+          : (userProfile?.photos && userProfile.photos.length > 0 ? userProfile.photos : undefined),
+        goals: userProfile?.goals ?? undefined,
+        looking_for: userProfile?.looking_for ?? undefined,
+      }
+
       console.log('✅ [PROFILE] Profile loaded successfully')
-      setProfile(profileData)
+      setProfile(viewModel)
 
     } catch (error) {
       console.error('💥 [PROFILE] Unexpected error:', error)
@@ -81,89 +109,137 @@ export default function Profile() {
     }
   }
 
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0)
+
   // Show loading while auth is loading
   if (authLoading || loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
+      </SafeAreaView>
     )
   }
 
   // Show error state
   if (error) {
     return (
-      <View style={styles.errorContainer}>
+      <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={getUserAndProfile}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     )
   }
 
+  const screenWidth = Dimensions.get('window').width
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+      {profile?.profile_photos?.length ? (
+        <View>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth)
+              setActivePhotoIndex(index)
+            }}
+          >
+            {profile.profile_photos.map((url, idx) => (
+              <Image
+                key={idx}
+                source={{ uri: url }}
+                style={[styles.carouselImage, { width: screenWidth }]}
+                contentFit="cover"
+                cachePolicy="none"
+                onError={() => {
+                  console.warn('⚠️ [PROFILE] Image failed to load:', url);
+                }}
+                transition={200}
+              />
+            ))}
+          </ScrollView>
+          {profile.profile_photos.length > 1 && (
+            <View style={styles.dotsContainer}>
+              {profile.profile_photos.map((_, i) => (
+                <View key={i} style={[styles.dot, i === activePhotoIndex && styles.dotActive]} />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
 
       {profile && (
         <View style={styles.profileSection}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          <View style={styles.profileItem}>
-            <Text style={styles.label}>Name:</Text>
-            <Text style={styles.value}>{profile.name || 'Not set'}</Text>
-          </View>
-          <View style={styles.profileItem}>
-            <Text style={styles.label}>Bio:</Text>
-            <Text style={styles.value}>{profile.bio || 'Not set'}</Text>
-        </View>
-          <View style={styles.profileItem}>
-            <Text style={styles.label}>Age:</Text>
-            <Text style={styles.value}>{profile.age || 'Not set'}</Text>
-          </View>
-          <View style={styles.profileItem}>
-            <Text style={styles.label}>Interests:</Text>
-            <Text style={styles.value}>
-              {profile.interests?.join(', ') || 'Not set'}
-              </Text>
+          <Text style={styles.displayName}>
+            {profile.name || 'New User'}{profile.age ? `, ${profile.age}` : ''}
+          </Text>
+
+          {!!profile.bio && (
+            <Text style={styles.bioText}>{profile.bio}</Text>
+          )}
+
+          {!!profile.looking_for?.length && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.subsectionTitle}>Looking for</Text>
+              <View style={styles.chipGroup}>
+                {profile.looking_for.map((g, idx) => (
+                  <View key={`${g}-${idx}`} style={styles.chip}>
+                    <Text style={styles.chipText}>{g}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        )}
+          )}
+
+          {!!profile.goals?.length && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.subsectionTitle}>Goals</Text>
+              <View style={styles.chipGroup}>
+                {profile.goals.map((g, idx) => (
+                  <View key={`${g}-${idx}`} style={styles.chip}>
+                    <Text style={styles.chipText}>{g}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {!!profile.interests?.length && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.subsectionTitle}>Interests</Text>
+              <View style={styles.chipGroup}>
+                {profile.interests.map((i, idx) => (
+                  <View key={`${i}-${idx}`} style={styles.chip}>
+                    <Text style={styles.chipText}>{i}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.actionsSection}>
         <TouchableOpacity 
-          style={styles.actionButton}
+          style={styles.primaryActionButton}
           onPress={() => router.push('/edit-profile')}
         >
-          <Text style={styles.actionButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => router.push('/blocked-users')}
-          >
-          <Text style={styles.actionButtonText}>Blocked Users</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => router.push('/test-features')}
-          >
-          <Text style={styles.actionButtonText}>🧪 Test Features</Text>
-          </TouchableOpacity>
+          <Text style={styles.primaryActionText}>Edit Profile</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.actionButton, styles.signOutButton]}
+          style={styles.secondaryActionButton}
           onPress={handleSignOut}
         >
-          <Text style={[styles.actionButtonText, styles.signOutButtonText]}>
-            Sign Out
-          </Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={styles.secondaryActionText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
       </ScrollView>
+    </SafeAreaView>
   )
 }
 
@@ -216,14 +292,55 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  carouselImage: {
+    height: 420,
+    backgroundColor: '#f0f0f0',
+  },
+  dotsContainer: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    marginHorizontal: 3,
+  },
+  dotActive: {
+    backgroundColor: '#fff',
+  },
   profileSection: {
     padding: 20,
+  },
+  displayName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#222',
+  },
+  bioText: {
+    marginTop: 8,
+    fontSize: 16,
+    color: '#444',
+    lineHeight: 22,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
     marginBottom: 15,
+  },
+  subsectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
   },
   profileItem: {
     marginBottom: 15,
@@ -238,29 +355,59 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  actionsSection: {
-    padding: 20,
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
   },
-  actionButton: {
-    backgroundColor: '#f8f9fa',
-    padding: 15,
+  photoTile: {
+    width: '30%',
+    aspectRatio: 1,
     borderRadius: 8,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
+    backgroundColor: '#eee',
+    marginRight: 8,
+    marginBottom: 8,
   },
-  actionButtonText: {
+  chipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  chipText: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionsSection: { padding: 20 },
+  primaryActionButton: {
+    backgroundColor: '#FF6B6B',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  primaryActionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryActionButton: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#f4f4f4',
+  },
+  secondaryActionText: {
+    color: '#333',
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-  },
-  signOutButton: {
-    backgroundColor: '#e74c3c',
-    borderColor: '#e74c3c',
-    marginTop: 20,
-  },
-  signOutButtonText: {
-    color: '#fff',
   },
 }) 

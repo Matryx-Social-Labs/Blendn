@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import { Alert } from 'react-native'
@@ -163,21 +164,30 @@ export const uploadPhoto = async (
     const finalFileName = fileName || `profile_${timestamp}.${fileExtension}`
     const filePath = `${userId}/${finalFileName}`
 
-    // Convert URI to blob for upload
-    const response = await fetch(processedUri)
-    const blob = await response.blob()
+    // Prefer direct HTTP upload via FileSystem to avoid 0-byte blobs in RN fetch
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return { success: false, error: 'Missing Supabase configuration' }
+    }
 
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('profile-photos')
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
-        upsert: false
-      })
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/profile-photos/${filePath}`
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+    const result = await FileSystem.uploadAsync(uploadUrl, processedUri, {
+      httpMethod: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'false',
+      },
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    })
 
-    if (error) {
-      console.error('Upload error:', error)
-      return { success: false, error: error.message }
+    if (result.status < 200 || result.status >= 300) {
+      console.error('Upload error (HTTP):', result.status, result.body)
+      return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
     // Get public URL

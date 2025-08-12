@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
@@ -36,6 +37,8 @@ type ChatTabType = 'group' | 'personal'
 export default function Chat() {
   const { user, loading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<ChatTabType>('group')
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([])
+  const [outgoingRequests, setOutgoingRequests] = useState<any[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,11 +64,25 @@ export default function Chat() {
       } else {
         await loadPersonalChats()
       }
+      await loadMessageRequests()
       
     } catch (error) {
       console.error('💥 [CHAT] Error loading chats:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMessageRequests = async () => {
+    try {
+      const [inc, out] = await Promise.all([
+        supabase.rpc('get_incoming_message_requests', { p_user_id: user.id }),
+        supabase.rpc('get_outgoing_message_requests', { p_user_id: user.id }),
+      ])
+      setIncomingRequests(Array.isArray(inc.data) ? inc.data : [])
+      setOutgoingRequests(Array.isArray(out.data) ? out.data : [])
+    } catch (e) {
+      console.error('[CHAT] loadMessageRequests failed:', e)
     }
   }
 
@@ -296,19 +313,24 @@ export default function Chat() {
           : 'Start conversations with other users'
         }
       </Text>
+      {incomingRequests.length > 0 && (
+        <View style={{ marginTop: 16 }}>
+          <Text style={{ textAlign: 'center', color: '#333', fontWeight: '600' }}>You have {incomingRequests.length} chat request(s)</Text>
+        </View>
+      )}
     </View>
   )
 
   if (authLoading || loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <Text style={styles.loadingText}>Loading chats...</Text>
-      </View>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Tab Switcher */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
@@ -345,21 +367,55 @@ export default function Chat() {
           ]}
         />
       ) : (
-        <FlatList
-          data={personalChats}
-          renderItem={renderPersonalChatItem}
-          keyExtractor={(item) => item.conversation_id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={[
-            styles.listContainer,
-            personalChats.length === 0 && styles.emptyListContainer
-          ]}
-        />
+        <>
+          {incomingRequests.length > 0 && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+              <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8 }}>Requests</Text>
+              {incomingRequests.map((r) => (
+                <View key={r.request_id} style={styles.requestItem}>
+                  <Text style={{ fontWeight: '600', color: '#333' }}>{r.sender_name || 'User'}</Text>
+                  {!!r.initial_message && (
+                    <Text style={{ color: '#666', marginTop: 2 }} numberOfLines={1}>{r.initial_message}</Text>
+                  )}
+                  <View style={styles.requestActions}>
+                    <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
+                      try { await supabase.rpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
+                    }}>
+                      <Text style={styles.reqBtnText}>Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.reqBtn, styles.accept]} onPress={async () => {
+                      try {
+                        const { data } = await supabase.rpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
+                        const res = Array.isArray(data) ? data[0] : data
+                        loadChats()
+                        if (res?.success && res.conversation_id) {
+                          router.push(`/private-chat/${res.conversation_id}`)
+                        }
+                      } catch {}
+                    }}>
+                      <Text style={styles.reqBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+          <FlatList
+            data={personalChats}
+            renderItem={renderPersonalChatItem}
+            keyExtractor={(item) => item.conversation_id}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={renderEmptyState}
+            contentContainerStyle={[
+              styles.listContainer,
+              personalChats.length === 0 && styles.emptyListContainer
+            ]}
+          />
+        </>
       )}
-    </View>
+    </SafeAreaView>
   )
 }
 
@@ -452,6 +508,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  requestItem: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 10,
+  },
+  reqBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  accept: { backgroundColor: '#4CAF50' },
+  reject: { backgroundColor: '#FF6B6B' },
+  reqBtnText: { color: '#fff', fontWeight: '700' },
   chatVenue: {
     fontSize: 14,
     color: '#666',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { AuthHelper, supabase } from '../lib/supabase'
 
 export default function TestFeatures() {
@@ -494,7 +495,8 @@ export default function TestFeatures() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView>
       <Text style={styles.title}>Test Features</Text>
       
       <TouchableOpacity
@@ -574,7 +576,8 @@ export default function TestFeatures() {
           ))}
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 

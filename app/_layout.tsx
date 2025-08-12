@@ -80,43 +80,43 @@ export default function RootLayout() {
       <Stack.Screen 
         name="chat/[id]" 
         options={{ 
-          title: "Group Chat",
-          headerBackTitle: "Back"
+          headerShown: false
         }} 
       />
       <Stack.Screen 
         name="event/[id]" 
         options={{ 
-          title: "Event Details",
-          headerBackTitle: "Back"
+          headerShown: false
         }} 
       />
       <Stack.Screen 
         name="private-chat/[conversationId]" 
         options={{ 
-          title: "Chat",
-          headerBackTitle: "Back"
+          headerShown: false
         }} 
       />
       <Stack.Screen 
         name="edit-profile" 
         options={{ 
-          title: "Edit Profile",
-          headerBackTitle: "Back"
+          headerShown: false
         }} 
       />
       <Stack.Screen 
         name="blocked-users" 
         options={{ 
-          title: "Blocked Users",
-          headerBackTitle: "Back"
+          headerShown: false
         }} 
       />
       <Stack.Screen 
         name="test-features" 
         options={{ 
-          title: "Test Features",
-          headerBackTitle: "Back"
+          headerShown: false
+        }} 
+      />
+      <Stack.Screen 
+        name="user/[id]" 
+        options={{ 
+          headerShown: false
         }} 
       />
     </Stack>

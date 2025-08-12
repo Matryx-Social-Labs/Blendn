@@ -135,18 +135,16 @@ export async function sendNotificationToUser(
   notification: NotificationData
 ): Promise<boolean> {
   try {
-    // This would typically be called from a backend function
-    // For now, we'll create a database record that can trigger a notification
-    const { error } = await supabase
-      .from('notifications')
-      .insert({
+    // Use SECURITY DEFINER RPC to bypass RLS safely
+    const { error } = await supabase.rpc('create_notification_json', {
+      payload: {
         user_id: userId,
         type: notification.type,
         title: notification.title,
         body: notification.body,
         data: notification.data || {},
-        sent: false
-      })
+      }
+    })
 
     if (error) {
       console.error('Error creating notification record:', error)

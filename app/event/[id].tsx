@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotificationHelpers } from '../../lib/notifications';
 import { supabase } from '../../lib/supabase';
 
@@ -382,21 +383,21 @@ export default function EventDetail() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color="#FF6B6B" />
         <Text style={styles.loadingText}>Loading event details...</Text>
-      </View>
+      </SafeAreaView>
     )
   }
 
   if (!event) {
     return (
-      <View style={styles.errorContainer}>
+      <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         <Text style={styles.errorText}>Event not found</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     )
   }
 
@@ -404,7 +405,8 @@ export default function EventDetail() {
   const isCheckedIn = checkInStatus?.checked_in || false
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView>
       <Image 
         source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
         style={styles.coverImage}
@@ -534,7 +536,8 @@ export default function EventDetail() {
           )}
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 
@@ -586,7 +589,7 @@ const styles = StyleSheet.create({
   },
   header: {
     position: 'absolute',
-    top: 40,
+    top: 12,
     left: 20,
     zIndex: 10,
   },

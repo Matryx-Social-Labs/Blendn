@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
 
@@ -92,17 +93,17 @@ export default function Index() {
   // Show loading while auth is initializing
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" />
         <Text style={styles.loadingText}>Loading...</Text>
-      </View>
+      </SafeAreaView>
     )
   }
 
   // Show sign in screen if not authenticated
   if (!user) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Text style={styles.title}>Welcome to blendn</Text>
         <Text style={styles.subtitle}>Connect with people at events</Text>
         
@@ -120,16 +121,16 @@ export default function Index() {
             <Text style={styles.signingInText}>Signing in...</Text>
           </View>
         )}
-      </View>
+      </SafeAreaView>
     )
   }
 
   // This should not be reached due to navigation in useEffect
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ActivityIndicator size="large" />
       <Text style={styles.loadingText}>Redirecting...</Text>
-    </View>
+    </SafeAreaView>
   )
 }
 

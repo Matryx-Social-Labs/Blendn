@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCheckout, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
@@ -294,15 +295,15 @@ export default function Events() {
 
   if (authLoading || loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Loading events...</Text>
-      </View>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <FlatList
         data={events}
         renderItem={renderEventItem}
@@ -313,7 +314,7 @@ export default function Events() {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   )
 }
 

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from '@react-navigation/native'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -12,141 +13,227 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
-import { NotificationHelpers } from '../../lib/notifications'
-import { showUserSafetyActions } from '../../lib/safetyUtils'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
 
-const { width, height } = Dimensions.get('window')
-const CARD_HEIGHT = height * 0.7
-const CARD_WIDTH = width * 0.9
+const { width } = Dimensions.get('window')
+const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
+const TILE_HEIGHT = TILE_WIDTH * 1.35
 
-interface UserProfile {
+interface AttendeeProfile {
   user_id: string
-  name: string
-  age: number
-  bio: string
-  interests: string[]
-  profile_photos: string[]
-  distance_km: number
-  mutual_events: string[]
+  name?: string
+  age?: number
+  bio?: string
+  interests?: string[]
+  profile_photos?: string[]
+  last_seen?: string
 }
 
 export default function Match() {
   const [loading, setLoading] = useState(true)
-  const [swipeLoading, setSwipeLoading] = useState(false)
-  const [candidates, setCandidates] = useState<UserProfile[]>([])
-  const [currentIndex, setCurrentIndex] = useState(0)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
+  const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadInitialData()
   }, [])
 
+  // Refresh when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser) {
+        loadActiveEventAndAttendees(currentUser.id)
+      }
+    }, [currentUser])
+  )
+
+  // Realtime: refresh when this user's check-in status changes
+  useEffect(() => {
+    if (!currentUser) return
+    const channel = supabase
+      .channel(`match_checkins_${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${currentUser.id}` },
+        () => {
+          loadActiveEventAndAttendees(currentUser.id)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      try { supabase.removeChannel(channel) } catch {}
+    }
+  }, [currentUser])
+
   const loadInitialData = async () => {
     try {
-      console.log('🔍 [MATCH_INIT] Starting loadInitialData...');
-      console.log('🔍 [MATCH_INIT] Supabase client initialized:', !!supabase);
-      
-      console.log('🔍 [MATCH_INIT] Getting authenticated user...');
-      const authStartTime = Date.now();
-      
-      // Get authenticated user with fallback
+      setError(null)
+      // Auth
       const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
-      const authEndTime = Date.now();
-      console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms`);
-      
-      if (error) {
-        console.error('❌ [MATCH_INIT] Auth error:', error);
-        // Redirect to main app if user is not authenticated
+      if (error || !user) {
         router.replace('/(tabs)/events')
         return
       }
-      
-      if (!user) {
-        console.log('⚠️ [MATCH_INIT] No authenticated user found, redirecting...');
-        router.replace('/(tabs)/events')
-        return
-      }
-
-      console.log('✅ [MATCH_INIT] Authenticated user found:', user.id);
-      console.log('✅ [MATCH_INIT] User email:', user.email);
-      
       setCurrentUser(user)
-      console.log('🔍 [MATCH_INIT] Loading swipe candidates...');
-      await loadCandidates(user.id)
-    } catch (error) {
-      console.error('💥 [MATCH_INIT] Unexpected error:', error);
-      console.error('💥 [MATCH_INIT] Error type:', typeof error);
-      console.error('💥 [MATCH_INIT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      // Redirect to main app on any unexpected error
-      router.replace('/(tabs)/events')
+
+      // Load active event and attendees
+      await loadActiveEventAndAttendees(user.id)
+    } catch (e) {
+      console.error('💥 [MATCH_INIT] Unexpected error:', e)
+      setError('Failed to load')
     } finally {
-      console.log('🏁 [MATCH_INIT] loadInitialData completed');
       setLoading(false)
     }
   }
 
-  const loadCandidates = async (userId: string) => {
+  const loadActiveEventAndAttendees = async (userId: string) => {
     try {
-      console.log('🔍 [MATCH] Starting loadCandidates...');
-      console.log('🔍 [MATCH] User ID:', userId);
-      console.log('🔍 [MATCH] Supabase client initialized:', !!supabase);
-      
-      console.log('🔍 [MATCH] Calling RPC: get_swipe_candidates');
-      console.log('🔍 [MATCH] Parameters:', {
-        p_user_id: userId,
-        p_limit: 10
-      });
-      
-      const rpcStartTime = Date.now();
-      
-      // Add timeout wrapper to prevent infinite hanging
-      const rpcPromise = supabase.rpc('get_swipe_candidates', {
-        p_user_id: userId,
-        p_limit: 10
-      })
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Match candidates RPC timeout after 8000ms')), 8000)
-      )
-      
-      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
+      // Find active event for current user
+      const { data: checkins, error: checkinsError } = await supabase
+        .from('event_checkins')
+        .select('event_id, checked_in_at')
+        .eq('user_id', userId)
+        .is('checked_out_at', null)
+        .order('checked_in_at', { ascending: false })
+        .limit(1)
 
-      const rpcEndTime = Date.now();
-      console.log(`🔍 [MATCH] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
-
-      if (error) {
-        console.error('❌ [MATCH] RPC error:', error);
-        console.error('❌ [MATCH] Error code:', error.code);
-        console.error('❌ [MATCH] Error message:', error.message);
-        console.error('❌ [MATCH] Error details:', error.details);
-        console.log('🔄 [MATCH] Setting empty candidates array');
-        setCandidates([]);
+      if (checkinsError) {
+        console.error('❌ [MATCH] Error fetching user check-ins:', checkinsError)
+        setEventInfo(null)
+        setAttendees([])
         return
       }
 
-      console.log('✅ [MATCH] SUCCESS: get_swipe_candidates worked!');
-      console.log('✅ [MATCH] Raw candidates data:', data);
-      console.log('✅ [MATCH] Data type:', typeof data);
-      console.log('✅ [MATCH] Candidates count:', data?.length || 0);
-      
-      if (data && data.length > 0) {
-        console.log('✅ [MATCH] First candidate sample:', JSON.stringify(data[0], null, 2));
+      const activeEventId = checkins && checkins.length > 0 ? checkins[0].event_id as string : null
+      if (!activeEventId) {
+        setEventInfo(null)
+        setAttendees([])
+        return
       }
 
-      setCandidates(data || [])
-      setCurrentIndex(0)
-      console.log(`✅ [MATCH] Successfully loaded ${data?.length || 0} candidates from database`);
-    } catch (error) {
-      console.error('💥 [MATCH] Unexpected error:', error);
-      console.error('💥 [MATCH] Error type:', typeof error);
-      console.error('💥 [MATCH] Error message:', error instanceof Error ? error.message : 'Unknown error');
-      console.log('🔄 [MATCH] Setting empty candidates array due to error');
-      setCandidates([]);
+      // Optionally fetch event title
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .select('id, title')
+        .eq('id', activeEventId)
+        .single()
+      if (!eventError && event) {
+        setEventInfo({ id: event.id, title: event.title })
+      } else {
+        setEventInfo({ id: activeEventId })
+      }
+
+      // Get blocked users to filter out
+      let blockedIds = new Set<string>()
+      try {
+        const blocked = await getBlockedUsers()
+        blockedIds = new Set(blocked.map(b => b.blocked_id))
+      } catch (blockErr) {
+        console.warn('⚠️ [MATCH] Failed to load blocked users:', blockErr)
+      }
+
+      // Prefer SECURITY DEFINER RPC to bypass RLS for attendee listing
+      const { data: rpcRows, error: rpcError } = await supabase
+        .rpc('get_event_attendees', { p_event_id: activeEventId })
+
+      if (rpcError) {
+        console.warn('⚠️ [MATCH] get_event_attendees RPC failed, falling back to direct selects:', rpcError.message)
+      }
+
+      if (rpcRows && Array.isArray(rpcRows)) {
+        const filtered = rpcRows.filter((r: any) => r.user_id !== userId && !blockedIds.has(r.user_id))
+        const attendeeProfiles: AttendeeProfile[] = filtered.map((r: any) => ({
+          user_id: r.user_id,
+          name: r.display_name,
+          age: r.age ?? undefined,
+          bio: r.bio ?? undefined,
+          interests: r.interests ?? undefined,
+          profile_photos: (r.photos && r.photos.length > 0) ? r.photos : undefined,
+          last_seen: r.checked_in_at ?? undefined,
+        }))
+        attendeeProfiles.sort((a, b) => {
+          const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
+          const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
+          return tb - ta
+        })
+        setAttendees(attendeeProfiles)
+        return
+      }
+
+      // Fallback path (may be limited by RLS):
+      const { data: attendeeCheckins, error: attendeesError } = await supabase
+        .from('event_checkins')
+        .select('user_id, checked_in_at, checked_out_at')
+        .eq('event_id', activeEventId)
+        .is('checked_out_at', null)
+
+      if (attendeesError || !attendeeCheckins) {
+        console.error('❌ [MATCH] Fallback attendees select failed:', attendeesError)
+        setAttendees([])
+        return
+      }
+
+      const uniqueUserIds = Array.from(
+        new Set(
+          attendeeCheckins
+            .map(a => a.user_id as string)
+            .filter(uid => uid && uid !== userId && !blockedIds.has(uid))
+        )
+      )
+
+      if (uniqueUserIds.length === 0) {
+        setAttendees([])
+        return
+      }
+
+      const [profilesRes, userProfilesRes] = await Promise.all([
+        supabase.from('profiles').select('id, name, age').in('id', uniqueUserIds),
+        supabase.from('user_profiles').select('user_id, display_name, bio, profile_photos, photos, interests').in('user_id', uniqueUserIds),
+      ])
+
+      const profiles = (profilesRes.data || []) as Array<{ id: string; name?: string; age?: number }>
+      const userProfiles = (userProfilesRes.data || []) as Array<{ user_id: string; display_name?: string; bio?: string; profile_photos?: string[]; photos?: string[]; interests?: string[] }>
+
+      const userIdToProfile = new Map(profiles.map(p => [p.id, p]))
+      const userIdToUserProfile = new Map(userProfiles.map(up => [up.user_id, up]))
+      const checkinMap = new Map<string, string>(attendeeCheckins.map(a => [a.user_id as string, a.checked_in_at as string]))
+
+      const attendeeProfiles: AttendeeProfile[] = uniqueUserIds.map(uid => {
+        const p = userIdToProfile.get(uid)
+        const up = userIdToUserProfile.get(uid)
+        const photos = (up?.profile_photos && up.profile_photos.length > 0)
+          ? up.profile_photos
+          : (up?.photos && up.photos.length > 0 ? up.photos : [])
+        return {
+          user_id: uid,
+          name: p?.name || up?.display_name,
+          age: p?.age,
+          bio: up?.bio,
+          interests: up?.interests,
+          profile_photos: photos,
+          last_seen: checkinMap.get(uid),
+        }
+      })
+
+      attendeeProfiles.sort((a, b) => {
+        const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
+        const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
+        return tb - ta
+      })
+
+      setAttendees(attendeeProfiles)
+    } catch (e) {
+      console.error('💥 [MATCH] Failed to load event attendees:', e)
+      setAttendees([])
     }
   }
 
-  const startPrivateConversation = async (candidate: UserProfile) => {
+  const startPrivateConversation = async (candidate: AttendeeProfile) => {
     try {
       const { data, error } = await supabase.rpc('get_or_create_private_conversation', {
         p_user1_id: currentUser.id,
@@ -178,198 +265,39 @@ export default function Match() {
     }
   }
 
-  const handleSwipe = async (isLike: boolean) => {
-    if (!currentUser || currentIndex >= candidates.length) return
-
-    const currentCandidate = candidates[currentIndex]
-    setSwipeLoading(true)
-
-    try {
-      const { data, error } = await supabase.rpc('record_swipe', {
-        p_swiper_id: currentUser.id,
-        p_swiped_id: currentCandidate.user_id,
-        p_is_like: isLike
-      })
-
-      if (error) {
-        console.error('Error recording swipe:', error)
-        Alert.alert('Error', 'Failed to record swipe')
-        return
-      }
-
-      const result = data[0]
-      
-      if (result.success) {
-        if (result.is_match) {
-          // Send match notification to the other user
-          try {
-            await NotificationHelpers.matchNotification(
-              'Someone', // We don't have current user's name here, could be improved
-              currentCandidate.user_id
-            );
-          } catch (error) {
-            console.error('Failed to send match notification:', error);
-          }
-
-          Alert.alert(
-            '🎉 It\'s a Match!',
-            `You and ${currentCandidate.name} liked each other! Start chatting now.`,
-            [
-              { text: 'Keep Swiping', style: 'cancel' },
-              { 
-                text: 'Start Chat', 
-                onPress: async () => {
-                  await startPrivateConversation(currentCandidate)
-                }
-              }
-            ]
-          )
-        }
-
-        // Move to next candidate
-        if (currentIndex < candidates.length - 1) {
-          setCurrentIndex(currentIndex + 1)
-        } else {
-          // Load more candidates
-          await loadCandidates(currentUser.id)
-        }
-      } else {
-        Alert.alert('Info', result.message)
-      }
-    } catch (error) {
-      console.error('Error handling swipe:', error)
-      Alert.alert('Error', 'Something went wrong')
-    } finally {
-      setSwipeLoading(false)
-    }
-  }
-
-  const renderProfileCard = () => {
-    if (currentIndex >= candidates.length) {
-      return (
-        <View style={styles.noMoreContainer}>
-          <Text style={styles.noMoreIcon}>🔍</Text>
-          <Text style={styles.noMoreTitle}>No More Profiles</Text>
-          <Text style={styles.noMoreText}>
-            Check back later for new people to match with!
-          </Text>
-          <TouchableOpacity 
-            style={styles.refreshButton}
-            onPress={() => loadCandidates(currentUser.id)}
-          >
-            <Text style={styles.refreshButtonText}>Refresh</Text>
-          </TouchableOpacity>
-        </View>
-      )
-    }
-
-    const profile = candidates[currentIndex]
-    const photoUrl = profile.profile_photos && profile.profile_photos.length > 0 
-      ? profile.profile_photos[0] 
-      : 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=400' // Placeholder
+  // Netflix-style attendee tile
+  const renderAttendeeTile = (attendee: AttendeeProfile) => {
+    const photoUrl = attendee.profile_photos && attendee.profile_photos.length > 0
+      ? attendee.profile_photos[0]
+      : 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=400'
 
     return (
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <Image 
-            source={{ uri: photoUrl }}
-            style={styles.profileImage}
-            resizeMode="cover"
-          />
-          
-          <View style={styles.gradient} />
-          
-          <View style={styles.profileInfo}>
-            <View style={styles.nameSection}>
-              <Text style={styles.name}>
-                {profile.name}, {profile.age}
-              </Text>
-              {profile.distance_km > 0 && (
-                <View style={styles.distanceTag}>
-                  <Ionicons name="location" size={14} color="#fff" />
-                  <Text style={styles.distance}>{profile.distance_km}km away</Text>
-                </View>
-              )}
-            </View>
-            
-            <Text style={styles.bio}>{profile.bio}</Text>
-            
-            {profile.mutual_events && profile.mutual_events.length > 0 && (
-              <View style={styles.mutualEvents}>
-                <Text style={styles.mutualTitle}>🎉 Mutual Events</Text>
-                {profile.mutual_events.slice(0, 2).map((event, index) => (
-                  <Text key={index} style={styles.mutualEvent}>• {event}</Text>
-                ))}
-              </View>
-            )}
-            
-            {profile.interests && profile.interests.length > 0 && (
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.interestsContainer}
-              >
-                {profile.interests.map((interest, index) => (
-                  <View key={index} style={styles.interestTag}>
-                    <Text style={styles.interestText}>{interest}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
+      <View key={attendee.user_id} style={styles.tileWrapper}>
+        <TouchableOpacity
+          style={styles.tile}
+          activeOpacity={0.85}
+          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+        >
+          <Image source={{ uri: photoUrl }} style={styles.tileImage} resizeMode="cover" />
+          <View style={styles.tileGradient} />
+          <View style={styles.tileInfo}>
+            <Text style={styles.tileName} numberOfLines={1}>
+              {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
+            </Text>
+            {attendee.bio ? (
+              <Text style={styles.tileBio} numberOfLines={1}>{attendee.bio}</Text>
+            ) : null}
           </View>
-        </View>
-      </View>
-    )
-  }
-
-  const renderActionButtons = () => {
-    if (currentIndex >= candidates.length) return null
-
-    const currentCandidate = candidates[currentIndex]
-
-    return (
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.passButton]}
-          onPress={() => handleSwipe(false)}
-          disabled={swipeLoading}
-        >
-          <Ionicons name="close" size={32} color="#FF6B6B" />
         </TouchableOpacity>
-        
         <TouchableOpacity
-          style={[styles.actionButton, styles.safetyButton]}
-          onPress={() => showUserSafetyActions(
-            currentCandidate.name, 
-            currentCandidate.user_id,
-            () => {
-              // On block, move to next candidate
-              if (currentIndex < candidates.length - 1) {
-                setCurrentIndex(currentIndex + 1)
-              } else {
-                loadCandidates(currentUser.id)
-              }
-            }
-          )}
-          disabled={swipeLoading}
+          style={styles.tileSafety}
+          onPress={() =>
+            showUserSafetyActions(attendee.name || 'User', attendee.user_id, () => {
+              setAttendees(prev => prev.filter(a => a.user_id !== attendee.user_id))
+            })
+          }
         >
-          <Ionicons name="shield-outline" size={24} color="#666" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.superLikeButton]}
-          onPress={() => Alert.alert('Coming Soon!', 'Super Like feature will be available soon!')}
-          disabled={swipeLoading}
-        >
-          <Ionicons name="star" size={28} color="#00D4FF" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.likeButton]}
-          onPress={() => handleSwipe(true)}
-          disabled={swipeLoading}
-        >
-          <Ionicons name="heart" size={32} color="#4CAF50" />
+          <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     )
@@ -377,10 +305,10 @@ export default function Match() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>💕</Text>
-      <Text style={styles.emptyTitle}>Start Matching!</Text>
+      <Text style={styles.emptyIcon}>🎬</Text>
+      <Text style={styles.emptyTitle}>Meet People at Events</Text>
       <Text style={styles.emptyText}>
-        Check in to events to start seeing profiles of other attendees and make meaningful connections!
+        Check in to an event to see other attendees and start a conversation.
       </Text>
       <TouchableOpacity 
         style={styles.eventsButton}
@@ -393,40 +321,53 @@ export default function Match() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Finding potential matches...</Text>
-      </View>
+        <Text style={styles.loadingText}>Loading attendees...</Text>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Match 💕</Text>
-        <Text style={styles.headerSubtitle}>
-          {candidates.length > 0 
-            ? `${candidates.length - currentIndex} people nearby`
-            : 'Connect with people at your events'
-          }
-        </Text>
+        <Text style={styles.headerTitle}>People</Text>
+        {eventInfo ? (
+          <Text style={styles.headerSubtitle}>
+            Active at {eventInfo.title ? `“${eventInfo.title}”` : 'your event'}
+          </Text>
+        ) : (
+          <Text style={styles.headerSubtitle}>Connect with people at your events</Text>
+        )}
+        <TouchableOpacity style={styles.refreshBtn} onPress={() => currentUser && loadActiveEventAndAttendees(currentUser.id)}>
+          <Ionicons name="refresh" size={20} color="#666" />
+        </TouchableOpacity>
       </View>
-      
-      {swipeLoading && (
-        <View style={styles.swipeLoadingOverlay}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
-        </View>
-      )}
 
-      {candidates.length === 0 ? (
+      {!eventInfo ? (
         renderEmptyState()
+      ) : attendees.length === 0 ? (
+        <View style={styles.noMoreContainer}>
+          <Text style={styles.noMoreIcon}>👋</Text>
+          <Text style={styles.noMoreTitle}>You're early!</Text>
+          <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
+        </View>
       ) : (
-        <View style={styles.matchContainer}>
-          {renderProfileCard()}
-          {renderActionButtons()}
+        <View style={styles.carouselContainer}>
+          <View style={styles.rowHeader}>
+            <Text style={styles.rowTitle}>Active attendees</Text>
+            <Text style={styles.rowCount}>{attendees.length}</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carousel}
+          >
+            {attendees.map(renderAttendeeTile)}
+          </ScrollView>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   )
 }
 
@@ -437,7 +378,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
@@ -462,168 +403,77 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  swipeLoadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    justifyContent: 'center',
+  carouselContainer: {
+    paddingTop: 16,
+  },
+  rowHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 1000,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
-  matchContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  rowTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222',
   },
-  cardContainer: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    marginBottom: 30,
+  rowCount: {
+    fontSize: 14,
+    color: '#888',
   },
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+  carousel: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  tileWrapper: {
+    width: TILE_WIDTH,
+    height: TILE_HEIGHT,
+    marginRight: 12,
+  },
+  tile: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
     overflow: 'hidden',
+    backgroundColor: '#f2f2f2',
   },
-  profileImage: {
+  tileImage: {
     width: '100%',
     height: '100%',
   },
-  gradient: {
+  tileGradient: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     height: '50%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  profileInfo: {
+  tileInfo: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
+    left: 10,
+    right: 10,
+    bottom: 10,
   },
-  nameSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  name: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  tileName: {
     color: '#fff',
-  },
-  distanceTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  distance: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  bio: {
     fontSize: 16,
-    color: '#fff',
-    lineHeight: 22,
-    marginBottom: 12,
+    fontWeight: '700',
+    marginBottom: 2,
   },
-  mutualEvents: {
-    marginBottom: 12,
-  },
-  mutualTitle: {
-    fontSize: 14,
-    color: '#FFD700',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  mutualEvent: {
-    fontSize: 13,
-    color: '#fff',
-    opacity: 0.9,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  interestTag: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  interestText: {
+  tileBio: {
+    color: '#f0f0f0',
     fontSize: 12,
-    color: '#fff',
-    fontWeight: '500',
   },
-  actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 20,
-  },
-  actionButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  passButton: {
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#FF6B6B',
-  },
-  superLikeButton: {
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#00D4FF',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  safetyButton: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#ddd',
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-  },
-  likeButton: {
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#4CAF50',
+  tileSafety: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   noMoreContainer: {
     alignItems: 'center',
@@ -647,17 +497,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 30,
   },
-  refreshButton: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -665,7 +504,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyIcon: {
-    fontSize: 80,
+    fontSize: 64,
     marginBottom: 20,
   },
   emptyTitle: {

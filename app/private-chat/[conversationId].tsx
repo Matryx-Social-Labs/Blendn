@@ -7,13 +7,13 @@ import {
     FlatList,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native'
+import { SafeAreaView as SafeAreaViewContext } from 'react-native-safe-area-context'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
 import { supabase } from '../../lib/supabase'
@@ -40,9 +40,9 @@ export default function PrivateChat() {
   }, [conversationId])
 
   useEffect(() => {
-    if (conversationId) {
-      subscribeToMessages()
-    }
+    if (!conversationId) return
+    const cleanup = subscribeToMessages()
+    return cleanup
   }, [conversationId])
 
   const initializeChat = async () => {
@@ -85,7 +85,7 @@ export default function PrivateChat() {
   const subscribeToMessages = () => {
     // Subscribe to real-time message updates
     const channel = supabase
-      .channel('private_messages')
+      .channel(`private_messages_${conversationId}`)
       .on(
         'postgres_changes',
         {
@@ -95,8 +95,19 @@ export default function PrivateChat() {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          const newMessage = payload.new as PrivateMessage
-          setMessages(prev => [...prev, newMessage])
+          const row: any = payload.new
+          const newMessage: PrivateMessage = {
+            message_id: row.id,
+            sender_id: row.sender_id,
+            message_text: row.message_text,
+            created_at: row.created_at,
+            updated_at: row.updated_at || row.created_at,
+          }
+          setMessages(prev => {
+            const exists = prev.some(m => m.message_id === newMessage.message_id)
+            if (exists) return prev
+            return [...prev, newMessage]
+          })
           setTimeout(() => scrollToBottom(), 100)
         }
       )
@@ -120,6 +131,17 @@ export default function PrivateChat() {
     const messageText = newMessage.trim()
     setNewMessage('')
 
+    // Optimistic UI
+    const optimistic: PrivateMessage = {
+      message_id: `temp-${Date.now()}`,
+      sender_id: currentUser.id,
+      message_text: messageText,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, optimistic])
+    setTimeout(() => scrollToBottom(), 50)
+
     try {
       const { data, error } = await supabase.rpc('send_private_message', {
         p_conversation_id: conversationId,
@@ -129,40 +151,42 @@ export default function PrivateChat() {
       if (error) {
         console.error('Error sending message:', error)
         Alert.alert('Error', 'Failed to send message')
-        setNewMessage(messageText) // Restore message on error
+        // Rollback optimistic
+        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
+        setNewMessage(messageText)
         return
       }
 
-      const result = data[0]
-      if (result.success) {
-        // Send push notification to the other user
-        try {
-          // Get current user's name for the notification
-          const { data: senderProfile } = await supabase
-            .from('user_profiles')
-            .select('display_name')
-            .eq('user_id', currentUser.id)
-            .single()
-
-          const senderName = senderProfile?.display_name || 'Someone'
-          
-          await NotificationHelpers.messageNotification(
-            senderName,
-            messageText,
-            otherUserId as string,
-            conversationId as string
-          )
-        } catch (notificationError) {
-          console.error('Failed to send message notification:', notificationError)
-          // Don't fail the message send if notification fails
-        }
-      } else {
-        Alert.alert('Error', result.message)
+      const result = Array.isArray(data) ? data[0] : data
+      if (!result?.success) {
+        Alert.alert('Error', result?.message || 'Failed to send message')
+        // Rollback optimistic
+        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
         setNewMessage(messageText)
+        return
+      }
+
+      // Notification (best-effort)
+      try {
+        const { data: senderProfile } = await supabase
+          .from('user_profiles')
+          .select('display_name')
+          .eq('user_id', currentUser.id)
+          .single()
+        const senderName = senderProfile?.display_name || 'Someone'
+        await NotificationHelpers.messageNotification(
+          senderName,
+          messageText,
+          otherUserId as string,
+          conversationId as string
+        )
+      } catch (notificationError) {
+        console.error('Failed to send message notification:', notificationError)
       }
     } catch (error) {
       console.error('Failed to send message:', error)
-      Alert.alert('Error', 'Something went wrong')
+      // Rollback optimistic
+      setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
       setNewMessage(messageText)
     } finally {
       setSending(false)
@@ -251,17 +275,17 @@ export default function PrivateChat() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaViewContext style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B6B" />
           <Text style={styles.loadingText}>Loading conversation...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaViewContext>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaViewContext style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.container} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -337,7 +361,7 @@ export default function PrivateChat() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SafeAreaViewContext>
   )
 }
 
