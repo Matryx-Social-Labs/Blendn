@@ -136,7 +136,7 @@ export default function Chat() {
     try {
       console.log('🔍 [CHAT] Fetching personal chats...')
       
-      // Get private conversations through matches table
+      // Get only conversations where the current user is part of the match (server-side filter)
       const { data: conversations, error: conversationError } = await supabase
         .from('private_conversations')
         .select(`
@@ -148,6 +148,9 @@ export default function Chat() {
             user2_id
           )
         `)
+        // Filter on the joined matches table so only the current user's conversations are returned
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`, { foreignTable: 'matches' })
+        .order('last_message_at', { ascending: false })
 
       if (conversationError) {
         console.error('❌ [CHAT] Error fetching conversations:', conversationError)
@@ -155,38 +158,55 @@ export default function Chat() {
         return
       }
 
-      // Filter conversations where current user is involved and get other user details
-      const userConversations = []
-      
-      for (const conv of conversations || []) {
-        const match = Array.isArray(conv.matches) ? conv.matches[0] : conv.matches
+      // Build list of other user IDs, then batch fetch their profiles
+      const conversationList = (conversations || []) as any[]
+      const otherUserIdsSet = new Set<string>()
+      const otherUserIdByConversationId: Record<string, string> = {}
+
+      for (const conversation of conversationList) {
+        const match = Array.isArray(conversation.matches) ? conversation.matches[0] : conversation.matches
         if (!match) continue
-        
+
         const isUser1 = match.user1_id === user.id
-        const isUser2 = match.user2_id === user.id
-        
-        if (!isUser1 && !isUser2) {
-          continue // Skip conversations where current user is not involved
-        }
-        
         const otherUserId = isUser1 ? match.user2_id : match.user1_id
-        
-        // Get other user's profile
-        const { data: otherUserProfile } = await supabase
+        if (otherUserId) {
+          otherUserIdsSet.add(otherUserId)
+          otherUserIdByConversationId[conversation.id] = otherUserId
+        }
+      }
+
+      const otherUserIds = Array.from(otherUserIdsSet)
+
+      let profilesById: Record<string, { id: string, name: string | null }> = {}
+      if (otherUserIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('name')
-          .eq('id', otherUserId)
-          .single()
-        
-        userConversations.push({
-          conversation_id: conv.id,
+          .select('id, name')
+          .in('id', otherUserIds)
+
+        if (profilesError) {
+          console.error('❌ [CHAT] Error fetching profiles:', profilesError)
+        } else {
+          profilesById = (profiles || []).reduce((acc: Record<string, { id: string, name: string | null }>, p: any) => {
+            acc[p.id] = { id: p.id, name: p.name ?? null }
+            return acc
+          }, {})
+        }
+      }
+
+      const userConversations = conversationList.map((conversation: any) => {
+        const otherUserId = otherUserIdByConversationId[conversation.id]
+        const otherUserProfile = otherUserId ? profilesById[otherUserId] : undefined
+
+        return {
+          conversation_id: conversation.id,
           other_user_id: otherUserId,
           other_user_name: otherUserProfile?.name || 'Unknown User',
           last_message: undefined,
-          last_message_time: conv.last_message_at,
-          unread_count: 0 // We'll skip this for now to avoid extra queries
-        })
-      }
+          last_message_time: conversation.last_message_at,
+          unread_count: 0,
+        } as PersonalChat
+      })
 
       setPersonalChats(userConversations)
       console.log(`✅ [CHAT] Loaded ${userConversations.length} personal chats`)
