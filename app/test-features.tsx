@@ -1,455 +1,685 @@
-import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
 import React, { useState } from 'react'
-import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native'
-import {
-    initializePushNotifications
-} from '../lib/notifications'
-import { supabase, supabaseWithTimeout } from '../lib/supabase'
-
-interface TestResult {
-  name: string
-  status: 'pending' | 'success' | 'error'
-  message?: string
-}
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { AuthHelper, supabase } from '../lib/supabase'
 
 export default function TestFeatures() {
-  const [tests, setTests] = useState<TestResult[]>([
-    { name: 'Supabase Connection', status: 'pending' },
-    { name: 'Real Events Query', status: 'pending' },
-    { name: 'Database Connection', status: 'pending' },
-    { name: 'Push Notifications Setup', status: 'pending' },
-    { name: 'Photo Upload System', status: 'pending' },
-    { name: 'User Profile Data', status: 'pending' },
-    { name: 'Matching System', status: 'pending' },
-    { name: 'Chat Functionality', status: 'pending' },
-    { name: 'Safety Features', status: 'pending' },
-    { name: 'Event Check-in', status: 'pending' },
-  ])
+  const [loading, setLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [userChats, setUserChats] = useState<any[]>([])
+  const [networkStatus, setNetworkStatus] = useState<string>('Unknown')
 
-  const updateTest = (name: string, status: 'success' | 'error', message?: string) => {
-    setTests(prev => prev.map(test => 
-      test.name === name ? { ...test, status, message } : test
-    ))
-  }
-
-  const testDatabaseConnection = async () => {
+  const testNetworkConnectivity = async () => {
     try {
-      console.log('Testing basic database connection...');
+      console.log('🔍 Testing network connectivity...')
+      setNetworkStatus('Testing...')
       
-      const result: any = await supabaseWithTimeout.query(
-        async () => {
-          const { data, error } = await supabase.from('profiles').select('count').limit(1)
-          return { data, error }
-        },
-        8000 // 8 second timeout
-      )
-      
-      if (result?.error) throw result.error
-      updateTest('Database Connection', 'success', 'Connected to Supabase successfully')
+      // Test 1: Basic fetch to Supabase URL
+      try {
+        const response = await fetch('https://rycftadewrklmsswzviy.supabase.co/rest/v1/', {
+          method: 'GET',
+          headers: {
+            'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`
+          }
+        })
+        
+        if (response.ok) {
+          setNetworkStatus('Network OK - Supabase reachable')
+          console.log('✅ Network test: Supabase is reachable')
+        } else {
+          setNetworkStatus(`Network Error - Status: ${response.status}`)
+          console.log('❌ Network test: Supabase returned error', response.status)
+        }
+      } catch (fetchError) {
+        setNetworkStatus('Network Failed - Cannot reach Supabase')
+        console.error('❌ Network test failed:', fetchError)
+      }
+
+      // Test 2: Simple Supabase query
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('count')
+          .limit(1)
+
+        if (!error) {
+          console.log('✅ Supabase query test: Success')
+          Alert.alert('Network Test', 'Network connectivity is working! Supabase is reachable.')
+        } else {
+          console.error('❌ Supabase query test failed:', error)
+          Alert.alert('Network Test', `Supabase query failed: ${error.message}`)
+        }
+      } catch (supabaseError) {
+        console.error('❌ Supabase connection failed:', supabaseError)
+        Alert.alert('Network Test', `Supabase connection failed: ${supabaseError}`)
+      }
+
     } catch (error) {
-      console.error('Database connection failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to database'
-      updateTest('Database Connection', 'error', errorMessage)
+      console.error('💥 Network test error:', error)
+      setNetworkStatus('Network Test Failed')
+      Alert.alert('Network Test', 'Network connectivity test failed')
     }
   }
 
-  const testPushNotifications = async () => {
+  const checkSupabaseConfig = async () => {
     try {
-      const token = await initializePushNotifications()
-      if (token) {
-        if (token.startsWith('development-token') || token.startsWith('simulator-token')) {
-          updateTest('Push Notifications Setup', 'success', 'Development token (simulator mode)')
+      console.log('🔍 Checking Supabase configuration...')
+      
+      const url = process.env.EXPO_PUBLIC_SUPABASE_URL
+      const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      
+      let configStatus = ''
+      
+      if (!url) {
+        configStatus += 'Missing SUPABASE_URL\n'
+      } else {
+        configStatus += `URL: ${url}\n`
+      }
+      
+      if (!key) {
+        configStatus += 'Missing SUPABASE_ANON_KEY\n'
+      } else {
+        configStatus += `Key: ${key.substring(0, 20)}...\n`
+      }
+      
+      // Check if we can create a supabase client
+      try {
+        const testClient = supabase
+        configStatus += 'Client: Created successfully\n'
+      } catch (clientError) {
+        configStatus += `Client: Failed to create - ${clientError}\n`
+      }
+      
+      Alert.alert('Supabase Configuration', configStatus)
+      
+    } catch (error) {
+      console.error('Error checking config:', error)
+      Alert.alert('Configuration Error', 'Failed to check Supabase configuration')
+    }
+  }
+
+  const checkCurrentUser = async () => {
+    try {
+      console.log('🔍 Checking current user...')
+      
+      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
+      if (error) {
+        console.error('❌ Auth error:', error)
+        Alert.alert('Auth Error', `Failed to get user: ${error.message}`)
+        return
+      }
+      
+      if (!user) {
+        Alert.alert('No User', 'User not authenticated. Please sign in first.')
+        return
+      }
+
+      setCurrentUser(user)
+      console.log('✅ Current user:', user)
+      
+      Alert.alert(
+        'Current User', 
+        `Email: ${user.email}\nID: ${user.id}\n\nThis is the user that will be used for testing.`
+      )
+    } catch (error) {
+      console.error('Error checking user:', error)
+      Alert.alert('Error', `Failed to get current user: ${error}`)
+    }
+  }
+
+  const checkExistingChats = async () => {
+    try {
+      console.log('🔍 Checking existing chats...')
+      
+      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
+      if (error || !user) {
+        Alert.alert('Error', `User not authenticated: ${error?.message || 'No user found'}`)
+        return
+      }
+
+      // Check for group chats
+      const { data: groupChats, error: groupError } = await supabase
+        .from('chat_participants')
+        .select(`
+          chat_room_id,
+          joined_at,
+          chat_rooms!inner(
+            room_name,
+            is_active,
+            events!inner(
+              title,
+              description
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+
+      if (groupError) {
+        console.error('❌ Error fetching group chats:', groupError)
+        Alert.alert('Database Error', `Failed to fetch group chats: ${groupError.message}`)
+        return
+      }
+
+      setUserChats(groupChats || [])
+      console.log('✅ Found group chats:', groupChats)
+
+      if (groupChats && groupChats.length > 0) {
+        const chatList = groupChats.map((chat: any, index) => 
+          `${index + 1}. ${chat.chat_rooms.events.title} - ${chat.chat_rooms.room_name}`
+        ).join('\n')
+
+        Alert.alert(
+          'Existing Group Chats', 
+          `Found ${groupChats.length} group chat(s):\n\n${chatList}`
+        )
+      } else {
+        Alert.alert(
+          'No Group Chats Found', 
+          'No group chats found for this user. Use the "Setup Chat Data" button to create test data.'
+        )
+      }
+    } catch (error) {
+      console.error('Error checking chats:', error)
+      Alert.alert('Error', `Failed to check existing chats: ${error}`)
+    }
+  }
+
+  const setupChatDataForCurrentUser = async () => {
+    setLoading(true)
+    try {
+      console.log('🚀 Setting up chat data for current user...')
+      
+      // Get current user
+      const { data: { user }, error: userError } = await AuthHelper.getUserWithFallback(3000)
+      if (userError || !user) {
+        Alert.alert('Auth Error', `User not authenticated: ${userError?.message || 'No user found'}`)
+        return
+      }
+
+      console.log('✅ User found:', user.id, user.email)
+
+      // Step 1: Create a test event
+      const eventData = {
+        title: 'Coffee Meetup Test',
+        description: 'Test event for chat functionality',
+        location: 'Test Location',
+        start_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours from now
+        end_time: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // 4 hours from now
+        max_participants: 10,
+        is_active: true,
+        created_by: user.id
+      }
+
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .insert(eventData)
+        .select()
+        .single()
+
+      if (eventError) {
+        console.error('❌ Error creating event:', eventError)
+        Alert.alert('Database Error', `Failed to create event: ${eventError.message}`)
+        return
+      }
+
+      console.log('✅ Event created:', event.id)
+
+      // Step 2: Check in user to event
+      const checkinData = {
+        user_id: user.id,
+        event_id: event.id,
+        checked_in_at: new Date().toISOString()
+      }
+
+      const { data: checkin, error: checkinError } = await supabase
+        .from('event_checkins')
+        .insert(checkinData)
+        .select()
+        .single()
+
+      if (checkinError) {
+        console.error('❌ Error checking in user:', checkinError)
+        Alert.alert('Database Error', `Failed to check in user: ${checkinError.message}`)
+        return
+      }
+
+      console.log('✅ User checked in')
+
+      // Step 3: Create chat room
+      const chatRoomData = {
+        event_id: event.id,
+        room_name: `Chat for ${event.title}`,
+        is_active: true
+      }
+
+      const { data: chatRoom, error: chatRoomError } = await supabase
+        .from('chat_rooms')
+        .insert(chatRoomData)
+        .select()
+        .single()
+
+      if (chatRoomError) {
+        console.error('❌ Error creating chat room:', chatRoomError)
+        Alert.alert('Database Error', `Failed to create chat room: ${chatRoomError.message}`)
+        return
+      }
+
+      console.log('✅ Chat room created:', chatRoom.chat_room_id)
+
+      // Step 4: Add user to chat participants
+      const participantData = {
+        chat_room_id: chatRoom.chat_room_id,
+        user_id: user.id,
+        joined_at: new Date().toISOString()
+      }
+
+      const { data: participant, error: participantError } = await supabase
+        .from('chat_participants')
+        .insert(participantData)
+        .select()
+        .single()
+
+      if (participantError) {
+        console.error('❌ Error adding user to chat:', participantError)
+        Alert.alert('Database Error', `Failed to add user to chat: ${participantError.message}`)
+        return
+      }
+
+      console.log('✅ User added to chat')
+
+      // Step 5: Send welcome message
+      const welcomeMessage = {
+        chat_room_id: chatRoom.chat_room_id,
+        sender_id: 'system',
+        message_text: `Welcome to ${event.title}! You've been automatically checked in and added to the group chat.`,
+        message_type: 'system'
+      }
+
+      const { data: message, error: messageError } = await supabase
+        .from('chat_messages')
+        .insert(welcomeMessage)
+        .select()
+        .single()
+
+      if (messageError) {
+        console.error('❌ Error sending welcome message:', messageError)
+        // Don't fail the whole process for this
+      } else {
+        console.log('✅ Welcome message sent')
+      }
+
+      Alert.alert(
+        'Success!', 
+        `Chat data setup complete!\n\nEvent: ${event.title}\nChat Room: ${chatRoom.room_name}\n\nYou can now test the chat functionality.`,
+        [
+          { text: 'OK', onPress: () => console.log('Setup complete') }
+        ]
+      )
+
+    } catch (error) {
+      console.error('💥 Unexpected error:', error)
+      Alert.alert('Error', `Something went wrong during setup: ${error}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const setupMultiUserChat = async () => {
+    setLoading(true)
+    try {
+      console.log('🚀 Setting up multi-user chat...')
+      
+      // Get current user
+      const { data: { user }, error: userError } = await AuthHelper.getUserWithFallback(3000)
+      if (userError || !user) {
+        Alert.alert('Auth Error', `User not authenticated: ${userError?.message || 'No user found'}`)
+        return
+      }
+
+      console.log('✅ Current user found:', user.id, user.email)
+
+      // Step 1: Create a shared event
+      const eventData = {
+        title: 'Team Collaboration Event',
+        description: 'Multi-user test event for chat functionality',
+        location: 'Virtual Meeting',
+        start_time: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(), // 1 hour from now
+        end_time: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(), // 3 hours from now
+        max_participants: 20,
+        is_active: true,
+        created_by: user.id
+      }
+
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .insert(eventData)
+        .select()
+        .single()
+
+      if (eventError) {
+        console.error('❌ Error creating event:', eventError)
+        Alert.alert('Database Error', `Failed to create event: ${eventError.message}`)
+        return
+      }
+
+      console.log('✅ Event created:', event.id)
+
+      // Step 2: Create chat room
+      const chatRoomData = {
+        event_id: event.id,
+        room_name: `Team Chat for ${event.title}`,
+        is_active: true
+      }
+
+      const { data: chatRoom, error: chatRoomError } = await supabase
+        .from('chat_rooms')
+        .insert(chatRoomData)
+        .select()
+        .single()
+
+      if (chatRoomError) {
+        console.error('❌ Error creating chat room:', chatRoomError)
+        Alert.alert('Database Error', `Failed to create chat room: ${chatRoomError.message}`)
+        return
+      }
+
+      console.log('✅ Chat room created:', chatRoom.chat_room_id)
+
+      // Step 3: Add current user to chat
+      const currentUserParticipant = {
+        chat_room_id: chatRoom.chat_room_id,
+        user_id: user.id,
+        joined_at: new Date().toISOString()
+      }
+
+      const { error: currentUserError } = await supabase
+        .from('chat_participants')
+        .insert(currentUserParticipant)
+
+      if (currentUserError) {
+        console.error('❌ Error adding current user to chat:', currentUserError)
+        Alert.alert('Database Error', `Failed to add current user to chat: ${currentUserError.message}`)
+      } else {
+        console.log('✅ Current user added to chat')
+      }
+
+      // Step 4: Find and add hemanth@unbothered.studio user
+      // First, let's try to find this user in the auth.users table
+      const { data: otherUser, error: otherUserError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', 'hemanth@unbothered.studio')
+        .single()
+
+      if (otherUserError || !otherUser) {
+        console.log('⚠️ User hemanth@unbothered.studio not found, creating placeholder...')
+        
+        // Create a placeholder user entry (this would normally be done through auth)
+        const placeholderUser = {
+          id: '00000000-0000-0000-0000-000000000001', // Placeholder UUID
+          email: 'hemanth@unbothered.studio'
+        }
+        
+        // Add placeholder user to chat participants
+        const placeholderParticipant = {
+          chat_room_id: chatRoom.chat_room_id,
+          user_id: placeholderUser.id,
+          joined_at: new Date().toISOString()
+        }
+
+        const { error: placeholderError } = await supabase
+          .from('chat_participants')
+          .insert(placeholderParticipant)
+
+        if (placeholderError) {
+          console.error('❌ Error adding placeholder user:', placeholderError)
         } else {
-          updateTest('Push Notifications Setup', 'success', 'Real push token received')
+          console.log('✅ Placeholder user added to chat')
         }
       } else {
-        updateTest('Push Notifications Setup', 'error', 'No push token received')
+        console.log('✅ Found user:', otherUser.email)
+        
+        // Add the found user to chat participants
+        const otherUserParticipant = {
+          chat_room_id: chatRoom.chat_room_id,
+          user_id: otherUser.id,
+          joined_at: new Date().toISOString()
+        }
+
+        const { error: otherUserParticipantError } = await supabase
+          .from('chat_participants')
+          .insert(otherUserParticipant)
+
+        if (otherUserParticipantError) {
+          console.error('❌ Error adding other user to chat:', otherUserParticipantError)
+        } else {
+          console.log('✅ Other user added to chat')
+        }
       }
-    } catch (error) {
-      updateTest('Push Notifications Setup', 'error', 'Push notifications failed')
-    }
-  }
 
-  const testPhotoUpload = async () => {
-    try {
-      // Test if storage bucket is accessible
-      const { data, error } = await supabase.storage.from('profile-photos').list('', { limit: 1 })
-      if (error) throw error
-      
-      // Also test public URL generation
-      const { data: urlData } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl('test-file.jpg')
-      
-      if (urlData?.publicUrl) {
-        updateTest('Photo Upload System', 'success', `Storage accessible, found ${data?.length || 0} files`)
-      } else {
-        updateTest('Photo Upload System', 'error', 'Storage URL generation failed')
+      // Step 5: Send welcome messages
+      const welcomeMessage1 = {
+        chat_room_id: chatRoom.chat_room_id,
+        sender_id: 'system',
+        message_text: `Welcome to ${event.title}! This is a multi-user chat room.`,
+        message_type: 'system'
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      updateTest('Photo Upload System', 'error', `Storage error: ${errorMessage}`)
-    }
-  }
 
-  const testUserProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No authenticated user')
-      
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-      
-      if (error && error.code !== 'PGRST116') throw error
-      updateTest('User Profile Data', 'success', 'Profile data accessible')
-    } catch (error) {
-      updateTest('User Profile Data', 'error', 'Profile data not accessible')
-    }
-  }
+      const welcomeMessage2 = {
+        chat_room_id: chatRoom.chat_room_id,
+        sender_id: 'system',
+        message_text: `Users ${user.email} and hemanth@unbothered.studio are now in this chat.`,
+        message_type: 'system'
+      }
 
-  const testMatchingSystem = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No authenticated user')
-      
-      const { data, error } = await supabase.rpc('get_swipe_candidates', {
-        p_user_id: user.id,
-        p_limit: 1
-      })
-      
-      if (error) throw error
-      updateTest('Matching System', 'success', `Found ${data?.length || 0} potential matches`)
-    } catch (error) {
-      updateTest('Matching System', 'error', 'Matching system failed')
-    }
-  }
+      await supabase.from('chat_messages').insert(welcomeMessage1)
+      await supabase.from('chat_messages').insert(welcomeMessage2)
 
-  const testChatFunctionality = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No authenticated user')
-      
-      const { data, error } = await supabase.rpc('get_user_event_chats', {
-        p_user_id: user.id
-      })
-      
-      if (error) throw error
-      updateTest('Chat Functionality', 'success', `Found ${data?.length || 0} chat rooms`)
-    } catch (error) {
-      updateTest('Chat Functionality', 'error', 'Chat system failed')
-    }
-  }
+      console.log('✅ Welcome messages sent')
 
-  const testSafetyFeatures = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No authenticated user')
-      
-      const { data, error } = await supabase.rpc('get_blocked_users', {
-        p_user_id: user.id
-      })
-      
-      if (error) throw error
-      updateTest('Safety Features', 'success', 'Safety features accessible')
-    } catch (error) {
-      updateTest('Safety Features', 'error', 'Safety features failed')
-    }
-  }
-
-  const testEventCheckin = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No authenticated user')
-      
-      const { data, error } = await supabase.rpc('get_check_in_status', {
-        p_user_id: user.id,
-        p_event_id: '00000000-0000-0000-0000-000000000000' // Test with dummy ID
-      })
-      
-      // We expect this to fail gracefully for a non-existent event
-      updateTest('Event Check-in', 'success', 'Check-in system accessible')
-    } catch (error) {
-      updateTest('Event Check-in', 'error', 'Check-in system failed')
-    }
-  }
-
-  const testSupabaseConnection = async () => {
-    try {
-      console.log('Testing Supabase connection with timeout...');
-      
-      // Test basic connectivity with timeout - use a simple select query
-      const result = await supabaseWithTimeout.query(
-        async () => {
-          const { data, error } = await supabase.from('events').select('count').limit(1)
-          return { data, error }
-        },
-        5000 // 5 second timeout
+      Alert.alert(
+        'Multi-User Chat Setup Complete!', 
+        `Event: ${event.title}\nChat Room: ${chatRoom.room_name}\n\nUsers in chat:\n- ${user.email}\n- hemanth@unbothered.studio\n\nYou can now test multi-user chat functionality.`,
+        [
+          { text: 'OK', onPress: () => console.log('Multi-user setup complete') }
+        ]
       )
-      
-      updateTest('Supabase Connection', 'success', 'Database connection working with timeout')
+
     } catch (error) {
-      console.error('Supabase connection test failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      updateTest('Supabase Connection', 'error', `Connection failed: ${errorMessage}`)
-    }
-  }
-
-  const testRealEvents = async () => {
-    try {
-      console.log('Testing real events query...');
-      
-      // Test events query with timeout
-      const result: any = await supabaseWithTimeout.query(
-        async () => {
-          const { data, error } = await supabase
-            .from('events')
-            .select('id, title, status')
-            .eq('status', 'published')
-            .limit(3)
-          return { data, error }
-        },
-        10000 // 10 second timeout
-      )
-      
-      if (result?.data && result.data.length > 0) {
-        updateTest('Real Events Query', 'success', `Found ${result.data.length} events`)
-      } else {
-        updateTest('Real Events Query', 'error', 'No events found or query failed')
-      }
-    } catch (error) {
-      console.error('Real events test failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      updateTest('Real Events Query', 'error', `Query failed: ${errorMessage}`)
-    }
-  }
-
-  const runAllTests = async () => {
-    // Reset all tests to pending
-    setTests(prev => prev.map(test => ({ ...test, status: 'pending' as const })))
-    
-    // Run tests with our new timeout-based approach
-    await testSupabaseConnection()
-    await testRealEvents()
-    await testDatabaseConnection()
-    
-    Alert.alert('Database Tests Complete', 'Core connectivity tests finished. Check results above.')
-  }
-
-  const getStatusIcon = (status: TestResult['status']) => {
-    switch (status) {
-      case 'pending': return '⏳'
-      case 'success': return '✅'
-      case 'error': return '❌'
-    }
-  }
-
-  const getStatusColor = (status: TestResult['status']) => {
-    switch (status) {
-      case 'pending': return '#666'
-      case 'success': return '#4CAF50'
-      case 'error': return '#f44336'
+      console.error('💥 Unexpected error:', error)
+      Alert.alert('Error', `Something went wrong during multi-user setup: ${error}`)
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Database Connection Tests</Text>
-        <TouchableOpacity onPress={runAllTests} style={styles.runButton}>
-          <Text style={styles.runButtonText}>Test DB</Text>
-        </TouchableOpacity>
-      </View>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Test Features</Text>
+      
+      <TouchableOpacity
+        style={[styles.button, styles.warningButton]}
+        onPress={testNetworkConnectivity}
+      >
+        <Text style={styles.buttonText}>Test Network Connectivity</Text>
+      </TouchableOpacity>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>🔍 Database Connectivity Diagnosis</Text>
-          <Text style={styles.infoText}>
-            Testing Supabase database connection with timeout handling to diagnose connection issues.
-            {'\n\n'}
-            📱 <Text style={styles.boldText}>Expected Results</Text>: If "Supabase Connection" and "Real Events Query" succeed, we can remove mock data bypasses.
-            {'\n\n'}
-            ⚠️ <Text style={styles.boldText}>If Tests Fail</Text>: The app will continue working with mock data until connectivity is resolved.
-          </Text>
+      <TouchableOpacity
+        style={[styles.button, styles.infoButton]}
+        onPress={checkSupabaseConfig}
+      >
+        <Text style={styles.buttonText}>Check Supabase Config</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={styles.button}
+        onPress={checkCurrentUser}
+      >
+        <Text style={styles.buttonText}>Check Current User</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={checkExistingChats}
+      >
+        <Text style={styles.buttonText}>Check Existing Chats</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[styles.button, styles.primaryButton, loading && styles.buttonDisabled]}
+        onPress={setupChatDataForCurrentUser}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Setting up...' : 'Setup Chat Data (Current User)'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, styles.secondaryButton, loading && styles.buttonDisabled]}
+        onPress={setupMultiUserChat}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Setting up...' : 'Setup Multi-User Chat'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.description}>
+        Start with "Test Network Connectivity" to diagnose connection issues. Then use other buttons to check your user and create test data.
+      </Text>
+
+      {networkStatus !== 'Unknown' && (
+        <View style={styles.networkInfo}>
+          <Text style={styles.networkInfoTitle}>Network Status:</Text>
+          <Text style={styles.networkInfoText}>{networkStatus}</Text>
         </View>
+      )}
 
-        <View style={styles.testsContainer}>
-          {tests.map((test, index) => (
-            <View key={index} style={styles.testItem}>
-              <View style={styles.testHeader}>
-                <Text style={styles.testIcon}>{getStatusIcon(test.status)}</Text>
-                <Text style={styles.testName}>{test.name}</Text>
-              </View>
-              {test.message && (
-                <Text style={[styles.testMessage, { color: getStatusColor(test.status) }]}>
-                  {test.message}
-                </Text>
-              )}
-            </View>
+      {currentUser && (
+        <View style={styles.userInfo}>
+          <Text style={styles.userInfoTitle}>Current User:</Text>
+          <Text style={styles.userInfoText}>Email: {currentUser.email}</Text>
+          <Text style={styles.userInfoText}>ID: {currentUser.id}</Text>
+        </View>
+      )}
+
+      {userChats.length > 0 && (
+        <View style={styles.chatInfo}>
+          <Text style={styles.chatInfoTitle}>Existing Chats ({userChats.length}):</Text>
+          {userChats.map((chat, index) => (
+            <Text key={index} style={styles.chatInfoText}>
+              {index + 1}. {chat.chat_rooms.events.title}
+            </Text>
           ))}
         </View>
-
-        <View style={styles.quickActions}>
-          <Text style={styles.actionsTitle}>Quick Actions</Text>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/edit-profile' as any)}
-          >
-            <Ionicons name="person-circle" size={20} color="#FF6B6B" />
-            <Text style={styles.actionText}>Test Profile Editing</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/match' as any)}
-          >
-            <Ionicons name="heart" size={20} color="#FF6B6B" />
-            <Text style={styles.actionText}>Test Matching</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/chat' as any)}
-          >
-            <Ionicons name="chatbubbles" size={20} color="#FF6B6B" />
-            <Text style={styles.actionText}>Test Chats</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/blocked-users' as any)}
-          >
-            <Ionicons name="shield" size={20} color="#FF6B6B" />
-            <Text style={styles.actionText}>Test Safety Features</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      )}
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    textAlign: 'center',
     color: '#333',
   },
-  runButton: {
+  button: {
+    backgroundColor: '#6c757d',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  primaryButton: {
     backgroundColor: '#FF6B6B',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
   },
-  runButtonText: {
+  secondaryButton: {
+    backgroundColor: '#28a745',
+  },
+  warningButton: {
+    backgroundColor: '#ffc107',
+  },
+  infoButton: {
+    backgroundColor: '#17a2b8',
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  buttonText: {
     color: '#fff',
-    fontSize: 14,
+    textAlign: 'center',
+    fontSize: 16,
     fontWeight: '600',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  infoCard: {
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  infoText: {
+  description: {
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 20,
   },
-  boldText: {
-    fontWeight: 'bold',
-    color: '#333',
+  networkInfo: {
+    backgroundColor: '#fff3cd',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#ffeaa7',
   },
-  testsContainer: {
-    marginBottom: 32,
-  },
-  testItem: {
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  testHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  testIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  testName: {
+  networkInfoTitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    flex: 1,
-  },
-  testMessage: {
-    fontSize: 14,
-    marginTop: 8,
-    marginLeft: 32,
-  },
-  quickActions: {
-    marginBottom: 32,
-  },
-  actionsTitle: {
-    fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+  networkInfoText: {
+    fontSize: 14,
+    color: '#856404',
+    marginBottom: 5,
   },
-  actionText: {
+  userInfo: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  userInfoTitle: {
     fontSize: 16,
+    fontWeight: '600',
     color: '#333',
-    marginLeft: 12,
+    marginBottom: 10,
+  },
+  userInfoText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  chatInfo: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  chatInfoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  chatInfoText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
   },
 }) 

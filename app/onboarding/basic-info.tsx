@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import { supabase } from '../../lib/supabase'
 
 export default function BasicInfo() {
   const [displayName, setDisplayName] = useState('')
@@ -30,9 +31,21 @@ export default function BasicInfo() {
       return
     }
 
-    // Store data temporarily (in real app, might want to use AsyncStorage or context)
-    // For now, just continue to next step
-    router.push('./interests' as any)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        Alert.alert('Error', 'Please sign in to continue')
+        return
+      }
+      await supabase.from('profiles').update({ name: displayName.trim(), age: parseInt(age) }).eq('id', user.id)
+      await supabase
+        .from('user_profiles')
+        .upsert({ user_id: user.id, display_name: displayName.trim(), age: parseInt(age) }, { onConflict: 'user_id' })
+      router.push('./interests' as any)
+    } catch (e) {
+      console.error('basic-info save error', e)
+      Alert.alert('Error', 'Failed to save your information')
+    }
   }
 
   const handleBack = () => {
@@ -50,7 +63,7 @@ export default function BasicInfo() {
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
               <Text style={styles.backButtonText}>←</Text>
             </TouchableOpacity>
-            <Text style={styles.progressText}>Step 2 of 5</Text>
+            <Text style={styles.progressText}>Step 2 of 8</Text>
           </View>
 
           <View style={styles.formSection}>

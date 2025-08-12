@@ -97,20 +97,23 @@ export default function Photos() {
   const photoUrls = uploadedPhotos.map(photo => photo.url!)
 
   const handleContinue = () => {
-    // Store photos in async storage or pass to complete step
+    // Persist to user_profiles now as well
     if (photoUrls.length > 0) {
-      // Pass photo URLs to the complete step
-      router.push({
-        pathname: './complete' as any,
-        params: { photoUrls: JSON.stringify(photoUrls) }
+      supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (user) {
+          try {
+            await supabase.from('user_profiles').update({ profile_photos: photoUrls }).eq('user_id', user.id)
+          } catch {}
+        }
       })
-    } else {
-      router.push('./complete' as any)
     }
+    // Next: Location permissions step
+    router.push('./location' as any)
   }
 
   const handleSkip = () => {
-    router.push('./complete' as any)
+    // proceed without photos -> go to location step
+    router.push('./location' as any)
   }
 
   const handleBack = () => {
@@ -157,7 +160,7 @@ export default function Photos() {
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.progressText}>Step 4 of 5</Text>
+          <Text style={styles.progressText}>Step 6 of 8</Text>
         </View>
 
         <View style={styles.mainContent}>

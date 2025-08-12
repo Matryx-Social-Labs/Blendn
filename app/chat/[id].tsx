@@ -46,81 +46,74 @@ export default function GroupChat() {
     try {
       console.log('🔍 [CHAT_USER] Getting current user...');
       
-      // Try cached session first
-      let user = AuthHelper.getCurrentUser()
+      // Get authenticated user with fallback
+      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
       
-      if (user) {
-        console.log('✅ [CHAT_USER] Using cached user session:', user.id);
-      } else {
-        console.log('⚠️ [CHAT_USER] No cached session, falling back to network call...');
-        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
-        
-        if (error) {
-          console.error('❌ [CHAT_USER] Auth error:', error);
-          return
-        }
-        
-        user = networkUser
+      if (error) {
+        console.error('❌ [CHAT_USER] Auth error:', error);
+        // Redirect to main app if user is not authenticated
+        router.replace('/(tabs)/events')
+        return
+      }
+      
+      if (!user) {
+        console.log('⚠️ [CHAT_USER] No authenticated user found, redirecting...');
+        router.replace('/(tabs)/events')
+        return
       }
       
       console.log('✅ [CHAT_USER] Current user:', user?.id);
       setCurrentUser(user)
     } catch (error) {
       console.error('❌ [CHAT_USER] Error getting current user:', error);
+      // Redirect to main app on any error
+      router.replace('/(tabs)/events')
     }
   }
 
   const loadMessages = async () => {
     try {
-      // Try cached session first, fallback to network call if needed
-      let user = AuthHelper.getCurrentUser()
+      // Get authenticated user with fallback
+      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
       
-      if (user) {
-        console.log('✅ [CHAT_MESSAGES] Using cached user session:', user.id);
-      } else {
-        console.log('⚠️ [CHAT_MESSAGES] No cached session, falling back to network call...');
-        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
-        
-        if (error) {
-          console.error('❌ [CHAT_MESSAGES] Auth error:', error);
-          Alert.alert('Error', 'Unable to load chat. Please restart the app.')
-          return
-        }
-        
-        user = networkUser
+      if (error) {
+        console.error('❌ [CHAT_MESSAGES] Auth error:', error);
+        // Redirect to main app if user is not authenticated
+        router.replace('/(tabs)/events')
+        return
       }
       
-      if (!user) return
+      if (!user) {
+        console.log('⚠️ [CHAT_MESSAGES] No authenticated user found, redirecting...');
+        router.replace('/(tabs)/events')
+        return
+      }
 
       console.log('🔍 [CHAT_MESSAGES] Loading messages for room:', chatRoomId);
       console.log('🔍 [CHAT_MESSAGES] User ID:', user.id);
 
-      // Skip participant check for now due to RLS recursion issue
-      // TODO: Fix RLS policy in database
-      console.log('⚠️ [CHAT_MESSAGES] Skipping participant check due to RLS policy issue');
-
-      // Load messages directly (bypassing participant check temporarily)
-      const { data, error } = await supabase
+      // Load messages directly (using existing sender_name field)
+      const { data, error: messagesError } = await supabase
         .from('chat_messages')
         .select(`
-          message_id,
+          id,
           sender_id,
+          sender_name,
           message_text,
           message_type,
           reply_to_message_id,
           is_edited,
-          created_at,
-          profiles!inner(name)
+          created_at
         `)
         .eq('chat_room_id', chatRoomId)
         .order('created_at', { ascending: false })
         .limit(100)
 
-      if (error) {
-        console.error('❌ [CHAT_MESSAGES] Error loading messages:', error)
+      if (messagesError) {
+        console.error('❌ [CHAT_MESSAGES] Error loading messages:', messagesError)
         
         // If this is an RLS policy error, show a more helpful message
-        if (error.code === '42501' || error.message.includes('policy')) {
+        if (messagesError.code === '42501' || messagesError.message.includes('policy')) {
           Alert.alert('Chat Temporarily Unavailable', 'Chat access is temporarily restricted. Please try again later.')
         } else {
           Alert.alert('Error', 'Failed to load messages')
@@ -130,9 +123,9 @@ export default function GroupChat() {
         
         // Transform data to match the expected interface
         const messages = (data || []).map(msg => ({
-          message_id: msg.message_id,
+          message_id: msg.id,
           sender_id: msg.sender_id,
-          sender_name: (msg.profiles && msg.profiles.length > 0) ? msg.profiles[0].name : 'Unknown User',
+          sender_name: msg.sender_name || 'Unknown User',
           message_text: msg.message_text,
           message_type: msg.message_type || 'text',
           reply_to_message_id: msg.reply_to_message_id,
@@ -146,7 +139,8 @@ export default function GroupChat() {
       }
     } catch (error) {
       console.error('💥 [CHAT_MESSAGES] Unexpected error:', error)
-      Alert.alert('Error', 'Unable to load chat. Please try again.')
+      // Redirect to main app on any unexpected error
+      router.replace('/(tabs)/events')
     } finally {
       setLoading(false)
     }
@@ -169,17 +163,10 @@ export default function GroupChat() {
         async (payload) => {
           console.log('🔍 [REALTIME] New message received:', payload.new);
           
-          // Get sender name for the new message
-          const { data: senderProfile } = await supabase
-            .from('profiles')
-            .select('name')
-            .eq('id', payload.new.sender_id)
-            .single()
-
           const newMessage: Message = {
-            message_id: payload.new.message_id,
+            message_id: payload.new.id,
             sender_id: payload.new.sender_id,
-            sender_name: senderProfile?.name || 'Unknown User',
+            sender_name: payload.new.sender_name || 'Unknown User',
             message_text: payload.new.message_text,
             message_type: payload.new.message_type || 'text',
             reply_to_message_id: payload.new.reply_to_message_id,
@@ -188,7 +175,33 @@ export default function GroupChat() {
           }
 
           console.log('✅ [REALTIME] Processed new message:', newMessage);
-          setMessages(prev => [...prev, newMessage])
+          
+          // Check if this message is already in our state (to avoid duplicates)
+          setMessages(prev => {
+            // Don't add if message already exists (by ID or by content + timestamp for optimistic updates)
+            const exists = prev.some(msg => 
+              msg.message_id === newMessage.message_id ||
+              (msg.message_text === newMessage.message_text && 
+               msg.sender_id === newMessage.sender_id &&
+               Math.abs(new Date(msg.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 5000) // Within 5 seconds
+            )
+            
+            if (exists) {
+              console.log('🔍 [REALTIME] Message already exists, skipping duplicate');
+              // If it's an optimistic message (temp ID), replace it with the real one
+              return prev.map(msg => 
+                msg.message_id.toString().startsWith('temp-') && 
+                msg.message_text === newMessage.message_text && 
+                msg.sender_id === newMessage.sender_id
+                  ? newMessage // Replace optimistic message with real one
+                  : msg
+              )
+            }
+            
+            // Add new message
+            return [...prev, newMessage]
+          })
+          
           setTimeout(() => scrollToBottom(), 100)
         }
       )
@@ -203,45 +216,84 @@ export default function GroupChat() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !currentUser) return
+    if (!newMessage.trim() || !currentUser) return
 
     setSending(true)
+    const messageText = newMessage.trim()
+    let optimisticMessage: Message | null = null
+    
     try {
       console.log('🔍 [SEND_MESSAGE] Sending message to room:', chatRoomId);
-      console.log('🔍 [SEND_MESSAGE] Message text:', newMessage.trim());
+      console.log('🔍 [SEND_MESSAGE] Message text:', messageText);
       console.log('🔍 [SEND_MESSAGE] Sender ID:', currentUser.id);
 
-      // Insert message directly into chat_messages table
+      // Get user profile for sender name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', currentUser.id)
+        .single()
+
+      const senderName = profile?.name || 'Unknown User'
+      
+      // Create optimistic message to show immediately
+      optimisticMessage = {
+        message_id: 'temp-' + Date.now(), // Temporary ID
+        sender_id: currentUser.id,
+        sender_name: senderName,
+        message_text: messageText,
+        message_type: 'text',
+        reply_to_message_id: null,
+        is_edited: false,
+        created_at: new Date().toISOString()
+      }
+      
+      // Add message immediately to UI and clear input
+      setMessages(prev => [...prev, optimisticMessage!])
+      setNewMessage('')
+      setTimeout(() => scrollToBottom(), 100)
+
+      // Use the database function to send message
       const { data, error } = await supabase
-        .from('chat_messages')
-        .insert({
-          chat_room_id: chatRoomId,
-          sender_id: currentUser.id,
-          message_text: newMessage.trim(),
+        .rpc('send_chat_message', {
+          room_id: chatRoomId,
+          message_text: messageText,
           message_type: 'text'
         })
-        .select(`
-          message_id,
-          sender_id,
-          message_text,
-          message_type,
-          reply_to_message_id,
-          is_edited,
-          created_at
-        `)
-        .single()
 
       if (error) {
         console.error('❌ [SEND_MESSAGE] Error sending message:', error)
         Alert.alert('Error', 'Failed to send message')
-      } else {
+        throw error // Will be caught by outer catch
+      } else if (data?.success) {
         console.log('✅ [SEND_MESSAGE] Message sent successfully:', data);
-        setNewMessage('')
-        // Note: Real-time subscription will automatically add the message to the UI
+        
+        // Update the optimistic message with real ID from server
+        setMessages(prev => prev.map(msg => 
+          msg.message_id === optimisticMessage!.message_id 
+            ? { ...msg, message_id: data.message_id }
+            : msg
+        ))
+      } else {
+        console.error('❌ [SEND_MESSAGE] Message sending failed:', data?.message)
+        Alert.alert('Error', data?.message || 'Failed to send message')
+        throw new Error(data?.message || 'Failed to send message')
       }
     } catch (error) {
       console.error('💥 [SEND_MESSAGE] Unexpected error:', error)
-      Alert.alert('Error', 'Something went wrong')
+      
+      // Remove optimistic message if it was created
+      if (optimisticMessage) {
+        setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage!.message_id))
+      }
+      
+      // Restore the message text
+      setNewMessage(messageText)
+      
+      // Show error if not already shown
+      if (!(error instanceof Error) || !error.message?.includes('Failed to send message')) {
+        Alert.alert('Error', 'Something went wrong')
+      }
     } finally {
       setSending(false)
     }

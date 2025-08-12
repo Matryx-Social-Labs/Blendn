@@ -48,8 +48,6 @@ export default function Complete() {
         .from('profiles')
         .update({ 
           onboarded: true,
-          name: 'Demo User', // TODO: Collect from basic-info step
-          age: 25, // TODO: Collect from basic-info step
         })
         .eq('id', user.id)
 
@@ -59,16 +57,17 @@ export default function Complete() {
         return
       }
 
-      // Update the user_profile for matching system with photos
+      // Mark onboarding completion in user_profiles
+      const updates: any = {
+        onboarding_step: 'complete',
+        onboarding_completed_at: new Date().toISOString(),
+      }
+      if (photoUrls && photoUrls.length > 0) {
+        updates.profile_photos = photoUrls
+      }
       const { error: userProfileError } = await supabase
         .from('user_profiles')
-        .update({ 
-          display_name: 'Demo User', // TODO: Collect from basic-info step
-          bio: 'Just joined Blendn!', // TODO: Collect from basic-info step
-          age: 25, // TODO: Collect from basic-info step
-          interests: ['🎵 Music', '🎬 Movies'], // TODO: Collect from interests step
-          profile_photos: photoUrls, // Save the uploaded photo URLs
-        })
+        .update(updates)
         .eq('user_id', user.id)
 
       if (userProfileError) {
@@ -110,6 +109,7 @@ export default function Complete() {
           <Text style={styles.subtitle}>
             Welcome to Blendn! Your profile is ready and you can start discovering amazing events and meeting new people.
           </Text>
+          <Text style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Onboarding 8/8 completed</Text>
 
           <View style={styles.featuresContainer}>
             <View style={styles.feature}>
@@ -147,7 +147,7 @@ export default function Complete() {
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.completeButtonText}>Start Exploring Events</Text>
+            <Text style={styles.completeButtonText}>Start Exploring Events</Text>
             )}
           </TouchableOpacity>
           

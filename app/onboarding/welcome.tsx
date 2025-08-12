@@ -39,7 +39,7 @@ export default function Welcome() {
         </View>
 
         <View style={styles.bottomSection}>
-          <Text style={styles.progressText}>Step 1 of 5</Text>
+          <Text style={styles.progressText}>Step 1 of 8</Text>
           <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
             <Text style={styles.continueButtonText}>Let's Get Started</Text>
           </TouchableOpacity>

@@ -1,61 +1,58 @@
 import {
-  GoogleSignin,
-  GoogleSigninButton,
-  statusCodes,
+    GoogleSignin,
+    GoogleSigninButton,
+    statusCodes,
 } from '@react-native-google-signin/google-signin'
+import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/useAuth'
 
 export default function Index() {
-  const [loading, setLoading] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const { session, user, loading } = useAuth()
+  const [signingIn, setSigningIn] = useState(false)
 
   useEffect(() => {
-    // Configure Google Sign In
+    // Configure Google Sign In once
     GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID!,
       iosClientId: '438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com',
       offlineAccess: true,
     })
-
-    checkAuthStatus()
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
-      
-      if (event === 'SIGNED_IN' && session) {
-        setIsAuthenticated(true)
-        setLoading(false)
-      } else if (event === 'SIGNED_OUT') {
-        setIsAuthenticated(false)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
-  const checkAuthStatus = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (session) {
-        setIsAuthenticated(true)
-      } else {
-        setIsAuthenticated(false)
+  useEffect(() => {
+    const checkOnboardingAndNavigate = async () => {
+      if (!user) return
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('onboarded')
+          .eq('id', user.id)
+          .single()
+        if (!profile || profile.onboarded === false) {
+          console.log('🔐 [INDEX] User not onboarded, navigating to onboarding')
+          router.replace('/onboarding/welcome')
+        } else {
+          console.log('🔐 [INDEX] User onboarded, navigating to events')
+          router.replace('/(tabs)/events')
+        }
+      } catch (e) {
+        console.log('⚠️ [INDEX] Onboarding check failed, defaulting to events')
+        router.replace('/(tabs)/events')
       }
-    } catch (error) {
-      console.error('Error checking auth status:', error)
-      setIsAuthenticated(false)
-    } finally {
-      setLoading(false)
     }
-  }
+    if (!loading && user) {
+      checkOnboardingAndNavigate()
+    }
+  }, [loading, user])
 
   const handleGoogleSignIn = async () => {
     try {
+      setSigningIn(true)
+      console.log('🔐 [INDEX] Starting Google Sign In...')
+      
       await GoogleSignin.hasPlayServices()
       const userInfo = await GoogleSignin.signIn()
       
@@ -64,68 +61,74 @@ export default function Index() {
           provider: 'google',
           token: userInfo.data.idToken,
         })
-        console.log(error, data)
+        
+        if (error) {
+          console.error('❌ [INDEX] Supabase auth error:', error)
+          throw error
+        }
+        
+        console.log('✅ [INDEX] Google Sign In successful')
+        // Navigation will happen automatically via useAuth hook
       } else {
-        throw new Error('no ID token present!')
+        throw new Error('No ID token received from Google')
       }
     } catch (error: any) {
-      console.error('Google Sign In Error:', error)
+      console.error('❌ [INDEX] Google Sign In failed:', error)
       
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // user cancelled the login flow
-        console.log('User cancelled sign in')
+        console.log('🔐 [INDEX] User cancelled sign in')
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        // operation (e.g. sign in) is in progress already
-        console.log('Sign in already in progress')
+        console.log('🔐 [INDEX] Sign in already in progress')
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        // play services not available or outdated
-        console.log('Google Play Services not available')
+        console.log('🔐 [INDEX] Play services not available')
       } else {
-        // some other error happened
-        console.log('Other error:', error)
+        console.error('🔐 [INDEX] Unknown sign in error:', error)
       }
+    } finally {
+      setSigningIn(false)
     }
   }
 
+  // Show loading while auth is initializing
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4285F4" />
+      <View style={styles.container}>
+        <ActivityIndicator size="large" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     )
   }
 
-  if (isAuthenticated) {
+  // Show sign in screen if not authenticated
+  if (!user) {
     return (
       <View style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.title}>Welcome to Blendn!</Text>
-          <Text style={styles.subtitle}>You are successfully authenticated</Text>
-        </View>
+        <Text style={styles.title}>Welcome to blendn</Text>
+        <Text style={styles.subtitle}>Connect with people at events</Text>
+        
+        <GoogleSigninButton
+          style={styles.googleButton}
+          size={GoogleSigninButton.Size.Wide}
+          color={GoogleSigninButton.Color.Dark}
+          onPress={handleGoogleSignIn}
+          disabled={signingIn}
+        />
+        
+        {signingIn && (
+          <View style={styles.signingInContainer}>
+            <ActivityIndicator size="small" />
+            <Text style={styles.signingInText}>Signing in...</Text>
+          </View>
+        )}
       </View>
     )
   }
 
+  // This should not be reached due to navigation in useEffect
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Welcome to Blendn</Text>
-        <Text style={styles.subtitle}>
-          Connect with others using secure Google authentication
-        </Text>
-
-        <GoogleSigninButton
-          size={GoogleSigninButton.Size.Wide}
-          color={GoogleSigninButton.Color.Dark}
-          onPress={handleGoogleSignIn}
-          style={styles.googleButton}
-        />
-
-        <Text style={styles.footerText}>
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </Text>
-      </View>
+      <ActivityIndicator size="large" />
+      <Text style={styles.loadingText}>Redirecting...</Text>
     </View>
   )
 }
@@ -133,48 +136,40 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
     backgroundColor: '#fff',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    alignItems: 'center',
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    textAlign: 'center',
     marginBottom: 10,
-    color: '#333',
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 40,
     color: '#666',
-    lineHeight: 22,
+    marginBottom: 40,
+    textAlign: 'center',
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#666',
   },
   googleButton: {
     width: 250,
     height: 48,
-    marginBottom: 30,
   },
-  footerText: {
-    fontSize: 12,
-    textAlign: 'center',
-    color: '#999',
-    lineHeight: 16,
+  signingInContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  signingInText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#666',
   },
 })

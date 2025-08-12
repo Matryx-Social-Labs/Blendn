@@ -1,41 +1,40 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native'
-import { AuthHelper, supabase } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 interface GroupChat {
   chat_room_id: string
-  room_name: string
-  event_title: string
   event_id: string
-  last_message: string | null
-  last_message_time: string | null
-  unread_count: number
+  event_title: string
+  event_venue: string
   participant_count: number
+  last_message?: string
+  last_message_time?: string
+  last_sender_name?: string
 }
 
 interface PersonalChat {
   conversation_id: string
   other_user_name: string
   other_user_id: string
-  last_message: string | null
-  last_message_time: string | null
+  last_message?: string
+  last_message_time?: string
   unread_count: number
 }
 
 type ChatTabType = 'group' | 'personal'
 
 export default function Chat() {
+  const { user, loading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<ChatTabType>('group')
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
@@ -43,175 +42,157 @@ export default function Chat() {
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    loadChats()
-  }, [activeTab])
+    if (!authLoading && user) {
+      loadChats()
+    } else if (!authLoading && !user) {
+      router.replace('/')
+    }
+  }, [user, authLoading, activeTab])
 
   const loadChats = async () => {
-    try {
-      console.log('🔍 [CHAT] Starting loadChats...');
-      console.log('🔍 [CHAT] Supabase client initialized:', !!supabase);
-      
-      console.log('🔍 [CHAT] Getting authenticated user...');
-      const authStartTime = Date.now();
-      
-      // Try cached session first, fallback to network call if needed
-      let user = AuthHelper.getCurrentUser()
-      
-      if (user) {
-        console.log('✅ [CHAT] Using cached user session:', user.id);
-        const authEndTime = Date.now();
-        console.log(`🔍 [CHAT] Auth query completed in ${authEndTime - authStartTime}ms (cached)`);
-      } else {
-        console.log('⚠️ [CHAT] No cached session, falling back to network call...');
-        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
-        const authEndTime = Date.now();
-        console.log(`🔍 [CHAT] Auth query completed in ${authEndTime - authStartTime}ms (network)`);
-        
-        if (error) {
-          console.error('❌ [CHAT] Auth error:', error);
-          Alert.alert('Error', 'Unable to load chats. Please restart the app.')
-          return
-        }
-        
-        user = networkUser
-      }
-      
-      if (!user) {
-        console.error('❌ [CHAT] No authenticated user found');
-        Alert.alert('Error', 'Please sign in to access chats')
-        return
-      }
+    if (!user) return
 
-      console.log('✅ [CHAT] Authenticated user found:', user.id);
-      console.log('🔍 [CHAT] Loading both group and private chats...');
+    try {
+      setLoading(true)
+      console.log('🔍 [CHAT] Loading chats for tab:', activeTab);
       
-      // Load both types of chats concurrently
-      const loadStartTime = Date.now();
-      await Promise.all([
-        loadGroupChats(user.id),
-        loadPersonalChats(user.id)
-      ])
-      const loadEndTime = Date.now();
-      console.log(`🔍 [CHAT] Both chat types loaded in ${loadEndTime - loadStartTime}ms`);
+      if (activeTab === 'group') {
+        await loadGroupChats()
+      } else {
+        await loadPersonalChats()
+      }
       
     } catch (error) {
-      console.error('💥 [CHAT] Unexpected error in loadChats:', error);
-      console.error('💥 [CHAT] Error type:', typeof error);
-      console.error('💥 [CHAT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      Alert.alert('Error', 'Failed to load chats')
+      console.error('💥 [CHAT] Error loading chats:', error)
     } finally {
-      console.log('🏁 [CHAT] loadChats completed');
       setLoading(false)
     }
   }
 
-  const loadGroupChats = async (userId: string) => {
+  const loadGroupChats = async () => {
     try {
-      console.log('🔍 [GROUP_CHAT] Starting loadGroupChats...');
-      console.log('🔍 [GROUP_CHAT] User ID:', userId);
-      console.log('🔍 [GROUP_CHAT] Supabase client initialized:', !!supabase);
+      console.log('🔍 [CHAT] Fetching group chats...')
       
-      console.log('🔍 [GROUP_CHAT] Calling RPC: get_user_event_chats');
-      console.log('🔍 [GROUP_CHAT] Parameters:', { p_user_id: userId });
-      
-      const rpcStartTime = Date.now();
-      
-      // Add timeout wrapper to prevent infinite hanging
-      const rpcPromise = supabase.rpc('get_user_event_chats', {
-        p_user_id: userId
-      })
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Group chats RPC timeout after 8000ms')), 8000)
-      )
-      
-      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
+      // Get user's chat participants first (they can only see their own)
+      const { data: userParticipations, error: participantError } = await supabase
+        .from('chat_participants')
+        .select('chat_room_id')
+        .eq('user_id', user.id)
 
-      const rpcEndTime = Date.now();
-      console.log(`🔍 [GROUP_CHAT] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
-
-      if (error) {
-        console.error('❌ [GROUP_CHAT] RPC error:', error);
-        console.error('❌ [GROUP_CHAT] Error code:', error.code);
-        console.error('❌ [GROUP_CHAT] Error message:', error.message);
-        console.error('❌ [GROUP_CHAT] Error details:', error.details);
-        console.log('🔄 [GROUP_CHAT] Setting empty group chats array');
-        setGroupChats([]);
+      if (participantError) {
+        console.error('❌ [CHAT] Error fetching user participations:', participantError)
+        setGroupChats([])
         return
       }
 
-      console.log('✅ [GROUP_CHAT] SUCCESS: get_user_event_chats worked!');
-      console.log('✅ [GROUP_CHAT] Raw group chats data:', data);
-      console.log('✅ [GROUP_CHAT] Data type:', typeof data);
-      console.log('✅ [GROUP_CHAT] Group chats count:', data?.length || 0);
-      
-      if (data && data.length > 0) {
-        console.log('✅ [GROUP_CHAT] First group chat sample:', JSON.stringify(data[0], null, 2));
+      if (!userParticipations || userParticipations.length === 0) {
+        console.log('📭 [CHAT] No group chats found')
+        setGroupChats([])
+        return
       }
 
-      setGroupChats(data || [])
-      console.log(`✅ [GROUP_CHAT] Successfully loaded ${data?.length || 0} group chats from database`);
+      // Get chat room details for each participation
+      const chatRoomIds = userParticipations.map(p => p.chat_room_id)
+      const { data: chatRooms, error: roomError } = await supabase
+        .from('chat_rooms')
+        .select(`
+          id,
+          name,
+          event_id,
+          events (
+            title,
+            venue_name
+          )
+        `)
+        .in('id', chatRoomIds)
+
+      if (roomError) {
+        console.error('❌ [CHAT] Error fetching chat rooms:', roomError)
+        setGroupChats([])
+        return
+      }
+
+      // Transform the data to match our GroupChat interface
+      const groupChatData: GroupChat[] = chatRooms?.map((room: any) => ({
+        chat_room_id: room.id,
+        event_id: room.event_id || '',
+        event_title: room.events?.title || 'Unknown Event',
+        event_venue: room.events?.venue_name || 'Unknown Venue',
+        participant_count: 0, // We'll skip this for now to avoid extra queries
+        last_message: undefined,
+        last_message_time: undefined,
+        last_sender_name: undefined
+      })) || []
+
+      setGroupChats(groupChatData)
+      console.log(`✅ [CHAT] Loaded ${groupChatData.length} group chats`)
     } catch (error) {
-      console.error('💥 [GROUP_CHAT] Unexpected error:', error);
-      console.error('💥 [GROUP_CHAT] Error type:', typeof error);
-      console.error('💥 [GROUP_CHAT] Error message:', error instanceof Error ? error.message : 'Unknown error');
-      console.log('🔄 [GROUP_CHAT] Setting empty group chats array due to error');
-      setGroupChats([]);
+      console.error('💥 [CHAT] Error loading group chats:', error)
+      setGroupChats([])
     }
   }
 
-  const loadPersonalChats = async (userId: string) => {
+  const loadPersonalChats = async () => {
     try {
-      console.log('🔍 [PRIVATE_CHAT] Starting loadPersonalChats...');
-      console.log('🔍 [PRIVATE_CHAT] User ID:', userId);
-      console.log('🔍 [PRIVATE_CHAT] Supabase client initialized:', !!supabase);
+      console.log('🔍 [CHAT] Fetching personal chats...')
       
-      console.log('🔍 [PRIVATE_CHAT] Calling RPC: get_user_private_conversations');
-      console.log('🔍 [PRIVATE_CHAT] Parameters:', { p_user_id: userId });
-      
-      const rpcStartTime = Date.now();
-      
-      // Add timeout wrapper to prevent infinite hanging
-      const rpcPromise = supabase.rpc('get_user_private_conversations', {
-        p_user_id: userId
-      })
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Private chats RPC timeout after 8000ms')), 8000)
-      )
-      
-      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any
+      // Get private conversations through matches table
+      const { data: conversations, error: conversationError } = await supabase
+        .from('private_conversations')
+        .select(`
+          id,
+          match_id,
+          last_message_at,
+          matches!inner (
+            user1_id,
+            user2_id
+          )
+        `)
 
-      const rpcEndTime = Date.now();
-      console.log(`🔍 [PRIVATE_CHAT] RPC completed in ${rpcEndTime - rpcStartTime}ms`);
-
-      if (error) {
-        console.error('❌ [PRIVATE_CHAT] RPC error:', error);
-        console.error('❌ [PRIVATE_CHAT] Error code:', error.code);
-        console.error('❌ [PRIVATE_CHAT] Error message:', error.message);
-        console.error('❌ [PRIVATE_CHAT] Error details:', error.details);
-        console.log('🔄 [PRIVATE_CHAT] Setting empty private chats array');
-        setPersonalChats([]);
+      if (conversationError) {
+        console.error('❌ [CHAT] Error fetching conversations:', conversationError)
+        setPersonalChats([])
         return
       }
 
-      console.log('✅ [PRIVATE_CHAT] SUCCESS: get_user_private_conversations worked!');
-      console.log('✅ [PRIVATE_CHAT] Raw private chats data:', data);
-      console.log('✅ [PRIVATE_CHAT] Data type:', typeof data);
-      console.log('✅ [PRIVATE_CHAT] Private chats count:', data?.length || 0);
+      // Filter conversations where current user is involved and get other user details
+      const userConversations = []
       
-      if (data && data.length > 0) {
-        console.log('✅ [PRIVATE_CHAT] First private chat sample:', JSON.stringify(data[0], null, 2));
+      for (const conv of conversations || []) {
+        const match = Array.isArray(conv.matches) ? conv.matches[0] : conv.matches
+        if (!match) continue
+        
+        const isUser1 = match.user1_id === user.id
+        const isUser2 = match.user2_id === user.id
+        
+        if (!isUser1 && !isUser2) {
+          continue // Skip conversations where current user is not involved
+        }
+        
+        const otherUserId = isUser1 ? match.user2_id : match.user1_id
+        
+        // Get other user's profile
+        const { data: otherUserProfile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', otherUserId)
+          .single()
+        
+        userConversations.push({
+          conversation_id: conv.id,
+          other_user_id: otherUserId,
+          other_user_name: otherUserProfile?.name || 'Unknown User',
+          last_message: undefined,
+          last_message_time: conv.last_message_at,
+          unread_count: 0 // We'll skip this for now to avoid extra queries
+        })
       }
 
-      setPersonalChats(data || [])
-      console.log(`✅ [PRIVATE_CHAT] Successfully loaded ${data?.length || 0} private chats from database`);
+      setPersonalChats(userConversations)
+      console.log(`✅ [CHAT] Loaded ${userConversations.length} personal chats`)
     } catch (error) {
-      console.error('💥 [PRIVATE_CHAT] Unexpected error:', error);
-      console.error('💥 [PRIVATE_CHAT] Error type:', typeof error);
-      console.error('💥 [PRIVATE_CHAT] Error message:', error instanceof Error ? error.message : 'Unknown error');
-      console.log('🔄 [PRIVATE_CHAT] Setting empty private chats array due to error');
-      setPersonalChats([]);
+      console.error('💥 [CHAT] Error loading personal chats:', error)
+      setPersonalChats([])
     }
   }
 
@@ -221,240 +202,142 @@ export default function Chat() {
     setRefreshing(false)
   }
 
-  const formatTime = (timeString: string | null) => {
-    if (!timeString) return ''
-    
-    const messageTime = new Date(timeString)
-    const now = new Date()
-    const diffMs = now.getTime() - messageTime.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return 'now'
-    if (diffMins < 60) return `${diffMins}m`
-    if (diffHours < 24) return `${diffHours}h`
-    if (diffDays < 7) return `${diffDays}d`
-    
-    return messageTime.toLocaleDateString()
+  const handleGroupChatPress = (chat: GroupChat) => {
+    router.push(`/chat/${chat.chat_room_id}`)
   }
 
-  const renderSegmentedControl = () => (
-    <View style={styles.segmentedControl}>
-      <TouchableOpacity
-        style={[
-          styles.segmentButton,
-          activeTab === 'group' && styles.activeSegmentButton
-        ]}
-        onPress={() => setActiveTab('group')}
-      >
-        <Text style={[
-          styles.segmentText,
-          activeTab === 'group' && styles.activeSegmentText
-        ]}>
-          Group
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[
-          styles.segmentButton,
-          activeTab === 'personal' && styles.activeSegmentButton
-        ]}
-        onPress={() => setActiveTab('personal')}
-      >
-        <Text style={[
-          styles.segmentText,
-          activeTab === 'personal' && styles.activeSegmentText
-        ]}>
-          Personal
-        </Text>
-      </TouchableOpacity>
-    </View>
-  )
+  const handlePersonalChatPress = (chat: PersonalChat) => {
+    router.push(`/private-chat/${chat.conversation_id}`)
+  }
 
   const renderGroupChatItem = ({ item }: { item: GroupChat }) => (
-    <TouchableOpacity
-      style={styles.chatItem}
-      onPress={() => {
-        router.push({
-          pathname: '/chat/[id]' as any,
-          params: { 
-            id: item.chat_room_id,
-            roomName: item.room_name,
-            eventTitle: item.event_title
-          }
-        })
-      }}
+    <TouchableOpacity 
+      style={styles.chatItem} 
+      onPress={() => handleGroupChatPress(item)}
     >
-      <View style={styles.chatIcon}>
-        <Ionicons name="people" size={24} color="#FF6B6B" />
+      <View style={styles.chatHeader}>
+        <Text style={styles.chatTitle}>{item.event_title}</Text>
+        <Text style={styles.participantCount}>👥 {item.participant_count}</Text>
       </View>
-      
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.chatTitle} numberOfLines={1}>
-            {item.event_title}
-          </Text>
-          <Text style={styles.chatTime}>
-            {formatTime(item.last_message_time)}
-          </Text>
-        </View>
-        
-        <View style={styles.chatSubHeader}>
-          <Text style={styles.chatSubtitle} numberOfLines={1}>
-            {item.participant_count} participants
-          </Text>
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
-                {item.unread_count > 99 ? '99+' : item.unread_count}
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        {item.last_message && (
+      <Text style={styles.chatVenue}>📍 {item.event_venue}</Text>
+      {item.last_message && (
+        <View style={styles.lastMessageContainer}>
           <Text style={styles.lastMessage} numberOfLines={2}>
-            {item.last_message}
+            {item.last_sender_name}: {item.last_message}
           </Text>
-        )}
-      </View>
+          <Text style={styles.lastMessageTime}>
+            {item.last_message_time ? new Date(item.last_message_time).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : ''}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   )
 
   const renderPersonalChatItem = ({ item }: { item: PersonalChat }) => (
-    <TouchableOpacity
-      style={styles.chatItem}
-      onPress={() => {
-        router.push({
-          pathname: '/private-chat/[conversationId]' as any,
-          params: {
-            conversationId: item.conversation_id,
-            otherUserName: item.other_user_name,
-            otherUserId: item.other_user_id
-          }
-        })
-      }}
+    <TouchableOpacity 
+      style={styles.chatItem} 
+      onPress={() => handlePersonalChatPress(item)}
     >
-      <View style={styles.chatIcon}>
-        <Ionicons name="person" size={24} color="#FF6B6B" />
+      <View style={styles.chatHeader}>
+        <Text style={styles.chatTitle}>{item.other_user_name}</Text>
+        {item.unread_count > 0 && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadCount}>{item.unread_count}</Text>
+          </View>
+        )}
       </View>
-      
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.chatTitle} numberOfLines={1}>
-            {item.other_user_name}
-          </Text>
-          <Text style={styles.chatTime}>
-            {formatTime(item.last_message_time)}
-          </Text>
-        </View>
-        
-        <View style={styles.chatSubHeader}>
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
-                {item.unread_count > 99 ? '99+' : item.unread_count}
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        {item.last_message && (
+      {item.last_message && (
+        <View style={styles.lastMessageContainer}>
           <Text style={styles.lastMessage} numberOfLines={2}>
             {item.last_message}
           </Text>
-        )}
-      </View>
+          <Text style={styles.lastMessageTime}>
+            {item.last_message_time ? new Date(item.last_message_time).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : ''}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   )
 
-  const renderEmptyState = () => {
-    const isGroupTab = activeTab === 'group'
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyTitle}>
+        {activeTab === 'group' ? 'No Group Chats' : 'No Personal Chats'}
+      </Text>
+      <Text style={styles.emptySubtitle}>
+        {activeTab === 'group' 
+          ? 'Check into events to join group chats' 
+          : 'Start conversations with other users'
+        }
+      </Text>
+    </View>
+  )
+
+  if (authLoading || loading) {
     return (
-      <View style={styles.emptyContainer}>
-        <Ionicons 
-          name={isGroupTab ? "people-outline" : "person-outline"} 
-          size={64} 
-          color="#ccc" 
-        />
-        <Text style={styles.emptyTitle}>
-          {isGroupTab ? 'No Group Chats Yet' : 'No Personal Chats Yet'}
-        </Text>
-        <Text style={styles.emptyText}>
-          {isGroupTab 
-            ? 'Check in to events to join group chats and meet people!'
-            : 'Match with someone to start a private conversation!'
-          }
-        </Text>
-        <TouchableOpacity 
-          style={styles.emptyButton}
-          onPress={() => {
-            if (isGroupTab) {
-              router.push('/(tabs)/events' as any)
-            } else {
-              router.push('/(tabs)/match' as any)
-            }
-          }}
-        >
-          <Text style={styles.emptyButtonText}>
-            {isGroupTab ? 'Browse Events' : 'Start Matching'}
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading chats...</Text>
       </View>
     )
   }
 
-  const renderChatList = () => {
-    if (activeTab === 'group') {
-      return (
-        <FlatList
-          data={groupChats}
-          keyExtractor={(item) => item.chat_room_id}
-          renderItem={renderGroupChatItem}
-          style={styles.chatList}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-        />
-      )
-    } else {
-      return (
-        <FlatList
-          data={personalChats}
-          keyExtractor={(item) => item.conversation_id}
-          renderItem={renderPersonalChatItem}
-          style={styles.chatList}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-        />
-      )
-    }
-  }
-
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chats 💬</Text>
-        <Text style={styles.headerSubtitle}>
-          {activeTab === 'group' ? 'Event group conversations' : 'Private messages'}
-        </Text>
+      {/* Tab Switcher */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'group' && styles.activeTab]}
+          onPress={() => setActiveTab('group')}
+        >
+          <Text style={[styles.tabText, activeTab === 'group' && styles.activeTabText]}>
+            Group Chats
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'personal' && styles.activeTab]}
+          onPress={() => setActiveTab('personal')}
+        >
+          <Text style={[styles.tabText, activeTab === 'personal' && styles.activeTabText]}>
+            Personal
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {renderSegmentedControl()}
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
-          <Text style={styles.loadingText}>Loading chats...</Text>
-        </View>
+      {/* Chat List */}
+      {activeTab === 'group' ? (
+        <FlatList
+          data={groupChats}
+          renderItem={renderGroupChatItem}
+          keyExtractor={(item) => item.chat_room_id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={[
+            styles.listContainer,
+            groupChats.length === 0 && styles.emptyListContainer
+          ]}
+        />
       ) : (
-        renderChatList()
+        <FlatList
+          data={personalChats}
+          renderItem={renderPersonalChatItem}
+          keyExtractor={(item) => item.conversation_id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={[
+            styles.listContainer,
+            personalChats.length === 0 && styles.emptyListContainer
+          ]}
+        />
       )}
     </View>
   )
@@ -463,40 +346,53 @@ export default function Chat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
   },
-  header: {
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
+  loadingText: {
     fontSize: 16,
     color: '#666',
   },
-  segmentedControl: {
+  tabContainer: {
     flexDirection: 'row',
-    margin: 16,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    padding: 4,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  activeSegmentButton: {
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#007AFF',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#007AFF',
+  },
+  listContainer: {
+    padding: 16,
+  },
+  emptyListContainer: {
+    flex: 1,
+  },
+  chatItem: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -506,123 +402,71 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  segmentText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666',
-  },
-  activeSegmentText: {
-    color: '#FF6B6B',
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  chatList: {
-    flex: 1,
-  },
-  chatItem: {
-    flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  chatIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#f8f8f8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  chatContent: {
-    flex: 1,
-  },
   chatHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   chatTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#333',
     flex: 1,
-    marginRight: 8,
   },
-  chatTime: {
-    fontSize: 12,
-    color: '#999',
-  },
-  chatSubHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  chatSubtitle: {
+  participantCount: {
     fontSize: 14,
     color: '#666',
-    flex: 1,
   },
   unreadBadge: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
-  unreadText: {
+  unreadCount: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
+  },
+  chatVenue: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  lastMessageContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   lastMessage: {
     fontSize: 14,
+    color: '#888',
+    flex: 1,
+    marginRight: 8,
+  },
+  lastMessageTime: {
+    fontSize: 12,
     color: '#999',
-    lineHeight: 18,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingVertical: 60,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#333',
-    marginTop: 16,
     marginBottom: 8,
   },
-  emptyText: {
+  emptySubtitle: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  emptyButton: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  emptyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 }) 

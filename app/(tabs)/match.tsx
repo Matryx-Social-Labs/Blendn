@@ -50,31 +50,21 @@ export default function Match() {
       console.log('🔍 [MATCH_INIT] Getting authenticated user...');
       const authStartTime = Date.now();
       
-      // Try cached session first, fallback to network call if needed
-      let user = AuthHelper.getCurrentUser()
+      // Get authenticated user with fallback
+      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
+      const authEndTime = Date.now();
+      console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms`);
       
-      if (user) {
-        console.log('✅ [MATCH_INIT] Using cached user session:', user.id);
-        const authEndTime = Date.now();
-        console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms (cached)`);
-      } else {
-        console.log('⚠️ [MATCH_INIT] No cached session, falling back to network call...');
-        const { data: { user: networkUser }, error } = await AuthHelper.getUserWithFallback(3000)
-        const authEndTime = Date.now();
-        console.log(`🔍 [MATCH_INIT] Auth query completed in ${authEndTime - authStartTime}ms (network)`);
-        
-        if (error) {
-          console.error('❌ [MATCH_INIT] Auth error:', error);
-          Alert.alert('Error', 'Unable to load matching data. Please restart the app.')
-          return
-        }
-        
-        user = networkUser
+      if (error) {
+        console.error('❌ [MATCH_INIT] Auth error:', error);
+        // Redirect to main app if user is not authenticated
+        router.replace('/(tabs)/events')
+        return
       }
       
       if (!user) {
-        console.error('❌ [MATCH_INIT] No authenticated user found');
-        Alert.alert('Error', 'Please sign in to continue')
+        console.log('⚠️ [MATCH_INIT] No authenticated user found, redirecting...');
+        router.replace('/(tabs)/events')
         return
       }
 
@@ -88,7 +78,8 @@ export default function Match() {
       console.error('💥 [MATCH_INIT] Unexpected error:', error);
       console.error('💥 [MATCH_INIT] Error type:', typeof error);
       console.error('💥 [MATCH_INIT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      Alert.alert('Error', 'Failed to load matching data')
+      // Redirect to main app on any unexpected error
+      router.replace('/(tabs)/events')
     } finally {
       console.log('🏁 [MATCH_INIT] loadInitialData completed');
       setLoading(false)

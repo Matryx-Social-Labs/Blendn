@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import { supabase } from '../../lib/supabase'
 
 const INTERESTS = [
   '🎵 Music', '🎬 Movies', '📚 Reading', '🏃‍♀️ Running', 
@@ -30,8 +31,22 @@ export default function Interests() {
     }
   }
 
-  const handleContinue = () => {
-    router.push('./photos' as any)
+  const handleContinue = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('Please sign in to continue')
+        return
+      }
+      await supabase
+        .from('user_profiles')
+        .update({ interests: selectedInterests })
+        .eq('user_id', user.id)
+      router.push('./goals' as any)
+    } catch (e) {
+      console.error(e)
+      alert('Failed to save interests')
+    }
   }
 
   const handleBack = () => {
@@ -65,7 +80,7 @@ export default function Interests() {
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.progressText}>Step 3 of 5</Text>
+          <Text style={styles.progressText}>Step 3 of 8</Text>
         </View>
 
         <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -1,93 +1,105 @@
-import type { Session } from '@supabase/supabase-js';
-import { Stack, router } from "expo-router";
-import { useEffect, useState } from 'react';
+import { Stack } from "expo-router";
+import { useEffect } from 'react';
 import {
     initializePushNotifications,
     removePushTokenFromProfile,
     setupNotificationListener,
     setupNotificationResponseListener
 } from '../lib/notifications';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/useAuth';
 
 export default function RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('📱 [ROOT_LAYOUT] Initial session loaded:', session?.user?.id || 'none');
-      setSession(session);
-      // No caching needed - using direct auth calls as per official docs
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('📱 [ROOT_LAYOUT] Auth state changed:', event, session?.user?.id || 'none');
-      setSession(session);
-      // No caching needed - using direct auth calls as per official docs
-      
-      // Handle push notifications based on auth state
-      if (event === 'SIGNED_IN' && session) {
-        // Initialize push notifications when user signs in
-        await initializePushNotifications();
-      } else if (event === 'SIGNED_OUT') {
-        // Remove push token when user signs out
-        await removePushTokenFromProfile();
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    // Set up notification listeners
-    const notificationListener = setupNotificationListener((notification) => {
-      console.log('Notification received in foreground:', notification);
-      // Handle in-app notification display here if needed
-    });
-
-    const responseListener = setupNotificationResponseListener((response) => {
-      console.log('Notification tapped:', response);
-      
-      // Handle navigation based on notification data
-      const data = response.notification.request.content.data;
-      if (data?.screen) {
-        switch (data.screen) {
-          case 'chat':
-            if (data.conversationId) {
-              router.push(`/private-chat/${data.conversationId}` as any);
-            } else {
-              router.push('/(tabs)/chat' as any);
-            }
-            break;
-          case 'match':
-            router.push('/(tabs)/match' as any);
-            break;
-          case 'event':
-            if (data.eventId) {
-              router.push(`/event/${data.eventId}` as any);
-            } else {
-              router.push('/(tabs)/events' as any);
-            }
-            break;
-          default:
-            break;
-        }
-      }
-    });
+    // Set up notification listeners once
+    const notificationListener = setupNotificationListener();
+    const responseListener = setupNotificationResponseListener();
 
     return () => {
-      notificationListener.remove();
-      responseListener.remove();
+      notificationListener?.remove?.();
+      responseListener?.remove?.();
     };
   }, []);
 
+  useEffect(() => {
+    // Handle push notifications based on auth state
+    if (!loading) {
+      if (user) {
+        // Initialize push notifications when user signs in
+        console.log('📱 [ROOT_LAYOUT] User signed in, initializing push notifications');
+        initializePushNotifications().catch(error => {
+          console.error('❌ [ROOT_LAYOUT] Failed to initialize push notifications:', error);
+        });
+      } else {
+        // Remove push token when user signs out
+        console.log('📱 [ROOT_LAYOUT] User signed out, removing push token');
+        removePushTokenFromProfile().catch(error => {
+          console.error('❌ [ROOT_LAYOUT] Failed to remove push token:', error);
+        });
+      }
+    }
+  }, [user, loading]);
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="(tabs)" />
+    <Stack>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen 
+        name="(tabs)" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false // Prevent swipe back to login
+        }} 
+      />
+      <Stack.Screen 
+        name="onboarding" 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false 
+        }} 
+      />
+      <Stack.Screen 
+        name="chat/[id]" 
+        options={{ 
+          title: "Group Chat",
+          headerBackTitle: "Back"
+        }} 
+      />
+      <Stack.Screen 
+        name="event/[id]" 
+        options={{ 
+          title: "Event Details",
+          headerBackTitle: "Back"
+        }} 
+      />
+      <Stack.Screen 
+        name="private-chat/[conversationId]" 
+        options={{ 
+          title: "Chat",
+          headerBackTitle: "Back"
+        }} 
+      />
+      <Stack.Screen 
+        name="edit-profile" 
+        options={{ 
+          title: "Edit Profile",
+          headerBackTitle: "Back"
+        }} 
+      />
+      <Stack.Screen 
+        name="blocked-users" 
+        options={{ 
+          title: "Blocked Users",
+          headerBackTitle: "Back"
+        }} 
+      />
+      <Stack.Screen 
+        name="test-features" 
+        options={{ 
+          title: "Test Features",
+          headerBackTitle: "Back"
+        }} 
+      />
     </Stack>
   );
 }
