@@ -11,7 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { EventCheckout, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
 interface Event {
@@ -67,46 +67,23 @@ export default function Events() {
     if (!user || events.length === 0) return
 
     try {
-      console.log('🔍 [CHECKIN_STATUS] Loading checkin statuses for all events in batch');
-      
-      // Get all checkin records for this user across all events in a single query
-      const eventIds = events.map(event => event.id)
-      const { data: checkinRecords, error } = await supabase
-        .from('event_checkins')
-        .select('event_id, checked_in_at, checked_out_at')
-        .eq('user_id', user.id)
-        .in('event_id', eventIds)
-        .order('checked_in_at', { ascending: false })
+      console.log('🔍 [CHECKIN_STATUS] Loading checkin statuses via RPC for all events');
+      const results = await Promise.all(
+        events.map(async (event) => {
+          const status = await EventCheckout.getCheckinStatus(event.id)
+          return [event.id, status] as const
+        })
+      )
 
-      if (error) {
-        console.error('❌ [CHECKIN_STATUS] Error fetching checkin records:', error)
-        setCheckinStatuses({})
-        return
-      }
-
-      // Process the batch results into status map
       const statusMap: { [eventId: string]: any } = {}
-      
-      for (const eventId of eventIds) {
-        // Find the most recent checkin record for this event
-        const eventRecord = checkinRecords?.find(record => record.event_id === eventId)
-        
-        if (!eventRecord) {
-          statusMap[eventId] = { status: 'not_checked_in' }
-        } else {
-          const status = eventRecord.checked_out_at ? 'checked_out' : 'checked_in'
-          statusMap[eventId] = {
-            status,
-            checked_in_at: eventRecord.checked_in_at,
-            checked_out_at: eventRecord.checked_out_at
-          }
-        }
+      for (const [eventId, status] of results) {
+        statusMap[eventId] = status
       }
 
       setCheckinStatuses(statusMap)
-      console.log(`✅ [CHECKIN_STATUS] Loaded statuses for ${Object.keys(statusMap).length} events in batch`);
+      console.log(`✅ [CHECKIN_STATUS] Loaded statuses for ${results.length} events via RPC`)
     } catch (error) {
-      console.error('💥 [CHECKIN_STATUS] Unexpected error:', error);
+      console.error('💥 [CHECKIN_STATUS] Unexpected error:', error)
       setCheckinStatuses({})
     }
   }
@@ -209,13 +186,20 @@ export default function Events() {
   const handleCheckIn = async (event: Event) => {
     try {
       console.log('🔍 [CHECK_IN] Starting check-in for event:', event.id)
+      if (!user) {
+        Alert.alert('Sign in required', 'Please sign in to check in to events')
+        return
+      }
       
-      // Call the check-in RPC function
+      // Call standardized production check-in RPC
       const { data, error } = await supabase
-        .rpc('checkin_user_to_event', {
-          event_id: event.id,
-          user_lat: userLocation?.latitude || 19.076,
-          user_lng: userLocation?.longitude || 72.8777
+        .rpc('check_in_to_event_production', {
+          p_event_id: event.id,
+          // When listing, we may only have approximate location; still pass if available
+          p_user_id: user.id,
+          p_user_latitude: userLocation?.latitude || 19.076,
+          p_user_longitude: userLocation?.longitude || 72.8777,
+          p_gps_accuracy: 50,
         })
 
       if (error) {

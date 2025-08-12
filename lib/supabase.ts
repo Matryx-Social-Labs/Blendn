@@ -293,26 +293,23 @@ export const EventCheckout = {
         return { status: 'not_authenticated' }
       }
 
-      // Get checkin status with direct query
-      const { data: checkinData, error } = await supabase
-        .from('event_checkins')
-        .select('checked_in_at, checked_out_at')
-        .eq('user_id', user.id)
-        .eq('event_id', eventId)
-        .order('checked_in_at', { ascending: false })
-        .limit(1)
-        .single()
+      // Standardize on production RPC for status
+      const { data, error } = await supabase
+        .rpc('get_check_in_status', {
+          p_event_id: eventId,
+          p_user_id: user.id,
+        })
 
-      if (error || !checkinData) {
+      if (error || !data) {
         return { status: 'not_checked_in' }
       }
 
-      const status = checkinData.checked_out_at ? 'checked_out' : 'checked_in'
-      
+      // Map RPC response to existing consumer shape
+      const isCheckedIn = !!data.checked_in
       return {
-        status,
-        checked_in_at: checkinData.checked_in_at,
-        checked_out_at: checkinData.checked_out_at
+        status: isCheckedIn ? 'checked_in' : 'not_checked_in',
+        checked_in_at: data.checked_in_at ?? null,
+        checked_out_at: data.checked_out_at ?? null,
       }
     } catch (error) {
       console.error('❌ [CHECKOUT] Error getting checkin status:', error);
