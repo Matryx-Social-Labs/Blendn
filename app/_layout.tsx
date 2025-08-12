@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { router, Stack, usePathname } from "expo-router";
 import { useEffect } from 'react';
 import {
     initializePushNotifications,
@@ -6,10 +6,12 @@ import {
     setupNotificationListener,
     setupNotificationResponseListener
 } from '../lib/notifications';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';
 
 export default function RootLayout() {
   const { user, loading } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     // Set up notification listeners once
@@ -31,6 +33,23 @@ export default function RootLayout() {
         initializePushNotifications().catch(error => {
           console.error('❌ [ROOT_LAYOUT] Failed to initialize push notifications:', error);
         });
+        // Global onboarding gate: redirect non-onboarded users to onboarding
+        (async () => {
+          try {
+            // Skip when already on onboarding route
+            if (pathname?.startsWith('/onboarding')) return;
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('onboarded')
+              .eq('id', user.id)
+              .single();
+            if (!profile || profile.onboarded === false) {
+              router.replace('/onboarding/welcome');
+            }
+          } catch (e) {
+            // Fail open to main tabs if check fails
+          }
+        })();
       } else {
         // Remove push token when user signs out
         console.log('📱 [ROOT_LAYOUT] User signed out, removing push token');
@@ -39,7 +58,7 @@ export default function RootLayout() {
         });
       }
     }
-  }, [user, loading]);
+  }, [user, loading, pathname]);
 
   return (
     <Stack>

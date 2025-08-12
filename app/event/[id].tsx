@@ -82,9 +82,13 @@ export default function EventDetail() {
     if (!userLocation || !event) return
     
     try {
+      const { data: userRes } = await supabase.auth.getUser()
+      const currentUserId = userRes?.user?.id
+      if (!currentUserId) return
+
       const { data, error } = await supabase
         .rpc('check_user_proximity_status', {
-          p_user_id: '339f7a74-3272-4b36-80e2-941ebea5bc4d', // Current user
+          p_user_id: currentUserId,
           p_user_latitude: userLocation.latitude,
           p_user_longitude: userLocation.longitude
         })
