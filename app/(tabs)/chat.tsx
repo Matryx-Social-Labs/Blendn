@@ -1,12 +1,13 @@
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
@@ -27,6 +28,7 @@ interface PersonalChat {
   conversation_id: string
   other_user_name: string
   other_user_id: string
+  other_user_avatar?: string | null
   last_message?: string
   last_message_time?: string
   unread_count: number
@@ -179,6 +181,7 @@ export default function Chat() {
       const conversationList = (conversations || []) as any[]
       const otherUserIdsSet = new Set<string>()
       const otherUserIdByConversationId: Record<string, string> = {}
+      const conversationIds: string[] = []
 
       for (const conversation of conversationList) {
         const match = Array.isArray(conversation.matches) ? conversation.matches[0] : conversation.matches
@@ -190,37 +193,74 @@ export default function Chat() {
           otherUserIdsSet.add(otherUserId)
           otherUserIdByConversationId[conversation.id] = otherUserId
         }
+        if (conversation.id) {
+          conversationIds.push(conversation.id)
+        }
       }
 
       const otherUserIds = Array.from(otherUserIdsSet)
 
-      let profilesById: Record<string, { id: string, name: string | null }> = {}
+      // Fetch user profile display names and avatars
+      let profilesById: Record<string, { user_id: string, display_name: string | null, avatar_url: string | null }> = {}
       if (otherUserIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', otherUserIds)
+          .from('user_profiles')
+          .select('user_id, display_name, profile_photos, photos')
+          .in('user_id', otherUserIds)
 
         if (profilesError) {
-          console.error('❌ [CHAT] Error fetching profiles:', profilesError)
+          console.error('❌ [CHAT] Error fetching user_profiles:', profilesError)
         } else {
-          profilesById = (profiles || []).reduce((acc: Record<string, { id: string, name: string | null }>, p: any) => {
-            acc[p.id] = { id: p.id, name: p.name ?? null }
+          profilesById = (profiles || []).reduce((acc: Record<string, { user_id: string, display_name: string | null, avatar_url: string | null }>, p: any) => {
+            // Prefer profile_photos first item, then photos first item if present
+            const primaryPhoto = Array.isArray(p?.profile_photos) && p.profile_photos.length > 0
+              ? p.profile_photos[0]
+              : (Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null)
+            acc[p.user_id] = {
+              user_id: p.user_id,
+              display_name: p.display_name ?? null,
+              avatar_url: primaryPhoto,
+            }
             return acc
           }, {})
+        }
+      }
+
+      // Fetch the latest message for each conversation (for preview + time)
+      let lastMessageByConversationId: Record<string, { text: string, time: string }> = {}
+      if (conversationIds.length > 0) {
+        const { data: msgs, error: msgErr } = await supabase
+          .from('private_messages')
+          .select('conversation_id, message_text, created_at')
+          .in('conversation_id', conversationIds)
+          .order('created_at', { ascending: false })
+
+        if (msgErr) {
+          console.error('❌ [CHAT] Error fetching last messages:', msgErr)
+        } else if (Array.isArray(msgs)) {
+          for (const m of msgs as any[]) {
+            if (!lastMessageByConversationId[m.conversation_id]) {
+              lastMessageByConversationId[m.conversation_id] = {
+                text: m.message_text,
+                time: m.created_at,
+              }
+            }
+          }
         }
       }
 
       const userConversations = conversationList.map((conversation: any) => {
         const otherUserId = otherUserIdByConversationId[conversation.id]
         const otherUserProfile = otherUserId ? profilesById[otherUserId] : undefined
+        const lastMeta = lastMessageByConversationId[conversation.id]
 
         return {
           conversation_id: conversation.id,
           other_user_id: otherUserId,
-          other_user_name: otherUserProfile?.name || 'Unknown User',
-          last_message: undefined,
-          last_message_time: conversation.last_message_at,
+          other_user_name: otherUserProfile?.display_name || 'User',
+          other_user_avatar: otherUserProfile?.avatar_url || null,
+          last_message: lastMeta?.text,
+          last_message_time: lastMeta?.time || conversation.last_message_at,
           unread_count: 0,
         } as PersonalChat
       })
@@ -245,7 +285,8 @@ export default function Chat() {
   }
 
   const handlePersonalChatPress = (chat: PersonalChat) => {
-    router.push(`/private-chat/${chat.conversation_id}`)
+    const q = `?otherUserName=${encodeURIComponent(chat.other_user_name || '')}&otherUserId=${encodeURIComponent(chat.other_user_id || '')}`
+    router.push(`/private-chat/${chat.conversation_id}${q}`)
   }
 
   const renderGroupChatItem = ({ item }: { item: GroupChat }) => (
@@ -276,32 +317,59 @@ export default function Chat() {
 
   const renderPersonalChatItem = ({ item }: { item: PersonalChat }) => (
     <TouchableOpacity 
-      style={styles.chatItem} 
+      style={styles.personalItem} 
       onPress={() => handlePersonalChatPress(item)}
     >
-      <View style={styles.chatHeader}>
-        <Text style={styles.chatTitle}>{item.other_user_name}</Text>
-        {item.unread_count > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadCount}>{item.unread_count}</Text>
-          </View>
-        )}
-      </View>
-      {item.last_message && (
-        <View style={styles.lastMessageContainer}>
-          <Text style={styles.lastMessage} numberOfLines={2}>
-            {item.last_message}
-          </Text>
-          <Text style={styles.lastMessageTime}>
-            {item.last_message_time ? new Date(item.last_message_time).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            }) : ''}
-          </Text>
+      {item.other_user_avatar ? (
+        <Image source={{ uri: item.other_user_avatar }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, styles.avatarFallback]}>
+          <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>
         </View>
       )}
+      <View style={styles.personalContent}>
+        <View style={styles.personalHeader}>
+          <Text style={styles.personalName} numberOfLines={1}>{item.other_user_name}</Text>
+          <Text style={styles.personalTime}>
+            {item.last_message_time ? formatRelativeTime(item.last_message_time) : ''}
+          </Text>
+        </View>
+        <View style={styles.personalFooter}>
+          <Text style={styles.personalPreview} numberOfLines={1}>
+            {item.last_message || 'Say hi 👋'}
+          </Text>
+          {item.unread_count > 0 && (
+            <View style={styles.unreadDot}>
+              <Text style={styles.unreadDotText}>{item.unread_count}</Text>
+            </View>
+          )}
+        </View>
+      </View>
     </TouchableOpacity>
   )
+
+  const getInitials = (name: string) => {
+    if (!name) return '?'
+    const parts = name.trim().split(/\s+/)
+    const first = parts[0]?.[0] || ''
+    const second = parts[1]?.[0] || ''
+    return (first + second).toUpperCase() || first.toUpperCase() || '?'
+  }
+
+  const formatRelativeTime = (timeString: string) => {
+    const messageTime = new Date(timeString)
+    const now = new Date()
+    const diffMs = now.getTime() - messageTime.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'now'
+    if (diffHours < 1) return `${diffMins}m`
+    if (diffHours < 24) return `${diffHours}h`
+    if (diffDays < 7) return `${diffDays}d`
+    return messageTime.toLocaleDateString()
+  }
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -390,7 +458,8 @@ export default function Chat() {
                         const res = Array.isArray(data) ? data[0] : data
                         loadChats()
                         if (res?.success && res.conversation_id) {
-                          router.push(`/private-chat/${res.conversation_id}`)
+                          const nameParam = `?otherUserName=${encodeURIComponent(r.sender_name || 'User')}`
+                          router.push(`/private-chat/${res.conversation_id}${nameParam}`)
                         }
                       } catch {}
                     }}>
@@ -465,6 +534,20 @@ const styles = StyleSheet.create({
   emptyListContainer: {
     flex: 1,
   },
+  personalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   chatItem: {
     backgroundColor: '#fff',
     padding: 16,
@@ -478,6 +561,68 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginRight: 12,
+    backgroundColor: '#f1f1f1',
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  avatarInitials: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#555',
+  },
+  personalContent: {
+    flex: 1,
+  },
+  personalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  personalName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+    flex: 1,
+    marginRight: 8,
+  },
+  personalTime: {
+    fontSize: 12,
+    color: '#999',
+  },
+  personalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  personalPreview: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+    marginRight: 8,
+  },
+  unreadDot: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    backgroundColor: '#F7B500',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDotText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
   },
   chatHeader: {
     flexDirection: 'row',
