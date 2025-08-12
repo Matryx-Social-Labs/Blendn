@@ -31,11 +31,19 @@ interface AttendeeProfile {
   last_seen?: string
 }
 
+interface MatchPreview {
+  conversation_id: string
+  other_user_id: string
+  other_user_name: string
+  photo_url?: string
+}
+
 export default function Match() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
+  const [matches, setMatches] = useState<MatchPreview[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,6 +55,7 @@ export default function Match() {
     useCallback(() => {
       if (currentUser) {
         loadActiveEventAndAttendees(currentUser.id)
+        loadMatches(currentUser.id)
       }
     }, [currentUser])
   )
@@ -83,11 +92,95 @@ export default function Match() {
 
       // Load active event and attendees
       await loadActiveEventAndAttendees(user.id)
+      await loadMatches(user.id)
     } catch (e) {
       console.error('💥 [MATCH_INIT] Unexpected error:', e)
       setError('Failed to load')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMatches = async (userId: string) => {
+    try {
+      const { data: conversations, error: convError } = await supabase
+        .from('private_conversations')
+        .select(`
+          id,
+          match_id,
+          last_message_at,
+          matches!inner (
+            user1_id,
+            user2_id
+          )
+        `)
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`, { foreignTable: 'matches' })
+        .order('last_message_at', { ascending: false })
+
+      if (convError) {
+        console.error('❌ [MATCHES] Error fetching conversations:', convError)
+        setMatches([])
+        return
+      }
+
+      const convs = (conversations || []) as any[]
+      if (convs.length === 0) {
+        setMatches([])
+        return
+      }
+
+      const otherUserIdsSet = new Set<string>()
+      const otherIdByConversation: Record<string, string> = {}
+      for (const c of convs) {
+        const m = Array.isArray(c.matches) ? c.matches[0] : c.matches
+        if (!m) continue
+        const otherId = m.user1_id === userId ? m.user2_id : m.user1_id
+        if (otherId) {
+          otherUserIdsSet.add(otherId)
+          otherIdByConversation[c.id] = otherId
+        }
+      }
+
+      const otherUserIds = Array.from(otherUserIdsSet)
+      let profilesById: Record<string, { name?: string; photo?: string }> = {}
+
+      if (otherUserIds.length > 0) {
+        const [userProfilesRes, profilesRes] = await Promise.all([
+          supabase.from('user_profiles').select('user_id, display_name, profile_photos, photos').in('user_id', otherUserIds),
+          supabase.from('profiles').select('id, name').in('id', otherUserIds)
+        ])
+
+        const userProfiles = (userProfilesRes.data || []) as Array<{ user_id: string; display_name?: string; profile_photos?: string[]; photos?: string[] }>
+        const basicProfiles = (profilesRes.data || []) as Array<{ id: string; name?: string }>
+
+        const basicMap = new Map(basicProfiles.map(p => [p.id, p]))
+        for (const up of userProfiles) {
+          const bestPhoto = (up.profile_photos && up.profile_photos[0]) || (up.photos && up.photos[0])
+          profilesById[up.user_id] = {
+            name: up.display_name || basicMap.get(up.user_id)?.name,
+            photo: bestPhoto,
+          }
+        }
+        for (const p of basicProfiles) {
+          if (!profilesById[p.id]) profilesById[p.id] = { name: p.name, photo: undefined }
+        }
+      }
+
+      const matched: MatchPreview[] = convs.map(c => {
+        const otherId = otherIdByConversation[c.id]
+        const prof = otherId ? profilesById[otherId] : undefined
+        return {
+          conversation_id: c.id,
+          other_user_id: otherId,
+          other_user_name: prof?.name || 'User',
+          photo_url: prof?.photo,
+        }
+      }).filter(m => !!m.other_user_id)
+
+      setMatches(matched)
+    } catch (e) {
+      console.error('💥 [MATCHES] Failed to load matches:', e)
+      setMatches([])
     }
   }
 
@@ -344,6 +437,37 @@ export default function Match() {
         </TouchableOpacity>
       </View>
 
+      {matches.length > 0 && (
+        <View style={styles.matchesContainer}>
+          <View style={styles.rowHeader}>
+            <Text style={styles.rowTitle}>Your matches</Text>
+            <Text style={styles.rowCount}>{matches.length}</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.matchesScroll}
+          >
+            {matches.map((m) => (
+              <View key={m.conversation_id} style={styles.matchItem}>
+                <TouchableOpacity
+                  style={styles.matchAvatarWrapper}
+                  onPress={() => router.push(`/private-chat/${m.conversation_id}`)}
+                >
+                  <View style={styles.matchAvatarRing}>
+                    <Image
+                      source={{ uri: m.photo_url || 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=200' }}
+                      style={styles.matchAvatar}
+                    />
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.matchName} numberOfLines={1}>{m.other_user_name || 'User'}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {!eventInfo ? (
         renderEmptyState()
       ) : attendees.length === 0 ? (
@@ -406,6 +530,9 @@ const styles = StyleSheet.create({
   carouselContainer: {
     paddingTop: 16,
   },
+  matchesContainer: {
+    paddingTop: 8,
+  },
   rowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -425,6 +552,43 @@ const styles = StyleSheet.create({
   carousel: {
     paddingHorizontal: 16,
     paddingBottom: 8,
+  },
+  matchesScroll: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  matchItem: {
+    width: 76,
+    marginRight: 12,
+    alignItems: 'center',
+  },
+  matchAvatarWrapper: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff6cc',
+  },
+  matchAvatarRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    padding: 3,
+    backgroundColor: '#FFCC00',
+  },
+  matchAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 33,
+  },
+  matchName: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+    maxWidth: 76,
+    textAlign: 'center',
   },
   tileWrapper: {
     width: TILE_WIDTH,
