@@ -96,15 +96,15 @@ export default function Chat() {
       const { data: chatRooms, error: roomError } = await supabase
         .from('chat_rooms')
         .select(`
-          id,
-          name,
+          chat_room_id,
+          room_name,
           event_id,
           events (
             title,
             venue_name
           )
         `)
-        .in('id', chatRoomIds)
+        .in('chat_room_id', chatRoomIds)
 
       if (roomError) {
         console.error('❌ [CHAT] Error fetching chat rooms:', roomError)
@@ -114,7 +114,7 @@ export default function Chat() {
 
       // Transform the data to match our GroupChat interface
       const groupChatData: GroupChat[] = chatRooms?.map((room: any) => ({
-        chat_room_id: room.id,
+        chat_room_id: room.chat_room_id,
         event_id: room.event_id || '',
         event_title: room.events?.title || 'Unknown Event',
         event_venue: room.events?.venue_name || 'Unknown Venue',
