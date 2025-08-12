@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotificationHelpers } from '../../lib/notifications';
-import { supabase } from '../../lib/supabase';
+import { EventChat, supabase } from '../../lib/supabase';
 
 interface EventDetail {
   id: string
@@ -280,6 +280,9 @@ export default function EventDetail() {
         Alert.alert('Error', 'Failed to check in. Please try again.')
       } else {
         if (data.success) {
+          // Ensure the user is added to the event group chat in the background
+          const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
+
           Alert.alert(
             'Check-in Successful! 🎉',
             `Welcome to ${event?.title || 'this event'}! You can now chat with other attendees and start matching.`,
@@ -290,7 +293,14 @@ export default function EventDetail() {
               },
               {
                 text: 'Join Chat',
-                onPress: () => router.push('/(tabs)/chat' as any)
+                onPress: () => {
+                  if (ensured?.chatRoomId) {
+                    const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+                    router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+                  } else {
+                    router.push('/(tabs)/chat' as any)
+                  }
+                }
               },
               { text: 'OK', style: 'default' }
             ]

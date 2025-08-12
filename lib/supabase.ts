@@ -317,3 +317,80 @@ export const EventCheckout = {
     }
   }
 } 
+
+// Event chat helpers: create/find the event chat room and ensure the current user is a participant
+export const EventChat = {
+  async ensureUserInEventChat(eventId: string, eventTitle?: string): Promise<{ chatRoomId: string, roomName: string } | null> {
+    try {
+      const { data: userRes } = await supabase.auth.getUser()
+      const currentUserId = userRes?.user?.id
+      if (!currentUserId) {
+        console.warn('[EVENT_CHAT] No authenticated user while ensuring chat membership')
+        return null
+      }
+
+      // 1) Find existing active chat room for this event
+      const { data: existingRoom, error: findError } = await supabase
+        .from('chat_rooms')
+        .select('chat_room_id, room_name, is_active')
+        .eq('event_id', eventId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+
+      if (findError) {
+        console.error('❌ [EVENT_CHAT] Error finding chat room:', findError)
+        // Continue to try creating below
+      }
+
+      let chatRoomId = existingRoom?.chat_room_id as string | undefined
+      let roomName = existingRoom?.room_name as string | undefined
+
+      // 2) Create room if none exists
+      if (!chatRoomId) {
+        const proposedName = eventTitle ? `Chat for ${eventTitle}` : 'Event Chat'
+        const { data: created, error: createError } = await supabase
+          .from('chat_rooms')
+          .insert({ event_id: eventId, room_name: proposedName, is_active: true })
+          .select('chat_room_id, room_name')
+          .single()
+
+        if (createError) {
+          console.error('❌ [EVENT_CHAT] Error creating chat room:', createError)
+          return null
+        }
+
+        chatRoomId = created.chat_room_id
+        roomName = created.room_name
+      }
+
+      // 3) Ensure current user is a participant
+      const { data: participant, error: participantFindError } = await supabase
+        .from('chat_participants')
+        .select('chat_room_id')
+        .eq('chat_room_id', chatRoomId!)
+        .eq('user_id', currentUserId)
+        .maybeSingle()
+
+      if (participantFindError) {
+        console.error('❌ [EVENT_CHAT] Error checking participant:', participantFindError)
+      }
+
+      if (!participant) {
+        const { error: participantInsertError } = await supabase
+          .from('chat_participants')
+          .insert({ chat_room_id: chatRoomId!, user_id: currentUserId, joined_at: new Date().toISOString() })
+
+        if (participantInsertError) {
+          console.error('❌ [EVENT_CHAT] Error adding participant:', participantInsertError)
+          // Still return the room so UI can attempt navigation
+        }
+      }
+
+      return { chatRoomId: chatRoomId!, roomName: roomName || 'Event Chat' }
+    } catch (error) {
+      console.error('💥 [EVENT_CHAT] Unexpected error ensuring chat membership:', error)
+      return null
+    }
+  }
+}

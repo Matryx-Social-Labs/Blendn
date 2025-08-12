@@ -240,7 +240,8 @@ export default function Chat() {
   }
 
   const handleGroupChatPress = (chat: GroupChat) => {
-    router.push(`/chat/${chat.chat_room_id}`)
+    const query = `?roomName=${encodeURIComponent(chat.event_title)}&eventTitle=${encodeURIComponent(chat.event_title)}`
+    router.push(`/chat/${chat.chat_room_id}${query}`)
   }
 
   const handlePersonalChatPress = (chat: PersonalChat) => {

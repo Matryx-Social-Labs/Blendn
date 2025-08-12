@@ -12,7 +12,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { EventCheckout, supabase } from '../../lib/supabase'
+import { EventChat, EventCheckout, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
 interface Event {
@@ -211,7 +211,23 @@ export default function Events() {
 
       if (data?.success) {
         console.log('✅ [CHECK_IN] Success')
-        Alert.alert('Success!', data.message)
+        // Ensure user is in the event chat in the background
+        EventChat.ensureUserInEventChat(event.id, event.title).then((ensured) => {
+          if (ensured?.chatRoomId) {
+            // Optional: guide user directly to the chat
+            Alert.alert(
+              'Success!',
+              'You have been checked in and added to the event chat.',
+              [
+                { text: 'Go to Chat', onPress: () => router.push(`/chat/${ensured.chatRoomId}?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event.title)}`) },
+                { text: 'OK', style: 'default' }
+              ]
+            )
+          } else {
+            Alert.alert('Success!', data.message)
+          }
+        }).catch(() => Alert.alert('Success!', data.message))
+
         // Refresh the checkin status for this event
         loadCheckinStatusesBatch()
       } else {

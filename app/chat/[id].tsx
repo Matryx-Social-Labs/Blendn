@@ -34,14 +34,67 @@ export default function GroupChat() {
   const [sending, setSending] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
+  const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (chatRoomId) {
       getCurrentUser()
+      loadParticipantAliases()
       loadMessages()
       subscribeToMessages()
     }
   }, [chatRoomId])
+
+  // Ensure current user alias is set to "You" after currentUser resolves
+  useEffect(() => {
+    if (currentUser?.id) {
+      setParticipantAliases(prev => (
+        prev[currentUser.id] === 'You' ? prev : { ...prev, [currentUser.id]: 'You' }
+      ))
+    }
+  }, [currentUser?.id])
+
+  // Re-apply aliases to existing messages whenever alias map changes
+  useEffect(() => {
+    if (!participantAliases || Object.keys(participantAliases).length === 0) return
+    setMessages(prev => prev.map(m => {
+      if (m.sender_id === 'system') return { ...m, sender_name: 'System' }
+      if (m.sender_id === currentUser?.id) return { ...m, sender_name: 'You' }
+      const alias = participantAliases[m.sender_id] || 'Attendee'
+      return { ...m, sender_name: alias }
+    }))
+  }, [participantAliases, currentUser?.id])
+
+  const loadParticipantAliases = async () => {
+    try {
+      // Load participants for deterministic anonymous aliases
+      const { data, error } = await supabase
+        .from('chat_participants')
+        .select('user_id, joined_at')
+        .eq('chat_room_id', chatRoomId)
+        .order('joined_at', { ascending: true })
+
+      if (error) {
+        console.error('❌ [CHAT_ALIASES] Error loading participants:', error)
+        return
+      }
+
+      const mapping: Record<string, string> = {}
+      ;(data || []).forEach((p: any, idx: number) => {
+        mapping[p.user_id] = `Attendee #${idx + 1}`
+      })
+
+      // Preserve a special alias for current user if we already know it
+      if (currentUser?.id && mapping[currentUser.id]) {
+        mapping[currentUser.id] = 'You'
+      }
+
+      setParticipantAliases(mapping)
+      console.log('✅ [CHAT_ALIASES] Loaded aliases for', Object.keys(mapping).length, 'participants')
+    } catch (error) {
+      console.error('💥 [CHAT_ALIASES] Unexpected error:', error)
+    }
+  }
 
   const getCurrentUser = async () => {
     try {
@@ -93,7 +146,7 @@ export default function GroupChat() {
       console.log('🔍 [CHAT_MESSAGES] Loading messages for room:', chatRoomId);
       console.log('🔍 [CHAT_MESSAGES] User ID:', user.id);
 
-      // Load messages directly (using existing sender_name field)
+      // Load messages
       const { data, error: messagesError } = await supabase
         .from('chat_messages')
         .select(`
@@ -122,17 +175,22 @@ export default function GroupChat() {
       } else {
         console.log('✅ [CHAT_MESSAGES] Successfully loaded', data?.length || 0, 'messages');
         
-        // Transform data to match the expected interface
-        const messages = (data || []).map(msg => ({
-          message_id: msg.id,
-          sender_id: msg.sender_id,
-          sender_name: msg.sender_name || 'Unknown User',
-          message_text: msg.message_text,
-          message_type: msg.message_type || 'text',
-          reply_to_message_id: msg.reply_to_message_id,
-          is_edited: msg.is_edited || false,
-          created_at: msg.created_at
-        }));
+        // Transform data and apply anonymous aliases
+        const messages = (data || []).map(msg => {
+          const alias = msg.sender_id === 'system'
+            ? 'System'
+            : (participantAliases[msg.sender_id] || 'Attendee')
+          return {
+            message_id: msg.id,
+            sender_id: msg.sender_id,
+            sender_name: alias,
+            message_text: msg.message_text,
+            message_type: msg.message_type || 'text',
+            reply_to_message_id: msg.reply_to_message_id,
+            is_edited: msg.is_edited || false,
+            created_at: msg.created_at
+          }
+        });
 
         // Reverse to show oldest first
         setMessages(messages.reverse())
@@ -164,10 +222,13 @@ export default function GroupChat() {
         async (payload) => {
           console.log('🔍 [REALTIME] New message received:', payload.new);
           
+          const alias = payload.new.sender_id === 'system'
+            ? 'System'
+            : (participantAliases[payload.new.sender_id] || 'Attendee')
           const newMessage: Message = {
             message_id: payload.new.id,
             sender_id: payload.new.sender_id,
-            sender_name: payload.new.sender_name || 'Unknown User',
+            sender_name: alias,
             message_text: payload.new.message_text,
             message_type: payload.new.message_type || 'text',
             reply_to_message_id: payload.new.reply_to_message_id,
@@ -228,20 +289,11 @@ export default function GroupChat() {
       console.log('🔍 [SEND_MESSAGE] Message text:', messageText);
       console.log('🔍 [SEND_MESSAGE] Sender ID:', currentUser.id);
 
-      // Get user profile for sender name
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', currentUser.id)
-        .single()
-
-      const senderName = profile?.name || 'Unknown User'
-      
       // Create optimistic message to show immediately
       optimisticMessage = {
         message_id: 'temp-' + Date.now(), // Temporary ID
         sender_id: currentUser.id,
-        sender_name: senderName,
+        sender_name: 'You',
         message_text: messageText,
         message_type: 'text',
         reply_to_message_id: null,
