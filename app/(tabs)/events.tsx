@@ -1,12 +1,13 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
     FlatList,
     Image,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -31,6 +32,7 @@ interface Event {
   current_capacity: number
   cover_image_url: string | null
   category: string
+  city?: string
   check_in_radius: number
   latitude: number
   longitude: number
@@ -46,6 +48,8 @@ export default function Events() {
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
   const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
+  const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
+  const [userCity, setUserCity] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -53,6 +57,7 @@ export default function Events() {
       fetchEvents()
       getCurrentLocationQuietly()
       loadCheckedInEvents()
+      fetchUserCity()
     } else if (!authLoading && !user) {
       Logger.journey('auth', 'redirect:unauthorized')
       router.replace('/')
@@ -63,6 +68,7 @@ export default function Events() {
     if (events.length > 0 && user) {
       loadCheckinStatusesBatch()
       loadInterestData()
+      loadInterestCounts()
     }
   }, [events, user])
 
@@ -177,14 +183,9 @@ export default function Events() {
   const renderCheckedInCarousel = () => (
     <View style={styles.carouselContainer}>
       <Text style={styles.carouselTitle}>You're checked in</Text>
-      <FlatList
-        data={checkedInEvents}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
+        {checkedInEvents.map((item) => (
+          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
               <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
             )}
@@ -196,22 +197,17 @@ export default function Events() {
               </Text>
             </View>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </ScrollView>
     </View>
   )
 
   const renderInterestedCarousel = (items: Event[]) => (
     <View style={styles.carouselContainer}>
       <Text style={styles.carouselTitle}>Your interested events</Text>
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
+        {items.map((item) => (
+          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
               <>
                 <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
@@ -232,8 +228,8 @@ export default function Events() {
               </Text>
             </View>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </ScrollView>
     </View>
   )
 
@@ -341,16 +337,30 @@ export default function Events() {
     }
   }
 
+  const fetchUserCity = async () => {
+    try {
+      if (!user) return
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('location')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (!error && data?.location) {
+        const firstPart = String(data.location).split(',')[0]?.trim()
+        if (firstPart) setUserCity(firstPart)
+      }
+    } catch {}
+  }
+
   const fetchEvents = async () => {
     try {
       setLoading(true)
       Logger.journey('events', 'fetch:start')
       
+      // Fetch only ongoing or upcoming events from the view
       const { data: eventsData, error } = await supabase
-        .from('events')
+        .from('events_now_or_upcoming')
         .select('*')
-        .eq('status', 'published')
-        .gte('end_time', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .order('start_time', { ascending: true })
 
       if (error) {
@@ -382,6 +392,17 @@ export default function Events() {
     } catch (e) {
       console.warn('⚠️ [EVENTS] loadInterestData failed:', e)
       setInterestStatuses({})
+    }
+  }
+
+  const loadInterestCounts = async () => {
+    try {
+      if (events.length === 0) return
+      const eventIds = events.map(e => e.id)
+      const counts = await EventInterest.getEventInterestCounts(eventIds)
+      setInterestCounts(counts)
+    } catch (e) {
+      setInterestCounts({})
     }
   }
 
@@ -561,6 +582,139 @@ export default function Events() {
     )
   }
 
+  const renderCarouselWithTitle = (title: string, items: Event[]) => (
+    <View style={styles.carouselContainer}>
+      <Text style={styles.carouselTitle}>{title}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
+        {items.map((item) => (
+          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            {item.cover_image_url && (
+              <>
+                <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+                <TouchableOpacity
+                  onPress={() => toggleInterest(item)}
+                  style={styles.carouselHeartButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <View style={styles.carouselContent}>
+              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+              <Text style={styles.carouselTime}>
+                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  )
+
+  const renderNearbyList = (items: Event[]) => (
+    <View style={styles.nearbyContainer}>
+      <Text style={styles.carouselTitle}>Nearby events</Text>
+      {items.map((ev) => (
+        <View key={ev.id}>
+          {renderEventItem({ item: ev })}
+        </View>
+      ))}
+    </View>
+  )
+
+  const distanceKmForEvent = (ev: Event): number => {
+    const prox = proximityData[ev.id]
+    if (prox && typeof prox.distance_km === 'number') return prox.distance_km
+    if (!userLocation || !ev.latitude || !ev.longitude) return Number.POSITIVE_INFINITY
+    const toRad = (d: number) => (d * Math.PI) / 180
+    const R = 6371
+    const dLat = toRad(ev.latitude - userLocation.latitude)
+    const dLon = toRad(ev.longitude - userLocation.longitude)
+    const lat1 = toRad(userLocation.latitude)
+    const lat2 = toRad(ev.latitude)
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
+  const interestedItems = useMemo(() => {
+    const now = Date.now()
+    return events.filter(e => !!interestStatuses[e.id] && new Date(e.end_time).getTime() >= now)
+  }, [events, interestStatuses])
+
+  const upcomingItems = useMemo(() => {
+    const now = Date.now()
+    return events
+      .filter(e => new Date(e.start_time).getTime() >= now)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [events])
+
+  const happeningNowItems = useMemo(() => {
+    const now = Date.now()
+    return events
+      .filter(e => new Date(e.start_time).getTime() <= now && new Date(e.end_time).getTime() >= now)
+      .sort((a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime())
+  }, [events])
+
+  const nearbyItems = useMemo(() => {
+    if (!userLocation) return [] as Event[]
+    const withDistance = events
+      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+      .map(e => ({ e, d: distanceKmForEvent(e) }))
+      .filter(x => Number.isFinite(x.d))
+      .sort((a, b) => a.d - b.d)
+      .map(x => x.e)
+    return withDistance
+  }, [events, userLocation, proximityData])
+
+  const cityTopItems = useMemo(() => {
+    if (!userCity) return [] as Event[]
+    const lc = userCity.toLowerCase()
+    const inCity = events.filter(e => {
+      const city = ((e as any).city || '') as string
+      const address = (e.address || '') as string
+      return city.toLowerCase() === lc || address.toLowerCase().includes(lc)
+    })
+    return inCity
+      .slice()
+      .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [events, userCity, interestCounts])
+
+  const bestPartiesItems = useMemo(() => {
+    const isPartyLike = (cat?: string) => {
+      if (!cat) return false
+      const c = cat.toLowerCase()
+      return c.includes('party') || c.includes('night') || c.includes('club') || c.includes('music')
+    }
+    const partyEvents = events.filter(e => isPartyLike(e.category))
+    if (partyEvents.length > 0) {
+      return partyEvents
+        .slice()
+        .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
+          new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    }
+    // Fallback: overall top by interest
+    return events
+      .slice()
+      .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [events, interestCounts])
+
+  const mainListData = useMemo(() => {
+    // Build a set of IDs we have already shown in carousels (limit to first 10 of each)
+    const shown = new Set<string>()
+    interestedItems.forEach(e => shown.add(e.id))
+    happeningNowItems.slice(0, 10).forEach(e => shown.add(e.id))
+    upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
+    nearbyItems.slice(0, 10).forEach(e => shown.add(e.id))
+    cityTopItems.slice(0, 10).forEach(e => shown.add(e.id))
+    bestPartiesItems.slice(0, 10).forEach(e => shown.add(e.id))
+    return events.filter(e => !shown.has(e.id))
+  }, [events, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
+
   if (authLoading || loading) {
     return (
       <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
@@ -572,22 +726,8 @@ export default function Events() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {checkedInEvents.length > 0 && renderCheckedInCarousel()}
-      {
-        (() => {
-          const now = Date.now()
-          const interestedItems = events.filter(e => !!interestStatuses[e.id] && new Date(e.end_time).getTime() >= now)
-          return interestedItems.length > 0 ? renderInterestedCarousel(interestedItems) : null
-        })()
-      }
       <FlatList
-        data={(() => {
-          const now = Date.now()
-          const interestedIds = new Set<string>(Object.entries(interestStatuses).filter(([, v]) => v).map(([k]) => k))
-          const interestedItems = events.filter(e => interestedIds.has(e.id) && new Date(e.end_time).getTime() >= now)
-          if (interestedItems.length === 0) return events
-          return events.filter(e => !interestedIds.has(e.id))
-        })()}
+        data={mainListData}
         renderItem={renderEventItem}
         keyExtractor={(item) => item.id}
         refreshControl={
@@ -595,7 +735,18 @@ export default function Events() {
         }
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={(checkedInEvents.length > 0) ? <View style={{ height: 8 }} /> : undefined}
+        ListHeaderComponent={(
+          <View>
+            {happeningNowItems.length > 0 && renderCarouselWithTitle('Happening now', happeningNowItems.slice(0, 10))}
+            {checkedInEvents.length > 0 && renderCheckedInCarousel()}
+            {interestedItems.length > 0 ? renderInterestedCarousel(interestedItems) : null}
+            {upcomingItems.length > 0 && renderCarouselWithTitle('Upcoming events', upcomingItems.slice(0, 10))}
+            {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 8))}
+            {userCity && cityTopItems.length > 0 && renderCarouselWithTitle(`${userCity}'s top events`, cityTopItems.slice(0, 10))}
+            {bestPartiesItems.length > 0 && renderCarouselWithTitle('Discover the best parties', bestPartiesItems.slice(0, 10))}
+            <View style={{ height: 8 }} />
+          </View>
+        )}
       />
     </SafeAreaView>
   )
@@ -775,5 +926,9 @@ const styles = StyleSheet.create({
     color: '#D81B60',
     fontSize: 14,
     fontWeight: '600',
+  },
+  nearbyContainer: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
   },
 }) 
