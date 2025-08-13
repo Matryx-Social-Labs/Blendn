@@ -82,6 +82,7 @@ export default function EventDetail() {
   const [proximityStatus, setProximityStatus] = useState<any>(null)
   const [interestCount, setInterestCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
+  const [interestedAvatars, setInterestedAvatars] = useState<string[]>([])
 
   useEffect(() => {
     if (id) {
@@ -89,6 +90,7 @@ export default function EventDetail() {
       fetchEventDetails()
       checkUserCheckInStatus()
       loadInterestInfo()
+      loadInterestedAvatars()
     }
   }, [id])
 
@@ -142,6 +144,8 @@ export default function EventDetail() {
             if (user && changedUserId === user.id) {
               setUserInterested(payload.eventType === 'INSERT')
             }
+            // Refresh avatars on any interest change
+            loadInterestedAvatars()
           }
         )
         .subscribe()
@@ -212,6 +216,56 @@ export default function EventDetail() {
       ])
       setInterestCount(count)
       setUserInterested(interested)
+    } catch {}
+  }
+
+  // Load a small set of interested user avatars for display
+  const loadInterestedAvatars = async () => {
+    try {
+      if (!id) return
+      // Fetch a handful of interested user IDs
+      const { data: interestRows, error: interestErr } = await supabase
+        .from('event_interests')
+        .select('user_id')
+        .eq('event_id', id)
+        .limit(6)
+
+      if (interestErr) {
+        return
+      }
+
+      const userIds: string[] = Array.from(new Set((interestRows || []).map((r: any) => r?.user_id).filter(Boolean)))
+      if (!userIds || userIds.length === 0) {
+        setInterestedAvatars([])
+        return
+      }
+
+      // Fetch profiles for those users to get their primary photo
+      const { data: profiles, error: profErr } = await supabase
+        .from('user_profiles')
+        .select('user_id, profile_photos, photos')
+        .in('user_id', userIds)
+
+      if (profErr) {
+        return
+      }
+
+      const primaryByUser: Record<string, string | null> = {}
+      ;(profiles || []).forEach((p: any) => {
+        const primary = (Array.isArray(p?.profile_photos) && p.profile_photos[0])
+          || (Array.isArray(p?.photos) && p.photos[0])
+          || null
+        if (primary) {
+          const optimized = getOptimizedImageUrl(primary, { width: 80, height: 80, resize: 'cover', quality: 60, format: 'webp' })
+          primaryByUser[p.user_id] = optimized || primary
+        } else {
+          primaryByUser[p.user_id] = null
+        }
+      })
+
+      // Preserve the order from interestRows
+      const ordered = userIds.map(uid => primaryByUser[uid]).filter(Boolean) as string[]
+      setInterestedAvatars(ordered)
     } catch {}
   }
 
@@ -608,11 +662,27 @@ export default function EventDetail() {
             </View>
 
             <View style={styles.attendingRow}>
-              <View style={styles.avatarsRow}>
-                <View style={styles.avatarCircle} />
-                <View style={[styles.avatarCircle, { left: 16 }]} />
-                <View style={[styles.avatarCircle, { left: 32 }]} />
-              </View>
+              {interestedAvatars && interestedAvatars.length > 0 ? (
+                <View style={[styles.avatarsRow, { width: 35 + Math.max(interestedAvatars.length - 1, 0) * 16 }]}>
+                  {interestedAvatars.slice(0, 6).map((url, idx) => (
+                    <Image
+                      key={`${url}-${idx}`}
+                      source={{ uri: url } as any}
+                      placeholder={placeholderImg}
+                      style={[styles.avatarImage, { left: idx * 16 }]}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={120}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.avatarsRow}>
+                  <View style={styles.avatarCircle} />
+                  <View style={[styles.avatarCircle, { left: 16 }]} />
+                  <View style={[styles.avatarCircle, { left: 32 }]} />
+                </View>
+              )}
               <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
             </View>
 
@@ -634,10 +704,17 @@ export default function EventDetail() {
             <Text style={styles.sectionTitle}>Location</Text>
             <View style={styles.locationCard}>
               <Image 
-                source={(() => {
-                  const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 249, resize: 'cover', quality: 60 })
-                  return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
-                })() as any}
+                source={{
+                  uri: (() => {
+                    // Static map centered on event coordinates (works on iOS/Android without native map deps)
+                    // Using OpenStreetMap static map service for a lightweight preview
+                    const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
+                    const mapHeight = 249
+                    const lat = event.latitude
+                    const lon = event.longitude
+                    return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},lightblue1`
+                  })()
+                } as any}
                 placeholder={placeholderImg}
                 style={styles.locationImage}
                 contentFit="cover"
@@ -938,6 +1015,17 @@ const styles = StyleSheet.create({
     width: 70,
     height: 35,
     marginRight: 8,
+  },
+  avatarImage: {
+    position: 'absolute',
+    width: 35,
+    height: 35,
+    borderRadius: 18,
+    backgroundColor: '#D9D9D9',
+    left: 0,
+    top: 0,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.35)'
   },
   avatarCircle: {
     position: 'absolute',
