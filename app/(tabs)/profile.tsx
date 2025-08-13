@@ -157,11 +157,11 @@ export default function Profile() {
                 resize: 'cover',
                 quality: 70,
               })
-              const sources = optimized ? [{ uri: optimized }, { uri: url }] : [{ uri: url }]
+              const finalUrl = optimized || url
               return (
                 <Image
                   key={idx}
-                  source={sources as any}
+                  source={{ uri: finalUrl } as any}
                   placeholder={placeholderImg}
                   style={[styles.carouselImage, { width: screenWidth }]}
                   contentFit="cover"

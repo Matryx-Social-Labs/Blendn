@@ -1,5 +1,5 @@
 import { router, Stack, usePathname } from "expo-router";
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
     initializePushNotifications,
     removePushTokenFromProfile,
@@ -12,6 +12,8 @@ import { useAuth } from '../lib/useAuth';
 export default function RootLayout() {
   const { user, loading } = useAuth();
   const pathname = usePathname();
+  const lastRedirectRef = useRef<string | null>(null);
+  const pushInitRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Set up notification listeners once
@@ -25,39 +27,70 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    // Handle push notifications based on auth state
-    if (!loading) {
-      if (user) {
-        // Initialize push notifications when user signs in
-        console.log('📱 [ROOT_LAYOUT] User signed in, initializing push notifications');
-        initializePushNotifications().catch(error => {
-          console.error('❌ [ROOT_LAYOUT] Failed to initialize push notifications:', error);
-        });
-        // Global onboarding gate: redirect non-onboarded users to onboarding
-        (async () => {
-          try {
-            // Skip when already on onboarding route
-            if (pathname?.startsWith('/onboarding')) return;
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('onboarded')
-              .eq('id', user.id)
-              .single();
-            if (!profile || profile.onboarded === false) {
-              router.replace('/onboarding/welcome');
-            }
-          } catch (e) {
-            // Fail open to main tabs if check fails
+    if (loading) return;
+    const run = async () => {
+      const isOnboarding = !!pathname && pathname.startsWith('/onboarding');
+      const isIndex = pathname === '/' || pathname === '/index';
+
+      if (!user) {
+        // Not authenticated → send to login index, unless already there
+        if (!isIndex) {
+          const target = '/';
+          if (lastRedirectRef.current !== target) {
+            lastRedirectRef.current = target;
+            router.replace(target);
           }
-        })();
-      } else {
-        // Remove push token when user signs out
-        console.log('📱 [ROOT_LAYOUT] User signed out, removing push token');
-        removePushTokenFromProfile().catch(error => {
-          console.error('❌ [ROOT_LAYOUT] Failed to remove push token:', error);
+        }
+        // Also remove push token best-effort
+        removePushTokenFromProfile().catch(() => {});
+        // Reset push init flag for next sign-in
+        pushInitRef.current = false;
+        return;
+      }
+
+      // Authenticated → init push once
+      if (!pushInitRef.current) {
+        initializePushNotifications().finally(() => {
+          pushInitRef.current = true;
         });
       }
-    }
+
+      // Check onboarding status, fail-closed (treat errors/missing as not onboarded)
+      let onboarded = false;
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('onboarded')
+          .eq('id', user.id)
+          .maybeSingle();
+        onboarded = !!profile && profile.onboarded === true && !error;
+      } catch {
+        onboarded = false;
+      }
+
+      if (!onboarded) {
+        const target = '/onboarding/welcome';
+        if (!isOnboarding && lastRedirectRef.current !== target) {
+          lastRedirectRef.current = target;
+          router.replace(target);
+        }
+        return;
+      }
+
+      // Onboarded users should not stay on onboarding or index
+      if (isOnboarding || isIndex) {
+        const target = '/(tabs)/events';
+        if (lastRedirectRef.current !== target) {
+          lastRedirectRef.current = target;
+          router.replace(target);
+        }
+      } else {
+        // Clear last target if user navigated to a normal screen
+        lastRedirectRef.current = null;
+      }
+    };
+
+    run();
   }, [user, loading, pathname]);
 
   return (

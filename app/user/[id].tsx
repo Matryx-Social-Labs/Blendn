@@ -211,11 +211,11 @@ export default function UserProfile() {
         >
           {photoList.map((uri, idx) => {
             const optimized = getOptimizedImageUrl(uri, { width, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
-            const sources = optimized ? [{ uri: optimized }, { uri }] : [{ uri }]
+            const finalUrl = optimized || uri
             return (
               <Image
                 key={idx}
-                source={sources as any}
+                source={{ uri: finalUrl } as any}
                 placeholder={placeholderImg}
                 style={styles.photo}
                 contentFit="cover"

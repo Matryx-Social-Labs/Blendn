@@ -3,7 +3,6 @@ import {
     GoogleSigninButton,
     statusCodes,
 } from '@react-native-google-signin/google-signin'
-import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -23,13 +22,7 @@ export default function Index() {
     })
   }, [])
 
-  useEffect(() => {
-    // After sign-in, defer route decisions to root layout gate.
-    // Navigate to tabs; non-onboarded users will be redirected to onboarding by RootLayout.
-    if (!loading && user) {
-      router.replace('/(tabs)/events')
-    }
-  }, [loading, user])
+  // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
   const handleGoogleSignIn = async () => {
     try {

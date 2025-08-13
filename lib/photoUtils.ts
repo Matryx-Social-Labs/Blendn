@@ -350,6 +350,11 @@ export const getOptimizedImageUrl = (
   } = {}
 ): string => {
   try {
+    // Allow disabling image transformations via env for projects without the feature
+    const transformsEnabled = process.env.EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED === 'true'
+    if (!transformsEnabled) {
+      return photoUrl
+    }
     const url = new URL(photoUrl)
     // Only transform Supabase public storage URLs
     const marker = '/storage/v1/object/public/'

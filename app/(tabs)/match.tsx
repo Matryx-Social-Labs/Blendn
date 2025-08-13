@@ -376,22 +376,14 @@ export default function Match() {
           activeOpacity={0.85}
           onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
         >
-          {optimized ? (
-            <Image
-              source={{ uri: optimized }}
-              placeholder={placeholderImg}
-              style={styles.tileImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-            />
-          ) : (
-            <Image
-              source={placeholderImg}
-              style={styles.tileImage}
-              contentFit="cover"
-            />
-          )}
+          <Image
+            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
+            placeholder={placeholderImg}
+            style={styles.tileImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
           <View style={styles.tileGradient} />
           <View style={styles.tileInfo}>
             <Text style={styles.tileName} numberOfLines={1}>
@@ -476,7 +468,7 @@ export default function Match() {
               const optimized = m.photo_url
                 ? getOptimizedImageUrl(m.photo_url, { width: 66, height: 66, resize: 'cover', quality: 60 })
                 : undefined
-              const sources = optimized ? [{ uri: optimized }, { uri: m.photo_url! }] : undefined
+              const finalSrc = optimized || m.photo_url
               return (
                 <View style={styles.matchItem}>
                   <TouchableOpacity
@@ -484,11 +476,7 @@ export default function Match() {
                     onPress={() => router.push(`/private-chat/${m.conversation_id}`)}
                   >
                     <View style={styles.matchAvatarRing}>
-                      {sources ? (
-                        <Image source={sources as any} placeholder={placeholderImg} style={styles.matchAvatar} contentFit="cover" cachePolicy="memory-disk" />
-                      ) : (
-                        <Image source={placeholderImg} style={styles.matchAvatar} contentFit="cover" />
-                      )}
+                      <Image source={finalSrc ? ({ uri: finalSrc } as any) : placeholderImg} placeholder={placeholderImg} style={styles.matchAvatar} contentFit="cover" cachePolicy="memory-disk" />
                     </View>
                   </TouchableOpacity>
                   <Text style={styles.matchName} numberOfLines={1}>{m.other_user_name || 'User'}</Text>
