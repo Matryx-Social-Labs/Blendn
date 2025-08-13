@@ -192,6 +192,28 @@ export const supabaseWithTimeout = {
   }
 }
 
+// Resilient helpers for consistent timeouts, retries, and queueing
+export async function runQuery<T>(
+  queryFn: () => Promise<T>,
+  options?: { timeoutMs?: number; retries?: number; queued?: boolean }
+): Promise<T> {
+  const execute = () => supabaseWithTimeout.query<T>(queryFn, options?.timeoutMs ?? 15000, options?.retries ?? 1)
+  if (options?.queued === false) return execute()
+  return queuedRequest.add(execute)
+}
+
+export async function callRpc<TReturn = any>(
+  rpcName: string,
+  args?: Record<string, any>,
+  options?: { timeoutMs?: number; retries?: number; queued?: boolean }
+): Promise<{ data: TReturn; error: any }> {
+  const execute = () => supabase.rpc(rpcName, args as any)
+  if (options?.queued === false) {
+    return supabaseWithTimeout.query(execute, options?.timeoutMs ?? 15000, options?.retries ?? 2)
+  }
+  return queuedRequest.add(() => supabaseWithTimeout.query(execute, options?.timeoutMs ?? 15000, options?.retries ?? 2))
+}
+
 // AuthHelper for consistent auth handling across the app
 export const AuthHelper = {
   // Get current user from session (cached)
@@ -251,8 +273,7 @@ export const EventCheckout = {
       console.log('🔍 [CHECKOUT] Starting checkout from event:', eventId);
       
       // Use the database function we created
-      const { data, error } = await supabase
-        .rpc('checkout_user_from_event', { p_event_id: eventId })
+      const { data, error } = await callRpc('checkout_user_from_event', { p_event_id: eventId })
 
       if (error) {
         console.error('❌ [CHECKOUT] Error:', error);
@@ -295,11 +316,10 @@ export const EventCheckout = {
       }
 
       // Standardize on production RPC for status
-      const { data, error } = await supabase
-        .rpc('get_check_in_status', {
-          p_event_id: eventId,
-          p_user_id: user.id,
-        })
+      const { data, error } = await callRpc('get_check_in_status', {
+        p_event_id: eventId,
+        p_user_id: user.id,
+      })
 
       if (error || !data) {
         return { status: 'not_checked_in' }
@@ -485,9 +505,7 @@ export const EventChat = {
 
       // Checkout from each event via RPC to preserve server-side logic
       const results = await Promise.allSettled(
-        eventIds.map(eventId =>
-          supabase.rpc('checkout_user_from_event', { p_event_id: eventId })
-        )
+        eventIds.map(eventId => callRpc('checkout_user_from_event', { p_event_id: eventId }))
       )
 
       let successCount = 0
@@ -571,7 +589,7 @@ export const EventChat = {
 export const EventInterest = {
   async toggleInterest(eventId: string): Promise<{ interested: boolean; count: number } | null> {
     try {
-      const { data, error } = await supabase.rpc('toggle_event_interest', { p_event_id: eventId })
+      const { data, error } = await callRpc('toggle_event_interest', { p_event_id: eventId })
       if (error) {
         console.error('❌ [EVENT_INTEREST] toggle RPC error:', error)
         return null
@@ -638,7 +656,7 @@ export const EventInterest = {
 
   async getSingleEventInterestCount(eventId: string): Promise<number> {
     try {
-      const { data, error } = await supabase.rpc('get_event_interest_count', { p_event_id: eventId })
+      const { data, error } = await callRpc('get_event_interest_count', { p_event_id: eventId })
       if (error) {
         console.error('❌ [EVENT_INTEREST] getSingleEventInterestCount error:', error)
         return 0

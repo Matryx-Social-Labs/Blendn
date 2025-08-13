@@ -13,7 +13,7 @@ import {
     View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { AuthHelper, supabase } from '../../lib/supabase'
+import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
 
 interface Message {
   message_id: string
@@ -307,8 +307,7 @@ export default function GroupChat() {
       setTimeout(() => scrollToBottom(), 100)
 
       // Use the database function to send message
-      const { data, error } = await supabase
-        .rpc('send_chat_message', {
+      const { data, error } = await callRpc('send_chat_message', {
           room_id: chatRoomId,
           message_text: messageText,
           message_type: 'text'

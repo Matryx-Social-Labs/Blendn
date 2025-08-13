@@ -1,19 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       <View style={styles.pillShadow} />
       <View style={styles.pillShadowSmall} />
-      <BlurView intensity={20} tint="light" style={styles.pillContainer}>
+      <BlurView intensity={50} tint="default" style={[styles.pillContainer, isDark ? styles.pillDark : styles.pillLight]}>
         <View style={styles.itemsRow}>
           {state.routes.map((route, index) => {
             const { options } = descriptors[route.key];
@@ -37,7 +40,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               });
             };
 
-            const iconColor = '#333333';
+            const iconColor = isDark ? '#F1F1F1' : '#333333';
             const iconSize = 24;
             let iconName: keyof typeof Ionicons.glyphMap = 'ellipse';
             if (route.name === 'events') iconName = isFocused ? 'calendar' : 'calendar-outline';
@@ -54,7 +57,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 onLongPress={onLongPress}
                 style={({ pressed }) => [
                   styles.item,
-                  (isFocused || pressed) && styles.itemActive,
+                  (isFocused || pressed) && (isDark ? styles.itemActiveDark : styles.itemActiveLight),
                 ]}
               >
                 <Ionicons name={iconName} size={iconSize} color={iconColor} />
@@ -63,8 +66,32 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           })}
         </View>
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <View style={styles.tint} />
-          <View style={styles.glassOverlay} />
+          <LinearGradient
+            colors={isDark ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.topGloss}
+          />
+          <LinearGradient
+            colors={isDark ? ['rgba(0,0,0,0)', 'rgba(0,0,0,0.10)'] : ['rgba(0,0,0,0)', 'rgba(0,0,0,0.06)']}
+            start={{ x: 0.5, y: 0.3 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.bottomShade}
+          />
+          <LinearGradient
+            colors={isDark ? ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.sideGlintLeft}
+          />
+          <LinearGradient
+            colors={isDark ? ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+            start={{ x: 1, y: 0.5 }}
+            end={{ x: 0, y: 0.5 }}
+            style={styles.sideGlintRight}
+          />
+          <View style={[styles.stroke, { borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.45)' }]} />
         </View>
       </BlurView>
     </View>
@@ -144,7 +171,17 @@ const styles = StyleSheet.create({
     height: 51,
     borderRadius: 1000,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'transparent',
+  },
+  pillLight: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.45)',
+  },
+  pillDark: {
+    backgroundColor: 'rgba(16,16,16,0.35)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   itemsRow: {
     flexDirection: 'row',
@@ -158,15 +195,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemActive: {
-    backgroundColor: '#EDEDED',
+  itemActiveLight: {
+    backgroundColor: 'rgba(255,255,255,0.60)',
   },
-  tint: {
+  itemActiveDark: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  stroke: {
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 1000,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  glassOverlay: {
-    borderRadius: 296,
-    backgroundColor: 'transparent',
+  topGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 1000,
+  },
+  bottomShade: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 1000,
+  },
+  sideGlintLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    borderTopLeftRadius: 1000,
+    borderBottomLeftRadius: 1000,
+  },
+  sideGlintRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    borderTopRightRadius: 1000,
+    borderBottomRightRadius: 1000,
   },
 });

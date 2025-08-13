@@ -1,16 +1,16 @@
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-  FlatList,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    FlatList,
+    Image,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../../lib/supabase'
+import { callRpc, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
 interface GroupChat {
@@ -78,8 +78,8 @@ export default function Chat() {
   const loadMessageRequests = async () => {
     try {
       const [inc, out] = await Promise.all([
-        supabase.rpc('get_incoming_message_requests', { p_user_id: user.id }),
-        supabase.rpc('get_outgoing_message_requests', { p_user_id: user.id }),
+        callRpc('get_incoming_message_requests', { p_user_id: user.id }),
+        callRpc('get_outgoing_message_requests', { p_user_id: user.id }),
       ])
       setIncomingRequests(Array.isArray(inc.data) ? inc.data : [])
       setOutgoingRequests(Array.isArray(out.data) ? out.data : [])
@@ -448,13 +448,13 @@ export default function Chat() {
                   )}
                   <View style={styles.requestActions}>
                     <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
-                      try { await supabase.rpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
+                      try { await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
                     }}>
                       <Text style={styles.reqBtnText}>Reject</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.reqBtn, styles.accept]} onPress={async () => {
                       try {
-                        const { data } = await supabase.rpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
+                        const { data } = await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
                         const res = Array.isArray(data) ? data[0] : data
                         loadChats()
                         if (res?.success && res.conversation_id) {

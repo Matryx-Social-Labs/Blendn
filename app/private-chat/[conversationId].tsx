@@ -16,7 +16,7 @@ import {
 import { SafeAreaView as SafeAreaViewContext } from 'react-native-safe-area-context'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
-import { supabase } from '../../lib/supabase'
+import { callRpc, supabase } from '../../lib/supabase'
 
 interface PrivateMessage {
   message_id: string
@@ -151,7 +151,7 @@ export default function PrivateChat() {
     setTimeout(() => scrollToBottom(), 50)
 
     try {
-      const { data, error } = await supabase.rpc('send_private_message', {
+      const { data, error } = await callRpc('send_private_message', {
         p_conversation_id: conversationId,
         p_message_text: messageText
       })

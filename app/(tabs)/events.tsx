@@ -20,7 +20,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../../lib/logger'
-import { EventChat, EventInterest, supabase } from '../../lib/supabase'
+import { callRpc, EventChat, EventInterest, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 
@@ -329,8 +329,7 @@ export default function Events() {
       Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
       
       // Use the actual function that exists: check_user_proximity_status
-      const { data: proximityData, error } = await supabase
-        .rpc('check_user_proximity_status', {
+      const { data: proximityData, error } = await callRpc('check_user_proximity_status', {
           p_user_id: user.id,
           p_user_latitude: userLocation.latitude,
           p_user_longitude: userLocation.longitude
@@ -482,8 +481,7 @@ export default function Events() {
         p_gps_accuracy: 50,
       }
       Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
-      const { data, error } = await supabase
-        .rpc('check_in_to_event_production', {
+      const { data, error } = await callRpc('check_in_to_event_production', {
           ...params
         })
 
