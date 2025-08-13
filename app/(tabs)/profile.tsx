@@ -3,8 +3,10 @@ import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
+const placeholderImg = require('../../assets/images/icon.png')
 
 interface UserProfileViewModel {
   id: string
@@ -148,19 +150,29 @@ export default function Profile() {
               setActivePhotoIndex(index)
             }}
           >
-            {profile.profile_photos.map((url, idx) => (
-              <Image
-                key={idx}
-                source={{ uri: url }}
-                style={[styles.carouselImage, { width: screenWidth }]}
-                contentFit="cover"
-                cachePolicy="none"
-                onError={() => {
-                  console.warn('⚠️ [PROFILE] Image failed to load:', url);
-                }}
-                transition={200}
-              />
-            ))}
+            {profile.profile_photos.map((url, idx) => {
+              const optimized = getOptimizedImageUrl(url, {
+                width: Math.round(screenWidth),
+                height: 420,
+                resize: 'cover',
+                quality: 70,
+              })
+              const sources = optimized ? [{ uri: optimized }, { uri: url }] : [{ uri: url }]
+              return (
+                <Image
+                  key={idx}
+                  source={sources as any}
+                  placeholder={placeholderImg}
+                  style={[styles.carouselImage, { width: screenWidth }]}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  onError={() => {
+                    console.warn('⚠️ [PROFILE] Image failed to load:', url, 'optimized:', optimized)
+                  }}
+                  transition={200}
+                />
+              )
+            })}
           </ScrollView>
           {profile.profile_photos.length > 1 && (
             <View style={styles.dotsContainer}>

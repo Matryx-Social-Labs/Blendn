@@ -1,21 +1,23 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
+import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
-    ScrollView,
+    FlatList,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
+const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
 const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
@@ -360,9 +362,12 @@ export default function Match() {
 
   // Netflix-style attendee tile
   const renderAttendeeTile = (attendee: AttendeeProfile) => {
-    const photoUrl = attendee.profile_photos && attendee.profile_photos.length > 0
+    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0
       ? attendee.profile_photos[0]
-      : 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=400'
+      : ''
+    const optimized = rawUrl
+      ? getOptimizedImageUrl(rawUrl, { width: TILE_WIDTH, height: TILE_HEIGHT, resize: 'cover', quality: 60, format: 'webp' })
+      : undefined
 
     return (
       <View key={attendee.user_id} style={styles.tileWrapper}>
@@ -371,7 +376,22 @@ export default function Match() {
           activeOpacity={0.85}
           onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
         >
-          <Image source={{ uri: photoUrl }} style={styles.tileImage} resizeMode="cover" />
+          {optimized ? (
+            <Image
+              source={{ uri: optimized }}
+              placeholder={placeholderImg}
+              style={styles.tileImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+            />
+          ) : (
+            <Image
+              source={placeholderImg}
+              style={styles.tileImage}
+              contentFit="cover"
+            />
+          )}
           <View style={styles.tileGradient} />
           <View style={styles.tileInfo}>
             <Text style={styles.tileName} numberOfLines={1}>
@@ -443,28 +463,39 @@ export default function Match() {
             <Text style={styles.rowTitle}>Your matches</Text>
             <Text style={styles.rowCount}>{matches.length}</Text>
           </View>
-          <ScrollView
+          <FlatList
+            data={matches}
+            keyExtractor={(m) => m.conversation_id}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.matchesScroll}
-          >
-            {matches.map((m) => (
-              <View key={m.conversation_id} style={styles.matchItem}>
-                <TouchableOpacity
-                  style={styles.matchAvatarWrapper}
-                  onPress={() => router.push(`/private-chat/${m.conversation_id}`)}
-                >
-                  <View style={styles.matchAvatarRing}>
-                    <Image
-                      source={{ uri: m.photo_url || 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=200' }}
-                      style={styles.matchAvatar}
-                    />
-                  </View>
-                </TouchableOpacity>
-                <Text style={styles.matchName} numberOfLines={1}>{m.other_user_name || 'User'}</Text>
-              </View>
-            ))}
-          </ScrollView>
+            initialNumToRender={8}
+            windowSize={5}
+            maxToRenderPerBatch={8}
+            renderItem={({ item: m }) => {
+              const optimized = m.photo_url
+                ? getOptimizedImageUrl(m.photo_url, { width: 66, height: 66, resize: 'cover', quality: 60 })
+                : undefined
+              const sources = optimized ? [{ uri: optimized }, { uri: m.photo_url! }] : undefined
+              return (
+                <View style={styles.matchItem}>
+                  <TouchableOpacity
+                    style={styles.matchAvatarWrapper}
+                    onPress={() => router.push(`/private-chat/${m.conversation_id}`)}
+                  >
+                    <View style={styles.matchAvatarRing}>
+                      {sources ? (
+                        <Image source={sources as any} placeholder={placeholderImg} style={styles.matchAvatar} contentFit="cover" cachePolicy="memory-disk" />
+                      ) : (
+                        <Image source={placeholderImg} style={styles.matchAvatar} contentFit="cover" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  <Text style={styles.matchName} numberOfLines={1}>{m.other_user_name || 'User'}</Text>
+                </View>
+              )
+            }}
+          />
         </View>
       )}
 
@@ -482,13 +513,18 @@ export default function Match() {
             <Text style={styles.rowTitle}>Active attendees</Text>
             <Text style={styles.rowCount}>{attendees.length}</Text>
           </View>
-          <ScrollView
+          <FlatList
+            data={attendees}
+            keyExtractor={(a) => a.user_id}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.carousel}
-          >
-            {attendees.map(renderAttendeeTile)}
-          </ScrollView>
+            renderItem={({ item }) => renderAttendeeTile(item)}
+            initialNumToRender={6}
+            windowSize={7}
+            maxToRenderPerBatch={6}
+            getItemLayout={(data, index) => ({ length: TILE_WIDTH + 12, offset: (TILE_WIDTH + 12) * index, index })}
+          />
         </View>
       )}
     </SafeAreaView>
@@ -516,6 +552,12 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: '#666',
+  },
+  refreshBtn: {
+    position: 'absolute',
+    right: 20,
+    top: 16,
+    padding: 8,
   },
   loadingContainer: {
     flex: 1,

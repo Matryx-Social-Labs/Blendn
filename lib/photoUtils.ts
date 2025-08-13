@@ -334,3 +334,42 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     }
   }
 } 
+
+/**
+ * Build an optimized Supabase render URL for a given public image URL.
+ * Falls back to the original URL if it is not a Supabase public storage URL.
+ */
+export const getOptimizedImageUrl = (
+  photoUrl: string,
+  options: {
+    width?: number
+    height?: number
+    quality?: number
+    resize?: 'contain' | 'cover'
+    format?: 'webp' | 'jpg' | 'png'
+  } = {}
+): string => {
+  try {
+    const url = new URL(photoUrl)
+    // Only transform Supabase public storage URLs
+    const marker = '/storage/v1/object/public/'
+    const idx = url.pathname.indexOf(marker)
+    if (idx === -1) {
+      return photoUrl
+    }
+
+    const publicPath = url.pathname.slice(idx + marker.length) // bucket/path/to/file
+    const base = `${url.origin}/storage/v1/render/image/public/${publicPath}`
+
+    const params = new URLSearchParams()
+    if (options.width) params.set('width', String(options.width))
+    if (options.height) params.set('height', String(options.height))
+    if (options.quality) params.set('quality', String(options.quality))
+    if (options.resize) params.set('resize', options.resize)
+    if (options.format) params.set('format', options.format)
+
+    return params.toString().length > 0 ? `${base}?${params.toString()}` : base
+  } catch {
+    return photoUrl
+  }
+}

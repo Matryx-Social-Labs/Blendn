@@ -1,4 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -6,7 +7,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     Linking,
     Platform,
     ScrollView,
@@ -19,7 +19,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
+import { getOptimizedImageUrl } from '../../lib/photoUtils';
 import { EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase';
+const placeholderImg = require('../../assets/images/icon.png');
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 const gallery1 = require('../../assets/figma/92e5bab9fd27a0db4c6751d74287d75d6762ca1c.png')
 const gallery2 = require('../../assets/figma/ebafaf4d1b09fd56fd54accaa108ad43fce6a4d9.png')
@@ -105,7 +107,7 @@ export default function EventDetail() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${user.id}` },
-          (payload) => {
+          (payload: any) => {
             if (payload.new?.event_id === id || payload.old?.event_id === id) {
               checkUserCheckInStatus()
             }
@@ -166,7 +168,8 @@ export default function EventDetail() {
       if (error) {
         Logger.error('❌ [PROXIMITY]', 'detail:check:error', { error })
       } else {
-        setProximityStatus(data)
+        // Normalize to an object to avoid TS complaints
+        setProximityStatus(data || {})
         Logger.journey('proximity', 'detail:check:success', { nearbyCount: data?.nearby_events?.length || 0 })
       }
     } catch (error) {
@@ -556,8 +559,15 @@ export default function EventDetail() {
       <View style={styles.bgScrim} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Image 
-          source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
+          source={(() => {
+            const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 390, resize: 'cover', quality: 70 })
+            return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
+          })() as any}
+          placeholder={placeholderImg}
           style={styles.coverImage}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
         />
         
         <View style={styles.content}>
@@ -604,8 +614,15 @@ export default function EventDetail() {
             <Text style={styles.sectionTitle}>Location</Text>
             <View style={styles.locationCard}>
               <Image 
-                source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
+                source={(() => {
+                  const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 249, resize: 'cover', quality: 60 })
+                  return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
+                })() as any}
+                placeholder={placeholderImg}
                 style={styles.locationImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
               />
               <View style={styles.locationOverlay} />
               <View style={styles.locationPillRow}>
@@ -620,7 +637,7 @@ export default function EventDetail() {
             <Text style={styles.sectionTitle}>Gallery (Pre Event)</Text>
             <View style={styles.galleryGrid}>
               {[gallery1, gallery2, gallery3, gallery4].map((src, idx) => (
-                <Image key={`g-${idx}`} source={src} style={styles.galleryTile} />
+                <Image key={`g-${idx}`} source={src} style={styles.galleryTile} contentFit="cover" cachePolicy="memory-disk" />
               ))}
             </View>
 

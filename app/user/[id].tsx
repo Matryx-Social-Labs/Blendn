@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -13,8 +13,10 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
+const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
 const PHOTO_HEIGHT = Math.min(420, Math.floor(width * 1.1))
@@ -207,9 +209,21 @@ export default function UserProfile() {
           showsHorizontalScrollIndicator={false}
           style={styles.photoStrip}
         >
-          {photoList.map((uri, idx) => (
-            <Image key={idx} source={{ uri }} style={styles.photo} resizeMode="cover" />
-          ))}
+          {photoList.map((uri, idx) => {
+            const optimized = getOptimizedImageUrl(uri, { width, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
+            const sources = optimized ? [{ uri: optimized }, { uri }] : [{ uri }]
+            return (
+              <Image
+                key={idx}
+                source={sources as any}
+                placeholder={placeholderImg}
+                style={styles.photo}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+              />
+            )
+          })}
         </ScrollView>
 
         <View style={styles.content}>
