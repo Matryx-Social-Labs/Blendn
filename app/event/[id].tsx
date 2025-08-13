@@ -547,16 +547,40 @@ export default function EventDetail() {
     }
   }
 
-  const openInMaps = () => {
+  const openInMaps = async () => {
     if (!event) return
-    
-    const url = Platform.select({
-      ios: `maps:0,0?q=${event.latitude},${event.longitude}`,
-      android: `geo:0,0?q=${event.latitude},${event.longitude}(${encodeURIComponent(event.venue_name)})`
-    })
-    
-    if (url) {
-      Linking.openURL(url)
+    const lat = event.latitude
+    const lon = event.longitude
+    const label = encodeURIComponent(event.venue_name || 'Event Location')
+
+    if (Platform.OS === 'ios') {
+      const googleScheme = 'comgooglemaps://'
+      const googleUrl = `${googleScheme}?q=${lat},${lon}`
+      const appleUrl = `maps:0,0?q=${label}@${lat},${lon}`
+      const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+      try {
+        const canOpenGoogle = await Linking.canOpenURL(googleScheme)
+        if (canOpenGoogle) return Linking.openURL(googleUrl)
+      } catch {}
+      try {
+        const canOpenApple = await Linking.canOpenURL('maps:')
+        if (canOpenApple) return Linking.openURL(appleUrl)
+      } catch {}
+      return Linking.openURL(webUrl)
+    } else {
+      const googleScheme = 'comgooglemaps://'
+      const googleUrl = `${googleScheme}?q=${lat},${lon}`
+      const geoUrl = `geo:0,0?q=${lat},${lon}(${label})`
+      const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+      try {
+        const canOpenGoogle = await Linking.canOpenURL(googleScheme)
+        if (canOpenGoogle) return Linking.openURL(googleUrl)
+      } catch {}
+      try {
+        const canOpenGeo = await Linking.canOpenURL('geo:')
+        if (canOpenGeo) return Linking.openURL(geoUrl)
+      } catch {}
+      return Linking.openURL(webUrl)
     }
   }
 
@@ -703,25 +727,34 @@ export default function EventDetail() {
 
             <Text style={styles.sectionTitle}>Location</Text>
             <View style={styles.locationCard}>
-              <Image 
-                source={{
-                  uri: (() => {
-                    // Static map centered on event coordinates (works on iOS/Android without native map deps)
-                    // Using OpenStreetMap static map service for a lightweight preview
-                    const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
+              <TouchableOpacity onPress={openInMaps} activeOpacity={0.9}>
+                <Image 
+                  source={(() => {
+                    const hasCoords = Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
                     const mapHeight = 249
+                    const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: mapHeight, resize: 'cover', quality: 60 })
+                    const cover = event.cover_image_url ? { uri: event.cover_image_url } as any : undefined
+                    if (!hasCoords) {
+                      return opt ? [{ uri: opt }, cover].filter(Boolean) as any : [cover].filter(Boolean) as any
+                    }
+                    const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
                     const lat = event.latitude
                     const lon = event.longitude
-                    return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},lightblue1`
-                  })()
-                } as any}
-                placeholder={placeholderImg}
-                style={styles.locationImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={150}
-              />
-              <View style={styles.locationOverlay} />
+                    const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},red`
+                    return [
+                      { uri: url } as any,
+                      ...(opt ? [{ uri: opt } as any] : []),
+                      ...(cover ? [cover] : []),
+                    ] as any
+                  })()}
+                  placeholder={placeholderImg}
+                  style={styles.locationImage}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={150}
+                />
+              </TouchableOpacity>
+              <View style={styles.locationOverlay} pointerEvents="none" />
               <View style={styles.locationPillRow}>
                 <View style={styles.locationPillIcon} />
                 <Text style={styles.locationPillText} numberOfLines={1}>{event.venue_name}</Text>
