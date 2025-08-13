@@ -492,7 +492,7 @@ export default function Match() {
       ) : attendees.length === 0 ? (
         <View style={styles.noMoreContainer}>
           <Text style={styles.noMoreIcon}>👋</Text>
-          <Text style={styles.noMoreTitle}>You're early!</Text>
+          <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
           <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
         </View>
       ) : (

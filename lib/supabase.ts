@@ -9,15 +9,15 @@ import { Logger } from './logger'
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables')
-  console.error('EXPO_PUBLIC_SUPABASE_URL:', !!supabaseUrl)
-  console.error('EXPO_PUBLIC_SUPABASE_ANON_KEY:', !!supabaseAnonKey)
-  throw new Error('Missing required Supabase environment variables')
+// Do not crash app on missing configuration; proceed with safe fallbacks and clear logs
+const missingSupabaseConfig = !supabaseUrl || !supabaseAnonKey
+if (missingSupabaseConfig) {
+  console.error('❌ Missing Supabase configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
 }
 
-console.log('Supabase URL:', supabaseUrl);
-console.log('Supabase Key (first 20 chars):', supabaseAnonKey?.substring(0, 20) + '...');
+// Use benign fallbacks so the app can render without crashing. Any network call will fail clearly in logs.
+const clientUrl = supabaseUrl || 'https://invalid.supabase.co'
+const clientKey = supabaseAnonKey || 'invalid-key'
 
 // Simple request queue to prevent network storms
 class RequestQueue {
@@ -94,7 +94,7 @@ const enhancedAsyncStorage = {
 }
 
 // Supabase client following official React Native documentation
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(clientUrl, clientKey, {
   auth: {
     storage: enhancedAsyncStorage,
     autoRefreshToken: true,
@@ -129,12 +129,15 @@ export const queuedRequest = {
 // `SIGNED_OUT` event if the user's session is terminated. This should
 // only be registered once.
 let appStateListenerRegistered = false
+let appStateSubscription: { remove: () => void } | null = null
 
 const registerAppStateListener = () => {
   if (appStateListenerRegistered) return
   
   try {
-    AppState.addEventListener('change', (state) => {
+    // If re-registering (Fast Refresh), remove prior subscription
+    try { appStateSubscription?.remove?.() } catch {}
+    const sub = AppState.addEventListener('change', (state) => {
       try {
         console.log('🔄 [APP_STATE] State changed to:', state)
         if (state === 'active') {
@@ -146,6 +149,7 @@ const registerAppStateListener = () => {
         console.error('❌ [APP_STATE] Error handling state change:', error)
       }
     })
+    appStateSubscription = sub as any
     appStateListenerRegistered = true
     console.log('✅ [APP_STATE] Listener registered successfully')
   } catch (error) {
@@ -168,7 +172,7 @@ export const supabaseWithTimeout = {
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms (attempt ${attempt + 1})`)), timeoutMs)
           )
-        ]) as Promise<T>
+        ]) as T
         
         console.log('✅ [TIMEOUT_WRAPPER] Query successful')
         return result

@@ -41,10 +41,10 @@ export default function Welcome() {
         <View style={styles.bottomSection}>
           <Text style={styles.progressText}>Step 1 of 8</Text>
           <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-            <Text style={styles.continueButtonText}>Let's Get Started</Text>
+          <Text style={styles.continueButtonText}>Let&apos;s Get Started</Text>
           </TouchableOpacity>
           <Text style={styles.privacyText}>
-            We'll help you create an amazing profile in just a few steps
+            We&apos;ll help you create an amazing profile in just a few steps
           </Text>
         </View>
       </View>

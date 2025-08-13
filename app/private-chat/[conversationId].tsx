@@ -63,11 +63,10 @@ export default function PrivateChat() {
 
   const loadMessages = async () => {
     try {
-      // Redirect unauthenticated users to login for consistency
+      // Respect centralized routing; if unauthenticated, skip work silently
       if (!currentUser) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
-          router.replace('/')
           return
         }
       }

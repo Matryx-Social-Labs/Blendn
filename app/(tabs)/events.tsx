@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
+import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -64,9 +65,6 @@ export default function Events() {
       getCurrentLocationQuietly()
       loadCheckedInEvents()
       fetchUserCity()
-    } else if (!authLoading && !user) {
-      Logger.journey('auth', 'redirect:unauthorized')
-      router.replace('/')
     }
   }, [user, authLoading])
 
@@ -189,7 +187,7 @@ export default function Events() {
   const renderCheckedInCarousel = () => (
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>You're checked in</Text>
+        <Text style={styles.sectionTitle}>You&apos;re checked in</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
         {checkedInEvents.map((item) => (
@@ -303,22 +301,22 @@ export default function Events() {
 
   const getCurrentLocationQuietly = async () => {
     try {
-      // Try to get location without prompting user (for proximity display only)
-      // This will use fallback coordinates if location is not available
-      const testLocation = {
-        latitude: 19.076, // Mumbai coordinates as fallback
-        longitude: 72.8777
+      // Best-effort permission request with quick timeout; fallback if denied/unavailable
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        const fallback = { latitude: 19.076, longitude: 72.8777 }
+        setUserLocation(fallback)
+        Logger.warn('📍 [LOCATION]', 'permission:notGrantedUsingFallback', { fallback })
+        return
       }
-      setUserLocation(testLocation)
-      Logger.journey('proximity', 'quietLocation:fallbackSet', { lat: testLocation.latitude, lon: testLocation.longitude })
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+      setUserLocation(coords)
+      Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
-      console.log('⚠️ [LOCATION] Using fallback location');
-      // Use fallback location for testing
-      setUserLocation({
-        latitude: 19.076,
-        longitude: 72.8777
-      })
-      Logger.warn('📍 [LOCATION]', 'quietLocation:error', { error: error as any })
+      const fallback = { latitude: 19.076, longitude: 72.8777 }
+      setUserLocation(fallback)
+      Logger.warn('📍 [LOCATION]', 'quietLocation:errorUsingFallback', { error: error as any, fallback })
     }
   }
 
@@ -952,7 +950,7 @@ export default function Events() {
                 <View style={styles.interestedThumb} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.interestedTitle}>Interested Events</Text>
-                  <Text style={styles.interestedSub}>Events you've liked or shown interest in will appear here.</Text>
+                  <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
                 </View>
               </View>
             ) : (

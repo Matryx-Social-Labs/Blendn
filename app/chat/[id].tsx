@@ -105,14 +105,11 @@ export default function GroupChat() {
       
       if (error) {
         console.error('❌ [CHAT_USER] Auth error:', error);
-        // Redirect to login if user is not authenticated
-        router.replace('/')
         return
       }
       
       if (!user) {
-        console.log('⚠️ [CHAT_USER] No authenticated user found, redirecting...');
-        router.replace('/')
+        console.log('⚠️ [CHAT_USER] No authenticated user found');
         return
       }
       
@@ -120,8 +117,6 @@ export default function GroupChat() {
       setCurrentUser(user)
     } catch (error) {
       console.error('❌ [CHAT_USER] Error getting current user:', error);
-      // Redirect to main app on any error
-      router.replace('/(tabs)/events')
     }
   }
 
@@ -132,14 +127,11 @@ export default function GroupChat() {
       
       if (error) {
         console.error('❌ [CHAT_MESSAGES] Auth error:', error);
-        // Redirect to login if user is not authenticated
-        router.replace('/')
         return
       }
       
       if (!user) {
-        console.log('⚠️ [CHAT_MESSAGES] No authenticated user found, redirecting...');
-        router.replace('/')
+        console.log('⚠️ [CHAT_MESSAGES] No authenticated user found');
         return
       }
 
@@ -198,8 +190,6 @@ export default function GroupChat() {
       }
     } catch (error) {
       console.error('💥 [CHAT_MESSAGES] Unexpected error:', error)
-      // Redirect to login on any unexpected error
-      router.replace('/')
     } finally {
       setLoading(false)
     }
@@ -210,7 +200,7 @@ export default function GroupChat() {
     
     // Subscribe to real-time message updates
     const channel = supabase
-      .channel('chat_messages')
+      .channel(`chat_messages_${chatRoomId}`)
       .on(
         'postgres_changes',
         {

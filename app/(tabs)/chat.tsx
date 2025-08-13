@@ -49,8 +49,6 @@ export default function Chat() {
   useEffect(() => {
     if (!authLoading && user) {
       loadChats()
-    } else if (!authLoading && !user) {
-      router.replace('/')
     }
   }, [user, authLoading, activeTab])
 
@@ -131,13 +129,27 @@ export default function Chat() {
         return
       }
 
+      // Compute participant counts in one batch
+      const { data: counts, error: countError } = await supabase
+        .from('chat_participants')
+        .select('chat_room_id')
+        .in('chat_room_id', chatRoomIds)
+      if (countError) {
+        console.warn('⚠️ [CHAT] Could not fetch participant counts:', countError)
+      }
+      const countMap = new Map<string, number>()
+      ;(counts || []).forEach((row: any) => {
+        const id = String(row.chat_room_id)
+        countMap.set(id, (countMap.get(id) || 0) + 1)
+      })
+
       // Transform the data to match our GroupChat interface
        const groupChatData: GroupChat[] = chatRooms?.map((room: any) => ({
         chat_room_id: room.id,
         event_id: room.event_id || '',
          event_title: room.events?.title || 'Unknown Event',
         event_venue: room.events?.venue_name || 'Unknown Venue',
-        participant_count: 0, // We'll skip this for now to avoid extra queries
+        participant_count: countMap.get(String(room.id)) || 0,
         last_message: undefined,
         last_message_time: undefined,
          last_sender_name: undefined

@@ -579,9 +579,9 @@ export default function TestFeatures() {
         </Text>
       </TouchableOpacity>
 
-      <Text style={styles.description}>
-        Start with "Test Network Connectivity" to diagnose connection issues. Then use other buttons to check your user and create test data.
-      </Text>
+        <Text style={styles.description}>
+        Start with &quot;Test Network Connectivity&quot; to diagnose connection issues. Then use other buttons to check your user and create test data.
+        </Text>
 
       {networkStatus !== 'Unknown' && (
         <View style={styles.networkInfo}>

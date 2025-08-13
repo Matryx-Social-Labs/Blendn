@@ -72,13 +72,13 @@ export default function BasicInfo() {
           </View>
 
           <View style={styles.formSection}>
-            <Text style={styles.title}>Let's get to know you! 😊</Text>
+            <Text style={styles.title}>Let&apos;s get to know you! 😊</Text>
             <Text style={styles.subtitle}>
               Tell us a bit about yourself to help others connect with you
             </Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>What's your name? *</Text>
+              <Text style={styles.label}>What&apos;s your name? *</Text>
               <TextInput
                 style={styles.input}
                 value={displayName}

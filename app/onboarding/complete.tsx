@@ -105,7 +105,7 @@ export default function Complete() {
             </Text>
           </View>
 
-          <Text style={styles.title}>You're all set! 🚀</Text>
+          <Text style={styles.title}>You&apos;re all set! 🚀</Text>
           <Text style={styles.subtitle}>
             Welcome to Blendn! Your profile is ready and you can start discovering amazing events and meeting new people.
           </Text>
@@ -152,7 +152,7 @@ export default function Complete() {
           </TouchableOpacity>
           
           <Text style={styles.welcomeText}>
-            Let's find your next adventure! 🌟
+            Let&apos;s find your next adventure! 🌟
           </Text>
         </View>
       </View>

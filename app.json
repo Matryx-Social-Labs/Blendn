@@ -13,12 +13,13 @@
       "bundleIdentifier": "com.matrixsociallabs.blendn",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "GIDClientID": "438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com"
+        "GIDClientID": "438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com",
+        "NSLocationWhenInUseUsageDescription": "Blend’n uses your location to show nearby events and validate on-site check-ins."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo/ios-dark.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
