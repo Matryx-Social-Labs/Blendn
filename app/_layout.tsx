@@ -1,13 +1,31 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
+import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import {
-    initializePushNotifications,
-    removePushTokenFromProfile,
-    setupNotificationListener,
-    setupNotificationResponseListener
+  initializePushNotifications,
+  removePushTokenFromProfile,
+  setupNotificationListener,
+  setupNotificationResponseListener
 } from '../lib/notifications';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';
+
+function BackgroundGradient() {
+  return (
+    <View style={styles.bg} pointerEvents="none">
+      <LinearGradient
+        colors={["#000000", "#000000"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Overlay for future animated darkening if needed */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: 0 }]} />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const { user, loading } = useAuth();
@@ -94,13 +112,22 @@ export default function RootLayout() {
   }, [user, loading, pathname]);
 
   return (
-    <Stack>
+    <GradientOverlayProvider>
+      <View style={{ flex: 1 }}>
+        <BackgroundGradient />
+        <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen 
         name="(tabs)" 
         options={{ 
           headerShown: false,
           gestureEnabled: false // Prevent swipe back to login
+        }} 
+      />
+      <Stack.Screen 
+        name="settings" 
+        options={{ 
+          headerShown: false
         }} 
       />
       <Stack.Screen 
@@ -152,6 +179,14 @@ export default function RootLayout() {
           headerShown: false
         }} 
       />
-    </Stack>
+        </Stack>
+      </View>
+    </GradientOverlayProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  bg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+})

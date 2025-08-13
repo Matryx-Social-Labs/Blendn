@@ -5,22 +5,24 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    FlatList,
-    Image,
-    ImageBackground,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  ImageBackground,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
+import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { callRpc, EventChat, EventInterest, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
@@ -47,6 +49,7 @@ interface Event {
 
 export default function Events() {
   const { user, loading: authLoading } = useAuth()
+  const insets = useSafeAreaInsets()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -57,6 +60,8 @@ export default function Events() {
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
   const [userCity, setUserCity] = useState<string | null>(null)
+  const { setScrollProgress } = useGradientOverlay()
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -65,6 +70,25 @@ export default function Events() {
       getCurrentLocationQuietly()
       loadCheckedInEvents()
       fetchUserCity()
+      // Load user avatar
+      ;(async () => {
+        try {
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select('profile_photos, photos')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          if (!error && data) {
+            const primary = (Array.isArray(data.profile_photos) && data.profile_photos[0]) || (Array.isArray(data.photos) && data.photos[0]) || null
+            if (primary) {
+              const optimized = getOptimizedImageUrl(primary, { width: 72, height: 72, resize: 'cover', quality: 60 })
+              setAvatarUrl(optimized || primary)
+            } else {
+              setAvatarUrl(null)
+            }
+          }
+        } catch {}
+      })()
     }
   }, [user, authLoading])
 
@@ -578,10 +602,10 @@ export default function Events() {
               </TouchableOpacity>
             )}
             
-            {proximity && !proximity.within_radius && (
+            {proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius && (
               <View style={[styles.statusBadge, { backgroundColor: '#f0f0f0' }]}>
-                <Text style={[styles.statusText, { color: '#666' }]}>
-                  📍 {Math.round(proximity.distance_km * 1000)}m away
+                <Text style={[styles.statusText, { color: '#666' }]}> 
+                  📍 {Math.round((proximity.distance_km || 0) * 1000)}m away 
                 </Text>
               </View>
             )}
@@ -675,7 +699,7 @@ export default function Events() {
         snapToAlignment="center"
         snapToInterval={UPCOMING_ITEM_FULL}
         contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
-        style={[styles.upcomingViewport, { marginHorizontal: -UPCOMING_SIDE_PADDING }]}
+        style={[styles.upcomingViewport, { marginHorizontal: 0 }]}
         removeClippedSubviews={false}
         disableIntervalMomentum
         initialScrollIndex={Math.max(0, Math.floor(upcomingLooped.length / 2))}
@@ -765,6 +789,89 @@ export default function Events() {
     </View>
   )
 
+  const renderCarouselFancy = (titleLines: string[], items: Event[]) => (
+    <View style={styles.carouselContainer}>
+      <View style={styles.sectionHeaderRow}>
+        <View>
+          {titleLines.map((t, i) => (
+            <Text key={`${t}-${i}`} style={styles.sectionTitle}>{t}</Text>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.viewAllRow}>
+          <Text style={styles.viewAllText}>View all</Text>
+          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
+        {items.map((item) => (
+          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            {item.cover_image_url && (
+              <>
+                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
+                  <LinearGradient
+                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                    style={styles.carouselGradient}
+                  />
+                  <View style={styles.carouselContentOverlay}>
+                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                    <Text style={styles.carouselTime}>
+                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                </ImageBackground>
+                <TouchableOpacity
+                  onPress={() => toggleInterest(item)}
+                  style={styles.carouselHeartButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  )
+
+  const formatFeaturedDate = (iso: string) => {
+    try {
+      const d = new Date(iso)
+      const month = d.toLocaleString(undefined, { month: 'short' })
+      const day = d.getDate()
+      const year = d.getFullYear()
+      return `${month} ${day}, ${year}`
+    } catch {
+      return ''
+    }
+  }
+
+  const renderFeaturedHero = (ev?: Event) => {
+    if (!ev || !ev.cover_image_url) return null
+    return (
+      <View style={styles.featuredContainer}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(ev)}>
+          <ImageBackground
+            source={{ uri: ev.cover_image_url }}
+            style={styles.featuredImage}
+            imageStyle={styles.featuredRadius}
+            resizeMode="cover"
+          >
+            <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.featuredRadius]} />
+          </ImageBackground>
+          <View style={styles.featuredOverlayBox}>
+            <Text style={styles.featuredTitle} numberOfLines={1}> - {ev.title} - </Text>
+            <View style={styles.featuredChip}>
+              <Text style={styles.featuredChipText}>{formatFeaturedDate(ev.start_time)}</Text>
+            </View>
+            <Text style={styles.featuredSubtitle} numberOfLines={1}>{ev.venue_name || 'Venue to be announced'}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
   const renderNearbyList = (items: Event[]) => {
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
     const place = userCity || 'Your area'
@@ -783,21 +890,21 @@ export default function Events() {
             {ev.cover_image_url ? (
               <View style={{ marginBottom: 18 }}>
                 <ImageBackground source={{ uri: ev.cover_image_url }} style={styles.nearbyImage} imageStyle={styles.nearbyImageRadius}>
-                  <View style={styles.nearbyOverlay} />
-                  <View style={styles.nearbyInfoBox}>
-                    <Text style={styles.nearbyTitle} numberOfLines={2}>{ev.title}</Text>
-                    <View style={styles.nearbyMetaRow}>
-                      <View style={styles.nearbyMetaItem}>
-                        <Ionicons name="time-outline" size={12} color="#878787" />
-                        <Text style={styles.nearbyMetaText}>
-                          {new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {` - `}
-                          {new Date(ev.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
+                  {/* Figma gradient from transparent to black at the bottom */}
+                  <LinearGradient colors={["#00000000", "#000000D9"]} style={[styles.gradientFull, styles.nearbyImageRadius]} />
+
+                  {/* Glass effect box overlay */}
+                  <View style={styles.nearbyGlass}>
+                    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.45)' }]} />
+                    <Text style={styles.nearbyGlassTitle} numberOfLines={2}>{ev.title}</Text>
+                    <View style={styles.nearbyGlassRow}>
+                      <View style={styles.nearbyMetaItem}> 
+                        <View ><Ionicons name="time-outline" size={13} color="#FFFFFF" /></View>
+                        <Text style={styles.nearbyMetaTextLight}>{formatTimeRange(ev.start_time, ev.end_time)}</Text>
                       </View>
-                      <View style={styles.nearbyMetaItem}>
-                        <Ionicons name="location-outline" size={12} color="#878787" />
-                        <Text style={styles.nearbyMetaText} numberOfLines={1}>{ev.venue_name}</Text>
+                      <View style={styles.nearbyMetaItem}> 
+                        <View ><Ionicons name="map-outline" size={13} color="#FFFFFF" /></View>
+                        <Text style={styles.nearbyMetaTextLight} numberOfLines={1}>{ev.venue_name || ev.address}</Text>
                       </View>
                     </View>
                   </View>
@@ -898,6 +1005,25 @@ export default function Events() {
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, interestCounts])
 
+  const formatTimeRange = (startIso: string, endIso: string) => {
+    try {
+      const s = new Date(startIso)
+      const e = new Date(endIso)
+      const fmt = (d: Date) => {
+        let hours = d.getHours()
+        const suffix = hours >= 12 ? 'pm' : 'am'
+        hours = hours % 12
+        if (hours === 0) hours = 12
+        return `${hours}${suffix}`
+      }
+      const month = e.toLocaleString(undefined, { month: 'long' })
+      const dayNum = e.getDate()
+      return `${fmt(s)} - ${fmt(e)}, ${month} ${dayNum}`
+    } catch {
+      return ''
+    }
+  }
+
   const mainListData = useMemo(() => {
     // Build a set of IDs we have already shown in carousels (limit to first 10 of each)
     const shown = new Set<string>()
@@ -919,59 +1045,78 @@ export default function Events() {
     )
   }
 
+  const stickyBarHeight = insets.top + 8 + 12 + 36
+  const sectionBgTop = stickyBarHeight + 12
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Background image tint to match Figma */}
-      <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
-      <View style={styles.bgScrim} />
-      <FlatList
-        data={mainListData}
-        renderItem={renderEventItem}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={(
-          <View>
-            {/* Top bar */}
-            <View style={styles.topBar}>
-              <Image source={require('../../assets/images/icon.png')} style={styles.avatar} />
-              <Text style={styles.topBarTitle}>Blend’n</Text>
-              <TouchableOpacity style={styles.settingsButton}>
-                <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Interested empty or carousel */}
-            {interestedItems.length === 0 ? (
-              <View style={styles.interestedEmptyRow}>
-                <View style={styles.interestedThumb} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.interestedTitle}>Interested Events</Text>
-                  <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
-                </View>
-              </View>
-            ) : (
-              renderInterestedCarousel(interestedItems.slice(0, 10))
-            )}
-
-            {/* Upcoming (Figma) */}
-            {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
-
-            {/* Nearby */}
-            {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
-
-            {/* City top */}
-            {userCity && cityTopItems.length > 0 && renderCarouselWithTitle(`${userCity}’s Top Events`, cityTopItems.slice(0, 10))}
-
-            {/* Best parties */}
-            {bestPartiesItems.length > 0 && renderCarouselWithTitle('Discover the best parties', bestPartiesItems.slice(0, 10))}
-            <View style={{ height: 8 }} />
-          </View>
+      {/* Image moved to global background in RootLayout */}
+      {/* Sticky top bar */}
+      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        ) : (
+          <Image source={require('../../assets/images/icon.png')} style={styles.avatar} />
         )}
-      />
+        <Text style={styles.topBarTitle}>Blend’n</Text>
+        <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
+          <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+      {/* Scrollable content clipped inside rounded section background */}
+      <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
+        <LinearGradient
+          colors={["#480D37", "#000000"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <FlatList
+          data={mainListData}
+          renderItem={renderEventItem}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+          scrollEventThrottle={16}
+          ListHeaderComponent={(
+            <View>
+              {/* Interested empty or carousel */}
+              {interestedItems.length === 0 ? (
+                <View style={styles.interestedEmptyRow}>
+                  <View style={styles.interestedThumb} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.interestedTitle}>Interested Events</Text>
+                    <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
+                  </View>
+                </View>
+              ) : (
+                renderInterestedCarousel(interestedItems.slice(0, 10))
+              )}
+
+              {/* Upcoming (Figma) */}
+              {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
+
+              {/* Nearby */}
+              {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
+
+              {/* City top - fancy header */}
+              {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
+
+              {/* Best parties - fancy header */}
+              {bestPartiesItems.length > 0 && renderCarouselFancy(['Discover the', 'Best Parties'], bestPartiesItems.slice(0, 10))}
+
+              {/* Featured hero */}
+              {renderFeaturedHero(bestPartiesItems[0] || cityTopItems[0] || upcomingItems[0])}
+              <View style={{ height: 8 }} />
+            </View>
+          )}
+        />
+      </View>
     </SafeAreaView>
   )
 }
@@ -979,7 +1124,21 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
+    
+  },
+  sectionBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 120,
+    bottom: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(190, 190, 190, 0.12)',
   },
   bgImage: {
     ...StyleSheet.absoluteFillObject,
@@ -993,7 +1152,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
   },
   loadingText: {
     marginTop: 16,
@@ -1001,28 +1160,47 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 1,
+    paddingTop: 18,
+    paddingBottom: 16,
+    
+   
+   
   },
   carouselContainer: {
     paddingTop: 12,
   },
   sectionHeaderRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  sectionFancyRow: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
   },
   sectionTitle: {
     fontSize: 24,
     fontWeight: '800',
     color: '#FFFFFF',
   },
+  sectionDividerLine: {
+    height: 1,
+    width: 73,
+    backgroundColor: '#D9D9D9',
+    borderRadius: 11,
+  },
   sectionSubTitle: {
     fontSize: 16,
     color: '#FFFFFF',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: 14,
+    marginBottom: 10,
   },
   viewAllRow: {
     flexDirection: 'row',
@@ -1034,7 +1212,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   carouselList: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingBottom: 8,
   },
   upcomingList: {
@@ -1263,8 +1441,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nearbyContainer: {
-    paddingTop: 12,
-    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingHorizontal: 14,
   },
   nearbyImage: {
     width: '100%',
@@ -1279,7 +1457,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 88,
-    backgroundColor: 'rgba(34,21,42,0.78)',
+    backgroundColor: 'transparent',
     borderBottomLeftRadius: 23,
     borderBottomRightRadius: 23,
   },
@@ -1289,9 +1467,44 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 16,
   },
+  nearbyGlass: {
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    top: 161,
+    bottom: 7,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(190, 190, 190, 0.32)',
+  },
+  nearbyGlassTitle: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    top: 12,
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  nearbyGlassRow: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  nearbyMetaTextLight: {
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+ 
   nearbyTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
   },
@@ -1303,15 +1516,69 @@ const styles = StyleSheet.create({
   nearbyMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     maxWidth: '48%',
   },
   nearbyMetaText: {
     color: '#878787',
     fontSize: 11,
   },
+  featuredContainer: {
+    paddingHorizontal: 23,
+    paddingTop: 8,
+  },
+  featuredImage: {
+    width: '100%',
+    height: 474,
+  },
+  featuredRadius: {
+    borderRadius: 20,
+  },
+  featuredOverlayBox: {
+    position: 'absolute',
+    bottom: 16 + 110, // approximate to align like figma overlay box area height
+    left: 45,
+    right: 45,
+    alignItems: 'center',
+    gap: 12,
+  },
+  featuredTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  featuredChip: {
+    backgroundColor: 'rgba(255,56,60,0.5)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  featuredChipText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+  },
+  featuredSubtitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
   topBar: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+   
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  topBarSticky: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 3,
+    paddingHorizontal: 14,
+    
     paddingTop: 8,
     paddingBottom: 12,
     flexDirection: 'row',

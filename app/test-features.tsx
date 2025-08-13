@@ -16,7 +16,8 @@ export default function TestFeatures() {
       
       // Test 1: Basic fetch to Supabase URL
       try {
-        const response = await fetch('https://rycftadewrklmsswzviy.supabase.co/rest/v1/', {
+        const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://invalid.supabase.co'
+        const response = await fetch(`${baseUrl}/rest/v1/`, {
           method: 'GET',
           headers: {
             'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
@@ -101,8 +102,6 @@ export default function TestFeatures() {
       
       if (!key) {
         configStatus += 'Missing SUPABASE_ANON_KEY\n'
-      } else {
-        configStatus += `Key: ${key.substring(0, 20)}...\n`
       }
       
       // Check if we can create a supabase client

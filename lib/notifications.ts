@@ -10,7 +10,10 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-  }),
+    // New fields in SDK 53
+    shouldShowBanner: true,
+    shouldShowList: true,
+  } as any),
 })
 
 // Types for different notification types

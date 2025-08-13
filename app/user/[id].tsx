@@ -265,7 +265,7 @@ export default function UserProfile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { marginTop: 8, color: '#666' },
   header: {

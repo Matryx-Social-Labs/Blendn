@@ -173,11 +173,15 @@ export const uploadPhoto = async (
 
     const uploadUrl = `${supabaseUrl}/storage/v1/object/profile-photos/${filePath}`
     const { data: { session } } = await supabase.auth.getSession()
-    const accessToken = session?.access_token
+    if (!session?.access_token) {
+      return { success: false, error: 'You must be signed in to upload photos' }
+    }
+    const accessToken = session.access_token
     const result = await FileSystem.uploadAsync(uploadUrl, processedUri, {
       httpMethod: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken || supabaseAnonKey}`,
+        // Require user access token for uploads to avoid 401 on private buckets
+        'Authorization': `Bearer ${accessToken}`,
         'apikey': supabaseAnonKey,
         'Content-Type': 'image/jpeg',
         'x-upsert': 'false',

@@ -105,6 +105,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: { backgroundColor: 'transparent' },
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >

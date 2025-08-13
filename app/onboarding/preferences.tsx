@@ -76,7 +76,7 @@ export default function PreferencesStep() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: 24 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 6, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 18, textAlign: 'center' },

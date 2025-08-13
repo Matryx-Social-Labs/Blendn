@@ -211,11 +211,12 @@ export async function callRpc<TReturn = any>(
   args?: Record<string, any>,
   options?: { timeoutMs?: number; retries?: number; queued?: boolean }
 ): Promise<{ data: TReturn; error: any }> {
-  const execute = () => supabase.rpc(rpcName, args as any)
+  const execute = async () => await supabase.rpc(rpcName, args as any)
   if (options?.queued === false) {
     return supabaseWithTimeout.query(execute, options?.timeoutMs ?? 15000, options?.retries ?? 2)
   }
-  return queuedRequest.add(() => supabaseWithTimeout.query(execute, options?.timeoutMs ?? 15000, options?.retries ?? 2))
+  // Ensure the queued function returns a Promise
+  return queuedRequest.add(async () => supabaseWithTimeout.query(execute, options?.timeoutMs ?? 15000, options?.retries ?? 2))
 }
 
 // AuthHelper for consistent auth handling across the app

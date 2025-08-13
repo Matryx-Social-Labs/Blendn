@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
@@ -24,13 +25,11 @@ export default function Profile() {
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
     if (!authLoading && user) {
-    getUserAndProfile()
-    } else if (!authLoading && !user) {
-      // User not authenticated, redirect to login
-      router.replace('/')
+      getUserAndProfile()
     }
   }, [user, authLoading])
 
@@ -54,8 +53,8 @@ export default function Profile() {
       }
       
       if (!baseProfile) {
-        console.log('⚠️ [PROFILE] No profile found, redirecting to onboarding')
-        router.replace('/onboarding/welcome')
+        console.log('⚠️ [PROFILE] No profile found')
+        setError('Profile not found')
         return
       }
       
@@ -103,7 +102,7 @@ export default function Profile() {
                 Alert.alert('Error', 'Failed to sign out')
       } else {
         console.log('✅ [PROFILE] Signed out successfully')
-        router.replace('/')
+        // Central router handles navigation
       }
     } catch (error) {
       console.error('💥 [PROFILE] Sign out error:', error)
@@ -138,7 +137,11 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false}
+        onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+        scrollEventThrottle={16}
+      >
+      
       {profile?.profile_photos?.length ? (
         <View>
           <ScrollView
@@ -265,7 +268,7 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,

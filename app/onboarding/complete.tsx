@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
@@ -78,8 +78,7 @@ export default function Complete() {
         console.log('Successfully saved profile photos:', photoUrls)
       }
 
-      // Navigate to main app
-      router.replace('/(tabs)/events' as any)
+      // Let centralized router redirect after onboarded flag is set
       
     } catch (error) {
       console.error('Onboarding completion error:', error)
@@ -163,7 +162,7 @@ export default function Complete() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   content: {
     flex: 1,

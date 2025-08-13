@@ -90,7 +90,7 @@ export default function LocationStep() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: { flex: 1, padding: 24, justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#666', lineHeight: 22, textAlign: 'center', marginBottom: 24 },

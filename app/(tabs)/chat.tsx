@@ -10,6 +10,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { callRpc, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
@@ -45,6 +46,7 @@ export default function Chat() {
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -446,6 +448,8 @@ export default function Chat() {
             styles.listContainer,
             groupChats.length === 0 && styles.emptyListContainer
           ]}
+          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
+          scrollEventThrottle={16}
         />
       ) : (
         <>
@@ -494,6 +498,8 @@ export default function Chat() {
               styles.listContainer,
               personalChats.length === 0 && styles.emptyListContainer
             ]}
+            onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
+            scrollEventThrottle={16}
           />
         </>
       )}
@@ -504,13 +510,13 @@ export default function Chat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: 'transparent',
   },
   loadingText: {
     fontSize: 16,

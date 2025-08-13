@@ -1,22 +1,24 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Linking,
-    Platform,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Linking,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/photoUtils';
@@ -65,12 +67,13 @@ interface CheckInStatus {
 }
 
 const { width } = Dimensions.get('window')
-const CONTENT_HORIZONTAL_PADDING = 20
+const CONTENT_HORIZONTAL_PADDING = 14
 const GALLERY_GAP = 12
 const galleryTileSize = Math.floor((width - (CONTENT_HORIZONTAL_PADDING * 2) - GALLERY_GAP) / 2)
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams()
+  const insets = useSafeAreaInsets()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -552,33 +555,50 @@ export default function EventDetail() {
   const spotsLeft = event.max_capacity - event.current_capacity
   const isCheckedIn = checkInStatus?.checked_in || false
   const isEnded = new Date(event.end_time).getTime() < Date.now()
+  const stickyBarHeight = insets.top + 8 + 12 + 36
+  const sectionBgTop = stickyBarHeight + 12
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
       <View style={styles.bgScrim} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Image 
-          source={(() => {
-            const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 390, resize: 'cover', quality: 70 })
-            return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
-          })() as any}
-          placeholder={placeholderImg}
-          style={styles.coverImage}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={200}
+      {/* Sticky top bar */}
+      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle} numberOfLines={1}>{event.title}</Text>
+        <TouchableOpacity style={[styles.navButton, { marginLeft: 'auto' }]} onPress={handleShare}>
+          <Ionicons name="share-outline" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Scrollable content clipped inside rounded section background */}
+      <View style={[styles.sectionBg, { top: sectionBgTop }]}>
+        <LinearGradient
+          colors={["#480D37", "#000000"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.gradientFull}
         />
-        
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <Text style={styles.backBtnText}>←</Text>
-            </TouchableOpacity>
-          </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <Image 
+            source={(() => {
+              const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 390, resize: 'cover', quality: 70 })
+              return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
+            })() as any}
+            placeholder={placeholderImg}
+            style={styles.coverImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+          />
+          
+          <View style={styles.content}>
 
           <View style={styles.eventInfo}>
-            <Text style={styles.title}>{event.title}</Text>
+            </View>
+            {/* <Text style={styles.title}>{event.title}</Text> */}
             
             <View style={styles.metaRow}>
               <View style={styles.categoryContainer}>
@@ -749,8 +769,8 @@ export default function EventDetail() {
             </View>
 
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       {/* Fixed bottom tab bar */}
       <View style={styles.tabBar}>
@@ -870,39 +890,24 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  header: {
-    position: 'absolute',
-    top: 12,
-    left: 20,
-    zIndex: 10,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backBtnText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
+  // legacy header/back styles removed; using sticky top bar
   eventInfo: {
-    padding: 20,
+    paddingHorizontal: 14,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 12,
+    paddingHorizontal: 14,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    marginTop: 12,
+    paddingHorizontal: 14,
   },
   categoryContainer: {
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -921,11 +926,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    marginRight: 14,
   },
   attendingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 14,
   },
   avatarsRow: {
     width: 70,
@@ -950,6 +957,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     marginBottom: 8,
+    paddingHorizontal: 14,
     fontWeight: '600',
   },
   description: {
@@ -957,11 +965,13 @@ const styles = StyleSheet.create({
     color: '#CCCCCC',
     lineHeight: 22,
     marginBottom: 16,
+    paddingHorizontal: 14,
   },
   locationCard: {
     marginBottom: 16,
     borderRadius: 23,
     overflow: 'hidden',
+    marginHorizontal: 14,
   },
   locationImage: {
     width: '100%',
@@ -1023,6 +1033,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: GALLERY_GAP,
     marginBottom: 20,
+    paddingHorizontal: 14,
   },
   galleryTile: {
     width: galleryTileSize,
@@ -1035,8 +1046,9 @@ const styles = StyleSheet.create({
   detailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
     marginBottom: 20,
+    paddingHorizontal: 14,
   },
   detailsCard: {
     width: (width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2,
@@ -1080,6 +1092,7 @@ const styles = StyleSheet.create({
   },
   actionSection: {
     paddingVertical: 20,
+    paddingHorizontal: 14,
   },
   checkedInContainer: {
     alignItems: 'center',
@@ -1089,6 +1102,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
+    marginHorizontal: 14,
   },
   checkedInText: {
     fontSize: 20,
@@ -1119,6 +1133,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
+    marginHorizontal: 14,
   },
   checkInButtonDisabled: {
     backgroundColor: '#333333',
@@ -1140,6 +1155,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
+    marginHorizontal: 14,
   },
   interestButtonActive: {
     backgroundColor: '#f8cfe0',
@@ -1202,7 +1218,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: 120,
+  },
+  sectionBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 120,
+    bottom: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(190, 190, 190, 0.12)',
+  },
+  gradientFull: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+  },
+  topBarSticky: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 3,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  navButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 12,
+    maxWidth: '62%',
   },
   tabBar: {
     position: 'absolute',

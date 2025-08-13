@@ -14,6 +14,7 @@ import {
     View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
@@ -47,6 +48,7 @@ export default function Match() {
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
   const [matches, setMatches] = useState<MatchPreview[]>([])
   const [error, setError] = useState<string | null>(null)
+  const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
     loadInitialData()
@@ -87,7 +89,6 @@ export default function Match() {
       // Auth
       const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
       if (error || !user) {
-        router.replace('/(tabs)/events')
         return
       }
       setCurrentUser(user)
@@ -434,7 +435,7 @@ export default function Match() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>People</Text>
         {eventInfo ? (
@@ -461,6 +462,8 @@ export default function Match() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.matchesScroll}
+            onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 260)}
+            scrollEventThrottle={16}
             initialNumToRender={8}
             windowSize={5}
             maxToRenderPerBatch={8}
@@ -522,7 +525,7 @@ export default function Match() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   header: {
     padding: 20,
