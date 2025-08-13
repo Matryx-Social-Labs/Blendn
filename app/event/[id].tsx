@@ -10,6 +10,7 @@ import {
     Linking,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -19,6 +20,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase';
+const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
+const gallery1 = require('../../assets/figma/92e5bab9fd27a0db4c6751d74287d75d6762ca1c.png')
+const gallery2 = require('../../assets/figma/ebafaf4d1b09fd56fd54accaa108ad43fce6a4d9.png')
+const gallery3 = require('../../assets/figma/aa4e9965e198c5e54ec642329ac04399f008edfb.png')
+const gallery4 = require('../../assets/figma/d89da9b93a9694cd7590f5907e2a93715a5950ab.png')
 
 interface EventDetail {
   id: string
@@ -57,6 +63,9 @@ interface CheckInStatus {
 }
 
 const { width } = Dimensions.get('window')
+const CONTENT_HORIZONTAL_PADDING = 20
+const GALLERY_GAP = 12
+const galleryTileSize = Math.floor((width - (CONTENT_HORIZONTAL_PADDING * 2) - GALLERY_GAP) / 2)
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams()
@@ -491,6 +500,16 @@ export default function EventDetail() {
     }
   }
 
+  const handleShare = async () => {
+    try {
+      if (!event) return
+      await Share.share({
+        title: event.title,
+        message: `${event.title}\n${event.venue_name}\n${event.address}`
+      })
+    } catch {}
+  }
+
   const formatPrice = (priceInCents: number) => {
     if (priceInCents === 0) return 'Free'
     return `₹${(priceInCents / 100).toFixed(0)}`
@@ -533,195 +552,259 @@ export default function EventDetail() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView>
-      <Image 
-        source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
-        style={styles.coverImage}
-      />
-      
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>←</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.eventInfo}>
-          <Text style={styles.title}>{event.title}</Text>
-          
-          <View style={styles.metaRow}>
-            <View style={styles.categoryContainer}>
-              <Text style={styles.categoryText}>{event.category}</Text>
-            </View>
-            <Text style={styles.price}>{formatPrice(event.price_cents)}</Text>
+      <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
+      <View style={styles.bgScrim} />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <Image 
+          source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
+          style={styles.coverImage}
+        />
+        
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Text style={styles.backBtnText}>←</Text>
+            </TouchableOpacity>
           </View>
 
+          <View style={styles.eventInfo}>
+            <Text style={styles.title}>{event.title}</Text>
+            
+            <View style={styles.metaRow}>
+              <View style={styles.categoryContainer}>
+                <Text style={styles.categoryText}>{event.category}</Text>
+              </View>
+              <Text style={styles.price}>{formatPrice(event.price_cents)}</Text>
+            </View>
+
+            <View style={styles.attendingRow}>
+              <View style={styles.avatarsRow}>
+                <View style={styles.avatarCircle} />
+                <View style={[styles.avatarCircle, { left: 16 }]} />
+                <View style={[styles.avatarCircle, { left: 32 }]} />
+              </View>
+              <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
+            </View>
+
+          <Text style={styles.sectionTitle}>About the Event</Text>
           <Text style={styles.description}>{event.description}</Text>
 
-          <View style={styles.detailsSection}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailIcon}>📍</Text>
-              <View>
-                <Text style={styles.detailTitle}>{event.venue_name}</Text>
-                <Text style={styles.detailText}>{event.address}</Text>
+            {/* Redesigned Event Details (2x2 grid) */}
+            <View style={styles.detailsGrid}>
+              <View style={styles.detailsCard}>
+                <Text style={styles.detailsIconLarge}>🕒</Text>
+                <Text style={styles.detailsTitle}>Date & Time</Text>
+                <Text style={styles.detailsValue}>{formatDate(event.start_time)}</Text>
+              </View>
+              <View style={styles.detailsCard}>
+                <Text style={styles.detailsIconLarge}>📍</Text>
+                <Text style={styles.detailsTitle}>Venue</Text>
+                <Text style={styles.detailsValue} numberOfLines={1}>{event.venue_name}</Text>
+              </View>
+              <View style={styles.detailsCard}>
+                <Text style={styles.detailsIconLarge}>👥</Text>
+                <Text style={styles.detailsTitle}>Capacity</Text>
+                <Text style={styles.detailsValue}>{spotsLeft > 0 ? `${spotsLeft} spots left` : 'Fully booked'}</Text>
+              </View>
+              <View style={styles.detailsCard}>
+                <Text style={styles.detailsIconLarge}>🎯</Text>
+                <Text style={styles.detailsTitle}>Check-in</Text>
+                <Text style={styles.detailsValue}>Within {event.check_in_radius}m</Text>
               </View>
             </View>
 
-            <View style={styles.detailItem}>
-              <Text style={styles.detailIcon}>🕒</Text>
-              <View>
-                <Text style={styles.detailTitle}>Date & Time</Text>
-                <Text style={styles.detailText}>{formatDate(event.start_time)}</Text>
+            <Text style={styles.sectionTitle}>Location</Text>
+            <View style={styles.locationCard}>
+              <Image 
+                source={{ uri: event.cover_image_url || 'https://images.unsplash.com/photo-1511632765486-a01980e01a18' }}
+                style={styles.locationImage}
+              />
+              <View style={styles.locationOverlay} />
+              <View style={styles.locationPillRow}>
+                <View style={styles.locationPillIcon} />
+                <Text style={styles.locationPillText} numberOfLines={1}>{event.venue_name}</Text>
               </View>
+              <TouchableOpacity style={styles.locationButton} onPress={openInMaps}>
+                <Text style={styles.locationButtonText}>Get Directions</Text>
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.detailItem}>
-              <Text style={styles.detailIcon}>👥</Text>
-              <View>
-                <Text style={styles.detailTitle}>Capacity</Text>
-                <Text style={styles.detailText}>
-                  {spotsLeft > 0 ? `${spotsLeft} spots remaining` : 'Fully booked'}
-                </Text>
-              </View>
+            <Text style={styles.sectionTitle}>Gallery (Pre Event)</Text>
+            <View style={styles.galleryGrid}>
+              {[gallery1, gallery2, gallery3, gallery4].map((src, idx) => (
+                <Image key={`g-${idx}`} source={src} style={styles.galleryTile} />
+              ))}
             </View>
 
-            <View style={styles.detailItem}>
-              <Text style={styles.detailIcon}>🎯</Text>
-              <View>
-                <Text style={styles.detailTitle}>Check-in Requirements</Text>
-                <Text style={styles.detailText}>
-                  Must be within {event.check_in_radius}m of venue
-                  {event.check_in_radius <= 20 && ' (Indoor Precision)'}
-                  {event.check_in_radius <= 30 && event.check_in_radius > 20 && ' (Standard Range)'}
-                  {event.check_in_radius > 30 && ' (Large Area)'}
-                </Text>
-                {proximityStatus && userLocation && (
-                  <View style={styles.proximityIndicator}>
-                    <Text style={[
-                      styles.proximityText,
-                      proximityStatus.can_check_in_count > 0 ? styles.proximityGood : styles.proximityBad
-                    ]}>
-                      {proximityStatus.can_check_in_count > 0 
-                        ? `✅ You're within check-in range!` 
-                        : `📍 Get closer to check in`}
-                    </Text>
+            
+
+            <View style={styles.actionSection}>
+              {isCheckedIn ? (
+                <View style={styles.checkedInContainer}>
+                  <Text style={styles.checkedInText}>✅ Checked In!</Text>
+                  <Text style={styles.checkedInSubtext}>
+                    You checked in {checkInStatus?.distance_meters ? 
+                      `${Math.round(checkInStatus.distance_meters)}m` : ''} from the venue
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity 
+                      style={styles.swipeButton}
+                      onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
+                    >
+                      <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.swipeButton, { backgroundColor: '#007AFF' }]}
+                      onPress={async () => {
+                        try {
+                          const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
+                          if (ensured?.chatRoomId) {
+                            const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+                            router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+                          } else {
+                            router.push('/(tabs)/chat' as any)
+                          }
+                        } catch {}
+                      }}
+                    >
+                      <Text style={styles.swipeButtonText}>Join Event Chat 💬</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
+                      onPress={async () => {
+                        try {
+                          const res = await EventCheckout.checkoutFromEvent(String(id))
+                          if (res.success) {
+                            Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
+                            await checkUserCheckInStatus()
+                          } else {
+                            Alert.alert('Checkout Failed', res.message || 'Please try again.')
+                          }
+                        } catch (e: any) {
+                          Alert.alert('Error', e?.message || 'Unknown error')
+                        }
+                      }}
+                    >
+                      <Text style={styles.swipeButtonText}>Check Out</Text>
+                    </TouchableOpacity>
                   </View>
-                )}
-              </View>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity 
+                    style={[styles.checkInButton, checkingIn && styles.checkInButtonDisabled]}
+                    onPress={handleCheckIn}
+                    disabled={checkingIn}
+                  >
+                    {checkingIn ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Text style={styles.checkInButtonText}>
+                          📍 Check In to Event
+                          {proximityStatus?.can_check_in_count > 0 && ' ✅'}
+                        </Text>
+                        <Text style={styles.checkInSubtext}>
+                          {event.check_in_radius <= 20 && '🏢 Indoor Event - '}
+                          {event.check_in_radius > 50 && '🌳 Outdoor Event - '}
+                          Must be within {event.check_in_radius}m
+                        </Text>
+                        {userLocation && proximityStatus?.nearby_events?.[0] && (
+                          <Text style={styles.distanceIndicator}>
+                            Current distance: {Math.round(proximityStatus.nearby_events[0].distance_meters || 0)}m
+                          </Text>
+                        )}
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {!isEnded && (
+                    <TouchableOpacity 
+                      style={[styles.interestButton, userInterested && styles.interestButtonActive]}
+                      onPress={async () => {
+                        try {
+                          const res = await EventInterest.toggleInterest(String(id))
+                          if (res) {
+                            setUserInterested(res.interested)
+                            setInterestCount(res.count)
+                            Logger.journey('interest', res.interested ? 'detail:markInterested' : 'detail:unmarkInterested', { eventId: String(id) })
+                          } else {
+                            Alert.alert('Error', 'Failed to update interest')
+                          }
+                        } catch {}
+                      }}
+                    >
+                      <Text style={[styles.interestButtonText, userInterested && { color: '#C2185B' }]}>
+                        {userInterested ? '♥︎' : '♡'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
+
           </View>
         </View>
-
-        <View style={styles.actionSection}>
-          {isCheckedIn ? (
-            <View style={styles.checkedInContainer}>
-              <Text style={styles.checkedInText}>✅ Checked In!</Text>
-              <Text style={styles.checkedInSubtext}>
-                You checked in {checkInStatus?.distance_meters ? 
-                  `${Math.round(checkInStatus.distance_meters)}m` : ''} from the venue
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity 
-                  style={styles.swipeButton}
-                  onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
-                >
-                  <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.swipeButton, { backgroundColor: '#007AFF' }]}
-                  onPress={async () => {
-                    try {
-                      const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
-                      if (ensured?.chatRoomId) {
-                        const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
-                        router.push(`/chat/${ensured.chatRoomId}${query}` as any)
-                      } else {
-                        router.push('/(tabs)/chat' as any)
-                      }
-                    } catch {}
-                  }}
-                >
-                  <Text style={styles.swipeButtonText}>Join Event Chat 💬</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
-                  onPress={async () => {
-                    try {
-                      const res = await EventCheckout.checkoutFromEvent(String(id))
-                      if (res.success) {
-                        Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
-                        await checkUserCheckInStatus()
-                      } else {
-                        Alert.alert('Checkout Failed', res.message || 'Please try again.')
-                      }
-                    } catch (e: any) {
-                      Alert.alert('Error', e?.message || 'Unknown error')
-                    }
-                  }}
-                >
-                  <Text style={styles.swipeButtonText}>Check Out</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <>
-              <TouchableOpacity 
-                style={[styles.checkInButton, checkingIn && styles.checkInButtonDisabled]}
-                onPress={handleCheckIn}
-                disabled={checkingIn}
-              >
-                {checkingIn ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Text style={styles.checkInButtonText}>
-                      📍 Check In to Event
-                      {proximityStatus?.can_check_in_count > 0 && ' ✅'}
-                    </Text>
-                    <Text style={styles.checkInSubtext}>
-                      {event.check_in_radius <= 20 && '🏢 Indoor Event - '}
-                      {event.check_in_radius > 50 && '🌳 Outdoor Event - '}
-                      Must be within {event.check_in_radius}m
-                    </Text>
-                    {userLocation && proximityStatus?.nearby_events?.[0] && (
-                      <Text style={styles.distanceIndicator}>
-                        Current distance: {Math.round(proximityStatus.nearby_events[0].distance_meters || 0)}m
-                      </Text>
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {!isEnded && (
-                <TouchableOpacity 
-                  style={[styles.interestButton, userInterested && styles.interestButtonActive]}
-                  onPress={async () => {
-                    try {
-                      const res = await EventInterest.toggleInterest(String(id))
-                      if (res) {
-                        setUserInterested(res.interested)
-                        setInterestCount(res.count)
-                        Logger.journey('interest', res.interested ? 'detail:markInterested' : 'detail:unmarkInterested', { eventId: String(id) })
-                      } else {
-                        Alert.alert('Error', 'Failed to update interest')
-                      }
-                    } catch {}
-                  }}
-                >
-                  <Text style={[styles.interestButtonText, userInterested && { color: '#C2185B' }]}>
-                    {userInterested ? '♥︎' : '♡'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={styles.directionsButton} onPress={openInMaps}>
-                <Text style={styles.directionsButtonText}>🗺️ Get Directions</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
       </ScrollView>
+
+      {/* Fixed bottom tab bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity 
+          style={styles.quickButton}
+          onPress={async () => {
+            try {
+              const res = await EventInterest.toggleInterest(String(id))
+              if (res) {
+                setUserInterested(res.interested)
+                setInterestCount(res.count)
+              }
+            } catch {}
+          }}
+        >
+          <Text style={styles.quickIcon}>{userInterested ? '♥︎' : '♡'}</Text>
+          <Text style={styles.quickText}>Interested</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.quickButton} onPress={handleShare}>
+          <Text style={styles.quickIcon}>􀈂</Text>
+          <Text style={styles.quickText}>Share</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.quickButton}
+          onPress={async () => {
+            try {
+              const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
+              if (ensured?.chatRoomId) {
+                const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+                router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+              } else {
+                router.push('/(tabs)/chat' as any)
+              }
+            } catch {}
+          }}
+        >
+          <Text style={styles.quickIcon}>💬</Text>
+          <Text style={styles.quickText}>Contact</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.quickButton}
+          onPress={() => {
+            Alert.alert(
+              'More',
+              undefined,
+              [
+                { text: 'Get Directions', onPress: openInMaps },
+                { text: 'Close', style: 'cancel' }
+              ]
+            )
+          }}
+        >
+          <Text style={styles.quickIcon}>⋯</Text>
+          <Text style={styles.quickText}>More</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   )
 }
@@ -729,18 +812,26 @@ export default function EventDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#000000',
+  },
+  bgImage: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.58,
+  },
+  bgScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#000000',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#ffffff',
   },
   errorContainer: {
     flex: 1,
@@ -750,7 +841,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: '#666',
+    color: '#ffffff',
     marginBottom: 20,
   },
   backButton: {
@@ -766,8 +857,10 @@ const styles = StyleSheet.create({
   },
   coverImage: {
     width: '100%',
-    height: 250,
-    backgroundColor: '#f0f0f0',
+    height: 390,
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
   },
   content: {
     flex: 1,
@@ -797,39 +890,172 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   categoryContainer: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   categoryText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
   },
   price: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: '#FFFFFF',
+  },
+  attendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarsRow: {
+    width: 70,
+    height: 35,
+    marginRight: 8,
+  },
+  avatarCircle: {
+    position: 'absolute',
+    width: 35,
+    height: 35,
+    borderRadius: 18,
+    backgroundColor: '#D9D9D9',
+    left: 0,
+    top: 0,
+  },
+  attendingText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    opacity: 0.9,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginBottom: 8,
+    fontWeight: '600',
   },
   description: {
-    fontSize: 16,
-    color: '#666',
-    lineHeight: 24,
-    marginBottom: 24,
+    fontSize: 14,
+    color: '#CCCCCC',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  locationCard: {
+    marginBottom: 16,
+    borderRadius: 23,
+    overflow: 'hidden',
+  },
+  locationImage: {
+    width: '100%',
+    height: 249,
+    borderRadius: 23,
+  },
+  locationOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 88,
+    backgroundColor: 'rgba(34,21,42,0.78)',
+    borderBottomLeftRadius: 23,
+    borderBottomRightRadius: 23,
+  },
+  locationPillRow: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+  },
+  locationPillIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#6B6B6B',
+    marginRight: 6,
+  },
+  locationPillText: {
+    color: '#222222',
+    fontSize: 12,
+    maxWidth: 140,
+  },
+  locationButton: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 100,
+  },
+  locationButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  galleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: GALLERY_GAP,
+    marginBottom: 20,
+  },
+  galleryTile: {
+    width: galleryTileSize,
+    height: galleryTileSize,
+    borderRadius: 12,
   },
   detailsSection: {
     marginBottom: 24,
+  },
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  detailsCard: {
+    width: (width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2,
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  detailsIconLarge: {
+    fontSize: 18,
+    marginBottom: 6,
+    color: '#FFFFFF',
+  },
+  detailsTitle: {
+    fontSize: 12,
+    color: '#AAAAAA',
+    marginBottom: 4,
+  },
+  detailsValue: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   detailItem: {
     flexDirection: 'row',
@@ -840,28 +1066,29 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginRight: 12,
     marginTop: 2,
+    color: '#FFFFFF',
   },
   detailTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   detailText: {
     fontSize: 14,
-    color: '#666',
+    color: '#CCCCCC',
   },
   actionSection: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    paddingVertical: 20,
   },
   checkedInContainer: {
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1A1A1A',
     borderRadius: 12,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   checkedInText: {
     fontSize: 20,
@@ -871,7 +1098,7 @@ const styles = StyleSheet.create({
   },
   checkedInSubtext: {
     fontSize: 14,
-    color: '#666',
+    color: '#CCCCCC',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -887,14 +1114,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   checkInButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#E53A17',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
   },
   checkInButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#333333',
   },
   checkInButtonText: {
     color: '#fff',
@@ -906,19 +1133,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     opacity: 0.9,
-  },
-  directionsButton: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  directionsButtonText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: '600',
   },
   interestButton: {
     backgroundColor: '#fde7ef',
@@ -939,7 +1153,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 8,
     borderRadius: 6,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1A1A1A',
   },
   proximityText: {
     fontSize: 12,
@@ -957,4 +1171,52 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: 2,
   },
-}) 
+  quickDock: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 16,
+  },
+  quickButton: {
+    width: '24%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(18,18,18,1)',
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  quickIcon: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  quickText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+  },
+  scrollContent: {
+    paddingBottom: 28,
+  },
+  tabBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+})

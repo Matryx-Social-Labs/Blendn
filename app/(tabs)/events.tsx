@@ -1,11 +1,16 @@
+import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
+    Animated,
+    Dimensions,
     FlatList,
     Image,
+    ImageBackground,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -17,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../../lib/logger'
 import { EventChat, EventInterest, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
+const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 
 interface Event {
   id: string
@@ -182,20 +188,27 @@ export default function Events() {
 
   const renderCheckedInCarousel = () => (
     <View style={styles.carouselContainer}>
-      <Text style={styles.carouselTitle}>You're checked in</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>You're checked in</Text>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
         {checkedInEvents.map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
-              <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+              <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
+                <LinearGradient
+                  colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                  style={styles.carouselGradient}
+                />
+                <View style={styles.carouselContentOverlay}>
+                  <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                  <Text style={styles.carouselTime}>
+                    {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              </ImageBackground>
             )}
-            <View style={styles.carouselContent}>
-              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-              <Text style={styles.carouselTime}>
-                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -204,13 +217,31 @@ export default function Events() {
 
   const renderInterestedCarousel = (items: Event[]) => (
     <View style={styles.carouselContainer}>
-      <Text style={styles.carouselTitle}>Your interested events</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>Interested Events</Text>
+        <TouchableOpacity style={styles.viewAllRow}>
+          <Text style={styles.viewAllText}>View all</Text>
+          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
+        </TouchableOpacity>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
         {items.map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
               <>
-                <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
+                  <LinearGradient
+                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                    style={styles.carouselGradient}
+                  />
+                  <View style={styles.carouselContentOverlay}>
+                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                    <Text style={styles.carouselTime}>
+                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                </ImageBackground>
                 <TouchableOpacity
                   onPress={() => toggleInterest(item)}
                   style={styles.carouselHeartButton}
@@ -220,13 +251,6 @@ export default function Events() {
                 </TouchableOpacity>
               </>
             )}
-            <View style={styles.carouselContent}>
-              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-              <Text style={styles.carouselTime}>
-                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -584,13 +608,31 @@ export default function Events() {
 
   const renderCarouselWithTitle = (title: string, items: Event[]) => (
     <View style={styles.carouselContainer}>
-      <Text style={styles.carouselTitle}>{title}</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <TouchableOpacity style={styles.viewAllRow}>
+          <Text style={styles.viewAllText}>View all</Text>
+          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
+        </TouchableOpacity>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
         {items.map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             {item.cover_image_url && (
               <>
-                <Image source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover" />
+                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
+                  <LinearGradient
+                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                    style={styles.carouselGradient}
+                  />
+                  <View style={styles.carouselContentOverlay}>
+                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                    <Text style={styles.carouselTime}>
+                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                </ImageBackground>
                 <TouchableOpacity
                   onPress={() => toggleInterest(item)}
                   style={styles.carouselHeartButton}
@@ -600,29 +642,175 @@ export default function Events() {
                 </TouchableOpacity>
               </>
             )}
-            <View style={styles.carouselContent}>
-              <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-              <Text style={styles.carouselTime}>
-                {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
     </View>
   )
 
-  const renderNearbyList = (items: Event[]) => (
-    <View style={styles.nearbyContainer}>
-      <Text style={styles.carouselTitle}>Nearby events</Text>
-      {items.map((ev) => (
-        <View key={ev.id}>
-          {renderEventItem({ item: ev })}
-        </View>
-      ))}
+  // Animated scroll state for coverflow-like carousel
+  const upcomingScrollX = useRef(new Animated.Value(0)).current
+  const { width: screenWidth } = Dimensions.get('window')
+  const UPCOMING_ITEM_WIDTH = 163
+  const UPCOMING_ITEM_HEIGHT = 264
+  const UPCOMING_ITEM_SPACING = 14
+  const UPCOMING_ITEM_FULL = UPCOMING_ITEM_WIDTH + UPCOMING_ITEM_SPACING
+  const UPCOMING_SIDE_PADDING = (screenWidth - UPCOMING_ITEM_WIDTH) / 2
+  const UPCOMING_LOOPS = 7
+  const upcomingListRef = useRef<FlatList<any> | null>(null)
+
+  const renderUpcomingFigmaCarousel = () => (
+    <View style={styles.carouselContainer}>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>Upcoming events</Text>
+        <TouchableOpacity style={styles.viewAllRow}>
+          <Text style={styles.viewAllText}>View all</Text>
+          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
+        </TouchableOpacity>
+      </View>
+      <Animated.FlatList
+        ref={upcomingListRef as any}
+        horizontal
+        data={upcomingLooped}
+        keyExtractor={(_, idx) => `up-${idx}`}
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        decelerationRate="fast"
+        snapToAlignment="center"
+        snapToInterval={UPCOMING_ITEM_FULL}
+        contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
+        style={[styles.upcomingViewport, { marginHorizontal: -UPCOMING_SIDE_PADDING }]}
+        removeClippedSubviews={false}
+        disableIntervalMomentum
+        initialScrollIndex={Math.max(0, Math.floor(upcomingLooped.length / 2))}
+        getItemLayout={(_, index) => ({ length: UPCOMING_ITEM_FULL, offset: UPCOMING_ITEM_FULL * index, index })}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: upcomingScrollX } } }],
+          { useNativeDriver: true }
+        )}
+        onScrollEndDrag={undefined}
+        onMomentumScrollEnd={(ev) => {
+          const x = ev.nativeEvent.contentOffset.x
+          const currentIndex = Math.round(x / UPCOMING_ITEM_FULL)
+          const base = Math.max(1, upcomingItems.length)
+          const nearStart = currentIndex <= base
+          const nearEnd = currentIndex >= (upcomingLooped.length - base - 1)
+          if (nearStart || nearEnd) {
+            const normalized = ((currentIndex % base) + base) % base
+            const middleBase = Math.floor(UPCOMING_LOOPS / 2) * base
+            const targetIndex = middleBase + normalized
+            upcomingListRef.current?.scrollToOffset({ offset: targetIndex * UPCOMING_ITEM_FULL, animated: false })
+            return
+          }
+          const snapped = currentIndex * UPCOMING_ITEM_FULL
+          if (Math.abs(snapped - x) > 0.5) {
+            upcomingListRef.current?.scrollToOffset({ offset: snapped, animated: true })
+          }
+        }}
+        renderItem={({ item, index }) => {
+          const inputRange = [
+            (index - 1) * UPCOMING_ITEM_FULL,
+            index * UPCOMING_ITEM_FULL,
+            (index + 1) * UPCOMING_ITEM_FULL,
+          ]
+          const scale = upcomingScrollX.interpolate({
+            inputRange,
+            outputRange: [0.9, 1.18, 0.9],
+            extrapolate: 'clamp',
+          })
+          const opacity = upcomingScrollX.interpolate({
+            inputRange,
+            outputRange: [0.7, 1, 0.7],
+            extrapolate: 'clamp',
+          })
+          const translateY = upcomingScrollX.interpolate({
+            inputRange,
+            outputRange: [8, 0, 8],
+            extrapolate: 'clamp',
+          })
+          return (
+            <View style={{ width: UPCOMING_ITEM_FULL, alignItems: 'center' }}>
+              <Animated.View
+                style={{
+                  width: UPCOMING_ITEM_WIDTH,
+                  height: UPCOMING_ITEM_HEIGHT,
+                  borderRadius: 20,
+                  // Allow scale to extend without clipping
+                  overflow: 'visible',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  transform: [{ scale }, { translateY }],
+                  opacity,
+                }}
+              >
+                {item.cover_image_url ? (
+                  <ImageBackground
+                    source={{ uri: item.cover_image_url }}
+                    style={{ width: '100%', height: '100%' }}
+                    imageStyle={styles.upcomingImageRadius}
+                    resizeMode="cover"
+                  >
+                    <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.upcomingImageRadius]} />
+                    <View style={styles.upTextOverlay}>
+                      <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
+                      <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
+                    </View>
+                  </ImageBackground>
+                ) : (
+                  <View style={[styles.upcomingImageRadius, { flex: 1, backgroundColor: '#222' }]} />
+                )}
+              </Animated.View>
+            </View>
+          )
+        }}
+      />
     </View>
   )
+
+  const renderNearbyList = (items: Event[]) => {
+    const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
+    const place = userCity || 'Your area'
+    return (
+      <View style={styles.nearbyContainer}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Nearby Events</Text>
+          <TouchableOpacity style={styles.viewAllRow}>
+            <Text style={styles.viewAllText}>View all</Text>
+            <Ionicons name="chevron-forward" size={18} color="#E53A17" />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
+        {items.map((ev) => (
+          <TouchableOpacity key={ev.id} onPress={() => handleEventPress(ev)} activeOpacity={0.9}>
+            {ev.cover_image_url ? (
+              <View style={{ marginBottom: 18 }}>
+                <ImageBackground source={{ uri: ev.cover_image_url }} style={styles.nearbyImage} imageStyle={styles.nearbyImageRadius}>
+                  <View style={styles.nearbyOverlay} />
+                  <View style={styles.nearbyInfoBox}>
+                    <Text style={styles.nearbyTitle} numberOfLines={2}>{ev.title}</Text>
+                    <View style={styles.nearbyMetaRow}>
+                      <View style={styles.nearbyMetaItem}>
+                        <Ionicons name="time-outline" size={12} color="#878787" />
+                        <Text style={styles.nearbyMetaText}>
+                          {new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {` - `}
+                          {new Date(ev.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                      <View style={styles.nearbyMetaItem}>
+                        <Ionicons name="location-outline" size={12} color="#878787" />
+                        <Text style={styles.nearbyMetaText} numberOfLines={1}>{ev.venue_name}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </ImageBackground>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ))}
+      </View>
+    )
+  }
 
   const distanceKmForEvent = (ev: Event): number => {
     const prox = proximityData[ev.id]
@@ -650,6 +838,15 @@ export default function Events() {
       .filter(e => new Date(e.start_time).getTime() >= now)
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events])
+
+  // Build looped data for infinite-like carousel after upcomingItems is defined
+  const upcomingLooped = useMemo(() => {
+    if (upcomingItems.length === 0) return [] as Event[]
+    const loops = 7
+    const arr: Event[] = []
+    for (let i = 0; i < loops; i += 1) arr.push(...upcomingItems)
+    return arr
+  }, [upcomingItems])
 
   const happeningNowItems = useMemo(() => {
     const now = Date.now()
@@ -726,6 +923,9 @@ export default function Events() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* Background image tint to match Figma */}
+      <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
+      <View style={styles.bgScrim} />
       <FlatList
         data={mainListData}
         renderItem={renderEventItem}
@@ -737,12 +937,38 @@ export default function Events() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={(
           <View>
-            {happeningNowItems.length > 0 && renderCarouselWithTitle('Happening now', happeningNowItems.slice(0, 10))}
-            {checkedInEvents.length > 0 && renderCheckedInCarousel()}
-            {interestedItems.length > 0 ? renderInterestedCarousel(interestedItems) : null}
-            {upcomingItems.length > 0 && renderCarouselWithTitle('Upcoming events', upcomingItems.slice(0, 10))}
-            {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 8))}
-            {userCity && cityTopItems.length > 0 && renderCarouselWithTitle(`${userCity}'s top events`, cityTopItems.slice(0, 10))}
+            {/* Top bar */}
+            <View style={styles.topBar}>
+              <Image source={require('../../assets/images/icon.png')} style={styles.avatar} />
+              <Text style={styles.topBarTitle}>Blend’n</Text>
+              <TouchableOpacity style={styles.settingsButton}>
+                <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Interested empty or carousel */}
+            {interestedItems.length === 0 ? (
+              <View style={styles.interestedEmptyRow}>
+                <View style={styles.interestedThumb} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.interestedTitle}>Interested Events</Text>
+                  <Text style={styles.interestedSub}>Events you've liked or shown interest in will appear here.</Text>
+                </View>
+              </View>
+            ) : (
+              renderInterestedCarousel(interestedItems.slice(0, 10))
+            )}
+
+            {/* Upcoming (Figma) */}
+            {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
+
+            {/* Nearby */}
+            {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
+
+            {/* City top */}
+            {userCity && cityTopItems.length > 0 && renderCarouselWithTitle(`${userCity}’s Top Events`, cityTopItems.slice(0, 10))}
+
+            {/* Best parties */}
             {bestPartiesItems.length > 0 && renderCarouselWithTitle('Discover the best parties', bestPartiesItems.slice(0, 10))}
             <View style={{ height: 8 }} />
           </View>
@@ -755,18 +981,26 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#000000',
+  },
+  bgImage: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.58,
+  },
+  bgScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#000000',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#ffffff',
   },
   listContainer: {
     padding: 16,
@@ -774,21 +1008,111 @@ const styles = StyleSheet.create({
   carouselContainer: {
     paddingTop: 12,
   },
-  carouselTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#333',
+  sectionHeaderRow: {
     paddingHorizontal: 16,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  sectionSubTitle: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  viewAllRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  viewAllText: {
+    color: '#FFFFFF',
+    fontSize: 13,
   },
   carouselList: {
     paddingHorizontal: 12,
     paddingBottom: 8,
   },
+  upcomingList: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 14,
+  },
+  upcomingImageRadius: {
+    borderRadius: 20,
+  },
+  upcomingViewport: {
+    // Extra vertical space to avoid top/bottom clipping when scaled
+    paddingVertical: 28,
+    height: 320,
+  },
+  upcomingCardSmall: {
+    width: 139,
+    height: 226,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  upcomingCardLarge: {
+    width: 163,
+    height: 264,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  upcomingImageSmall: {
+    width: 139,
+    height: 226,
+  },
+  upcomingImageLarge: {
+    width: 163,
+    height: 264,
+  },
+  gradientFull: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+  },
+  upTextOverlay: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 10,
+  },
+  upVenueSmall: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    textAlign: 'left',
+    marginBottom: 2,
+  },
+  upTitleSmall: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  upVenueLarge: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    textAlign: 'left',
+    marginBottom: 4,
+  },
+  upTitleLarge: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   carouselCard: {
     width: 260,
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#111111',
     marginHorizontal: 4,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -801,11 +1125,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 120,
   },
+  carouselGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
+  },
   carouselHeartButton: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 16,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -818,23 +1149,29 @@ const styles = StyleSheet.create({
   carouselContent: {
     padding: 12,
   },
+  carouselContentOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 10,
+  },
   carouselEventTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: '#FFFFFF',
   },
   carouselVenue: {
     fontSize: 13,
-    color: '#666',
+    color: '#CCCCCC',
     marginTop: 2,
   },
   carouselTime: {
     fontSize: 12,
-    color: '#999',
+    color: '#AAAAAA',
     marginTop: 6,
   },
   eventCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#111111',
     borderRadius: 12,
     marginBottom: 16,
     shadowColor: '#000',
@@ -857,17 +1194,17 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   eventVenue: {
     fontSize: 16,
-    color: '#666',
+    color: '#CCCCCC',
     marginBottom: 8,
   },
   eventDescription: {
     fontSize: 14,
-    color: '#888',
+    color: '#AAAAAA',
     marginBottom: 12,
     lineHeight: 20,
   },
@@ -879,7 +1216,7 @@ const styles = StyleSheet.create({
   },
   eventTime: {
     fontSize: 14,
-    color: '#666',
+    color: '#CCCCCC',
   },
   eventPrice: {
     fontSize: 16,
@@ -930,5 +1267,94 @@ const styles = StyleSheet.create({
   nearbyContainer: {
     paddingTop: 12,
     paddingHorizontal: 16,
+  },
+  nearbyImage: {
+    width: '100%',
+    height: 249,
+  },
+  nearbyImageRadius: {
+    borderRadius: 23,
+  },
+  nearbyOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 88,
+    backgroundColor: 'rgba(34,21,42,0.78)',
+    borderBottomLeftRadius: 23,
+    borderBottomRightRadius: 23,
+  },
+  nearbyInfoBox: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+  },
+  nearbyTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  nearbyMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nearbyMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '48%',
+  },
+  nearbyMetaText: {
+    color: '#878787',
+    fontSize: 11,
+  },
+  topBar: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  topBarTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+    marginLeft: 12,
+  },
+  settingsButton: {
+    marginLeft: 'auto',
+  },
+  interestedEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  interestedThumb: {
+    width: 78,
+    height: 78,
+    borderRadius: 12,
+    backgroundColor: '#D9D9D9',
+  },
+  interestedTitle: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  interestedSub: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
 }) 
