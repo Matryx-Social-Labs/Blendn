@@ -731,35 +731,37 @@ export default function Events() {
           })
           return (
             <View style={{ width: UPCOMING_ITEM_FULL, alignItems: 'center' }}>
-              <Animated.View
-                style={{
-                  width: UPCOMING_ITEM_WIDTH,
-                  height: UPCOMING_ITEM_HEIGHT,
-                  borderRadius: 20,
-                  // Allow scale to extend without clipping
-                  overflow: 'visible',
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  transform: [{ scale }, { translateY }],
-                  opacity,
-                }}
-              >
-                {item.cover_image_url ? (
-                  <ImageBackground
-                    source={{ uri: item.cover_image_url }}
-                    style={{ width: '100%', height: '100%' }}
-                    imageStyle={styles.upcomingImageRadius}
-                    resizeMode="cover"
-                  >
-                    <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.upcomingImageRadius]} />
-                    <View style={styles.upTextOverlay}>
-                      <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
-                      <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
-                    </View>
-                  </ImageBackground>
-                ) : (
-                  <View style={[styles.upcomingImageRadius, { flex: 1, backgroundColor: '#222' }]} />
-                )}
-              </Animated.View>
+              <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(item)}>
+                <Animated.View
+                  style={{
+                    width: UPCOMING_ITEM_WIDTH,
+                    height: UPCOMING_ITEM_HEIGHT,
+                    borderRadius: 20,
+                    // Allow scale to extend without clipping
+                    overflow: 'visible',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    transform: [{ scale }, { translateY }],
+                    opacity,
+                  }}
+                >
+                  {item.cover_image_url ? (
+                    <ImageBackground
+                      source={{ uri: item.cover_image_url }}
+                      style={{ width: '100%', height: '100%' }}
+                      imageStyle={styles.upcomingImageRadius}
+                      resizeMode="cover"
+                    >
+                      <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.upcomingImageRadius]} />
+                      <View style={styles.upTextOverlay}>
+                        <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
+                        <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
+                      </View>
+                    </ImageBackground>
+                  ) : (
+                    <View style={[styles.upcomingImageRadius, { flex: 1, backgroundColor: '#222' }]} />
+                  )}
+                </Animated.View>
+              </TouchableOpacity>
             </View>
           )
         }}
