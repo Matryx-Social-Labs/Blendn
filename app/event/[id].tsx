@@ -589,27 +589,15 @@ export default function EventDetail() {
           <Text style={styles.sectionTitle}>About the Event</Text>
           <Text style={styles.description}>{event.description}</Text>
 
-            {/* Redesigned Event Details (2x2 grid) */}
+            {/* Redesigned Event Details (clean 2-up) */}
             <View style={styles.detailsGrid}>
               <View style={styles.detailsCard}>
-                <Text style={styles.detailsIconLarge}>🕒</Text>
                 <Text style={styles.detailsTitle}>Date & Time</Text>
                 <Text style={styles.detailsValue}>{formatDate(event.start_time)}</Text>
               </View>
               <View style={styles.detailsCard}>
-                <Text style={styles.detailsIconLarge}>📍</Text>
                 <Text style={styles.detailsTitle}>Venue</Text>
                 <Text style={styles.detailsValue} numberOfLines={1}>{event.venue_name}</Text>
-              </View>
-              <View style={styles.detailsCard}>
-                <Text style={styles.detailsIconLarge}>👥</Text>
-                <Text style={styles.detailsTitle}>Capacity</Text>
-                <Text style={styles.detailsValue}>{spotsLeft > 0 ? `${spotsLeft} spots left` : 'Fully booked'}</Text>
-              </View>
-              <View style={styles.detailsCard}>
-                <Text style={styles.detailsIconLarge}>🎯</Text>
-                <Text style={styles.detailsTitle}>Check-in</Text>
-                <Text style={styles.detailsValue}>Within {event.check_in_radius}m</Text>
               </View>
             </View>
 
@@ -1041,11 +1029,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-  },
-  detailsIconLarge: {
-    fontSize: 18,
-    marginBottom: 6,
-    color: '#FFFFFF',
   },
   detailsTitle: {
     fontSize: 12,
