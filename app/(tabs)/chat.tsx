@@ -16,6 +16,7 @@ import AppHeader from '../../components/AppHeader'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
+import { computeUnreadCounts, setConversationLastRead } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 
 interface GroupChat {
@@ -59,6 +60,7 @@ export default function Chat() {
   }, [])
 
   const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
+    setConversationLastRead(chat.conversation_id).catch(() => {})
     router.push(`/private-chat/${chat.conversation_id}`)
   }, [])
 
@@ -303,7 +305,16 @@ export default function Chat() {
         } as PersonalChat
       })
 
-      setPersonalChats(userConversations)
+      try {
+        const counts = await computeUnreadCounts(conversationIds)
+        const withUnread = userConversations.map(c => ({
+          ...c,
+          unread_count: counts[c.conversation_id] || 0,
+        }))
+        setPersonalChats(withUnread)
+      } catch {
+        setPersonalChats(userConversations)
+      }
       Logger.info('chat', `Loaded ${userConversations.length} personal chats`)
     } catch (error) {
       Logger.error('chat', 'Error loading personal chats', { error })

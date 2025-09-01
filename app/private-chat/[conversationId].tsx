@@ -18,6 +18,7 @@ import AppHeader from '../../components/AppHeader'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
 import { callRpc, supabase } from '../../lib/supabase'
+import { setConversationLastRead } from '../../lib/unread'
 
 interface PrivateMessage {
   message_id: string
@@ -84,6 +85,10 @@ export default function PrivateChat() {
 
       // Reverse to show oldest first
       setMessages((data || []).reverse())
+      // Mark as read now that the user has viewed
+      if (conversationId) {
+        setConversationLastRead(String(conversationId)).catch(() => {})
+      }
       setTimeout(() => scrollToBottom(), 100)
     } catch (error) {
       console.error('Failed to load messages:', error)
