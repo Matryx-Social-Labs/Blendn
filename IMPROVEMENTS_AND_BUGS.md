@@ -16,7 +16,7 @@
 
 ### **Navigation**
 - [ ] **Route warnings**: Console shows warnings about missing routes
-- [ ] **Deep linking**: App doesn't handle deep links properly
+- [x] **Deep linking**: Added URL scheme/intent filters and router origin for deep links
 - [ ] **Back button**: Inconsistent back navigation behavior
 
 ### **Notifications**

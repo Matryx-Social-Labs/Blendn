@@ -23,7 +23,20 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.matrixsociallabs.blendn"
+      "package": "com.matrixsociallabs.blendn",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "blendn",
+              "host": "*",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -52,7 +65,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": { "origin": "*" },
       "eas": {
         "projectId": "25c4d3a8-0ffd-494f-931a-e286c649ce96"
       }
