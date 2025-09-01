@@ -269,7 +269,7 @@ export async function initializePushNotifications(): Promise<string | null> {
   try {
     const token = await registerForPushNotificationsAsync()
     
-    if (token) {
+    if (token && !token.startsWith('development-token-') && !token.startsWith('simulator-token-')) {
       await savePushTokenToProfile(token)
     }
     

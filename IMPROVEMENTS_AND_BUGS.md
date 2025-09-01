@@ -151,7 +151,7 @@
 - [ ] **App Store Optimization**: No metadata for app stores
 - [ ] **Device Permissions**: Permission requests could be more explanatory
 - [ ] **Background App Refresh**: No background updates for messages
- - [ ] **Push token saving**: Avoid saving development/simulator tokens to user profile; only persist real device tokens
+ - [x] **Push token saving**: Skip saving development/simulator tokens to user profile
 
 ### **Analytics & Monitoring**
 - [ ] **Crash Reporting**: No crash analytics (Sentry, Bugsnag)
@@ -166,7 +166,7 @@
 - [ ] **Database Migrations**: No versioning of database changes
 - [ ] **Backup Strategy**: No automated database backups
 - [ ] **Monitoring**: No uptime or performance monitoring
- - [ ] **Config hygiene**: Move Google Sign-In client IDs and similar values to env/remote config; avoid hardcoding in `app.json`/source
+ - [x] **Config hygiene**: Google Sign-In client IDs are now read from env
 
 ---
 

@@ -13,7 +13,7 @@
       "bundleIdentifier": "com.matrixsociallabs.blendn",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "GIDClientID": "438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com",
+        "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
         "NSLocationWhenInUseUsageDescription": "Blend’n uses your location to show nearby events and validate on-site check-ins."
       }
     },

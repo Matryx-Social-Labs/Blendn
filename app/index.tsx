@@ -16,9 +16,8 @@ export default function Index() {
   useEffect(() => {
     // Configure Google Sign In once
     GoogleSignin.configure({
-      // Avoid crashing when env is missing; log and continue gracefully
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
-      iosClientId: '438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com',
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
       offlineAccess: true,
     })
   }, [])
