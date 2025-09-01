@@ -27,7 +27,7 @@
 - [x] **Unimplemented batch queries**: Implemented `batchQuery` execution using Supabase with common filters
 
 ### **Onboarding Completion**
-- [ ] **No explicit navigation**: Completing onboarding updates the DB but does not navigate; relies on outer layout detection, which can leave users stuck if a rerender doesn’t occur
+- [x] **No explicit navigation**: Onboarding completion now navigates directly to `/(tabs)/events`
 
 ---
 

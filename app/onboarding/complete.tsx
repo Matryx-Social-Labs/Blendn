@@ -10,6 +10,7 @@ import {
     View
 } from 'react-native'
 import { supabase } from '../../lib/supabase'
+import { router } from 'expo-router'
 
 export default function Complete() {
   const [loading, setLoading] = useState(false)
@@ -78,7 +79,8 @@ export default function Complete() {
         console.log('Successfully saved profile photos:', photoUrls)
       }
 
-      // Let centralized router redirect after onboarded flag is set
+      // Explicit navigation to main tabs
+      router.replace('/(tabs)/events')
       
     } catch (error) {
       console.error('Onboarding completion error:', error)
