@@ -80,6 +80,44 @@ export default function Chat() {
     }
   }, [user, authLoading, activeTab])
 
+  // Realtime: update personal chat list when new private_messages arrive
+  useEffect(() => {
+    if (!user || activeTab !== 'personal') return
+    const channel = supabase
+      .channel(`personal_chats_${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'private_messages' },
+        (payload: any) => {
+          const row = payload.new
+          if (!row?.conversation_id) return
+          setPersonalChats(prev => {
+            const idx = prev.findIndex(c => c.conversation_id === row.conversation_id)
+            const updatedTime = row.created_at
+            let next = [...prev]
+            if (idx >= 0) {
+              const item = next[idx]
+              const updated = {
+                ...item,
+                last_message: row.message_text,
+                last_message_time: updatedTime,
+                // optimistically increment unread; precise counts recomputed on refresh
+                unread_count: (item.unread_count || 0) + 1,
+              }
+              next.splice(idx, 1)
+              next = [updated, ...next]
+            }
+            return next
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      try { supabase.removeChannel(channel) } catch {}
+    }
+  }, [user, activeTab])
+
   const loadChats = async () => {
     if (!user) return
 

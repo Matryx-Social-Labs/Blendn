@@ -60,7 +60,7 @@
 - [ ] **Message Search**: No way to search chat history
 - [ ] **Chat Notifications**: No push notifications for new messages
  - [x] **Unread counts**: Implemented per-conversation unread counts with local last-read tracking
- - [ ] **Realtime updates**: Chat list doesn’t subscribe to new messages; items don’t refresh until manual reload
+ - [x] **Realtime updates**: Chat list subscribes to new private messages and updates in-place
  - [x] **RPC response robustness**: Normalized RPC responses (array/object) in chat and safety flows
 
 ### **Location & Check-ins**
