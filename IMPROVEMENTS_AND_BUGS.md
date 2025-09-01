@@ -5,7 +5,7 @@
 ### **Authentication Issues**
 - [x] **Infinite auth loops**: Guarded redirects prevent re-entrant navigation loops
 - [x] **Session persistence**: Initialization waits for INITIAL_SESSION to stabilize persisted sessions
-- [ ] **Onboarding bypass**: Possible to skip onboarding steps and reach main app
+- [x] **Onboarding bypass**: Tabs layout now gates and redirects non-onboarded users
  - [x] **Missing Supabase envs**: If `EXPO_PUBLIC_SUPABASE_URL/ANON_KEY` are missing, the app now fails fast with a clear error instead of using an invalid fallback
 
 ### **Database Connection**

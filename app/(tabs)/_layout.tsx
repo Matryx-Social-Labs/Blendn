@@ -3,7 +3,9 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { router } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -99,6 +101,33 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabLayout() {
+  const guardRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (guardRef.current) return;
+      guardRef.current = true;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return; // Root layout will handle auth redirect
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('onboarded')
+          .eq('id', user.id)
+          .maybeSingle();
+        const onboarded = !!profile && profile.onboarded === true && !error;
+        if (!onboarded && !cancelled) {
+          router.replace('/onboarding/welcome');
+        }
+      } finally {
+        setTimeout(() => { guardRef.current = false; }, 200);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
