@@ -3,6 +3,7 @@ import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
+import { router } from 'expo-router'
 
 // Configure how notifications are handled when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -10,10 +11,7 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-    // New fields in SDK 53
-    shouldShowBanner: true,
-    shouldShowList: true,
-  } as any),
+  }),
 })
 
 // Types for different notification types
@@ -231,8 +229,35 @@ export function setupNotificationResponseListener(
     // Handle navigation based on notification data
     const data = response.notification.request.content.data
     if (data?.screen) {
-      // Navigate to specific screen based on notification data
-      // This would be implemented in the component using this function
+      try {
+        switch (data.screen) {
+          case 'chat': {
+            if (data.conversationId) {
+              router.push(`/private-chat/${encodeURIComponent(String(data.conversationId))}`)
+            } else {
+              router.push('/(tabs)/chat')
+            }
+            break
+          }
+          case 'event': {
+            if (data.eventId) {
+              router.push(`/event/${encodeURIComponent(String(data.eventId))}`)
+            } else {
+              router.push('/(tabs)/events')
+            }
+            break
+          }
+          case 'match': {
+            router.push('/(tabs)/match')
+            break
+          }
+          default: {
+            router.push('/(tabs)/events')
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to navigate from notification', e)
+      }
     }
   })
 

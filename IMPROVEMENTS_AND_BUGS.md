@@ -20,8 +20,8 @@
 - [ ] **Back button**: Inconsistent back navigation behavior
 
 ### **Notifications**
-- [ ] **Non-standard handler fields**: Foreground handler uses `shouldShowBanner`/`shouldShowList` (SDK 53) cast as `any`, which may be ignored or error on some platforms
-- [ ] **Tapped notification routing**: Tapped notification response lacks navigation mapping, so users are not routed to the intended screen
+- [x] **Non-standard handler fields**: Use only supported keys in foreground handler
+- [x] **Tapped notification routing**: Implemented navigation mapping for chat, event, and match screens
 
 ### **Caching/Batching**
 - [x] **Unimplemented batch queries**: Implemented `batchQuery` execution using Supabase with common filters
