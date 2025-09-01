@@ -47,8 +47,8 @@ export const blockUser = async (
       return { success: false, message: 'Failed to block user' }
     }
 
-    const result = data[0]
-    return { success: result.success, message: result.message }
+    const result: any = Array.isArray(data) ? data[0] : data
+    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
     console.error('Error blocking user:', error)
     return { success: false, message: 'Something went wrong' }
@@ -69,8 +69,8 @@ export const unblockUser = async (userId: string): Promise<SafetyActionResult> =
       return { success: false, message: 'Failed to unblock user' }
     }
 
-    const result = data[0]
-    return { success: result.success, message: result.message }
+    const result: any = Array.isArray(data) ? data[0] : data
+    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
     console.error('Error unblocking user:', error)
     return { success: false, message: 'Something went wrong' }
@@ -97,8 +97,8 @@ export const reportUser = async (
       return { success: false, message: 'Failed to submit report' }
     }
 
-    const result = data[0]
-    return { success: result.success, message: result.message }
+    const result: any = Array.isArray(data) ? data[0] : data
+    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
     console.error('Error reporting user:', error)
     return { success: false, message: 'Something went wrong' }

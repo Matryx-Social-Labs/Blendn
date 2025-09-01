@@ -61,7 +61,7 @@
 - [ ] **Chat Notifications**: No push notifications for new messages
  - [ ] **Unread counts**: Unread counters are always `0`; implement per-conversation unread state
  - [ ] **Realtime updates**: Chat list doesn’t subscribe to new messages; items don’t refresh until manual reload
- - [ ] **RPC response robustness**: Creation/fetch flows assume array `data[0]`; normalize to handle object/array consistently
+ - [x] **RPC response robustness**: Normalized RPC responses (array/object) in chat and safety flows
 
 ### **Location & Check-ins**
 - [ ] **Check-in History**: No way to see past check-ins

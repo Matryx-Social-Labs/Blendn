@@ -349,9 +349,8 @@ export default function Match() {
         Alert.alert('Error', 'Failed to start conversation')
         return
       }
-
-      const result = data[0]
-      if (result.success) {
+      const result: any = Array.isArray(data) ? data[0] : data
+      if (result?.success) {
         router.push({
           pathname: '/private-chat/[conversationId]' as any,
           params: {
@@ -361,7 +360,7 @@ export default function Match() {
           }
         })
       } else {
-        Alert.alert('Error', result.message)
+        Alert.alert('Error', result?.message || 'Failed to start conversation')
       }
     } catch (error) {
       console.error('Error starting conversation:', error)
