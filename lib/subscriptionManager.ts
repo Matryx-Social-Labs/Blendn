@@ -1,6 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase } from './supabase'
 import { Logger } from './logger'
+import { supabase } from './supabase'
 
 interface SubscriptionConfig {
   id: string

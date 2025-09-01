@@ -5,10 +5,10 @@ import { Animated, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import {
-  initializePushNotifications,
-  removePushTokenFromProfile,
-  setupNotificationListener,
-  setupNotificationResponseListener
+    initializePushNotifications,
+    removePushTokenFromProfile,
+    setupNotificationListener,
+    setupNotificationResponseListener
 } from '../lib/notifications';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';

@@ -109,6 +109,6 @@ export const Logger = {
   }
 }
 
-export type { LogLevel, LogContext }
+export type { LogContext, LogLevel }
 
 

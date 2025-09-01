@@ -1,6 +1,6 @@
+import { Ionicons } from '@expo/vector-icons'
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { Logger } from '../lib/logger'
 
 interface Props {
