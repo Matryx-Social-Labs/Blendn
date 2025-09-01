@@ -55,13 +55,22 @@ export default function Chat() {
 
   // Memoized callbacks to prevent re-creation
   const handleGroupChatPress = useCallback((chat: GroupChat) => {
-    const query = `?roomName=${encodeURIComponent(chat.event_title)}&eventTitle=${encodeURIComponent(chat.event_title)}`
-    router.push(`/chat/${chat.chat_room_id}${query}`)
+    router.push({
+      pathname: '/chat/[id]',
+      params: {
+        id: chat.chat_room_id,
+        roomName: chat.event_title,
+        eventTitle: chat.event_title,
+      } as any,
+    })
   }, [])
 
   const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
     setConversationLastRead(chat.conversation_id).catch(() => {})
-    router.push(`/private-chat/${chat.conversation_id}`)
+    router.push({
+      pathname: '/private-chat/[conversationId]',
+      params: { conversationId: chat.conversation_id } as any,
+    })
   }, [])
 
   const onRefresh = useCallback(async () => {

@@ -15,7 +15,7 @@
  - [x] **Invalid endpoint fallback**: Startup now halts with a clear fatal error when Supabase URL/key are missing
 
 ### **Navigation**
-- [ ] **Route warnings**: Console shows warnings about missing routes
+- [x] **Route warnings**: Replaced string routes with typed object routes for dynamic paths
 - [x] **Deep linking**: Added URL scheme/intent filters and router origin for deep links
 - [ ] **Back button**: Inconsistent back navigation behavior
 

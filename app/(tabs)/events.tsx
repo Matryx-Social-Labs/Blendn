@@ -95,7 +95,7 @@ export default function Events() {
 
   // Memoized callbacks to prevent re-creation
   const handleEventPress = useCallback((event: Event) => {
-    router.push(`/event/${event.id}`)
+    router.push({ pathname: '/event/[id]', params: { id: event.id } as any })
   }, [])
 
   const handleCheckIn = useCallback(async (event: Event) => {
@@ -136,7 +136,7 @@ export default function Events() {
               'Success!',
               'You have been checked in and added to the event chat.',
               [
-                { text: 'Go to Chat', onPress: () => router.push(`/chat/${ensured.chatRoomId}?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event.title)}`) },
+                { text: 'Go to Chat', onPress: () => router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event.title } as any }) },
                 { text: 'OK', style: 'default' }
               ]
             )

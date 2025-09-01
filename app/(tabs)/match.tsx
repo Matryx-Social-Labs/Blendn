@@ -382,7 +382,7 @@ export default function Match() {
         <TouchableOpacity
           style={styles.tile}
           activeOpacity={0.85}
-          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
           <Image
             source={optimized ? ({ uri: optimized } as any) : placeholderImg}
@@ -441,7 +441,7 @@ export default function Match() {
         <TouchableOpacity
           activeOpacity={0.9}
           style={styles.similarCard}
-          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
           <Image
             source={optimized ? ({ uri: optimized } as any) : placeholderImg}
@@ -479,7 +479,7 @@ export default function Match() {
         <TouchableOpacity
           activeOpacity={0.9}
           style={styles.gridTouch}
-          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
           <Image
             source={optimized ? ({ uri: optimized } as any) : placeholderImg}

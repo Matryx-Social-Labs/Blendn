@@ -233,7 +233,7 @@ export function setupNotificationResponseListener(
         switch (data.screen) {
           case 'chat': {
             if (data.conversationId) {
-              router.push(`/private-chat/${encodeURIComponent(String(data.conversationId))}`)
+              router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any })
             } else {
               router.push('/(tabs)/chat')
             }
@@ -241,7 +241,7 @@ export function setupNotificationResponseListener(
           }
           case 'event': {
             if (data.eventId) {
-              router.push(`/event/${encodeURIComponent(String(data.eventId))}`)
+              router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
             } else {
               router.push('/(tabs)/events')
             }

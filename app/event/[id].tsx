@@ -499,8 +499,7 @@ export default function EventDetail() {
                 text: 'Join Chat',
                 onPress: () => {
                   if (ensured?.chatRoomId) {
-                    const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
-                    router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+                    router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event?.title || '' } as any })
                   } else {
                     router.push('/(tabs)/chat' as any)
                   }
@@ -997,8 +996,7 @@ export default function EventDetail() {
             try {
               const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
               if (ensured?.chatRoomId) {
-                const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
-                router.push(`/chat/${ensured.chatRoomId}${query}` as any)
+                router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event?.title || '' } as any })
               } else {
                 router.push('/(tabs)/chat' as any)
               }
