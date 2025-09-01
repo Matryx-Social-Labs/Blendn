@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
-import { PhotoUploadResult, selectAndUploadPhoto } from '../../lib/photoUtils'
+import { deletePhoto, PhotoUploadResult, selectAndUploadPhoto } from '../../lib/photoUtils'
 import { supabase } from '../../lib/supabase'
 
 interface PhotoSlot {
@@ -84,9 +84,31 @@ export default function Photos() {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            setPhotos(prev => prev.map((photo, index) => 
-              index === slotIndex ? { id: photo.id } : photo
-            ))
+            setPhotos(prev => prev.map((photo, index) => {
+              if (index === slotIndex) {
+                const url = photo.url
+                if (url) {
+                  // Best-effort delete in background
+                  deletePhoto(url).catch(() => {})
+                  // Also update DB user_profiles to remove this URL
+                  supabase.auth.getUser().then(async ({ data: { user } }) => {
+                    try {
+                      if (!user) return
+                      const { data: current } = await supabase
+                        .from('user_profiles')
+                        .select('profile_photos')
+                        .eq('user_id', user.id)
+                        .maybeSingle()
+                      const currentPhotos: string[] = Array.isArray((current as any)?.profile_photos) ? (current as any).profile_photos : []
+                      const next = currentPhotos.filter((u: string) => u !== url)
+                      await supabase.from('user_profiles').update({ profile_photos: next }).eq('user_id', user.id)
+                    } catch {}
+                  })
+                }
+                return { id: photo.id }
+              }
+              return photo
+            }))
           }
         }
       ]

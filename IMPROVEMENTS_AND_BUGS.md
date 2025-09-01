@@ -121,7 +121,7 @@
 - [ ] **Conflict Resolution**: No handling of concurrent data changes
 - [ ] **Data Synchronization**: Potential race conditions in real-time updates
  - [ ] **Per-device tokens**: Store push tokens per-device (e.g., `user_devices` table) instead of a single `profiles.push_token`
- - [ ] **Photo deletion**: Removing a photo in onboarding only clears local state; also delete from storage and update DB atomically
+ - [x] **Photo deletion**: Removing a photo now deletes from storage and updates DB
 
 ---
 
