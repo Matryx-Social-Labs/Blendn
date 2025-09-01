@@ -24,7 +24,7 @@
 - [ ] **Tapped notification routing**: Tapped notification response lacks navigation mapping, so users are not routed to the intended screen
 
 ### **Caching/Batching**
-- [ ] **Unimplemented batch queries**: `batchQuery` in `lib/queryCache.ts` throws "Query execution not implemented" which will crash if used inadvertently
+- [x] **Unimplemented batch queries**: Implemented `batchQuery` execution using Supabase with common filters
 
 ### **Onboarding Completion**
 - [ ] **No explicit navigation**: Completing onboarding updates the DB but does not navigate; relies on outer layout detection, which can leave users stuck if a rerender doesn’t occur

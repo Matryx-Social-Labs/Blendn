@@ -1,4 +1,5 @@
 import { Logger } from './logger'
+import { supabase, runQuery } from './supabase'
 
 interface CacheEntry<T> {
   data: T
@@ -195,13 +196,85 @@ class QueryCache {
    * Execute individual query (placeholder)
    */
   private async executeQuery(query: BatchQuery): Promise<any> {
-    // This is a placeholder - would be implemented with actual Supabase logic
-    Logger.debug('database', 'Executing query', { 
-      table: query.table, 
-      select: query.select 
+    Logger.debug('database', 'Executing batch query', {
+      table: query.table,
+      select: query.select,
+      filters: Object.keys(query.filters || {})
     })
-    
-    throw new Error('Query execution not implemented')
+
+    return runQuery(async () => {
+      let q: any = supabase.from(query.table).select(query.select)
+
+      const f = query.filters || {}
+
+      // Support common filter shapes
+      if (f.eq && typeof f.eq === 'object') {
+        for (const [col, val] of Object.entries(f.eq)) {
+          q = q.eq(col, val as any)
+        }
+      }
+      if (f.neq && typeof f.neq === 'object') {
+        for (const [col, val] of Object.entries(f.neq)) {
+          q = q.neq(col, val as any)
+        }
+      }
+      if (f.in && typeof f.in === 'object') {
+        for (const [col, arr] of Object.entries(f.in)) {
+          q = q.in(col, Array.isArray(arr) ? arr : [arr])
+        }
+      }
+      if (f.gte && typeof f.gte === 'object') {
+        for (const [col, val] of Object.entries(f.gte)) {
+          q = q.gte(col, val as any)
+        }
+      }
+      if (f.lte && typeof f.lte === 'object') {
+        for (const [col, val] of Object.entries(f.lte)) {
+          q = q.lte(col, val as any)
+        }
+      }
+      if (f.like && typeof f.like === 'object') {
+        for (const [col, val] of Object.entries(f.like)) {
+          q = q.like(col, String(val))
+        }
+      }
+      if (f.ilike && typeof f.ilike === 'object') {
+        for (const [col, val] of Object.entries(f.ilike)) {
+          q = q.ilike(col, String(val))
+        }
+      }
+      if (f.is && typeof f.is === 'object') {
+        for (const [col, val] of Object.entries(f.is)) {
+          q = q.is(col, val as any)
+        }
+      }
+      if (f.order) {
+        const orders = Array.isArray(f.order) ? f.order : [f.order]
+        for (const o of orders) {
+          if (o && typeof o === 'object' && 'column' in o) {
+            q = q.order((o as any).column, {
+              ascending: (o as any).ascending ?? true,
+              nullsFirst: (o as any).nullsFirst ?? false
+            })
+          }
+        }
+      }
+      if (typeof f.limit === 'number') {
+        q = q.limit(f.limit)
+      }
+      if (typeof f.offset === 'number') {
+        q = q.range(f.offset, f.limit ? f.offset + f.limit - 1 : f.offset + 99)
+      }
+      if (f.single) {
+        q = q.single()
+      } else if (f.maybeSingle) {
+        q = q.maybeSingle()
+      }
+
+      const { data, error } = await q
+      if (error) throw error
+      return data
+    })
   }
 }
 
