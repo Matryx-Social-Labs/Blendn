@@ -6,16 +6,28 @@
 - [ ] **Infinite auth loops**: App sometimes gets stuck in auth checking state
 - [ ] **Session persistence**: User gets logged out randomly on app restart
 - [ ] **Onboarding bypass**: Possible to skip onboarding steps and reach main app
+ - [x] **Missing Supabase envs**: If `EXPO_PUBLIC_SUPABASE_URL/ANON_KEY` are missing, the app now fails fast with a clear error instead of using an invalid fallback
 
 ### **Database Connection**
 - [ ] **Column name mismatch**: Some SQL functions still reference old column names
 - [ ] **RLS policy gaps**: Users might access data they shouldn't
 - [ ] **Connection timeouts**: No retry logic for failed database calls
+ - [x] **Invalid endpoint fallback**: Startup now halts with a clear fatal error when Supabase URL/key are missing
 
 ### **Navigation**
 - [ ] **Route warnings**: Console shows warnings about missing routes
 - [ ] **Deep linking**: App doesn't handle deep links properly
 - [ ] **Back button**: Inconsistent back navigation behavior
+
+### **Notifications**
+- [ ] **Non-standard handler fields**: Foreground handler uses `shouldShowBanner`/`shouldShowList` (SDK 53) cast as `any`, which may be ignored or error on some platforms
+- [ ] **Tapped notification routing**: Tapped notification response lacks navigation mapping, so users are not routed to the intended screen
+
+### **Caching/Batching**
+- [ ] **Unimplemented batch queries**: `batchQuery` in `lib/queryCache.ts` throws "Query execution not implemented" which will crash if used inadvertently
+
+### **Onboarding Completion**
+- [ ] **No explicit navigation**: Completing onboarding updates the DB but does not navigate; relies on outer layout detection, which can leave users stuck if a rerender doesn’t occur
 
 ---
 
@@ -37,6 +49,7 @@
 - [ ] **Event Favorites**: Can't bookmark interesting events
 - [ ] **Real Distance**: Distance calculation returns 0 (placeholder)
 - [ ] **Event Categories**: No category filtering system
+ - [ ] **Check-in accuracy enforcement**: Check-in uses hardcoded fallback coordinates when permission is denied; enforce permission and a minimum GPS accuracy threshold before allowing check-in
 
 ### **Chat & Messaging**
 - [ ] **Private Messaging**: Not implemented yet (shows "Coming Soon")
@@ -46,6 +59,9 @@
 - [ ] **Read Receipts**: Can't see if messages were read
 - [ ] **Message Search**: No way to search chat history
 - [ ] **Chat Notifications**: No push notifications for new messages
+ - [ ] **Unread counts**: Unread counters are always `0`; implement per-conversation unread state
+ - [ ] **Realtime updates**: Chat list doesn’t subscribe to new messages; items don’t refresh until manual reload
+ - [ ] **RPC response robustness**: Creation/fetch flows assume array `data[0]`; normalize to handle object/array consistently
 
 ### **Location & Check-ins**
 - [ ] **Check-in History**: No way to see past check-ins
@@ -64,6 +80,7 @@
 - [ ] **Onboarding Flow**: Placeholder data instead of real input collection
 - [ ] **Pull to Refresh**: Missing on many list screens
 - [ ] **Infinite Scroll**: Events list doesn't paginate
+ - [ ] **Accessibility labels**: Add `accessibilityLabel` and roles for tappables; improve contrast on dark backgrounds
 
 ### **Visual Design**
 - [ ] **Dark Mode**: No dark theme option
@@ -88,18 +105,23 @@
 - [ ] **Bundle Size**: App bundle could be optimized
 - [ ] **Memory Leaks**: Real-time subscriptions might not clean up properly
 - [ ] **Database Optimization**: Some queries could be more efficient
+ - [ ] **Enable image transforms**: Turn on Supabase Image Transformations in production and prefer WebP where supported
+ - [ ] **Paginate carousels**: Carousels render full arrays; paginate/limit to reduce work on mount
 
 ### **Real-time Features**
 - [ ] **Connection Status**: No indication of real-time connection status
 - [ ] **Retry Logic**: Failed real-time messages don't retry
 - [ ] **Subscription Cleanup**: Memory leaks from unclosed subscriptions
 - [ ] **Offline Queueing**: Messages sent offline don't queue for later
+ - [ ] **Centralized teardown**: Ensure all channels are removed on unmount; standardize unsubscribe to prevent leaks across screens
 
 ### **Data Management**
 - [ ] **Data Validation**: Frontend validation missing for many inputs
 - [ ] **Optimistic Updates**: UI doesn't update optimistically
 - [ ] **Conflict Resolution**: No handling of concurrent data changes
 - [ ] **Data Synchronization**: Potential race conditions in real-time updates
+ - [ ] **Per-device tokens**: Store push tokens per-device (e.g., `user_devices` table) instead of a single `profiles.push_token`
+ - [ ] **Photo deletion**: Removing a photo in onboarding only clears local state; also delete from storage and update DB atomically
 
 ---
 
@@ -117,6 +139,7 @@
 - [ ] **Input Sanitization**: Messages could contain malicious content
 - [ ] **API Security**: No request signing or advanced authentication
 - [ ] **Data Encryption**: Sensitive data might not be encrypted at rest
+ - [ ] **Secrets in config**: Google client IDs are committed in `app.json`/code; move to secure env configuration
 
 ---
 
@@ -128,6 +151,7 @@
 - [ ] **App Store Optimization**: No metadata for app stores
 - [ ] **Device Permissions**: Permission requests could be more explanatory
 - [ ] **Background App Refresh**: No background updates for messages
+ - [ ] **Push token saving**: Avoid saving development/simulator tokens to user profile; only persist real device tokens
 
 ### **Analytics & Monitoring**
 - [ ] **Crash Reporting**: No crash analytics (Sentry, Bugsnag)
@@ -142,6 +166,7 @@
 - [ ] **Database Migrations**: No versioning of database changes
 - [ ] **Backup Strategy**: No automated database backups
 - [ ] **Monitoring**: No uptime or performance monitoring
+ - [ ] **Config hygiene**: Move Google Sign-In client IDs and similar values to env/remote config; avoid hardcoding in `app.json`/source
 
 ---
 

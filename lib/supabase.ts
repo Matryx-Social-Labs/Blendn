@@ -9,15 +9,15 @@ import { Logger } from './logger'
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-// Do not crash app on missing configuration; proceed with safe fallbacks and clear logs
-const missingSupabaseConfig = !supabaseUrl || !supabaseAnonKey
-if (missingSupabaseConfig) {
-  console.error('❌ Missing Supabase configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+// Enforce strict configuration: fail fast with a clear error instead of using bogus fallbacks
+if (!supabaseUrl || !supabaseAnonKey) {
+  const message = 'Missing Supabase configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.'
+  console.error(`❌ ${message}`)
+  throw new Error(message)
 }
 
-// Use benign fallbacks so the app can render without crashing. Any network call will fail clearly in logs.
-const clientUrl = supabaseUrl || 'https://invalid.supabase.co'
-const clientKey = supabaseAnonKey || 'invalid-key'
+const clientUrl = supabaseUrl
+const clientKey = supabaseAnonKey
 
 // Enhanced request queue to prevent network storms and database overload
 class RequestQueue {
