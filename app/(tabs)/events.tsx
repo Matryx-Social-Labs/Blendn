@@ -175,7 +175,7 @@ export default function Events() {
         .is('checked_out_at', null)
 
       if (error) {
-        Logger.error('❌ [CHECKED_IN]', 'Error fetching active check-ins', { error })
+        Logger.error('events', 'Error fetching active check-ins', { error })
         setCheckedInEvents([])
         return
       }
@@ -193,7 +193,7 @@ export default function Events() {
         .in('id', eventIds)
 
       if (eventsError) {
-        Logger.error('❌ [CHECKED_IN]', 'Error fetching events', { error: eventsError })
+        Logger.error('events', 'Error fetching events', { error: eventsError })
         setCheckedInEvents([])
         return
       }
@@ -203,7 +203,7 @@ export default function Events() {
       setCheckedInEvents(sorted as Event[])
       Logger.journey('checkin', 'loadActiveCheckins:success', { count: sorted.length })
     } catch (e) {
-      Logger.error('💥 [CHECKED_IN]', 'Unexpected error', { error: e as any })
+      Logger.error('events', 'Unexpected error', { error: e as any })
       setCheckedInEvents([])
     }
   }
@@ -318,7 +318,7 @@ export default function Events() {
       setCheckinStatuses(statusMap)
       Logger.journey('checkin', 'statusBatch:success', { count: results.length })
     } catch (error) {
-      Logger.error('💥 [CHECKIN_STATUS]', 'Unexpected error', { error: error as any })
+      Logger.error('events', 'Unexpected error', { error: error as any })
       setCheckinStatuses({})
     }
   }
@@ -330,7 +330,7 @@ export default function Events() {
       if (status !== 'granted') {
         const fallback = { latitude: 19.076, longitude: 72.8777 }
         setUserLocation(fallback)
-        Logger.warn('📍 [LOCATION]', 'permission:notGrantedUsingFallback', { fallback })
+        Logger.warn('events', 'permission:notGrantedUsingFallback', { fallback })
         return
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
@@ -340,7 +340,7 @@ export default function Events() {
     } catch (error) {
       const fallback = { latitude: 19.076, longitude: 72.8777 }
       setUserLocation(fallback)
-      Logger.warn('📍 [LOCATION]', 'quietLocation:errorUsingFallback', { error: error as any, fallback })
+      Logger.warn('events', 'quietLocation:errorUsingFallback', { error: error as any, fallback })
     }
   }
 
@@ -358,7 +358,7 @@ export default function Events() {
         })
 
       if (error) {
-        Logger.error('❌ [PROXIMITY]', 'Error checking proximity', { error })
+        Logger.error('events', 'Error checking proximity', { error })
         return
       }
 
@@ -378,7 +378,7 @@ export default function Events() {
       setProximityData(proximityMap)
       Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: proximityData?.nearby_events?.length || 0 })
     } catch (error) {
-      Logger.error('💥 [PROXIMITY]', 'Proximity check failed', { error: error as any })
+      Logger.error('events', 'Proximity check failed', { error: error as any })
     }
   }
 
@@ -409,7 +409,7 @@ export default function Events() {
         .order('start_time', { ascending: true })
 
       if (error) {
-        Logger.error('❌ [EVENTS]', 'Error fetching events', { error })
+        Logger.error('events', 'Error fetching events', { error })
         Alert.alert('Error', 'Failed to load events')
         return
       }
@@ -417,7 +417,7 @@ export default function Events() {
       setEvents(eventsData || [])
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
-      Logger.error('💥 [EVENTS]', 'Unexpected error', { error: error as any })
+      Logger.error('events', 'Unexpected error', { error: error as any })
       Alert.alert('Error', 'Failed to load events')
     } finally {
       setLoading(false)
@@ -435,7 +435,7 @@ export default function Events() {
       })
       setInterestStatuses(statuses)
     } catch (e) {
-      console.warn('⚠️ [EVENTS] loadInterestData failed:', e)
+      Logger.warn('events', 'loadInterestData failed', { error: e })
       setInterestStatuses({})
     }
   }
@@ -508,7 +508,7 @@ export default function Events() {
         })
 
       if (error) {
-        Logger.error('❌ [CHECK_IN]', 'RPC error', { error })
+        Logger.error('events', 'RPC error', { error })
         Alert.alert('Check-in Failed', error.message)
         return
       }
@@ -535,11 +535,11 @@ export default function Events() {
         // Refresh the checkin status for this event
         loadCheckinStatusesBatch()
       } else {
-        Logger.warn('⚠️ [CHECK_IN]', 'Failed', { message: data?.message })
+        Logger.warn('events', 'Failed', { message: data?.message })
         Alert.alert('Check-in Failed', data?.message || 'Unknown error')
       }
     } catch (error) {
-      Logger.error('💥 [CHECK_IN]', 'Unexpected error', { error: error as any })
+      Logger.error('events', 'Unexpected error', { error: error as any })
       Alert.alert('Error', 'Failed to check in')
     }
   }
@@ -1057,7 +1057,9 @@ export default function Events() {
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
-          <Image source={require('../../assets/images/icon.png')} style={styles.avatar} />
+          <View style={[styles.avatar, styles.defaultAvatar]}>
+            <Ionicons name="person" size={24} color="#666" />
+          </View>
         )}
         <Text style={styles.topBarTitle}>Blend’n</Text>
         <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
@@ -1588,6 +1590,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+  },
+  defaultAvatar: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarTitle: {
     color: '#FFFFFF',

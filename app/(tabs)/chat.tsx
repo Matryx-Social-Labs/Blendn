@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
+import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 
@@ -62,7 +63,7 @@ export default function Chat() {
 
     try {
       setLoading(true)
-      console.log('🔍 [CHAT] Loading chats for tab:', activeTab);
+      Logger.debug('chat', `Loading chats for tab: ${activeTab}`)
       
       if (activeTab === 'group') {
         await loadGroupChats()
@@ -72,7 +73,7 @@ export default function Chat() {
       await loadMessageRequests()
       
     } catch (error) {
-      console.error('💥 [CHAT] Error loading chats:', error)
+      Logger.error('chat', 'Error loading chats', { error })
     } finally {
       setLoading(false)
     }
@@ -87,13 +88,13 @@ export default function Chat() {
       setIncomingRequests(Array.isArray(inc.data) ? inc.data : [])
       setOutgoingRequests(Array.isArray(out.data) ? out.data : [])
     } catch (e) {
-      console.error('[CHAT] loadMessageRequests failed:', e)
+      Logger.error('chat', 'loadMessageRequests failed', { error: e })
     }
   }
 
   const loadGroupChats = async () => {
     try {
-      console.log('🔍 [CHAT] Fetching group chats...')
+      Logger.debug('chat', 'Fetching group chats...')
       
       // Get user's chat participants first (they can only see their own)
       const { data: userParticipations, error: participantError } = await supabase
@@ -102,7 +103,7 @@ export default function Chat() {
         .eq('user_id', user.id)
 
       if (participantError) {
-        console.error('❌ [CHAT] Error fetching user participations:', participantError)
+        Logger.error('chat', 'Error fetching user participations', { error: participantError })
         setGroupChats([])
         return
       }
@@ -129,7 +130,7 @@ export default function Chat() {
         .in('id', chatRoomIds)
 
       if (roomError) {
-        console.error('❌ [CHAT] Error fetching chat rooms:', roomError)
+        Logger.error('chat', 'Error fetching chat rooms', { error: roomError })
         setGroupChats([])
         return
       }
@@ -140,7 +141,7 @@ export default function Chat() {
         .select('chat_room_id')
         .in('chat_room_id', chatRoomIds)
       if (countError) {
-        console.warn('⚠️ [CHAT] Could not fetch participant counts:', countError)
+        Logger.warn('chat', 'Could not fetch participant counts', { error: countError })
       }
       const countMap = new Map<string, number>()
       ;(counts || []).forEach((row: any) => {
@@ -161,16 +162,16 @@ export default function Chat() {
       })) || []
 
       setGroupChats(groupChatData)
-      console.log(`✅ [CHAT] Loaded ${groupChatData.length} group chats`)
+      Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
     } catch (error) {
-      console.error('💥 [CHAT] Error loading group chats:', error)
+      Logger.error('chat', 'Error loading group chats', { error })
       setGroupChats([])
     }
   }
 
   const loadPersonalChats = async () => {
     try {
-      console.log('🔍 [CHAT] Fetching personal chats...')
+      Logger.debug('chat', 'Fetching personal chats...')
       
       // Get only conversations where the current user is part of the match (server-side filter)
       const { data: conversations, error: conversationError } = await supabase
@@ -189,7 +190,7 @@ export default function Chat() {
         .order('last_message_at', { ascending: false })
 
       if (conversationError) {
-        console.error('❌ [CHAT] Error fetching conversations:', conversationError)
+        Logger.error('chat', 'Error fetching conversations', { error: conversationError })
         setPersonalChats([])
         return
       }
@@ -226,7 +227,7 @@ export default function Chat() {
           .in('user_id', otherUserIds)
 
         if (profilesError) {
-          console.error('❌ [CHAT] Error fetching user_profiles:', profilesError)
+          Logger.error('chat', 'Error fetching user_profiles', { error: profilesError })
         } else {
           profilesById = (profiles || []).reduce((acc: Record<string, { user_id: string, display_name: string | null, avatar_url: string | null }>, p: any) => {
             // Prefer profile_photos first item, then photos first item if present
@@ -253,7 +254,7 @@ export default function Chat() {
           .order('created_at', { ascending: false })
 
         if (msgErr) {
-          console.error('❌ [CHAT] Error fetching last messages:', msgErr)
+          Logger.error('chat', 'Error fetching last messages', { error: msgErr })
         } else if (Array.isArray(msgs)) {
           for (const m of msgs as any[]) {
             if (!lastMessageByConversationId[m.conversation_id]) {
@@ -283,9 +284,9 @@ export default function Chat() {
       })
 
       setPersonalChats(userConversations)
-      console.log(`✅ [CHAT] Loaded ${userConversations.length} personal chats`)
+      Logger.info('chat', `Loaded ${userConversations.length} personal chats`)
     } catch (error) {
-      console.error('💥 [CHAT] Error loading personal chats:', error)
+      Logger.error('chat', 'Error loading personal chats', { error })
       setPersonalChats([])
     }
   }

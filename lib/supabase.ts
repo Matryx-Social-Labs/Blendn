@@ -19,18 +19,56 @@ if (missingSupabaseConfig) {
 const clientUrl = supabaseUrl || 'https://invalid.supabase.co'
 const clientKey = supabaseAnonKey || 'invalid-key'
 
-// Simple request queue to prevent network storms
+// Enhanced request queue to prevent network storms and database overload
 class RequestQueue {
-  private queue: Array<{ request: () => Promise<any>, resolve: (value: any) => void, reject: (error: any) => void }> = []
+  private queue: Array<{ 
+    request: () => Promise<any>, 
+    resolve: (value: any) => void, 
+    reject: (error: any) => void,
+    priority: number,
+    timestamp: number,
+    type: 'query' | 'rpc' | 'auth'
+  }> = []
   private processing = false
   private maxConcurrent = 3
   private currentRequests = 0
+  private lastProcessTime = 0
+  private debounceMs = 50
+  private requestCount = 0
+  private errorCount = 0
 
-  async add<T>(request: () => Promise<T>): Promise<T> {
+  async add<T>(
+    request: () => Promise<T>, 
+    priority: number = 5,
+    type: 'query' | 'rpc' | 'auth' = 'query'
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ request, resolve, reject })
-      this.processQueue()
+      this.queue.push({ 
+        request, 
+        resolve, 
+        reject, 
+        priority, 
+        timestamp: Date.now(),
+        type
+      })
+      
+      // Sort by priority (lower number = higher priority)
+      this.queue.sort((a, b) => a.priority - b.priority)
+      
+      this.scheduleProcessing()
     })
+  }
+
+  private scheduleProcessing() {
+    const now = Date.now()
+    const timeSinceLastProcess = now - this.lastProcessTime
+    
+    if (timeSinceLastProcess < this.debounceMs) {
+      // Debounce rapid requests
+      setTimeout(() => this.processQueue(), this.debounceMs - timeSinceLastProcess)
+    } else {
+      this.processQueue()
+    }
   }
 
   private async processQueue() {
@@ -39,6 +77,9 @@ class RequestQueue {
     }
 
     this.processing = true
+    this.lastProcessTime = Date.now()
+
+    Logger.debug('database', `Processing queue: ${this.queue.length} pending, ${this.currentRequests} active`)
 
     while (this.queue.length > 0 && this.currentRequests < this.maxConcurrent) {
       const item = this.queue.shift()
@@ -51,17 +92,71 @@ class RequestQueue {
     this.processing = false
   }
 
-  private async executeRequest(item: { request: () => Promise<any>, resolve: (value: any) => void, reject: (error: any) => void }) {
+  private async executeRequest(item: {
+    request: () => Promise<any>, 
+    resolve: (value: any) => void, 
+    reject: (error: any) => void,
+    priority: number,
+    timestamp: number,
+    type: 'query' | 'rpc' | 'auth'
+  }) {
+    const requestId = ++this.requestCount
+    const startTime = Date.now()
+    
     try {
+      Logger.debug('database', `Executing ${item.type} request #${requestId}`, {
+        priority: item.priority,
+        queueTime: startTime - item.timestamp
+      })
+      
       const result = await item.request()
+      
+      Logger.debug('database', `Request #${requestId} completed`, {
+        duration: Date.now() - startTime,
+        type: item.type
+      })
+      
       item.resolve(result)
     } catch (error) {
+      this.errorCount++
+      
+      Logger.error('database', `Request #${requestId} failed`, {
+        error,
+        duration: Date.now() - startTime,
+        type: item.type,
+        errorRate: this.errorCount / this.requestCount
+      })
+      
       item.reject(error)
     } finally {
       this.currentRequests--
-      // Process next batch
-      setTimeout(() => this.processQueue(), 100)
+      // Process next batch with a small delay to prevent overwhelming
+      setTimeout(() => this.processQueue(), 10)
     }
+  }
+
+  getStats() {
+    return {
+      queueLength: this.queue.length,
+      activeRequests: this.currentRequests,
+      totalRequests: this.requestCount,
+      errorCount: this.errorCount,
+      errorRate: this.requestCount > 0 ? this.errorCount / this.requestCount : 0
+    }
+  }
+
+  // Clear queue on auth changes or critical errors
+  clear() {
+    Logger.warn('database', 'Clearing request queue', this.getStats())
+    
+    // Reject all pending requests
+    this.queue.forEach(item => {
+      item.reject(new Error('Request queue cleared'))
+    })
+    
+    this.queue = []
+    this.currentRequests = 0
+    this.processing = false
   }
 }
 
@@ -116,11 +211,33 @@ export const supabase = createClient(clientUrl, clientKey, {
   },
 })
 
-// Simple request queue to prevent concurrent request storms
+// Enhanced request queue with priority support
 export const queuedRequest = {
-  async add<T>(queryFn: () => Promise<T>): Promise<T> {
-    return requestQueue.add(queryFn)
-  }
+  async add<T>(
+    queryFn: () => Promise<T>, 
+    priority: number = 5,
+    type: 'query' | 'rpc' | 'auth' = 'query'
+  ): Promise<T> {
+    return requestQueue.add(queryFn, priority, type)
+  },
+  
+  // High priority for auth requests
+  async addAuth<T>(queryFn: () => Promise<T>): Promise<T> {
+    return requestQueue.add(queryFn, 1, 'auth')
+  },
+  
+  // Medium priority for critical queries
+  async addCritical<T>(queryFn: () => Promise<T>): Promise<T> {
+    return requestQueue.add(queryFn, 2, 'query')
+  },
+  
+  // Low priority for background operations
+  async addBackground<T>(queryFn: () => Promise<T>): Promise<T> {
+    return requestQueue.add(queryFn, 8, 'query')
+  },
+  
+  getStats: () => requestQueue.getStats(),
+  clear: () => requestQueue.clear()
 }
 
 // Tells Supabase Auth to continuously refresh the session automatically
@@ -139,21 +256,23 @@ const registerAppStateListener = () => {
     try { appStateSubscription?.remove?.() } catch {}
     const sub = AppState.addEventListener('change', (state) => {
       try {
-        console.log('🔄 [APP_STATE] State changed to:', state)
+        Logger.info('general', `App state changed to: ${state}`)
         if (state === 'active') {
           supabase.auth.startAutoRefresh()
         } else {
           supabase.auth.stopAutoRefresh()
+          // Clear request queue on background to prevent stale requests
+          queuedRequest.clear()
         }
       } catch (error) {
-        console.error('❌ [APP_STATE] Error handling state change:', error)
+        Logger.error('general', 'Error handling app state change', { error })
       }
     })
     appStateSubscription = sub as any
     appStateListenerRegistered = true
-    console.log('✅ [APP_STATE] Listener registered successfully')
+    Logger.info('general', 'App state listener registered successfully')
   } catch (error) {
-    console.error('❌ [APP_STATE] Failed to register listener:', error)
+    Logger.error('general', 'Failed to register app state listener', { error })
   }
 }
 
@@ -165,7 +284,7 @@ export const supabaseWithTimeout = {
   async query<T>(queryFn: () => Promise<any>, timeoutMs: number = 15000, retries: number = 2): Promise<T> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        console.log(`🔍 [TIMEOUT_WRAPPER] Query attempt ${attempt + 1}/${retries + 1}`)
+        Logger.debug('database', `Query attempt ${attempt + 1}/${retries + 1}`, { timeoutMs })
         
         const result = await Promise.race([
           queryFn(),
@@ -174,16 +293,16 @@ export const supabaseWithTimeout = {
           )
         ]) as T
         
-        console.log('✅ [TIMEOUT_WRAPPER] Query successful')
+        Logger.debug('database', 'Query successful')
         return result
       } catch (error) {
-        console.error(`❌ [TIMEOUT_WRAPPER] Attempt ${attempt + 1} failed:`, error)
+        Logger.warn('database', `Attempt ${attempt + 1} failed`, { error })
         if (attempt === retries) {
           throw error
         }
         // Wait before retry with exponential backoff
         const waitTime = 1000 * Math.pow(2, attempt)
-        console.log(`⏳ [TIMEOUT_WRAPPER] Waiting ${waitTime}ms before retry`)
+        Logger.debug('database', `Waiting ${waitTime}ms before retry`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
@@ -224,17 +343,17 @@ export const AuthHelper = {
   // Get current user from session (cached)
   async getCurrentUser() {
     try {
-      console.log('🔍 [AUTH_HELPER] Getting current user from session')
+      Logger.debug('auth', 'Getting current user from session')
       // This is a synchronous method that tries to get the user from the current session
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error) {
-        console.error('❌ [AUTH_HELPER] Session error:', error)
+        Logger.error('auth', 'Session error', { error })
         return null
       }
-      console.log('✅ [AUTH_HELPER] Session retrieved:', !!session?.user)
+      Logger.debug('auth', 'Session retrieved', { hasUser: !!session?.user })
       return session?.user || null
     } catch (error) {
-      console.error('❌ [AUTH_HELPER] Error getting current user:', error)
+      Logger.error('auth', 'Error getting current user', { error })
       return null
     }
   },
@@ -243,7 +362,7 @@ export const AuthHelper = {
   async getUserWithFallback(timeoutMs: number = 10000, retries: number = 2) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        console.log(`🔍 [AUTH_HELPER] Getting user with fallback attempt ${attempt + 1}/${retries + 1}`)
+        Logger.debug('auth', `Getting user with fallback attempt ${attempt + 1}/${retries + 1}`)
         
         // Try to get user with timeout
         const result = await Promise.race([
@@ -253,17 +372,17 @@ export const AuthHelper = {
           )
         ]) as any
 
-        console.log('✅ [AUTH_HELPER] User retrieved successfully')
+        Logger.debug('auth', 'User retrieved successfully')
         return result
       } catch (error) {
-        console.error(`❌ [AUTH_HELPER] Attempt ${attempt + 1} failed:`, error)
+        Logger.warn('auth', `Attempt ${attempt + 1} failed`, { error })
         if (attempt === retries) {
-          console.error('❌ [AUTH_HELPER] All attempts failed, returning null user')
+          Logger.error('auth', 'All attempts failed, returning null user')
           return { data: { user: null }, error }
         }
         // Wait before retry with exponential backoff
         const waitTime = 1000 * Math.pow(2, attempt)
-        console.log(`⏳ [AUTH_HELPER] Waiting ${waitTime}ms before retry`)
+        Logger.debug('auth', `Waiting ${waitTime}ms before retry`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
@@ -359,12 +478,12 @@ export const EventCheckout = {
       try {
         const rpcRes: any = await supabase.rpc('checkout_user_from_event', { p_event_id: eventId })
         if (rpcRes?.error) {
-          Logger.warn('CHECKOUT_RPC', 'ensureNoActive:rpcFailed', { error: rpcRes.error?.message })
+          Logger.warn('database', 'ensureNoActive:rpcFailed', { error: rpcRes.error?.message })
         } else {
           Logger.journey('checkin', 'ensureNoActive:rpcOk')
         }
       } catch (e: any) {
-        Logger.warn('CHECKOUT_RPC', 'ensureNoActive:rpcException', { error: e?.message || String(e) })
+        Logger.warn('database', 'ensureNoActive:rpcException', { error: e?.message || String(e) })
       }
 
       // Fallback: hard update any lingering active rows
@@ -376,7 +495,7 @@ export const EventCheckout = {
         .eq('event_id', eventId)
         .is('checked_out_at', null)
       if (updateErr) {
-        Logger.warn('CHECKOUT_FALLBACK', 'ensureNoActive:updateFailed', { error: updateErr.message })
+        Logger.warn('database', 'ensureNoActive:updateFailed', { error: updateErr.message })
       } else {
         Logger.journey('checkin', 'ensureNoActive:updateOk')
       }
@@ -391,14 +510,14 @@ export const EventCheckout = {
         .limit(1)
 
       if (error) {
-        Logger.error('CHECKOUT_VERIFY', 'ensureNoActive:verifyError', { error: error.message })
+        Logger.error('database', 'ensureNoActive:verifyError', { error: error.message })
         return { success: false, message: error.message }
       }
       const noneLeft = !Array.isArray(stillActive) || stillActive.length === 0
       Logger.journey('checkin', 'ensureNoActive:verify', { noneLeft })
       return { success: noneLeft, message: noneLeft ? 'No active check-ins' : 'Active check-in remains' }
     } catch (e: any) {
-      Logger.error('CHECKOUT_ENSURE', 'ensureNoActive:exception', { error: e?.message || String(e) })
+      Logger.error('database', 'ensureNoActive:exception', { error: e?.message || String(e) })
       return { success: false, message: e?.message || 'Unknown error' }
     }
   }

@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
+import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
@@ -104,7 +105,7 @@ export default function Match() {
       await loadActiveEventAndAttendees(user.id)
       await loadMatches(user.id)
     } catch (e) {
-      console.error('💥 [MATCH_INIT] Unexpected error:', e)
+      Logger.error('match', 'Unexpected error during initialization', { error: e })
       setError('Failed to load')
     } finally {
       setLoading(false)
@@ -128,7 +129,7 @@ export default function Match() {
         .order('last_message_at', { ascending: false })
 
       if (convError) {
-        console.error('❌ [MATCHES] Error fetching conversations:', convError)
+        Logger.error('match', 'Error fetching conversations', { error: convError })
         setMatches([])
         return
       }
@@ -189,7 +190,7 @@ export default function Match() {
 
       setMatches(matched)
     } catch (e) {
-      console.error('💥 [MATCHES] Failed to load matches:', e)
+      Logger.error('match', 'Failed to load matches', { error: e })
       setMatches([])
     }
   }
@@ -206,7 +207,7 @@ export default function Match() {
         .limit(1)
 
       if (checkinsError) {
-        console.error('❌ [MATCH] Error fetching user check-ins:', checkinsError)
+        Logger.error('match', 'Error fetching user check-ins', { error: checkinsError })
         setEventInfo(null)
         setAttendees([])
         return
@@ -237,7 +238,7 @@ export default function Match() {
         const blocked = await getBlockedUsers()
         blockedIds = new Set(blocked.map(b => b.blocked_id))
       } catch (blockErr) {
-        console.warn('⚠️ [MATCH] Failed to load blocked users:', blockErr)
+        Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
       }
 
       // Prefer SECURITY DEFINER RPC to bypass RLS for attendee listing
@@ -245,7 +246,7 @@ export default function Match() {
         .rpc('get_event_attendees', { p_event_id: activeEventId })
 
       if (rpcError) {
-        console.warn('⚠️ [MATCH] get_event_attendees RPC failed, falling back to direct selects:', rpcError.message)
+        Logger.warn('match', 'get_event_attendees RPC failed, falling back to direct selects', { error: rpcError.message })
       }
 
       if (rpcRows && Array.isArray(rpcRows)) {
@@ -276,7 +277,7 @@ export default function Match() {
         .is('checked_out_at', null)
 
       if (attendeesError || !attendeeCheckins) {
-        console.error('❌ [MATCH] Fallback attendees select failed:', attendeesError)
+        Logger.error('match', 'Fallback attendees select failed', { error: attendeesError })
         setAttendees([])
         return
       }
@@ -331,7 +332,7 @@ export default function Match() {
 
       setAttendees(attendeeProfiles)
     } catch (e) {
-      console.error('💥 [MATCH] Failed to load event attendees:', e)
+      Logger.error('match', 'Failed to load event attendees', { error: e })
       setAttendees([])
     }
   }

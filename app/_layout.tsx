@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import {
   initializePushNotifications,
@@ -112,10 +113,16 @@ export default function RootLayout() {
   }, [user, loading, pathname]);
 
   return (
-    <GradientOverlayProvider>
-      <View style={{ flex: 1 }}>
-        <BackgroundGradient />
-        <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        // Could send error to crash reporting service here
+        console.error('Root layout error:', error, errorInfo)
+      }}
+    >
+      <GradientOverlayProvider>
+        <View style={{ flex: 1 }}>
+          <BackgroundGradient />
+          <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen 
         name="(tabs)" 
@@ -179,9 +186,10 @@ export default function RootLayout() {
           headerShown: false
         }} 
       />
-        </Stack>
-      </View>
-    </GradientOverlayProvider>
+          </Stack>
+        </View>
+      </GradientOverlayProvider>
+    </ErrorBoundary>
   );
 }
 
