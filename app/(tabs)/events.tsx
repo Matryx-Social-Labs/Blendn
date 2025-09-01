@@ -20,6 +20,9 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { VirtualizedList } from '../../components/VirtualizedList'
+import OptimizedImage from '../../components/OptimizedImage'
+import EventCard from '../../components/EventCard'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -62,6 +65,132 @@ export default function Events() {
   const [userCity, setUserCity] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  // Memoized style objects to prevent re-creation
+  const sectionBgStyle = useMemo(() => ({
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    top: 120,
+    bottom: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(190, 190, 190, 0.12)'
+  }), [])
+
+  const topBarStyle = useMemo(() => ({
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 3,
+    paddingHorizontal: 14,
+    paddingTop: insets.top + 8,
+    paddingBottom: 12,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const
+  }), [insets.top])
+
+  // Memoized callbacks to prevent re-creation
+  const handleEventPress = useCallback((event: Event) => {
+    router.push(`/event/${event.id}`)
+  }, [])
+
+  const handleCheckIn = useCallback(async (event: Event) => {
+    try {
+      Logger.journey('checkin', 'start', { eventId: event.id })
+      if (!user) {
+        Logger.journey('auth', 'blocked:notSignedIn')
+        Alert.alert('Sign in required', 'Please sign in to check in to events')
+        return
+      }
+      
+      // Call standardized production check-in RPC
+      const params = {
+        p_event_id: event.id,
+        p_user_id: user.id,
+        p_user_latitude: userLocation?.latitude || 19.076,
+        p_user_longitude: userLocation?.longitude || 72.8777,
+        p_gps_accuracy: 50,
+      }
+      Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
+      const { data, error } = await callRpc('check_in_to_event_production', {
+          ...params
+        })
+
+      if (error) {
+        Logger.error('events', 'RPC error', { error })
+        Alert.alert('Check-in Failed', error.message)
+        return
+      }
+
+      if (data?.success) {
+        Logger.journey('checkin', 'success', { eventId: event.id })
+        // Ensure user is in the event chat in the background
+        EventChat.ensureUserInEventChat(event.id, event.title).then((ensured) => {
+          if (ensured?.chatRoomId) {
+            // Optional: guide user directly to the chat
+            Alert.alert(
+              'Success!',
+              'You have been checked in and added to the event chat.',
+              [
+                { text: 'Go to Chat', onPress: () => router.push(`/chat/${ensured.chatRoomId}?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event.title)}`) },
+                { text: 'OK', style: 'default' }
+              ]
+            )
+          } else {
+            Alert.alert('Success!', data.message)
+          }
+        }).catch(() => Alert.alert('Success!', data.message))
+
+        // Refresh the checkin status for this event
+        loadCheckinStatusesBatch()
+      } else {
+        Logger.warn('events', 'Failed', { message: data?.message })
+        Alert.alert('Check-in Failed', data?.message || 'Unknown error')
+      }
+    } catch (error) {
+      Logger.error('events', 'Unexpected error', { error: error as any })
+      Alert.alert('Error', 'Failed to check in')
+    }
+  }, [user, userLocation])
+
+  const toggleInterest = useCallback(async (event: Event) => {
+    try {
+      if (!user) {
+        Alert.alert('Sign in required', 'Please sign in to save events')
+        return
+      }
+      const prevInterested = !!interestStatuses[event.id]
+      // Optimistic update
+      setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
+
+      const res = await EventInterest.toggleInterest(event.id)
+      if (!res) {
+        // rollback
+        setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
+        Alert.alert('Error', 'Failed to update interest')
+        return
+      }
+      setInterestStatuses(prev => ({ ...prev, [event.id]: res.interested }))
+      Logger.journey('events', res.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update interest')
+    }
+  }, [user, interestStatuses])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await fetchEvents()
+    setRefreshing(false)
+  }, [])
+
+  const onScroll = useCallback((e: any) => {
+    setScrollProgress(e.nativeEvent.contentOffset.y, 320)
+  }, [setScrollProgress])
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -544,7 +673,8 @@ export default function Events() {
     }
   }
 
-  const renderEventItem = ({ item: event }: { item: Event }) => {
+  // Memoized render function for event items
+  const renderEventItem = useCallback(({ item: event }: { item: Event }) => {
     const checkinStatus = checkinStatuses[event.id]
     const proximity = proximityData[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
@@ -553,78 +683,22 @@ export default function Events() {
     const isEnded = new Date(event.end_time).getTime() < Date.now()
 
     return (
-      <TouchableOpacity 
-        style={styles.eventCard} 
-        onPress={() => handleEventPress(event)}
-      >
-        {event.cover_image_url && (
-          <Image 
-            source={{ uri: event.cover_image_url }} 
-            style={styles.eventImage}
-            resizeMode="cover"
-          />
-        )}
-        
-        <View style={styles.eventContent}>
-          <Text style={styles.eventTitle}>{event.title}</Text>
-          <Text style={styles.eventVenue}>{event.venue_name}</Text>
-          <Text style={styles.eventDescription} numberOfLines={2}>
-            {event.short_description || event.description}
-          </Text>
-          
-          <View style={styles.eventMeta}>
-            <Text style={styles.eventTime}>
-              {new Date(event.start_time).toLocaleDateString()} at{' '}
-              {new Date(event.start_time).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </Text>
-            <Text style={styles.eventPrice}>
-              {event.price_cents > 0 ? `₹${event.price_cents / 100}` : 'Free'}
-            </Text>
-          </View>
-
-          {/* Status indicators */}
-          <View style={styles.statusRow}>
-            {isCheckedIn && (
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>✅ Checked In</Text>
-              </View>
-            )}
-            
-            {proximity?.within_radius && !isCheckedIn && (
-              <TouchableOpacity 
-                style={styles.checkinButton}
-                onPress={() => handleCheckIn(event)}
-              >
-                <Text style={styles.checkinButtonText}>Check In</Text>
-              </TouchableOpacity>
-            )}
-            
-            {proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius && (
-              <View style={[styles.statusBadge, { backgroundColor: '#f0f0f0' }]}>
-                <Text style={[styles.statusText, { color: '#666' }]}> 
-                  📍 {Math.round((proximity.distance_km || 0) * 1000)}m away 
-                </Text>
-              </View>
-            )}
-
-            {!isEnded && (
-              <TouchableOpacity 
-                style={[styles.interestButton, interested && styles.interestButtonActive]}
-                onPress={() => toggleInterest(event)}
-              >
-                <Text style={[styles.interestButtonText, interested && { color: '#C2185B' }]}>
-                  {interested ? '♥︎' : '♡'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+      <EventCard
+        event={event}
+        isCheckedIn={isCheckedIn}
+        canCheckIn={canCheckIn}
+        interested={interested}
+        isEnded={isEnded}
+        proximity={proximity}
+        onPress={handleEventPress}
+        onCheckIn={handleCheckIn}
+        onToggleInterest={toggleInterest}
+      />
     )
-  }
+  }, [checkinStatuses, proximityData, interestStatuses, handleEventPress, handleCheckIn, toggleInterest])
+
+  // Memoized keyExtractor
+  const keyExtractor = useCallback((item: Event) => item.id, [])
 
   const renderCarouselWithTitle = (title: string, items: Event[]) => (
     <View style={styles.carouselContainer}>
@@ -1074,17 +1148,22 @@ export default function Events() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <FlatList
+        <VirtualizedList
           data={mainListData}
           renderItem={renderEventItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
+          estimatedItemSize={200}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
-          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+          onScroll={onScroll}
           scrollEventThrottle={16}
+          enableVirtualization={mainListData.length > 20}
+          initialNumToRender={10}
+          maxToRenderPerBatch={5}
+          windowSize={10}
           ListHeaderComponent={(
             <View>
               {/* Interested empty or carousel */}

@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     FlatList,
     Image,
@@ -13,6 +13,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import { VirtualizedList } from '../../components/VirtualizedList'
+import OptimizedImage from '../../components/OptimizedImage'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
@@ -51,6 +53,26 @@ export default function Chat() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const { setScrollProgress } = useGradientOverlay()
+
+  // Memoized callbacks to prevent re-creation
+  const handleGroupChatPress = useCallback((chat: GroupChat) => {
+    const query = `?roomName=${encodeURIComponent(chat.event_title)}&eventTitle=${encodeURIComponent(chat.event_title)}`
+    router.push(`/chat/${chat.chat_room_id}${query}`)
+  }, [])
+
+  const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
+    router.push(`/private-chat/${chat.conversation_id}`)
+  }, [])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadChats()
+    setRefreshing(false)
+  }, [])
+
+  const onScroll = useCallback((e: any) => {
+    setScrollProgress(e.nativeEvent.contentOffset.y, 320)
+  }, [setScrollProgress])
 
   useEffect(() => {
     if (!authLoading && user) {
