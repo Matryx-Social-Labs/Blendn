@@ -13,6 +13,7 @@ import {
     View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../../components/AppHeader'
 import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
 
 interface Message {
@@ -25,6 +26,10 @@ interface Message {
   is_edited: boolean
   created_at: string
 }
+
+type ChatListItem =
+  | ({ kind: 'message' } & Message)
+  | { kind: 'separator'; id: string; label: string }
 
 export default function GroupChat() {
   const { id: chatRoomId, roomName, eventTitle } = useLocalSearchParams()
@@ -64,6 +69,48 @@ export default function GroupChat() {
       return { ...m, sender_name: alias }
     }))
   }, [participantAliases, currentUser?.id])
+
+  const getInitials = (name: string) => {
+    if (!name) return '?'
+    const trimmed = String(name).trim()
+    if (!trimmed) return '?'
+    const parts = trimmed.split(/\s+/)
+    const first = parts[0]?.charAt(0) || ''
+    const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : ''
+    const combined = (first + last).toUpperCase()
+    return combined || '?'
+  }
+
+  const toDayKey = (iso: string) => {
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+  }
+
+  const formatDayLabel = (iso: string) => {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date()
+    yesterday.setDate(today.getDate() - 1)
+    const sameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+    if (sameDay(d, today)) return 'Today'
+    if (sameDay(d, yesterday)) return 'Yesterday'
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
+  }
+
+  const chatItems: ChatListItem[] = React.useMemo(() => {
+    const items: ChatListItem[] = []
+    let lastDayKey: string | null = null
+    for (const m of messages) {
+      const dayKey = toDayKey(m.created_at)
+      if (dayKey !== lastDayKey) {
+        items.push({ kind: 'separator', id: `sep-${dayKey}`, label: formatDayLabel(m.created_at) })
+        lastDayKey = dayKey
+      }
+      items.push({ kind: 'message', ...m })
+    }
+    return items
+  }, [messages])
 
   const loadParticipantAliases = async () => {
     try {
@@ -379,51 +426,59 @@ export default function GroupChat() {
     }
 
     return (
-      <View style={[
-        styles.messageContainer,
-        isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer
-      ]}>
+      <View style={[styles.messageRow, isMyMessage ? styles.myRow : styles.otherRow]}>
         {!isMyMessage && (
-          <Text style={styles.senderName}>{item.sender_name}</Text>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(item.sender_name)}</Text>
+          </View>
         )}
         <View style={[
-          styles.messageBubble,
-          isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
+          styles.messageContainer,
+          isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer
         ]}>
-          <Text style={[
-            styles.messageText,
-            isMyMessage ? styles.myMessageText : styles.otherMessageText
+          {!isMyMessage && (
+            <Text style={styles.senderName}>{item.sender_name}</Text>
+          )}
+          <View style={[
+            styles.messageBubble,
+            isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
           ]}>
-            {item.message_text}
+            <Text style={[
+              styles.messageText,
+              isMyMessage ? styles.myMessageText : styles.otherMessageText
+            ]}>
+              {item.message_text}
+            </Text>
+          </View>
+          <Text style={[
+            styles.messageTime,
+            isMyMessage ? styles.myMessageTime : styles.otherMessageTime
+          ]}>
+            {formatMessageTime(item.created_at)}
           </Text>
         </View>
-        <Text style={[
-          styles.messageTime,
-          isMyMessage ? styles.myMessageTime : styles.otherMessageTime
-        ]}>
-          {formatMessageTime(item.created_at)}
-        </Text>
       </View>
     )
   }
 
-  const renderHeader = () => (
-    <View style={styles.headerContainer}>
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-        <Text style={styles.backButtonText}>←</Text>
-      </TouchableOpacity>
-      <View style={styles.headerInfo}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {roomName}
-        </Text>
-        <Text style={styles.headerSubtitle} numberOfLines={1}>
-          {eventTitle}
-        </Text>
-      </View>
+  const renderSeparator = (label: string) => (
+    <View style={styles.dateSeparatorContainer}>
+      <View style={styles.dateSeparatorLine} />
+      <Text style={styles.dateSeparatorText}>{label}</Text>
     </View>
+  )
+
+  const renderChatItem = ({ item }: { item: ChatListItem }) => {
+    if (item.kind === 'separator') return renderSeparator(item.label)
+    return renderMessage({ item })
+  }
+
+  const renderHeader = () => (
+    <AppHeader
+      title={(roomName as string) || 'Event Chat'}
+      subtitle={(eventTitle as string) || undefined}
+      onBack={() => router.back()}
+    />
   )
 
   if (loading) {
@@ -445,12 +500,14 @@ export default function GroupChat() {
         
         <FlatList
           ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.message_id}
+          data={chatItems}
+          renderItem={renderChatItem}
+          keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContainer}
           onContentSizeChange={scrollToBottom}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         />
 
         <View style={styles.inputContainer}>
@@ -459,6 +516,7 @@ export default function GroupChat() {
             value={newMessage}
             onChangeText={setNewMessage}
             placeholder="Type a message..."
+            placeholderTextColor="#999"
             multiline
             maxLength={1000}
             onSubmitEditing={sendMessage}
@@ -487,60 +545,49 @@ export default function GroupChat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#F7F8FA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: '#F7F8FA',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: '#666',
   },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    paddingTop: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  backButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
+  
   messagesList: {
     flex: 1,
   },
   messagesContainer: {
     padding: 16,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: 6,
+  },
+  myRow: {
+    justifyContent: 'flex-end',
+  },
+  otherRow: {
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E9ECF2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  avatarText: {
+    fontSize: 12,
+    color: '#556070',
+    fontWeight: '600',
   },
   systemMessageContainer: {
     alignItems: 'center',
@@ -583,6 +630,8 @@ const styles = StyleSheet.create({
   },
   otherMessageBubble: {
     backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e9e9e9',
     borderBottomLeftRadius: 6,
   },
   messageText: {
@@ -607,6 +656,26 @@ const styles = StyleSheet.create({
   otherMessageTime: {
     color: '#999',
     marginLeft: 12,
+  },
+  dateSeparatorContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  dateSeparatorLine: {
+    position: 'absolute',
+    top: '50%',
+    left: 16,
+    right: 16,
+    height: 1,
+    backgroundColor: '#eaeaea',
+  },
+  dateSeparatorText: {
+    backgroundColor: '#F7F8FA',
+    color: '#666',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 12,
   },
   inputContainer: {
     flexDirection: 'row',

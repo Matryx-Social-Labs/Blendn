@@ -15,6 +15,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../components/AppHeader'
 import { PhotoUploadResult, selectAndUploadPhoto } from '../lib/photoUtils'
 import { supabase } from '../lib/supabase'
 
@@ -329,23 +330,11 @@ export default function EditProfile() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Profile</Text>
-          <TouchableOpacity
-            onPress={handleSave}
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        <AppHeader
+          title="Edit Profile"
+          onBack={() => router.back()}
+          rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
+        />
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
@@ -449,39 +438,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  saveButton: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  
   content: {
     flex: 1,
     paddingHorizontal: 16,

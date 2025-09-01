@@ -12,6 +12,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../components/AppHeader'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
 
 export default function BlockedUsers() {
@@ -118,16 +119,7 @@ export default function BlockedUsers() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Blocked Users</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <AppHeader title="Blocked Users" onBack={() => router.back()} />
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -156,27 +148,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  placeholder: {
-    width: 40,
-  },
+  
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

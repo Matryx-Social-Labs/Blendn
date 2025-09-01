@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../../components/AppHeader'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
@@ -192,15 +193,11 @@ export default function UserProfile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.iconBtn} onPress={openSafety}>
-          <Ionicons name="ellipsis-vertical" size={20} color="#333" />
-        </TouchableOpacity>
-      </View>
+      <AppHeader
+        title="Profile"
+        onBack={() => router.back()}
+        rightIconButton={{ name: 'ellipsis-vertical', onPress: openSafety, accessibilityLabel: 'More options' }}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <ScrollView
@@ -268,13 +265,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { marginTop: 8, color: '#666' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#222' },
-  backBtn: { padding: 8 },
-  iconBtn: { padding: 8 },
+  
   photoStrip: { width, height: PHOTO_HEIGHT, backgroundColor: '#eee' },
   photo: { width, height: PHOTO_HEIGHT },
   content: { padding: 16 },

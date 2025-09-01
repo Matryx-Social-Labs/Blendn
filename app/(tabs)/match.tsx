@@ -1,19 +1,22 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
 import { Image } from 'expo-image'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../../components/AppHeader'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
@@ -23,6 +26,8 @@ const placeholderImg = require('../../assets/images/icon.png')
 const { width } = Dimensions.get('window')
 const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
 const TILE_HEIGHT = TILE_WIDTH * 1.35
+const SIMILAR_CARD_WIDTH = Math.floor(width * 0.72)
+const SIMILAR_CARD_HEIGHT = Math.floor(SIMILAR_CARD_WIDTH * 1.1)
 
 interface AttendeeProfile {
   user_id: string
@@ -49,6 +54,8 @@ export default function Match() {
   const [matches, setMatches] = useState<MatchPreview[]>([])
   const [error, setError] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
+  const [activeSegment, setActiveSegment] = useState<'matching' | 'chat'>('matching')
+  const [similarIndex, setSimilarIndex] = useState(0)
 
   useEffect(() => {
     loadInitialData()
@@ -409,6 +416,89 @@ export default function Match() {
     )
   }
 
+  const formatTimeAgo = (iso?: string) => {
+    if (!iso) return ''
+    const diffMs = Date.now() - new Date(iso).getTime()
+    const minutes = Math.max(0, Math.floor(diffMs / 60000))
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes} mins ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  const renderSimilarCard = (attendee: AttendeeProfile) => {
+    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0
+      ? attendee.profile_photos[0]
+      : ''
+    const optimized = rawUrl
+      ? getOptimizedImageUrl(rawUrl, { width: SIMILAR_CARD_WIDTH, height: SIMILAR_CARD_HEIGHT, resize: 'cover', quality: 70, format: 'webp' })
+      : undefined
+
+    return (
+      <View key={`similar_${attendee.user_id}`} style={styles.similarCardWrap}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.similarCard}
+          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+        >
+          <Image
+            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
+            placeholder={placeholderImg}
+            style={styles.similarImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
+          <LinearGradient
+            colors={[ 'rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)' ]}
+            style={styles.similarGradient}
+          />
+          <View style={styles.similarInfo}>
+            <Text style={styles.similarName} numberOfLines={1}>
+              {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
+            </Text>
+            <Text style={styles.similarTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  const renderStartupItem = (attendee: AttendeeProfile) => {
+    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0 ? attendee.profile_photos[0] : ''
+    const gridWidth = Math.floor((width - 32 - 12 * 2) / 3)
+    const gridHeight = Math.floor(gridWidth * 1.05)
+    const optimized = rawUrl
+      ? getOptimizedImageUrl(rawUrl, { width: gridWidth, height: gridHeight, resize: 'cover', quality: 60, format: 'webp' })
+      : undefined
+
+    return (
+      <View key={`grid_${attendee.user_id}`} style={[styles.gridItem, { width: gridWidth, height: gridHeight }]}> 
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.gridTouch}
+          onPress={() => router.push({ pathname: '/user/[id]' as any, params: { id: attendee.user_id } })}
+        >
+          <Image
+            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
+            placeholder={placeholderImg}
+            style={styles.gridImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
+          <LinearGradient colors={[ 'transparent', 'rgba(0,0,0,0.55)' ]} style={styles.gridGradient} />
+          <View style={styles.gridInfo}>
+            <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
+            <Text style={styles.gridTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎬</Text>
@@ -435,89 +525,80 @@ export default function Match() {
   }
 
   return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>People</Text>
-        {eventInfo ? (
-          <Text style={styles.headerSubtitle}>
-            Active at {eventInfo.title ? `“${eventInfo.title}”` : 'your event'}
-          </Text>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+        <LinearGradient colors={[ '#3b0147', '#23001b' ]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroGradient}>
+          <AppHeader
+            title="The Grid"
+            variant="darkTransparent"
+            showBottomBorder={false}
+            onBack={() => router.back()}
+            rightIconButton={{ name: 'refresh', onPress: () => currentUser && loadActiveEventAndAttendees(currentUser.id), accessibilityLabel: 'Refresh' }}
+          />
+
+          <View style={styles.segmentContainer}>
+            <View style={styles.segmentPill}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeSegment === 'matching' && styles.segmentBtnActive]}
+                onPress={() => setActiveSegment('matching')}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.segmentText, activeSegment === 'matching' && styles.segmentTextActive]}>Start Matching</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeSegment === 'chat' && styles.segmentBtnActive]}
+                onPress={() => {
+                  setActiveSegment('chat')
+                  router.push('/(tabs)/chat' as any)
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.segmentText, activeSegment === 'chat' && styles.segmentTextActive]}>Join Chat</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {!eventInfo ? (
+          renderEmptyState()
+        ) : attendees.length === 0 ? (
+          <View style={styles.noMoreContainer}>
+            <Text style={styles.noMoreIcon}>👋</Text>
+            <Text style={styles.noMoreTitle}>You're early!</Text>
+            <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
+          </View>
         ) : (
-          <Text style={styles.headerSubtitle}>Connect with people at your events</Text>
+          <>
+            <Text style={styles.sectionTitle}>Similar Interests</Text>
+            <FlatList
+              data={attendees}
+              keyExtractor={(a) => `similar_${a.user_id}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.similarList}
+              snapToInterval={SIMILAR_CARD_WIDTH + 16}
+              decelerationRate="fast"
+              onScroll={(e) => {
+                const x = e.nativeEvent.contentOffset.x
+                const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
+                setSimilarIndex(Math.max(0, idx))
+              }}
+              scrollEventThrottle={16}
+              renderItem={({ item }) => renderSimilarCard(item)}
+            />
+            <View style={styles.dotsRow}>
+              {new Array(Math.min(4, Math.max(1, attendees.length))).fill(0).map((_, i) => (
+                <View key={`dot_${i}`} style={[styles.dot, i === (similarIndex % 4) && styles.dotActive]} />
+              ))}
+            </View>
+
+            <Text style={styles.sectionTitle}>Startup</Text>
+            <View style={styles.gridWrap}>
+              {attendees.slice(0, 12).map(renderStartupItem)}
+            </View>
+          </>
         )}
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => currentUser && loadActiveEventAndAttendees(currentUser.id)}>
-          <Ionicons name="refresh" size={20} color="#666" />
-        </TouchableOpacity>
-      </View>
-
-      {matches.length > 0 && (
-        <View style={styles.matchesContainer}>
-          <View style={styles.rowHeader}>
-            <Text style={styles.rowTitle}>Your matches</Text>
-            <Text style={styles.rowCount}>{matches.length}</Text>
-          </View>
-          <FlatList
-            data={matches}
-            keyExtractor={(m) => m.conversation_id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.matchesScroll}
-            onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 260)}
-            scrollEventThrottle={16}
-            initialNumToRender={8}
-            windowSize={5}
-            maxToRenderPerBatch={8}
-            renderItem={({ item: m }) => {
-              const optimized = m.photo_url
-                ? getOptimizedImageUrl(m.photo_url, { width: 66, height: 66, resize: 'cover', quality: 60 })
-                : undefined
-              const finalSrc = optimized || m.photo_url
-              return (
-                <View style={styles.matchItem}>
-                  <TouchableOpacity
-                    style={styles.matchAvatarWrapper}
-                    onPress={() => router.push(`/private-chat/${m.conversation_id}`)}
-                  >
-                    <View style={styles.matchAvatarRing}>
-                      <Image source={finalSrc ? ({ uri: finalSrc } as any) : placeholderImg} placeholder={placeholderImg} style={styles.matchAvatar} contentFit="cover" cachePolicy="memory-disk" />
-                    </View>
-                  </TouchableOpacity>
-                  <Text style={styles.matchName} numberOfLines={1}>{m.other_user_name || 'User'}</Text>
-                </View>
-              )
-            }}
-          />
-        </View>
-      )}
-
-      {!eventInfo ? (
-        renderEmptyState()
-      ) : attendees.length === 0 ? (
-        <View style={styles.noMoreContainer}>
-          <Text style={styles.noMoreIcon}>👋</Text>
-          <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
-          <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
-        </View>
-      ) : (
-        <View style={styles.carouselContainer}>
-          <View style={styles.rowHeader}>
-            <Text style={styles.rowTitle}>Active attendees</Text>
-            <Text style={styles.rowCount}>{attendees.length}</Text>
-          </View>
-          <FlatList
-            data={attendees}
-            keyExtractor={(a) => a.user_id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carousel}
-            renderItem={({ item }) => renderAttendeeTile(item)}
-            initialNumToRender={6}
-            windowSize={7}
-            maxToRenderPerBatch={6}
-            getItemLayout={(data, index) => ({ length: TILE_WIDTH + 12, offset: (TILE_WIDTH + 12) * index, index })}
-          />
-        </View>
-      )}
+      </ScrollView>
     </SafeAreaView>
   )
 }
@@ -525,7 +606,7 @@ export default function Match() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#120016',
   },
   header: {
     padding: 20,
@@ -546,9 +627,45 @@ const styles = StyleSheet.create({
   },
   refreshBtn: {
     position: 'absolute',
-    right: 20,
-    top: 16,
+    right: 12,
+    top: 12,
     padding: 8,
+  },
+  scrollBody: {
+    paddingBottom: 40,
+  },
+  heroGradient: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+  },
+  
+  segmentContainer: {
+    paddingTop: 14,
+  },
+  segmentPill: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 28,
+    padding: 6,
+    flexDirection: 'row',
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 22,
+    alignItems: 'center',
+  },
+  segmentBtnActive: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  segmentText: {
+    color: '#ffffffbb',
+    fontWeight: '600',
+  },
+  segmentTextActive: {
+    color: '#fff',
   },
   loadingContainer: {
     flex: 1,
@@ -565,6 +682,14 @@ const styles = StyleSheet.create({
   },
   matchesContainer: {
     paddingTop: 8,
+  },
+  sectionTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 10,
   },
   rowHeader: {
     flexDirection: 'row',
@@ -589,6 +714,108 @@ const styles = StyleSheet.create({
   matchesScroll: {
     paddingHorizontal: 16,
     paddingBottom: 6,
+  },
+  similarList: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  similarCardWrap: {
+    width: SIMILAR_CARD_WIDTH,
+    height: SIMILAR_CARD_HEIGHT,
+    marginRight: 16,
+  },
+  similarCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#1f0b1e',
+  },
+  similarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  similarGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '55%',
+  },
+  similarInfo: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 12,
+  },
+  similarName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  similarTime: {
+    color: '#e6e6e6',
+    fontSize: 12,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  dot: {
+    width: 26,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginHorizontal: 4,
+  },
+  dotActive: {
+    backgroundColor: '#fff',
+  },
+  gridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+  },
+  gridItem: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginRight: 12,
+    marginBottom: 12,
+    backgroundColor: '#1f0b1e',
+  },
+  gridTouch: {
+    flex: 1,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '55%',
+  },
+  gridInfo: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+  },
+  gridName: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  gridTime: {
+    color: '#e6e6e6',
+    fontSize: 10,
   },
   matchItem: {
     width: 76,

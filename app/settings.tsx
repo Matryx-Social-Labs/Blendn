@@ -4,6 +4,7 @@ import { router } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../components/AppHeader'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
@@ -96,13 +97,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <AppHeader title="Settings" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileCard}>
@@ -134,9 +129,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  backBtn: { width: 40, alignItems: 'flex-start' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#222' },
+  
   content: { padding: 16 },
   profileCard: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f9f9f9', borderRadius: 12, marginBottom: 16 },
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#eee' },

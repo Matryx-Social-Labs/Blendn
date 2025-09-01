@@ -1,15 +1,18 @@
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     FlatList,
     Image,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import AppHeader from '../../components/AppHeader'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { callRpc, supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
@@ -39,7 +42,7 @@ type ChatTabType = 'group' | 'personal'
 
 export default function Chat() {
   const { user, loading: authLoading } = useAuth()
-  const [activeTab, setActiveTab] = useState<ChatTabType>('group')
+  const [activeTab, setActiveTab] = useState<ChatTabType>('personal')
   const [incomingRequests, setIncomingRequests] = useState<any[]>([])
   const [outgoingRequests, setOutgoingRequests] = useState<any[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
@@ -414,24 +417,61 @@ export default function Chat() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Tab Switcher */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'group' && styles.activeTab]}
-          onPress={() => setActiveTab('group')}
-        >
-          <Text style={[styles.tabText, activeTab === 'group' && styles.activeTabText]}>
-            Group Chats
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'personal' && styles.activeTab]}
-          onPress={() => setActiveTab('personal')}
-        >
-          <Text style={[styles.tabText, activeTab === 'personal' && styles.activeTabText]}>
-            Personal
-          </Text>
-        </TouchableOpacity>
+      {/* Header gradient + stories */}
+      <View style={styles.headerGradient}>
+        <LinearGradient
+          colors={["#3a0b2d", "#18041f"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <AppHeader title="The Banter" variant="darkTransparent" showBottomBorder={false} />
+
+        <View style={styles.storiesCard}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.storiesRow}
+          >
+            {(personalChats.slice(0, 10)).map((c) => (
+              <View key={c.conversation_id} style={styles.storyItem}>
+                <LinearGradient
+                  colors={["#FFD36E", "#FF5BA6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.storyRing}
+                >
+                  {c.other_user_avatar ? (
+                    <Image source={{ uri: c.other_user_avatar }} style={styles.storyImage} />
+                  ) : (
+                    <View style={[styles.storyImage, styles.avatarFallback]}>
+                      <Text style={styles.avatarInitials}>{getInitials(c.other_user_name)}</Text>
+                    </View>
+                  )}
+                </LinearGradient>
+                <Text style={styles.storyLabel} numberOfLines={1}>{c.other_user_name?.split(' ')[0] || 'User'}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+
+      {/* Segmented control */}
+      <View style={styles.segmentContainer}>
+        <View style={styles.segmentPill}>
+          <TouchableOpacity
+            onPress={() => setActiveTab('personal')}
+            style={[styles.segmentItem, activeTab === 'personal' && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentText, activeTab === 'personal' && styles.segmentTextActive]}>Recent Chats</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('group')}
+            style={[styles.segmentItem, activeTab === 'group' && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentText, activeTab === 'group' && styles.segmentTextActive]}>Go Anonymous</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Chat List */}
@@ -512,6 +552,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  headerGradient: {
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  
+  storiesCard: {
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.04)'
+  },
+  storiesRow: {
+    gap: 18,
+    paddingHorizontal: 2,
+  },
+  storyItem: {
+    width: 60,
+    alignItems: 'center',
+  },
+  storyRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
+  },
+  storyImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#2b2b2b',
+  },
+  storyLabel: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#EDEDED',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -522,32 +603,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  tabContainer: {
+  segmentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  segmentPill: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.20)',
+    overflow: 'hidden',
   },
-  tab: {
+  segmentItem: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
   },
-  activeTab: {
-    borderBottomColor: '#007AFF',
+  segmentActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#CFCFCF',
   },
-  activeTabText: {
-    color: '#007AFF',
+  segmentTextActive: {
+    color: '#FFFFFF',
   },
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   emptyListContainer: {
     flex: 1,
@@ -555,48 +643,50 @@ const styles = StyleSheet.create({
   personalItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 4,
     paddingVertical: 10,
     borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    marginBottom: 6,
   },
   chatItem: {
-    backgroundColor: '#fff',
-    padding: 16,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 4,
+    paddingVertical: 12,
     borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginBottom: 6,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
   avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    marginRight: 12,
-    backgroundColor: '#f1f1f1',
+    backgroundColor: '#2b2b2b',
   },
   avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   avatarInitials: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#555',
+    color: '#DADADA',
+  },
+  onlineDot: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2AD866',
+    borderWidth: 2,
+    borderColor: '#0E0E0E',
   },
   personalContent: {
     flex: 1,
@@ -609,13 +699,13 @@ const styles = StyleSheet.create({
   personalName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#222',
+    color: '#FFFFFF',
     flex: 1,
     marginRight: 8,
   },
   personalTime: {
     fontSize: 12,
-    color: '#999',
+    color: '#B5B5B5',
   },
   personalFooter: {
     flexDirection: 'row',
@@ -624,16 +714,16 @@ const styles = StyleSheet.create({
   },
   personalPreview: {
     fontSize: 14,
-    color: '#666',
+    color: '#C9C9C9',
     flex: 1,
     marginRight: 8,
   },
   unreadDot: {
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     paddingHorizontal: 6,
-    backgroundColor: '#F7B500',
-    borderRadius: 10,
+    backgroundColor: '#E94B59',
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -651,15 +741,15 @@ const styles = StyleSheet.create({
   chatTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     flex: 1,
   },
   participantCount: {
     fontSize: 14,
-    color: '#666',
+    color: '#C9C9C9',
   },
   unreadBadge: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#E94B59',
     borderRadius: 12,
     minWidth: 24,
     height: 24,
@@ -673,15 +763,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   requestItem: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     padding: 12,
     borderRadius: 12,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)'
   },
   requestActions: {
     flexDirection: 'row',
@@ -699,7 +786,7 @@ const styles = StyleSheet.create({
   reqBtnText: { color: '#fff', fontWeight: '700' },
   chatVenue: {
     fontSize: 14,
-    color: '#666',
+    color: '#C9C9C9',
     marginBottom: 8,
   },
   lastMessageContainer: {
@@ -709,13 +796,13 @@ const styles = StyleSheet.create({
   },
   lastMessage: {
     fontSize: 14,
-    color: '#888',
+    color: '#C9C9C9',
     flex: 1,
     marginRight: 8,
   },
   lastMessageTime: {
     fontSize: 12,
-    color: '#999',
+    color: '#B5B5B5',
   },
   emptyContainer: {
     flex: 1,
@@ -726,12 +813,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#C9C9C9',
     textAlign: 'center',
   },
 }) 

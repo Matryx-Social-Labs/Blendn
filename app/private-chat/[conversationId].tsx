@@ -14,6 +14,7 @@ import {
     View
 } from 'react-native'
 import { SafeAreaView as SafeAreaViewContext } from 'react-native-safe-area-context'
+import AppHeader from '../../components/AppHeader'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
 import { callRpc, supabase } from '../../lib/supabase'
@@ -297,35 +298,25 @@ export default function PrivateChat() {
         style={styles.container} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{otherUserName || 'Chat'}</Text>
-          <TouchableOpacity 
-            style={styles.infoButton}
-            onPress={() => {
+        <AppHeader
+          title={(otherUserName as string) || 'Chat'}
+          onBack={() => router.back()}
+          rightIconButton={{
+            name: 'shield-outline',
+            onPress: () => {
               if (otherUserId) {
                 showUserSafetyActions(
-                  otherUserName as string || 'User',
+                  (otherUserName as string) || 'User',
                   otherUserId as string,
-                  () => {
-                    // On block, go back to chat list
-                    router.back()
-                  }
+                  () => router.back()
                 )
               } else {
                 Alert.alert('Coming Soon!', 'User profile view will be available soon!')
               }
-            }}
-          >
-            <Ionicons name="shield-outline" size={24} color="#333" />
-          </TouchableOpacity>
-        </View>
+            },
+            accessibilityLabel: 'Safety options',
+          }}
+        />
 
         {/* Messages */}
         <FlatList
@@ -387,29 +378,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-    textAlign: 'center',
-  },
-  infoButton: {
-    padding: 8,
-  },
+  
   messagesList: {
     flex: 1,
     paddingHorizontal: 16,

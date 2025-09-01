@@ -49,6 +49,11 @@ interface EventDetail {
   latitude: number
   longitude: number
   check_in_radius: number
+  // Optional media fields for gallery support
+  gallery?: string[]
+  gallery_photos?: string[]
+  pre_event_gallery?: string[]
+  images?: string[]
 }
 
 interface CheckInStatus {
@@ -70,6 +75,8 @@ const { width } = Dimensions.get('window')
 const CONTENT_HORIZONTAL_PADDING = 14
 const GALLERY_GAP = 12
 const galleryTileSize = Math.floor((width - (CONTENT_HORIZONTAL_PADDING * 2) - GALLERY_GAP) / 2)
+const GALLERY_FULL_WIDTH = Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))
+const GALLERY_TALL_HEIGHT = (galleryTileSize * 2) + GALLERY_GAP
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams()
@@ -85,12 +92,16 @@ export default function EventDetail() {
   const [interestedAvatars, setInterestedAvatars] = useState<string[]>([])
 
   useEffect(() => {
-    if (id) {
+    if (id && String(id).trim()) {
       Logger.journey('events', 'detail:mount', { eventId: String(id) })
       fetchEventDetails()
       checkUserCheckInStatus()
       loadInterestInfo()
       loadInterestedAvatars()
+    } else {
+      // No valid ID provided, show error immediately
+      setLoading(false)
+      Logger.error('❌ [EVENTS]', 'detail:noValidId', { id })
     }
   }, [id])
 
@@ -302,6 +313,24 @@ export default function EventDetail() {
       checkUserCheckInStatus()
     }, [id])
   )
+
+  // Prepare gallery sources from event or fallback - moved before early returns to follow Rules of Hooks
+  const galleryUrls = React.useMemo(() => {
+    if (!event) return [] as string[]
+    const evt: any = event
+    const candidates: any[] = [evt.gallery, evt.gallery_photos, evt.pre_event_gallery, evt.images]
+    for (const arr of candidates) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.filter(Boolean)
+      }
+    }
+    return [] as string[]
+  }, [event])
+
+  const gallerySources: Array<string | number> = React.useMemo(() => {
+    if (galleryUrls.length > 0) return galleryUrls
+    return [gallery1, gallery2, gallery3, gallery4]
+  }, [galleryUrls])
 
   const getCurrentLocation = async () => {
     try {
@@ -551,13 +580,21 @@ export default function EventDetail() {
     if (!event) return
     const lat = event.latitude
     const lon = event.longitude
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
     const label = encodeURIComponent(event.venue_name || 'Event Location')
+    const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
 
     if (Platform.OS === 'ios') {
       const googleScheme = 'comgooglemaps://'
-      const googleUrl = `${googleScheme}?q=${lat},${lon}`
-      const appleUrl = `maps:0,0?q=${label}@${lat},${lon}`
-      const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+      const googleUrl = hasCoords
+        ? `${googleScheme}?q=${lat},${lon}`
+        : `${googleScheme}?q=${addressQuery}`
+      const appleUrl = hasCoords
+        ? `maps:0,0?q=${label}@${lat},${lon}`
+        : `maps:0,0?q=${addressQuery}`
+      const webUrl = hasCoords
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+        : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
       try {
         const canOpenGoogle = await Linking.canOpenURL(googleScheme)
         if (canOpenGoogle) return Linking.openURL(googleUrl)
@@ -569,9 +606,15 @@ export default function EventDetail() {
       return Linking.openURL(webUrl)
     } else {
       const googleScheme = 'comgooglemaps://'
-      const googleUrl = `${googleScheme}?q=${lat},${lon}`
-      const geoUrl = `geo:0,0?q=${lat},${lon}(${label})`
-      const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+      const googleUrl = hasCoords
+        ? `${googleScheme}?q=${lat},${lon}`
+        : `${googleScheme}?q=${addressQuery}`
+      const geoUrl = hasCoords
+        ? `geo:0,0?q=${lat},${lon}(${label})`
+        : `geo:0,0?q=${addressQuery}`
+      const webUrl = hasCoords
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+        : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
       try {
         const canOpenGoogle = await Linking.canOpenURL(googleScheme)
         if (canOpenGoogle) return Linking.openURL(googleUrl)
@@ -636,6 +679,105 @@ export default function EventDetail() {
   const stickyBarHeight = insets.top + 8 + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
 
+  const renderBentoGallery = (sources: Array<string | number>) => {
+    if (!sources || sources.length === 0) return null
+
+    const buildImageSource = (src: string | number, dims: { width: number; height: number }) => {
+      if (typeof src === 'string') {
+        const opt = getOptimizedImageUrl(src, { width: Math.round(dims.width), height: Math.round(dims.height), resize: 'cover', quality: 70, format: 'webp' })
+        return opt && opt !== src ? { uri: opt } : { uri: src }
+      }
+      return src
+    }
+
+    const img = (src: string | number, w: number, h: number, key: string) => (
+      <Image
+        key={key}
+        source={buildImageSource(src, { width: w, height: h }) as any}
+        placeholder={placeholderImg}
+        style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={150}
+      />
+    )
+
+    const n = sources.length
+
+    // 1 item: full width hero
+    if (n === 1) {
+      return (
+        <View style={styles.galleryRow}>
+          {img(sources[0], GALLERY_FULL_WIDTH, GALLERY_TALL_HEIGHT, 'g-0')}
+        </View>
+      )
+    }
+
+    // 2 items: two squares
+    if (n === 2) {
+      return (
+        <View style={styles.galleryRow}>
+          {img(sources[0], galleryTileSize, galleryTileSize, 'g-0')}
+          {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
+        </View>
+      )
+    }
+
+    // 3 items: tall on left, two stacked on right
+    if (n === 3) {
+      return (
+        <View style={styles.galleryRow}>
+          {img(sources[0], galleryTileSize, GALLERY_TALL_HEIGHT, 'g-0')}
+          <View style={styles.galleryColumn}>
+            {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
+            {img(sources[2], galleryTileSize, galleryTileSize, 'g-2')}
+          </View>
+        </View>
+      )
+    }
+
+    // 4 items: 2x2 grid
+    if (n === 4) {
+      return (
+        <View style={styles.galleryColumn}>
+          <View style={styles.galleryRow}>
+            {img(sources[0], galleryTileSize, galleryTileSize, 'g-0')}
+            {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
+          </View>
+          <View style={styles.galleryRow}>
+            {img(sources[2], galleryTileSize, galleryTileSize, 'g-2')}
+            {img(sources[3], galleryTileSize, galleryTileSize, 'g-3')}
+          </View>
+        </View>
+      )
+    }
+
+    // 5+ items: 3-layout row then fill remaining as 2-col grid
+    const first = sources.slice(0, 3)
+    const rest = sources.slice(3)
+    const rows: React.ReactNode[] = []
+    rows.push(
+      <View key="row-0" style={styles.galleryRow}>
+        {img(first[0], galleryTileSize, GALLERY_TALL_HEIGHT, 'g-0')}
+        <View style={styles.galleryColumn}>
+          {img(first[1], galleryTileSize, galleryTileSize, 'g-1')}
+          {img(first[2], galleryTileSize, galleryTileSize, 'g-2')}
+        </View>
+      </View>
+    )
+
+    for (let i = 0; i < rest.length; i += 2) {
+      rows.push(
+        <View key={`row-${1 + (i / 2)}`} style={styles.galleryRow}>
+          {img(rest[i], galleryTileSize, galleryTileSize, `g-${3 + i}`)}
+          {rest[i + 1] !== undefined && img(rest[i + 1], galleryTileSize, galleryTileSize, `g-${3 + i + 1}`)}
+        </View>
+      )
+    }
+
+    return <View style={styles.galleryColumn}>{rows}</View>
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
@@ -662,9 +804,11 @@ export default function EventDetail() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <Image 
             source={(() => {
-              const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: 390, resize: 'cover', quality: 70 })
-              return opt ? [{ uri: opt }, { uri: event.cover_image_url } as any] : [{ uri: event.cover_image_url } as any]
-            })() as any}
+              const coverUrl = event.cover_image_url
+              if (!coverUrl) return placeholderImg
+              const opt = getOptimizedImageUrl(coverUrl, { width, height: 390, resize: 'cover', quality: 70 })
+              return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
+            })()}
             placeholder={placeholderImg}
             style={styles.coverImage}
             contentFit="cover"
@@ -732,20 +876,19 @@ export default function EventDetail() {
                   source={(() => {
                     const hasCoords = Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
                     const mapHeight = 249
-                    const opt = getOptimizedImageUrl(event.cover_image_url || '', { width, height: mapHeight, resize: 'cover', quality: 60 })
-                    const cover = event.cover_image_url ? { uri: event.cover_image_url } as any : undefined
                     if (!hasCoords) {
-                      return opt ? [{ uri: opt }, cover].filter(Boolean) as any : [cover].filter(Boolean) as any
+                      // No coordinates available, use cover image
+                      const coverUrl = event.cover_image_url
+                      if (!coverUrl) return placeholderImg
+                      const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
+                      return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
                     }
+                    // Use map with coordinates
                     const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
                     const lat = event.latitude
                     const lon = event.longitude
                     const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},red`
-                    return [
-                      { uri: url } as any,
-                      ...(opt ? [{ uri: opt } as any] : []),
-                      ...(cover ? [cover] : []),
-                    ] as any
+                    return { uri: url }
                   })()}
                   placeholder={placeholderImg}
                   style={styles.locationImage}
@@ -764,11 +907,9 @@ export default function EventDetail() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.sectionTitle}>Gallery (Pre Event)</Text>
-            <View style={styles.galleryGrid}>
-              {[gallery1, gallery2, gallery3, gallery4].map((src, idx) => (
-                <Image key={`g-${idx}`} source={src} style={styles.galleryTile} contentFit="cover" cachePolicy="memory-disk" />
-              ))}
+            <Text style={styles.sectionTitle}>Gallery</Text>
+            <View style={styles.gallerySection}>
+              {renderBentoGallery(gallerySources)}
             </View>
 
             
@@ -827,53 +968,16 @@ export default function EventDetail() {
               ) : (
                 <>
                   <TouchableOpacity 
-                    style={[styles.checkInButton, checkingIn && styles.checkInButtonDisabled]}
+                    style={[styles.blendnButton, checkingIn && styles.checkInButtonDisabled]}
                     onPress={handleCheckIn}
                     disabled={checkingIn}
                   >
                     {checkingIn ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <>
-                        <Text style={styles.checkInButtonText}>
-                          📍 Check In to Event
-                          {proximityStatus?.can_check_in_count > 0 && ' ✅'}
-                        </Text>
-                        <Text style={styles.checkInSubtext}>
-                          {event.check_in_radius <= 20 && '🏢 Indoor Event - '}
-                          {event.check_in_radius > 50 && '🌳 Outdoor Event - '}
-                          Must be within {event.check_in_radius}m
-                        </Text>
-                        {userLocation && proximityStatus?.nearby_events?.[0] && (
-                          <Text style={styles.distanceIndicator}>
-                            Current distance: {Math.round(proximityStatus.nearby_events[0].distance_meters || 0)}m
-                          </Text>
-                        )}
-                      </>
+                      <Text style={styles.blendnButtonText}>Blend’n</Text>
                     )}
                   </TouchableOpacity>
-
-                  {!isEnded && (
-                    <TouchableOpacity 
-                      style={[styles.interestButton, userInterested && styles.interestButtonActive]}
-                      onPress={async () => {
-                        try {
-                          const res = await EventInterest.toggleInterest(String(id))
-                          if (res) {
-                            setUserInterested(res.interested)
-                            setInterestCount(res.count)
-                            Logger.journey('interest', res.interested ? 'detail:markInterested' : 'detail:unmarkInterested', { eventId: String(id) })
-                          } else {
-                            Alert.alert('Error', 'Failed to update interest')
-                          }
-                        } catch {}
-                      }}
-                    >
-                      <Text style={[styles.interestButtonText, userInterested && { color: '#C2185B' }]}>
-                        {userInterested ? '♥︎' : '♡'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </>
               )}
             </View>
@@ -884,22 +988,6 @@ export default function EventDetail() {
 
       {/* Fixed bottom tab bar */}
       <View style={styles.tabBar}>
-        <TouchableOpacity 
-          style={styles.quickButton}
-          onPress={async () => {
-            try {
-              const res = await EventInterest.toggleInterest(String(id))
-              if (res) {
-                setUserInterested(res.interested)
-                setInterestCount(res.count)
-              }
-            } catch {}
-          }}
-        >
-          <Text style={styles.quickIcon}>{userInterested ? '♥︎' : '♡'}</Text>
-          <Text style={styles.quickText}>Interested</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.quickButton} onPress={handleShare}>
           <Text style={styles.quickIcon}>􀈂</Text>
           <Text style={styles.quickText}>Share</Text>
@@ -1161,6 +1249,25 @@ const styles = StyleSheet.create({
     height: galleryTileSize,
     borderRadius: 12,
   },
+  gallerySection: {
+    paddingHorizontal: 14,
+    marginBottom: 20,
+  },
+  galleryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: GALLERY_GAP,
+    marginBottom: GALLERY_GAP,
+  },
+  galleryColumn: {
+    flexDirection: 'column',
+    gap: GALLERY_GAP,
+    flex: 1,
+  },
+  galleryImage: {
+    borderRadius: 12,
+    backgroundColor: '#1A1A1A',
+  },
   detailsSection: {
     marginBottom: 24,
   },
@@ -1270,6 +1377,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.9,
   },
+  blendnButton: {
+    backgroundColor: '#7217b3',
+    padding: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    marginBottom: 12,
+    marginHorizontal: 14,
+  },
+  blendnButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
   interestButton: {
     backgroundColor: '#fde7ef',
     padding: 16,
@@ -1322,7 +1442,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   quickButton: {
-    width: '24%',
+    width: '32%',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(18,18,18,1)',
