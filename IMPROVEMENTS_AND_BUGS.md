@@ -17,7 +17,7 @@
 ### **Navigation**
 - [x] **Route warnings**: Replaced string routes with typed object routes for dynamic paths
 - [x] **Deep linking**: Added URL scheme/intent filters and router origin for deep links
-- [ ] **Back button**: Inconsistent back navigation behavior
+- [x] **Back button**: Normalized Android hardware back (blocked on root/onboarding, back elsewhere)
 
 ### **Notifications**
 - [x] **Non-standard handler fields**: Use only supported keys in foreground handler

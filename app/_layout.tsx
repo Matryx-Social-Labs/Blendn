@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import {
@@ -118,6 +118,28 @@ export default function RootLayout() {
 
     run();
   }, [user, loading, pathname]);
+
+  // Normalize Android hardware back behavior
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onBackPress = () => {
+      const isOnboarding = !!pathname && pathname.startsWith('/onboarding');
+      const isIndex = pathname === '/' || pathname === '/index';
+      const isTabsRoot = pathname?.startsWith('/(tabs)');
+
+      // Block back on login, onboarding, and tabs root
+      if (isIndex || isOnboarding || isTabsRoot) {
+        return true; // prevent default
+      }
+      // Otherwise perform a normal back
+      try { router.back(); } catch {}
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => {
+      try { sub.remove(); } catch {}
+    };
+  }, [pathname, loading]);
 
   return (
     <ErrorBoundary
