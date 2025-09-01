@@ -49,7 +49,7 @@
 - [ ] **Event Favorites**: Can't bookmark interesting events
 - [ ] **Real Distance**: Distance calculation returns 0 (placeholder)
 - [ ] **Event Categories**: No category filtering system
- - [ ] **Check-in accuracy enforcement**: Check-in uses hardcoded fallback coordinates when permission is denied; enforce permission and a minimum GPS accuracy threshold before allowing check-in
+ - [x] **Check-in accuracy enforcement**: Enforce permission and GPS accuracy; block low-accuracy check-ins
 
 ### **Chat & Messaging**
 - [ ] **Private Messaging**: Not implemented yet (shows "Coming Soon")

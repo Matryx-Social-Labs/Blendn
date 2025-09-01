@@ -101,7 +101,7 @@ export default function EventDetail() {
     } else {
       // No valid ID provided, show error immediately
       setLoading(false)
-      Logger.error('❌ [EVENTS]', 'detail:noValidId', { id })
+      Logger.error('events', 'detail:noValidId', { id })
     }
   }, [id])
 
@@ -184,14 +184,14 @@ export default function EventDetail() {
         })
 
       if (error) {
-        Logger.error('❌ [PROXIMITY]', 'detail:check:error', { error })
+        Logger.error('events', 'detail:check:error', { error })
       } else {
         // Normalize to an object to avoid TS complaints
         setProximityStatus(data || {})
         Logger.journey('proximity', 'detail:check:success', { nearbyCount: data?.nearby_events?.length || 0 })
       }
     } catch (error) {
-      Logger.error('💥 [PROXIMITY]', 'detail:check:exception', { error: error as any })
+      Logger.error('events', 'detail:check:exception', { error: error as any })
     }
   }
 
@@ -205,14 +205,14 @@ export default function EventDetail() {
         .single()
 
       if (error) {
-        Logger.error('❌ [EVENTS]', 'detail:fetch:error', { error })
+        Logger.error('events', 'detail:fetch:error', { error })
         Alert.alert('Error', 'Failed to load event details')
       } else {
         setEvent(data)
         Logger.journey('events', 'detail:fetch:success', { eventId: data?.id })
       }
     } catch (error) {
-      Logger.error('💥 [EVENTS]', 'detail:fetch:exception', { error: error as any })
+      Logger.error('events', 'detail:fetch:exception', { error: error as any })
     } finally {
       setLoading(false)
     }
@@ -295,7 +295,7 @@ export default function EventDetail() {
         .limit(1)
 
       if (error) {
-        Logger.error('❌ [CHECKIN]', 'detail:status:error', { error })
+        Logger.error('events', 'detail:status:error', { error })
         return
       }
 
@@ -303,7 +303,7 @@ export default function EventDetail() {
       setCheckInStatus({ success: true, checked_in: checkedIn })
       Logger.journey('checkin', 'detail:status:success', { checkedIn })
     } catch (error) {
-      Logger.error('💥 [CHECKIN]', 'detail:status:exception', { error: error as any })
+      Logger.error('events', 'detail:status:exception', { error: error as any })
     }
   }
 
@@ -336,7 +336,7 @@ export default function EventDetail() {
     try {
       // Fallback if expo-location is not available
       if (!Location) {
-        Logger.warn('📍 [LOCATION]', 'moduleUnavailable')
+        Logger.warn('events', 'location:moduleUnavailable')
         Alert.alert(
           'Location Service Not Available',
           'For the best experience, please use the latest version of this app with location services enabled.',
@@ -365,7 +365,7 @@ export default function EventDetail() {
       // Check if location services are enabled
       const serviceEnabled = await Location.hasServicesEnabledAsync()
       if (!serviceEnabled) {
-        Logger.warn('📍 [LOCATION]', 'servicesDisabled')
+        Logger.warn('events', 'location:servicesDisabled')
         Alert.alert(
           'Location Services Disabled',
           'Please enable location services in your device settings to check in to events.',
@@ -380,7 +380,7 @@ export default function EventDetail() {
       // Request permission with better messaging
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        Logger.warn('📍 [LOCATION]', 'permissionDenied')
+        Logger.warn('events', 'location:permissionDenied')
         Alert.alert(
           'Location Permission Required',
           'Blendn needs location access to verify you\'re at events. This ensures authentic meetups and prevents fake check-ins.',
@@ -394,27 +394,25 @@ export default function EventDetail() {
 
       // Get high-accuracy location for production
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10000, // 10 seconds timeout
-        distanceInterval: 1,  // 1 meter accuracy
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 12000,
+        distanceInterval: 1,
+        mayShowUserSettingsDialog: true,
       })
 
       // Validate GPS accuracy for production
       const accuracy = location.coords.accuracy || 999
       if (accuracy > 50) {
-        Logger.warn('📍 [LOCATION]', 'lowAccuracy', { accuracy })
+        Logger.warn('events', 'location:lowAccuracy', { accuracy })
         Alert.alert(
           'GPS Signal Weak',
           `GPS accuracy is ${Math.round(accuracy)}m. For accurate check-ins, please move to a location with better GPS signal.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Try Again', onPress: () => getCurrentLocation() },
-            { text: 'Continue Anyway', onPress: () => Promise.resolve({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude
-            })}
           ]
         )
+        return null
       }
 
       return {
@@ -422,7 +420,7 @@ export default function EventDetail() {
         longitude: location.coords.longitude
       }
     } catch (error) {
-      Logger.error('📍 [LOCATION]', 'getCurrentLocation:error', { error: error as any })
+      Logger.error('events', 'location:getCurrentLocation:error', { error: error as any })
       
       // Handle specific location errors for production
       const errorCode = (error as any)?.code
@@ -463,7 +461,7 @@ export default function EventDetail() {
       // Get current location
       const location = await getCurrentLocation()
       if (!location) {
-        Logger.warn('checkin', 'detail:location:unavailable')
+        Logger.warn('events', 'checkin:location:unavailable')
         setCheckingIn(false)
         return
       }
@@ -481,7 +479,7 @@ export default function EventDetail() {
         })
 
       if (error) {
-        Logger.error('❌ [CHECK_IN]', 'detail:rpc:error', { error })
+        Logger.error('events', 'checkin:rpc:error', { error })
         Alert.alert('Error', 'Failed to check in. Please try again.')
       } else {
         if (data.success) {
@@ -519,7 +517,7 @@ export default function EventDetail() {
               user.id
             )
           } catch (notificationError) {
-            Logger.warn('🔔 [NOTIFICATIONS]', 'checkInNotification:failed', { error: notificationError as any })
+            Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
             // Don't fail check-in if notification fails
           }
 
@@ -532,13 +530,13 @@ export default function EventDetail() {
             await checkUserCheckInStatus()
             Alert.alert('Already Checked In', 'You are already checked in to this event.')
           } else {
-            Logger.warn('❗ [CHECK_IN]', 'detail:failed', { code: data.code, message: data.error || data.message })
+            Logger.warn('events', 'checkin:failed', { code: data.code, message: data.error || data.message })
             handleCheckInError(data)
           }
         }
       }
     } catch (error) {
-      Logger.error('💥 [CHECK_IN]', 'detail:exception', { error: error as any })
+      Logger.error('events', 'checkin:exception', { error: error as any })
       Alert.alert('Error', 'Something went wrong. Please try again.')
     } finally {
       setCheckingIn(false)
