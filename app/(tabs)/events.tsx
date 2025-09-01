@@ -20,9 +20,8 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { VirtualizedList } from '../../components/VirtualizedList'
-import OptimizedImage from '../../components/OptimizedImage'
 import EventCard from '../../components/EventCard'
+import { VirtualizedList } from '../../components/VirtualizedList'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -580,98 +579,7 @@ export default function Events() {
     }
   }
 
-  const toggleInterest = async (event: Event) => {
-    try {
-      if (!user) {
-        Alert.alert('Sign in required', 'Please sign in to save events')
-        return
-      }
-      const prevInterested = !!interestStatuses[event.id]
-      // Optimistic update
-      setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
-
-      const res = await EventInterest.toggleInterest(event.id)
-      if (!res) {
-        // rollback
-        setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
-        Alert.alert('Error', 'Failed to update interest')
-        return
-      }
-      setInterestStatuses(prev => ({ ...prev, [event.id]: res.interested }))
-      Logger.journey('events', res.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update interest')
-    }
-  }
-
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await fetchEvents()
-    setRefreshing(false)
-  }
-
-  const handleEventPress = (event: Event) => {
-    router.push(`/event/${event.id}`)
-  }
-
-  const handleCheckIn = async (event: Event) => {
-    try {
-      Logger.journey('checkin', 'start', { eventId: event.id })
-      if (!user) {
-        Logger.journey('auth', 'blocked:notSignedIn')
-        Alert.alert('Sign in required', 'Please sign in to check in to events')
-        return
-      }
-      
-      // Call standardized production check-in RPC
-      const params = {
-        p_event_id: event.id,
-        p_user_id: user.id,
-        p_user_latitude: userLocation?.latitude || 19.076,
-        p_user_longitude: userLocation?.longitude || 72.8777,
-        p_gps_accuracy: 50,
-      }
-      Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
-      const { data, error } = await callRpc('check_in_to_event_production', {
-          ...params
-        })
-
-      if (error) {
-        Logger.error('events', 'RPC error', { error })
-        Alert.alert('Check-in Failed', error.message)
-        return
-      }
-
-      if (data?.success) {
-        Logger.journey('checkin', 'success', { eventId: event.id })
-        // Ensure user is in the event chat in the background
-        EventChat.ensureUserInEventChat(event.id, event.title).then((ensured) => {
-          if (ensured?.chatRoomId) {
-            // Optional: guide user directly to the chat
-            Alert.alert(
-              'Success!',
-              'You have been checked in and added to the event chat.',
-              [
-                { text: 'Go to Chat', onPress: () => router.push(`/chat/${ensured.chatRoomId}?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event.title)}`) },
-                { text: 'OK', style: 'default' }
-              ]
-            )
-          } else {
-            Alert.alert('Success!', data.message)
-          }
-        }).catch(() => Alert.alert('Success!', data.message))
-
-        // Refresh the checkin status for this event
-        loadCheckinStatusesBatch()
-      } else {
-        Logger.warn('events', 'Failed', { message: data?.message })
-        Alert.alert('Check-in Failed', data?.message || 'Unknown error')
-      }
-    } catch (error) {
-      Logger.error('events', 'Unexpected error', { error: error as any })
-      Alert.alert('Error', 'Failed to check in')
-    }
-  }
+  
 
   // Memoized render function for event items
   const renderEventItem = useCallback(({ item: event }: { item: Event }) => {

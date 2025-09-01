@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
     FlatList,
     Image,
@@ -13,8 +13,6 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
-import { VirtualizedList } from '../../components/VirtualizedList'
-import OptimizedImage from '../../components/OptimizedImage'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
@@ -313,21 +311,7 @@ export default function Chat() {
     }
   }
 
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await loadChats()
-    setRefreshing(false)
-  }
-
-  const handleGroupChatPress = (chat: GroupChat) => {
-    const query = `?roomName=${encodeURIComponent(chat.event_title)}&eventTitle=${encodeURIComponent(chat.event_title)}`
-    router.push(`/chat/${chat.chat_room_id}${query}`)
-  }
-
-  const handlePersonalChatPress = (chat: PersonalChat) => {
-    const q = `?otherUserName=${encodeURIComponent(chat.other_user_name || '')}&otherUserId=${encodeURIComponent(chat.other_user_id || '')}`
-    router.push(`/private-chat/${chat.conversation_id}${q}`)
-  }
+  
 
   const renderGroupChatItem = ({ item }: { item: GroupChat }) => (
     <TouchableOpacity 

@@ -1,7 +1,7 @@
-import React, { ComponentType, lazy, Suspense, memo } from 'react'
-import { ActivityIndicator, StyleSheet, View, Text } from 'react-native'
-import { ErrorBoundary } from './ErrorBoundary'
+import React, { ComponentType, lazy, memo, Suspense } from 'react'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Logger } from '../lib/logger'
+import { ErrorBoundary } from './ErrorBoundary'
 
 interface LazyLoadProps {
   fallback?: React.ReactNode

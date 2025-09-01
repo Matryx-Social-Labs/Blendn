@@ -1,8 +1,8 @@
+import { Image, ImageContentFit, ImageSource } from 'expo-image'
 import React, { memo, useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
-import { Image, ImageContentFit, ImageSource } from 'expo-image'
-import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { Logger } from '../lib/logger'
+import { getOptimizedImageUrl } from '../lib/photoUtils'
 
 interface OptimizedImageProps {
   source: string | ImageSource
