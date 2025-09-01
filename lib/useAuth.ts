@@ -28,46 +28,78 @@ const initializeAuth = async () => {
 
   console.log('🔐 [AUTH_MANAGER] Initializing auth system...')
 
+  // Start in loading state until INITIAL_SESSION arrives
+  globalAuthState = {
+    ...globalAuthState,
+    loading: true
+  }
+
   try {
-    // Get initial session
-    const { data: { session }, error } = await supabase.auth.getSession()
-    if (error) {
-      console.error('❌ [AUTH_MANAGER] Error getting initial session:', error)
-    }
+    let initialResolved = false
 
-    // Update global state
-    globalAuthState = {
-      session,
-      user: session?.user || null,
-      loading: false,
-      initialized: true
-    }
-
-    console.log('✅ [AUTH_MANAGER] Initial session loaded:', session?.user?.id || 'none')
-
-    // Set up auth state listener (only once)
+    // Set up auth state listener (only once) BEFORE any session fetch
     if (!authSubscription) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         console.log('🔐 [AUTH_MANAGER] Auth state changed:', event, session?.user?.id || 'none')
-        
-        // Update global state
-        globalAuthState = {
-          ...globalAuthState,
-          session,
-          user: session?.user || null,
-          loading: false
+
+        // For the very first event, mark initialized
+        if (event === 'INITIAL_SESSION') {
+          initialResolved = true
+          globalAuthState = {
+            session,
+            user: session?.user || null,
+            loading: false,
+            initialized: true
+          }
+        } else {
+          // Subsequent events
+          globalAuthState = {
+            ...globalAuthState,
+            session,
+            user: session?.user || null,
+            loading: false
+          }
         }
 
         // Notify all listeners
         authStateListeners.forEach(listener => listener(globalAuthState))
       })
-      
+
       authSubscription = subscription
     }
 
-    // Notify listeners of initial state
-    authStateListeners.forEach(listener => listener(globalAuthState))
+    // Prime storage read; rely on INITIAL_SESSION event for correctness
+    try {
+      await supabase.auth.getSession()
+    } catch (e) {
+      console.warn('⚠️ [AUTH_MANAGER] getSession prime failed', e)
+    }
 
+    // Wait briefly for INITIAL_SESSION; fallback to a direct read if it never arrives
+    const waitForInitial = async (timeoutMs = 2000) => {
+      const start = Date.now()
+      while (!initialResolved && Date.now() - start < timeoutMs) {
+        await new Promise(res => setTimeout(res, 50))
+      }
+    }
+    await waitForInitial(2000)
+
+    // If still not resolved (edge case), attempt a final direct read and proceed
+    if (!initialResolved) {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('❌ [AUTH_MANAGER] Error getting initial session (fallback):', error)
+      }
+      globalAuthState = {
+        session: session || null,
+        user: session?.user || null,
+        loading: false,
+        initialized: true
+      }
+      authStateListeners.forEach(listener => listener(globalAuthState))
+    }
+
+    console.log('✅ [AUTH_MANAGER] Auth initialized with user:', globalAuthState.user?.id || 'none')
     return globalAuthState
   } catch (error) {
     console.error('❌ [AUTH_MANAGER] Failed to initialize auth:', error)
