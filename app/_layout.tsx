@@ -33,6 +33,21 @@ export default function RootLayout() {
   const pathname = usePathname();
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
+  const isNavigatingRef = useRef<boolean>(false);
+
+  const replaceIfNeeded = (target: string) => {
+    if (isNavigatingRef.current) return;
+    if (!target) return;
+    if (pathname === target) return;
+    if (lastRedirectRef.current === target) return;
+    isNavigatingRef.current = true;
+    lastRedirectRef.current = target;
+    router.replace(target);
+    // Release the guard shortly after navigation; also resets on path change via effect deps
+    setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 200);
+  };
 
   useEffect(() => {
     // Set up notification listeners once
@@ -54,11 +69,7 @@ export default function RootLayout() {
       if (!user) {
         // Not authenticated → send to login index, unless already there
         if (!isIndex) {
-          const target = '/';
-          if (lastRedirectRef.current !== target) {
-            lastRedirectRef.current = target;
-            router.replace(target);
-          }
+          replaceIfNeeded('/');
         }
         // Also remove push token best-effort
         removePushTokenFromProfile().catch(() => {});
@@ -89,9 +100,8 @@ export default function RootLayout() {
 
       if (!onboarded) {
         const target = '/onboarding/welcome';
-        if (!isOnboarding && lastRedirectRef.current !== target) {
-          lastRedirectRef.current = target;
-          router.replace(target);
+        if (!isOnboarding) {
+          replaceIfNeeded(target);
         }
         return;
       }
@@ -99,10 +109,7 @@ export default function RootLayout() {
       // Onboarded users should not stay on onboarding or index
       if (isOnboarding || isIndex) {
         const target = '/(tabs)/events';
-        if (lastRedirectRef.current !== target) {
-          lastRedirectRef.current = target;
-          router.replace(target);
-        }
+        replaceIfNeeded(target);
       } else {
         // Clear last target if user navigated to a normal screen
         lastRedirectRef.current = null;
