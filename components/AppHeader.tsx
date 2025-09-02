@@ -1,7 +1,85 @@
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+interface ChatHeaderProps {
+  groupName: string
+  participantCount?: number
+  onBack?: () => void
+  onSettings?: () => void
+}
+
+interface SegmentedControlProps {
+  options: string[]
+  selectedIndex: number
+  onSelectionChange: (index: number) => void
+}
+
+function SegmentedControl({ options, selectedIndex, onSelectionChange }: SegmentedControlProps) {
+  return (
+    <View style={styles.segmentedContainer}>
+      <View style={styles.segmentedPill}>
+        {options.map((option, index) => (
+          <Pressable
+            key={index}
+            onPress={() => onSelectionChange(index)}
+            style={[
+              styles.segmentedItem,
+              index === selectedIndex && styles.segmentedItemActive
+            ]}
+          >
+            <Text style={[
+              styles.segmentedText,
+              index === selectedIndex && styles.segmentedTextActive
+            ]}>
+              {option}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHeaderProps) {
+  return (
+    <View style={[styles.chatHeaderContainer, { paddingTop: 0 }]}>
+      <View style={styles.chatHeaderRow}>
+        {/* Back button */}
+        {onBack && (
+          <Pressable
+            onPress={onBack}
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </Pressable>
+        )}
+
+        {/* Center content */}
+        <View style={styles.chatHeaderCenter}>
+          <Text style={styles.chatHeaderTitle} numberOfLines={1}>
+            {groupName}
+          </Text>
+          {participantCount && (
+            <Text style={styles.chatHeaderSubtitle}>
+              {participantCount} members
+            </Text>
+          )}
+        </View>
+
+        {/* Settings button */}
+        {onSettings && (
+          <Pressable
+            onPress={onSettings}
+            style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+          </Pressable>
+        )}
+      </View>
+    </View>
+  )
+}
 
 type HeaderVariant = 'light' | 'darkTransparent'
 
@@ -37,13 +115,12 @@ export function AppHeader(props: AppHeaderProps) {
     onBack,
     rightIconButton,
     rightTextButton,
-    variant = 'light',
-    showBottomBorder = true,
-    centerTitle = true,
+    variant = 'darkTransparent',
+    showBottomBorder = false,
+    centerTitle = false,
     containerStyle,
   } = props
 
-  const insets = useSafeAreaInsets()
   const isDark = variant === 'darkTransparent'
   const iconColor = isDark ? '#FFFFFF' : '#333333'
   const titleColor = isDark ? '#FFFFFF' : '#333333'
@@ -52,9 +129,9 @@ export function AppHeader(props: AppHeaderProps) {
   return (
     <View style={[
       {
-        paddingTop: insets.top + 8,
+        paddingTop: 0,
         paddingBottom: 12,
-        paddingHorizontal: 16,
+        paddingHorizontal: 14,
         backgroundColor: isDark ? 'transparent' : '#FFFFFF',
         borderBottomWidth: showBottomBorder && !isDark ? StyleSheet.hairlineWidth : 0,
         borderBottomColor: '#f0f0f0',
@@ -62,15 +139,15 @@ export function AppHeader(props: AppHeaderProps) {
       containerStyle,
     ]}>
       <View style={styles.row}>
-        {/* Left */}
+        {/* Back button or left spacer */}
         {onBack ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go back"
             onPress={onBack}
-            style={({ pressed }) => [styles.iconBtn, isDark && styles.iconBtnDark, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name="arrow-back" size={24} color={iconColor} />
+            <Ionicons name="chevron-back" size={24} color={iconColor} />
           </Pressable>
         ) : (
           <View style={{ width: 40 }} />
@@ -79,14 +156,14 @@ export function AppHeader(props: AppHeaderProps) {
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
           <Text
-            style={[styles.title, { color: titleColor }, isDark && styles.titleShadow]}
+            style={[styles.title, { color: titleColor }]}
             numberOfLines={1}
           >
             {title}
           </Text>
           {!!subtitle && (
             <Text
-              style={[styles.subtitle, { color: subtitleColor }, isDark && styles.titleShadow]}
+              style={[styles.subtitle, { color: subtitleColor }]}
               numberOfLines={1}
             >
               {subtitle}
@@ -112,9 +189,9 @@ export function AppHeader(props: AppHeaderProps) {
             accessibilityRole="button"
             accessibilityLabel={rightIconButton.accessibilityLabel || 'Action'}
             onPress={rightIconButton.onPress}
-            style={({ pressed }) => [styles.iconBtn, isDark && styles.iconBtnDark, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name={rightIconButton.name} size={22} color={iconColor} />
+            <Ionicons name={rightIconButton.name} size={24} color={iconColor} />
           </Pressable>
         ) : (
           <View style={{ width: 40 }} />
@@ -125,6 +202,79 @@ export function AppHeader(props: AppHeaderProps) {
 }
 
 const styles = StyleSheet.create({
+  // SegmentedControl styles
+  segmentedContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  segmentedPill: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.20)',
+    overflow: 'hidden',
+  },
+  segmentedItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  segmentedItemActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  segmentedText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#CFCFCF',
+  },
+  segmentedTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // ChatHeader styles
+  chatHeaderContainer: {
+    backgroundColor: 'transparent',
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  chatHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  chatHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  chatHeaderSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // AppHeader styles
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -148,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
   },
   titleShadow: {
@@ -182,6 +332,6 @@ const styles = StyleSheet.create({
   },
 })
 
-export default AppHeader
+export { ChatHeader, AppHeader as default, SegmentedControl }
 
 

@@ -1,16 +1,17 @@
+import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
@@ -483,21 +484,35 @@ export default function GroupChat() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Loading chat...</Text>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <LinearGradient
+          colors={["#480D37", "#000000"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color="#FF6B6B" />
+          <Text style={styles.loadingText}>Loading chat...</Text>
+        </View>
       </SafeAreaView>
     )
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <LinearGradient
+        colors={["#480D37", "#000000"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {renderHeader()}
-        
+
         <FlatList
           ref={flatListRef}
           data={chatItems}
@@ -516,7 +531,7 @@ export default function GroupChat() {
             value={newMessage}
             onChangeText={setNewMessage}
             placeholder="Type a message..."
-            placeholderTextColor="#999"
+            placeholderTextColor="rgba(255,255,255,0.6)"
             multiline
             maxLength={1000}
             onSubmitEditing={sendMessage}
@@ -545,18 +560,16 @@ export default function GroupChat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
   },
-  loadingContainer: {
+  loadingContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F7F8FA',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: '#FFFFFF',
   },
   
   messagesList: {
@@ -579,14 +592,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E9ECF2',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
   avatarText: {
     fontSize: 12,
-    color: '#556070',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   systemMessageContainer: {
@@ -595,12 +608,12 @@ const styles = StyleSheet.create({
   },
   systemMessage: {
     fontSize: 14,
-    color: '#999',
+    color: '#FFFFFF',
     fontStyle: 'italic',
     textAlign: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
   },
   messageContainer: {
@@ -615,7 +628,7 @@ const styles = StyleSheet.create({
   },
   senderName: {
     fontSize: 12,
-    color: '#666',
+    color: '#FFFFFF',
     marginBottom: 4,
     marginLeft: 12,
   },
@@ -667,11 +680,11 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     height: 1,
-    backgroundColor: '#eaeaea',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   dateSeparatorText: {
-    backgroundColor: '#F7F8FA',
-    color: '#666',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -680,19 +693,23 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 25,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginRight: 12,
     maxHeight: 100,
     fontSize: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#FFFFFF',
   },
   sendButton: {
     width: 50,

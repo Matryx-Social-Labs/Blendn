@@ -30,6 +30,13 @@
         <data android:scheme="blendn"/>
         <data android:scheme="exp+blendn"/>
       </intent-filter>
+      <intent-filter data-generated="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <data android:scheme="blendn" android:host="*" android:pathPrefix="/"/>
+        <data android:scheme="exp+blendn"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
     </activity>
   </application>
 </manifest>

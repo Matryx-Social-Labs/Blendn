@@ -47,7 +47,7 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>GIDClientID</key>
-    <string>438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f.apps.googleusercontent.com</string>
+    <string>$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>

@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import ModernChat from '../../components/ModernChat'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
@@ -51,6 +52,7 @@ export default function Chat() {
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [showModernChat, setShowModernChat] = useState(false)
   const { setScrollProgress } = useGradientOverlay()
 
   // Memoized callbacks to prevent re-creation
@@ -480,6 +482,18 @@ export default function Chat() {
     )
   }
 
+  // Show modern chat demo if toggled
+  if (showModernChat) {
+    return (
+      <ModernChat
+        groupName="Bobs Chat Room"
+        participantCount={5}
+        onBack={() => setShowModernChat(false)}
+        onSettings={() => alert('Settings pressed!')}
+      />
+    )
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header gradient + stories */}
@@ -490,7 +504,16 @@ export default function Chat() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <AppHeader title="The Banter" variant="darkTransparent" showBottomBorder={false} />
+        <AppHeader
+          title="The Banter"
+          variant="darkTransparent"
+          showBottomBorder={false}
+          rightIconButton={{
+            name: 'chatbubble-ellipses',
+            onPress: () => setShowModernChat(true),
+            accessibilityLabel: 'View modern chat demo'
+          }}
+        />
 
         <View style={styles.storiesCard}>
           <ScrollView
