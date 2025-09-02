@@ -17,7 +17,7 @@ function BackgroundGradient() {
   return (
     <View style={styles.bg} pointerEvents="none">
       <LinearGradient
-        colors={["#000000", "#000000"]}
+        colors={["#480D37", "#000000"]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}

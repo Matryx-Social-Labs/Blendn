@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   loadingText: {
     fontSize: 16,
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     padding: 20,
   },
   errorText: {

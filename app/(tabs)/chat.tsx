@@ -499,7 +499,7 @@ export default function Chat() {
       {/* Header gradient + stories */}
       <View style={styles.headerGradient}>
         <LinearGradient
-          colors={["#3a0b2d", "#18041f"]}
+          colors={["#480D37", "#000000"]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
