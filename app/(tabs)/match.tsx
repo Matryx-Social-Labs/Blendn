@@ -532,7 +532,6 @@ export default function Match() {
             title="The Grid"
             variant="darkTransparent"
             showBottomBorder={false}
-            onBack={() => router.back()}
             rightIconButton={{ name: 'refresh', onPress: () => currentUser && loadActiveEventAndAttendees(currentUser.id), accessibilityLabel: 'Refresh' }}
           />
 
@@ -606,7 +605,7 @@ export default function Match() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
   },
   header: {
     padding: 20,
@@ -635,9 +634,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   heroGradient: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 18,
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
   },

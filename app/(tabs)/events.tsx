@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
+import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
@@ -663,12 +664,10 @@ export default function Events() {
 
   const renderUpcomingFigmaCarousel = () => (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionFancyRow}>
+        <View style={styles.sectionDividerLine} />
         <Text style={styles.sectionTitle}>Upcoming events</Text>
-        <TouchableOpacity style={styles.viewAllRow}>
-          <Text style={styles.viewAllText}>View all</Text>
-          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
-        </TouchableOpacity>
+        <View style={styles.sectionDividerLine} />
       </View>
       <Animated.FlatList
         ref={upcomingListRef as any}
@@ -753,7 +752,12 @@ export default function Events() {
                       imageStyle={styles.upcomingImageRadius}
                       resizeMode="cover"
                     >
-                      <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.upcomingImageRadius]} />
+                      <LinearGradient
+                        colors={["rgba(0,0,0,0)", "#000000"]}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={[styles.gradientFull, styles.upcomingImageRadius]}
+                      />
                       <View style={styles.upTextOverlay}>
                         <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
                         <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
@@ -873,11 +877,30 @@ export default function Events() {
               <View style={{ marginBottom: 18 }}>
                 <ImageBackground source={{ uri: ev.cover_image_url }} style={styles.nearbyImage} imageStyle={styles.nearbyImageRadius}>
                   {/* Figma gradient from transparent to black at the bottom */}
-                  <LinearGradient colors={["#00000000", "#000000D9"]} style={[styles.gradientFull, styles.nearbyImageRadius]} />
+                  <LinearGradient
+                    colors={["#00000000", "#000000D9"]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={[styles.gradientFull, styles.nearbyImageRadius]}
+                  />
 
                   {/* Glass effect box overlay */}
                   <View style={styles.nearbyGlass}>
-                    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.45)' }]} />
+                    <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
+                    <LinearGradient
+                      colors={["rgba(255,255,255,0.35)", "rgba(255,255,255,0.08)"]}
+                      start={{ x: 0.2, y: 0 }}
+                      end={{ x: 0.8, y: 1 }}
+                      style={styles.nearbyGlassSheen}
+                    />
+                    {/* removed top inset highlight */}
+                    <LinearGradient
+                      colors={["rgba(0,0,0,0.35)", "rgba(0,0,0,0)"]}
+                      start={{ x: 0.5, y: 1 }}
+                      end={{ x: 0.5, y: 0 }}
+                      style={styles.nearbyGlassInnerShadowBottom}
+                    />
+                    <View pointerEvents="none" style={styles.nearbyGlassRim} />
                     <Text style={styles.nearbyGlassTitle} numberOfLines={2}>{ev.title}</Text>
                     <View style={styles.nearbyGlassRow}>
                       <View style={styles.nearbyMetaItem}> 
@@ -1035,7 +1058,7 @@ export default function Events() {
       {/* Background image tint to match Figma */}
       {/* Image moved to global background in RootLayout */}
       {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} className='bg-black'>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
@@ -1113,7 +1136,7 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
     
   },
   sectionBg: {
@@ -1141,7 +1164,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
   },
   loadingText: {
     marginTop: 16,
@@ -1182,8 +1205,10 @@ const styles = StyleSheet.create({
   sectionDividerLine: {
     height: 1,
     width: 73,
-    backgroundColor: '#D9D9D9',
+    backgroundColor: '#FFFFFF',
+    opacity: 0.22,
     borderRadius: 11,
+    transform: [{ rotate: '180deg' }],
   },
   sectionSubTitle: {
     fontSize: 16,
@@ -1248,9 +1273,10 @@ const styles = StyleSheet.create({
   },
   upTextOverlay: {
     position: 'absolute',
-    left: 8,
-    right: 8,
+    left: 0,
+    right: 0,
     bottom: 10,
+    alignItems: 'center',
   },
   upVenueSmall: {
     color: '#FFFFFF',
@@ -1266,13 +1292,14 @@ const styles = StyleSheet.create({
   upVenueLarge: {
     color: '#FFFFFF',
     fontSize: 12,
-    textAlign: 'left',
+    textAlign: 'center',
     marginBottom: 4,
   },
   upTitleLarge: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    textAlign: 'center',
   },
   carouselCard: {
     width: 260,
@@ -1434,8 +1461,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   nearbyImage: {
-    width: '100%',
+    width: 363,
     height: 249,
+    alignSelf: 'center',
   },
   nearbyImageRadius: {
     borderRadius: 23,
@@ -1458,15 +1486,42 @@ const styles = StyleSheet.create({
   },
   nearbyGlass: {
     position: 'absolute',
-    left: 6,
+    left: 5,
     right: 6,
     top: 161,
     bottom: 7,
     borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(190, 190, 190, 0.32)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  nearbyGlassSheen: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    opacity: 0.45,
+  },
+  // removed nearbyGlassInsetTop
+  nearbyGlassRim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  nearbyGlassInnerShadowBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    opacity: 0.4,
   },
   nearbyGlassTitle: {
     position: 'absolute',
@@ -1567,6 +1622,7 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 3,
     paddingHorizontal: 14,
+    backgroundColor: '#000000',
     
     paddingTop: 8,
     paddingBottom: 12,

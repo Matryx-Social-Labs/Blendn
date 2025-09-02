@@ -129,10 +129,11 @@ export function AppHeader(props: AppHeaderProps) {
   return (
     <View style={[
       {
-        paddingTop: 0,
-        paddingBottom: 12,
         paddingHorizontal: 14,
-        backgroundColor: isDark ? 'transparent' : '#FFFFFF',
+        paddingTop: 8,
+        paddingBottom: 12,
+      
+        backgroundColor: isDark ? '#000000' : '#FFFFFF',
         borderBottomWidth: showBottomBorder && !isDark ? StyleSheet.hairlineWidth : 0,
         borderBottomColor: '#f0f0f0',
       },
@@ -149,9 +150,7 @@ export function AppHeader(props: AppHeaderProps) {
           >
             <Ionicons name="chevron-back" size={24} color={iconColor} />
           </Pressable>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
+        ) : null}
 
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
@@ -193,9 +192,7 @@ export function AppHeader(props: AppHeaderProps) {
           >
             <Ionicons name={rightIconButton.name} size={24} color={iconColor} />
           </Pressable>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
+        ) : null}
       </View>
     </View>
   )
@@ -204,9 +201,9 @@ export function AppHeader(props: AppHeaderProps) {
 const styles = StyleSheet.create({
   // SegmentedControl styles
   segmentedContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 6,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   segmentedPill: {
     flexDirection: 'row',
@@ -235,9 +232,9 @@ const styles = StyleSheet.create({
 
   // ChatHeader styles
   chatHeaderContainer: {
-    backgroundColor: 'transparent',
-    paddingBottom: 12,
-    paddingHorizontal: 16,
+    backgroundColor: '#000000',
+    paddingBottom: 0,
+    paddingHorizontal: 0,
   },
   chatHeaderRow: {
     flexDirection: 'row',
@@ -253,7 +250,6 @@ const styles = StyleSheet.create({
   chatHeaderCenter: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 12,
   },
   chatHeaderTitle: {
     fontSize: 18,
@@ -264,7 +260,6 @@ const styles = StyleSheet.create({
   chatHeaderSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
     textAlign: 'center',
   },
   settingsButton: {
@@ -292,7 +287,6 @@ const styles = StyleSheet.create({
   },
   titleWrap: {
     flex: 1,
-    paddingHorizontal: 8,
   },
   centerTitle: {
     alignItems: 'center',

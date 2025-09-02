@@ -703,6 +703,7 @@ export default function GroupChat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   loadingContent: {
     flex: 1,

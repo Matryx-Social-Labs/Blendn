@@ -1,13 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { router } from 'expo-router';
-import { supabase } from '../../lib/supabase';
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '../../lib/supabase';
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -16,9 +14,14 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <View style={styles.pillShadow} />
-      <View style={styles.pillShadowSmall} />
-      <BlurView intensity={50} tint="default" style={[styles.pillContainer, isDark ? styles.pillDark : styles.pillLight]}>
+      <View style={styles.glowOuter} />
+      <View style={styles.glowInner} />
+      <LinearGradient
+        colors={[ '#6E1FD0', '#7E26CC' ]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.pillContainer}
+      >
         <View style={styles.itemsRow}>
           {state.routes.map((route, index) => {
             const { options } = descriptors[route.key];
@@ -42,10 +45,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               });
             };
 
-            const iconColor = isDark ? '#F1F1F1' : '#333333';
-            const iconSize = 24;
+            const iconColor = '#FFFFFF';
+            const iconSize = 26;
             let iconName: keyof typeof Ionicons.glyphMap = 'ellipse';
-            if (route.name === 'events') iconName = isFocused ? 'calendar' : 'calendar-outline';
+            if (route.name === 'events') iconName = isFocused ? 'home' : 'home-outline';
             if (route.name === 'match') iconName = isFocused ? 'heart' : 'heart-outline';
             if (route.name === 'chat') iconName = isFocused ? 'chatbubbles' : 'chatbubbles-outline';
             if (route.name === 'profile') iconName = isFocused ? 'person' : 'person-outline';
@@ -57,45 +60,32 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 accessibilityState={isFocused ? { selected: true } : {}}
                 onPress={onPress}
                 onLongPress={onLongPress}
-                style={({ pressed }) => [
-                  styles.item,
-                  (isFocused || pressed) && (isDark ? styles.itemActiveDark : styles.itemActiveLight),
-                ]}
+                style={styles.item}
               >
-                <Ionicons name={iconName} size={iconSize} color={iconColor} />
+                <View style={[styles.iconWrapper, isFocused && styles.iconWrapperActive]}>
+                  <Ionicons name={iconName} size={iconSize} color={iconColor} />
+                </View>
               </Pressable>
             );
           })}
         </View>
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0)']}
-            locations={[0, 0.5, 1]}
+            colors={[ 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0)' ]}
+            locations={[0, 1]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={styles.topGloss}
           />
           <LinearGradient
-            colors={isDark ? ['rgba(0,0,0,0)', 'rgba(0,0,0,0.10)'] : ['rgba(0,0,0,0)', 'rgba(0,0,0,0.06)']}
-            start={{ x: 0.5, y: 0.3 }}
+            colors={[ 'rgba(0,0,0,0)', 'rgba(0,0,0,0.20)' ]}
+            start={{ x: 0.5, y: 0.4 }}
             end={{ x: 0.5, y: 1 }}
             style={styles.bottomShade}
           />
-          <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.sideGlintLeft}
-          />
-          <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-            start={{ x: 1, y: 0.5 }}
-            end={{ x: 0, y: 0.5 }}
-            style={styles.sideGlintRight}
-          />
-          <View style={[styles.stroke, { borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.45)' }]} />
+          <View style={[styles.stroke, { borderColor: 'rgba(255,255,255,0.80)' }]} />
         </View>
-      </BlurView>
+      </LinearGradient>
     </View>
   );
 }
@@ -154,7 +144,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
   },
-  pillShadow: {
+  glowOuter: {
     position: 'absolute',
     bottom: 16,
     width: 352,
@@ -163,33 +153,33 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     ...Platform.select({
       ios: {
-        shadowColor: 'rgba(0,0,0,0.12)',
-        shadowOpacity: 1,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 1 },
+        shadowColor: 'rgb(139, 92, 246)',
+        shadowOpacity: 0.55,
+        shadowRadius: 22,
+        shadowOffset: { width: 0, height: 0 },
       },
       android: {
-        elevation: 6,
+        elevation: 0,
       },
       default: {},
     }),
   },
-  pillShadowSmall: {
+  glowInner: {
     position: 'absolute',
-    bottom: 18,
+    bottom: 16,
     width: 352,
     height: 51,
     borderRadius: 1000,
     backgroundColor: 'transparent',
     ...Platform.select({
       ios: {
-        shadowColor: 'rgba(0,0,0,0.10)',
-        shadowOpacity: 1,
-        shadowRadius: 2,
+        shadowColor: 'rgb(139, 92, 246)',
+        shadowOpacity: 0.35,
+        shadowRadius: 14,
         shadowOffset: { width: 0, height: 0 },
       },
       android: {
-        elevation: 2,
+        elevation: 0,
       },
       default: {},
     }),
@@ -203,16 +193,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
-  pillLight: {
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.45)',
-  },
-  pillDark: {
-    backgroundColor: 'rgba(16,16,16,0.35)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
   itemsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -225,41 +205,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemActiveLight: {
-    backgroundColor: 'rgba(255,255,255,0.60)',
+  iconWrapper: {
+    height: 39,
+    width: 56,
+    borderRadius: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  itemActiveDark: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
+  iconWrapperActive: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.45)'
   },
   stroke: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 1000,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  topGloss: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 1000,
-  },
-  bottomShade: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 1000,
-  },
-  sideGlintLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 40,
-    borderTopLeftRadius: 1000,
-    borderBottomLeftRadius: 1000,
-  },
-  sideGlintRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 40,
-    borderTopRightRadius: 1000,
-    borderBottomRightRadius: 1000,
-  },
+  topGloss: {},
+  bottomShade: {},
+  sideGlintLeft: {},
+  sideGlintRight: {},
 });

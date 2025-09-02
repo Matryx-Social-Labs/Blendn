@@ -638,12 +638,9 @@ export default function Chat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
   },
   headerGradient: {
-    paddingTop: 8,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
   },
   
   storiesCard: {
