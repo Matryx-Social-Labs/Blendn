@@ -11,12 +11,12 @@ import {
   Platform,
   SafeAreaView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native'
 import { ChatHeader, SegmentedControl } from './AppHeader'
+import Typography from './Typography'
 
 interface Message {
   id: string
@@ -160,25 +160,25 @@ export default function ModernChat({
     >
       {!item.isCurrentUser && (
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
+          <Typography variant="caption" style={styles.avatarText}>
             {item.sender.split(' ').map(word => word[0]).join('').toUpperCase()}
-          </Text>
+          </Typography>
         </View>
       )}
       <View style={styles.messageContainer}>
         {!item.isCurrentUser && (
-          <Text style={styles.senderName}>{item.sender}</Text>
+          <Typography variant="caption" style={styles.senderName}>{item.sender}</Typography>
         )}
 
         {/* Reply indicator */}
         {item.replyTo && (
           <View style={styles.replyContainer}>
             <View style={styles.replyLine} />
-            <Text style={styles.replyText}>
+            <Typography variant="caption" style={styles.replyText}>
               Replying to {item.replyTo.sender}: {item.replyTo.text.length > 50
                 ? `${item.replyTo.text.substring(0, 50)}...`
                 : item.replyTo.text}
-            </Text>
+            </Typography>
           </View>
         )}
 
@@ -186,19 +186,19 @@ export default function ModernChat({
           styles.messageBubble,
           item.isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble
         ]}>
-          <Text style={[
+          <Typography style={[
             styles.messageText,
             item.isCurrentUser ? styles.currentUserText : styles.otherUserText
           ]}>
             {item.text}
-          </Text>
+          </Typography>
         </View>
-        <Text style={[
+        <Typography variant="caption" style={[
           styles.messageTime,
           item.isCurrentUser ? styles.currentUserTime : styles.otherUserTime
         ]}>
           {item.timestamp}
-        </Text>
+        </Typography>
       </View>
     </TouchableOpacity>
   )
@@ -249,10 +249,10 @@ export default function ModernChat({
             <View style={styles.replyInputContent}>
               <View style={styles.replyInputLine} />
               <View style={styles.replyInputText}>
-                <Text style={styles.replyInputLabel}>Replying to {replyingTo.sender}</Text>
-                <Text style={styles.replyInputMessage} numberOfLines={1}>
+                <Typography variant="caption" style={styles.replyInputLabel}>Replying to {replyingTo.sender}</Typography>
+                <Typography variant="body2" style={styles.replyInputMessage} numberOfLines={1}>
                   {replyingTo.text}
-                </Text>
+                </Typography>
               </View>
               <TouchableOpacity
                 onPress={() => setReplyingTo(null)}
@@ -321,7 +321,7 @@ export default function ModernChat({
               onPress={handleReply}
             >
               <Ionicons name="return-up-back" size={24} color="#FFFFFF" />
-              <Text style={styles.menuItemText}>Reply</Text>
+              <Typography variant="body1" style={styles.menuItemText}>Reply</Typography>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -329,7 +329,7 @@ export default function ModernChat({
               onPress={handleCopyMessage}
             >
               <Ionicons name="copy" size={24} color="#FFFFFF" />
-              <Text style={styles.menuItemText}>Copy</Text>
+              <Typography variant="body1" style={styles.menuItemText}>Copy</Typography>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -337,7 +337,7 @@ export default function ModernChat({
               onPress={handleReportMessage}
             >
               <Ionicons name="flag" size={24} color="#FF6B6B" />
-              <Text style={[styles.menuItemText, styles.menuItemTextDestructive]}>Report</Text>
+              <Typography variant="body1" style={[styles.menuItemText, styles.menuItemTextDestructive]}>Report</Typography>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
+import Typography from './Typography'
 
 interface ChatHeaderProps {
   groupName: string
@@ -57,13 +58,13 @@ function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHea
 
         {/* Center content */}
         <View style={styles.chatHeaderCenter}>
-          <Text style={styles.chatHeaderTitle} numberOfLines={1}>
+          <Typography variant="h3" style={styles.chatHeaderTitle} numberOfLines={1}>
             {groupName}
-          </Text>
+          </Typography>
           {participantCount && (
-            <Text style={styles.chatHeaderSubtitle}>
+            <Typography variant="caption" style={styles.chatHeaderSubtitle}>
               {participantCount} members
-            </Text>
+            </Typography>
           )}
         </View>
 
@@ -154,19 +155,21 @@ export function AppHeader(props: AppHeaderProps) {
 
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
-          <Text
+          <Typography
+            variant="h2"
             style={[styles.title, { color: titleColor }]}
             numberOfLines={1}
           >
             {title}
-          </Text>
+          </Typography>
           {!!subtitle && (
-            <Text
+            <Typography
+              variant="caption"
               style={[styles.subtitle, { color: subtitleColor }]}
               numberOfLines={1}
             >
               {subtitle}
-            </Text>
+            </Typography>
           )}
         </View>
 
@@ -180,7 +183,7 @@ export function AppHeader(props: AppHeaderProps) {
             {rightTextButton.loading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.ctaText}>{rightTextButton.label}</Text>
+              <Typography variant="button" uppercaseButton style={styles.ctaText}>{rightTextButton.label}</Typography>
             )}
           </Pressable>
         ) : rightIconButton ? (

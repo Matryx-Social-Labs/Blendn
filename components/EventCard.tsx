@@ -1,6 +1,7 @@
 import React, { memo } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import OptimizedImage from './OptimizedImage'
+import Typography from './Typography'
 
 interface Event {
   id: string
@@ -69,30 +70,30 @@ const EventCard = memo<EventCardProps>(({
       )}
       
       <View style={styles.eventContent}>
-        <Text style={styles.eventTitle}>{event.title}</Text>
-        <Text style={styles.eventVenue}>{event.venue_name}</Text>
-        <Text style={styles.eventDescription} numberOfLines={2}>
+        <Typography variant="h3" style={styles.eventTitle}>{event.title}</Typography>
+        <Typography variant="body2" style={styles.eventVenue}>{event.venue_name}</Typography>
+        <Typography variant="body2" style={styles.eventDescription} numberOfLines={2}>
           {event.short_description || event.description}
-        </Text>
+        </Typography>
         
         <View style={styles.eventMeta}>
-          <Text style={styles.eventTime}>
+          <Typography variant="caption" style={styles.eventTime}>
             {new Date(event.start_time).toLocaleDateString()} at{' '}
             {new Date(event.start_time).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit'
             })}
-          </Text>
-          <Text style={styles.eventPrice}>
+          </Typography>
+          <Typography variant="body2" style={styles.eventPrice}>
             {event.price_cents > 0 ? `₹${event.price_cents / 100}` : 'Free'}
-          </Text>
+          </Typography>
         </View>
 
         {/* Status indicators */}
         <View style={styles.statusRow}>
           {isCheckedIn && (
             <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>✅ Checked In</Text>
+              <Typography variant="caption" style={styles.statusText}>✅ Checked In</Typography>
             </View>
           )}
           
@@ -101,15 +102,15 @@ const EventCard = memo<EventCardProps>(({
               style={styles.checkinButton}
               onPress={handleCheckIn}
             >
-              <Text style={styles.checkinButtonText}>Check In</Text>
+              <Typography variant="button" uppercaseButton style={styles.checkinButtonText}>Check In</Typography>
             </TouchableOpacity>
           )}
           
           {proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius && (
             <View style={[styles.statusBadge, styles.distanceBadge]}>
-              <Text style={[styles.statusText, styles.distanceText]}> 
+              <Typography variant="caption" style={[styles.statusText, styles.distanceText]}> 
                 📍 {Math.round((proximity.distance_km || 0) * 1000)}m away 
-              </Text>
+              </Typography>
             </View>
           )}
 
@@ -118,9 +119,9 @@ const EventCard = memo<EventCardProps>(({
               style={[styles.interestButton, interested && styles.interestButtonActive]}
               onPress={handleToggleInterest}
             >
-              <Text style={[styles.interestButtonText, interested && styles.interestButtonTextActive]}>
+              <Typography variant="body2" style={[styles.interestButtonText, interested && styles.interestButtonTextActive]}>
                 {interested ? '♥︎' : '♡'}
-              </Text>
+              </Typography>
             </TouchableOpacity>
           )}
         </View>

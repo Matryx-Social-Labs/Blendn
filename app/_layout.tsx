@@ -3,6 +3,7 @@ import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
 import { Animated, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import '../lib/globalText';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import {
     initializePushNotifications,

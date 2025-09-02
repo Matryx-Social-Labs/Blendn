@@ -8,12 +8,12 @@ import {
   Dimensions,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import Typography from '../../components/Typography'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
@@ -177,7 +177,7 @@ export default function UserProfile() {
     return (
       <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
         <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.muted}>Loading profile…</Text>
+        <Typography variant="body2" style={styles.muted}>Loading profile…</Typography>
       </SafeAreaView>
     )
   }
@@ -185,7 +185,7 @@ export default function UserProfile() {
   if (!profile) {
     return (
       <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
-        <Text style={styles.muted}>Profile not found</Text>
+        <Typography variant="body2" style={styles.muted}>Profile not found</Typography>
       </SafeAreaView>
     )
   }
@@ -232,17 +232,17 @@ export default function UserProfile() {
 
         <View style={styles.content}>
           <View style={styles.rowBetween}>
-            <Text style={styles.name}>
+            <Typography variant="h1" style={styles.name}>
               {profile.name}{profile.age ? `, ${profile.age}` : ''}
-            </Text>
+            </Typography>
           </View>
 
           {profile.interests && profile.interests.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Interests</Text>
+              <Typography variant="h3" style={styles.sectionTitle}>Interests</Typography>
               <View style={styles.tags}>
                 {profile.interests.map((i, idx) => (
-                  <View key={`${i}-${idx}`} style={styles.tag}><Text style={styles.tagText}>{i}</Text></View>
+                  <View key={`${i}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{i}</Typography></View>
                 ))}
               </View>
             </View>
@@ -250,14 +250,14 @@ export default function UserProfile() {
 
           {!!profile.bio && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>About</Text>
-              <Text style={styles.aboutText}>{profile.bio}</Text>
+              <Typography variant="h3" style={styles.sectionTitle}>About</Typography>
+              <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
             </View>
           )}
 
           {(profile.profile_photos && profile.profile_photos.length > 0) || (profile.photos && profile.photos.length > 0) ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Gallery</Text>
+              <Typography variant="h3" style={styles.sectionTitle}>Gallery</Typography>
               <View style={styles.galleryGrid}>
                 {(profile.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile.photos || []).map((uri, idx) => {
                   const optimized = getOptimizedImageUrl(uri, { width: 120, height: 120, resize: 'cover', quality: 60, format: 'webp' })
