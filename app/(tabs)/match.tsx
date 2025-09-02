@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
@@ -17,6 +16,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import { SkeletonBlock } from '../../components/Skeleton'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -515,14 +515,7 @@ export default function Match() {
     </View>
   )
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Loading attendees...</Text>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = loading
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -558,7 +551,30 @@ export default function Match() {
           </View>
         </LinearGradient>
 
-        {!eventInfo ? (
+        {isLoading ? (
+          <>
+            <Text style={styles.sectionTitle}>Similar Interests</Text>
+            <View style={styles.similarList}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {[...Array(5)].map((_, i) => (
+                  <SkeletonBlock key={`sk-sim-${i}`} width={SIMILAR_CARD_WIDTH} height={SIMILAR_CARD_HEIGHT} borderRadius={18} style={{ marginRight: 16 }} />
+                ))}
+              </ScrollView>
+            </View>
+            <View style={styles.dotsRow}>
+              {[...Array(4)].map((_, i) => (
+                <View key={`dot_${i}`} style={[styles.dot]} />
+              ))}
+            </View>
+
+            <Text style={styles.sectionTitle}>People Nearby</Text>
+            <View style={styles.gridWrap}>
+              {[...Array(12)].map((_, i) => (
+                <SkeletonBlock key={`sk-g-${i}`} width={Math.floor((width - 32 - 12 * 2) / 3)} height={Math.floor((width - 32 - 12 * 2) / 3 * 1.05)} borderRadius={12} style={{ marginRight: 12, marginBottom: 12 }} />
+              ))}
+            </View>
+          </>
+        ) : !eventInfo ? (
           renderEmptyState()
         ) : attendees.length === 0 ? (
           <View style={styles.noMoreContainer}>

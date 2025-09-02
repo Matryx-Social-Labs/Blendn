@@ -9,6 +9,7 @@ import {
     View
 } from 'react-native'
 import PhotoManager from '../../components/PhotoManager'
+import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { supabase } from '../../lib/supabase'
 
 export default function Photos() {
@@ -68,8 +69,9 @@ export default function Photos() {
   const renderPhotoSection = () => {
     if (loading || !currentUser) {
       return (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+        <View>
+          <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
+          <SkeletonLine width={'60%'} />
         </View>
       )
     }

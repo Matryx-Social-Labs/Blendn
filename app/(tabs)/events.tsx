@@ -6,7 +6,6 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -22,6 +21,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import EventCard from '../../components/EventCard'
+import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -1041,14 +1041,7 @@ export default function Events() {
     return events.filter(e => !shown.has(e.id))
   }, [events, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
 
-  if (authLoading || loading) {
-    return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading events...</Text>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = authLoading || loading
 
   const stickyBarHeight = insets.top + 8 + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
@@ -1080,52 +1073,89 @@ export default function Events() {
           style={StyleSheet.absoluteFill}
         />
         <VirtualizedList
-          data={mainListData}
+          data={isLoading ? [] : mainListData}
           renderItem={renderEventItem}
           keyExtractor={keyExtractor}
           estimatedItemSize={200}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} />
           }
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          enableVirtualization={mainListData.length > 20}
+          enableVirtualization={!isLoading && mainListData.length > 20}
           initialNumToRender={10}
           maxToRenderPerBatch={5}
           windowSize={10}
           ListHeaderComponent={(
-            <View>
-              {/* Interested empty or carousel */}
-              {interestedItems.length === 0 ? (
-                <View style={styles.interestedEmptyRow}>
-                  <View style={styles.interestedThumb} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.interestedTitle}>Interested Events</Text>
-                    <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
-                  </View>
+            isLoading ? (
+              <View>
+                <View style={styles.sectionHeaderRow}>
+                  <SkeletonLine width={160} />
+                  <SkeletonLine width={80} />
                 </View>
-              ) : (
-                renderInterestedCarousel(interestedItems.slice(0, 10))
-              )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
+                  {[...Array(5)].map((_, i) => (
+                    <SkeletonBlock key={`s-int-${i}`} width={260} height={120} borderRadius={12} style={{ marginHorizontal: 4 }} />
+                  ))}
+                </ScrollView>
+                <View style={styles.sectionHeaderRow}>
+                  <SkeletonLine width={200} />
+                </View>
+                <Animated.View style={[styles.upcomingViewport, { paddingVertical: 16, height: 300 }]}> 
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
+                    {[...Array(7)].map((_, i) => (
+                      <SkeletonBlock key={`s-up-${i}`} width={163} height={264} borderRadius={20} style={{ marginRight: 14 }} />
+                    ))}
+                  </ScrollView>
+                </Animated.View>
+                <View style={styles.sectionHeaderRow}>
+                  <SkeletonLine width={180} />
+                </View>
+                {[...Array(4)].map((_, i) => (
+                  <SkeletonBlock key={`s-near-${i}`} width={'96%'} height={249} borderRadius={23} style={{ alignSelf: 'center', marginBottom: 16 }} />
+                ))}
+                <View style={{ paddingHorizontal: 23, paddingTop: 8 }}>
+                  <SkeletonBlock width={'100%'} height={474} borderRadius={20} />
+                </View>
+                {[...Array(6)].map((_, i) => (
+                  <View key={`s-card-${i}`} style={{ paddingHorizontal: 8, marginTop: 16 }}>
+                    <SkeletonBlock width={'100%'} height={200} borderRadius={12} />
+                    <View style={{ marginTop: 10, paddingHorizontal: 6 }}>
+                      <SkeletonLine width={'60%'} />
+                      <SkeletonLine width={'40%'} style={{ marginTop: 6 }} />
+                    </View>
+                  </View>
+                ))}
+                <View style={{ height: 8 }} />
+              </View>
+            ) : (
+              <View>
+                {interestedItems.length === 0 ? (
+                  <View style={styles.interestedEmptyRow}>
+                    <View style={styles.interestedThumb} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.interestedTitle}>Interested Events</Text>
+                      <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
+                    </View>
+                  </View>
+                ) : (
+                  renderInterestedCarousel(interestedItems.slice(0, 10))
+                )}
 
-              {/* Upcoming (Figma) */}
-              {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
+                {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
 
-              {/* Nearby */}
-              {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
+                {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
 
-              {/* City top - fancy header */}
-              {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
+                {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
 
-              {/* Best parties - fancy header */}
-              {bestPartiesItems.length > 0 && renderCarouselFancy(['Discover the', 'Best Parties'], bestPartiesItems.slice(0, 10))}
+                {bestPartiesItems.length > 0 && renderCarouselFancy(['Discover the', 'Best Parties'], bestPartiesItems.slice(0, 10))}
 
-              {/* Featured hero */}
-              {renderFeaturedHero(bestPartiesItems[0] || cityTopItems[0] || upcomingItems[0])}
-              <View style={{ height: 8 }} />
-            </View>
+                {renderFeaturedHero(bestPartiesItems[0] || cityTopItems[0] || upcomingItems[0])}
+                <View style={{ height: 8 }} />
+              </View>
+            )
           )}
         />
       </View>

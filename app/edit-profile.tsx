@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
@@ -16,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
+import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { supabase } from '../lib/supabase'
 
 interface UserProfile {
@@ -350,16 +350,7 @@ export default function EditProfile() {
     </View>
   )
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = loading
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -376,86 +367,120 @@ export default function EditProfile() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Photos</Text>
-            <PhotoManager
-              userId={currentUser.id}
-              maxPhotos={6}
-              editable={true}
-              onPhotosChange={handlePhotosChange}
-              style={styles.photoManager}
-            />
+            {isLoading ? (
+              <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
+            ) : (
+              <PhotoManager
+                userId={currentUser.id}
+                maxPhotos={6}
+                editable={true}
+                onPhotosChange={handlePhotosChange}
+                style={styles.photoManager}
+              />
+            )}
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
             
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Name *</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your name"
-                maxLength={50}
-              />
-            </View>
+            {isLoading ? (
+              <>
+                <SkeletonLine width={'30%'} style={{ marginBottom: 8 }} />
+                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
+                <SkeletonLine width={'20%'} style={{ marginBottom: 8 }} />
+                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
+                <SkeletonLine width={'25%'} style={{ marginBottom: 8 }} />
+                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
+                <SkeletonLine width={'22%'} style={{ marginBottom: 8 }} />
+                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
+              </>
+            ) : (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Enter your name"
+                    maxLength={50}
+                  />
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Age</Text>
-              <TextInput
-                style={styles.input}
-                value={age}
-                onChangeText={setAge}
-                placeholder="Enter your age"
-                keyboardType="numeric"
-                maxLength={3}
-              />
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Age</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={age}
+                    onChangeText={setAge}
+                    placeholder="Enter your age"
+                    keyboardType="numeric"
+                    maxLength={3}
+                  />
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Location</Text>
-              <TextInput
-                style={styles.input}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="City, State"
-                maxLength={100}
-              />
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Location</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={location}
+                    onChangeText={setLocation}
+                    placeholder="City, State"
+                    maxLength={100}
+                  />
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone</Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Phone number"
-                keyboardType="phone-pad"
-                maxLength={20}
-              />
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Phone</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="Phone number"
+                    keyboardType="phone-pad"
+                    maxLength={20}
+                  />
+                </View>
+              </>
+            )}
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>About You</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Bio</Text>
-              <TextInput
-                style={[styles.input, styles.bioInput]}
-                value={bio}
-                onChangeText={setBio}
-                placeholder="Tell people about yourself..."
-                multiline
-                numberOfLines={4}
-                maxLength={500}
-              />
-              <Text style={styles.characterCount}>{bio.length}/500</Text>
-            </View>
+            {isLoading ? (
+              <>
+                <SkeletonLine width={'20%'} style={{ marginBottom: 8 }} />
+                <SkeletonBlock width={'100%'} height={100} borderRadius={12} />
+              </>
+            ) : (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Bio</Text>
+                <TextInput
+                  style={[styles.input, styles.bioInput]}
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="Tell people about yourself..."
+                  multiline
+                  numberOfLines={4}
+                  maxLength={500}
+                />
+                <Text style={styles.characterCount}>{bio.length}/500</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Interests</Text>
             <Text style={styles.sectionSubtitle}>What are you into?</Text>
-            {renderInterests()}
+            {isLoading ? (
+              <View style={styles.interestsContainer}>
+                {[...Array(5)].map((_, i) => (
+                  <SkeletonBlock key={`sk-i-${i}`} width={120} height={32} borderRadius={20} />
+                ))}
+              </View>
+            ) : (
+              renderInterests()
+            )}
           </View>
 
           <View style={styles.bottomPadding} />

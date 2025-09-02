@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
   Clipboard,
   FlatList,
@@ -18,6 +17,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
 
 interface Message {
@@ -564,22 +564,27 @@ export default function GroupChat() {
     />
   )
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <LinearGradient
-          colors={["#480D37", "#000000"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.loadingContent}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
-          <Text style={styles.loadingText}>Loading chat...</Text>
-        </View>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = loading
+
+  const renderLoadingSkeleton = () => (
+    <View style={styles.messagesContainer}>
+      {[...Array(8)].map((_, idx) => {
+        const isMine = idx % 3 === 0
+        return (
+          <View key={`sk-${idx}`} style={[styles.messageRow, isMine ? styles.myRow : styles.otherRow]}>
+            {!isMine && (
+              <SkeletonCircle width={32} style={styles.avatar} />
+            )}
+            <View style={[styles.messageContainer, isMine ? styles.myMessageContainer : styles.otherMessageContainer]}> 
+              {!isMine && <SkeletonLine width={80} style={{ marginLeft: 12, marginBottom: 6 }} />}
+              <SkeletonBlock width={isMine ? '78%' : '86%'} height={isMine ? 44 : 64} borderRadius={20} />
+              <SkeletonLine width={60} style={{ marginTop: 6, alignSelf: isMine ? 'flex-end' : 'flex-start', marginHorizontal: 12 }} />
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -595,17 +600,21 @@ export default function GroupChat() {
       >
         {renderHeader()}
 
-        <FlatList
-          ref={flatListRef}
-          data={chatItems}
-          renderItem={renderChatItem}
-          keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContainer}
-          onContentSizeChange={scrollToBottom}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        />
+        {isLoading ? (
+          renderLoadingSkeleton()
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={chatItems}
+            renderItem={renderChatItem}
+            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
+            style={styles.messagesList}
+            contentContainerStyle={styles.messagesContainer}
+            onContentSizeChange={scrollToBottom}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
         {/* Reply indicator above input */}
         {replyingTo && (
@@ -643,13 +652,13 @@ export default function GroupChat() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!newMessage.trim() || sending) && styles.sendButtonDisabled
+              ((!newMessage.trim() || sending || isLoading) && styles.sendButtonDisabled)
             ]}
             onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
+            disabled={!newMessage.trim() || sending || isLoading}
           >
             {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.sendButtonText}>…</Text>
             ) : (
               <Text style={styles.sendButtonText}>➤</Text>
             )}

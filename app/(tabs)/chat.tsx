@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import ModernChat from '../../components/ModernChat'
+import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { callRpc, supabase } from '../../lib/supabase'
@@ -474,13 +475,7 @@ export default function Chat() {
     </View>
   )
 
-  if (authLoading || loading) {
-    return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
-        <Text style={styles.loadingText}>Loading chats...</Text>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = authLoading || loading
 
   // Show modern chat demo if toggled
   if (showModernChat) {
@@ -559,72 +554,108 @@ export default function Chat() {
 
       {/* Chat List */}
       {activeTab === 'group' ? (
-        <FlatList
-          data={groupChats}
-          renderItem={renderGroupChatItem}
-          keyExtractor={(item) => item.chat_room_id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={[
-            styles.listContainer,
-            groupChats.length === 0 && styles.emptyListContainer
-          ]}
-          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
-          scrollEventThrottle={16}
-        />
-      ) : (
-        <>
-          {incomingRequests.length > 0 && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-              <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8 }}>Requests</Text>
-              {incomingRequests.map((r) => (
-                <View key={r.request_id} style={styles.requestItem}>
-                  <Text style={{ fontWeight: '600', color: '#333' }}>{r.sender_name || 'User'}</Text>
-                  {!!r.initial_message && (
-                    <Text style={{ color: '#666', marginTop: 2 }} numberOfLines={1}>{r.initial_message}</Text>
-                  )}
-                  <View style={styles.requestActions}>
-                    <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
-                      try { await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
-                    }}>
-                      <Text style={styles.reqBtnText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.reqBtn, styles.accept]} onPress={async () => {
-                      try {
-                        const { data } = await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
-                        const res = Array.isArray(data) ? data[0] : data
-                        loadChats()
-                        if (res?.success && res.conversation_id) {
-                          const nameParam = `?otherUserName=${encodeURIComponent(r.sender_name || 'User')}`
-                          router.push(`/private-chat/${res.conversation_id}${nameParam}`)
-                        }
-                      } catch {}
-                    }}>
-                      <Text style={styles.reqBtnText}>Accept</Text>
-                    </TouchableOpacity>
-                  </View>
+        isLoading ? (
+          <View style={[styles.listContainer]}>
+            {[...Array(8)].map((_, i) => (
+              <View key={`sk-g-${i}`} style={styles.chatItem}>
+                <View style={styles.chatHeader}>
+                  <SkeletonLine width={'60%'} />
+                  <SkeletonLine width={40} />
                 </View>
-              ))}
-            </View>
-          )}
+                <SkeletonLine width={'40%'} style={{ marginBottom: 10 }} />
+                <SkeletonLine width={'80%'} />
+              </View>
+            ))}
+          </View>
+        ) : (
           <FlatList
-            data={personalChats}
-            renderItem={renderPersonalChatItem}
-            keyExtractor={(item) => item.conversation_id}
+            data={groupChats}
+            renderItem={renderGroupChatItem}
+            keyExtractor={(item) => item.chat_room_id}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             ListEmptyComponent={renderEmptyState}
             contentContainerStyle={[
               styles.listContainer,
-              personalChats.length === 0 && styles.emptyListContainer
+              groupChats.length === 0 && styles.emptyListContainer
             ]}
             onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
             scrollEventThrottle={16}
           />
-        </>
+        )
+      ) : (
+        isLoading ? (
+          <View style={[styles.listContainer]}>
+            {[...Array(10)].map((_, i) => (
+              <View key={`sk-p-${i}`} style={styles.personalItem}>
+                <View style={styles.avatarContainer}>
+                  <SkeletonCircle width={56} />
+                </View>
+                <View style={styles.personalContent}>
+                  <View style={styles.personalHeader}>
+                    <SkeletonLine width={'40%'} />
+                    <SkeletonLine width={40} />
+                  </View>
+                  <View style={styles.personalFooter}>
+                    <SkeletonLine width={'70%'} />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <>
+            {incomingRequests.length > 0 && (
+              <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8 }}>Requests</Text>
+                {incomingRequests.map((r) => (
+                  <View key={r.request_id} style={styles.requestItem}>
+                    <Text style={{ fontWeight: '600', color: '#333' }}>{r.sender_name || 'User'}</Text>
+                    {!!r.initial_message && (
+                      <Text style={{ color: '#666', marginTop: 2 }} numberOfLines={1}>{r.initial_message}</Text>
+                    )}
+                    <View style={styles.requestActions}>
+                      <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
+                        try { await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
+                      }}>
+                        <Text style={styles.reqBtnText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.reqBtn, styles.accept]} onPress={async () => {
+                        try {
+                          const { data } = await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
+                          const res = Array.isArray(data) ? data[0] : data
+                          loadChats()
+                          if (res?.success && res.conversation_id) {
+                            const nameParam = `?otherUserName=${encodeURIComponent(r.sender_name || 'User')}`
+                            router.push(`/private-chat/${res.conversation_id}${nameParam}`)
+                          }
+                        } catch {}
+                      }}>
+                        <Text style={styles.reqBtnText}>Accept</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            <FlatList
+              data={personalChats}
+              renderItem={renderPersonalChatItem}
+              keyExtractor={(item) => item.conversation_id}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              ListEmptyComponent={renderEmptyState}
+              contentContainerStyle={[
+                styles.listContainer,
+                personalChats.length === 0 && styles.emptyListContainer
+              ]}
+              onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
+              scrollEventThrottle={16}
+            />
+          </>
+        )
       )}
     </SafeAreaView>
   )

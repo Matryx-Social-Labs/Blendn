@@ -3,7 +3,6 @@ import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   ScrollView,
@@ -13,6 +12,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -173,14 +173,7 @@ export default function UserProfile() {
     showUserSafetyActions(profile.name || 'User', profile.user_id)
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-        <Typography variant="body2" style={styles.muted}>Loading profile…</Typography>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = loading
 
   if (!profile) {
     return (
@@ -204,132 +197,175 @@ export default function UserProfile() {
       />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoStrip}
-        >
-          {photoList.map((uri, idx) => {
-            const optimized = getOptimizedImageUrl(uri, { width, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
-            const finalUrl = optimized || uri
-            return (
-              <View key={idx} style={styles.photoSlide}>
-                <View style={styles.photoContainer}>
-                  <Image
-                    source={{ uri: finalUrl } as any}
-                    placeholder={placeholderImg}
-                    style={styles.photo}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={150}
-                  />
+        {isLoading ? (
+          <>
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.photoStrip}>
+              {[...Array(2)].map((_, i) => (
+                <View key={`skp_${i}`} style={styles.photoSlide}>
+                  <View style={styles.photoContainer}>
+                    <SkeletonBlock width={width - 24} height={PHOTO_HEIGHT - 20} borderRadius={18} />
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.content}>
+              <View style={styles.rowBetween}>
+                <SkeletonLine width={'50%'} />
+              </View>
+              <View style={styles.section}>
+                <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
+                <View style={styles.tags}>
+                  {[...Array(5)].map((_, i) => (
+                    <SkeletonBlock key={`skt_${i}`} width={78} height={28} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
+                  ))}
                 </View>
               </View>
-            )
-          })}
-        </ScrollView>
-
-        <View style={styles.content}>
-          <View style={styles.rowBetween}>
-            <Typography variant="h1" style={styles.name}>
-              {profile.name}{profile.age ? `, ${profile.age}` : ''}
-            </Typography>
-          </View>
-
-          {profile.interests && profile.interests.length > 0 && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Interests</Typography>
-              <View style={styles.tags}>
-                {profile.interests.map((i, idx) => (
-                  <View key={`${i}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{i}</Typography></View>
+              <View style={styles.section}>
+                <SkeletonLine width={'25%'} style={{ marginBottom: 8 }} />
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonLine key={`ska_${i}`} width={`${80 - i * 10}%`} style={{ marginBottom: 6 }} />
                 ))}
               </View>
+              <View style={styles.section}>
+                <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
+                <View style={styles.galleryGrid}>
+                  {[...Array(6)].map((_, i) => (
+                    <SkeletonBlock key={`skg_${i}`} width={Math.floor((width - 16 * 2 - 8 * 2) / 3)} height={Math.floor((width - 16 * 2 - 8 * 2) / 3)} borderRadius={12} style={{ marginRight: 8, marginBottom: 8 }} />
+                  ))}
+                </View>
+              </View>
             </View>
-          )}
-
-          {!!profile.bio && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>About</Typography>
-              <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-            </View>
-          )}
-
-          {(profile.profile_photos && profile.profile_photos.length > 0) || (profile.photos && profile.photos.length > 0) ? (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Gallery</Typography>
-              <View style={styles.galleryGrid}>
-                {(profile.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile.photos || []).map((uri, idx) => {
-                  const optimized = getOptimizedImageUrl(uri, { width: 120, height: 120, resize: 'cover', quality: 60, format: 'webp' })
-                  const finalUrl = optimized || uri
-                  return (
-                    <View key={`gal_${idx}`} style={styles.galleryItem}>
+          </>
+        ) : (
+          <>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+            >
+              {photoList.map((uri, idx) => {
+                const optimized = getOptimizedImageUrl(uri, { width, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
+                const finalUrl = optimized || uri
+                return (
+                  <View key={idx} style={styles.photoSlide}>
+                    <View style={styles.photoContainer}>
                       <Image
                         source={{ uri: finalUrl } as any}
                         placeholder={placeholderImg}
-                        style={styles.galleryImage}
+                        style={styles.photo}
                         contentFit="cover"
                         cachePolicy="memory-disk"
-                        transition={120}
+                        transition={150}
                       />
                     </View>
-                  )
-                })}
+                  </View>
+                )
+              })}
+            </ScrollView>
+
+            <View style={styles.content}>
+              <View style={styles.rowBetween}>
+                <Typography variant="h1" style={styles.name}>
+                  {profile.name}{profile.age ? `, ${profile.age}` : ''}
+                </Typography>
               </View>
+
+              {profile.interests && profile.interests.length > 0 && (
+                <View style={styles.section}>
+                  <Typography variant="h3" style={styles.sectionTitle}>Interests</Typography>
+                  <View style={styles.tags}>
+                    {profile.interests.map((i, idx) => (
+                      <View key={`${i}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{i}</Typography></View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {!!profile.bio && (
+                <View style={styles.section}>
+                  <Typography variant="h3" style={styles.sectionTitle}>About</Typography>
+                  <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
+                </View>
+              )}
+
+              {(profile.profile_photos && profile.profile_photos.length > 0) || (profile.photos && profile.photos.length > 0) ? (
+                <View style={styles.section}>
+                  <Typography variant="h3" style={styles.sectionTitle}>Gallery</Typography>
+                  <View style={styles.galleryGrid}>
+                    {(profile.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile.photos || []).map((uri, idx) => {
+                      const optimized = getOptimizedImageUrl(uri, { width: 120, height: 120, resize: 'cover', quality: 60, format: 'webp' })
+                      const finalUrl = optimized || uri
+                      return (
+                        <View key={`gal_${idx}`} style={styles.galleryItem}>
+                          <Image
+                            source={{ uri: finalUrl } as any}
+                            placeholder={placeholderImg}
+                            style={styles.galleryImage}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={120}
+                          />
+                        </View>
+                      )
+                    })}
+                  </View>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-        </View>
+          </>
+        )}
       </ScrollView>
 
-      <View style={styles.actionsOverlay} pointerEvents="box-none">
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[styles.circleBtn]}
-            onPress={async () => {
-              try {
-                if (currentUserId && profile?.user_id) {
-                  // Find active event for the current user so the swipe can be tied to it
-                  const { data: checkins } = await supabase
-                    .from('event_checkins')
-                    .select('event_id, checked_in_at')
-                    .eq('user_id', currentUserId)
-                    .is('checked_out_at', null)
-                    .order('checked_in_at', { ascending: false })
-                    .limit(1)
+      {!isLoading && (
+        <View style={styles.actionsOverlay} pointerEvents="box-none">
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={[styles.circleBtn]}
+              onPress={async () => {
+                try {
+                  if (currentUserId && profile?.user_id) {
+                    const { data: checkins } = await supabase
+                      .from('event_checkins')
+                      .select('event_id, checked_in_at')
+                      .eq('user_id', currentUserId)
+                      .is('checked_out_at', null)
+                      .order('checked_in_at', { ascending: false })
+                      .limit(1)
 
-                  const eventId = Array.isArray(checkins) && checkins.length > 0 ? (checkins[0] as any).event_id : null
-                  if (eventId) {
-                    await supabase.from('swipes').insert({
-                      swiper_id: currentUserId,
-                      swiped_id: profile.user_id,
-                      event_id: eventId,
-                      action: 'pass',
-                    })
+                    const eventId = Array.isArray(checkins) && checkins.length > 0 ? (checkins[0] as any).event_id : null
+                    if (eventId) {
+                      await supabase.from('swipes').insert({
+                        swiper_id: currentUserId,
+                        swiped_id: profile.user_id,
+                        event_id: eventId,
+                        action: 'pass',
+                      })
+                    }
                   }
-                }
-              } catch {}
-              // Navigate back to Match screen
-              try { router.replace('/(tabs)/match' as any) } catch { router.back() }
-            }}
-          >
-            <View style={styles.circleInner}>
-              <Ionicons name="close" size={28} color="#7A2CF3" />
-            </View>
-          </TouchableOpacity>
+                } catch {}
+                try { router.replace('/(tabs)/match' as any) } catch { router.back() }
+              }}
+            >
+              <View style={styles.circleInner}>
+                <Ionicons name="close" size={28} color="#7A2CF3" />
+              </View>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[styles.circleBtn]}
-            disabled={actionLoading || currentUserId === profile.user_id}
-            onPress={handleConnect}
-          >
-            <View style={styles.circleInner}>
-              <Ionicons name="heart" size={26} color="#E23B3B" />
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={[styles.circleBtn]}
+              disabled={actionLoading || currentUserId === profile.user_id}
+              onPress={handleConnect}
+            >
+              <View style={styles.circleInner}>
+                <Ionicons name="heart" size={26} color="#E23B3B" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </SafeAreaView>
   )
 }
