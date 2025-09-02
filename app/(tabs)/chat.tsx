@@ -508,11 +508,6 @@ export default function Chat() {
           title="The Banter"
           variant="darkTransparent"
           showBottomBorder={false}
-          rightIconButton={{
-            name: 'chatbubble-ellipses',
-            onPress: () => setShowModernChat(true),
-            accessibilityLabel: 'View modern chat demo'
-          }}
         />
 
         <View style={styles.storiesCard}>
