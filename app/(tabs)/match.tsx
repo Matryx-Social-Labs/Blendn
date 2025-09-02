@@ -591,7 +591,7 @@ export default function Match() {
               ))}
             </View>
 
-            <Text style={styles.sectionTitle}>Startup</Text>
+            <Text style={styles.sectionTitle}>People Nearby</Text>
             <View style={styles.gridWrap}>
               {attendees.slice(0, 12).map(renderStartupItem)}
             </View>
@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
   gridWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
+    paddingHorizontal: 2,
   },
   gridItem: {
     borderRadius: 12,
