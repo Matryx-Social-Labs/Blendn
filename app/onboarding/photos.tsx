@@ -1,140 +1,63 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import {
-    ActivityIndicator,
     Alert,
-    Image,
     SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native'
-import { deletePhoto, PhotoUploadResult, selectAndUploadPhoto } from '../../lib/photoUtils'
+import PhotoManager from '../../components/PhotoManager'
 import { supabase } from '../../lib/supabase'
 
-interface PhotoSlot {
-  id: string
-  url?: string
-  uploading?: boolean
-}
-
 export default function Photos() {
-  const [photos, setPhotos] = useState<PhotoSlot[]>([
-    { id: '1' }, { id: '2' }, { id: '3' }, 
-    { id: '4' }, { id: '5' }, { id: '6' }
-  ])
-  const [uploading, setUploading] = useState(false)
+  const [photos, setPhotos] = useState<string[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
-  const handleAddPhoto = async (slotIndex: number) => {
+  React.useEffect(() => {
+    loadCurrentUser()
+  }, [])
+
+  const loadCurrentUser = async () => {
     try {
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        Alert.alert('Error', 'Please sign in to upload photos')
+        Alert.alert('Error', 'Please sign in to continue')
         return
       }
-
-      // Mark this slot as uploading
-      setPhotos(prev => prev.map((photo, index) => 
-        index === slotIndex ? { ...photo, uploading: true } : photo
-      ))
-      setUploading(true)
-
-      // Select and upload photo
-      const result: PhotoUploadResult = await selectAndUploadPhoto(user.id)
-
-      if (result.success && result.url) {
-        // Update the photo slot with the uploaded URL
-        setPhotos(prev => prev.map((photo, index) => 
-          index === slotIndex 
-            ? { ...photo, url: result.url, uploading: false } 
-            : photo
-        ))
-      } else {
-        // Remove uploading state on failure
-        setPhotos(prev => prev.map((photo, index) => 
-          index === slotIndex ? { ...photo, uploading: false } : photo
-        ))
-        
-        if (result.error && result.error !== 'User cancelled') {
-          Alert.alert('Upload Failed', result.error)
-        }
-      }
+      setCurrentUser(user)
     } catch (error) {
-      console.error('Error uploading photo:', error)
-      Alert.alert('Error', 'Failed to upload photo. Please try again.')
-      
-      // Remove uploading state
-      setPhotos(prev => prev.map((photo, index) => 
-        index === slotIndex ? { ...photo, uploading: false } : photo
-      ))
+      console.error('OnboardingPhotos: Load user error', { error })
     } finally {
-      setUploading(false)
+      setLoading(false)
     }
   }
 
-  const handleRemovePhoto = (slotIndex: number) => {
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setPhotos(prev => prev.map((photo, index) => {
-              if (index === slotIndex) {
-                const url = photo.url
-                if (url) {
-                  // Best-effort delete in background
-                  deletePhoto(url).catch(() => {})
-                  // Also update DB user_profiles to remove this URL
-                  supabase.auth.getUser().then(async ({ data: { user } }) => {
-                    try {
-                      if (!user) return
-                      const { data: current } = await supabase
-                        .from('user_profiles')
-                        .select('profile_photos')
-                        .eq('user_id', user.id)
-                        .maybeSingle()
-                      const currentPhotos: string[] = Array.isArray((current as any)?.profile_photos) ? (current as any).profile_photos : []
-                      const next = currentPhotos.filter((u: string) => u !== url)
-                      await supabase.from('user_profiles').update({ profile_photos: next }).eq('user_id', user.id)
-                    } catch {}
-                  })
-                }
-                return { id: photo.id }
-              }
-              return photo
-            }))
-          }
-        }
-      ]
-    )
+  const handlePhotosChange = (newPhotos: string[]) => {
+    setPhotos(newPhotos)
   }
 
-  const uploadedPhotos = photos.filter(photo => photo.url)
-  const photoUrls = uploadedPhotos.map(photo => photo.url!)
-
-  const handleContinue = () => {
-    // Persist to user_profiles now as well
-    if (photoUrls.length > 0) {
-      supabase.auth.getUser().then(async ({ data: { user } }) => {
-        if (user) {
-          try {
-            await supabase.from('user_profiles').update({ profile_photos: photoUrls }).eq('user_id', user.id)
-          } catch {}
-        }
-      })
+  const handleContinue = async () => {
+    // Save photos to user_profiles
+    if (photos.length > 0 && currentUser) {
+      try {
+        await supabase
+          .from('user_profiles')
+          .update({ profile_photos: photos })
+          .eq('user_id', currentUser.id)
+        console.log('OnboardingPhotos: Photos saved', { userId: currentUser.id, count: photos.length })
+      } catch (error) {
+        console.error('OnboardingPhotos: Save photos error', { error })
+      }
     }
     // Next: Location permissions step
     router.push('./location' as any)
   }
 
   const handleSkip = () => {
-    // proceed without photos -> go to location step
+    // Proceed without photos -> go to location step
     router.push('./location' as any)
   }
 
@@ -142,36 +65,23 @@ export default function Photos() {
     router.back()
   }
 
-  const renderPhotoSlot = (photo: PhotoSlot, index: number) => {
-    const hasPhoto = !!photo.url
-    const isUploading = !!photo.uploading
-    
+  const renderPhotoSection = () => {
+    if (loading || !currentUser) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      )
+    }
+
     return (
-      <TouchableOpacity
-        key={photo.id}
-        style={[
-          styles.photoSlot,
-          hasPhoto ? styles.filledPhotoSlot : styles.emptyPhotoSlot
-        ]}
-        onPress={() => hasPhoto ? handleRemovePhoto(index) : handleAddPhoto(index)}
-        disabled={uploading}
-      >
-        {isUploading ? (
-          <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="small" color="#FF6B6B" />
-            <Text style={styles.uploadingText}>Uploading...</Text>
-          </View>
-        ) : hasPhoto ? (
-          <>
-            <Image source={{ uri: photo.url }} style={styles.photoImage} />
-            <View style={styles.removeOverlay}>
-              <Text style={styles.removeIcon}>×</Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.plusIcon}>+</Text>
-        )}
-      </TouchableOpacity>
+      <PhotoManager
+        userId={currentUser.id}
+        maxPhotos={6}
+        editable={true}
+        onPhotosChange={handlePhotosChange}
+        style={styles.photoManager}
+      />
     )
   }
 
@@ -191,33 +101,33 @@ export default function Photos() {
             Add some photos to help others get to know you better
           </Text>
 
-          <View style={styles.photosGrid}>
-            {photos.map((photo, index) => renderPhotoSlot(photo, index))}
+          <View style={styles.photosSection}>
+            {renderPhotoSection()}
           </View>
 
           <Text style={styles.photoTip}>
             💡 Tip: Photos with your face clearly visible get more matches!
           </Text>
           
-          {uploadedPhotos.length > 0 && (
+          {photos.length > 0 && (
             <Text style={styles.photoCount}>
-              {uploadedPhotos.length} photo{uploadedPhotos.length !== 1 ? 's' : ''} added
+              {photos.length} photo{photos.length !== 1 ? 's' : ''} added
             </Text>
           )}
         </View>
 
         <View style={styles.bottomSection}>
           <TouchableOpacity 
-            style={[styles.continueButton, uploading && styles.disabledButton]} 
+            style={[styles.continueButton, loading && styles.disabledButton]} 
             onPress={handleContinue}
-            disabled={uploading}
+            disabled={loading}
           >
             <Text style={styles.continueButtonText}>
-              {uploadedPhotos.length > 0 ? 'Continue' : 'Continue without photos'}
+              {photos.length > 0 ? 'Continue' : 'Continue without photos'}
             </Text>
           </TouchableOpacity>
           
-          {uploadedPhotos.length === 0 && !uploading && (
+          {photos.length === 0 && !loading && (
             <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
               <Text style={styles.skipButtonText}>Skip for now</Text>
             </TouchableOpacity>
@@ -378,5 +288,22 @@ const styles = StyleSheet.create({
   skipButtonText: {
     color: '#666',
     fontSize: 16,
+  },
+  photosSection: {
+    width: '100%',
+    maxWidth: 350,
+    marginBottom: 32,
+  },
+  photoManager: {
+    marginVertical: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
   },
 }) 

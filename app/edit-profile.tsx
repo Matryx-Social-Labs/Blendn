@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
-    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -16,7 +15,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
-import { PhotoUploadResult, selectAndUploadPhoto } from '../lib/photoUtils'
+import PhotoManager from '../components/PhotoManager'
 import { supabase } from '../lib/supabase'
 
 interface UserProfile {
@@ -29,13 +28,14 @@ interface UserProfile {
   display_name?: string
   bio?: string
   profile_photos?: string[]
+  goals?: string[]
+  looking_for?: string[]
 }
 
 export default function EditProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
 
   // Form state
@@ -45,6 +45,8 @@ export default function EditProfile() {
   const [phone, setPhone] = useState('')
   const [bio, setBio] = useState('')
   const [interests, setInterests] = useState<string[]>([])
+  const [goals, setGoals] = useState<string[]>([])
+  const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export default function EditProfile() {
         .single()
 
       if (userProfileError && userProfileError.code !== 'PGRST116') {
-        console.error('Error loading user profile:', userProfileError)
+        console.error('EditProfile: User profile load error', { error: userProfileError })
       }
 
       // Combine data
@@ -94,7 +96,9 @@ export default function EditProfile() {
         interests: profileData?.interests || userProfileData?.interests || [],
         display_name: userProfileData?.display_name || '',
         bio: userProfileData?.bio || '',
-        profile_photos: userProfileData?.profile_photos || []
+        profile_photos: userProfileData?.profile_photos || [],
+        goals: userProfileData?.goals || [],
+        looking_for: userProfileData?.looking_for || []
       }
 
       setProfile(combinedProfile)
@@ -106,56 +110,72 @@ export default function EditProfile() {
       setPhone(combinedProfile.phone || '')
       setBio(combinedProfile.bio || '')
       setInterests(combinedProfile.interests || [])
+      setGoals(combinedProfile.goals || [])
+      setLookingFor(combinedProfile.looking_for || [])
       setPhotos(combinedProfile.profile_photos || [])
 
     } catch (error) {
-      console.error('Error loading profile:', error)
+      console.error('EditProfile: Load profile error', { error })
       Alert.alert('Error', 'Failed to load profile data')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAddPhoto = async () => {
-    if (photos.length >= 6) {
-      Alert.alert('Photo Limit', 'You can only have up to 6 photos')
-      return
-    }
-
-    if (!currentUser) return
-
-    setUploading(true)
-    try {
-      const result: PhotoUploadResult = await selectAndUploadPhoto(currentUser.id)
-
-      if (result.success && result.url) {
-        setPhotos(prev => [...prev, result.url!])
-      } else if (result.error && result.error !== 'User cancelled') {
-        Alert.alert('Upload Failed', result.error)
-      }
-    } catch (error) {
-      console.error('Error uploading photo:', error)
-      Alert.alert('Error', 'Failed to upload photo')
-    } finally {
-      setUploading(false)
-    }
+  const handlePhotosChange = (newPhotos: string[]) => {
+    setPhotos(newPhotos)
   }
 
-  const handleRemovePhoto = (index: number) => {
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove this photo?',
+  const handleAddGoal = () => {
+    Alert.prompt(
+      'Add Goal',
+      'What are you looking for?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setPhotos(prev => prev.filter((_, i) => i !== index))
+          text: 'Add',
+          onPress: (value) => {
+            if (value && value.trim()) {
+              const newGoal = value.trim()
+              if (!goals.includes(newGoal)) {
+                setGoals(prev => [...prev, newGoal])
+              }
+            }
           }
         }
-      ]
+      ],
+      'plain-text'
     )
+  }
+
+  const handleRemoveGoal = (goal: string) => {
+    setGoals(prev => prev.filter(g => g !== goal))
+  }
+
+  const handleAddLookingFor = () => {
+    Alert.prompt(
+      'Add Preference',
+      'What type of person are you looking for?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Add',
+          onPress: (value) => {
+            if (value && value.trim()) {
+              const newPref = value.trim()
+              if (!lookingFor.includes(newPref)) {
+                setLookingFor(prev => [...prev, newPref])
+              }
+            }
+          }
+        }
+      ],
+      'plain-text'
+    )
+  }
+
+  const handleRemoveLookingFor = (pref: string) => {
+    setLookingFor(prev => prev.filter(p => p !== pref))
   }
 
   const handleAddInterest = () => {
@@ -204,41 +224,53 @@ export default function EditProfile() {
       }
 
       // Update profiles table
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          name: name.trim(),
-          age: ageNum || null,
-          location: location.trim() || null,
-          phone: phone.trim() || null,
-          interests: interests,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', currentUser.id)
+      const profileUpdates: any = {}
+      if (name !== profile?.name) profileUpdates.name = name
+      if (ageNum !== profile?.age) profileUpdates.age = ageNum
+      if (location !== profile?.location) profileUpdates.location = location
+      if (phone !== profile?.phone) profileUpdates.phone = phone
+      if (JSON.stringify(interests) !== JSON.stringify(profile?.interests)) {
+        profileUpdates.interests = interests
+      }
 
-      if (profileError) {
-        console.error('Error updating profile:', profileError)
-        throw profileError
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update(profileUpdates)
+          .eq('id', currentUser.id)
+
+        if (profileError) {
+          console.error('EditProfile: Profile update error', { error: profileError })
+          throw profileError
+        }
       }
 
       // Update user_profiles table
-      const { error: userProfileError } = await supabase
-        .from('user_profiles')
-        .update({
-          display_name: name.trim(),
-          bio: bio.trim() || null,
-          age: ageNum || null,
-          interests: interests,
-          profile_photos: photos,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', currentUser.id)
-
-      if (userProfileError) {
-        console.error('Error updating user profile:', userProfileError)
-        throw userProfileError
+      const userProfileUpdates: any = {}
+      if (bio !== profile?.bio) userProfileUpdates.bio = bio
+      if (JSON.stringify(photos) !== JSON.stringify(profile?.profile_photos)) {
+        userProfileUpdates.profile_photos = photos
+      }
+      if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
+        userProfileUpdates.goals = goals
+      }
+      if (JSON.stringify(lookingFor) !== JSON.stringify(profile?.looking_for)) {
+        userProfileUpdates.looking_for = lookingFor
       }
 
+      if (Object.keys(userProfileUpdates).length > 0) {
+        const { error: userProfileError } = await supabase
+          .from('user_profiles')
+          .update(userProfileUpdates)
+          .eq('user_id', currentUser.id)
+
+        if (userProfileError) {
+          console.error('EditProfile: User profile update error', { error: userProfileError })
+          throw userProfileError
+        }
+      }
+
+      console.log('EditProfile: Profile updated successfully', { userId: currentUser.id })
       Alert.alert(
         'Profile Updated',
         'Your profile has been successfully updated!',
@@ -251,43 +283,48 @@ export default function EditProfile() {
       )
 
     } catch (error) {
-      console.error('Error saving profile:', error)
+      console.error('EditProfile: Save profile error', { error })
       Alert.alert('Error', 'Failed to save profile. Please try again.')
     } finally {
       setSaving(false)
     }
   }
 
-  const renderPhotoGrid = () => (
-    <View style={styles.photoGrid}>
-      {Array.from({ length: 6 }).map((_, index) => {
-        const photo = photos[index]
-        return (
-          <TouchableOpacity
-            key={index}
-            style={styles.photoSlot}
-            onPress={() => photo ? handleRemovePhoto(index) : handleAddPhoto()}
-            disabled={uploading}
-          >
-            {photo ? (
-              <>
-                <Image source={{ uri: photo }} style={styles.photo} />
-                <View style={styles.removePhotoOverlay}>
-                  <Ionicons name="close-circle" size={24} color="#fff" />
-                </View>
-              </>
-            ) : (
-              <View style={styles.addPhotoContainer}>
-                {uploading && index === photos.length ? (
-                  <ActivityIndicator size="small" color="#FF6B6B" />
-                ) : (
-                  <Ionicons name="add" size={24} color="#ccc" />
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
-        )
-      })}
+  const renderGoals = () => (
+    <View style={styles.tagsContainer}>
+      {goals.map((goal, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.tag}
+          onPress={() => handleRemoveGoal(goal)}
+        >
+          <Text style={styles.tagText}>{goal}</Text>
+          <Ionicons name="close" size={16} color="#FFFFFF" style={styles.tagIcon} />
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={styles.addTag} onPress={handleAddGoal}>
+        <Ionicons name="add" size={16} color="#FF6B6B" />
+        <Text style={styles.addTagText}>Add Goal</Text>
+      </TouchableOpacity>
+    </View>
+  )
+
+  const renderLookingFor = () => (
+    <View style={styles.tagsContainer}>
+      {lookingFor.map((pref, index) => (
+        <TouchableOpacity
+          key={index}
+          style={styles.tag}
+          onPress={() => handleRemoveLookingFor(pref)}
+        >
+          <Text style={styles.tagText}>{pref}</Text>
+          <Ionicons name="close" size={16} color="#FFFFFF" style={styles.tagIcon} />
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={styles.addTag} onPress={handleAddLookingFor}>
+        <Ionicons name="add" size={16} color="#FF6B6B" />
+        <Text style={styles.addTagText}>Add Preference</Text>
+      </TouchableOpacity>
     </View>
   )
 
@@ -339,8 +376,13 @@ export default function EditProfile() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Photos</Text>
-            <Text style={styles.sectionSubtitle}>Add up to 6 photos</Text>
-            {renderPhotoGrid()}
+            <PhotoManager
+              userId={currentUser.id}
+              maxPhotos={6}
+              editable={true}
+              onPhotosChange={handlePhotosChange}
+              style={styles.photoManager}
+            />
           </View>
 
           <View style={styles.section}>
@@ -552,5 +594,47 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 32,
+  },
+  photoManager: {
+    marginVertical: 8,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7C3AED',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  tagText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  tagIcon: {
+    marginLeft: 2,
+  },
+  addTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#FF6B6B',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  addTagText: {
+    fontSize: 14,
+    color: '#FF6B6B',
+    fontWeight: '500',
   },
 }) 

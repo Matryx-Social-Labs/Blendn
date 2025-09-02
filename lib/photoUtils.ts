@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as FileSystem from 'expo-file-system'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
@@ -8,6 +9,41 @@ export interface PhotoUploadResult {
   success: boolean
   url?: string
   error?: string
+  metadata?: {
+    size: number
+    width: number
+    height: number
+    format: string
+  }
+}
+
+export interface PhotoCacheEntry {
+  url: string
+  localPath: string
+  timestamp: number
+  size: number
+}
+
+export interface PhotoVerificationResult {
+  isValid: boolean
+  hasFace: boolean
+  quality: 'low' | 'medium' | 'high'
+  issues: string[]
+}
+
+export interface ProfilePhoto {
+  id: string
+  url: string
+  order: number
+  isVerified?: boolean
+  isPrimary?: boolean
+  metadata?: {
+    size: number
+    width: number
+    height: number
+    format: string
+    uploadedAt: string
+  }
 }
 
 export interface PhotoOptions {
@@ -303,6 +339,209 @@ export const validatePhoto = (imageInfo: ImagePicker.ImagePickerAsset): { valid:
 }
 
 /**
+ * Photo cache management
+ */
+const CACHE_KEY_PREFIX = 'photo_cache_'
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const MAX_CACHE_SIZE = 50 * 1024 * 1024 // 50MB
+
+export const cachePhoto = async (url: string): Promise<string | null> => {
+  try {
+    const cacheKey = `${CACHE_KEY_PREFIX}${encodeURIComponent(url)}`
+    const cached = await AsyncStorage.getItem(cacheKey)
+    
+    if (cached) {
+      const entry: PhotoCacheEntry = JSON.parse(cached)
+      if (Date.now() - entry.timestamp < CACHE_EXPIRY_MS) {
+        // Check if file still exists
+        const fileInfo = await FileSystem.getInfoAsync(entry.localPath)
+        if (fileInfo.exists) {
+          return entry.localPath
+        }
+      }
+    }
+
+    // Download and cache
+    const filename = url.split('/').pop() || 'photo.jpg'
+    const localPath = `${FileSystem.cacheDirectory}photos/${filename}`
+    
+    // Ensure directory exists
+    await FileSystem.makeDirectoryAsync(`${FileSystem.cacheDirectory}photos/`, { intermediates: true })
+    
+    const downloadResult = await FileSystem.downloadAsync(url, localPath)
+    
+    if (downloadResult.status === 200) {
+      const fileInfo = await FileSystem.getInfoAsync(localPath)
+      const entry: PhotoCacheEntry = {
+        url,
+        localPath,
+        timestamp: Date.now(),
+        size: (fileInfo.exists && 'size' in fileInfo) ? fileInfo.size : 0
+      }
+      
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(entry))
+      await cleanupCache()
+      
+      return localPath
+    }
+  } catch (error) {
+    console.error('photoUtils: Cache error', { error, url })
+  }
+  
+  return null
+}
+
+const cleanupCache = async () => {
+  try {
+    const keys = await AsyncStorage.getAllKeys()
+    const cacheKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX))
+    
+    let totalSize = 0
+    const entries: Array<{ key: string; entry: PhotoCacheEntry }> = []
+    
+    for (const key of cacheKeys) {
+      const cached = await AsyncStorage.getItem(key)
+      if (cached) {
+        const entry: PhotoCacheEntry = JSON.parse(cached)
+        entries.push({ key, entry })
+        totalSize += entry.size
+      }
+    }
+    
+    // Remove expired entries
+    const now = Date.now()
+    const expiredKeys = entries
+      .filter(({ entry }) => now - entry.timestamp > CACHE_EXPIRY_MS)
+      .map(({ key }) => key)
+    
+    if (expiredKeys.length > 0) {
+      await AsyncStorage.multiRemove(expiredKeys)
+    }
+    
+    // If still over size limit, remove oldest entries
+    if (totalSize > MAX_CACHE_SIZE) {
+      const sortedEntries = entries
+        .filter(({ key }) => !expiredKeys.includes(key))
+        .sort((a, b) => a.entry.timestamp - b.entry.timestamp)
+      
+      let currentSize = totalSize
+      const toRemove: string[] = []
+      
+      for (const { key, entry } of sortedEntries) {
+        if (currentSize <= MAX_CACHE_SIZE) break
+        toRemove.push(key)
+        currentSize -= entry.size
+        
+        // Remove file
+        try {
+          await FileSystem.deleteAsync(entry.localPath, { idempotent: true })
+        } catch {}
+      }
+      
+      if (toRemove.length > 0) {
+        await AsyncStorage.multiRemove(toRemove)
+      }
+    }
+  } catch (error) {
+    console.error('photoUtils: Cache cleanup error', { error })
+  }
+}
+
+/**
+ * Basic photo verification (placeholder for ML integration)
+ */
+export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationResult> => {
+  try {
+    // Basic validation
+    const fileInfo = await FileSystem.getInfoAsync(imageUri)
+    if (!fileInfo.exists) {
+      return {
+        isValid: false,
+        hasFace: false,
+        quality: 'low',
+        issues: ['File not found']
+      }
+    }
+
+    // TODO: Integrate with face detection API or ML Kit
+    // For now, basic checks based on file size and dimensions
+    const issues: string[] = []
+    let quality: 'low' | 'medium' | 'high' = 'medium'
+    
+    if (fileInfo.size && fileInfo.size < 50000) {
+      issues.push('Image quality may be too low')
+      quality = 'low'
+    } else if (fileInfo.size && fileInfo.size > 2000000) {
+      quality = 'high'
+    }
+
+    return {
+      isValid: issues.length === 0,
+      hasFace: true, // Placeholder - would use face detection
+      quality,
+      issues
+    }
+  } catch (error) {
+    return {
+      isValid: false,
+      hasFace: false,
+      quality: 'low',
+      issues: ['Verification failed']
+    }
+  }
+}
+
+/**
+ * Reorder profile photos
+ */
+export const reorderPhotos = async (userId: string, photoUrls: string[]): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ profile_photos: photoUrls })
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('photoUtils: Reorder failed', { error, userId })
+      return false
+    }
+
+    console.log('photoUtils: Photos reordered', { userId, count: photoUrls.length })
+    return true
+  } catch (error) {
+    console.error('photoUtils: Reorder error', { error, userId })
+    return false
+  }
+}
+
+/**
+ * Get user's profile photos with metadata
+ */
+export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('profile_photos')
+      .eq('user_id', userId)
+      .single()
+
+    if (error || !data?.profile_photos) {
+      return []
+    }
+
+    return data.profile_photos.map((url: string, index: number) => ({
+      id: `${userId}_${index}`,
+      url,
+      order: index,
+      isPrimary: index === 0
+    }))
+  } catch (error) {
+    console.error('photoUtils: Get photos error', { error, userId })
+    return []
+  }
+}
+
+/**
  * Complete photo selection and upload flow
  */
 export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadResult> => {
@@ -328,10 +567,27 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
       return { success: false, error: validation.error }
     }
 
+    // Verify photo quality (optional)
+    const verification = await verifyPhoto(asset.uri)
+    if (!verification.isValid && verification.issues.length > 0) {
+      console.warn('photoUtils: Photo verification issues', { issues: verification.issues })
+    }
+
     // Upload image
-    return await uploadPhoto(asset.uri, userId)
+    const result = await uploadPhoto(asset.uri, userId)
+    
+    if (result.success && result.url) {
+      result.metadata = {
+        size: asset.fileSize || 0,
+        width: asset.width,
+        height: asset.height,
+        format: asset.type || 'image'
+      }
+    }
+    
+    return result
   } catch (error) {
-    console.error('Error in photo selection flow:', error)
+    console.error('photoUtils: Photo selection error', { error })
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 
