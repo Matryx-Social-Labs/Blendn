@@ -6,19 +6,20 @@ import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Linking,
-  Platform,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Linking,
+    Platform,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/photoUtils';
@@ -650,16 +651,9 @@ export default function EventDetail() {
     })
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Loading event details...</Text>
-      </SafeAreaView>
-    )
-  }
+  const isLoading = loading
 
-  if (!event) {
+  if (!isLoading && !event) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         <Text style={styles.errorText}>Event not found</Text>
@@ -670,9 +664,9 @@ export default function EventDetail() {
     )
   }
 
-  const spotsLeft = event.max_capacity - event.current_capacity
+  const spotsLeft = event ? (event.max_capacity - event.current_capacity) : 0
   const isCheckedIn = checkInStatus?.checked_in || false
-  const isEnded = new Date(event.end_time).getTime() < Date.now()
+  const isEnded = event ? (new Date(event.end_time).getTime() < Date.now()) : false
   const stickyBarHeight = insets.top + 8 + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
 
@@ -784,7 +778,7 @@ export default function EventDetail() {
         <TouchableOpacity style={styles.navButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.topBarTitle} numberOfLines={1}>{event.title}</Text>
+        <Text style={styles.topBarTitle} numberOfLines={1}>{event?.title || ''}</Text>
         <TouchableOpacity style={[styles.navButton, { marginLeft: 'auto' }]} onPress={handleShare}>
           <Ionicons name="share-outline" size={22} color="#FFFFFF" />
         </TouchableOpacity>
@@ -799,19 +793,23 @@ export default function EventDetail() {
           style={styles.gradientFull}
         />
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <Image 
-            source={(() => {
-              const coverUrl = event.cover_image_url
-              if (!coverUrl) return placeholderImg
-              const opt = getOptimizedImageUrl(coverUrl, { width, height: 390, resize: 'cover', quality: 70 })
-              return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-            })()}
-            placeholder={placeholderImg}
-            style={styles.coverImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={200}
-          />
+          {isLoading ? (
+            <SkeletonBlock width={'100%'} height={390} borderRadius={25} />
+          ) : (
+            <Image 
+              source={(() => {
+                const coverUrl = event!.cover_image_url
+                if (!coverUrl) return placeholderImg
+                const opt = getOptimizedImageUrl(coverUrl, { width, height: 390, resize: 'cover', quality: 70 })
+                return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
+              })()}
+              placeholder={placeholderImg}
+              style={styles.coverImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+            />
+          )}
           
           <View style={styles.content}>
 
@@ -819,15 +817,31 @@ export default function EventDetail() {
             </View>
             {/* <Text style={styles.title}>{event.title}</Text> */}
             
-            <View style={styles.metaRow}>
-              <View style={styles.categoryContainer}>
-                <Text style={styles.categoryText}>{event.category}</Text>
+            {isLoading ? (
+              <View style={styles.metaRow}>
+                <SkeletonBlock width={90} height={28} borderRadius={16} />
+                <SkeletonLine width={60} />
               </View>
-              <Text style={styles.price}>{formatPrice(event.price_cents)}</Text>
-            </View>
+            ) : (
+              <View style={styles.metaRow}>
+                <View style={styles.categoryContainer}>
+                  <Text style={styles.categoryText}>{event!.category}</Text>
+                </View>
+                <Text style={styles.price}>{formatPrice(event!.price_cents)}</Text>
+              </View>
+            )}
 
             <View style={styles.attendingRow}>
-              {interestedAvatars && interestedAvatars.length > 0 ? (
+              {isLoading ? (
+                <>
+                  <View style={styles.avatarsRow}>
+                    <View style={styles.avatarCircle} />
+                    <View style={[styles.avatarCircle, { left: 16 }]} />
+                    <View style={[styles.avatarCircle, { left: 32 }]} />
+                  </View>
+                  <SkeletonLine width={180} />
+                </>
+              ) : interestedAvatars && interestedAvatars.length > 0 ? (
                 <View style={[styles.avatarsRow, { width: 35 + Math.max(interestedAvatars.length - 1, 0) * 16 }]}>
                   {interestedAvatars.slice(0, 6).map((url, idx) => (
                     <Image
@@ -848,71 +862,109 @@ export default function EventDetail() {
                   <View style={[styles.avatarCircle, { left: 32 }]} />
                 </View>
               )}
-              <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
+              {!isLoading && (
+                <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
+              )}
             </View>
 
-          <Text style={styles.sectionTitle}>About the Event</Text>
-          <Text style={styles.description}>{event.description}</Text>
+          {isLoading ? (
+            <View style={{ paddingHorizontal: 14, marginBottom: 12 }}>
+              <SkeletonLine width={160} style={{ marginBottom: 10 }} />
+              {[...Array(3)].map((_, i) => (
+                <SkeletonLine key={`ab-${i}`} width={`${90 - i * 10}%`} style={{ marginBottom: 6 }} />
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>About the Event</Text>
+              <Text style={styles.description}>{event!.description}</Text>
+            </>
+          )}
 
             {/* Redesigned Event Details (clean 2-up) */}
-            <View style={styles.detailsGrid}>
-              <View style={styles.detailsCard}>
-                <Text style={styles.detailsTitle}>Date & Time</Text>
-                <Text style={styles.detailsValue}>{formatDate(event.start_time)}</Text>
+            {isLoading ? (
+              <View style={styles.detailsGrid}>
+                <SkeletonBlock width={(width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2} height={70} borderRadius={14} />
+                <SkeletonBlock width={(width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2} height={70} borderRadius={14} />
               </View>
-              <View style={styles.detailsCard}>
-                <Text style={styles.detailsTitle}>Venue</Text>
-                <Text style={styles.detailsValue} numberOfLines={1}>{event.venue_name}</Text>
+            ) : (
+              <View style={styles.detailsGrid}>
+                <View style={styles.detailsCard}>
+                  <Text style={styles.detailsTitle}>Date & Time</Text>
+                  <Text style={styles.detailsValue}>{formatDate(event!.start_time)}</Text>
+                </View>
+                <View style={styles.detailsCard}>
+                  <Text style={styles.detailsTitle}>Venue</Text>
+                  <Text style={styles.detailsValue} numberOfLines={1}>{event!.venue_name}</Text>
+                </View>
               </View>
-            </View>
+            )}
 
-            <Text style={styles.sectionTitle}>Location</Text>
-            <View style={styles.locationCard}>
-              <TouchableOpacity onPress={openInMaps} activeOpacity={0.9}>
-                <Image 
-                  source={(() => {
-                    const hasCoords = Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
-                    const mapHeight = 249
-                    if (!hasCoords) {
-                      // No coordinates available, use cover image
-                      const coverUrl = event.cover_image_url
-                      if (!coverUrl) return placeholderImg
-                      const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
-                      return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-                    }
-                    // Use map with coordinates
-                    const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
-                    const lat = event.latitude
-                    const lon = event.longitude
-                    const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},red`
-                    return { uri: url }
-                  })()}
-                  placeholder={placeholderImg}
-                  style={styles.locationImage}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  transition={150}
-                />
-              </TouchableOpacity>
-              <View style={styles.locationOverlay} pointerEvents="none" />
-              <View style={styles.locationPillRow}>
-                <View style={styles.locationPillIcon} />
-                <Text style={styles.locationPillText} numberOfLines={1}>{event.venue_name}</Text>
-              </View>
-              <TouchableOpacity style={styles.locationButton} onPress={openInMaps}>
-                <Text style={styles.locationButtonText}>Get Directions</Text>
-              </TouchableOpacity>
-            </View>
+            {isLoading ? (
+              <>
+                <Text style={styles.sectionTitle}>Location</Text>
+                <SkeletonBlock width={'92%'} height={249} borderRadius={23} style={{ alignSelf: 'center', marginBottom: 16 }} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.sectionTitle}>Location</Text>
+                <View style={styles.locationCard}>
+                  <TouchableOpacity onPress={openInMaps} activeOpacity={0.9}>
+                    <Image 
+                      source={(() => {
+                        const hasCoords = Number.isFinite(event!.latitude) && Number.isFinite(event!.longitude)
+                        const mapHeight = 249
+                        if (!hasCoords) {
+                          const coverUrl = event!.cover_image_url
+                          if (!coverUrl) return placeholderImg
+                          const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
+                          return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
+                        }
+                        const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
+                        const lat = event!.latitude
+                        const lon = event!.longitude
+                        const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},red`
+                        return { uri: url }
+                      })()}
+                      placeholder={placeholderImg}
+                      style={styles.locationImage}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={150}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.locationOverlay} pointerEvents="none" />
+                  <View style={styles.locationPillRow}>
+                    <View style={styles.locationPillIcon} />
+                    <Text style={styles.locationPillText} numberOfLines={1}>{event!.venue_name}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.locationButton} onPress={openInMaps}>
+                    <Text style={styles.locationButtonText}>Get Directions</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
-            <Text style={styles.sectionTitle}>Gallery</Text>
-            <View style={styles.gallerySection}>
-              {renderBentoGallery(gallerySources)}
-            </View>
+            {isLoading ? (
+              <View style={{ paddingHorizontal: 14, marginBottom: 20 }}>
+                <SkeletonLine width={120} style={{ marginBottom: 10 }} />
+                <SkeletonBlock width={'100%'} height={GALLERY_TALL_HEIGHT} borderRadius={12} />
+              </View>
+            ) : (
+              <>
+                <Text style={styles.sectionTitle}>Gallery</Text>
+                <View style={styles.gallerySection}>
+                  {renderBentoGallery(gallerySources)}
+                </View>
+              </>
+            )}
 
             
 
             <View style={styles.actionSection}>
-              {isCheckedIn ? (
+              {isLoading ? (
+                <SkeletonBlock width={'92%'} height={56} borderRadius={25} style={{ alignSelf: 'center' }} />
+              ) : isCheckedIn ? (
                 <View style={styles.checkedInContainer}>
                   <Text style={styles.checkedInText}>✅ Checked In!</Text>
                   <Text style={styles.checkedInSubtext}>
