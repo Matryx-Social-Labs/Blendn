@@ -1,11 +1,14 @@
+import * as Haptics from 'expo-haptics'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -26,6 +29,7 @@ interface Message {
   reply_to_message_id: string | null
   is_edited: boolean
   created_at: string
+  replyTo?: Message
 }
 
 type ChatListItem =
@@ -41,6 +45,11 @@ export default function GroupChat() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({})
+
+  // Message interaction states
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
+  const [showMessageMenu, setShowMessageMenu] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
   useEffect(() => {
     if (chatRoomId) {
@@ -216,7 +225,7 @@ export default function GroupChat() {
         console.log('✅ [CHAT_MESSAGES] Successfully loaded', data?.length || 0, 'messages');
         
         // Transform data and apply anonymous aliases
-        const messages = (data || []).map(msg => {
+        const transformedMessages = (data || []).map(msg => {
           const alias = msg.sender_id === 'system'
             ? 'System'
             : (participantAliases[msg.sender_id] || 'Attendee')
@@ -228,9 +237,16 @@ export default function GroupChat() {
             message_type: msg.message_type || 'text',
             reply_to_message_id: msg.reply_to_message_id,
             is_edited: msg.is_edited || false,
-            created_at: msg.created_at
+            created_at: msg.created_at,
+            replyTo: undefined as Message | undefined
           }
         });
+
+        // Link reply messages
+        const messages = transformedMessages.map(msg => ({
+          ...msg,
+          replyTo: msg.reply_to_message_id ? transformedMessages.find(m => m.message_id === msg.reply_to_message_id) : undefined
+        }));
 
         // Reverse to show oldest first
         setMessages(messages.reverse())
@@ -271,7 +287,8 @@ export default function GroupChat() {
             message_type: payload.new.message_type || 'text',
             reply_to_message_id: payload.new.reply_to_message_id,
             is_edited: payload.new.is_edited || false,
-            created_at: payload.new.created_at
+            created_at: payload.new.created_at,
+            replyTo: payload.new.reply_to_message_id ? messages.find(m => m.message_id === payload.new.reply_to_message_id) : undefined
           }
 
           console.log('✅ [REALTIME] Processed new message:', newMessage);
@@ -315,6 +332,51 @@ export default function GroupChat() {
     }
   }
 
+  // Message interaction handlers
+  const handleMessageLongPress = (message: Message) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    setSelectedMessage(message)
+    setShowMessageMenu(true)
+  }
+
+  const handleReply = () => {
+    if (selectedMessage) {
+      setReplyingTo(selectedMessage)
+      setShowMessageMenu(false)
+      setSelectedMessage(null)
+    }
+  }
+
+  const handleCopyMessage = async () => {
+    if (selectedMessage) {
+      await Clipboard.setString(selectedMessage.message_text)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setShowMessageMenu(false)
+      setSelectedMessage(null)
+      // You could show a toast notification here
+    }
+  }
+
+  const handleReportMessage = () => {
+    Alert.alert(
+      'Report Message',
+      'Are you sure you want to report this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: () => {
+            // Handle report logic here
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+            setShowMessageMenu(false)
+            setSelectedMessage(null)
+          }
+        }
+      ]
+    )
+  }
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUser) return
 
@@ -334,14 +396,16 @@ export default function GroupChat() {
         sender_name: 'You',
         message_text: messageText,
         message_type: 'text',
-        reply_to_message_id: null,
+        reply_to_message_id: replyingTo ? replyingTo.message_id : null,
         is_edited: false,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        replyTo: replyingTo || undefined
       }
-      
+
       // Add message immediately to UI and clear input
       setMessages(prev => [...prev, optimisticMessage!])
       setNewMessage('')
+      setReplyingTo(null) // Clear reply state after sending
       setTimeout(() => scrollToBottom(), 100)
 
       // Use the database function to send message
@@ -427,7 +491,12 @@ export default function GroupChat() {
     }
 
     return (
-      <View style={[styles.messageRow, isMyMessage ? styles.myRow : styles.otherRow]}>
+      <TouchableOpacity
+        style={[styles.messageRow, isMyMessage ? styles.myRow : styles.otherRow]}
+        onLongPress={() => handleMessageLongPress(item)}
+        delayLongPress={500}
+        activeOpacity={0.7}
+      >
         {!isMyMessage && (
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{getInitials(item.sender_name)}</Text>
@@ -440,6 +509,19 @@ export default function GroupChat() {
           {!isMyMessage && (
             <Text style={styles.senderName}>{item.sender_name}</Text>
           )}
+
+          {/* Reply indicator */}
+          {item.replyTo && (
+            <View style={styles.replyContainer}>
+              <View style={styles.replyLine} />
+              <Text style={styles.replyText}>
+                Replying to {item.replyTo.sender_name}: {item.replyTo.message_text.length > 50
+                  ? `${item.replyTo.message_text.substring(0, 50)}...`
+                  : item.replyTo.message_text}
+              </Text>
+            </View>
+          )}
+
           <View style={[
             styles.messageBubble,
             isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
@@ -458,7 +540,7 @@ export default function GroupChat() {
             {formatMessageTime(item.created_at)}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 
@@ -525,6 +607,27 @@ export default function GroupChat() {
           showsVerticalScrollIndicator={false}
         />
 
+        {/* Reply indicator above input */}
+        {replyingTo && (
+          <View style={styles.replyInputContainer}>
+            <View style={styles.replyInputContent}>
+              <View style={styles.replyInputLine} />
+              <View style={styles.replyInputText}>
+                <Text style={styles.replyInputLabel}>Replying to {replyingTo.sender_name}</Text>
+                <Text style={styles.replyInputMessage} numberOfLines={1}>
+                  {replyingTo.message_text}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setReplyingTo(null)}
+                style={styles.replyInputClose}
+              >
+                <Text style={styles.replyInputCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
@@ -553,6 +656,46 @@ export default function GroupChat() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Message Menu Modal */}
+      <Modal
+        visible={showMessageMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMessageMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMessageMenu(false)}
+        >
+          <View style={styles.messageMenu}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleReply}
+            >
+              <Text style={[styles.menuItemText, styles.menuItemIcon]}>↩️</Text>
+              <Text style={styles.menuItemText}>Reply</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleCopyMessage}
+            >
+              <Text style={[styles.menuItemText, styles.menuItemIcon]}>📋</Text>
+              <Text style={styles.menuItemText}>Copy</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuItemDestructive]}
+              onPress={handleReportMessage}
+            >
+              <Text style={[styles.menuItemText, styles.menuItemIcon]}>🚩</Text>
+              <Text style={[styles.menuItemText, styles.menuItemTextDestructive]}>Report</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -726,5 +869,114 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+
+  // Reply functionality styles
+  replyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingLeft: 12,
+  },
+  replyLine: {
+    width: 2,
+    height: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 1,
+    marginRight: 8,
+  },
+  replyText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    flex: 1,
+    fontStyle: 'italic',
+  },
+
+  // Reply input styles
+  replyInputContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  replyInputContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF6B6B',
+  },
+  replyInputLine: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#FF6B6B',
+    borderRadius: 1,
+    marginRight: 8,
+  },
+  replyInputText: {
+    flex: 1,
+  },
+  replyInputLabel: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  replyInputMessage: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+  replyInputClose: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  replyInputCloseText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  // Message menu modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageMenu: {
+    backgroundColor: 'rgba(30,30,30,0.95)',
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  menuItemIcon: {
+    marginLeft: 0,
+    marginRight: 8,
+    fontSize: 18,
+  },
+  menuItemDestructive: {
+    // Destructive styling handled in the TouchableOpacity style array
+  },
+  menuItemTextDestructive: {
+    color: '#FF6B6B',
   },
 }) 
