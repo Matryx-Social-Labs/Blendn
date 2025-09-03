@@ -1,19 +1,21 @@
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
-import { SafeAreaView as SafeAreaViewContext } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import { NotificationHelpers } from '../../lib/notifications'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
@@ -28,6 +30,10 @@ interface PrivateMessage {
   updated_at: string
 }
 
+type ChatListItem =
+  | ({ kind: 'message' } & PrivateMessage)
+  | { kind: 'separator'; id: string; label: string }
+
 export default function PrivateChat() {
   const { conversationId, otherUserName, otherUserId } = useLocalSearchParams()
   const [messages, setMessages] = useState<PrivateMessage[]>([])
@@ -36,6 +42,18 @@ export default function PrivateChat() {
   const [sending, setSending] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
+  const insets = useSafeAreaInsets()
+
+  const getInitials = (name: string) => {
+    if (!name) return '?'
+    const trimmed = String(name).trim()
+    if (!trimmed) return '?'
+    const parts = trimmed.split(/\s+/)
+    const first = parts[0]?.charAt(0) || ''
+    const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : ''
+    const combined = (first + last).toUpperCase()
+    return combined || '?'
+  }
 
   useEffect(() => {
     initializeChat()
@@ -253,25 +271,35 @@ export default function PrivateChat() {
     
     return (
       <TouchableOpacity
-        style={[
-          styles.messageContainer,
-          isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
-        ]}
+        style={[styles.messageRow, isCurrentUser ? styles.myRow : styles.otherRow]}
         onLongPress={handleMessageLongPress}
         delayLongPress={500}
+        activeOpacity={0.7}
       >
-        <Text style={[
-          styles.messageText,
-          isCurrentUser ? styles.currentUserText : styles.otherUserText
-        ]}>
-          {item.message_text}
-        </Text>
-        <Text style={[
-          styles.messageTime,
-          isCurrentUser ? styles.currentUserTime : styles.otherUserTime
-        ]}>
-          {formatTime(item.created_at)}
-        </Text>
+        {!isCurrentUser && (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(String(otherUserName || 'User'))}</Text>
+          </View>
+        )}
+        <View style={[styles.messageContainer, isCurrentUser ? styles.myMessageContainer : styles.otherMessageContainer]}>
+          <View style={[
+            styles.messageBubble,
+            isCurrentUser ? styles.myMessageBubble : styles.otherMessageBubble
+          ]}>
+            <Text style={[
+              styles.messageText,
+              isCurrentUser ? styles.myMessageText : styles.otherMessageText
+            ]}>
+              {item.message_text}
+            </Text>
+          </View>
+          <Text style={[
+            styles.messageTime,
+            isCurrentUser ? styles.myMessageTime : styles.otherMessageTime
+          ]}>
+            {formatTime(item.created_at)}
+          </Text>
+        </View>
       </TouchableOpacity>
     )
   }
@@ -286,19 +314,90 @@ export default function PrivateChat() {
     </View>
   )
 
+  const toDayKey = (iso: string) => {
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+  }
+
+  const formatDayLabel = (iso: string) => {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date()
+    yesterday.setDate(today.getDate() - 1)
+    const sameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+    if (sameDay(d, today)) return 'Today'
+    if (sameDay(d, yesterday)) return 'Yesterday'
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
+  }
+
+  const chatItems: ChatListItem[] = React.useMemo(() => {
+    const items: ChatListItem[] = []
+    let lastDayKey: string | null = null
+    for (const m of messages) {
+      const dayKey = toDayKey(m.created_at)
+      if (dayKey !== lastDayKey) {
+        items.push({ kind: 'separator', id: `sep-${dayKey}`, label: formatDayLabel(m.created_at) })
+        lastDayKey = dayKey
+      }
+      items.push({ kind: 'message', ...m })
+    }
+    return items
+  }, [messages])
+
+  const renderSeparator = (label: string) => (
+    <View style={styles.dateSeparatorContainer}>
+      <View style={styles.dateSeparatorLine} />
+      <Text style={styles.dateSeparatorText}>{label}</Text>
+    </View>
+  )
+
+  const renderChatItem = ({ item }: { item: ChatListItem }) => {
+    if (item.kind === 'separator') return renderSeparator(item.label)
+    return renderMessage({ item })
+  }
+
   if (loading) {
     return (
-      <SafeAreaViewContext style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <StatusBar style="light" backgroundColor="transparent" translucent />
+        <LinearGradient
+          colors={["#480D37", "#000000"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Gradient top inset to fill the status bar area on iOS */}
+        <LinearGradient
+          colors={["#480D37", "#000000"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B6B" />
           <Text style={styles.loadingText}>Loading conversation...</Text>
         </View>
-      </SafeAreaViewContext>
+      </SafeAreaView>
     )
   }
 
   return (
-    <SafeAreaViewContext style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar style="light" backgroundColor="transparent" translucent />
+      <LinearGradient
+        colors={["#480D37", "#000000"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Gradient top inset to fill the status bar area on iOS */}
+      <LinearGradient
+        colors={["#480D37", "#000000"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
+      />
       <KeyboardAvoidingView 
         style={styles.container} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -307,7 +406,7 @@ export default function PrivateChat() {
           title={(otherUserName as string) || 'Chat'}
           onBack={() => router.back()}
           rightIconButton={{
-            name: 'shield-outline',
+            name: 'settings-outline',
             onPress: () => {
               if (otherUserId) {
                 showUserSafetyActions(
@@ -324,30 +423,44 @@ export default function PrivateChat() {
         />
 
         {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.message_id}
-          renderItem={renderMessage}
-          style={styles.messagesList}
-          contentContainerStyle={messages.length === 0 ? styles.emptyListContainer : undefined}
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollToBottom()}
-        />
+        {messages.length === 0 ? (
+          <View style={[styles.messagesContainer, styles.emptyListContainer]}>
+            {renderEmptyState()}
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={chatItems}
+            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
+            renderItem={renderChatItem}
+            style={styles.messagesList}
+            contentContainerStyle={styles.messagesContainer}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => scrollToBottom()}
+          />
+        )}
 
         {/* Input */}
         <View style={styles.inputContainer}>
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="attach" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder="Type a message..."
-            placeholderTextColor="#999"
+            placeholder=""
+            placeholderTextColor="rgba(255,255,255,0.6)"
             multiline
             maxLength={1000}
             editable={!sending}
           />
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="camera" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="mic" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -364,14 +477,14 @@ export default function PrivateChat() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaViewContext>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
   },
   loadingContainer: {
     flex: 1,
@@ -386,7 +499,9 @@ const styles = StyleSheet.create({
   
   messagesList: {
     flex: 1,
-    paddingHorizontal: 16,
+  },
+  messagesContainer: {
+    padding: 16,
   },
   emptyListContainer: {
     flex: 1,
@@ -412,40 +527,97 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: 6,
+  },
+  myRow: {
+    justifyContent: 'flex-end',
+  },
+  otherRow: {
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  avatarText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
   messageContainer: {
     marginVertical: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 18,
     maxWidth: '80%',
   },
-  currentUserMessage: {
+  myMessageContainer: {
     alignSelf: 'flex-end',
-    backgroundColor: '#FF6B6B',
   },
-  otherUserMessage: {
+  otherMessageContainer: {
     alignSelf: 'flex-start',
-    backgroundColor: '#f0f0f0',
+  },
+  messageBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  myMessageBubble: {
+    backgroundColor: '#7B2DFA',
+    borderBottomRightRadius: 6,
+  },
+  otherMessageBubble: {
+    backgroundColor: '#1F2B24',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderBottomLeftRadius: 6,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  currentUserText: {
-    color: '#fff',
+  myMessageText: {
+    color: '#FFFFFF',
   },
-  otherUserText: {
-    color: '#333',
+  otherMessageText: {
+    color: '#FFFFFF',
   },
   messageTime: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
   },
-  currentUserTime: {
-    color: 'rgba(255,255,255,0.8)',
+  myMessageTime: {
+    color: '#B5B5B5',
+    textAlign: 'right',
+    marginRight: 12,
   },
-  otherUserTime: {
-    color: '#999',
+  otherMessageTime: {
+    color: '#B5B5B5',
+    marginLeft: 12,
+  },
+  dateSeparatorContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  dateSeparatorLine: {
+    position: 'absolute',
+    top: '50%',
+    left: 16,
+    right: 16,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  dateSeparatorText: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 12,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -453,29 +625,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    backgroundColor: '#fff',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  inputIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 25,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
     maxHeight: 100,
-    marginRight: 12,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#FFFFFF',
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#7B2DFA',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#555',
   },
 }) 

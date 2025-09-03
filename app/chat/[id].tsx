@@ -1,6 +1,8 @@
+import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Alert,
@@ -15,7 +17,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
@@ -45,6 +47,7 @@ export default function GroupChat() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({})
+  const insets = useSafeAreaInsets()
 
   // Message interaction states
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
@@ -588,11 +591,19 @@ export default function GroupChat() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar style="light" backgroundColor="transparent" translucent />
       <LinearGradient
         colors={["#480D37", "#000000"]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
+      />
+      {/* Gradient top inset to fill the status bar area on iOS */}
+      <LinearGradient
+        colors={["#480D37", "#000000"]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
       />
       <KeyboardAvoidingView
         style={styles.container}
@@ -638,17 +649,26 @@ export default function GroupChat() {
         )}
 
         <View style={styles.inputContainer}>
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="attach" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder="Type a message..."
+            placeholder=""
             placeholderTextColor="rgba(255,255,255,0.6)"
             multiline
             maxLength={1000}
             onSubmitEditing={sendMessage}
             blurOnSubmit={false}
           />
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="camera" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.inputIcon}>
+            <Ionicons name="mic" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -660,7 +680,7 @@ export default function GroupChat() {
             {sending ? (
               <Text style={styles.sendButtonText}>…</Text>
             ) : (
-              <Text style={styles.sendButtonText}>➤</Text>
+              <Ionicons name="send" size={20} color="#fff" />
             )}
           </TouchableOpacity>
         </View>
@@ -791,13 +811,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   myMessageBubble: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#7B2DFA',
     borderBottomRightRadius: 6,
   },
   otherMessageBubble: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1F2B24',
     borderWidth: 1,
-    borderColor: '#e9e9e9',
+    borderColor: 'rgba(255,255,255,0.08)',
     borderBottomLeftRadius: 6,
   },
   messageText: {
@@ -805,22 +825,22 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   myMessageText: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   otherMessageText: {
-    color: '#333',
+    color: '#FFFFFF',
   },
   messageTime: {
     fontSize: 11,
     marginTop: 4,
   },
   myMessageTime: {
-    color: '#999',
+    color: '#B5B5B5',
     textAlign: 'right',
     marginRight: 12,
   },
   otherMessageTime: {
-    color: '#999',
+    color: '#B5B5B5',
     marginLeft: 12,
   },
   dateSeparatorContainer: {
@@ -851,6 +871,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.2)',
   },
+  inputIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
   textInput: {
     flex: 1,
     borderWidth: 1,
@@ -865,15 +892,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   sendButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FF6B6B',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#7B2DFA',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#555',
   },
   sendButtonText: {
     color: '#fff',
