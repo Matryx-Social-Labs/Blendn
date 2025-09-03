@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
@@ -10,7 +10,6 @@ import {
     View
 } from 'react-native'
 import { supabase } from '../../lib/supabase'
-import { router } from 'expo-router'
 
 export default function Complete() {
   const [loading, setLoading] = useState(false)
@@ -110,7 +109,7 @@ export default function Complete() {
           <Text style={styles.subtitle}>
             Welcome to Blendn! Your profile is ready and you can start discovering amazing events and meeting new people.
           </Text>
-          <Text style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Onboarding 8/8 completed</Text>
+          <Text style={{ fontSize: 12, color: '#fff', marginBottom: 12 }}>Onboarding 8/8 completed</Text>
 
           <View style={styles.featuresContainer}>
             <View style={styles.feature}>
@@ -192,13 +191,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 16,
-    color: '#333',
+    color: '#fff',
   },
   subtitle: {
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 48,
-    color: '#666',
+    color: '#fff',
     lineHeight: 24,
     paddingHorizontal: 16,
   },
@@ -218,7 +217,7 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 16,
-    color: '#333',
+    color: '#fff',
     flex: 1,
   },
   bottomSection: {
@@ -250,7 +249,7 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 14,
     textAlign: 'center',
-    color: '#666',
+    color: '#fff',
     fontStyle: 'italic',
   },
 }) 

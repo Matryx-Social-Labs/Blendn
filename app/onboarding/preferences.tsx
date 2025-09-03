@@ -44,7 +44,7 @@ export default function PreferencesStep() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Your preferences</Text>
-        <Text style={{ textAlign: 'center', color: '#666', marginBottom: 12 }}>Step 5 of 8</Text>
+        <Text style={{ textAlign: 'center', color: '#fff', marginBottom: 12 }}>Step 5 of 8</Text>
         <Text style={styles.subtitle}>Help us tailor your experience</Text>
 
         <Text style={styles.sectionTitle}>What are you looking for?</Text>
@@ -78,9 +78,9 @@ export default function PreferencesStep() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: 24 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 6, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 18, textAlign: 'center' },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#333', marginTop: 8, marginBottom: 10 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 6, textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#fff', marginBottom: 18, textAlign: 'center' },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginTop: 8, marginBottom: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   chip: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#f0f0f0', marginBottom: 12, minWidth: '48%', alignItems: 'center' },
   chipSelected: { backgroundColor: '#FF6B6B' },
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: '#FF6B6B', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12 },
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   skip: { padding: 12, alignItems: 'center' },
-  skipText: { color: '#666', fontSize: 16 },
+  skipText: { color: '#fff', fontSize: 16 },
   disabled: { opacity: 0.6 },
 })
 

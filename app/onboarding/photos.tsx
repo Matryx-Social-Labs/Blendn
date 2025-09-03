@@ -166,11 +166,11 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: '#333',
+    color: '#fff',
   },
   progressText: {
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
   },
   mainContent: {
     flex: 1,
@@ -180,12 +180,12 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#fff',
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#fff',
     marginBottom: 40,
     lineHeight: 22,
     textAlign: 'center',
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   photoTip: {
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
     textAlign: 'center',
     fontStyle: 'italic',
     paddingHorizontal: 16,
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: {
-    color: '#666',
+    color: '#fff',
     fontSize: 16,
   },
   photosSection: {
@@ -306,6 +306,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#666',
+    color: '#fff',
   },
 }) 

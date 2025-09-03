@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    FlatList,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -22,7 +21,6 @@ import {
 } from '../lib/photoUtils'
 
 const { width } = Dimensions.get('window')
-const PHOTO_SIZE = (width - 48) / 3 // 3 photos per row with padding
 
 interface PhotoManagerProps {
   userId: string
@@ -42,9 +40,13 @@ export default function PhotoManager({
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [reordering, setReordering] = useState(false)
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
   const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange']>()
+  // Measure available width to compute exact 3-col sizing
+  const [containerWidth, setContainerWidth] = useState<number>(width - 32)
+  const NUM_COLUMNS = 3
+  const GAP = 8
+  const itemSize = Math.max(80, Math.floor((containerWidth - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS))
 
   useEffect(() => {
     loadPhotos()
@@ -166,54 +168,20 @@ export default function PhotoManager({
     )
   }
 
-  const handleReorderPhotos = async (newData: ProfilePhoto[]) => {
-    if (!editable) return
-
-    setReordering(true)
-    try {
-      // Update order property
-      const reorderedPhotos = newData.map((photo, index) => ({
-        ...photo,
-        order: index,
-        isPrimary: index === 0
-      }))
-
-      setPhotos(reorderedPhotos)
-      
-      // Update database
-      const newPhotoUrls = reorderedPhotos.map(p => p.url)
-      const success = await reorderPhotos(userId, newPhotoUrls)
-      
-      if (!success) {
-        Alert.alert('Error', 'Failed to reorder photos')
-        loadPhotos() // Reload original order
-      } else {
-        console.log('PhotoManager: Photos reordered', { userId, count: reorderedPhotos.length })
-      }
-    } catch (error) {
-      console.error('PhotoManager: Reorder error', { error, userId })
-      Alert.alert('Error', 'Failed to reorder photos')
-      loadPhotos()
-    } finally {
-      setReordering(false)
-    }
-  }
-
   const renderPhoto = useCallback(({ item, index }: { item: ProfilePhoto; index: number }) => {
     const cachedUrl = cachedUrls[item.url]
     const optimizedUrl = getOptimizedImageUrl(item.url, {
-      width: Math.round(PHOTO_SIZE * 2), // 2x for retina
-      height: Math.round(PHOTO_SIZE * 2),
+      width: Math.round(itemSize * 2), // 2x for retina
+      height: Math.round(itemSize * 2),
       quality: 80,
       resize: 'cover',
       format: 'webp'
     })
 
     return (
-      <View style={styles.photoContainer}>
+      <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}>
         <TouchableOpacity
-          style={[styles.photo, { width: PHOTO_SIZE, height: PHOTO_SIZE }]}
-          onLongPress={editable ? () => handleRemovePhoto(index) : undefined}
+          style={[styles.photo, { width: itemSize, height: itemSize }]}
           activeOpacity={0.8}
         >
           <Image
@@ -239,12 +207,6 @@ export default function PhotoManager({
               <Ionicons name="close-circle" size={24} color="#FF4444" />
             </TouchableOpacity>
           )}
-          
-          {editable && (
-            <View style={styles.dragHandle}>
-              <Text style={styles.dragText}>Hold to remove</Text>
-            </View>
-          )}
         </TouchableOpacity>
       </View>
     )
@@ -255,7 +217,7 @@ export default function PhotoManager({
 
     return (
       <TouchableOpacity
-        style={[styles.addPhoto, { width: PHOTO_SIZE, height: PHOTO_SIZE }]}
+        style={[styles.addPhoto, { width: itemSize, height: itemSize }]}
         onPress={handleAddPhoto}
         disabled={uploading}
       >
@@ -280,24 +242,13 @@ export default function PhotoManager({
     )
   }
 
-  const data = [...photos]
-  if (editable && photos.length < maxPhotos) {
-    // Add placeholder for add button
-    data.push({
-      id: 'add_photo',
-      url: '',
-      order: photos.length,
-      isPrimary: false
-    } as ProfilePhoto)
-  }
-
   return (
-    <View style={[styles.container, style]}>
+    <View 
+      style={[styles.container, style]}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>Photos ({photos.length}/{maxPhotos})</Text>
-        {editable && photos.length > 1 && (
-          <Text style={styles.hint}>Hold and drag to reorder</Text>
-        )}
       </View>
 
       {photos.length === 0 ? (
@@ -309,24 +260,16 @@ export default function PhotoManager({
           )}
         </View>
       ) : (
-        <FlatList
-          data={photos}
-          keyExtractor={(item: ProfilePhoto) => item.id}
-          renderItem={renderPhoto}
-          numColumns={3}
-          style={styles.photoGrid}
-          contentContainerStyle={styles.photoGridContent}
-        />
+        <View style={[styles.photoGrid, styles.photoGridContent]}> 
+          {photos.map((item, index) => (
+            <React.Fragment key={item.id}>
+              {renderPhoto({ item, index })}
+            </React.Fragment>
+          ))}
+        </View>
       )}
 
       {renderAddPhoto()}
-      
-      {reordering && (
-        <View style={styles.reorderingOverlay}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
-          <Text style={styles.reorderingText}>Reordering...</Text>
-        </View>
-      )}
     </View>
   )
 }
@@ -380,14 +323,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   photoGrid: {
-    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   photoGridContent: {
-    padding: 4,
+    padding: 0,
   },
   photoContainer: {
-    flex: 1,
-    margin: 4,
+    margin: 0,
   },
   photo: {
     borderRadius: 12,
@@ -451,23 +395,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: '#7C3AED',
-    fontWeight: '500',
-  },
-  reorderingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  reorderingText: {
-    marginLeft: 8,
-    color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '500',
   },
 })

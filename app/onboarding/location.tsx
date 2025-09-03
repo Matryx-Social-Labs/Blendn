@@ -56,7 +56,7 @@ export default function LocationStep() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Enable Location</Text>
-        <Text style={{ textAlign: 'center', color: '#666', marginBottom: 12 }}>Step 7 of 8</Text>
+        <Text style={{ textAlign: 'center', color: '#fff', marginBottom: 12 }}>Step 7 of 8</Text>
         <Text style={styles.subtitle}>
           Location helps us verify event check-ins and show you people and events nearby. We never share your exact
           location with other users.
@@ -92,17 +92,17 @@ export default function LocationStep() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { flex: 1, padding: 24, justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#666', lineHeight: 22, textAlign: 'center', marginBottom: 24 },
-  card: { backgroundColor: '#f8f9fa', padding: 16, borderRadius: 12, marginBottom: 24 },
-  cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#333' },
-  cardItem: { fontSize: 14, color: '#555', marginBottom: 6 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#fff', lineHeight: 22, textAlign: 'center', marginBottom: 24 },
+  card: { backgroundColor: 'rgba(0,0,0,0.3)', padding: 16, borderRadius: 12, marginBottom: 24 },
+  cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#fff' },
+  cardItem: { fontSize: 14, color: '#fff', marginBottom: 6 },
   primaryButton: { backgroundColor: '#FF6B6B', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   disabled: { opacity: 0.6 },
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secondaryButton: { padding: 12, alignItems: 'center' },
-  secondaryText: { color: '#666', fontSize: 16 },
-  notice: { marginTop: 12, fontSize: 12, color: '#999', textAlign: 'center' },
+  secondaryText: { color: '#fff', fontSize: 16 },
+  notice: { marginTop: 12, fontSize: 12, color: '#fff', textAlign: 'center' },
 })
 
 

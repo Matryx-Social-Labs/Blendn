@@ -2,20 +2,21 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
+import { useGradientOverlay } from '../lib/gradientOverlay'
 import { supabase } from '../lib/supabase'
 
 interface UserProfile {
@@ -48,6 +49,7 @@ export default function EditProfile() {
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
+  const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
     loadProfile()
@@ -364,7 +366,12 @@ export default function EditProfile() {
           rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
         />
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+          scrollEventThrottle={16}
+        >
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Photos</Text>
             {isLoading ? (
@@ -493,7 +500,7 @@ export default function EditProfile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
@@ -516,12 +523,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: '#fff',
     marginBottom: 4,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#d1d5db',
     marginBottom: 16,
   },
   photoGrid: {
@@ -561,7 +568,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
+    color: '#fff',
     marginBottom: 8,
   },
   input: {
@@ -580,7 +587,7 @@ const styles = StyleSheet.create({
   characterCount: {
     textAlign: 'right',
     fontSize: 12,
-    color: '#666',
+    color: '#e5e7eb',
     marginTop: 4,
   },
   interestsContainer: {

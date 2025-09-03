@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { LinearGradient } from 'expo-linear-gradient'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState } from 'react'
 import {
@@ -529,12 +529,21 @@ export default function GroupChat() {
             styles.messageBubble,
             isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
           ]}>
-            <Text style={[
-              styles.messageText,
-              isMyMessage ? styles.myMessageText : styles.otherMessageText
-            ]}>
-              {item.message_text}
-            </Text>
+            {item.message_type === 'text' ? (
+              <Text style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText
+              ]}>
+                {item.message_text}
+              </Text>
+            ) : (
+              <Text style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText
+              ]}>
+                Message type not supported
+              </Text>
+            )}
           </View>
           <Text style={[
             styles.messageTime,
@@ -591,6 +600,7 @@ export default function GroupChat() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" backgroundColor="transparent" translucent />
       <LinearGradient
         colors={["#480D37", "#000000"]}
@@ -649,9 +659,6 @@ export default function GroupChat() {
         )}
 
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputIcon}>
-            <Ionicons name="attach" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             value={newMessage}
@@ -663,12 +670,6 @@ export default function GroupChat() {
             onSubmitEditing={sendMessage}
             blurOnSubmit={false}
           />
-          <TouchableOpacity style={styles.inputIcon}>
-            <Ionicons name="camera" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.inputIcon}>
-            <Ionicons name="mic" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.sendButton,

@@ -72,13 +72,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 16,
-    color: '#333',
+    color: '#fff',
   },
   subtitle: {
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 48,
-    color: '#666',
+    color: '#fff',
     lineHeight: 24,
   },
   featuresContainer: {
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 16,
-    color: '#333',
+    color: '#fff',
     flex: 1,
   },
   bottomSection: {
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   privacyText: {
     fontSize: 12,
     textAlign: 'center',
-    color: '#999',
+    color: '#fff',
     lineHeight: 16,
   },
 }) 

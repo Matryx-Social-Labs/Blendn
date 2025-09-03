@@ -160,11 +160,11 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: '#333',
+    color: '#fff',
   },
   progressText: {
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
   },
   formSection: {
     flex: 1,
@@ -173,11 +173,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#fff',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#fff',
     marginBottom: 32,
     lineHeight: 22,
   },
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#fff',
     marginBottom: 8,
   },
   input: {
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontSize: 12,
-    color: '#999',
+    color: '#fff',
     textAlign: 'right',
     marginTop: 4,
   },

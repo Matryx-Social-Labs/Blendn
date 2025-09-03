@@ -175,23 +175,14 @@ export default function RootLayout() {
         }} 
       />
       <Stack.Screen 
-        name="chat/[id]" 
-        options={{ 
-          headerShown: false
-        }} 
-      />
-      <Stack.Screen 
         name="event/[id]" 
         options={{ 
           headerShown: false
         }} 
       />
-      <Stack.Screen 
-        name="private-chat/[conversationId]" 
-        options={{ 
-          headerShown: false
-        }} 
-      />
+      {/* Nested segment layouts handle their own screens */}
+      <Stack.Screen name="chat" options={{ headerShown: false }} />
+      <Stack.Screen name="private-chat" options={{ headerShown: false }} />
       <Stack.Screen 
         name="edit-profile" 
         options={{ 

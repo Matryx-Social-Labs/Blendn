@@ -1,13 +1,15 @@
 import {
-    GoogleSignin,
-    GoogleSigninButton,
-    statusCodes,
+  GoogleSignin,
+  GoogleSigninButton,
+  statusCodes,
 } from '@react-native-google-signin/google-signin'
 import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
+
+const logo = require('../assets/logo/ios-dark.png')
 
 export default function Index() {
   const { session, user, loading } = useAuth()
@@ -29,7 +31,9 @@ export default function Index() {
       setSigningIn(true)
       console.log('🔐 [INDEX] Starting Google Sign In...')
       
-      await GoogleSignin.hasPlayServices()
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
+      }
       const userInfo = await GoogleSignin.signIn()
       
       if (userInfo.data?.idToken) {
@@ -79,8 +83,10 @@ export default function Index() {
   if (!user) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <Text style={styles.title}>Welcome to blendn</Text>
-        <Text style={styles.subtitle}>Connect with people at events</Text>
+        <View style={styles.logoContainer}>
+          <Image source={logo} style={styles.logo} resizeMode="contain" />
+        </View>
+        <Text style={styles.tagline}>Connect with people at events</Text>
         
         <GoogleSigninButton
           style={styles.googleButton}
@@ -127,6 +133,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 40,
+    textAlign: 'center',
+  },
+  logoContainer: {
+    marginBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 200,
+    height: 60,
+  },
+  tagline: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 32,
     textAlign: 'center',
   },
   loadingText: {

@@ -159,11 +159,11 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: '#333',
+    color: '#fff',
   },
   progressText: {
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
   },
   scrollContent: {
     flex: 1,
@@ -172,11 +172,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#fff',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#fff',
     marginBottom: 24,
     lineHeight: 22,
   },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   selectedText: {
     fontSize: 14,
-    color: '#FF6B6B',
+    color: '#fff',
     fontWeight: '500',
   },
   interestsGrid: {
