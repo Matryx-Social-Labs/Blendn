@@ -343,23 +343,21 @@ export default function Events() {
         <Text style={styles.sectionTitle}>You&apos;re checked in</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {checkedInEvents.map((item) => (
+        {checkedInEvents.filter(item => !!item.cover_image_url).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            {item.cover_image_url && (
-              <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
-                <LinearGradient
-                  colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                  style={styles.carouselGradient}
-                />
-                <View style={styles.carouselContentOverlay}>
-                  <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                  <Text style={styles.carouselTime}>
-                    {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </View>
-              </ImageBackground>
-            )}
+            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                style={styles.carouselGradient}
+              />
+              <View style={styles.carouselContentOverlay}>
+                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                <Text style={styles.carouselTime}>
+                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </ImageBackground>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -370,38 +368,30 @@ export default function Events() {
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Interested Events</Text>
-        <TouchableOpacity style={styles.viewAllRow}>
-          <Text style={styles.viewAllText}>View all</Text>
-          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
-        </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.map((item) => (
+        {items.filter(item => !!item.cover_image_url).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            {item.cover_image_url && (
-              <>
-                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
-                  <LinearGradient
-                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                    style={styles.carouselGradient}
-                  />
-                  <View style={styles.carouselContentOverlay}>
-                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                    <Text style={styles.carouselTime}>
-                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                </ImageBackground>
-                <TouchableOpacity
-                  onPress={() => toggleInterest(item)}
-                  style={styles.carouselHeartButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                style={styles.carouselGradient}
+              />
+              <View style={styles.carouselContentOverlay}>
+                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                <Text style={styles.carouselTime}>
+                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </ImageBackground>
+            <TouchableOpacity
+              onPress={() => toggleInterest(item)}
+              style={styles.carouselHeartButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -613,38 +603,30 @@ export default function Events() {
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>{title}</Text>
-        <TouchableOpacity style={styles.viewAllRow}>
-          <Text style={styles.viewAllText}>View all</Text>
-          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
-        </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.map((item) => (
+        {items.filter(item => !!item.cover_image_url).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            {item.cover_image_url && (
-              <>
-                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
-                  <LinearGradient
-                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                    style={styles.carouselGradient}
-                  />
-                  <View style={styles.carouselContentOverlay}>
-                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                    <Text style={styles.carouselTime}>
-                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                </ImageBackground>
-                <TouchableOpacity
-                  onPress={() => toggleInterest(item)}
-                  style={styles.carouselHeartButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                style={styles.carouselGradient}
+              />
+              <View style={styles.carouselContentOverlay}>
+                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                <Text style={styles.carouselTime}>
+                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </ImageBackground>
+            <TouchableOpacity
+              onPress={() => toggleInterest(item)}
+              style={styles.carouselHeartButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -783,38 +765,30 @@ export default function Events() {
             <Text key={`${t}-${i}`} style={styles.sectionTitle}>{t}</Text>
           ))}
         </View>
-        <TouchableOpacity style={styles.viewAllRow}>
-          <Text style={styles.viewAllText}>View all</Text>
-          <Ionicons name="chevron-forward" size={18} color="#E53A17" />
-        </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.map((item) => (
+        {items.filter(item => !!item.cover_image_url).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            {item.cover_image_url && (
-              <>
-                <ImageBackground source={{ uri: item.cover_image_url }} style={styles.carouselImage} resizeMode="cover">
-                  <LinearGradient
-                    colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                    style={styles.carouselGradient}
-                  />
-                  <View style={styles.carouselContentOverlay}>
-                    <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                    <Text style={styles.carouselTime}>
-                      {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                </ImageBackground>
-                <TouchableOpacity
-                  onPress={() => toggleInterest(item)}
-                  style={styles.carouselHeartButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+                style={styles.carouselGradient}
+              />
+              <View style={styles.carouselContentOverlay}>
+                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
+                <Text style={styles.carouselTime}>
+                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </ImageBackground>
+            <TouchableOpacity
+              onPress={() => toggleInterest(item)}
+              style={styles.carouselHeartButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -865,10 +839,6 @@ export default function Events() {
       <View style={styles.nearbyContainer}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Nearby Events</Text>
-          <TouchableOpacity style={styles.viewAllRow}>
-            <Text style={styles.viewAllText}>View all</Text>
-            <Ionicons name="chevron-forward" size={18} color="#E53A17" />
-          </TouchableOpacity>
         </View>
         <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
         {items.map((ev) => (
@@ -952,7 +922,7 @@ export default function Events() {
   // Build looped data for infinite-like carousel after upcomingItems is defined
   const upcomingLooped = useMemo(() => {
     if (upcomingItems.length === 0) return [] as Event[]
-    const loops = 7
+    const loops = UPCOMING_LOOPS
     const arr: Event[] = []
     for (let i = 0; i < loops; i += 1) arr.push(...upcomingItems)
     return arr
