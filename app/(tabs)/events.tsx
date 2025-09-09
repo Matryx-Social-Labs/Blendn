@@ -12,6 +12,7 @@ import {
   FlatList,
   Image,
   ImageBackground,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -107,13 +108,24 @@ export default function Events() {
         Alert.alert('Sign in required', 'Please sign in to check in to events')
         return
       }
+      if (!userLocation) {
+        Alert.alert(
+          'Location required',
+          'Enable location to verify proximity and check in.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { try { (Linking as any)?.openSettings?.() } catch {} } }
+          ]
+        )
+        return
+      }
       
       // Call standardized production check-in RPC
       const params = {
         p_event_id: event.id,
         p_user_id: user.id,
-        p_user_latitude: userLocation?.latitude || 19.076,
-        p_user_longitude: userLocation?.longitude || 72.8777,
+        p_user_latitude: userLocation.latitude,
+        p_user_longitude: userLocation.longitude,
         p_gps_accuracy: 50,
       }
       Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
@@ -447,9 +459,16 @@ export default function Events() {
       // Best-effort permission request with quick timeout; fallback if denied/unavailable
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        const fallback = { latitude: 19.076, longitude: 72.8777 }
-        setUserLocation(fallback)
-        Logger.warn('events', 'permission:notGrantedUsingFallback', { fallback })
+        setUserLocation(null)
+        Logger.warn('events', 'permission:notGranted', {})
+        Alert.alert(
+          'Turn on Location',
+          'We need your location to show nearby events and enable check-in.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { try { (Linking as any)?.openSettings?.() } catch {} } }
+          ]
+        )
         return
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
@@ -457,9 +476,8 @@ export default function Events() {
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
-      const fallback = { latitude: 19.076, longitude: 72.8777 }
-      setUserLocation(fallback)
-      Logger.warn('events', 'quietLocation:errorUsingFallback', { error: error as any, fallback })
+      setUserLocation(null)
+      Logger.warn('events', 'quietLocation:error', { error: error as any })
     }
   }
 
@@ -1021,7 +1039,7 @@ export default function Events() {
       {/* Background image tint to match Figma */}
       {/* Image moved to global background in RootLayout */}
       {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} className='bg-black'>
+      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
@@ -1461,8 +1479,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   nearbyImage: {
-    width: 363,
-    height: 249,
+    width: '96%',
+    aspectRatio: 363 / 249,
+    maxWidth: 420,
     alignSelf: 'center',
   },
   nearbyImageRadius: {
@@ -1573,7 +1592,8 @@ const styles = StyleSheet.create({
   },
   featuredImage: {
     width: '100%',
-    height: 474,
+    aspectRatio: 363 / 474,
+    maxHeight: 474,
   },
   featuredRadius: {
     borderRadius: 20,
