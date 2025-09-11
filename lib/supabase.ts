@@ -1,6 +1,7 @@
 // Import URL polyfill first (CRITICAL for React Native)
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient } from '@supabase/supabase-js'
+import * as SecureStore from 'expo-secure-store'
 import { AppState } from 'react-native'
 import 'react-native-url-polyfill/auto'
 import { Logger } from './logger'
@@ -162,28 +163,135 @@ class RequestQueue {
 
 const requestQueue = new RequestQueue()
 
-// Enhanced AsyncStorage wrapper with error handling
-const enhancedAsyncStorage = {
+// Secure auth storage using expo-secure-store with seamless migration from AsyncStorage
+const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainService: 'blendn.supabase.auth',
+  // Avoid biometric/pin prompts on background refresh; tokens are still encrypted at rest
+  requireAuthentication: false,
+  // iOS-only: never leave device or backups
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+}
+
+const CHUNK_SIZE_CHARS = 1800 // comfortably below SecureStore ~2048 byte limit (ASCII JSON)
+
+function sanitizeKey(key: string): string {
+  // SecureStore keys must match /^[\w.-]+$/
+  // Map any forbidden character to underscore to preserve readability and avoid collisions in practice
+  const sanitized = key.replace(/[^\w.-]/g, '_')
+  // Prefix to namespace our entries
+  return `sb_${sanitized}`
+}
+
+async function getChunkCount(key: string): Promise<number | null> {
+  try {
+    const sKey = sanitizeKey(key)
+    const countStr = await SecureStore.getItemAsync(`${sKey}.__chunks`, SECURE_OPTIONS)
+    if (!countStr) return null
+    const n = Number(countStr)
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+
+async function clearChunks(key: string, existingCount?: number | null) {
+  const count = existingCount ?? (await getChunkCount(key))
+  if (!count) return
+  for (let i = 0; i < count; i++) {
+    try { await SecureStore.deleteItemAsync(`${sanitizeKey(key)}.__chunk_${i}`, SECURE_OPTIONS) } catch {}
+  }
+  try { await SecureStore.deleteItemAsync(`${sanitizeKey(key)}.__chunks`, SECURE_OPTIONS) } catch {}
+}
+
+async function readChunked(key: string): Promise<string | null> {
+  const count = await getChunkCount(key)
+  if (!count) return null
+  const parts: string[] = []
+  for (let i = 0; i < count; i++) {
+    const part = await SecureStore.getItemAsync(`${sanitizeKey(key)}.__chunk_${i}`, SECURE_OPTIONS)
+    if (part == null) return null
+    parts.push(part)
+  }
+  return parts.join('')
+}
+
+async function writeChunked(key: string, value: string): Promise<void> {
+  const existingCount = await getChunkCount(key)
+  // Remove any single-value entry
+  try { await SecureStore.deleteItemAsync(sanitizeKey(key), SECURE_OPTIONS) } catch {}
+  // Clear previous chunks
+  await clearChunks(key, existingCount)
+
+  const chunks: string[] = []
+  for (let i = 0; i < value.length; i += CHUNK_SIZE_CHARS) {
+    chunks.push(value.slice(i, i + CHUNK_SIZE_CHARS))
+  }
+  await SecureStore.setItemAsync(`${sanitizeKey(key)}.__chunks`, String(chunks.length), SECURE_OPTIONS)
+  for (let i = 0; i < chunks.length; i++) {
+    await SecureStore.setItemAsync(`${sanitizeKey(key)}.__chunk_${i}`, chunks[i], SECURE_OPTIONS)
+  }
+}
+
+const secureAuthStorage = {
   async getItem(key: string): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem(key)
-    } catch (error) {
-      console.error('❌ AsyncStorage getItem error:', error)
+      // Prefer chunked value if present
+      const chunkedVal = await readChunked(key)
+      if (chunkedVal != null) return chunkedVal
+
+      const secureVal = await SecureStore.getItemAsync(sanitizeKey(key), SECURE_OPTIONS)
+      if (secureVal != null) return secureVal
+
+      // Migration path: fall back to AsyncStorage once, then migrate to SecureStore
+      const legacyVal = await AsyncStorage.getItem(key)
+      if (legacyVal != null) {
+        try {
+          if (legacyVal.length > CHUNK_SIZE_CHARS) {
+            await writeChunked(key, legacyVal)
+          } else {
+            await SecureStore.setItemAsync(sanitizeKey(key), legacyVal, SECURE_OPTIONS)
+          }
+          await AsyncStorage.removeItem(key)
+        } catch (migrateErr) {
+          console.warn('⚠️ SecureStore migrate setItem failed; leaving legacy token in AsyncStorage', migrateErr)
+        }
+        return legacyVal
+      }
       return null
+    } catch (error) {
+      console.error('❌ SecureStore getItem error:', error)
+      // Final fallback so auth does not break if SecureStore throws
+      try {
+        return await AsyncStorage.getItem(key)
+      } catch {
+        return null
+      }
     }
   },
   async setItem(key: string, value: string): Promise<void> {
     try {
-      await AsyncStorage.setItem(key, value)
+      if (value.length > CHUNK_SIZE_CHARS) {
+        await writeChunked(key, value)
+      } else {
+        // Remove any chunked representation when switching back to single value
+        await clearChunks(key)
+        await SecureStore.setItemAsync(sanitizeKey(key), value, SECURE_OPTIONS)
+      }
+      // Ensure legacy store is cleared to prevent stale copies
+      try { await AsyncStorage.removeItem(key) } catch {}
     } catch (error) {
-      console.error('❌ AsyncStorage setItem error:', error)
+      console.error('❌ SecureStore setItem error, falling back to AsyncStorage:', error)
+      try { await AsyncStorage.setItem(key, value) } catch (e) { console.error('❌ AsyncStorage fallback setItem error:', e) }
     }
   },
   async removeItem(key: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(key)
+      await SecureStore.deleteItemAsync(sanitizeKey(key), SECURE_OPTIONS)
+      await clearChunks(key)
     } catch (error) {
-      console.error('❌ AsyncStorage removeItem error:', error)
+      console.error('❌ SecureStore removeItem error:', error)
+    } finally {
+      try { await AsyncStorage.removeItem(key) } catch {}
     }
   }
 }
@@ -191,7 +299,7 @@ const enhancedAsyncStorage = {
 // Supabase client following official React Native documentation
 export const supabase = createClient(clientUrl, clientKey, {
   auth: {
-    storage: enhancedAsyncStorage,
+    storage: secureAuthStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

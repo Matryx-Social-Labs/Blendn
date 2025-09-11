@@ -34,7 +34,10 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -59,7 +62,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
