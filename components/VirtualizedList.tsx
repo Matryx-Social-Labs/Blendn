@@ -15,6 +15,7 @@ interface VirtualizedListProps<T> extends Omit<FlatListProps<T>, 'renderItem' | 
   onEndReachedThreshold?: number
   enableVirtualization?: boolean
   debug?: boolean
+  forwardedRef?: React.Ref<FlatList<T>>
 }
 
 interface ViewabilityConfig {
@@ -36,6 +37,7 @@ export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<
     onEndReachedThreshold = 0.5,
     enableVirtualization = true,
     debug = false,
+    forwardedRef,
     ...restProps
   } = props
 
@@ -86,7 +88,11 @@ export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<
   if (!enableVirtualization) {
     return (
       <FlatList
-        ref={listRef}
+        ref={(node) => {
+          listRef.current = node as any
+          if (typeof forwardedRef === 'function') forwardedRef(node as any)
+          else if (forwardedRef) (forwardedRef as any).current = node
+        }}
         data={data}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
@@ -97,7 +103,11 @@ export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<
 
   return (
     <FlatList
-      ref={listRef}
+      ref={(node) => {
+        listRef.current = node as any
+        if (typeof forwardedRef === 'function') forwardedRef(node as any)
+        else if (forwardedRef) (forwardedRef as any).current = node
+      }}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}

@@ -27,7 +27,8 @@ import { VirtualizedList } from '../../components/VirtualizedList'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
-import { callRpc, EventChat, EventInterest, supabase } from '../../lib/supabase'
+import { callRpc, EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase'
+import { formatTimeRange as fmtRange, formatEventDateTime } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 
@@ -66,6 +67,9 @@ export default function Events() {
   const [userCity, setUserCity] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const listRef = useRef<any>(null)
+  const [netError, setNetError] = useState<string | null>(null)
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false)
 
   // Memoized style objects to prevent re-creation
   const sectionBgStyle = useMemo(() => ({
@@ -355,7 +359,7 @@ export default function Events() {
         <Text style={styles.sectionTitle}>You&apos;re checked in</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {checkedInEvents.filter(item => !!item.cover_image_url).map((item) => (
+        {checkedInEvents.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
               <LinearGradient
@@ -366,8 +370,27 @@ export default function Events() {
                 <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
                 <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
                 <Text style={styles.carouselTime}>
-                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatEventDateTime(item.start_time)}
                 </Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      const res: any = await EventCheckout.checkoutFromEvent(String(item.id))
+                      if (res?.success) {
+                        Alert.alert('Checked Out', res?.message || 'You have been checked out of this event.')
+                        loadCheckedInEvents()
+                        loadCheckinStatusesBatch()
+                      } else {
+                        Alert.alert('Checkout Failed', res?.message || 'Please try again.')
+                      }
+                    } catch (e) {
+                      Alert.alert('Checkout Failed', 'Please try again.')
+                    }
+                  }}
+                  style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 12 }}>Check out</Text>
+                </TouchableOpacity>
               </View>
             </ImageBackground>
           </TouchableOpacity>
@@ -380,9 +403,12 @@ export default function Events() {
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Interested Events</Text>
+        <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/interested' as any)}>
+          <Text style={styles.viewAllText}>See all</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.filter(item => !!item.cover_image_url).map((item) => (
+        {items.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
               <LinearGradient
@@ -393,7 +419,7 @@ export default function Events() {
                 <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
                 <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
                 <Text style={styles.carouselTime}>
-                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatEventDateTime(item.start_time)}
                 </Text>
               </View>
             </ImageBackground>
@@ -460,6 +486,7 @@ export default function Events() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setUserLocation(null)
+        setLocationPermissionDenied(true)
         Logger.warn('events', 'permission:notGranted', {})
         Alert.alert(
           'Turn on Location',
@@ -474,9 +501,11 @@ export default function Events() {
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
       setUserLocation(coords)
+      setLocationPermissionDenied(false)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
       setUserLocation(null)
+      setLocationPermissionDenied(false)
       Logger.warn('events', 'quietLocation:error', { error: error as any })
     }
   }
@@ -534,9 +563,12 @@ export default function Events() {
     } catch {}
   }
 
+  // Removed city override feature
+
   const fetchEvents = async () => {
     try {
       setLoading(true)
+      setNetError(null)
       Logger.journey('events', 'fetch:start')
       
       // Fetch only ongoing or upcoming events from the view
@@ -544,22 +576,45 @@ export default function Events() {
         .from('events_now_or_upcoming')
         .select('*')
         .order('start_time', { ascending: true })
+        .range(0, PAGE_SIZE - 1)
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
-        Alert.alert('Error', 'Failed to load events')
+        setNetError('Failed to load events')
         return
       }
 
       setEvents(eventsData || [])
+      setPage(0)
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
-      Alert.alert('Error', 'Failed to load events')
+      setNetError('Failed to load events')
     } finally {
       setLoading(false)
     }
   }
+
+  // Basic pagination: fetch next page after current items
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+  const fetchMore = useCallback(async () => {
+    try {
+      if (loading) return
+      Logger.journey('events', 'fetchMore:start', { page: page + 1 })
+      const from = (page + 1) * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from('events_now_or_upcoming')
+        .select('*')
+        .order('start_time', { ascending: true })
+        .range(from, to)
+      if (error) return
+      if (!data || data.length === 0) return
+      setEvents(prev => [...prev, ...data])
+      setPage(prev => prev + 1)
+    } catch {}
+  }, [loading, page])
 
   const loadInterestData = async () => {
     try {
@@ -607,6 +662,7 @@ export default function Events() {
         interested={interested}
         isEnded={isEnded}
         proximity={proximity}
+        interestCount={interestCounts[event.id]}
         onPress={handleEventPress}
         onCheckIn={handleCheckIn}
         onToggleInterest={toggleInterest}
@@ -623,7 +679,7 @@ export default function Events() {
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.filter(item => !!item.cover_image_url).map((item) => (
+        {items.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
           <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
             <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
               <LinearGradient
@@ -634,7 +690,7 @@ export default function Events() {
                 <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
                 <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
                 <Text style={styles.carouselTime}>
-                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatEventDateTime(item.start_time)}
                 </Text>
               </View>
             </ImageBackground>
@@ -998,27 +1054,11 @@ export default function Events() {
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, interestCounts])
 
-  const formatTimeRange = (startIso: string, endIso: string) => {
-    try {
-      const s = new Date(startIso)
-      const e = new Date(endIso)
-      const fmt = (d: Date) => {
-        let hours = d.getHours()
-        const suffix = hours >= 12 ? 'pm' : 'am'
-        hours = hours % 12
-        if (hours === 0) hours = 12
-        return `${hours}${suffix}`
-      }
-      const month = e.toLocaleString(undefined, { month: 'long' })
-      const dayNum = e.getDate()
-      return `${fmt(s)} - ${fmt(e)}, ${month} ${dayNum}`
-    } catch {
-      return ''
-    }
-  }
+  const formatTimeRange = (startIso: string, endIso: string) => fmtRange(startIso, endIso, { includeDate: true })
+
+  const filteredSortedEvents = useMemo(() => events, [events])
 
   const mainListData = useMemo(() => {
-    // Build a set of IDs we have already shown in carousels (limit to first 10 of each)
     const shown = new Set<string>()
     interestedItems.forEach(e => shown.add(e.id))
     happeningNowItems.slice(0, 10).forEach(e => shown.add(e.id))
@@ -1026,8 +1066,9 @@ export default function Events() {
     nearbyItems.slice(0, 10).forEach(e => shown.add(e.id))
     cityTopItems.slice(0, 10).forEach(e => shown.add(e.id))
     bestPartiesItems.slice(0, 10).forEach(e => shown.add(e.id))
-    return events.filter(e => !shown.has(e.id))
-  }, [events, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
+    const remaining = filteredSortedEvents.filter(e => !shown.has(e.id))
+    return remaining
+  }, [filteredSortedEvents, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
 
   const isLoading = authLoading || loading
 
@@ -1039,18 +1080,24 @@ export default function Events() {
       {/* Background image tint to match Figma */}
       {/* Image moved to global background in RootLayout */}
       {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.defaultAvatar]}>
-            <Ionicons name="person" size={24} color="#666" />
-          </View>
-        )}
-        <Text style={styles.topBarTitle}>Blend’n</Text>
-        <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
-          <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="View profile" onPress={() => router.push('/profile' as any)}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.defaultAvatar]}>
+              <Ionicons name="person" size={24} color="#666" />
+            </View>
+          )}
         </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Scroll to top" onPress={() => listRef.current?.scrollToOffset?.({ offset: 0, animated: true })}>
+          <Ionicons name="chevron-up" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity style={styles.settingsButton} accessibilityLabel="Open settings" accessibilityRole="button" onPress={() => router.push('/settings')}>
+            <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
@@ -1060,11 +1107,45 @@ export default function Events() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
+        {/* Banners */}
+        <View style={styles.filtersBar}>
+          {locationPermissionDenied && (
+            <View style={styles.bannerWarn}>
+              <Text style={styles.bannerText}>
+                Enable Location to show nearby events and check-in. 
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Open settings to enable location"
+                onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
+                style={styles.bannerCta}
+              >
+                <Text style={styles.bannerCtaText}>Enable</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {!!netError && (
+            <View style={styles.bannerError}>
+              <Text style={styles.bannerText}>{netError}</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading events"
+                onPress={fetchEvents}
+                style={styles.bannerCta}
+              >
+                <Text style={styles.bannerCtaText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
         <VirtualizedList
+          forwardedRef={listRef as any}
           data={isLoading ? [] : mainListData}
           renderItem={renderEventItem}
           keyExtractor={keyExtractor}
           estimatedItemSize={200}
+          onEndReachedThreshold={0.5}
+          onEndReached={fetchMore}
           refreshControl={
             <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} />
           }
@@ -1120,6 +1201,21 @@ export default function Events() {
               </View>
             ) : (
               <View>
+                {/* Friendly empty state when no results */}
+                {mainListData.length === 0 && (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyTitle}>No events found</Text>
+                    <Text style={styles.emptySub}>Try updating your location.</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                      <TouchableOpacity
+                        style={styles.ctaGhost}
+                        onPress={() => getCurrentLocationQuietly()}
+                      >
+                        <Text style={styles.ctaGhostText}>Update location</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
                 {interestedItems.length === 0 ? (
                   <View style={styles.interestedEmptyRow}>
                     <View style={styles.interestedThumb} />
@@ -1147,6 +1243,8 @@ export default function Events() {
           )}
         />
       </View>
+
+      {/* City override UI removed */}
     </SafeAreaView>
   )
 }
@@ -1668,6 +1766,12 @@ const styles = StyleSheet.create({
   settingsButton: {
     marginLeft: 'auto',
   },
+  filtersBar: {
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  
   interestedEmptyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1691,5 +1795,81 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFFFFF',
     opacity: 0.9,
+  },
+  bannerWarn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 10,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFF3E0',
+  },
+  bannerError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 10,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFEBEE',
+  },
+  bannerText: {
+    color: '#333',
+    fontSize: 13,
+    flex: 1,
+    marginRight: 10,
+  },
+  bannerCta: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  bannerCtaText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  emptyState: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptySub: {
+    color: '#E6E6E6',
+    fontSize: 13,
+  },
+  ctaGhost: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ctaGhostText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  cityPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  cityPillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 }) 

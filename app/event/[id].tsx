@@ -640,6 +640,26 @@ export default function EventDetail() {
     return `₹${(priceInCents / 100).toFixed(0)}`
   }
 
+  const addToCalendar = useCallback(() => {
+    try {
+      if (!event) return
+      const start = new Date(event.start_time)
+      const end = new Date(event.end_time)
+      const toCal = (d: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const yyyy = d.getUTCFullYear()
+        const mm = pad(d.getUTCMonth() + 1)
+        const dd = pad(d.getUTCDate())
+        const hh = pad(d.getUTCHours())
+        const min = pad(d.getUTCMinutes())
+        const ss = pad(d.getUTCSeconds())
+        return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`
+      }
+      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${toCal(start)}/${toCal(end)}&details=${encodeURIComponent(event.venue_name + '\n' + event.address)}`
+      Linking.openURL(url)
+    } catch {}
+  }, [event])
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-IN', { 
@@ -1059,6 +1079,11 @@ export default function EventDetail() {
           <Text style={styles.quickText}>Contact</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.quickButton} onPress={addToCalendar}>
+          <Text style={styles.quickIcon}>📆</Text>
+          <Text style={styles.quickText}>Calendar</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity 
           style={styles.quickButton}
           onPress={() => {
@@ -1067,6 +1092,7 @@ export default function EventDetail() {
               undefined,
               [
                 { text: 'Get Directions', onPress: openInMaps },
+                { text: 'Add to Calendar', onPress: addToCalendar },
                 { text: 'Close', style: 'cancel' }
               ]
             )
