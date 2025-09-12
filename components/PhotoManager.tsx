@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     ActivityIndicator,
@@ -19,6 +18,7 @@ import {
     reorderPhotos,
     selectAndUploadPhoto
 } from '../lib/photoUtils'
+import OptimizedImage from './OptimizedImage'
 
 const { width } = Dimensions.get('window')
 
@@ -72,11 +72,13 @@ export default function PhotoManager({
       
       // Pre-cache photos for better performance
       userPhotos.forEach(photo => {
-        cachePhoto(photo.url).then(localPath => {
-          if (localPath) {
-            setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
-          }
-        })
+        if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
+          cachePhoto(photo.url).then(localPath => {
+            if (localPath) {
+              setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
+            }
+          })
+        }
       })
     } catch (error) {
       console.error('PhotoManager: Load photos error', { error, userId })
@@ -97,10 +99,10 @@ export default function PhotoManager({
     try {
       const result = await selectAndUploadPhoto(userId)
 
-      if (result.success && result.url) {
+      if (result.success && (result.path || result.url)) {
         const newPhoto: ProfilePhoto = {
           id: `${userId}_${photos.length}`,
-          url: result.url,
+          url: (result.path || result.url) as string,
           order: photos.length,
           isPrimary: photos.length === 0,
           metadata: result.metadata ? {
@@ -112,10 +114,10 @@ export default function PhotoManager({
         setPhotos(prev => [...prev, newPhoto])
         
         // Update database
-        const newPhotoUrls = [...photos.map(p => p.url), result.url]
+        const newPhotoUrls = [...photos.map(p => p.url), (result.path || result.url) as string]
         await reorderPhotos(userId, newPhotoUrls)
         
-        console.log('PhotoManager: Photo added', { userId, url: result.url })
+        console.log('PhotoManager: Photo added', { userId, path: result.path || result.url })
       } else if (result.error && result.error !== 'User cancelled') {
         Alert.alert('Upload Failed', result.error)
       }
@@ -179,18 +181,21 @@ export default function PhotoManager({
     })
 
     return (
-      <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}>
+      <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}> 
         <TouchableOpacity
           style={[styles.photo, { width: itemSize, height: itemSize }]}
           activeOpacity={0.8}
         >
-          <Image
-            source={{ uri: cachedUrl || optimizedUrl || item.url }}
+          <OptimizedImage
+            source={cachedUrl || item.url}
             style={styles.photoImage}
             contentFit="cover"
             placeholder={require('../assets/images/icon.png')}
             transition={200}
             cachePolicy="memory-disk"
+            width={Math.round(itemSize * 2)}
+            height={Math.round(itemSize * 2)}
+            quality={80}
           />
           
           {item.isPrimary && (

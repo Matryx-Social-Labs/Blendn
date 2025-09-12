@@ -1,20 +1,19 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-  Alert,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
-import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { AuthHelper, supabase } from '../../lib/supabase'
 const placeholderImg = require('../../assets/images/icon.png')
@@ -244,24 +243,20 @@ export default function UserProfile() {
               showsHorizontalScrollIndicator={false}
               style={styles.photoStrip}
             >
-              {photoList.map((uri, idx) => {
-                const optimized = getOptimizedImageUrl(uri, { width, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
-                const finalUrl = optimized || uri
-                return (
-                  <View key={idx} style={styles.photoSlide}>
-                    <View style={styles.photoContainer}>
-                      <Image
-                        source={{ uri: finalUrl } as any}
-                        placeholder={placeholderImg}
-                        style={styles.photo}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={150}
-                      />
-                    </View>
+              {photoList.map((uri, idx) => (
+                <View key={idx} style={styles.photoSlide}>
+                  <View style={styles.photoContainer}>
+                    <OptimizedImage
+                      source={uri as any}
+                      style={styles.photo as any}
+                      contentFit="cover"
+                      width={width}
+                      height={PHOTO_HEIGHT}
+                      quality={70}
+                    />
                   </View>
-                )
-              })}
+                </View>
+              ))}
             </ScrollView>
 
             <View style={styles.content}>
@@ -293,22 +288,18 @@ export default function UserProfile() {
                 <View style={styles.section}>
                   <Typography variant="h3" style={styles.sectionTitle}>Gallery</Typography>
                   <View style={styles.galleryGrid}>
-                    {(profile.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile.photos || []).map((uri, idx) => {
-                      const optimized = getOptimizedImageUrl(uri, { width: 120, height: 120, resize: 'cover', quality: 60, format: 'webp' })
-                      const finalUrl = optimized || uri
-                      return (
-                        <View key={`gal_${idx}`} style={styles.galleryItem}>
-                          <Image
-                            source={{ uri: finalUrl } as any}
-                            placeholder={placeholderImg}
-                            style={styles.galleryImage}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            transition={120}
-                          />
-                        </View>
-                      )
-                    })}
+                    {(profile.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile.photos || []).map((uri, idx) => (
+                      <View key={`gal_${idx}`} style={styles.galleryItem}>
+                        <OptimizedImage
+                          source={uri as any}
+                          style={styles.galleryImage as any}
+                          contentFit="cover"
+                          width={120}
+                          height={120}
+                          quality={60}
+                        />
+                      </View>
+                    ))}
                   </View>
                 </View>
               ) : null}

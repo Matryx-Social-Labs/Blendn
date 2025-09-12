@@ -6,16 +6,16 @@ import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
@@ -471,8 +471,8 @@ export default function PrivateChat() {
               if (!picked || picked.canceled) return
               const asset = picked.assets[0]
               const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`)
-              if (result.success && result.url) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: result.url })
+              if (result.success && (result.path || result.url)) {
+                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.path || result.url) })
               } else {
                 Alert.alert('Upload failed', result.error || 'Could not upload image')
               }
@@ -499,8 +499,8 @@ export default function PrivateChat() {
               if (!picked || picked.canceled) return
               const asset = picked.assets[0]
               const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`)
-              if (result.success && result.url) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: result.url })
+              if (result.success && (result.path || result.url)) {
+                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.path || result.url) })
               } else {
                 Alert.alert('Upload failed', result.error || 'Could not upload image')
               }
@@ -537,8 +537,7 @@ export default function PrivateChat() {
                       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
                     })
                     if (result.status >= 200 && result.status < 300) {
-                      const { data: urlData } = supabase.storage.from('profile-photos').getPublicUrl(path)
-                      await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: urlData.publicUrl })
+                      await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: path })
                     } else {
                       Alert.alert('Upload failed', `HTTP ${result.status}`)
                     }

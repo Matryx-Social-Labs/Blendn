@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
@@ -195,10 +195,13 @@ export default function Profile() {
       {/* Header */}
       <View style={styles.headerRow}>
         {((profile?.profile_photos && profile.profile_photos.length > 0) || (profile?.photos && profile.photos.length > 0)) && (
-          <Image
-            source={{ uri: (profile?.profile_photos || profile?.photos || [])[0] as any }}
-            style={styles.headerAvatar}
+          <OptimizedImage
+            source={(profile?.profile_photos || profile?.photos || [])[0] as any}
+            style={styles.headerAvatar as any}
             contentFit="cover"
+            width={28}
+            height={28}
+            quality={60}
           />
         )}
         <Typography variant="h1" style={styles.headerTitle}>About me</Typography>
@@ -228,13 +231,13 @@ export default function Profile() {
             return (
               <View key={idx} style={styles.photoSlide}>
                 <View style={styles.photoContainer}>
-                  <Image
-                    source={{ uri: finalUrl } as any}
-                    placeholder={placeholderImg}
-                    style={styles.photo}
+                  <OptimizedImage
+                    source={uri as any}
+                    style={styles.photo as any}
                     contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={150}
+                    width={WINDOW_WIDTH}
+                    height={PHOTO_HEIGHT}
+                    quality={70}
                   />
                   <LinearGradient
                     pointerEvents="none"
@@ -342,13 +345,13 @@ export default function Profile() {
                   const finalUrl = optimized || uri
                   return (
                     <View key={`gal_${idx}`} style={styles.galleryItem}>
-                      <Image
-                        source={{ uri: finalUrl } as any}
-                        placeholder={placeholderImg}
-                        style={styles.galleryImage}
+                      <OptimizedImage
+                        source={uri as any}
+                        style={styles.galleryImage as any}
                         contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={120}
+                        width={120}
+                        height={120}
+                        quality={60}
                       />
                     </View>
                   )

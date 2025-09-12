@@ -8,6 +8,7 @@ import { supabase } from './supabase'
 export interface PhotoUploadResult {
   success: boolean
   url?: string
+  path?: string
   error?: string
   metadata?: {
     size: number
@@ -230,14 +231,9 @@ export const uploadPhoto = async (
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('profile-photos')
-      .getPublicUrl(filePath)
-
     return {
       success: true,
-      url: urlData.publicUrl
+      path: filePath
     }
   } catch (error) {
     console.error('Error uploading photo:', error)
@@ -253,17 +249,21 @@ export const uploadPhoto = async (
  */
 export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   try {
-    // Extract file path from URL
-    const url = new URL(photoUrl)
-    const pathParts = url.pathname.split('/')
-    const bucketIndex = pathParts.findIndex(part => part === 'profile-photos')
-    
-    if (bucketIndex === -1) {
-      console.error('Invalid photo URL format')
-      return false
+    // Accept either a full URL or a storage path
+    let filePath = photoUrl
+    if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
+      try {
+        const url = new URL(photoUrl)
+        const pathParts = url.pathname.split('/')
+        // Handles both public and signed URLs
+        // public:  /storage/v1/object/public/profile-photos/<path>
+        // signed:  /storage/v1/object/sign/profile-photos/<path>
+        const markerIndex = pathParts.findIndex(part => part === 'profile-photos')
+        if (markerIndex !== -1) {
+          filePath = pathParts.slice(markerIndex + 1).join('/')
+        }
+      } catch {}
     }
-
-    const filePath = pathParts.slice(bucketIndex + 1).join('/')
 
     const { error } = await supabase.storage
       .from('profile-photos')

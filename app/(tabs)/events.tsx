@@ -10,7 +10,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   ImageBackground,
   Linking,
   RefreshControl,
@@ -18,15 +17,15 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import EventCard from '../../components/EventCard'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
-import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { callRpc, EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase'
 import { formatTimeRange as fmtRange, formatEventDateTime } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
@@ -226,8 +225,8 @@ export default function Events() {
           if (!error && data) {
             const primary = (Array.isArray(data.profile_photos) && data.profile_photos[0]) || (Array.isArray(data.photos) && data.photos[0]) || null
             if (primary) {
-              const optimized = getOptimizedImageUrl(primary, { width: 72, height: 72, resize: 'cover', quality: 60 })
-              setAvatarUrl(optimized || primary)
+              // Store path or URL; OptimizedImage will handle signed URLs
+              setAvatarUrl(primary)
             } else {
               setAvatarUrl(null)
             }
@@ -1083,7 +1082,7 @@ export default function Events() {
       <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="View profile" onPress={() => router.push('/profile' as any)}>
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            <OptimizedImage source={avatarUrl} style={styles.avatar} width={72} height={72} quality={60} />
           ) : (
             <View style={[styles.avatar, styles.defaultAvatar]}>
               <Ionicons name="person" size={24} color="#666" />

@@ -5,17 +5,18 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -384,14 +385,18 @@ export default function Match() {
           activeOpacity={0.85}
           onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
-          <Image
-            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
-            placeholder={placeholderImg}
-            style={styles.tileImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-          />
+          {rawUrl ? (
+            <OptimizedImage
+              source={rawUrl as any}
+              style={styles.tileImage as any}
+              contentFit="cover"
+              width={TILE_WIDTH}
+              height={TILE_HEIGHT}
+              quality={60}
+            />
+          ) : (
+            <Image source={placeholderImg} style={styles.tileImage} contentFit="cover" />
+          )}
           <View style={styles.tileGradient} />
           <View style={styles.tileInfo}>
             <Text style={styles.tileName} numberOfLines={1}>
@@ -443,14 +448,18 @@ export default function Match() {
           style={styles.similarCard}
           onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
-          <Image
-            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
-            placeholder={placeholderImg}
-            style={styles.similarImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-          />
+          {rawUrl ? (
+            <OptimizedImage
+              source={rawUrl as any}
+              style={styles.similarImage as any}
+              contentFit="cover"
+              width={SIMILAR_CARD_WIDTH}
+              height={SIMILAR_CARD_HEIGHT}
+              quality={70}
+            />
+          ) : (
+            <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
+          )}
           <LinearGradient
             colors={[ 'rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)' ]}
             style={styles.similarGradient}
@@ -481,14 +490,18 @@ export default function Match() {
           style={styles.gridTouch}
           onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
         >
-          <Image
-            source={optimized ? ({ uri: optimized } as any) : placeholderImg}
-            placeholder={placeholderImg}
-            style={styles.gridImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-          />
+          {rawUrl ? (
+            <OptimizedImage
+              source={rawUrl as any}
+              style={styles.gridImage as any}
+              contentFit="cover"
+              width={gridWidth}
+              height={gridHeight}
+              quality={60}
+            />
+          ) : (
+            <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
+          )}
           <LinearGradient colors={[ 'transparent', 'rgba(0,0,0,0.55)' ]} style={styles.gridGradient} />
           <View style={styles.gridInfo}>
             <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>

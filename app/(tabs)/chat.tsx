@@ -3,7 +3,6 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
     FlatList,
-    Image,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import ModernChat from '../../components/ModernChat'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -406,7 +406,7 @@ export default function Chat() {
       onPress={() => handlePersonalChatPress(item)}
     >
       {item.other_user_avatar ? (
-        <Image source={{ uri: item.other_user_avatar }} style={styles.avatar} />
+        <OptimizedImage source={item.other_user_avatar} style={styles.avatar as any} width={56} height={56} quality={60} />
       ) : (
         <View style={[styles.avatar, styles.avatarFallback]}>
           <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>
@@ -520,7 +520,7 @@ export default function Chat() {
                   style={styles.storyRing}
                 >
                   {c.other_user_avatar ? (
-                    <Image source={{ uri: c.other_user_avatar }} style={styles.storyImage} />
+                    <OptimizedImage source={c.other_user_avatar} style={styles.storyImage as any} width={52} height={52} quality={60} />
                   ) : (
                     <View style={[styles.storyImage, styles.avatarFallback]}>
                       <Text style={styles.avatarInitials}>{getInitials(c.other_user_name)}</Text>

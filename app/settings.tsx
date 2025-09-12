@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
 import { router } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
-import { getOptimizedImageUrl } from '../lib/photoUtils'
+import OptimizedImage from '../components/OptimizedImage'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
 
@@ -28,8 +27,7 @@ export default function SettingsScreen() {
         setDisplayName(name)
         const primary = (Array.isArray(up?.profile_photos) && up?.profile_photos?.[0]) || (Array.isArray(up?.photos) && up?.photos?.[0]) || null
         if (primary) {
-          const optimized = getOptimizedImageUrl(primary, { width: 160, height: 160, resize: 'cover', quality: 60 })
-          setAvatarUrl(optimized || primary)
+          setAvatarUrl(primary)
         }
       } catch {}
     }
@@ -102,7 +100,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileCard}>
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl } as any} style={styles.avatar} contentFit="cover" />
+            <OptimizedImage source={avatarUrl} style={styles.avatar as any} contentFit="cover" width={160} height={160} quality={60} />
           ) : (
             <View style={[styles.avatar, styles.avatarFallback]} />
           )}

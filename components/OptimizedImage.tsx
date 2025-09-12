@@ -3,6 +3,7 @@ import React, { memo, useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
 import { Logger } from '../lib/logger'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
+import { supabase } from '../lib/supabase'
 
 interface OptimizedImageProps {
   source: string | ImageSource
@@ -196,7 +197,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
 
 OptimizedImage.displayName = 'OptimizedImage'
 
-// Hook to generate optimized URLs
+// Hook to generate optimized or signed URLs
 const useOptimizedUrls = (
   source: string | ImageSource,
   width?: number,
@@ -205,37 +206,89 @@ const useOptimizedUrls = (
   enableWebP: boolean = true,
   enableProgressive: boolean = true
 ) => {
-  return React.useMemo(() => {
-    const sourceUrl = typeof source === 'string' ? source : (source as any)?.uri || ''
-    
-    if (!sourceUrl) {
-      return { lowQualityUrl: '', highQualityUrl: '' }
+  const [urls, setUrls] = React.useState<{ lowQualityUrl: string; highQualityUrl: string }>({ lowQualityUrl: '', highQualityUrl: '' })
+
+  useEffect(() => {
+    let cancelled = false
+    const resolveUrls = async () => {
+      try {
+        const sourceStr = typeof source === 'string' ? source : (source as any)?.uri || ''
+        if (!sourceStr) {
+          if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: '' })
+          return
+        }
+
+        const baseOptions = { width, height, resize: 'cover' as const }
+
+        // If the source is already a URL, use public optimizer
+        if (/^https?:\/\//i.test(sourceStr)) {
+          const highQualityUrl = getOptimizedImageUrl(sourceStr, {
+            ...baseOptions,
+            quality,
+            format: enableWebP ? 'webp' : 'jpg'
+          })
+          const lowQualityUrl = enableProgressive ? getOptimizedImageUrl(sourceStr, {
+            ...baseOptions,
+            quality: Math.max(20, quality - 50),
+            format: enableWebP ? 'webp' : 'jpg',
+            width: width ? Math.floor(width / 3) : undefined,
+            height: height ? Math.floor(height / 3) : undefined,
+          }) : ''
+          if (!cancelled) setUrls({ lowQualityUrl, highQualityUrl })
+          return
+        }
+
+        // Otherwise treat as private storage path in `profile-photos` bucket
+        const expiresIn = 60 * 30 // 30 minutes
+        const bucket = 'profile-photos'
+
+        const transformHigh: any = {
+          width: width || undefined,
+          height: height || undefined,
+          resize: 'cover',
+          quality: quality,
+          format: enableWebP ? 'webp' : 'jpg',
+        }
+
+        const transformLow: any = enableProgressive ? {
+          width: width ? Math.floor(width / 3) : undefined,
+          height: height ? Math.floor(height / 3) : undefined,
+          resize: 'cover',
+          quality: Math.max(20, quality - 50),
+          format: enableWebP ? 'webp' : 'jpg',
+        } : null
+
+        const path = sourceStr.replace(/^\/+/, '')
+        let highQualityUrl = ''
+        let lowQualityUrl = ''
+        try {
+          const { data: high } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn, { transform: transformHigh })
+          highQualityUrl = high?.signedUrl || ''
+        } catch (e) {
+          // Fallback: signed URL without transform
+          const { data: high } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn)
+          highQualityUrl = high?.signedUrl || ''
+        }
+        if (transformLow) {
+          try {
+            const { data: low } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn, { transform: transformLow })
+            lowQualityUrl = low?.signedUrl || ''
+          } catch {
+            lowQualityUrl = ''
+          }
+        }
+        if (!cancelled) setUrls({ lowQualityUrl, highQualityUrl })
+      } catch (error) {
+        Logger.warn('general', 'Failed to resolve signed image URLs', { error })
+        if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: '' })
+      }
     }
 
-    const baseOptions = {
-      width,
-      height,
-      resize: 'cover' as const
-    }
-
-    // High quality URL with WebP if supported
-    const highQualityUrl = getOptimizedImageUrl(sourceUrl, {
-      ...baseOptions,
-      quality,
-      format: enableWebP ? 'webp' : 'jpg'
-    })
-
-    // Low quality URL for progressive loading
-    const lowQualityUrl = enableProgressive ? getOptimizedImageUrl(sourceUrl, {
-      ...baseOptions,
-      quality: Math.max(20, quality - 50),
-      format: enableWebP ? 'webp' : 'jpg',
-      width: width ? Math.floor(width / 3) : undefined,
-      height: height ? Math.floor(height / 3) : undefined,
-    }) : ''
-
-    return { lowQualityUrl, highQualityUrl }
+    resolveUrls()
+    return () => { cancelled = true }
   }, [source, width, height, quality, enableWebP, enableProgressive])
+
+  return urls
 }
 
 // Preload images for better performance
