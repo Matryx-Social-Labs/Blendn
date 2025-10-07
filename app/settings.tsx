@@ -75,20 +75,25 @@ export default function SettingsScreen() {
       return (
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name={item.icon} size={20} color="#333" />
+            <Ionicons name={item.icon} size={20} color="#FFFFFF" />
             <Text style={styles.rowTitle}>{item.title}</Text>
           </View>
-          <Switch value={!!item.value} onValueChange={item.onToggle} />
+          <Switch
+            value={!!item.value}
+            onValueChange={item.onToggle}
+            trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#7A2CF3' }}
+            thumbColor="#FFFFFF"
+          />
         </View>
       )
     }
     return (
       <TouchableOpacity key={idx} style={styles.row} onPress={item.onPress}>
         <View style={styles.rowLeft}>
-          <Ionicons name={item.icon} size={20} color={item.danger ? '#e74c3c' : '#333'} />
+          <Ionicons name={item.icon} size={20} color={item.danger ? '#e74c3c' : '#FFFFFF'} />
           <Text style={[styles.rowTitle, item.danger && { color: '#e74c3c' }]}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#999" />
+        <Ionicons name="chevron-forward" size={18} color="#FFFFFF99" />
       </TouchableOpacity>
     )
   }
@@ -98,7 +103,7 @@ export default function SettingsScreen() {
       <AppHeader title="Settings" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.profileCard}>
+        <TouchableOpacity style={styles.profileCard} onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" accessibilityLabel="Open About me">
           {avatarUrl ? (
             <OptimizedImage source={avatarUrl} style={styles.avatar as any} contentFit="cover" width={160} height={160} quality={60} />
           ) : (
@@ -110,7 +115,7 @@ export default function SettingsScreen() {
               <Text style={styles.editLink}>Edit profile</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.card}>
           {items.map((it, i) => (
@@ -126,20 +131,20 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { padding: 16 },
-  profileCard: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f9f9f9', borderRadius: 12, marginBottom: 16 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#eee' },
-  avatarFallback: { backgroundColor: '#eee' },
-  displayName: { fontSize: 18, fontWeight: '800', color: '#222' },
-  editLink: { marginTop: 4, color: '#007AFF', fontWeight: '600' },
-  card: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#f0f0f0' },
-  sectionHeader: { fontSize: 14, fontWeight: '700', color: '#666', marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#333' },
+  avatarFallback: { backgroundColor: '#333' },
+  displayName: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
+  editLink: { marginTop: 4, color: '#9CCBFF', fontWeight: '600' },
+  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  sectionHeader: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14 },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: '#333' },
-  divider: { height: 1, backgroundColor: '#f2f2f2', marginLeft: 44 },
+  rowTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 44 },
 })
 
 

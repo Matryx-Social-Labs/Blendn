@@ -194,20 +194,15 @@ export default function Profile() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.headerRow}>
-        {((profile?.profile_photos && profile.profile_photos.length > 0) || (profile?.photos && profile.photos.length > 0)) && (
-          <OptimizedImage
-            source={(profile?.profile_photos || profile?.photos || [])[0] as any}
-            style={styles.headerAvatar as any}
-            contentFit="cover"
-            width={28}
-            height={28}
-            quality={60}
-          />
-        )}
         <Typography variant="h1" style={styles.headerTitle}>About me</Typography>
-        <TouchableOpacity onPress={() => router.push('/edit-profile')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="create-outline" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push('/settings')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="settings-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/edit-profile')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginLeft: 12 }}>
+            <Ionicons name="create-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -247,14 +242,19 @@ export default function Profile() {
                     end={{ x: 0.5, y: 1 }}
                     style={styles.heroGradient}
                   />
-                  {/* Overlay name/subtitle */}
+                  {/* Overlay name/subtitle and strength pill */}
                   <View style={styles.heroOverlay} pointerEvents="none">
                     <Typography variant="h1" style={styles.heroName}>
                       {(profile?.name || 'New User')}
                     </Typography>
-                    {!!profile?.age && (
-                      <Typography variant="body2" style={styles.heroSubtitle}>Age {profile.age}</Typography>
-                    )}
+                    <Typography variant="body2" style={styles.heroSubtitle}>Entrepreneur</Typography>
+                    <View style={styles.matchPill} pointerEvents="none">
+                      <View style={styles.matchPillBadge}>
+                        {/* Simple filled badge for now; ring removed to avoid extra deps */}
+                        <Text style={styles.matchPillPercent}>{computeProfileStrength(profile)}%</Text>
+                      </View>
+                      <Text style={styles.matchPillLabel}>  Profile Strength</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -263,29 +263,28 @@ export default function Profile() {
         </ScrollView>
 
         <View style={styles.content}>
-          {/* Profile Strength */}
-          <View style={styles.strengthPill}>
-            <View style={styles.strengthBadge} />
-            <Text style={styles.strengthText}>{computeProfileStrength(profile)}%</Text>
-            <Text style={styles.strengthLabel}>  Profile Strength</Text>
-          </View>
-
           <View style={styles.rowBetween}>
             <Typography variant="h1" style={styles.name}>
               {profile?.name || 'New User'}{profile?.age ? `, ${profile.age}` : ''}
             </Typography>
           </View>
 
-          {/* Details list */}
+          {/* Details list - match Figma ordering */}
           <View style={styles.detailsList}>
-            {/* Gender + age (gender unknown, fallback icon) */}
             {!!profile?.age && (
               <View style={styles.detailRow}>
                 <Ionicons name="male" size={16} color="#fff" style={styles.detailIcon} />
                 <Text style={styles.detailText}>Male, {profile.age}</Text>
               </View>
             )}
-            {/* Location */}
+            <View style={styles.detailRow}>
+              <Ionicons name="briefcase-outline" size={16} color="#fff" style={styles.detailIcon} />
+              <Text style={styles.detailText}>CEO at Four Fold</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Ionicons name="school-outline" size={16} color="#fff" style={styles.detailIcon} />
+              <Text style={styles.detailText}>BBA, Delhi University</Text>
+            </View>
             {!!profile?.location && (
               <View style={styles.detailRow}>
                 <Ionicons name="business-outline" size={16} color="#fff" style={styles.detailIcon} />
@@ -296,27 +295,7 @@ export default function Profile() {
 
           <View style={styles.divider} />
 
-          {!!profile?.looking_for?.length && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Looking for</Typography>
-              <View style={styles.tags}>
-                {profile.looking_for.map((g, idx) => (
-                  <View key={`${g}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{g}</Typography></View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {!!profile?.goals?.length && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Goals</Typography>
-              <View style={styles.tags}>
-                {profile.goals.map((g, idx) => (
-                  <View key={`${g}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{g}</Typography></View>
-                ))}
-              </View>
-            </View>
-          )}
+          {/* Omit Looking for / Goals on About me screen to match Figma */}
 
           {!!profile?.interests?.length && (
             <View style={styles.section}>
@@ -331,32 +310,51 @@ export default function Profile() {
 
           {!!profile?.bio && (
             <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>About</Typography>
+              <Typography variant="h3" style={styles.sectionTitle}>About me</Typography>
               <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
             </View>
           )}
 
           {(profile?.profile_photos && profile.profile_photos.length > 0) || (profile?.photos && profile.photos.length > 0) ? (
             <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Gallery</Typography>
-              <View style={styles.galleryGrid}>
-                {(profile?.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile?.photos || []).map((uri, idx) => {
-                  const optimized = getOptimizedImageUrl(uri, { width: 120, height: 120, resize: 'cover', quality: 60, format: 'webp' })
-                  const finalUrl = optimized || uri
-                  return (
-                    <View key={`gal_${idx}`} style={styles.galleryItem}>
-                      <OptimizedImage
-                        source={uri as any}
-                        style={styles.galleryImage as any}
-                        contentFit="cover"
-                        width={120}
-                        height={120}
-                        quality={60}
-                      />
+              <Typography variant="h3" style={styles.sectionTitle}>Photos & Videos</Typography>
+              {/* Collage layout based on Figma; horizontally scrollable */}
+              {(() => {
+                const list = (profile?.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile?.photos || []) as string[]
+                const contentWidthDesign = 460
+                const designWidth = 393
+                const containerWidth = WINDOW_WIDTH - 24
+                const scale = containerWidth / designWidth
+                const S = (n: number) => Math.round(n * scale)
+                const items = [
+                  { x: 0, y: 0, w: 135, h: 141, i: 0 },
+                  { x: 0, y: 141, w: 135, h: 104, i: 1 },
+                  { x: 143, y: 0, w: 184, h: 64, i: 2 },
+                  { x: 143, y: 71, w: 222, h: 174, i: 3 },
+                  { x: 335, y: 0, w: 125, h: 64, i: 4 },
+                  { x: 374, y: 71, w: 86, h: 83, i: 5 },
+                  { x: 374, y: 162, w: 86, h: 83, i: 6 },
+                ]
+                const get = (idx: number) => list[idx % list.length]
+                return (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ width: containerWidth, height: S(245) }}>
+                    <View style={{ width: S(contentWidthDesign), height: S(245) }}>
+                      {items.map((it, idx) => (
+                        <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
+                          <OptimizedImage
+                            source={get(idx) as any}
+                            style={{ width: '100%', height: '100%' } as any}
+                            contentFit="cover"
+                            width={S(it.w)}
+                            height={S(it.h)}
+                            quality={60}
+                          />
+                        </View>
+                      ))}
                     </View>
-                  )
-                })}
-              </View>
+                  </ScrollView>
+                )
+              })()}
             </View>
           ) : null}
         </View>
@@ -389,11 +387,11 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: 24, fontWeight: '800', color: '#fff' },
   section: { marginTop: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#555', marginBottom: 8 },
-  aboutText: { color: '#fff', fontSize: 14, lineHeight: 22 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  aboutText: { color: '#c796e1', fontSize: 16, lineHeight: 25 },
   tags: { flexDirection: 'row', flexWrap: 'wrap' },
-  tag: { backgroundColor: '#f2f2f2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, marginRight: 8, marginBottom: 8 },
-  tagText: { color: '#444', fontSize: 12, fontWeight: '600' },
+  tag: { backgroundColor: '#330826', borderWidth: 1, borderColor: '#61114a', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 24, marginRight: 10, marginBottom: 10 },
+  tagText: { color: '#fff', fontSize: 13, fontWeight: '400' },
   galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   galleryItem: { width: Math.floor((WINDOW_WIDTH - 16 * 2 - 4 * 2) / 3), height: Math.floor((WINDOW_WIDTH - 16 * 2 - 4 * 2) / 3), marginBottom: 4, borderRadius: 12, overflow: 'hidden', backgroundColor: '#1f0b1e' },
   galleryImage: { width: '100%', height: '100%' },
@@ -405,21 +403,22 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
   headerAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 8 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', flex: 1, marginLeft: 8 },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', flex: 1, marginLeft: 0 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
 
   heroOverlay: { position: 'absolute', left: 16, right: 16, bottom: 24, alignItems: 'center' },
   heroName: { color: '#fff', fontSize: 28, fontWeight: '800' },
   heroSubtitle: { color: '#ffffffcc', marginTop: 4 },
   heroGradient: { ...StyleSheet.absoluteFillObject, borderRadius: 18 },
 
-  strengthPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#5b1c7f', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 18, marginTop: 8 },
-  strengthBadge: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#f3c614', marginRight: 8 },
-  strengthText: { color: '#000', fontWeight: '700' },
-  strengthLabel: { color: '#fff', fontWeight: '700' },
+  matchPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', backgroundColor: '#330826', borderColor: '#61114a', borderWidth: 1, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginTop: 10 },
+  matchPillBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3C614', marginRight: 8, alignItems: 'center', justifyContent: 'center' },
+  matchPillPercent: { color: '#000', fontWeight: '700', fontSize: 10 },
+  matchPillLabel: { color: '#FFFFFF', fontWeight: '700' },
 
   detailsList: { marginTop: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   detailIcon: { marginRight: 10 },
-  detailText: { color: '#fff', fontSize: 14 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 14 },
+  detailText: { color: '#fff', fontSize: 16 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 18 },
 }) 

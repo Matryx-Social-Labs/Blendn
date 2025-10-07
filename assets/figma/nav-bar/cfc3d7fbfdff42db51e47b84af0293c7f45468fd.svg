@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 260 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Container">
+<mask id="mask0_2002_15" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="6" y="6" width="248" height="72">
+<rect id="Rounded Background" x="6" y="6" width="248" height="72" rx="36" fill="var(--fill-0, #D9D9D9)"/>
+</mask>
+<g mask="url(#mask0_2002_15)">
+<foreignObject x="-39.25" y="-35" width="374.62" height="154"><div xmlns="http://www.w3.org/1999/xhtml" style="backdrop-filter:blur(4px);clip-path:url(#bgblur_0_2002_15_clip_path);height:100%;width:100%"></div></foreignObject><g id="Ellipse 7" data-figma-bg-blur-radius="8">
+<path d="M327.37 42.408C327.37 80.2903 247.09 111 148.06 111C49.0298 111 -31.25 80.2903 -31.25 42.408C-31.25 4.52571 49.0298 -27 148.06 -27C247.09 -27 327.37 4.52571 327.37 42.408Z" fill="var(--fill-0, black)" fill-opacity="0.1" style="mix-blend-mode:overlay"/>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="bgblur_0_2002_15_clip_path" transform="translate(39.25 35)"><path d="M327.37 42.408C327.37 80.2903 247.09 111 148.06 111C49.0298 111 -31.25 80.2903 -31.25 42.408C-31.25 4.52571 49.0298 -27 148.06 -27C247.09 -27 327.37 4.52571 327.37 42.408Z"/>
+</clipPath></defs>
+</svg>

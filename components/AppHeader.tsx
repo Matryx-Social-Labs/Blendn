@@ -133,8 +133,10 @@ export function AppHeader(props: AppHeaderProps) {
         paddingHorizontal: 14,
         paddingTop: 8,
         paddingBottom: 12,
-      
-        backgroundColor: isDark ? '#000000' : '#FFFFFF',
+        // Let background gradient from root show through on darkTransparent
+        backgroundColor: isDark ? 'transparent' : '#FFFFFF',
+        shadowOpacity: 0,
+        elevation: 0,
         borderBottomWidth: showBottomBorder && !isDark ? StyleSheet.hairlineWidth : 0,
         borderBottomColor: '#f0f0f0',
       },

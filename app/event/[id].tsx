@@ -6,17 +6,17 @@ import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Linking,
-    Platform,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Linking,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton';
@@ -86,6 +86,7 @@ export default function EventDetail() {
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkingIn, setCheckingIn] = useState(false)
+  const [checkingOut, setCheckingOut] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   const [proximityStatus, setProximityStatus] = useState<any>(null)
   const [interestCount, setInterestCount] = useState<number>(0)
@@ -574,6 +575,23 @@ export default function EventDetail() {
     }
   }
 
+  const handleCheckout = async () => {
+    setCheckingOut(true)
+    try {
+      const res = await EventCheckout.checkoutFromEvent(String(id))
+      if (res.success) {
+        Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
+        await checkUserCheckInStatus()
+      } else {
+        Alert.alert('Checkout Failed', res.message || 'Please try again.')
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Unknown error')
+    } finally {
+      setCheckingOut(false)
+    }
+  }
+
   const openInMaps = async () => {
     if (!event) return
     const lat = event.latitude
@@ -991,9 +1009,9 @@ export default function EventDetail() {
                     You checked in {checkInStatus?.distance_meters ? 
                       `${Math.round(checkInStatus.distance_meters)}m` : ''} from the venue
                   </Text>
-                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={styles.actionsColumn}>
                     <TouchableOpacity 
-                      style={styles.swipeButton}
+                      style={[styles.swipeButton, { backgroundColor: '#7217b3' }]}
                       onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
                     >
                       <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
@@ -1036,7 +1054,7 @@ export default function EventDetail() {
                 </View>
               ) : (
                 <>
-                  <TouchableOpacity 
+                  {/* <TouchableOpacity 
                     style={[styles.blendnButton, checkingIn && styles.checkInButtonDisabled]}
                     onPress={handleCheckIn}
                     disabled={checkingIn}
@@ -1046,7 +1064,7 @@ export default function EventDetail() {
                     ) : (
                       <Text style={styles.blendnButtonText}>Blend’n</Text>
                     )}
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                 </>
               )}
             </View>
@@ -1055,52 +1073,33 @@ export default function EventDetail() {
         </ScrollView>
       </View>
 
-      {/* Fixed bottom tab bar */}
+     
       <View style={styles.tabBar}>
-        <TouchableOpacity style={styles.quickButton} onPress={handleShare}>
-          <Text style={styles.quickIcon}>􀈂</Text>
-          <Text style={styles.quickText}>Share</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.quickButton}
-          onPress={async () => {
-            try {
-              const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
-              if (ensured?.chatRoomId) {
-                router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event?.title || '' } as any })
-              } else {
-                router.push('/(tabs)/chat' as any)
-              }
-            } catch {}
-          }}
-        >
-          <Text style={styles.quickIcon}>💬</Text>
-          <Text style={styles.quickText}>Contact</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.quickButton} onPress={addToCalendar}>
-          <Text style={styles.quickIcon}>📆</Text>
-          <Text style={styles.quickText}>Calendar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.quickButton}
-          onPress={() => {
-            Alert.alert(
-              'More',
-              undefined,
-              [
-                { text: 'Get Directions', onPress: openInMaps },
-                { text: 'Add to Calendar', onPress: addToCalendar },
-                { text: 'Close', style: 'cancel' }
-              ]
-            )
-          }}
-        >
-          <Text style={styles.quickIcon}>⋯</Text>
-          <Text style={styles.quickText}>More</Text>
-        </TouchableOpacity>
+        {isCheckedIn ? (
+          <TouchableOpacity 
+            style={[styles.blendnButton, checkingOut && styles.checkInButtonDisabled]}
+            onPress={handleCheckout}
+            disabled={checkingOut}
+          >
+            {checkingOut ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.blendnButtonText}>Check Out</Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.blendnButton, checkingIn && styles.checkInButtonDisabled]}
+            onPress={handleCheckIn}
+            disabled={checkingIn}
+          >
+            {checkingIn ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.blendnButtonText}>Blend’n</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   )
@@ -1418,11 +1417,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
+  actionsColumn: {
+    width: '100%',
+    flexDirection: 'column',
+    gap: 12,
+  },
   swipeButton: {
     backgroundColor: '#FF6B6B',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingVertical: 14,
+    borderRadius: 100,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   swipeButtonText: {
     color: '#fff',
@@ -1457,7 +1463,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     alignItems: 'center',
     marginBottom: 12,
-    marginHorizontal: 14,
+    width: '100%',
   },
   blendnButtonText: {
     color: '#FFFFFF',

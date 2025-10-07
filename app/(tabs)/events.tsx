@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
-import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
@@ -21,6 +20,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import EventCard from '../../components/EventCard'
+import NearbyEventCard from '../../components/NearbyEventCard'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
@@ -435,6 +435,16 @@ export default function Events() {
     </View>
   )
 
+  const renderInterestedEmpty = () => (
+    <View style={styles.interestedEmptyRow}>
+      <View style={styles.interestedThumb} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.interestedTitle}>Interested Events</Text>
+        <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
+      </View>
+    </View>
+  )
+
   useEffect(() => {
     if (userLocation && events.length > 0) {
       checkEventProximity()
@@ -827,17 +837,25 @@ export default function Events() {
           )
         }}
       />
+      {/* Pagination indicator to match Figma */}
+      <View style={styles.carouselIndicatorRow}>
+        <View style={styles.carouselIndicatorLong} />
+        <View style={styles.carouselIndicatorDot} />
+        <View style={styles.carouselIndicatorDot} />
+      </View>
     </View>
   )
 
   const renderCarouselFancy = (titleLines: string[], items: Event[]) => (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionFancyRow}>
+        <View style={styles.sectionDividerLine} />
         <View>
           {titleLines.map((t, i) => (
             <Text key={`${t}-${i}`} style={styles.sectionTitle}>{t}</Text>
           ))}
         </View>
+        <View style={styles.sectionDividerLine} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
         {items.filter(item => !!item.cover_image_url).map((item) => (
@@ -865,6 +883,12 @@ export default function Events() {
           </TouchableOpacity>
         ))}
       </ScrollView>
+      {/* Pagination indicator to match Figma */}
+      <View style={styles.carouselIndicatorRow}>
+        <View style={styles.carouselIndicatorLong} />
+        <View style={styles.carouselIndicatorDot} />
+        <View style={styles.carouselIndicatorDot} />
+      </View>
     </View>
   )
 
@@ -912,55 +936,30 @@ export default function Events() {
       <View style={styles.nearbyContainer}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Nearby Events</Text>
+          <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/events' as any)}>
+            <Text style={styles.viewAllText}>View all</Text>
+            <Ionicons name="chevron-forward" size={19} color="#E53A17" />
+          </TouchableOpacity>
         </View>
         <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
-        {items.map((ev) => (
-          <TouchableOpacity key={ev.id} onPress={() => handleEventPress(ev)} activeOpacity={0.9}>
-            {ev.cover_image_url ? (
-              <View style={{ marginBottom: 18 }}>
-                <ImageBackground source={{ uri: ev.cover_image_url }} style={styles.nearbyImage} imageStyle={styles.nearbyImageRadius}>
-                  {/* Figma gradient from transparent to black at the bottom */}
-                  <LinearGradient
-                    colors={["#00000000", "#000000D9"]}
-                    start={{ x: 0.5, y: 0 }}
-                    end={{ x: 0.5, y: 1 }}
-                    style={[styles.gradientFull, styles.nearbyImageRadius]}
-                  />
-
-                  {/* Glass effect box overlay */}
-                  <View style={styles.nearbyGlass}>
-                    <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFillObject} />
-                    <LinearGradient
-                      colors={["rgba(255,255,255,0.35)", "rgba(255,255,255,0.08)"]}
-                      start={{ x: 0.2, y: 0 }}
-                      end={{ x: 0.8, y: 1 }}
-                      style={styles.nearbyGlassSheen}
-                    />
-                    {/* removed top inset highlight */}
-                    <LinearGradient
-                      colors={["rgba(0,0,0,0.35)", "rgba(0,0,0,0)"]}
-                      start={{ x: 0.5, y: 1 }}
-                      end={{ x: 0.5, y: 0 }}
-                      style={styles.nearbyGlassInnerShadowBottom}
-                    />
-                    <View pointerEvents="none" style={styles.nearbyGlassRim} />
-                    <Text style={styles.nearbyGlassTitle} numberOfLines={2}>{ev.title}</Text>
-                    <View style={styles.nearbyGlassRow}>
-                      <View style={styles.nearbyMetaItem}> 
-                        <View ><Ionicons name="time-outline" size={13} color="#FFFFFF" /></View>
-                        <Text style={styles.nearbyMetaTextLight}>{formatTimeRange(ev.start_time, ev.end_time)}</Text>
-                      </View>
-                      <View style={styles.nearbyMetaItem}> 
-                        <View ><Ionicons name="map-outline" size={13} color="#FFFFFF" /></View>
-                        <Text style={styles.nearbyMetaTextLight} numberOfLines={1}>{ev.venue_name || ev.address}</Text>
-                      </View>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        ))}
+        <View style={{ paddingHorizontal: 0 }}>
+        {items.map((ev) => {
+          const screenW = Dimensions.get('window').width
+          const containerPadding = 14 * 2 // styles.nearbyContainer paddingHorizontal
+          const innerW = Math.max(0, screenW - containerPadding)
+          const containerWidth = Math.min(420, Math.round(innerW * 0.96))
+          return (
+            <NearbyEventCard
+              key={ev.id}
+              event={ev as any}
+              width={containerWidth}
+              onPress={handleEventPress as any}
+              timeLabel={formatTimeRange(ev.start_time, ev.end_time)}
+              locationLabel={ev.venue_name || ev.address || ''}
+            />
+          )
+        })}
+        </View>
       </View>
     )
   }
@@ -1089,9 +1088,7 @@ export default function Events() {
             </View>
           )}
         </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Scroll to top" onPress={() => listRef.current?.scrollToOffset?.({ offset: 0, animated: true })}>
-          <Ionicons name="chevron-up" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+       
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <TouchableOpacity style={styles.settingsButton} accessibilityLabel="Open settings" accessibilityRole="button" onPress={() => router.push('/settings')}>
             <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
@@ -1200,32 +1197,14 @@ export default function Events() {
               </View>
             ) : (
               <View>
-                {/* Friendly empty state when no results */}
-                {mainListData.length === 0 && (
+                {/* Friendly empty state when there are no events at all */}
+                {events.length === 0 && (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>No events found</Text>
-                    <Text style={styles.emptySub}>Try updating your location.</Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                      <TouchableOpacity
-                        style={styles.ctaGhost}
-                        onPress={() => getCurrentLocationQuietly()}
-                      >
-                        <Text style={styles.ctaGhostText}>Update location</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <Text style={styles.emptySub}>We'll show nearby events automatically.</Text>
                   </View>
                 )}
-                {interestedItems.length === 0 ? (
-                  <View style={styles.interestedEmptyRow}>
-                    <View style={styles.interestedThumb} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.interestedTitle}>Interested Events</Text>
-                      <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
-                    </View>
-                  </View>
-                ) : (
-                  renderInterestedCarousel(interestedItems.slice(0, 10))
-                )}
+                {interestedItems.length > 0 ? renderInterestedCarousel(interestedItems.slice(0, 10)) : renderInterestedEmpty()}
 
                 {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
 
@@ -1233,7 +1212,19 @@ export default function Events() {
 
                 {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
 
-                {bestPartiesItems.length > 0 && renderCarouselFancy(['Discover the', 'Best Parties'], bestPartiesItems.slice(0, 10))}
+                {/* Discover the Best Parties header without carousel */}
+                {bestPartiesItems.length > 0 && (
+                  <View style={styles.carouselContainer}>
+                    <View style={styles.sectionFancyRow}>
+                      <View style={styles.sectionDividerLine} />
+                      <View>
+                        <Text style={styles.sectionTitle}>Discover the</Text>
+                        <Text style={styles.sectionTitle}>Best Parties</Text>
+                      </View>
+                      <View style={styles.sectionDividerLine} />
+                    </View>
+                  </View>
+                )}
 
                 {renderFeaturedHero(bestPartiesItems[0] || cityTopItems[0] || upcomingItems[0])}
                 <View style={{ height: 8 }} />
@@ -1293,6 +1284,27 @@ const styles = StyleSheet.create({
     
    
    
+  },
+  carouselIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 10,
+  },
+  carouselIndicatorLong: {
+    width: 60,
+    height: 6,
+    borderRadius: 11,
+    backgroundColor: '#D9D9D9',
+    opacity: 1,
+  },
+  carouselIndicatorDot: {
+    width: 7,
+    height: 6,
+    borderRadius: 9,
+    backgroundColor: '#D9D9D9',
+    opacity: 1,
   },
   carouselContainer: {
     paddingTop: 12,
@@ -1745,6 +1757,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   avatar: {
     width: 36,

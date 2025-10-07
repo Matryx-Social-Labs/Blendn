@@ -3,19 +3,19 @@ import { useFocusEffect } from '@react-navigation/native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../../components/AppHeader'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
@@ -26,10 +26,23 @@ import { AuthHelper, supabase } from '../../lib/supabase'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
+// Figma base frame width for iPhone 16
+const BASE_FRAME_WIDTH = 393
+
+// Similar Interests cards are 163x260 at 393 width
+const SIMILAR_CARD_WIDTH = Math.round(width * (163 / BASE_FRAME_WIDTH))
+const SIMILAR_CARD_HEIGHT = Math.round(SIMILAR_CARD_WIDTH * (260 / 163))
+
+// Grid sizing (3 columns) from Figma blocks (105x115) with 26px side padding and 13px gaps
+const CONTENT_SIDE_PADDING = 26
+const GRID_GAP = 13
+const contentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
+const GRID_ITEM_WIDTH = Math.floor((contentWidth - GRID_GAP * 2) / 3)
+const GRID_ITEM_HEIGHT = Math.round(GRID_ITEM_WIDTH * (115 / 105))
+
+// Legacy attendee tile sizes (kept for potential reuse elsewhere on this screen)
 const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
 const TILE_HEIGHT = TILE_WIDTH * 1.35
-const SIMILAR_CARD_WIDTH = Math.floor(width * 0.72)
-const SIMILAR_CARD_HEIGHT = Math.floor(SIMILAR_CARD_WIDTH * 1.1)
 
 interface AttendeeProfile {
   user_id: string
@@ -49,6 +62,7 @@ interface MatchPreview {
 }
 
 export default function Match() {
+  const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
@@ -461,7 +475,7 @@ export default function Match() {
             <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
           )}
           <LinearGradient
-            colors={[ 'rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)' ]}
+            colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)']}
             style={styles.similarGradient}
           />
           <View style={styles.similarInfo}>
@@ -477,8 +491,8 @@ export default function Match() {
 
   const renderStartupItem = (attendee: AttendeeProfile) => {
     const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0 ? attendee.profile_photos[0] : ''
-    const gridWidth = Math.floor((width - 32 - 12 * 2) / 3)
-    const gridHeight = Math.floor(gridWidth * 1.05)
+    const gridWidth = GRID_ITEM_WIDTH
+    const gridHeight = GRID_ITEM_HEIGHT
     const optimized = rawUrl
       ? getOptimizedImageUrl(rawUrl, { width: gridWidth, height: gridHeight, resize: 'cover', quality: 60, format: 'webp' })
       : undefined
@@ -502,7 +516,7 @@ export default function Match() {
           ) : (
             <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
           )}
-          <LinearGradient colors={[ 'transparent', 'rgba(0,0,0,0.55)' ]} style={styles.gridGradient} />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
           <View style={styles.gridInfo}>
             <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
             <Text style={styles.gridTime}>{formatTimeAgo(attendee.last_seen)}</Text>
@@ -531,38 +545,57 @@ export default function Match() {
   const isLoading = loading
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-        <LinearGradient colors={[ '#480D37', '#000000' ]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.heroGradient}>
-          <AppHeader
-            title="The Grid"
-            variant="darkTransparent"
-            showBottomBorder={false}
-            rightIconButton={{ name: 'refresh', onPress: () => currentUser && loadActiveEventAndAttendees(currentUser.id), accessibilityLabel: 'Refresh' }}
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollBody}
+        onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+        scrollEventThrottle={16}
+      >
+        <View style={[styles.headerGradient, { paddingTop: insets.top }]}>
+          <LinearGradient
+            colors={['#480D37', '#000000']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFill}
           />
-
-          <View style={styles.segmentContainer}>
-            <View style={styles.segmentPill}>
-              <TouchableOpacity
-                style={[styles.segmentBtn, activeSegment === 'matching' && styles.segmentBtnActive]}
-                onPress={() => setActiveSegment('matching')}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.segmentText, activeSegment === 'matching' && styles.segmentTextActive]}>Start Matching</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.segmentBtn, activeSegment === 'chat' && styles.segmentBtnActive]}
-                onPress={() => {
-                  setActiveSegment('chat')
-                  router.push('/(tabs)/chat' as any)
-                }}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.segmentText, activeSegment === 'chat' && styles.segmentTextActive]}>Join Chat</Text>
-              </TouchableOpacity>
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.headerTitleText}>The Grid</Text>
             </View>
+            <TouchableOpacity
+              style={styles.headerRight}
+              onPress={() => currentUser && loadActiveEventAndAttendees(currentUser.id)}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh"
+            >
+              <Ionicons name="refresh" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        </LinearGradient>
+        </View>
+
+        <View style={styles.segmentContainer}>
+          <View style={[styles.segmentPill, { width: Math.round(width * (370 / BASE_FRAME_WIDTH)), alignSelf: 'center' }]}>
+            <TouchableOpacity
+              style={[styles.segmentBtn, activeSegment === 'matching' && styles.segmentBtnActive]}
+              onPress={() => setActiveSegment('matching')}
+              activeOpacity={0.9}
+            >
+              <Text style={[styles.segmentText, activeSegment === 'matching' && styles.segmentTextActive]}>Start Matching</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segmentBtn, activeSegment === 'chat' && styles.segmentBtnActive]}
+              onPress={() => {
+                setActiveSegment('chat')
+                router.push('/(tabs)/chat' as any)
+              }}
+              activeOpacity={0.9}
+            >
+              <Text style={[styles.segmentText, activeSegment === 'chat' && styles.segmentTextActive]}>Join Chat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {isLoading ? (
           <>
@@ -570,20 +603,20 @@ export default function Match() {
             <View style={styles.similarList}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-sim-${i}`} width={SIMILAR_CARD_WIDTH} height={SIMILAR_CARD_HEIGHT} borderRadius={18} style={{ marginRight: 16 }} />
+                  <SkeletonBlock key={`sk-sim-${i}`} width={SIMILAR_CARD_WIDTH} height={SIMILAR_CARD_HEIGHT} borderRadius={24} style={{ marginRight: 16 }} />
                 ))}
               </ScrollView>
             </View>
             <View style={styles.dotsRow}>
-              {[...Array(4)].map((_, i) => (
-                <View key={`dot_${i}`} style={[styles.dot]} />
-              ))}
+              <View style={styles.dotLong} />
+              <View style={styles.dotSmall} />
+              <View style={styles.dotSmall} />
             </View>
 
-            <Text style={styles.sectionTitle}>People Nearby</Text>
+            <Text style={styles.sectionTitle}>Startup</Text>
             <View style={styles.gridWrap}>
               {[...Array(12)].map((_, i) => (
-                <SkeletonBlock key={`sk-g-${i}`} width={Math.floor((width - 32 - 12 * 2) / 3)} height={Math.floor((width - 32 - 12 * 2) / 3 * 1.05)} borderRadius={12} style={{ marginRight: 12, marginBottom: 12 }} />
+                <SkeletonBlock key={`sk-g-${i}`} width={GRID_ITEM_WIDTH} height={GRID_ITEM_HEIGHT} borderRadius={24} style={{ marginRight: GRID_GAP, marginBottom: GRID_GAP }} />
               ))}
             </View>
           </>
@@ -615,12 +648,12 @@ export default function Match() {
               renderItem={({ item }) => renderSimilarCard(item)}
             />
             <View style={styles.dotsRow}>
-              {new Array(Math.min(4, Math.max(1, attendees.length))).fill(0).map((_, i) => (
-                <View key={`dot_${i}`} style={[styles.dot, i === (similarIndex % 4) && styles.dotActive]} />
-              ))}
+              <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
+              <View style={[styles.dotSmall, (similarIndex % 3) === 1 && styles.dotActive]} />
+              <View style={[styles.dotSmall, (similarIndex % 3) === 2 && styles.dotActive]} />
             </View>
 
-            <Text style={styles.sectionTitle}>People Nearby</Text>
+            <Text style={styles.sectionTitle}>Startup</Text>
             <View style={styles.gridWrap}>
               {attendees.slice(0, 12).map(renderStartupItem)}
             </View>
@@ -635,6 +668,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  headerGradient: {
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitleText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  headerRight: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     padding: 20,
@@ -663,34 +721,42 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   heroGradient: {
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   
   segmentContainer: {
-    paddingTop: 14,
+    paddingTop: 10,
   },
   segmentPill: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 28,
-    padding: 6,
+    backgroundColor: 'rgba(118,118,128,0.32)',
+    borderRadius: 100,
+    padding: 4,
+    height: 52,
     flexDirection: 'row',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.20)',
+    overflow: 'hidden',
   },
   segmentBtn: {
     flex: 1,
-    paddingVertical: 10,
+    height: 44,
+    paddingVertical: 0,
     borderRadius: 22,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   segmentBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#480D37',
   },
   segmentText: {
-    color: '#ffffffbb',
+    color: '#FFFFFF',
     fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 18,
   },
   segmentTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
@@ -710,7 +776,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     paddingHorizontal: 16,
     marginTop: 16,
@@ -752,7 +818,7 @@ const styles = StyleSheet.create({
   similarCard: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
+    borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: '#1f0b1e',
   },
@@ -790,26 +856,33 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
-  dot: {
-    width: 26,
+  dotLong: {
+    width: Math.round(width * (60 / BASE_FRAME_WIDTH)),
     height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    marginHorizontal: 4,
+    borderRadius: 11,
+    backgroundColor: 'rgba(217,217,217,1)',
+    marginHorizontal: 7,
+  },
+  dotSmall: {
+    width: Math.round(width * (7 / BASE_FRAME_WIDTH)),
+    height: 6,
+    borderRadius: 9,
+    backgroundColor: 'rgba(217,217,217,1)',
+    marginHorizontal: 7,
   },
   dotActive: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
   },
   gridWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 2,
+    paddingHorizontal: CONTENT_SIDE_PADDING,
   },
   gridItem: {
-    borderRadius: 12,
+    borderRadius: 24,
     overflow: 'hidden',
-    marginRight: 12,
-    marginBottom: 12,
+    marginRight: GRID_GAP,
+    marginBottom: GRID_GAP,
     backgroundColor: '#1f0b1e',
   },
   gridTouch: {
