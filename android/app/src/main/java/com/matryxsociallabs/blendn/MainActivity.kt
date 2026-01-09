@@ -1,4 +1,4 @@
-package com.matrixsociallabs.blendn
+package com.matryxsociallabs.blendn
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

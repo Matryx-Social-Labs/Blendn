@@ -1,4 +1,4 @@
-package com.matrixsociallabs.blendn
+package com.matryxsociallabs.blendn
 
 import android.app.Application
 import android.content.res.Configuration
