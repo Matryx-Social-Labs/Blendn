@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Audio } from 'expo-av'
+import * as FileSystem from 'expo-file-system'
 import * as Haptics from 'expo-haptics'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
@@ -19,7 +21,9 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
+import { pickImage, uploadPhoto } from '../../lib/photoUtils'
 import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
 
 interface Message {
@@ -48,6 +52,8 @@ export default function GroupChat() {
   const flatListRef = useRef<FlatList>(null)
   const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({})
   const insets = useSafeAreaInsets()
+  const [isRecording, setIsRecording] = useState(false)
+  const [recording, setRecording] = useState<Audio.Recording | null>(null)
 
   // Message interaction states
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
@@ -529,14 +535,25 @@ export default function GroupChat() {
             styles.messageBubble,
             isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
           ]}>
-            {item.message_type === 'text' ? (
+            {item.message_type === 'text' && (
               <Text style={[
                 styles.messageText,
                 isMyMessage ? styles.myMessageText : styles.otherMessageText
               ]}>
                 {item.message_text}
               </Text>
-            ) : (
+            )}
+            {item.message_type === 'image' && (
+              <OptimizedImage
+                source={item.message_text}
+                style={{ width: 220, height: 160, borderRadius: 14 }}
+                contentFit="cover"
+              />
+            )}
+            {item.message_type === 'audio' && (
+              <VoiceNote uri={item.message_text} />
+            )}
+            {item.message_type !== 'text' && item.message_type !== 'image' && item.message_type !== 'audio' && (
               <Text style={[
                 styles.messageText,
                 isMyMessage ? styles.myMessageText : styles.otherMessageText
@@ -659,6 +676,31 @@ export default function GroupChat() {
         )}
 
         <View style={styles.inputContainer}>
+          <TouchableOpacity
+            style={styles.inputIcon}
+            onPress={async () => {
+              if (!currentUser || sending || isLoading) return
+              try {
+                const picked = await pickImage('library')
+                if (!picked || !picked.assets || picked.assets.length === 0) return
+                const asset = picked.assets[0]
+                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
+                if (result.success && (result.url || result.path)) {
+                  await callRpc('send_chat_message', {
+                    room_id: chatRoomId,
+                    message_text: (result.url || result.path),
+                    message_type: 'image'
+                  })
+                } else {
+                  Alert.alert('Upload failed', result.error || 'Could not upload image')
+                }
+              } catch (e: any) {
+                Alert.alert('Error', e?.message || 'Failed to send image')
+              }
+            }}
+          >
+            <Ionicons name="attach" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             value={newMessage}
@@ -670,6 +712,100 @@ export default function GroupChat() {
             onSubmitEditing={sendMessage}
             blurOnSubmit={false}
           />
+          <TouchableOpacity
+            style={styles.inputIcon}
+            onPress={async () => {
+              if (!currentUser || sending || isLoading) return
+              try {
+                const picked = await pickImage('camera')
+                if (!picked || !picked.assets || picked.assets.length === 0) return
+                const asset = picked.assets[0]
+                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
+                if (result.success && (result.url || result.path)) {
+                  await callRpc('send_chat_message', {
+                    room_id: chatRoomId,
+                    message_text: (result.url || result.path),
+                    message_type: 'image'
+                  })
+                } else {
+                  Alert.alert('Upload failed', result.error || 'Could not upload image')
+                }
+              } catch (e: any) {
+                Alert.alert('Error', e?.message || 'Failed to send image')
+              }
+            }}
+          >
+            <Ionicons name="camera" size={22} color="#CFCFCF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.inputIcon}
+            onPress={async () => {
+              if (!currentUser || isLoading) return
+              if (isRecording) {
+                try {
+                  await recording?.stopAndUnloadAsync()
+                  const uri = recording ? recording.getURI() : null
+                  setIsRecording(false)
+                  setRecording(null)
+                  if (uri && currentUser) {
+                    try {
+                      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+                      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+                      const { data: { session } } = await supabase.auth.getSession()
+                      if (!supabaseUrl || !supabaseAnonKey || !session?.access_token) throw new Error('Missing config')
+                      const fileName = `voice_${chatRoomId}_${Date.now()}.m4a`
+                      const path = `${currentUser.id}/${fileName}`
+                      const bucket = 'chat-media'
+                      const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
+                      const result = await FileSystem.uploadAsync(uploadUrl, uri, {
+                        httpMethod: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${session.access_token}`,
+                          'apikey': supabaseAnonKey,
+                          'Content-Type': 'audio/m4a',
+                          'x-upsert': 'false',
+                        },
+                        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+                      })
+                      if (result.status >= 200 && result.status < 300) {
+                        const publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
+                        await callRpc('send_chat_message', {
+                          room_id: chatRoomId,
+                          message_text: publicUrl,
+                          message_type: 'audio'
+                        })
+                      } else {
+                        Alert.alert('Upload failed', `HTTP ${result.status}`)
+                      }
+                    } catch (e: any) {
+                      Alert.alert('Error', e?.message || 'Failed to upload audio')
+                    }
+                  }
+                } catch (e: any) {
+                  setIsRecording(false)
+                  setRecording(null)
+                }
+              } else {
+                try {
+                  const { status } = await Audio.requestPermissionsAsync()
+                  if (status !== 'granted') {
+                    Alert.alert('Permission required', 'Microphone access is needed to record voice notes')
+                    return
+                  }
+                  await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
+                  const rec = new Audio.Recording()
+                  await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
+                  await rec.startAsync()
+                  setRecording(rec)
+                  setIsRecording(true)
+                } catch (e: any) {
+                  Alert.alert('Error', e?.message || 'Failed to start recording')
+                }
+              }
+            }}
+          >
+            <Ionicons name={isRecording ? 'stop' : 'mic'} size={22} color="#CFCFCF" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -727,6 +863,62 @@ export default function GroupChat() {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
+  )
+}
+
+// Simple inline voice note player (mirrors private chat)
+const VoiceNote = ({ uri }: { uri: string }) => {
+  const [sound, setSound] = React.useState<Audio.Sound | null>(null)
+  const [playing, setPlaying] = React.useState(false)
+  const [duration, setDuration] = React.useState<number | null>(null)
+  const [position, setPosition] = React.useState(0)
+
+  React.useEffect(() => {
+    let isMounted = true
+    const load = async () => {
+      try {
+        const { sound: s } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false })
+        if (!isMounted) return
+        setSound(s)
+        s.setOnPlaybackStatusUpdate((status: any) => {
+          if (!status) return
+          if ('durationMillis' in status && status.durationMillis != null) setDuration(status.durationMillis)
+          if ('positionMillis' in status && status.positionMillis != null) setPosition(status.positionMillis)
+          if ('didJustFinish' in status && status.didJustFinish) setPlaying(false)
+        })
+      } catch {}
+    }
+    load()
+    return () => {
+      isMounted = false
+      try { sound?.unloadAsync() } catch {}
+    }
+  }, [uri])
+
+  const toggle = async () => {
+    try {
+      if (!sound) return
+      const status = await sound.getStatusAsync()
+      if ((status as any).isPlaying) {
+        await sound.pauseAsync()
+        setPlaying(false)
+      } else {
+        await sound.playAsync()
+        setPlaying(true)
+      }
+    } catch {}
+  }
+
+  const seconds = Math.floor((duration || 0) / 1000)
+  const posSeconds = Math.floor(position / 1000)
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <TouchableOpacity onPress={toggle} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#7B2DFA', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+        <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#fff" />
+      </TouchableOpacity>
+      <Text style={{ color: '#FFFFFF' }}>{posSeconds}s / {seconds || 0}s</Text>
+    </View>
   )
 }
 

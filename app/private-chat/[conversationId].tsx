@@ -470,9 +470,9 @@ export default function PrivateChat() {
               const picked = await pickImage('library')
               if (!picked || picked.canceled) return
               const asset = picked.assets[0]
-              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`)
-              if (result.success && (result.path || result.url)) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.path || result.url) })
+              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`, 'chat-media')
+              if (result.success && (result.url || result.path)) {
+                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.url || result.path) })
               } else {
                 Alert.alert('Upload failed', result.error || 'Could not upload image')
               }
@@ -498,9 +498,9 @@ export default function PrivateChat() {
               const picked = await pickImage('camera')
               if (!picked || picked.canceled) return
               const asset = picked.assets[0]
-              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`)
-              if (result.success && (result.path || result.url)) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.path || result.url) })
+              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`, 'chat-media')
+              if (result.success && (result.url || result.path)) {
+                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.url || result.path) })
               } else {
                 Alert.alert('Upload failed', result.error || 'Could not upload image')
               }
@@ -525,7 +525,8 @@ export default function PrivateChat() {
                     if (!supabaseUrl || !supabaseAnonKey || !session?.access_token) throw new Error('Missing config')
                     const fileName = `voice_${conversationId}_${Date.now()}.m4a`
                     const path = `${currentUser.id}/${fileName}`
-                    const uploadUrl = `${supabaseUrl}/storage/v1/object/profile-photos/${path}`
+                    const bucket = 'chat-media'
+                    const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
                     const result = await FileSystem.uploadAsync(uploadUrl, uri, {
                       httpMethod: 'POST',
                       headers: {
@@ -537,7 +538,8 @@ export default function PrivateChat() {
                       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
                     })
                     if (result.status >= 200 && result.status < 300) {
-                      await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: path })
+                      const publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
+                      await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: publicUrl })
                     } else {
                       Alert.alert('Upload failed', `HTTP ${result.status}`)
                     }

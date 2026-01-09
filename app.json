@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.matrixsociallabs.blendn",
+      "bundleIdentifier": "com.matryxsociallabs.blendn",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
@@ -23,7 +23,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.matrixsociallabs.blendn",
+      "package": "com.matryxsociallabs.blendn",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -69,10 +69,10 @@
       "typedRoutes": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "25c4d3a8-0ffd-494f-931a-e286c649ce96"
+        "projectId": "9fbe009f-ee8b-4d9b-8837-aba0223864d5"
       }
-    },
-    "owner": "hemanthr04"
+    }
   }
 }

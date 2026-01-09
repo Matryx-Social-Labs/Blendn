@@ -186,7 +186,8 @@ export const processImage = async (
 export const uploadPhoto = async (
   uri: string,
   userId: string,
-  fileName?: string
+  fileName?: string,
+  bucket: string = 'profile-photos'
 ): Promise<PhotoUploadResult> => {
   try {
     // Process the image first
@@ -208,7 +209,7 @@ export const uploadPhoto = async (
       return { success: false, error: 'Missing Supabase configuration' }
     }
 
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/profile-photos/${filePath}`
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) {
       return { success: false, error: 'You must be signed in to upload photos' }
@@ -231,9 +232,15 @@ export const uploadPhoto = async (
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
+    const isPublicBucket = bucket === 'chat-media' // our chat-media bucket is public
+    const publicUrl = isPublicBucket
+      ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`
+      : undefined
+
     return {
       success: true,
-      path: filePath
+      path: filePath,
+      url: publicUrl
     }
   } catch (error) {
     console.error('Error uploading photo:', error)
