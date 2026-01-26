@@ -3,6 +3,7 @@
     "name": "blendn",
     "slug": "blendn",
     "version": "1.0.0",
+    "owner": "matrixsociallabs",
     "orientation": "portrait",
     "icon": "./assets/logo/ios-dark.png",
     "scheme": "blendn",
@@ -60,7 +61,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.438961177346-4sul4brn7h5c773c2mnt1ohqb8bnju7f"
+          "iosUrlScheme": "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
         }
       ],
       "expo-secure-store"
