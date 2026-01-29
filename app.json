@@ -15,7 +15,14 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
-        "NSLocationWhenInUseUsageDescription": "Blend’n uses your location to show nearby events and validate on-site check-ins."
+        "NSLocationWhenInUseUsageDescription": "Blend'n uses your location to show nearby events and validate on-site check-ins.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
+            ]
+          }
+        ]
       }
     },
     "android": {
