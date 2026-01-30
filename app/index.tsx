@@ -3,12 +3,12 @@ import {
   GoogleSignin,
   statusCodes
 } from '@react-native-google-signin/google-signin'
+import Constants from 'expo-constants'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/useAuth'
+import { signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const logo = require('../assets/logo/logo2.webp')
 
@@ -35,31 +35,36 @@ export default function Index() {
     try {
       setSigningIn(true)
       console.log('🔐 [INDEX] Starting Google Sign In...')
-      
+
       if (Platform.OS === 'android') {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
       }
       const userInfo = await GoogleSignin.signIn()
-      
+
       if (userInfo.data?.idToken) {
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: userInfo.data.idToken,
-        })
-        
-        if (error) {
-          console.error('❌ [INDEX] Supabase auth error:', error)
-          throw error
+        // Get device info for the backend
+        const deviceInfo = {
+          platform: Platform.OS,
+          device: Constants.deviceName || undefined,
+          appVersion: Constants.expoConfig?.version || undefined,
         }
-        
-        console.log('✅ [INDEX] Google Sign In successful')
+
+        // Sign in via admin backend
+        const result = await signInWithGoogle(userInfo.data.idToken, deviceInfo)
+
+        if (!result.success) {
+          console.error('❌ [INDEX] Backend auth error:', result.error)
+          throw new Error(result.error || 'Sign in failed')
+        }
+
+        console.log('✅ [INDEX] Google Sign In successful', { isNewUser: result.isNewUser })
         // Navigation will happen automatically via useAuth hook
       } else {
         throw new Error('No ID token received from Google')
       }
     } catch (error: any) {
       console.error('❌ [INDEX] Google Sign In failed:', error)
-      
+
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         console.log('🔐 [INDEX] User cancelled sign in')
       } else if (error.code === statusCodes.IN_PROGRESS) {

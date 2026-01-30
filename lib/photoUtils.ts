@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import { Alert } from 'react-native'
+import { apiClient } from './apiClient'
 import { supabase } from './supabase'
 
 export interface PhotoUploadResult {
@@ -181,13 +182,14 @@ export const processImage = async (
 }
 
 /**
- * Upload photo to Supabase Storage
+ * Upload photo to Tigris via admin backend (preferred)
+ * Falls back to Supabase Storage if Tigris is not available
  */
 export const uploadPhoto = async (
   uri: string,
   userId: string,
   fileName?: string,
-  bucket: string = 'profile-photos'
+  folder: 'profile' | 'chat' | 'events' = 'profile'
 ): Promise<PhotoUploadResult> => {
   try {
     // Process the image first
@@ -199,10 +201,87 @@ export const uploadPhoto = async (
     // Generate unique filename
     const timestamp = Date.now()
     const fileExtension = 'jpg'
-    const finalFileName = fileName || `profile_${timestamp}.${fileExtension}`
-    const filePath = `${userId}/${finalFileName}`
+    const finalFileName = fileName || `${folder}_${timestamp}.${fileExtension}`
 
-    // Prefer direct HTTP upload via FileSystem to avoid 0-byte blobs in RN fetch
+    // Try Tigris upload first
+    const tigrisResult = await uploadToTigris(processedUri, finalFileName, folder)
+    if (tigrisResult.success) {
+      return tigrisResult
+    }
+
+    // Fall back to Supabase if Tigris fails
+    console.warn('Tigris upload failed, falling back to Supabase:', tigrisResult.error)
+    return await uploadToSupabase(processedUri, userId, finalFileName, folder === 'chat' ? 'chat-media' : 'profile-photos')
+  } catch (error) {
+    console.error('Error uploading photo:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Upload failed'
+    }
+  }
+}
+
+/**
+ * Upload to Tigris via presigned URL
+ */
+const uploadToTigris = async (
+  uri: string,
+  fileName: string,
+  folder: 'profile' | 'chat' | 'events'
+): Promise<PhotoUploadResult> => {
+  try {
+    // Get presigned URL from admin backend
+    const presignedResult = await apiClient.getPresignedUploadUrl(fileName, 'image/jpeg', folder)
+
+    if (!presignedResult.success || !presignedResult.data) {
+      return {
+        success: false,
+        error: presignedResult.error || 'Failed to get upload URL'
+      }
+    }
+
+    const { uploadUrl, publicUrl } = presignedResult.data
+
+    // Upload directly to Tigris using the presigned URL
+    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
+      httpMethod: 'PUT',
+      headers: {
+        'Content-Type': 'image/jpeg',
+      },
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    })
+
+    if (result.status < 200 || result.status >= 300) {
+      console.error('Tigris upload error:', result.status, result.body)
+      return { success: false, error: `Upload failed with status ${result.status}` }
+    }
+
+    return {
+      success: true,
+      url: publicUrl,
+      path: presignedResult.data.key
+    }
+  } catch (error) {
+    console.error('Tigris upload error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Tigris upload failed'
+    }
+  }
+}
+
+/**
+ * Upload to Supabase Storage (fallback)
+ */
+const uploadToSupabase = async (
+  uri: string,
+  userId: string,
+  fileName: string,
+  bucket: string
+): Promise<PhotoUploadResult> => {
+  try {
+    const filePath = `${userId}/${fileName}`
+
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -215,10 +294,9 @@ export const uploadPhoto = async (
       return { success: false, error: 'You must be signed in to upload photos' }
     }
     const accessToken = session.access_token
-    const result = await FileSystem.uploadAsync(uploadUrl, processedUri, {
+    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
       httpMethod: 'POST',
       headers: {
-        // Require user access token for uploads to avoid 401 on private buckets
         'Authorization': `Bearer ${accessToken}`,
         'apikey': supabaseAnonKey,
         'Content-Type': 'image/jpeg',
@@ -228,11 +306,11 @@ export const uploadPhoto = async (
     })
 
     if (result.status < 200 || result.status >= 300) {
-      console.error('Upload error (HTTP):', result.status, result.body)
+      console.error('Supabase upload error:', result.status, result.body)
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
-    const isPublicBucket = bucket === 'chat-media' // our chat-media bucket is public
+    const isPublicBucket = bucket === 'chat-media'
     const publicUrl = isPublicBucket
       ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`
       : undefined
@@ -243,10 +321,10 @@ export const uploadPhoto = async (
       url: publicUrl
     }
   } catch (error) {
-    console.error('Error uploading photo:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Upload failed' 
+    console.error('Supabase upload error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Supabase upload failed'
     }
   }
 }
