@@ -5,7 +5,7 @@
 import Constants from 'expo-constants'
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-type LogContext = 'auth' | 'events' | 'chat' | 'match' | 'profile' | 'navigation' | 'network' | 'database' | 'realtime' | 'general'
+type LogContext = 'auth' | 'events' | 'chat' | 'match' | 'profile' | 'navigation' | 'network' | 'database' | 'realtime' | 'general' | 'api' | 'interested' | 'private-chat' | 'socket' | 'notifications'
 
 // Development mode detection
 const isDevelopment = __DEV__ || Constants.expoConfig?.extra?.isDevelopment || process.env.NODE_ENV === 'development'
@@ -62,7 +62,12 @@ function getContextEmoji(context: LogContext): string {
     network: '🌐',
     database: '🗄️',
     realtime: '⚡',
-    general: '📱'
+    general: '📱',
+    api: '🔌',
+    interested: '❤️',
+    'private-chat': '🔒',
+    socket: '🔗',
+    notifications: '🔔'
   }
   return emojis[context] || '📱'
 }

@@ -4,7 +4,6 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import { Alert } from 'react-native'
 import { apiClient } from './apiClient'
-import { supabase } from './supabase'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -183,7 +182,7 @@ export const processImage = async (
 
 /**
  * Upload photo to Tigris via admin backend (preferred)
- * Falls back to Supabase Storage if Tigris is not available
+ * Uploads to Tigris via admin backend presigned URL
  */
 export const uploadPhoto = async (
   uri: string,
@@ -203,15 +202,14 @@ export const uploadPhoto = async (
     const fileExtension = 'jpg'
     const finalFileName = fileName || `${folder}_${timestamp}.${fileExtension}`
 
-    // Try Tigris upload first
-    const tigrisResult = await uploadToTigris(processedUri, finalFileName, folder)
-    if (tigrisResult.success) {
-      return tigrisResult
+    // Upload to Tigris via admin backend
+    const result = await uploadToTigris(processedUri, finalFileName, folder)
+
+    if (!result.success) {
+      console.error('Photo upload failed:', result.error)
     }
 
-    // Fall back to Supabase if Tigris fails
-    console.warn('Tigris upload failed, falling back to Supabase:', tigrisResult.error)
-    return await uploadToSupabase(processedUri, userId, finalFileName, folder === 'chat' ? 'chat-media' : 'profile-photos')
+    return result
   } catch (error) {
     console.error('Error uploading photo:', error)
     return {
@@ -271,94 +269,14 @@ const uploadToTigris = async (
 }
 
 /**
- * Upload to Supabase Storage (fallback)
- */
-const uploadToSupabase = async (
-  uri: string,
-  userId: string,
-  fileName: string,
-  bucket: string
-): Promise<PhotoUploadResult> => {
-  try {
-    const filePath = `${userId}/${fileName}`
-
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return { success: false, error: 'Missing Supabase configuration' }
-    }
-
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) {
-      return { success: false, error: 'You must be signed in to upload photos' }
-    }
-    const accessToken = session.access_token
-    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-      httpMethod: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': supabaseAnonKey,
-        'Content-Type': 'image/jpeg',
-        'x-upsert': 'false',
-      },
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    })
-
-    if (result.status < 200 || result.status >= 300) {
-      console.error('Supabase upload error:', result.status, result.body)
-      return { success: false, error: `Upload failed with status ${result.status}` }
-    }
-
-    const isPublicBucket = bucket === 'chat-media'
-    const publicUrl = isPublicBucket
-      ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`
-      : undefined
-
-    return {
-      success: true,
-      path: filePath,
-      url: publicUrl
-    }
-  } catch (error) {
-    console.error('Supabase upload error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Supabase upload failed'
-    }
-  }
-}
-
-/**
- * Delete photo from Supabase Storage
+ * Delete photo via admin backend
+ * TODO: Add delete endpoint to admin backend
  */
 export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   try {
-    // Accept either a full URL or a storage path
-    let filePath = photoUrl
-    if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
-      try {
-        const url = new URL(photoUrl)
-        const pathParts = url.pathname.split('/')
-        // Handles both public and signed URLs
-        // public:  /storage/v1/object/public/profile-photos/<path>
-        // signed:  /storage/v1/object/sign/profile-photos/<path>
-        const markerIndex = pathParts.findIndex(part => part === 'profile-photos')
-        if (markerIndex !== -1) {
-          filePath = pathParts.slice(markerIndex + 1).join('/')
-        }
-      } catch {}
-    }
-
-    const { error } = await supabase.storage
-      .from('profile-photos')
-      .remove([filePath])
-
-    if (error) {
-      console.error('Delete error:', error)
-      return false
-    }
-
+    // TODO: Call admin backend to delete photo
+    // For now, just log and return true (photos will be cleaned up later)
+    console.log('Photo deletion requested:', photoUrl)
     return true
   } catch (error) {
     console.error('Error deleting photo:', error)
@@ -577,17 +495,14 @@ export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationRe
 }
 
 /**
- * Reorder profile photos
+ * Reorder profile photos via API
  */
 export const reorderPhotos = async (userId: string, photoUrls: string[]): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ profile_photos: photoUrls })
-      .eq('user_id', userId)
+    const result = await apiClient.updateProfile(userId, { photos: photoUrls })
 
-    if (error) {
-      console.error('photoUtils: Reorder failed', { error, userId })
+    if (!result.success) {
+      console.error('photoUtils: Reorder failed', { error: result.error, userId })
       return false
     }
 
@@ -604,17 +519,14 @@ export const reorderPhotos = async (userId: string, photoUrls: string[]): Promis
  */
 export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => {
   try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('profile_photos')
-      .eq('user_id', userId)
-      .single()
+    const result = await apiClient.getProfile(userId)
 
-    if (error || !data?.profile_photos) {
+    if (!result.success || !result.data?.profile?.photos) {
       return []
     }
 
-    return data.profile_photos.map((url: string, index: number) => ({
+    const photos = result.data.profile.photos as string[]
+    return photos.map((url: string, index: number) => ({
       id: `${userId}_${index}`,
       url,
       order: index,

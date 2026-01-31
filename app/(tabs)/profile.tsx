@@ -44,8 +44,9 @@ export default function Profile() {
   }, [user, authLoading])
 
   const getUserAndProfile = async () => {
+    if (!user) return
     try {
-      console.log('[PROFILE] Loading profile for user:', user?.id);
+      console.log('[PROFILE] Loading profile for user:', user.id);
       setLoading(true)
       setError(null)
 

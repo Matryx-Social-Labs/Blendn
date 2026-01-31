@@ -11,7 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.matryxsociallabs.blendn",
+      "bundleIdentifier": "com.hemanth.blendn.dev",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
@@ -71,7 +71,14 @@
           "iosUrlScheme": "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#480D37"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

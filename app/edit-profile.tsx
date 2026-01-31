@@ -16,8 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
+import { apiClient } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
-import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/useAuth'
 
 interface UserProfile {
   id: string
@@ -34,10 +35,10 @@ interface UserProfile {
 }
 
 export default function EditProfile() {
+  const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
 
   // Form state
   const [name, setName] = useState('')
@@ -52,55 +53,41 @@ export default function EditProfile() {
   const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
-    loadProfile()
-  }, [])
+    if (authUser) {
+      loadProfile()
+    }
+  }, [authUser])
 
   const loadProfile = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      if (!authUser) {
         Alert.alert('Error', 'Please sign in to edit your profile')
         router.back()
         return
       }
 
-      setCurrentUser(user)
+      // Load profile data via API
+      const result = await apiClient.getProfile(authUser.id)
 
-      // Load profiles data
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error loading profile:', profileError)
+      if (!result.success || !result.data) {
+        console.error('EditProfile: Profile load error', { error: result.error })
       }
 
-      // Load user_profiles data
-      const { data: userProfileData, error: userProfileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
+      const profileData = result.data || {}
 
-      if (userProfileError && userProfileError.code !== 'PGRST116') {
-        console.error('EditProfile: User profile load error', { error: userProfileError })
-      }
-
-      // Combine data
+      // Combine with auth user data
       const combinedProfile = {
-        id: user.id,
-        name: profileData?.name || user.user_metadata?.full_name || '',
-        age: profileData?.age || userProfileData?.age || '',
-        location: profileData?.location || '',
-        phone: profileData?.phone || '',
-        interests: profileData?.interests || userProfileData?.interests || [],
-        display_name: userProfileData?.display_name || '',
-        bio: userProfileData?.bio || '',
-        profile_photos: userProfileData?.profile_photos || [],
-        goals: userProfileData?.goals || [],
-        looking_for: userProfileData?.looking_for || []
+        id: authUser.id,
+        name: profileData.name || authUser.name || '',
+        age: profileData.age || '',
+        location: profileData.location || '',
+        phone: profileData.phone || '',
+        interests: profileData.interests || [],
+        display_name: profileData.display_name || '',
+        bio: profileData.bio || '',
+        profile_photos: profileData.photos || profileData.profile_photos || [],
+        goals: profileData.goals || [],
+        looking_for: profileData.looking_for || []
       }
 
       setProfile(combinedProfile)
@@ -207,7 +194,7 @@ export default function EditProfile() {
   }
 
   const handleSave = async () => {
-    if (!currentUser) return
+    if (!authUser) return
 
     setSaving(true)
     try {
@@ -225,54 +212,24 @@ export default function EditProfile() {
         return
       }
 
-      // Update profiles table
-      const profileUpdates: any = {}
-      if (name !== profile?.name) profileUpdates.name = name
-      if (ageNum !== profile?.age) profileUpdates.age = ageNum
-      if (location !== profile?.location) profileUpdates.location = location
-      if (phone !== profile?.phone) profileUpdates.phone = phone
+      // Update profile via API
+      const updateData: any = {}
+      if (name !== profile?.name) updateData.name = name
+      if (ageNum !== profile?.age) updateData.age = ageNum
+      if (location !== profile?.location) updateData.location = location
+      if (phone !== profile?.phone) updateData.phone = phone
       if (JSON.stringify(interests) !== JSON.stringify(profile?.interests)) {
-        profileUpdates.interests = interests
+        updateData.interests = interests
       }
 
-      if (Object.keys(profileUpdates).length > 0) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update(profileUpdates)
-          .eq('id', currentUser.id)
+      const result = await apiClient.updateProfile(authUser.id, updateData)
 
-        if (profileError) {
-          console.error('EditProfile: Profile update error', { error: profileError })
-          throw profileError
-        }
+      if (!result.success) {
+        console.error('EditProfile: Profile update error', { error: result.error })
+        throw new Error(result.error || 'Failed to update profile')
       }
 
-      // Update user_profiles table
-      const userProfileUpdates: any = {}
-      if (bio !== profile?.bio) userProfileUpdates.bio = bio
-      if (JSON.stringify(photos) !== JSON.stringify(profile?.profile_photos)) {
-        userProfileUpdates.profile_photos = photos
-      }
-      if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
-        userProfileUpdates.goals = goals
-      }
-      if (JSON.stringify(lookingFor) !== JSON.stringify(profile?.looking_for)) {
-        userProfileUpdates.looking_for = lookingFor
-      }
-
-      if (Object.keys(userProfileUpdates).length > 0) {
-        const { error: userProfileError } = await supabase
-          .from('user_profiles')
-          .update(userProfileUpdates)
-          .eq('user_id', currentUser.id)
-
-        if (userProfileError) {
-          console.error('EditProfile: User profile update error', { error: userProfileError })
-          throw userProfileError
-        }
-      }
-
-      console.log('EditProfile: Profile updated successfully', { userId: currentUser.id })
+      console.log('EditProfile: Profile updated successfully', { userId: authUser.id })
       Alert.alert(
         'Profile Updated',
         'Your profile has been successfully updated!',
@@ -376,15 +333,15 @@ export default function EditProfile() {
             <Text style={styles.sectionTitle}>Photos</Text>
             {isLoading ? (
               <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
-            ) : (
+            ) : authUser ? (
               <PhotoManager
-                userId={currentUser.id}
+                userId={authUser.id}
                 maxPhotos={6}
                 editable={true}
                 onPhotosChange={handlePhotosChange}
                 style={styles.photoManager}
               />
-            )}
+            ) : null}
           </View>
 
           <View style={styles.section}>

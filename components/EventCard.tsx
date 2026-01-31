@@ -50,6 +50,7 @@ const EventCard = memo<EventCardProps>(({
   interested,
   isEnded,
   proximity,
+  interestCount,
   onPress,
   onCheckIn,
   onToggleInterest

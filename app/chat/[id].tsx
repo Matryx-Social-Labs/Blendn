@@ -26,6 +26,7 @@ import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Sk
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { pickImage, uploadPhoto } from '../../lib/photoUtils'
+import { subscribeToChat, ChatMessageCallback } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 
 interface Message {
@@ -68,9 +69,15 @@ export default function GroupChat() {
       setCurrentUser(authUser)
       loadParticipantAliases()
       loadMessages()
-      subscribeToMessages()
     }
   }, [chatRoomId, authUser, authLoading])
+
+  // Socket subscription in separate effect for proper cleanup
+  useEffect(() => {
+    if (!chatRoomId || !currentUser) return
+    const cleanup = subscribeToMessages()
+    return cleanup
+  }, [chatRoomId, currentUser, participantAliases])
 
   // Ensure current user alias is set to "You" after currentUser resolves
   useEffect(() => {
@@ -212,12 +219,39 @@ export default function GroupChat() {
   }
 
   const subscribeToMessages = () => {
-    // TODO: Real-time subscriptions will use Socket.io instead of Supabase
-    // For now, messages are loaded on mount and after sending
-    Logger.info('chat', `Real-time subscription placeholder for room: ${chatRoomId}`)
+    if (!chatRoomId) return () => {}
+
+    Logger.info('chat', `Subscribing to chat room: ${chatRoomId}`)
+
+    // Subscribe to real-time chat messages via Socket.io
+    const handleNewMessage: ChatMessageCallback = (data) => {
+      Logger.debug('chat', 'Received new message via socket', { messageId: data.message.id })
+
+      const newMsg: Message = {
+        message_id: data.message.id,
+        sender_id: data.message.userId,
+        sender_name: data.message.userId === currentUser?.id ? 'You' : (participantAliases[data.message.userId] || data.message.userName || 'Attendee'),
+        message_text: data.message.content,
+        message_type: data.message.type || 'text',
+        reply_to_message_id: data.message.parentId || null,
+        is_edited: false,
+        created_at: data.message.createdAt,
+      }
+
+      setMessages(prev => {
+        // Avoid duplicates
+        if (prev.some(m => m.message_id === newMsg.message_id)) return prev
+        return [...prev, newMsg]
+      })
+
+      setTimeout(() => scrollToBottom(), 100)
+    }
+
+    const unsubscribe = subscribeToChat(String(chatRoomId), handleNewMessage)
 
     return () => {
-      Logger.info('chat', 'Cleaning up subscription placeholder')
+      Logger.info('chat', 'Cleaning up chat subscription')
+      unsubscribe()
     }
   }
 
@@ -556,9 +590,9 @@ export default function GroupChat() {
                 const picked = await pickImage('library')
                 if (!picked || !picked.assets || picked.assets.length === 0) return
                 const asset = picked.assets[0]
-                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
+                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
                 if (result.success && (result.url || result.path)) {
-                  await apiClient.sendChatMessage(chatRoomId as string, result.url || result.path, 'image')
+                  await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
                 } else {
                   Alert.alert('Upload failed', result.error || 'Could not upload image')
                 }
@@ -588,9 +622,9 @@ export default function GroupChat() {
                 const picked = await pickImage('camera')
                 if (!picked || !picked.assets || picked.assets.length === 0) return
                 const asset = picked.assets[0]
-                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
+                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
                 if (result.success && (result.url || result.path)) {
-                  await apiClient.sendChatMessage(chatRoomId as string, result.url || result.path, 'image')
+                  await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
                 } else {
                   Alert.alert('Upload failed', result.error || 'Could not upload image')
                 }

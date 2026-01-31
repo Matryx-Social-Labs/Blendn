@@ -14,8 +14,9 @@ import AppHeader from '../../components/AppHeader'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
+import { apiClient } from '../../lib/apiClient'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { AuthHelper, supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
@@ -33,7 +34,7 @@ interface UserProfileView {
 
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -46,53 +47,38 @@ export default function UserProfile() {
     if (!id) return
     setLoading(true)
     try {
-      const { data: { user } } = await AuthHelper.getUserWithFallback(4000)
-      setCurrentUserId(user?.id || null)
+      // Load public profile via API
+      const result = await apiClient.getPublicProfile(id)
 
-      // Try safe RPC first (security definer)
-      let display: UserProfileView | null = null
-      try {
-        const { data: rpcData } = await supabase.rpc('get_user_profile_safe', { p_user_id: id })
-        const row = Array.isArray(rpcData) ? rpcData[0] : rpcData
-        if (row) {
-          const photos = (row.profile_photos && row.profile_photos.length > 0)
-            ? row.profile_photos
-            : (row.photos && row.photos.length > 0 ? row.photos : [])
-          display = {
-            user_id: id,
-            name: row.display_name || row.name,
-            age: row.age ?? undefined,
-            bio: row.bio ?? undefined,
-            interests: row.interests ?? undefined,
-            photos,
-            profile_photos: Array.isArray(row.profile_photos) ? row.profile_photos : [],
-          }
-        }
-      } catch {}
-
-      if (!display) {
-        // Fallback to direct selects
-        const [pRes, upRes] = await Promise.all([
-          supabase.from('profiles').select('id, name, age').eq('id', id).single(),
-          supabase.from('user_profiles').select('display_name, bio, age, interests, profile_photos, photos').eq('user_id', id).single(),
-        ])
-        const p = pRes.data || null
-        const up = upRes.data || null
-        const photos = (up?.profile_photos && up.profile_photos.length > 0)
-          ? up.profile_photos
-          : (up?.photos && up.photos.length > 0 ? up.photos : [])
-        display = {
+      if (result.success && result.data) {
+        const data = result.data
+        const photos = data.photos || data.profile_photos || []
+        setProfile({
           user_id: id,
-          name: up?.display_name || p?.name,
-          age: up?.age ?? p?.age,
-          bio: up?.bio,
-          interests: up?.interests,
+          name: data.name || data.display_name,
+          age: data.age,
+          bio: data.bio,
+          interests: data.interests,
           photos,
-          profile_photos: Array.isArray(up?.profile_photos) ? up?.profile_photos : [],
+          profile_photos: photos,
+        })
+      } else {
+        // Fallback: try getProfile if public profile endpoint not available
+        const fallbackResult = await apiClient.getProfile(id)
+        if (fallbackResult.success && fallbackResult.data) {
+          const data = fallbackResult.data
+          const photos = data.photos || data.profile_photos || []
+          setProfile({
+            user_id: id,
+            name: data.name,
+            age: data.age,
+            bio: data.bio,
+            interests: data.interests,
+            photos,
+            profile_photos: photos,
+          })
         }
       }
-
-      setProfile(display)
     } catch (e) {
       console.error('[USER_PROFILE] load failed:', e)
       Alert.alert('Error', 'Failed to load profile')
@@ -102,28 +88,13 @@ export default function UserProfile() {
   }
 
   const handleConnect = async () => {
-    if (!currentUserId || !profile) return
-    if (currentUserId === profile.user_id) return
+    if (!authUser || !profile) return
+    if (authUser.id === profile.user_id) return
     setActionLoading(true)
     try {
-      // Send message request instead of immediate match
-      const { data, error } = await supabase.rpc('send_message_request', {
-        p_sender_id: currentUserId,
-        p_receiver_id: profile.user_id,
-        p_event_id: null,
-        p_message: null,
-      })
-      if (error) {
-        console.error('send_message_request error:', error)
-        Alert.alert('Error', 'Could not send request')
-        return
-      }
-      const result = Array.isArray(data) ? data[0] : data
-      if (result?.success) {
-        Alert.alert('Request sent', 'They will need to accept to start chatting.')
-      } else {
-        Alert.alert('Info', result?.message || 'Could not send request')
-      }
+      // TODO: Add API endpoint for message requests
+      // POST /api/mobile/message-requests
+      Alert.alert('Coming Soon', 'Message requests will be available soon.')
     } catch (e) {
       console.error('connect error:', e)
       Alert.alert('Error', 'Something went wrong')
@@ -133,32 +104,13 @@ export default function UserProfile() {
   }
 
   const handleMessage = async () => {
-    if (!currentUserId || !profile) return
-    if (currentUserId === profile.user_id) return
+    if (!authUser || !profile) return
+    if (authUser.id === profile.user_id) return
     setActionLoading(true)
     try {
-      const { data, error } = await supabase.rpc('get_or_create_private_conversation', {
-        p_user1_id: currentUserId,
-        p_user2_id: profile.user_id,
-      })
-      if (error) {
-        console.error('get_or_create_private_conversation error:', error)
-        Alert.alert('Error', 'Could not start conversation')
-        return
-      }
-      const result = Array.isArray(data) ? data[0] : data
-      if (result?.success) {
-        router.push({
-          pathname: '/private-chat/[conversationId]' as any,
-          params: {
-            conversationId: result.conversation_id,
-            otherUserName: profile.name || 'User',
-            otherUserId: profile.user_id,
-          },
-        })
-      } else {
-        Alert.alert('Info', result?.message || 'Could not open chat')
-      }
+      // TODO: Add API endpoint for private conversations
+      // POST /api/mobile/conversations
+      Alert.alert('Coming Soon', 'Private messaging will be available soon.')
     } catch (e) {
       console.error('message error:', e)
       Alert.alert('Error', 'Something went wrong')
@@ -315,27 +267,7 @@ export default function UserProfile() {
               activeOpacity={0.9}
               style={[styles.circleBtn]}
               onPress={async () => {
-                try {
-                  if (currentUserId && profile?.user_id) {
-                    const { data: checkins } = await supabase
-                      .from('event_checkins')
-                      .select('event_id, checked_in_at')
-                      .eq('user_id', currentUserId)
-                      .is('checked_out_at', null)
-                      .order('checked_in_at', { ascending: false })
-                      .limit(1)
-
-                    const eventId = Array.isArray(checkins) && checkins.length > 0 ? (checkins[0] as any).event_id : null
-                    if (eventId) {
-                      await supabase.from('swipes').insert({
-                        swiper_id: currentUserId,
-                        swiped_id: profile.user_id,
-                        event_id: eventId,
-                        action: 'pass',
-                      })
-                    }
-                  }
-                } catch {}
+                // TODO: Add swipe/pass API endpoint if needed
                 try { router.replace('/(tabs)/match' as any) } catch { router.back() }
               }}
             >
@@ -347,7 +279,7 @@ export default function UserProfile() {
             <TouchableOpacity
               activeOpacity={0.9}
               style={[styles.circleBtn]}
-              disabled={actionLoading || currentUserId === profile.user_id}
+              disabled={actionLoading || authUser?.id === profile.user_id}
               onPress={handleConnect}
             >
               <View style={styles.circleInner}>

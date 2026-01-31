@@ -12,6 +12,7 @@ import {
     setupNotificationResponseListener
 } from '../lib/notifications';
 import { apiClient } from '../lib/apiClient';
+import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { useAuth } from '../lib/useAuth';
 
 function BackgroundGradient() {
@@ -43,7 +44,7 @@ export default function RootLayout() {
     if (lastRedirectRef.current === target) return;
     isNavigatingRef.current = true;
     lastRedirectRef.current = target;
-    router.replace(target);
+    router.replace(target as any);
     // Release the guard shortly after navigation; also resets on path change via effect deps
     setTimeout(() => {
       isNavigatingRef.current = false;
@@ -60,6 +61,24 @@ export default function RootLayout() {
       responseListener?.remove?.();
     };
   }, []);
+
+  // Socket connection management
+  useEffect(() => {
+    if (loading) return;
+
+    if (user) {
+      // User authenticated - initialize socket with app state management
+      initSocketWithAppState();
+    } else {
+      // User logged out - disconnect socket
+      disconnectSocket();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      cleanupSocket();
+    };
+  }, [user, loading]);
 
   useEffect(() => {
     if (loading) return;

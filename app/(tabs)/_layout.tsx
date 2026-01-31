@@ -5,7 +5,8 @@ import { Tabs, router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../../lib/supabase';
+import { apiClient } from '../../lib/apiClient';
+import { useAuth } from '../../lib/useAuth';
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -92,21 +93,18 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 export default function TabLayout() {
   const guardRef = useRef<boolean>(false);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (guardRef.current) return;
+      if (guardRef.current || loading) return;
       guardRef.current = true;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return; // Root layout will handle auth redirect
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('onboarded')
-          .eq('id', user.id)
-          .maybeSingle();
-        const onboarded = !!profile && profile.onboarded === true && !error;
+        const result = await apiClient.getProfile(user.id);
+        const profile = result.data;
+        const onboarded = result.success && profile?.onboarded === true;
         if (!onboarded && !cancelled) {
           router.replace('/onboarding/welcome');
         }
@@ -116,7 +114,7 @@ export default function TabLayout() {
     };
     run();
     return () => { cancelled = true; };
-  }, []);
+  }, [user, loading]);
 
   return (
     <Tabs

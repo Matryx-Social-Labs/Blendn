@@ -191,8 +191,8 @@ export default function Events() {
         Alert.alert('Error', 'Failed to update interest')
         return
       }
-      setInterestStatuses(prev => ({ ...prev, [event.id]: result.data.interested }))
-      Logger.journey('events', result.data.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
+      setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
+      Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch (e) {
       Alert.alert('Error', 'Failed to update interest')
     }

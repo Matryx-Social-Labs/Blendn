@@ -15,8 +15,10 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { EventInterest, supabase } from '../lib/supabase'
+import { apiClient } from '../lib/apiClient'
+import { Logger } from '../lib/logger'
 import { formatEventDateTime } from '../lib/time'
+import { useAuth } from '../lib/useAuth'
 
 interface EventRow {
   id: string
@@ -31,6 +33,7 @@ interface EventRow {
 }
 
 export default function InterestedScreen() {
+  const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
@@ -38,76 +41,57 @@ export default function InterestedScreen() {
   const loadInterestedEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const { data: userRes } = await supabase.auth.getUser()
-      const userId = userRes?.user?.id
-      if (!userId) {
+      if (!authUser) {
         setEvents([])
         setLoading(false)
         return
       }
 
-      const { data: interestRows, error: interestsError } = await supabase
-        .from('event_interests')
-        .select('event_id')
-        .eq('user_id', userId)
+      // Get user's favorites/interested events via API
+      const result = await apiClient.getUserFavorites(authUser.id)
 
-      if (interestsError) {
+      if (!result.success || !result.data) {
+        Logger.debug('interested', 'Failed to load favorites', { error: result.error })
         setEvents([])
         setLoading(false)
         return
       }
 
-      const eventIds = Array.from(new Set((interestRows || []).map((r: any) => String(r.event_id)))).filter(Boolean)
-      if (eventIds.length === 0) {
-        setEvents([])
-        setLoading(false)
-        return
-      }
+      // Map API response to EventRow format
+      const rows: EventRow[] = (result.data || []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        venue_name: e.venueName || e.venue_name || '',
+        address: e.address || '',
+        start_time: e.startTime || e.start_time,
+        end_time: e.endTime || e.end_time,
+        cover_image_url: e.coverImageUrl || e.cover_image_url,
+        latitude: e.latitude,
+        longitude: e.longitude,
+      }))
 
-      const { data: eventRows, error: eventsError } = await supabase
-        .from('events_now_or_upcoming')
-        .select('*')
-        .in('id', eventIds)
-        .order('start_time', { ascending: true })
-
-      if (eventsError) {
-        setEvents([])
-        setLoading(false)
-        return
-      }
-
-      const rows = (eventRows || []) as EventRow[]
       setEvents(rows)
     } catch (e) {
       setEvents([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [authUser])
 
   useEffect(() => {
-    loadInterestedEvents()
-  }, [loadInterestedEvents])
-
-  // Realtime interests updates
-  useEffect(() => {
-    let channel: any
-    const subscribe = async () => {
-      const { data: userRes } = await supabase.auth.getUser()
-      const userId = userRes?.user?.id
-      if (!userId) return
-      channel = supabase
-        .channel(`interests_${userId}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'event_interests', filter: `user_id=eq.${userId}` },
-          () => loadInterestedEvents()
-        )
-        .subscribe()
+    if (authUser) {
+      loadInterestedEvents()
     }
-    subscribe()
-    return () => { if (channel) supabase.removeChannel(channel) }
-  }, [loadInterestedEvents])
+  }, [authUser, loadInterestedEvents])
+
+  // TODO: Realtime interests updates via Socket.io
+  useEffect(() => {
+    if (!authUser) return
+    // TODO: Socket.io subscription for interest updates
+    // socket.on('interest:update', () => loadInterestedEvents())
+    Logger.debug('interested', 'TODO: Socket.io interest subscription')
+    return () => {}
+  }, [authUser, loadInterestedEvents])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -116,13 +100,17 @@ export default function InterestedScreen() {
   }, [loadInterestedEvents])
 
   const toggleInterest = useCallback(async (event: EventRow) => {
-    const res = await EventInterest.toggleInterest(event.id)
-    if (!res) {
+    try {
+      const result = await apiClient.toggleFavorite(event.id)
+      if (!result.success) {
+        Alert.alert('Error', 'Failed to update interest')
+        return
+      }
+      if (!result.data?.favorited) {
+        setEvents(prev => prev.filter(e => e.id !== event.id))
+      }
+    } catch (e) {
       Alert.alert('Error', 'Failed to update interest')
-      return
-    }
-    if (!res.interested) {
-      setEvents(prev => prev.filter(e => e.id !== event.id))
     }
   }, [])
 

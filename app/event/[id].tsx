@@ -20,10 +20,12 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton';
+import { apiClient } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/photoUtils';
-import { EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase';
+import { subscribeToEvent, EventCheckInCallback, EventInterestCallback } from '../../lib/socketClient';
+import { useAuth } from '../../lib/useAuth';
 const placeholderImg = require('../../assets/images/icon.png');
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 const gallery1 = require('../../assets/figma/92e5bab9fd27a0db4c6751d74287d75d6762ca1c.png')
@@ -82,6 +84,7 @@ const GALLERY_TALL_HEIGHT = (galleryTileSize * 2) + GALLERY_GAP
 export default function EventDetail() {
   const { id } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
+  const { user } = useAuth()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -92,6 +95,7 @@ export default function EventDetail() {
   const [interestCount, setInterestCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
   const [interestedAvatars, setInterestedAvatars] = useState<string[]>([])
+  const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
 
   useEffect(() => {
     if (id && String(id).trim()) {
@@ -114,104 +118,133 @@ export default function EventDetail() {
     }
   }, [userLocation, event])
 
-  // Realtime: update when this user's check-in rows change (for this event)
+  // Real-time event updates via Socket.io
   useEffect(() => {
-    let channel: any
-    const subscribe = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || !id) return
-      channel = supabase
-        .channel(`event_checkins_detail_${user.id}_${id}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${user.id}` },
-          (payload: any) => {
-            if (payload.new?.event_id === id || payload.old?.event_id === id) {
-              checkUserCheckInStatus()
-            }
-          }
-        )
-        .subscribe()
-    }
-    subscribe()
-    return () => {
-      if (channel) supabase.removeChannel(channel)
-    }
-  }, [id])
+    if (!id) return
 
-  // Realtime: update interest count and status for this event
-  useEffect(() => {
-    let channel: any
-    const subscribe = async () => {
-      if (!id) return
-      const { data: { user } } = await supabase.auth.getUser()
-      channel = supabase
-        .channel(`event_interests_detail_${id}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'event_interests', filter: `event_id=eq.${id}` },
-          (payload: any) => {
-            if (payload.eventType === 'INSERT') setInterestCount(prev => prev + 1)
-            if (payload.eventType === 'DELETE') setInterestCount(prev => Math.max(0, prev - 1))
-            const changedUserId = payload?.new?.user_id || payload?.old?.user_id
-            if (user && changedUserId === user.id) {
-              setUserInterested(payload.eventType === 'INSERT')
-            }
-            // Refresh avatars on any interest change
-            loadInterestedAvatars()
-          }
-        )
-        .subscribe()
+    Logger.info('events', 'Subscribing to event updates', { eventId: id })
+
+    // Handle check-in updates
+    const handleCheckIn: EventCheckInCallback = (data) => {
+      Logger.debug('events', 'Received check-in update', { userId: data.userId })
+      if (user && data.userId === user.id) {
+        setCheckInStatus({ success: true, checked_in: true })
+      }
+      // Refresh attendee count
+      fetchEventDetails()
     }
-    subscribe()
+
+    // Handle interest updates
+    const handleInterest: EventInterestCallback = (data) => {
+      Logger.debug('events', 'Received interest update', { interested: data.interested, count: data.interestCount })
+      setInterestCount(data.interestCount)
+      if (user && data.userId === user.id) {
+        setUserInterested(data.interested)
+      }
+      // Refresh interested avatars
+      loadInterestedAvatars()
+    }
+
+    // Subscribe to both check-in and interest events
+    const unsubCheckIn = subscribeToEvent(String(id), handleCheckIn)
+    const unsubInterest = subscribeToEvent(String(id), handleInterest)
+
     return () => {
-      if (channel) supabase.removeChannel(channel)
+      Logger.info('events', 'Cleaning up event subscriptions')
+      unsubCheckIn()
+      unsubInterest()
     }
-  }, [id])
+  }, [id, user])
 
   const checkProximityStatus = async () => {
     if (!userLocation || !event) return
-    
+
     try {
       Logger.journey('proximity', 'detail:check:start', { eventId: event.id, lat: userLocation.latitude, lon: userLocation.longitude })
-      const { data: userRes } = await supabase.auth.getUser()
-      const currentUserId = userRes?.user?.id
-      if (!currentUserId) return
+      if (!user) return
 
-      const { data, error } = await supabase
-        .rpc('check_user_proximity_status', {
-          p_user_id: currentUserId,
-          p_user_latitude: userLocation.latitude,
-          p_user_longitude: userLocation.longitude
-        })
+      // Calculate distance client-side for now
+      // TODO: Add proximity check API endpoint if needed
+      const distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        event.latitude,
+        event.longitude
+      )
 
-      if (error) {
-        Logger.error('events', 'detail:check:error', { error })
-      } else {
-        // Normalize to an object to avoid TS complaints
-        setProximityStatus(data || {})
-        Logger.journey('proximity', 'detail:check:success', { nearbyCount: data?.nearby_events?.length || 0 })
-      }
+      const isNearby = distance <= (event.check_in_radius || 100)
+      setProximityStatus({
+        nearby: isNearby,
+        distance_meters: distance,
+        event_id: event.id
+      })
+      Logger.journey('proximity', 'detail:check:success', { distance, isNearby })
     } catch (error) {
       Logger.error('events', 'detail:check:exception', { error: error as any })
     }
   }
 
+  // Helper function to calculate distance between two coordinates (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3 // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180
+    const φ2 = lat2 * Math.PI / 180
+    const Δφ = (lat2 - lat1) * Math.PI / 180
+    const Δλ = (lon2 - lon1) * Math.PI / 180
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
   const fetchEventDetails = async () => {
     try {
       Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const result = await apiClient.getEvent(String(id))
 
-      if (error) {
-        Logger.error('events', 'detail:fetch:error', { error })
+      if (!result.success || !result.data) {
+        Logger.error('events', 'detail:fetch:error', { error: result.error })
         Alert.alert('Error', 'Failed to load event details')
       } else {
-        setEvent(data)
-        Logger.journey('events', 'detail:fetch:success', { eventId: data?.id })
+        // Map API response (camelCase) to EventDetail interface (snake_case)
+        const d = result.data
+        setEvent({
+          id: d.id,
+          title: d.title,
+          description: d.description || '',
+          short_description: d.shortDescription || d.short_description || '',
+          city: d.city || '',
+          venue_name: d.venueName || d.venue_name || '',
+          address: d.address || '',
+          start_time: d.startTime || d.start_time,
+          end_time: d.endTime || d.end_time,
+          category: d.categories?.[0]?.name || '',
+          price_cents: d.priceCents || d.price_cents || 0,
+          max_capacity: d.maxCapacity || d.max_capacity || 0,
+          current_capacity: d.currentCapacity || d.current_capacity || 0,
+          cover_image_url: d.coverImageUrl || d.cover_image_url || '',
+          organizer: d.organizer?.name || '',
+          latitude: d.latitude,
+          longitude: d.longitude,
+          check_in_radius: d.checkInRadius || d.check_in_radius || 100,
+          gallery: d.gallery,
+          gallery_photos: d.gallery_photos,
+          pre_event_gallery: d.pre_event_gallery,
+          images: d.images,
+        })
+        // Set interest info from userStatus
+        if (d.userStatus) {
+          setUserInterested(d.userStatus.isFavorited || false)
+        }
+        if (d.stats) {
+          setInterestCount(d.stats.favoriteCount || 0)
+        }
+        // Set chat group ID if available
+        if (d.chatGroup?.id) {
+          setEventChatGroupId(d.chatGroup.id)
+        }
+        Logger.journey('events', 'detail:fetch:success', { eventId: d.id })
       }
     } catch (error) {
       Logger.error('events', 'detail:fetch:exception', { error: error as any })
@@ -223,12 +256,11 @@ export default function EventDetail() {
   const loadInterestInfo = async () => {
     try {
       if (!id) return
-      const [count, interested] = await Promise.all([
-        EventInterest.getSingleEventInterestCount(String(id)),
-        EventInterest.isInterested(String(id)),
-      ])
-      setInterestCount(count)
-      setUserInterested(interested)
+      // Interest info is loaded as part of event details from API
+      // The API returns interest count and user's interest status
+      // This is handled in fetchEventDetails response
+      // TODO: If needed, add dedicated interest info endpoint
+      Logger.debug('events', 'loadInterestInfo called - info loaded with event details')
     } catch {}
   }
 
@@ -236,73 +268,35 @@ export default function EventDetail() {
   const loadInterestedAvatars = async () => {
     try {
       if (!id) return
-      // Fetch a handful of interested user IDs
-      const { data: interestRows, error: interestErr } = await supabase
-        .from('event_interests')
-        .select('user_id')
-        .eq('event_id', id)
-        .limit(6)
+      // TODO: Add API endpoint to get interested users with avatars
+      // For now, avatars will be populated from event details if available
+      // GET /api/mobile/events/{eventId}/interested-users
+      Logger.debug('events', 'loadInterestedAvatars - TODO: implement API endpoint')
 
-      if (interestErr) {
-        return
-      }
-
-      const userIds: string[] = Array.from(new Set((interestRows || []).map((r: any) => r?.user_id).filter(Boolean)))
-      if (!userIds || userIds.length === 0) {
-        setInterestedAvatars([])
-        return
-      }
-
-      // Fetch profiles for those users to get their primary photo
-      const { data: profiles, error: profErr } = await supabase
-        .from('user_profiles')
-        .select('user_id, profile_photos, photos')
-        .in('user_id', userIds)
-
-      if (profErr) {
-        return
-      }
-
-      const primaryByUser: Record<string, string | null> = {}
-      ;(profiles || []).forEach((p: any) => {
-        const primary = (Array.isArray(p?.profile_photos) && p.profile_photos[0])
-          || (Array.isArray(p?.photos) && p.photos[0])
-          || null
-        if (primary) {
-          const optimized = getOptimizedImageUrl(primary, { width: 80, height: 80, resize: 'cover', quality: 60, format: 'webp' })
-          primaryByUser[p.user_id] = optimized || primary
-        } else {
-          primaryByUser[p.user_id] = null
-        }
-      })
-
-      // Preserve the order from interestRows
-      const ordered = userIds.map(uid => primaryByUser[uid]).filter(Boolean) as string[]
-      setInterestedAvatars(ordered)
+      // Placeholder: avatars should come from event API response
+      // setInterestedAvatars(event?.interested_avatars || [])
     } catch {}
   }
 
   const checkUserCheckInStatus = async () => {
     try {
       Logger.journey('checkin', 'detail:status:start', { eventId: String(id) })
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data, error } = await supabase
-        .from('event_checkins')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('event_id', id)
-        .is('checked_out_at', null)
-        .limit(1)
+      // Get check-ins for this event and check if current user is checked in
+      const result = await apiClient.getEventCheckins(String(id))
 
-      if (error) {
-        Logger.error('events', 'detail:status:error', { error })
+      if (!result.success) {
+        Logger.error('events', 'detail:status:error', { error: result.error })
         return
       }
 
-      const checkedIn = Array.isArray(data) && data.length > 0
-      setCheckInStatus({ success: true, checked_in: checkedIn })
+      const checkins = result.data || []
+      const userCheckin = checkins.find((c: any) =>
+        c.user_id === user.id && !c.checked_out_at
+      )
+      const checkedIn = !!userCheckin
+      setCheckInStatus({ success: true, checked_in: checkedIn, check_in_id: userCheckin?.id })
       Logger.journey('checkin', 'detail:status:success', { checkedIn })
     } catch (error) {
       Logger.error('events', 'detail:status:exception', { error: error as any })
@@ -439,26 +433,15 @@ export default function EventDetail() {
 
   const handleCheckIn = async () => {
     setCheckingIn(true)
-    
+
     try {
       Logger.journey('checkin', 'detail:start', { eventId: String(id) })
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         Logger.journey('auth', 'detail:blocked:notSignedIn')
         Alert.alert('Error', 'Please sign in to check in to events')
+        setCheckingIn(false)
         return
       }
-
-      // Guard: if UI thinks we are not checked in, ensure backend also has no active check-ins
-      // This prevents the "Already Checked In" path from stale rows
-      try {
-        const { ensureNoActiveCheckins } = await import('../../lib/supabase') as any
-        if (ensureNoActiveCheckins && typeof ensureNoActiveCheckins === 'function') {
-          Logger.journey('checkin', 'detail:ensureNoActiveCheckins:start')
-          await ensureNoActiveCheckins(String(id))
-          Logger.journey('checkin', 'detail:ensureNoActiveCheckins:done')
-        }
-      } catch {}
 
       // Get current location
       const location = await getCurrentLocation()
@@ -470,71 +453,64 @@ export default function EventDetail() {
 
       setUserLocation(location)
 
-      // Call production check-in function with GPS accuracy
-      const { data, error } = await supabase
-        .rpc('check_in_to_event_production', {
-          p_event_id: id,
-          p_user_id: user.id,
-          p_user_latitude: location.latitude,
-          p_user_longitude: location.longitude,
-          p_gps_accuracy: 10 // Will be actual GPS accuracy in production
-        })
+      // Call check-in API
+      const result = await apiClient.checkIn(String(id), {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        deviceInfo: { platform: Platform.OS }
+      })
 
-      if (error) {
-        Logger.error('events', 'checkin:rpc:error', { error })
-        Alert.alert('Error', 'Failed to check in. Please try again.')
-      } else {
-        if (data.success) {
-          Logger.journey('checkin', 'detail:success', { eventId: String(id) })
-          // Ensure the user is added to the event group chat in the background
-          const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
-
-          Alert.alert(
-            'Check-in Successful! 🎉',
-            `Welcome to ${event?.title || 'this event'}! You can now chat with other attendees and start matching.`,
-            [
-              {
-                text: 'Start Matching',
-                onPress: () => router.push('/(tabs)/match' as any)
-              },
-              {
-                text: 'Join Chat',
-                onPress: () => {
-                  if (ensured?.chatRoomId) {
-                    router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event?.title || '' } as any })
-                  } else {
-                    router.push('/(tabs)/chat' as any)
-                  }
-                }
-              },
-              { text: 'OK', style: 'default' }
-            ]
-          )
-
-          // Send check-in success notification to the user
-          try {
-            await NotificationHelpers.checkInNotification(
-              event?.title || 'Event',
-              user.id
-            )
-          } catch (notificationError) {
-            Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
-            // Don't fail check-in if notification fails
-          }
-
-          // Refresh check-in status
+      if (!result.success) {
+        Logger.error('events', 'checkin:api:error', { error: result.error })
+        // Handle specific error codes
+        if (result.error?.includes('already checked in') || result.error?.includes('ALREADY_CHECKED_IN')) {
+          Logger.journey('checkin', 'detail:alreadyCheckedIn')
           await checkUserCheckInStatus()
+          Alert.alert('Already Checked In', 'You are already checked in to this event.')
+        } else if (result.error?.includes('too far') || result.error?.includes('TOO_FAR')) {
+          handleCheckInError({ code: 'TOO_FAR', error: result.error })
         } else {
-          // If server says already checked-in, re-sync UI by re-checking status and surface a consistent message
-          if (data.code === 'ALREADY_CHECKED_IN') {
-            Logger.journey('checkin', 'detail:alreadyCheckedIn')
-            await checkUserCheckInStatus()
-            Alert.alert('Already Checked In', 'You are already checked in to this event.')
-          } else {
-            Logger.warn('events', 'checkin:failed', { code: data.code, message: data.error || data.message })
-            handleCheckInError(data)
-          }
+          Alert.alert('Error', result.error || 'Failed to check in. Please try again.')
         }
+      } else {
+        const data = result.data
+        Logger.journey('checkin', 'detail:success', { eventId: String(id) })
+
+        Alert.alert(
+          'Check-in Successful! 🎉',
+          `Welcome to ${event?.title || 'this event'}! You can now chat with other attendees and start matching.`,
+          [
+            {
+              text: 'Start Matching',
+              onPress: () => router.push('/(tabs)/match' as any)
+            },
+            {
+              text: 'Join Chat',
+              onPress: () => {
+                if (eventChatGroupId) {
+                  router.push({ pathname: '/chat/[id]', params: { id: eventChatGroupId, roomName: event?.title || 'Event Chat', eventTitle: event?.title || '' } as any })
+                } else {
+                  router.push('/(tabs)/chat' as any)
+                }
+              }
+            },
+            { text: 'OK', style: 'default' }
+          ]
+        )
+
+        // Send check-in success notification to the user
+        try {
+          await NotificationHelpers.checkInNotification(
+            event?.title || 'Event',
+            user.id
+          )
+        } catch (notificationError) {
+          Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
+          // Don't fail check-in if notification fails
+        }
+
+        // Refresh check-in status
+        await checkUserCheckInStatus()
       }
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
@@ -578,12 +554,12 @@ export default function EventDetail() {
   const handleCheckout = async () => {
     setCheckingOut(true)
     try {
-      const res = await EventCheckout.checkoutFromEvent(String(id))
-      if (res.success) {
-        Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
+      const result = await apiClient.checkOut(String(id))
+      if (result.success) {
+        Alert.alert('Checked Out', 'You have been checked out of this event.')
         await checkUserCheckInStatus()
       } else {
-        Alert.alert('Checkout Failed', res.message || 'Please try again.')
+        Alert.alert('Checkout Failed', result.error || 'Please try again.')
       }
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Unknown error')
@@ -1016,37 +992,22 @@ export default function EventDetail() {
                     >
                       <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.swipeButton, { backgroundColor: '#007AFF' }]}
-                      onPress={async () => {
-                        try {
-                          const ensured = await EventChat.ensureUserInEventChat(String(id), event?.title)
-                          if (ensured?.chatRoomId) {
-                            const query = `?roomName=${encodeURIComponent(ensured.roomName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
-                            router.push(`/chat/${ensured.chatRoomId}${query}` as any)
-                          } else {
-                            router.push('/(tabs)/chat' as any)
-                          }
-                        } catch {}
+                      onPress={() => {
+                        if (eventChatGroupId) {
+                          const query = `?roomName=${encodeURIComponent(event?.title || 'Event Chat')}&eventTitle=${encodeURIComponent(event?.title || '')}`
+                          router.push(`/chat/${eventChatGroupId}${query}` as any)
+                        } else {
+                          router.push('/(tabs)/chat' as any)
+                        }
                       }}
                     >
                       <Text style={styles.swipeButtonText}>Join Event Chat 💬</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
-                      onPress={async () => {
-                        try {
-                          const res = await EventCheckout.checkoutFromEvent(String(id))
-                          if (res.success) {
-                            Alert.alert('Checked Out', res.message || 'You have been checked out of this event.')
-                            await checkUserCheckInStatus()
-                          } else {
-                            Alert.alert('Checkout Failed', res.message || 'Please try again.')
-                          }
-                        } catch (e: any) {
-                          Alert.alert('Error', e?.message || 'Unknown error')
-                        }
-                      }}
+                      onPress={handleCheckout}
                     >
                       <Text style={styles.swipeButtonText}>Check Out</Text>
                     </TouchableOpacity>

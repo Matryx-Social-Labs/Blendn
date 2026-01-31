@@ -18,11 +18,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock } from '../../components/Skeleton'
+import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
-import { AuthHelper, supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
@@ -63,8 +64,8 @@ interface MatchPreview {
 
 export default function Match() {
   const insets = useSafeAreaInsets()
+  const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [currentUser, setCurrentUser] = useState<any>(null)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
   const [matches, setMatches] = useState<MatchPreview[]>([])
@@ -74,51 +75,42 @@ export default function Match() {
   const [similarIndex, setSimilarIndex] = useState(0)
 
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (authUser) {
+      loadInitialData()
+    }
+  }, [authUser])
 
   // Refresh when screen gains focus
   useFocusEffect(
     useCallback(() => {
-      if (currentUser) {
-        loadActiveEventAndAttendees(currentUser.id)
-        loadMatches(currentUser.id)
+      if (authUser) {
+        loadActiveEventAndAttendees(authUser.id)
+        loadMatches(authUser.id)
       }
-    }, [currentUser])
+    }, [authUser])
   )
 
-  // Realtime: refresh when this user's check-in status changes
+  // TODO: Realtime check-in updates via Socket.io
   useEffect(() => {
-    if (!currentUser) return
-    const channel = supabase
-      .channel(`match_checkins_${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${currentUser.id}` },
-        () => {
-          loadActiveEventAndAttendees(currentUser.id)
-        }
-      )
-      .subscribe()
-
-    return () => {
-      try { supabase.removeChannel(channel) } catch {}
-    }
-  }, [currentUser])
+    if (!authUser) return
+    // TODO: Socket.io subscription for check-in updates
+    // socket.on('checkin:update', (data) => {
+    //   if (data.userId === authUser.id) loadActiveEventAndAttendees(authUser.id)
+    // })
+    Logger.debug('match', 'TODO: Socket.io check-in subscription')
+    return () => {}
+  }, [authUser])
 
   const loadInitialData = async () => {
     try {
       setError(null)
-      // Auth
-      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
-      if (error || !user) {
+      if (!authUser) {
         return
       }
-      setCurrentUser(user)
 
       // Load active event and attendees
-      await loadActiveEventAndAttendees(user.id)
-      await loadMatches(user.id)
+      await loadActiveEventAndAttendees(authUser.id)
+      await loadMatches(authUser.id)
     } catch (e) {
       Logger.error('match', 'Unexpected error during initialization', { error: e })
       setError('Failed to load')
@@ -129,81 +121,11 @@ export default function Match() {
 
   const loadMatches = async (userId: string) => {
     try {
-      const { data: conversations, error: convError } = await supabase
-        .from('private_conversations')
-        .select(`
-          id,
-          match_id,
-          last_message_at,
-          matches!inner (
-            user1_id,
-            user2_id
-          )
-        `)
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`, { foreignTable: 'matches' })
-        .order('last_message_at', { ascending: false })
-
-      if (convError) {
-        Logger.error('match', 'Error fetching conversations', { error: convError })
-        setMatches([])
-        return
-      }
-
-      const convs = (conversations || []) as any[]
-      if (convs.length === 0) {
-        setMatches([])
-        return
-      }
-
-      const otherUserIdsSet = new Set<string>()
-      const otherIdByConversation: Record<string, string> = {}
-      for (const c of convs) {
-        const m = Array.isArray(c.matches) ? c.matches[0] : c.matches
-        if (!m) continue
-        const otherId = m.user1_id === userId ? m.user2_id : m.user1_id
-        if (otherId) {
-          otherUserIdsSet.add(otherId)
-          otherIdByConversation[c.id] = otherId
-        }
-      }
-
-      const otherUserIds = Array.from(otherUserIdsSet)
-      let profilesById: Record<string, { name?: string; photo?: string }> = {}
-
-      if (otherUserIds.length > 0) {
-        const [userProfilesRes, profilesRes] = await Promise.all([
-          supabase.from('user_profiles').select('user_id, display_name, profile_photos, photos').in('user_id', otherUserIds),
-          supabase.from('profiles').select('id, name').in('id', otherUserIds)
-        ])
-
-        const userProfiles = (userProfilesRes.data || []) as Array<{ user_id: string; display_name?: string; profile_photos?: string[]; photos?: string[] }>
-        const basicProfiles = (profilesRes.data || []) as Array<{ id: string; name?: string }>
-
-        const basicMap = new Map(basicProfiles.map(p => [p.id, p]))
-        for (const up of userProfiles) {
-          const bestPhoto = (up.profile_photos && up.profile_photos[0]) || (up.photos && up.photos[0])
-          profilesById[up.user_id] = {
-            name: up.display_name || basicMap.get(up.user_id)?.name,
-            photo: bestPhoto,
-          }
-        }
-        for (const p of basicProfiles) {
-          if (!profilesById[p.id]) profilesById[p.id] = { name: p.name, photo: undefined }
-        }
-      }
-
-      const matched: MatchPreview[] = convs.map(c => {
-        const otherId = otherIdByConversation[c.id]
-        const prof = otherId ? profilesById[otherId] : undefined
-        return {
-          conversation_id: c.id,
-          other_user_id: otherId,
-          other_user_name: prof?.name || 'User',
-          photo_url: prof?.photo,
-        }
-      }).filter(m => !!m.other_user_id)
-
-      setMatches(matched)
+      // TODO: Add API endpoint for matches/conversations
+      // GET /api/mobile/matches or /api/mobile/conversations
+      // For now, just set empty matches - this feature will be implemented later
+      Logger.debug('match', 'TODO: Load matches via API endpoint')
+      setMatches([])
     } catch (e) {
       Logger.error('match', 'Failed to load matches', { error: e })
       setMatches([])
@@ -212,40 +134,36 @@ export default function Match() {
 
   const loadActiveEventAndAttendees = async (userId: string) => {
     try {
-      // Find active event for current user
-      const { data: checkins, error: checkinsError } = await supabase
-        .from('event_checkins')
-        .select('event_id, checked_in_at')
-        .eq('user_id', userId)
-        .is('checked_out_at', null)
-        .order('checked_in_at', { ascending: false })
-        .limit(1)
+      // Get events to find which one user is checked into
+      // We'll use the getEvents API and check userStatus
+      const eventsResult = await apiClient.getEvents({ limit: 20 })
 
-      if (checkinsError) {
-        Logger.error('match', 'Error fetching user check-ins', { error: checkinsError })
+      if (!eventsResult.success || !eventsResult.data?.events) {
+        Logger.error('match', 'Error fetching events', { error: eventsResult.error })
         setEventInfo(null)
         setAttendees([])
         return
       }
 
-      const activeEventId = checkins && checkins.length > 0 ? checkins[0].event_id as string : null
+      // Find an event where user is checked in
+      let activeEventId: string | null = null
+      let activeEventTitle: string | undefined
+
+      for (const event of eventsResult.data.events) {
+        if (event.userStatus?.isCheckedIn) {
+          activeEventId = event.id
+          activeEventTitle = event.title
+          break
+        }
+      }
+
       if (!activeEventId) {
         setEventInfo(null)
         setAttendees([])
         return
       }
 
-      // Optionally fetch event title
-      const { data: event, error: eventError } = await supabase
-        .from('events')
-        .select('id, title')
-        .eq('id', activeEventId)
-        .single()
-      if (!eventError && event) {
-        setEventInfo({ id: event.id, title: event.title })
-      } else {
-        setEventInfo({ id: activeEventId })
-      }
+      setEventInfo({ id: activeEventId, title: activeEventTitle })
 
       // Get blocked users to filter out
       let blockedIds = new Set<string>()
@@ -256,88 +174,37 @@ export default function Match() {
         Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
       }
 
-      // Prefer SECURITY DEFINER RPC to bypass RLS for attendee listing
-      const { data: rpcRows, error: rpcError } = await supabase
-        .rpc('get_event_attendees', { p_event_id: activeEventId })
+      // Get attendees via check-ins API
+      const checkinsResult = await apiClient.getEventCheckins(activeEventId)
 
-      if (rpcError) {
-        Logger.warn('match', 'get_event_attendees RPC failed, falling back to direct selects', { error: rpcError.message })
-      }
-
-      if (rpcRows && Array.isArray(rpcRows)) {
-        const filtered = rpcRows.filter((r: any) => r.user_id !== userId && !blockedIds.has(r.user_id))
-        const attendeeProfiles: AttendeeProfile[] = filtered.map((r: any) => ({
-          user_id: r.user_id,
-          name: r.display_name,
-          age: r.age ?? undefined,
-          bio: r.bio ?? undefined,
-          interests: r.interests ?? undefined,
-          profile_photos: (r.photos && r.photos.length > 0) ? r.photos : undefined,
-          last_seen: r.checked_in_at ?? undefined,
-        }))
-        attendeeProfiles.sort((a, b) => {
-          const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
-          const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
-          return tb - ta
-        })
-        setAttendees(attendeeProfiles)
-        return
-      }
-
-      // Fallback path (may be limited by RLS):
-      const { data: attendeeCheckins, error: attendeesError } = await supabase
-        .from('event_checkins')
-        .select('user_id, checked_in_at, checked_out_at')
-        .eq('event_id', activeEventId)
-        .is('checked_out_at', null)
-
-      if (attendeesError || !attendeeCheckins) {
-        Logger.error('match', 'Fallback attendees select failed', { error: attendeesError })
+      if (!checkinsResult.success || !checkinsResult.data) {
+        Logger.error('match', 'Error fetching event check-ins', { error: checkinsResult.error })
         setAttendees([])
         return
       }
 
-      const uniqueUserIds = Array.from(
-        new Set(
-          attendeeCheckins
-            .map(a => a.user_id as string)
-            .filter(uid => uid && uid !== userId && !blockedIds.has(uid))
-        )
+      const checkins = checkinsResult.data || []
+      const activeCheckins = checkins.filter((c: any) =>
+        c.user_id !== userId &&
+        c.status === 'checked_in' &&
+        !blockedIds.has(c.user_id)
       )
 
-      if (uniqueUserIds.length === 0) {
+      if (activeCheckins.length === 0) {
         setAttendees([])
         return
       }
 
-      const [profilesRes, userProfilesRes] = await Promise.all([
-        supabase.from('profiles').select('id, name, age').in('id', uniqueUserIds),
-        supabase.from('user_profiles').select('user_id, display_name, bio, profile_photos, photos, interests').in('user_id', uniqueUserIds),
-      ])
-
-      const profiles = (profilesRes.data || []) as Array<{ id: string; name?: string; age?: number }>
-      const userProfiles = (userProfilesRes.data || []) as Array<{ user_id: string; display_name?: string; bio?: string; profile_photos?: string[]; photos?: string[]; interests?: string[] }>
-
-      const userIdToProfile = new Map(profiles.map(p => [p.id, p]))
-      const userIdToUserProfile = new Map(userProfiles.map(up => [up.user_id, up]))
-      const checkinMap = new Map<string, string>(attendeeCheckins.map(a => [a.user_id as string, a.checked_in_at as string]))
-
-      const attendeeProfiles: AttendeeProfile[] = uniqueUserIds.map(uid => {
-        const p = userIdToProfile.get(uid)
-        const up = userIdToUserProfile.get(uid)
-        const photos = (up?.profile_photos && up.profile_photos.length > 0)
-          ? up.profile_photos
-          : (up?.photos && up.photos.length > 0 ? up.photos : [])
-        return {
-          user_id: uid,
-          name: p?.name || up?.display_name,
-          age: p?.age,
-          bio: up?.bio,
-          interests: up?.interests,
-          profile_photos: photos,
-          last_seen: checkinMap.get(uid),
-        }
-      })
+      // Build attendee profiles from check-in data
+      const attendeeProfiles: AttendeeProfile[] = activeCheckins.map((c: any) => ({
+        user_id: c.user_id,
+        name: c.user?.name || c.user?.profile?.name,
+        age: c.user?.profile?.age,
+        bio: c.user?.profile?.bio,
+        interests: c.user?.profile?.interests,
+        profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined),
+        last_seen: c.check_in_time,
+      }))
 
       attendeeProfiles.sort((a, b) => {
         const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
@@ -354,29 +221,17 @@ export default function Match() {
 
   const startPrivateConversation = async (candidate: AttendeeProfile) => {
     try {
-      const { data, error } = await supabase.rpc('get_or_create_private_conversation', {
-        p_user1_id: currentUser.id,
-        p_user2_id: candidate.user_id
-      })
-
-      if (error) {
-        console.error('Error creating conversation:', error)
-        Alert.alert('Error', 'Failed to start conversation')
-        return
-      }
-      const result: any = Array.isArray(data) ? data[0] : data
-      if (result?.success) {
-        router.push({
-          pathname: '/private-chat/[conversationId]' as any,
-          params: {
-            conversationId: result.conversation_id,
-            otherUserName: candidate.name,
-            otherUserId: candidate.user_id
-          }
-        })
-      } else {
-        Alert.alert('Error', result?.message || 'Failed to start conversation')
-      }
+      // TODO: Add API endpoint for creating private conversations
+      // POST /api/mobile/conversations
+      // For now, just navigate to user profile
+      Alert.alert(
+        'Coming Soon',
+        'Private messaging will be available soon. View their profile instead?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View Profile', onPress: () => router.push({ pathname: '/user/[id]', params: { id: candidate.user_id } as any }) }
+        ]
+      )
     } catch (error) {
       console.error('Error starting conversation:', error)
       Alert.alert('Error', 'Something went wrong')
@@ -566,7 +421,7 @@ export default function Match() {
             </View>
             <TouchableOpacity
               style={styles.headerRight}
-              onPress={() => currentUser && loadActiveEventAndAttendees(currentUser.id)}
+              onPress={() => authUser && loadActiveEventAndAttendees(authUser.id)}
               accessibilityRole="button"
               accessibilityLabel="Refresh"
             >

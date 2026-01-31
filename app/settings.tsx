@@ -5,8 +5,8 @@ import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import OptimizedImage from '../components/OptimizedImage'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/useAuth'
+import { apiClient } from '../lib/apiClient'
+import { useAuth, signOut } from '../lib/useAuth'
 
 export default function SettingsScreen() {
   const { user } = useAuth()
@@ -21,13 +21,19 @@ export default function SettingsScreen() {
     const load = async () => {
       try {
         if (!user) return
-        const { data: base } = await supabase.from('profiles').select('name').eq('id', user.id).maybeSingle()
-        const { data: up } = await supabase.from('user_profiles').select('display_name, profile_photos, photos').eq('user_id', user.id).maybeSingle()
-        const name = up?.display_name || base?.name || 'You'
-        setDisplayName(name)
-        const primary = (Array.isArray(up?.profile_photos) && up?.profile_photos?.[0]) || (Array.isArray(up?.photos) && up?.photos?.[0]) || null
-        if (primary) {
-          setAvatarUrl(primary)
+        const result = await apiClient.getProfile(user.id)
+        if (result.success && result.data) {
+          const profile = result.data
+          const name = profile.name || user.name || 'You'
+          setDisplayName(name)
+          // Get avatar from profile photos if available
+          const photos = profile.photos || profile.profile_photos || []
+          const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
+          if (primary) {
+            setAvatarUrl(primary)
+          } else if (user.image) {
+            setAvatarUrl(user.image)
+          }
         }
       } catch {}
     }
@@ -40,8 +46,8 @@ export default function SettingsScreen() {
     { icon: 'mail-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
     { icon: 'log-out-outline', title: 'Sign out', danger: true, onPress: async () => {
       try {
-        const { error } = await supabase.auth.signOut()
-        if (error) Alert.alert('Error', 'Failed to sign out')
+        const result = await signOut()
+        if (!result.success) Alert.alert('Error', 'Failed to sign out')
       } catch (e) {
         Alert.alert('Error', 'Failed to sign out')
       }
