@@ -627,6 +627,7 @@ class ApiClientClass {
       age?: number
       location?: string
       interests?: string[]
+      photos?: string[]
       onboarded?: boolean
     }
   ): Promise<ApiResponse<any>> {
@@ -740,9 +741,9 @@ class ApiClientClass {
   async getPresignedUploadUrl(
     filename: string,
     contentType: string,
-    folder: 'profile' | 'chat' = 'profile'
-  ): Promise<ApiResponse<{ uploadUrl: string; publicUrl: string }>> {
-    return this.queuedRequest<{ uploadUrl: string; publicUrl: string }>(
+    folder: 'profile' | 'chat' | 'events' = 'profile'
+  ): Promise<ApiResponse<{ uploadUrl: string; publicUrl: string; key?: string }>> {
+    return this.queuedRequest<{ uploadUrl: string; publicUrl: string; key?: string }>(
       '/api/mobile/uploads/presigned-url',
       {
         method: 'POST',
@@ -757,6 +758,124 @@ class ApiClientClass {
 
   async getCategories(): Promise<ApiResponse<any[]>> {
     return this.queuedRequest<any[]>('/api/mobile/categories')
+  }
+
+  // === PUSH NOTIFICATIONS ===
+
+  async registerPushToken(
+    token: string,
+    platform: 'ios' | 'android'
+  ): Promise<ApiResponse<{ message: string }>> {
+    return this.queuedRequest<{ message: string }>(
+      '/api/mobile/notifications/token',
+      {
+        method: 'POST',
+        body: JSON.stringify({ token, platform }),
+      },
+      true,
+      2 // High priority
+    )
+  }
+
+  async removePushToken(token: string): Promise<ApiResponse<{ message: string }>> {
+    return this.queuedRequest<{ message: string }>(
+      `/api/mobile/notifications/token?token=${encodeURIComponent(token)}`,
+      { method: 'DELETE' },
+      true,
+      5
+    )
+  }
+
+  // === PRIVATE CONVERSATIONS ===
+
+  async getConversations(): Promise<ApiResponse<any[]>> {
+    return this.queuedRequest<any[]>('/api/mobile/conversations')
+  }
+
+  async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{
+    id: string
+    otherUser: { id: string; name: string | null; image: string | null }
+    createdAt: string
+    isNew: boolean
+  }>> {
+    return this.queuedRequest(
+      '/api/mobile/conversations',
+      {
+        method: 'POST',
+        body: JSON.stringify({ otherUserId }),
+      },
+      true,
+      2
+    )
+  }
+
+  async getConversation(conversationId: string): Promise<ApiResponse<{
+    id: string
+    otherUser: { id: string; name: string | null; image: string | null }
+    createdAt: string
+    lastMessageAt: string | null
+  }>> {
+    return this.queuedRequest(`/api/mobile/conversations/${conversationId}`)
+  }
+
+  async getConversationMessages(
+    conversationId: string,
+    options?: { page?: number; limit?: number; before?: string }
+  ): Promise<ApiResponse<{
+    messages: Array<{
+      id: string
+      conversationId: string
+      senderId: string
+      sender: { id: string; name: string | null; image: string | null }
+      text: string | null
+      mediaUrl: string | null
+      mediaType: string | null
+      isRead: boolean
+      createdAt: string
+    }>
+    hasMore: boolean
+    nextCursor: string | null
+  }>> {
+    const params = new URLSearchParams()
+    if (options?.page) params.set('page', String(options.page))
+    if (options?.limit) params.set('limit', String(options.limit))
+    if (options?.before) params.set('before', options.before)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.queuedRequest(`/api/mobile/conversations/${conversationId}/messages${query}`)
+  }
+
+  async sendPrivateMessage(
+    conversationId: string,
+    data: { text?: string; mediaUrl?: string; mediaType?: 'image' | 'video' }
+  ): Promise<ApiResponse<{
+    id: string
+    conversationId: string
+    senderId: string
+    sender: { id: string; name: string | null; image: string | null }
+    text: string | null
+    mediaUrl: string | null
+    mediaType: string | null
+    isRead: boolean
+    createdAt: string
+  }>> {
+    return this.queuedRequest(
+      `/api/mobile/conversations/${conversationId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      true,
+      1 // High priority for sending messages
+    )
+  }
+
+  async deleteConversation(conversationId: string): Promise<ApiResponse<{ deleted: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/conversations/${conversationId}`,
+      { method: 'DELETE' },
+      true,
+      5
+    )
   }
 
   // === HELPER METHODS ===

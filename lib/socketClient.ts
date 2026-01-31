@@ -57,6 +57,32 @@ interface ServerToClientEvents {
     emoji: string
     action: "add" | "remove"
   }) => void
+  // Private messaging
+  "private:message": (data: {
+    conversationId: string
+    message: {
+      id: string
+      conversationId: string
+      senderId: string
+      sender: { id: string; name: string | null; image: string | null }
+      text: string | null
+      mediaUrl: string | null
+      mediaType: string | null
+      isRead: boolean
+      createdAt: string
+    }
+  }) => void
+  "private:typing": (data: {
+    conversationId: string
+    userId: string
+    userName: string
+    isTyping: boolean
+  }) => void
+  "private:read": (data: {
+    conversationId: string
+    messageIds: string[]
+    readBy: string
+  }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -66,8 +92,13 @@ interface ClientToServerEvents {
   "leave:event": (eventId: string) => void
   "join:chat": (chatGroupId: string) => void
   "leave:chat": (chatGroupId: string) => void
+  "join:conversation": (conversationId: string) => void
+  "leave:conversation": (conversationId: string) => void
   "chat:startTyping": (chatGroupId: string) => void
   "chat:stopTyping": (chatGroupId: string) => void
+  "private:startTyping": (conversationId: string) => void
+  "private:stopTyping": (conversationId: string) => void
+  "private:markRead": (conversationId: string, messageIds: string[]) => void
   ping: () => void
 }
 
@@ -80,6 +111,9 @@ type EventInterestCallback = (data: ServerToClientEvents["event:interestUpdate"]
 type ChatMessageCallback = (data: ServerToClientEvents["chat:message"] extends (data: infer D) => void ? D : never) => void
 type ChatTypingCallback = (data: ServerToClientEvents["chat:typing"] extends (data: infer D) => void ? D : never) => void
 type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends (data: infer D) => void ? D : never) => void
+type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
+type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
+type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 
 // Connection state
 let socket: TypedSocket | null = null
@@ -91,6 +125,7 @@ const RECONNECT_DELAY_BASE = 1000
 // Subscriptions
 const eventSubscriptions = new Map<string, Set<EventCheckInCallback | EventCheckOutCallback | EventInterestCallback>>()
 const chatSubscriptions = new Map<string, Set<ChatMessageCallback | ChatTypingCallback | ChatReactionCallback>>()
+const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -178,6 +213,7 @@ export function disconnect(): void {
   // Clear subscriptions
   eventSubscriptions.clear()
   chatSubscriptions.clear()
+  conversationSubscriptions.clear()
 }
 
 /**
@@ -239,6 +275,22 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("chat:reaction", (data) => {
     const callbacks = chatSubscriptions.get(data.chatGroupId)
     callbacks?.forEach((cb) => (cb as ChatReactionCallback)(data))
+  })
+
+  // Private messaging updates
+  sock.on("private:message", (data) => {
+    const callbacks = conversationSubscriptions.get(data.conversationId)
+    callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
+  })
+
+  sock.on("private:typing", (data) => {
+    const callbacks = conversationSubscriptions.get(data.conversationId)
+    callbacks?.forEach((cb) => (cb as PrivateTypingCallback)(data))
+  })
+
+  sock.on("private:read", (data) => {
+    const callbacks = conversationSubscriptions.get(data.conversationId)
+    callbacks?.forEach((cb) => (cb as PrivateReadCallback)(data))
   })
 }
 
@@ -346,6 +398,62 @@ export function stopTyping(chatGroupId: string): void {
   socket?.emit("chat:stopTyping", chatGroupId)
 }
 
+// === Private Conversation Subscriptions ===
+
+/**
+ * Subscribe to private conversation updates (messages, typing, read receipts)
+ */
+export function subscribeToConversation(
+  conversationId: string,
+  callback: PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback
+): () => void {
+  if (!socket?.connected) {
+    connect()
+  }
+
+  // Join conversation room
+  socket?.emit("join:conversation", conversationId)
+
+  // Add to subscriptions
+  if (!conversationSubscriptions.has(conversationId)) {
+    conversationSubscriptions.set(conversationId, new Set())
+  }
+  conversationSubscriptions.get(conversationId)!.add(callback)
+
+  // Return unsubscribe function
+  return () => {
+    const callbacks = conversationSubscriptions.get(conversationId)
+    if (callbacks) {
+      callbacks.delete(callback)
+      if (callbacks.size === 0) {
+        conversationSubscriptions.delete(conversationId)
+        socket?.emit("leave:conversation", conversationId)
+      }
+    }
+  }
+}
+
+/**
+ * Start typing indicator for private conversation
+ */
+export function startPrivateTyping(conversationId: string): void {
+  socket?.emit("private:startTyping", conversationId)
+}
+
+/**
+ * Stop typing indicator for private conversation
+ */
+export function stopPrivateTyping(conversationId: string): void {
+  socket?.emit("private:stopTyping", conversationId)
+}
+
+/**
+ * Mark messages as read in private conversation
+ */
+export function markPrivateMessagesRead(conversationId: string, messageIds: string[]): void {
+  socket?.emit("private:markRead", conversationId, messageIds)
+}
+
 // === App State Management ===
 
 /**
@@ -380,6 +488,9 @@ async function handleAppStateChange(state: AppStateStatus): Promise<void> {
       chatSubscriptions.forEach((_, chatGroupId) => {
         socket?.emit("join:chat", chatGroupId)
       })
+      conversationSubscriptions.forEach((_, conversationId) => {
+        socket?.emit("join:conversation", conversationId)
+      })
     }
   } else {
     // App went to background, disconnect to save battery
@@ -408,4 +519,7 @@ export type {
   ChatMessageCallback,
   ChatTypingCallback,
   ChatReactionCallback,
+  PrivateMessageCallback,
+  PrivateTypingCallback,
+  PrivateReadCallback,
 }

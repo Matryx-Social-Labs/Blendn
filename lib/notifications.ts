@@ -2,8 +2,9 @@ import Constants from 'expo-constants'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
-import { supabase } from './supabase'
 import { router } from 'expo-router'
+import { apiClient, TokenStorage } from './apiClient'
+import { Logger } from './logger'
 
 // Configure how notifications are handled when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -38,123 +39,111 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   if (Device.isDevice) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync()
     let finalStatus = existingStatus
-    
+
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync()
       finalStatus = status
     }
-    
+
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!')
+      Logger.warn('notifications', 'Push notification permission not granted')
       return null
     }
-    
+
     try {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
       if (!projectId) {
-        console.warn('Project ID not found - using fallback for development')
-        // Return a dummy token for development/simulator testing
+        Logger.warn('notifications', 'Project ID not found - using dev token')
         return 'development-token-' + Math.random().toString(36).substr(2, 9)
       }
-      
+
       token = (await Notifications.getExpoPushTokenAsync({
         projectId,
       })).data
-      
-      console.log('Got push token:', token)
+
+      Logger.info('notifications', 'Got push token', { token: token.substring(0, 20) + '...' })
     } catch (error) {
-      console.error('Error getting push token:', error)
-      // Return a dummy token for development/simulator testing
-      console.log('Using development token for simulator/testing')
+      // This is expected if APS entitlement is missing (dev builds without push capability)
+      Logger.warn('notifications', 'Push token unavailable (expected in dev builds)', { error: String(error).substring(0, 100) })
       return 'development-token-' + Math.random().toString(36).substr(2, 9)
     }
   } else {
-    console.log('Must use physical device for Push Notifications - using development token')
-    // Return a dummy token for simulator testing
+    Logger.debug('notifications', 'Using simulator token')
     return 'simulator-token-' + Math.random().toString(36).substr(2, 9)
   }
 
   return token
 }
 
-// Save push token to user profile in Supabase
+// Save push token to backend
 export async function savePushTokenToProfile(token: string): Promise<boolean> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await TokenStorage.getUser()
     if (!user) {
-      console.error('No authenticated user found')
+      Logger.warn('notifications', 'No authenticated user found for push token')
       return false
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ push_token: token })
-      .eq('id', user.id)
+    const platform = Platform.OS === 'ios' ? 'ios' : 'android'
+    const result = await apiClient.registerPushToken(token, platform)
 
-    if (error) {
-      console.error('Error saving push token:', error)
+    if (result.success) {
+      Logger.info('notifications', 'Push token registered successfully', { token: token.substring(0, 20) + '...' })
+      return true
+    } else {
+      Logger.error('notifications', 'Failed to register push token', { error: result.error })
       return false
     }
-
-    console.log('Push token saved successfully')
-    return true
   } catch (error) {
-    console.error('Error saving push token:', error)
+    Logger.error('notifications', 'Error saving push token', { error })
     return false
   }
+}
+
+// Store current push token for removal on logout
+let currentPushToken: string | null = null
+
+export function setCurrentPushToken(token: string | null) {
+  currentPushToken = token
 }
 
 // Remove push token when user logs out
 export async function removePushTokenFromProfile(): Promise<boolean> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return true // No user, nothing to remove
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ push_token: null })
-      .eq('id', user.id)
-
-    if (error) {
-      console.error('Error removing push token:', error)
-      return false
+    if (!currentPushToken) {
+      Logger.debug('notifications', 'No push token to remove')
+      return true
     }
 
-    console.log('Push token removed successfully')
-    return true
+    const result = await apiClient.removePushToken(currentPushToken)
+
+    if (result.success) {
+      Logger.info('notifications', 'Push token removed successfully')
+      currentPushToken = null
+      return true
+    } else {
+      Logger.warn('notifications', 'Failed to remove push token', { error: result.error })
+      // Clear local reference anyway
+      currentPushToken = null
+      return false
+    }
   } catch (error) {
-    console.error('Error removing push token:', error)
+    Logger.error('notifications', 'Error removing push token', { error })
+    currentPushToken = null
     return false
   }
 }
 
 // Send a notification to a specific user (for backend use)
+// Note: This is typically handled server-side, not from the mobile app
 export async function sendNotificationToUser(
-  userId: string, 
+  userId: string,
   notification: NotificationData
 ): Promise<boolean> {
-  try {
-    // Use SECURITY DEFINER RPC to bypass RLS safely
-    const { error } = await supabase.rpc('create_notification_json', {
-      payload: {
-        user_id: userId,
-        type: notification.type,
-        title: notification.title,
-        body: notification.body,
-        data: notification.data || {},
-      }
-    })
-
-    if (error) {
-      console.error('Error creating notification record:', error)
-      return false
-    }
-
-    return true
-  } catch (error) {
-    console.error('Error sending notification:', error)
-    return false
-  }
+  // Notifications are handled by the backend via Socket.io or push services
+  // This function is a stub for compatibility
+  Logger.debug('notifications', 'sendNotificationToUser called (handled by backend)', { userId, type: notification.type })
+  return true
 }
 
 // Helper functions for specific notification types
@@ -211,7 +200,7 @@ export function setupNotificationListener(
   onNotificationReceived?: (notification: Notifications.Notification) => void
 ) {
   const subscription = Notifications.addNotificationReceivedListener(notification => {
-    console.log('Notification received:', notification)
+    Logger.debug('notifications', 'Notification received', { id: notification.request.identifier })
     onNotificationReceived?.(notification)
   })
 
@@ -223,7 +212,7 @@ export function setupNotificationResponseListener(
   onNotificationResponse?: (response: Notifications.NotificationResponse) => void
 ) {
   const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-    console.log('Notification response:', response)
+    Logger.debug('notifications', 'Notification tapped', { id: response.notification.request.identifier })
     onNotificationResponse?.(response)
     
     // Handle navigation based on notification data
@@ -268,14 +257,20 @@ export function setupNotificationResponseListener(
 export async function initializePushNotifications(): Promise<string | null> {
   try {
     const token = await registerForPushNotificationsAsync()
-    
-    if (token && !token.startsWith('development-token-') && !token.startsWith('simulator-token-')) {
-      await savePushTokenToProfile(token)
+
+    if (token) {
+      // Store token for removal on logout
+      setCurrentPushToken(token)
+
+      // Only register real tokens with the backend
+      if (!token.startsWith('development-token-') && !token.startsWith('simulator-token-')) {
+        await savePushTokenToProfile(token)
+      }
     }
-    
+
     return token
   } catch (error) {
-    console.error('Error initializing push notifications:', error)
+    Logger.error('notifications', 'Error initializing push notifications', { error })
     return null
   }
 } 

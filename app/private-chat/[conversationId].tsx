@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Audio } from 'expo-av'
-import * as FileSystem from 'expo-file-system'
+import { Audio } from 'expo-av'  // Keep for VoiceNote component
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -20,35 +19,51 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import OptimizedImage from '../../components/OptimizedImage'
-import { NotificationHelpers } from '../../lib/notifications'
-import { pickImage, uploadPhoto } from '../../lib/photoUtils'
+import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
-import { callRpc, supabase } from '../../lib/supabase'
+import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, PrivateMessageCallback } from '../../lib/socketClient'
+import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 
 interface PrivateMessage {
-  message_id: string
-  sender_id: string
-  message_text: string
-  created_at: string
-  updated_at: string
+  id: string
+  conversationId: string
+  senderId: string
+  sender: { id: string; name: string | null; image: string | null }
+  text: string | null
+  mediaUrl: string | null
+  mediaType: string | null
+  isRead: boolean
+  createdAt: string
 }
 
 type ChatListItem =
   | ({ kind: 'message' } & PrivateMessage)
   | { kind: 'separator'; id: string; label: string }
 
+// Helper to map API response to local message format
+const mapMessage = (msg: any): PrivateMessage => ({
+  id: msg.id,
+  conversationId: msg.conversationId,
+  senderId: msg.senderId,
+  sender: msg.sender,
+  text: msg.text,
+  mediaUrl: msg.mediaUrl,
+  mediaType: msg.mediaType,
+  isRead: msg.isRead,
+  createdAt: msg.createdAt,
+})
+
 export default function PrivateChat() {
   const { conversationId, otherUserName, otherUserId } = useLocalSearchParams()
+  const { user: authUser } = useAuth()
   const [messages, setMessages] = useState<PrivateMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
   const insets = useSafeAreaInsets()
-  const [isRecording, setIsRecording] = useState(false)
-  const [recording, setRecording] = useState<Audio.Recording | null>(null)
 
   const getInitials = (name: string) => {
     if (!name) return '?'
@@ -63,7 +78,7 @@ export default function PrivateChat() {
 
   useEffect(() => {
     initializeChat()
-  }, [conversationId])
+  }, [conversationId, authUser])
 
   useEffect(() => {
     if (!conversationId) return
@@ -73,10 +88,7 @@ export default function PrivateChat() {
 
   const initializeChat = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      setCurrentUser(user)
-
-      if (user && conversationId) {
+      if (authUser && conversationId) {
         await loadMessages()
       }
     } catch (error) {
@@ -89,71 +101,55 @@ export default function PrivateChat() {
 
   const loadMessages = async () => {
     try {
-      // Respect centralized routing; if unauthenticated, skip work silently
-      if (!currentUser) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          return
-        }
-      }
-      const { data, error } = await supabase.rpc('get_private_conversation_messages', {
-        p_conversation_id: conversationId,
-        p_limit: 50,
-        p_offset: 0
-      })
+      Logger.info('private-chat', 'Loading messages', { conversationId })
+      const result = await apiClient.getConversationMessages(String(conversationId))
 
-      if (error) {
-        console.error('Error loading messages:', error)
-        return
+      if (result.success && result.data) {
+        // Messages come in reverse order (newest first), reverse for display
+        const msgs = result.data.messages.map(mapMessage).reverse()
+        setMessages(msgs)
+        Logger.info('private-chat', `Loaded ${msgs.length} messages`)
+      } else {
+        Logger.error('private-chat', 'Failed to load messages', { error: result.error })
       }
 
-      // Reverse to show oldest first
-      setMessages((data || []).reverse())
-      // Mark as read now that the user has viewed
+      // Mark as read when viewing
       if (conversationId) {
         setConversationLastRead(String(conversationId)).catch(() => {})
       }
-      setTimeout(() => scrollToBottom(), 100)
     } catch (error) {
-      console.error('Failed to load messages:', error)
+      Logger.error('private-chat', 'Failed to load messages', { error })
     }
   }
 
-  const subscribeToMessages = () => {
-    // Subscribe to real-time message updates
-    const channel = supabase
-      .channel(`private_messages_${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'private_messages',
-          filter: `conversation_id=eq.${conversationId}`
-        },
-        (payload) => {
-          const row: any = payload.new
-          const newMessage: PrivateMessage = {
-            message_id: row.id,
-            sender_id: row.sender_id,
-            message_text: row.message_text,
-            created_at: row.created_at,
-            updated_at: row.updated_at || row.created_at,
-          }
-          setMessages(prev => {
-            const exists = prev.some(m => m.message_id === newMessage.message_id)
-            if (exists) return prev
-            return [...prev, newMessage]
-          })
-          setTimeout(() => scrollToBottom(), 100)
+  const subscribeToMessages = useCallback(() => {
+    if (!conversationId) return () => {}
+
+    Logger.info('private-chat', `Subscribing to conversation: ${conversationId}`)
+
+    const handleNewMessage: PrivateMessageCallback = (data) => {
+      Logger.debug('private-chat', 'Received new message via socket', { messageId: data.message.id })
+
+      // Add new message to the list
+      setMessages(prev => {
+        // Check if message already exists
+        if (prev.some(m => m.id === data.message.id)) {
+          return prev
         }
-      )
-      .subscribe()
+        return [...prev, mapMessage(data.message)]
+      })
+
+      // Scroll to bottom
+      setTimeout(scrollToBottom, 100)
+    }
+
+    const unsubscribe = subscribeToConversation(String(conversationId), handleNewMessage)
 
     return () => {
-      supabase.removeChannel(channel)
+      Logger.debug('private-chat', `Unsubscribing from conversation: ${conversationId}`)
+      unsubscribe()
     }
-  }
+  }, [conversationId])
 
   const scrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {
@@ -162,69 +158,35 @@ export default function PrivateChat() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !currentUser) return
+    if (!newMessage.trim() || sending || !authUser || !conversationId) return
 
-    setSending(true)
     const messageText = newMessage.trim()
     setNewMessage('')
-
-    // Optimistic UI
-    const optimistic: PrivateMessage = {
-      message_id: `temp-${Date.now()}`,
-      sender_id: currentUser.id,
-      message_text: messageText,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-    setMessages(prev => [...prev, optimistic])
-    setTimeout(() => scrollToBottom(), 50)
+    setSending(true)
 
     try {
-      const { data, error } = await callRpc('send_private_message', {
-        p_conversation_id: conversationId,
-        p_message_text: messageText
-      })
+      Logger.info('private-chat', 'Sending message')
+      const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
 
-      if (error) {
-        console.error('Error sending message:', error)
-        Alert.alert('Error', 'Failed to send message')
-        // Rollback optimistic
-        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
-        setNewMessage(messageText)
-        return
-      }
-
-      const result = Array.isArray(data) ? data[0] : data
-      if (!result?.success) {
-        Alert.alert('Error', result?.message || 'Failed to send message')
-        // Rollback optimistic
-        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
-        setNewMessage(messageText)
-        return
-      }
-
-      // Notification (best-effort)
-      try {
-        const { data: senderProfile } = await supabase
-          .from('user_profiles')
-          .select('display_name')
-          .eq('user_id', currentUser.id)
-          .single()
-        const senderName = senderProfile?.display_name || 'Someone'
-        await NotificationHelpers.messageNotification(
-          senderName,
-          messageText,
-          otherUserId as string,
-          conversationId as string
-        )
-      } catch (notificationError) {
-        console.error('Failed to send message notification:', notificationError)
+      if (result.success && result.data) {
+        Logger.info('private-chat', 'Message sent successfully', { messageId: result.data.id })
+        // Add to local messages (socket might also deliver it, handled by dedup)
+        setMessages(prev => {
+          if (prev.some(m => m.id === result.data!.id)) {
+            return prev
+          }
+          return [...prev, mapMessage(result.data)]
+        })
+        setTimeout(scrollToBottom, 100)
+      } else {
+        Logger.error('private-chat', 'Failed to send message', { error: result.error })
+        Alert.alert('Error', 'Failed to send message. Please try again.')
+        setNewMessage(messageText) // Restore message
       }
     } catch (error) {
-      console.error('Failed to send message:', error)
-      // Rollback optimistic
-      setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
-      setNewMessage(messageText)
+      Logger.error('private-chat', 'Failed to send message', { error })
+      Alert.alert('Error', 'Failed to send message. Please try again.')
+      setNewMessage(messageText) // Restore message
     } finally {
       setSending(false)
     }
@@ -252,8 +214,8 @@ export default function PrivateChat() {
   }
 
   const renderMessage = ({ item }: { item: PrivateMessage }) => {
-    const isCurrentUser = item.sender_id === currentUser?.id
-    
+    const isCurrentUser = item.senderId === authUser?.id
+
     const handleMessageLongPress = () => {
       if (!isCurrentUser) {
         Alert.alert(
@@ -263,7 +225,7 @@ export default function PrivateChat() {
             {
               text: 'Report Message',
               onPress: () => {
-                showMessageReportOptions(item.message_id, 'private')
+                showMessageReportOptions(item.id, 'private')
               }
             },
             {
@@ -274,10 +236,12 @@ export default function PrivateChat() {
         )
       }
     }
-    
-    // Simple type inference from URL for media
-    const lower = String(item.message_text || '').toLowerCase()
-    const isImage = lower.startsWith('http') && /(\.jpg|\.jpeg|\.png|\.webp)$/i.test(lower)
+
+    // Check for media
+    const hasImage = item.mediaType === 'image' && item.mediaUrl
+    const hasVideo = item.mediaType === 'video' && item.mediaUrl
+    // Check for audio in text (legacy support)
+    const lower = String(item.text || '').toLowerCase()
     const isAudio = lower.startsWith('http') && /(\.m4a|\.mp3|\.aac|\.wav|\.ogg)$/i.test(lower)
 
     return (
@@ -289,7 +253,7 @@ export default function PrivateChat() {
       >
         {!isCurrentUser && (
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(String(otherUserName || 'User'))}</Text>
+            <Text style={styles.avatarText}>{getInitials(String(item.sender?.name || otherUserName || 'User'))}</Text>
           </View>
         )}
         <View style={[styles.messageContainer, isCurrentUser ? styles.myMessageContainer : styles.otherMessageContainer]}>
@@ -297,20 +261,20 @@ export default function PrivateChat() {
             styles.messageBubble,
             isCurrentUser ? styles.myMessageBubble : styles.otherMessageBubble
           ]}>
-            {isImage ? (
+            {hasImage ? (
               <OptimizedImage
-                source={item.message_text}
+                source={item.mediaUrl!}
                 style={{ width: 220, height: 160, borderRadius: 14 }}
                 contentFit="cover"
               />
             ) : isAudio ? (
-              <VoiceNote uri={item.message_text} />
+              <VoiceNote uri={item.text!} />
             ) : (
               <Text style={[
                 styles.messageText,
                 isCurrentUser ? styles.myMessageText : styles.otherMessageText
               ]}>
-                {item.message_text}
+                {item.text || ''}
               </Text>
             )}
           </View>
@@ -318,7 +282,7 @@ export default function PrivateChat() {
             styles.messageTime,
             isCurrentUser ? styles.myMessageTime : styles.otherMessageTime
           ]}>
-            {formatTime(item.created_at)}
+            {formatTime(item.createdAt)}
           </Text>
         </View>
       </TouchableOpacity>
@@ -356,9 +320,9 @@ export default function PrivateChat() {
     const items: ChatListItem[] = []
     let lastDayKey: string | null = null
     for (const m of messages) {
-      const dayKey = toDayKey(m.created_at)
+      const dayKey = toDayKey(m.createdAt)
       if (dayKey !== lastDayKey) {
-        items.push({ kind: 'separator', id: `sep-${dayKey}`, label: formatDayLabel(m.created_at) })
+        items.push({ kind: 'separator', id: `sep-${dayKey}`, label: formatDayLabel(m.createdAt) })
         lastDayKey = dayKey
       }
       items.push({ kind: 'message', ...m })
@@ -453,7 +417,7 @@ export default function PrivateChat() {
           <FlatList
             ref={flatListRef}
             data={chatItems}
-            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
+            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.id}
             renderItem={renderChatItem}
             style={styles.messagesList}
             contentContainerStyle={styles.messagesContainer}
@@ -464,21 +428,8 @@ export default function PrivateChat() {
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputIcon} onPress={async () => {
-            if (!currentUser) return
-            try {
-              const picked = await pickImage('library')
-              if (!picked || picked.canceled) return
-              const asset = picked.assets[0]
-              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`, 'chat-media')
-              if (result.success && (result.url || result.path)) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.url || result.path) })
-              } else {
-                Alert.alert('Upload failed', result.error || 'Could not upload image')
-              }
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Failed to send image')
-            }
+          <TouchableOpacity style={styles.inputIcon} onPress={() => {
+            Alert.alert('Coming Soon', 'File attachments will be available soon.')
           }}>
             <Ionicons name="attach" size={22} color="#CFCFCF" />
           </TouchableOpacity>
@@ -486,90 +437,21 @@ export default function PrivateChat() {
             style={styles.textInput}
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder=""
-            placeholderTextColor="rgba(255,255,255,0.6)"
+            placeholder="Type a message..."
+            placeholderTextColor="rgba(255,255,255,0.4)"
             multiline
             maxLength={1000}
             editable={!sending}
           />
-          <TouchableOpacity style={styles.inputIcon} onPress={async () => {
-            if (!currentUser) return
-            try {
-              const picked = await pickImage('camera')
-              if (!picked || picked.canceled) return
-              const asset = picked.assets[0]
-              const result = await uploadPhoto(asset.uri, currentUser.id, `pm_${conversationId}_${Date.now()}.jpg`, 'chat-media')
-              if (result.success && (result.url || result.path)) {
-                await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: (result.url || result.path) })
-              } else {
-                Alert.alert('Upload failed', result.error || 'Could not upload image')
-              }
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Failed to send image')
-            }
+          <TouchableOpacity style={styles.inputIcon} onPress={() => {
+            Alert.alert('Coming Soon', 'Photo sharing will be available soon.')
           }}>
             <Ionicons name="camera" size={22} color="#CFCFCF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.inputIcon} onPress={async () => {
-            if (isRecording) {
-              try {
-                await recording?.stopAndUnloadAsync()
-                const uri = recording ? recording.getURI() : null
-                setIsRecording(false)
-                setRecording(null)
-                if (uri && currentUser) {
-                  try {
-                    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
-                    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-                    const { data: { session } } = await supabase.auth.getSession()
-                    if (!supabaseUrl || !supabaseAnonKey || !session?.access_token) throw new Error('Missing config')
-                    const fileName = `voice_${conversationId}_${Date.now()}.m4a`
-                    const path = `${currentUser.id}/${fileName}`
-                    const bucket = 'chat-media'
-                    const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
-                    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-                      httpMethod: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'apikey': supabaseAnonKey,
-                        'Content-Type': 'audio/m4a',
-                        'x-upsert': 'false',
-                      },
-                      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-                    })
-                    if (result.status >= 200 && result.status < 300) {
-                      const publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
-                      await callRpc('send_private_message', { p_conversation_id: conversationId, p_message_text: publicUrl })
-                    } else {
-                      Alert.alert('Upload failed', `HTTP ${result.status}`)
-                    }
-                  } catch (e: any) {
-                    Alert.alert('Error', e?.message || 'Failed to upload audio')
-                  }
-                }
-              } catch (e: any) {
-                setIsRecording(false)
-                setRecording(null)
-              }
-            } else {
-              try {
-                const { status } = await Audio.requestPermissionsAsync()
-                if (status !== 'granted') {
-                  Alert.alert('Permission required', 'Microphone access is needed to record voice notes')
-                  return
-                }
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
-                const rec = new Audio.Recording()
-                await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
-                await rec.startAsync()
-                setRecording(rec)
-                setIsRecording(true)
-              } catch (e: any) {
-                Alert.alert('Error', e?.message || 'Failed to start recording')
-              }
-            }
+          <TouchableOpacity style={styles.inputIcon} onPress={() => {
+            Alert.alert('Coming Soon', 'Voice notes will be available soon.')
           }}>
-            <Ionicons name={isRecording ? 'stop' : 'mic'} size={22} color="#CFCFCF" />
+            <Ionicons name="mic" size={22} color="#CFCFCF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[
