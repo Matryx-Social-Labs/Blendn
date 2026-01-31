@@ -7,9 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
+import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
-import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/useAuth'
 const placeholderImg = require('../../assets/images/icon.png')
 
@@ -45,59 +45,40 @@ export default function Profile() {
 
   const getUserAndProfile = async () => {
     try {
-      console.log('🔍 [PROFILE] Loading profile for user:', user?.id);
+      console.log('[PROFILE] Loading profile for user:', user?.id);
       setLoading(true)
       setError(null)
 
-      // Load core profile
-      const { data: baseProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, name, age, location')
-        .eq('id', user.id)
-        .single()
+      const result = await apiClient.getProfile(user.id)
 
-      if (profileError) {
-        console.error('❌ [PROFILE] Error fetching profile:', profileError)
+      if (!result.success || !result.data) {
+        console.error('[PROFILE] Error fetching profile:', result.error)
         setError('Failed to load profile')
         return
       }
-      
-      if (!baseProfile) {
-        console.log('⚠️ [PROFILE] No profile found')
-        setError('Profile not found')
-        return
-      }
-      
-      // Load extended onboarding details
-      const { data: userProfile, error: userProfileError } = await supabase
-        .from('user_profiles')
-        .select('bio, interests, profile_photos, photos, goals, looking_for')
-        .eq('user_id', user.id)
-        .single()
 
-      if (userProfileError) {
-        console.warn('⚠️ [PROFILE] user_profiles fetch warning:', userProfileError.message)
-      }
+      const data = result.data
+      const profileData = data.profile || {}
 
       const viewModel: UserProfileViewModel = {
-        id: baseProfile.id,
-        name: baseProfile.name ?? undefined,
-        age: baseProfile.age ?? undefined,
-        location: (baseProfile as any)?.location ?? undefined,
-        bio: userProfile?.bio ?? undefined,
-        interests: userProfile?.interests ?? undefined,
-        profile_photos: (userProfile?.profile_photos && userProfile.profile_photos.length > 0)
-          ? userProfile.profile_photos
-          : (userProfile?.photos && userProfile.photos.length > 0 ? userProfile.photos : undefined),
-        goals: userProfile?.goals ?? undefined,
-        looking_for: userProfile?.looking_for ?? undefined,
+        id: data.id,
+        name: data.name ?? profileData.name ?? undefined,
+        age: profileData.age ?? undefined,
+        location: profileData.location ?? undefined,
+        bio: profileData.bio ?? undefined,
+        interests: profileData.interests ?? undefined,
+        profile_photos: (profileData.profile_photos && profileData.profile_photos.length > 0)
+          ? profileData.profile_photos
+          : (profileData.photos && profileData.photos.length > 0 ? profileData.photos : undefined),
+        goals: profileData.goals ?? undefined,
+        looking_for: profileData.looking_for ?? undefined,
       }
 
-      console.log('✅ [PROFILE] Profile loaded successfully')
+      console.log('[PROFILE] Profile loaded successfully')
       setProfile(viewModel)
 
     } catch (error) {
-      console.error('💥 [PROFILE] Unexpected error:', error)
+      console.error('[PROFILE] Unexpected error:', error)
       setError('Failed to load profile')
     } finally {
       setLoading(false)
@@ -106,17 +87,17 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     try {
-      console.log('🔐 [PROFILE] Signing out...')
-              const { error } = await supabase.auth.signOut()
-              if (error) {
-        console.error('❌ [PROFILE] Sign out error:', error)
-                Alert.alert('Error', 'Failed to sign out')
+      console.log('[PROFILE] Signing out...')
+      const result = await apiClient.signOut()
+      if (!result.success) {
+        console.error('[PROFILE] Sign out error:', result.error)
+        Alert.alert('Error', 'Failed to sign out')
       } else {
-        console.log('✅ [PROFILE] Signed out successfully')
+        console.log('[PROFILE] Signed out successfully')
         // Central router handles navigation
       }
     } catch (error) {
-      console.error('💥 [PROFILE] Sign out error:', error)
+      console.error('[PROFILE] Sign out error:', error)
       Alert.alert('Error', 'Failed to sign out')
     }
   }

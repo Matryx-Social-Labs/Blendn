@@ -10,50 +10,20 @@ import {
 } from 'react-native'
 import PhotoManager from '../../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
-import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 export default function Photos() {
+  const { user, loading: authLoading } = useAuth()
   const [photos, setPhotos] = useState<string[]>([])
-  const [currentUser, setCurrentUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-
-  React.useEffect(() => {
-    loadCurrentUser()
-  }, [])
-
-  const loadCurrentUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        Alert.alert('Error', 'Please sign in to continue')
-        return
-      }
-      setCurrentUser(user)
-    } catch (error) {
-      console.error('OnboardingPhotos: Load user error', { error })
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [loading, setLoading] = useState(false)
 
   const handlePhotosChange = (newPhotos: string[]) => {
     setPhotos(newPhotos)
   }
 
   const handleContinue = async () => {
-    // Save photos to user_profiles
-    if (photos.length > 0 && currentUser) {
-      try {
-        await supabase
-          .from('user_profiles')
-          .update({ profile_photos: photos })
-          .eq('user_id', currentUser.id)
-        console.log('OnboardingPhotos: Photos saved', { userId: currentUser.id, count: photos.length })
-      } catch (error) {
-        console.error('OnboardingPhotos: Save photos error', { error })
-      }
-    }
-    // Next: Location permissions step
+    // Photos are saved by PhotoManager component directly
+    // Just navigate to next step
     router.push('./location' as any)
   }
 
@@ -67,7 +37,7 @@ export default function Photos() {
   }
 
   const renderPhotoSection = () => {
-    if (loading || !currentUser) {
+    if (authLoading || !user) {
       return (
         <View>
           <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
@@ -78,7 +48,7 @@ export default function Photos() {
 
     return (
       <PhotoManager
-        userId={currentUser.id}
+        userId={user.id}
         maxPhotos={6}
         editable={true}
         onPhotosChange={handlePhotosChange}

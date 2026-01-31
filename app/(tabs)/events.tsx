@@ -24,12 +24,25 @@ import NearbyEventCard from '../../components/NearbyEventCard'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
+import { getEvents as fetchEventsApi } from '../../lib/api'
+import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
-import { callRpc, EventChat, EventCheckout, EventInterest, supabase } from '../../lib/supabase'
 import { formatTimeRange as fmtRange, formatEventDateTime } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
 const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
+
+// Helper to calculate distance between two coordinates in km
+const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371 // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  return R * c
+}
 
 interface Event {
   id: string
@@ -124,49 +137,37 @@ export default function Events() {
       }
       
       // Call standardized production check-in RPC
-      const params = {
-        p_event_id: event.id,
-        p_user_id: user.id,
-        p_user_latitude: userLocation.latitude,
-        p_user_longitude: userLocation.longitude,
-        p_gps_accuracy: 50,
-      }
-      Logger.journey('checkin', 'rpc:check_in_to_event_production:call', params)
-      const { data, error } = await callRpc('check_in_to_event_production', {
-          ...params
-        })
+      Logger.journey('checkin', 'api:checkIn:call', { eventId: event.id })
+      const result = await apiClient.checkIn(event.id, {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        deviceInfo: { gpsAccuracy: 50 },
+      })
 
-      if (error) {
-        Logger.error('events', 'RPC error', { error })
-        Alert.alert('Check-in Failed', error.message)
+      if (!result.success) {
+        Logger.error('events', 'Check-in error', { error: result.error })
+        Alert.alert('Check-in Failed', result.error || 'Unknown error')
         return
       }
 
-      if (data?.success) {
-        Logger.journey('checkin', 'success', { eventId: event.id })
-        // Ensure user is in the event chat in the background
-        EventChat.ensureUserInEventChat(event.id, event.title).then((ensured) => {
-          if (ensured?.chatRoomId) {
-            // Optional: guide user directly to the chat
-            Alert.alert(
-              'Success!',
-              'You have been checked in and added to the event chat.',
-              [
-                { text: 'Go to Chat', onPress: () => router.push({ pathname: '/chat/[id]', params: { id: ensured.chatRoomId, roomName: ensured.roomName, eventTitle: event.title } as any }) },
-                { text: 'OK', style: 'default' }
-              ]
-            )
-          } else {
-            Alert.alert('Success!', data.message)
-          }
-        }).catch(() => Alert.alert('Success!', data.message))
-
-        // Refresh the checkin status for this event
-        loadCheckinStatusesBatch()
+      Logger.journey('checkin', 'success', { eventId: event.id })
+      // Get event chat and offer navigation
+      const chatResult = await apiClient.getEventChat(event.id)
+      if (chatResult.success && chatResult.data?.id) {
+        Alert.alert(
+          'Success!',
+          'You have been checked in and added to the event chat.',
+          [
+            { text: 'Go to Chat', onPress: () => router.push({ pathname: '/chat/[id]', params: { id: chatResult.data.id, roomName: chatResult.data.name || 'Event Chat', eventTitle: event.title } as any }) },
+            { text: 'OK', style: 'default' }
+          ]
+        )
       } else {
-        Logger.warn('events', 'Failed', { message: data?.message })
-        Alert.alert('Check-in Failed', data?.message || 'Unknown error')
+        Alert.alert('Success!', 'You have been checked in!')
       }
+
+      // Refresh the checkin status for this event
+      loadCheckinStatusesBatch()
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
       Alert.alert('Error', 'Failed to check in')
@@ -183,15 +184,15 @@ export default function Events() {
       // Optimistic update
       setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
 
-      const res = await EventInterest.toggleInterest(event.id)
-      if (!res) {
+      const result = await apiClient.toggleInterest(event.id)
+      if (!result.success || !result.data) {
         // rollback
         setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
         Alert.alert('Error', 'Failed to update interest')
         return
       }
-      setInterestStatuses(prev => ({ ...prev, [event.id]: res.interested }))
-      Logger.journey('events', res.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
+      setInterestStatuses(prev => ({ ...prev, [event.id]: result.data.interested }))
+      Logger.journey('events', result.data.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch (e) {
       Alert.alert('Error', 'Failed to update interest')
     }
@@ -214,18 +215,16 @@ export default function Events() {
       getCurrentLocationQuietly()
       loadCheckedInEvents()
       fetchUserCity()
-      // Load user avatar
+      // Load user avatar from profile
       ;(async () => {
         try {
-          const { data, error } = await supabase
-            .from('user_profiles')
-            .select('profile_photos, photos')
-            .eq('user_id', user.id)
-            .maybeSingle()
-          if (!error && data) {
-            const primary = (Array.isArray(data.profile_photos) && data.profile_photos[0]) || (Array.isArray(data.photos) && data.photos[0]) || null
+          const result = await apiClient.getProfile(user.id)
+          if (result.success && result.data?.profile) {
+            const profile = result.data.profile
+            const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
+                           (Array.isArray(profile.photos) && profile.photos[0]) ||
+                           result.data.image || null
             if (primary) {
-              // Store path or URL; OptimizedImage will handle signed URLs
               setAvatarUrl(primary)
             } else {
               setAvatarUrl(null)
@@ -256,96 +255,17 @@ export default function Events() {
     }, [user, events.length])
   )
 
-  // Realtime: refresh when this user's check-in rows change
-  useEffect(() => {
-    if (!user) return
-    const channel = supabase
-      .channel(`events_checkins_${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_checkins', filter: `user_id=eq.${user.id}` },
-        () => {
-          loadCheckinStatusesBatch()
-          loadCheckedInEvents()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, events.length])
-
-  // Realtime: update interests when any interest row changes
-  useEffect(() => {
-    if (!user || events.length === 0) return
-    const channel = supabase
-      .channel(`events_interests_${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'event_interests' },
-        (payload: any) => {
-          const affectedEventId = String(payload?.new?.event_id || payload?.old?.event_id || '')
-          if (!affectedEventId) return
-          const isVisible = events.some(e => String(e.id) === affectedEventId)
-          if (!isVisible) return
-
-          const changedUserId = payload?.new?.user_id || payload?.old?.user_id
-          if (changedUserId && changedUserId === user.id) {
-            setInterestStatuses(prev => {
-              if (payload.eventType === 'INSERT') return { ...prev, [affectedEventId]: true }
-              if (payload.eventType === 'DELETE') return { ...prev, [affectedEventId]: false }
-              return prev
-            })
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, events.length])
+  // TODO: Real-time subscriptions will use Socket.io instead of Supabase
+  // For now, we rely on manual refresh and polling
 
   const loadCheckedInEvents = async () => {
     if (!user) return
     try {
       Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
-      // Get active check-ins for this user
-      const { data: checkins, error } = await supabase
-        .from('event_checkins')
-        .select('event_id')
-        .eq('user_id', user.id)
-        .is('checked_out_at', null)
-
-      if (error) {
-        Logger.error('events', 'Error fetching active check-ins', { error })
-        setCheckedInEvents([])
-        return
-      }
-
-      const eventIds = Array.from(new Set((checkins || []).map((c: any) => String(c.event_id)))).filter(Boolean)
-      if (eventIds.length === 0) {
-        Logger.journey('checkin', 'loadActiveCheckins:none')
-        setCheckedInEvents([])
-        return
-      }
-
-      const { data: eventRows, error: eventsError } = await supabase
-        .from('events')
-        .select('*')
-        .in('id', eventIds)
-
-      if (eventsError) {
-        Logger.error('events', 'Error fetching events', { error: eventsError })
-        setCheckedInEvents([])
-        return
-      }
-
-      // Optional: sort by start_time ascending
-      const sorted = (eventRows || []).slice().sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-      setCheckedInEvents(sorted as Event[])
-      Logger.journey('checkin', 'loadActiveCheckins:success', { count: sorted.length })
+      // TODO: Add API endpoint to get user's active check-ins
+      // For now, just set empty array
+      setCheckedInEvents([])
+      Logger.journey('checkin', 'loadActiveCheckins:done')
     } catch (e) {
       Logger.error('events', 'Unexpected error', { error: e as any })
       setCheckedInEvents([])
@@ -374,13 +294,13 @@ export default function Events() {
                 <TouchableOpacity
                   onPress={async () => {
                     try {
-                      const res: any = await EventCheckout.checkoutFromEvent(String(item.id))
-                      if (res?.success) {
-                        Alert.alert('Checked Out', res?.message || 'You have been checked out of this event.')
+                      const result = await apiClient.checkOut(String(item.id))
+                      if (result.success) {
+                        Alert.alert('Checked Out', 'You have been checked out of this event.')
                         loadCheckedInEvents()
                         loadCheckinStatusesBatch()
                       } else {
-                        Alert.alert('Checkout Failed', res?.message || 'Please try again.')
+                        Alert.alert('Checkout Failed', result.error || 'Please try again.')
                       }
                     } catch (e) {
                       Alert.alert('Checkout Failed', 'Please try again.')
@@ -456,33 +376,14 @@ export default function Events() {
 
     try {
       Logger.journey('checkin', 'statusBatch:start', { eventCount: events.length })
-      // Query statuses directly to avoid stale caches when resetting check-ins
-      const { data: rawStatuses, error: statusError } = await supabase
-        .from('event_checkins')
-        .select('event_id, checked_in_at, checked_out_at')
-        .eq('user_id', user.id)
-
-      if (statusError) {
-        throw statusError
-      }
-
-      // Map: checked_in if a row exists for that event where checked_out_at is null
-      const activeMap = new Map<string, boolean>()
-      ;(rawStatuses || []).forEach((row: any) => {
-        const eid = String(row.event_id)
-        const isActive = !row.checked_out_at
-        if (eid && isActive) activeMap.set(eid, true)
-      })
-
-      const results = events.map((ev) => [ev.id, { status: activeMap.get(String(ev.id)) ? 'checked_in' : 'not_checked_in' } as any] as const)
-
+      // TODO: Add API endpoint to get check-in statuses for multiple events
+      // For now, just set all as not checked in
       const statusMap: { [eventId: string]: any } = {}
-      for (const [eventId, status] of results) {
-        statusMap[eventId] = status
-      }
-
+      events.forEach((ev) => {
+        statusMap[ev.id] = { status: 'not_checked_in' }
+      })
       setCheckinStatuses(statusMap)
-      Logger.journey('checkin', 'statusBatch:success', { count: results.length })
+      Logger.journey('checkin', 'statusBatch:done', { count: events.length })
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
       setCheckinStatuses({})
@@ -526,11 +427,22 @@ export default function Events() {
       Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
       
       // Use the actual function that exists: check_user_proximity_status
-      const { data: proximityData, error } = await callRpc('check_user_proximity_status', {
-          p_user_id: user.id,
-          p_user_latitude: userLocation.latitude,
-          p_user_longitude: userLocation.longitude
-        })
+      // TODO: Add API endpoint for proximity check
+      // For now, calculate distance client-side
+      const proximityResults = events.map(event => {
+        if (!event.latitude || !event.longitude) return null
+        const distance = getDistanceKm(userLocation.latitude, userLocation.longitude, event.latitude, event.longitude)
+        const checkInRadius = event.check_in_radius || 0.5 // default 500m
+        return {
+          event_id: event.id,
+          within_radius: distance <= checkInRadius,
+          distance_km: distance,
+          can_check_in: distance <= checkInRadius
+        }
+      }).filter(Boolean)
+
+      const proximityData = { nearby_events: proximityResults }
+      const error = null
 
       if (error) {
         Logger.error('events', 'Error checking proximity', { error })
@@ -560,13 +472,9 @@ export default function Events() {
   const fetchUserCity = async () => {
     try {
       if (!user) return
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('location')
-        .eq('id', user.id)
-        .maybeSingle()
-      if (!error && data?.location) {
-        const firstPart = String(data.location).split(',')[0]?.trim()
+      const result = await apiClient.getProfile(user.id)
+      if (result.success && result.data?.profile?.location) {
+        const firstPart = String(result.data.profile.location).split(',')[0]?.trim()
         if (firstPart) setUserCity(firstPart)
       }
     } catch {}
@@ -579,13 +487,14 @@ export default function Events() {
       setLoading(true)
       setNetError(null)
       Logger.journey('events', 'fetch:start')
-      
-      // Fetch only ongoing or upcoming events from the view
-      const { data: eventsData, error } = await supabase
-        .from('events_now_or_upcoming')
-        .select('*')
-        .order('start_time', { ascending: true })
-        .range(0, PAGE_SIZE - 1)
+
+      // Use the API helper which handles Supabase vs admin backend switching
+      const { data: eventsData, error } = await fetchEventsApi({
+        page: 0,
+        limit: PAGE_SIZE,
+        lat: userLocation?.latitude,
+        lon: userLocation?.longitude,
+      })
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
@@ -611,30 +520,26 @@ export default function Events() {
     try {
       if (loading) return
       Logger.journey('events', 'fetchMore:start', { page: page + 1 })
-      const from = (page + 1) * PAGE_SIZE
-      const to = from + PAGE_SIZE - 1
-      const { data, error } = await supabase
-        .from('events_now_or_upcoming')
-        .select('*')
-        .order('start_time', { ascending: true })
-        .range(from, to)
+      const { data, error } = await fetchEventsApi({
+        page: page + 1,
+        limit: PAGE_SIZE,
+        lat: userLocation?.latitude,
+        lon: userLocation?.longitude,
+      })
       if (error) return
       if (!data || data.length === 0) return
       setEvents(prev => [...prev, ...data])
       setPage(prev => prev + 1)
     } catch {}
-  }, [loading, page])
+  }, [loading, page, userLocation])
 
   const loadInterestData = async () => {
     try {
       if (!user || events.length === 0) return
-      const eventIds = events.map(e => e.id)
-      const userSet = await EventInterest.getUserInterestedEventIds(eventIds)
-      const statuses: { [eventId: string]: boolean } = {}
-      eventIds.forEach(id => {
-        statuses[id] = userSet.has(id)
-      })
-      setInterestStatuses(statuses)
+      // TODO: Add batch API endpoint to get user's interested events
+      // For now, interest statuses are tracked locally via toggleInterest
+      // and will be properly loaded when the API is available
+      Logger.info('events', 'loadInterestData: batch interest loading not yet implemented in API')
     } catch (e) {
       Logger.warn('events', 'loadInterestData failed', { error: e })
       setInterestStatuses({})
@@ -644,9 +549,9 @@ export default function Events() {
   const loadInterestCounts = async () => {
     try {
       if (events.length === 0) return
-      const eventIds = events.map(e => e.id)
-      const counts = await EventInterest.getEventInterestCounts(eventIds)
-      setInterestCounts(counts)
+      // TODO: Add batch API endpoint to get interest counts for events
+      // For now, interest counts will be empty until API is available
+      Logger.info('events', 'loadInterestCounts: batch count loading not yet implemented in API')
     } catch (e) {
       setInterestCounts({})
     }

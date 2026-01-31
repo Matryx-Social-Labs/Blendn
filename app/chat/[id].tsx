@@ -23,8 +23,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AppHeader from '../../components/AppHeader'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
+import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { pickImage, uploadPhoto } from '../../lib/photoUtils'
-import { AuthHelper, callRpc, supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 interface Message {
   message_id: string
@@ -44,6 +46,7 @@ type ChatListItem =
 
 export default function GroupChat() {
   const { id: chatRoomId, roomName, eventTitle } = useLocalSearchParams()
+  const { user: authUser, loading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
@@ -61,13 +64,13 @@ export default function GroupChat() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
   useEffect(() => {
-    if (chatRoomId) {
-      getCurrentUser()
+    if (chatRoomId && authUser && !authLoading) {
+      setCurrentUser(authUser)
       loadParticipantAliases()
       loadMessages()
       subscribeToMessages()
     }
-  }, [chatRoomId])
+  }, [chatRoomId, authUser, authLoading])
 
   // Ensure current user alias is set to "You" after currentUser resolves
   useEffect(() => {
@@ -133,211 +136,88 @@ export default function GroupChat() {
 
   const loadParticipantAliases = async () => {
     try {
-      // Load participants for deterministic anonymous aliases
-      const { data, error } = await supabase
-        .from('chat_participants')
-        .select('user_id, joined_at')
-        .eq('chat_room_id', chatRoomId)
-        .order('joined_at', { ascending: true })
-
-      if (error) {
-        console.error('❌ [CHAT_ALIASES] Error loading participants:', error)
-        return
-      }
-
+      // TODO: Add API endpoint to get chat participants
+      // For now, use a simple mapping based on current user
       const mapping: Record<string, string> = {}
-      ;(data || []).forEach((p: any, idx: number) => {
-        mapping[p.user_id] = `Attendee #${idx + 1}`
-      })
 
-      // Preserve a special alias for current user if we already know it
-      if (currentUser?.id && mapping[currentUser.id]) {
-        mapping[currentUser.id] = 'You'
+      // Mark current user as "You"
+      if (authUser?.id) {
+        mapping[authUser.id] = 'You'
       }
 
       setParticipantAliases(mapping)
-      console.log('✅ [CHAT_ALIASES] Loaded aliases for', Object.keys(mapping).length, 'participants')
+      Logger.info('chat', 'Participant aliases initialized')
     } catch (error) {
-      console.error('💥 [CHAT_ALIASES] Unexpected error:', error)
+      Logger.error('chat', 'Error loading participant aliases', { error })
     }
   }
 
-  const getCurrentUser = async () => {
-    try {
-      console.log('🔍 [CHAT_USER] Getting current user...');
-      
-      // Get authenticated user with fallback
-      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
-      
-      if (error) {
-        console.error('❌ [CHAT_USER] Auth error:', error);
-        return
-      }
-      
-      if (!user) {
-        console.log('⚠️ [CHAT_USER] No authenticated user found');
-        return
-      }
-      
-      console.log('✅ [CHAT_USER] Current user:', user?.id);
-      setCurrentUser(user)
-    } catch (error) {
-      console.error('❌ [CHAT_USER] Error getting current user:', error);
-    }
-  }
+  // getCurrentUser is now handled by useAuth hook - user is set from authUser in useEffect
 
   const loadMessages = async () => {
     try {
-      // Get authenticated user with fallback
-      const { data: { user }, error } = await AuthHelper.getUserWithFallback(3000)
-      
-      if (error) {
-        console.error('❌ [CHAT_MESSAGES] Auth error:', error);
-        return
-      }
-      
-      if (!user) {
-        console.log('⚠️ [CHAT_MESSAGES] No authenticated user found');
+      if (!authUser) {
+        Logger.warn('chat', 'No authenticated user found')
         return
       }
 
-      console.log('🔍 [CHAT_MESSAGES] Loading messages for room:', chatRoomId);
-      console.log('🔍 [CHAT_MESSAGES] User ID:', user.id);
+      Logger.info('chat', `Loading messages for room: ${chatRoomId}`)
 
-      // Load messages
-      const { data, error: messagesError } = await supabase
-        .from('chat_messages')
-        .select(`
-          id,
-          sender_id,
-          sender_name,
-          message_text,
-          message_type,
-          reply_to_message_id,
-          is_edited,
-          created_at
-        `)
-        .eq('chat_room_id', chatRoomId)
-        .order('created_at', { ascending: false })
-        .limit(100)
+      // Use API to get chat messages
+      const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 100 })
 
-      if (messagesError) {
-        console.error('❌ [CHAT_MESSAGES] Error loading messages:', messagesError)
-        
-        // If this is an RLS policy error, show a more helpful message
-        if (messagesError.code === '42501' || messagesError.message.includes('policy')) {
-          Alert.alert('Chat Temporarily Unavailable', 'Chat access is temporarily restricted. Please try again later.')
-        } else {
-          Alert.alert('Error', 'Failed to load messages')
+      if (!result.success || !result.data) {
+        Logger.error('chat', 'Error loading messages', { error: result.error })
+        Alert.alert('Error', 'Failed to load messages')
+        return
+      }
+
+      Logger.info('chat', `Successfully loaded ${result.data.length || 0} messages`)
+
+      // Transform data and apply anonymous aliases
+      const transformedMessages = (result.data || []).map((msg: any) => {
+        const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
+        const alias = senderId === 'system'
+          ? 'System'
+          : senderId === authUser?.id
+            ? 'You'
+            : (participantAliases[senderId] || msg.sender_name || msg.senderName || 'Attendee')
+        return {
+          message_id: msg.id || msg.message_id,
+          sender_id: senderId,
+          sender_name: alias,
+          message_text: msg.message_text || msg.content || msg.text || '',
+          message_type: msg.message_type || msg.type || 'text',
+          reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
+          is_edited: msg.is_edited || msg.isEdited || false,
+          created_at: msg.created_at || msg.createdAt,
+          replyTo: undefined as Message | undefined
         }
-      } else {
-        console.log('✅ [CHAT_MESSAGES] Successfully loaded', data?.length || 0, 'messages');
-        
-        // Transform data and apply anonymous aliases
-        const transformedMessages = (data || []).map(msg => {
-          const alias = msg.sender_id === 'system'
-            ? 'System'
-            : (participantAliases[msg.sender_id] || 'Attendee')
-          return {
-            message_id: msg.id,
-            sender_id: msg.sender_id,
-            sender_name: alias,
-            message_text: msg.message_text,
-            message_type: msg.message_type || 'text',
-            reply_to_message_id: msg.reply_to_message_id,
-            is_edited: msg.is_edited || false,
-            created_at: msg.created_at,
-            replyTo: undefined as Message | undefined
-          }
-        });
+      })
 
-        // Link reply messages
-        const messages = transformedMessages.map(msg => ({
-          ...msg,
-          replyTo: msg.reply_to_message_id ? transformedMessages.find(m => m.message_id === msg.reply_to_message_id) : undefined
-        }));
+      // Link reply messages
+      const messagesWithReplies = transformedMessages.map(msg => ({
+        ...msg,
+        replyTo: msg.reply_to_message_id ? transformedMessages.find(m => m.message_id === msg.reply_to_message_id) : undefined
+      }))
 
-        // Reverse to show oldest first
-        setMessages(messages.reverse())
-        setTimeout(() => scrollToBottom(), 100)
-      }
+      // Messages should be in chronological order (oldest first)
+      setMessages(messagesWithReplies)
+      setTimeout(() => scrollToBottom(), 100)
     } catch (error) {
-      console.error('💥 [CHAT_MESSAGES] Unexpected error:', error)
+      Logger.error('chat', 'Unexpected error loading messages', { error })
     } finally {
       setLoading(false)
     }
   }
 
   const subscribeToMessages = () => {
-    console.log('🔍 [REALTIME] Setting up real-time subscription for room:', chatRoomId);
-    
-    // Subscribe to real-time message updates
-    const channel = supabase
-      .channel(`chat_messages_${chatRoomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `chat_room_id=eq.${chatRoomId}`
-        },
-        async (payload) => {
-          console.log('🔍 [REALTIME] New message received:', payload.new);
-          
-          const alias = payload.new.sender_id === 'system'
-            ? 'System'
-            : (participantAliases[payload.new.sender_id] || 'Attendee')
-          const newMessage: Message = {
-            message_id: payload.new.id,
-            sender_id: payload.new.sender_id,
-            sender_name: alias,
-            message_text: payload.new.message_text,
-            message_type: payload.new.message_type || 'text',
-            reply_to_message_id: payload.new.reply_to_message_id,
-            is_edited: payload.new.is_edited || false,
-            created_at: payload.new.created_at,
-            replyTo: payload.new.reply_to_message_id ? messages.find(m => m.message_id === payload.new.reply_to_message_id) : undefined
-          }
-
-          console.log('✅ [REALTIME] Processed new message:', newMessage);
-          
-          // Check if this message is already in our state (to avoid duplicates)
-          setMessages(prev => {
-            // Don't add if message already exists (by ID or by content + timestamp for optimistic updates)
-            const exists = prev.some(msg => 
-              msg.message_id === newMessage.message_id ||
-              (msg.message_text === newMessage.message_text && 
-               msg.sender_id === newMessage.sender_id &&
-               Math.abs(new Date(msg.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 5000) // Within 5 seconds
-            )
-            
-            if (exists) {
-              console.log('🔍 [REALTIME] Message already exists, skipping duplicate');
-              // If it's an optimistic message (temp ID), replace it with the real one
-              return prev.map(msg => 
-                msg.message_id.toString().startsWith('temp-') && 
-                msg.message_text === newMessage.message_text && 
-                msg.sender_id === newMessage.sender_id
-                  ? newMessage // Replace optimistic message with real one
-                  : msg
-              )
-            }
-            
-            // Add new message
-            return [...prev, newMessage]
-          })
-          
-          setTimeout(() => scrollToBottom(), 100)
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔍 [REALTIME] Subscription status:', status);
-      })
+    // TODO: Real-time subscriptions will use Socket.io instead of Supabase
+    // For now, messages are loaded on mount and after sending
+    Logger.info('chat', `Real-time subscription placeholder for room: ${chatRoomId}`)
 
     return () => {
-      console.log('🔍 [REALTIME] Cleaning up subscription');
-      supabase.removeChannel(channel)
+      Logger.info('chat', 'Cleaning up subscription placeholder')
     }
   }
 
@@ -392,11 +272,9 @@ export default function GroupChat() {
     setSending(true)
     const messageText = newMessage.trim()
     let optimisticMessage: Message | null = null
-    
+
     try {
-      console.log('🔍 [SEND_MESSAGE] Sending message to room:', chatRoomId);
-      console.log('🔍 [SEND_MESSAGE] Message text:', messageText);
-      console.log('🔍 [SEND_MESSAGE] Sender ID:', currentUser.id);
+      Logger.info('chat', `Sending message to room: ${chatRoomId}`)
 
       // Create optimistic message to show immediately
       optimisticMessage = {
@@ -417,42 +295,36 @@ export default function GroupChat() {
       setReplyingTo(null) // Clear reply state after sending
       setTimeout(() => scrollToBottom(), 100)
 
-      // Use the database function to send message
-      const { data, error } = await callRpc('send_chat_message', {
-          room_id: chatRoomId,
-          message_text: messageText,
-          message_type: 'text'
-        })
+      // Use API to send message
+      const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text')
 
-      if (error) {
-        console.error('❌ [SEND_MESSAGE] Error sending message:', error)
+      if (!result.success) {
+        Logger.error('chat', 'Error sending message', { error: result.error })
         Alert.alert('Error', 'Failed to send message')
-        throw error // Will be caught by outer catch
-      } else if (data?.success) {
-        console.log('✅ [SEND_MESSAGE] Message sent successfully:', data);
-        
-        // Update the optimistic message with real ID from server
-        setMessages(prev => prev.map(msg => 
-          msg.message_id === optimisticMessage!.message_id 
-            ? { ...msg, message_id: data.message_id }
+        throw new Error(result.error || 'Failed to send message')
+      }
+
+      Logger.info('chat', 'Message sent successfully')
+
+      // Update the optimistic message with real ID from server if available
+      if (result.data?.id) {
+        setMessages(prev => prev.map(msg =>
+          msg.message_id === optimisticMessage!.message_id
+            ? { ...msg, message_id: result.data.id }
             : msg
         ))
-      } else {
-        console.error('❌ [SEND_MESSAGE] Message sending failed:', data?.message)
-        Alert.alert('Error', data?.message || 'Failed to send message')
-        throw new Error(data?.message || 'Failed to send message')
       }
     } catch (error) {
-      console.error('💥 [SEND_MESSAGE] Unexpected error:', error)
-      
+      Logger.error('chat', 'Unexpected error sending message', { error })
+
       // Remove optimistic message if it was created
       if (optimisticMessage) {
         setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage!.message_id))
       }
-      
+
       // Restore the message text
       setNewMessage(messageText)
-      
+
       // Show error if not already shown
       if (!(error instanceof Error) || !error.message?.includes('Failed to send message')) {
         Alert.alert('Error', 'Something went wrong')
@@ -686,11 +558,7 @@ export default function GroupChat() {
                 const asset = picked.assets[0]
                 const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
                 if (result.success && (result.url || result.path)) {
-                  await callRpc('send_chat_message', {
-                    room_id: chatRoomId,
-                    message_text: (result.url || result.path),
-                    message_type: 'image'
-                  })
+                  await apiClient.sendChatMessage(chatRoomId as string, result.url || result.path, 'image')
                 } else {
                   Alert.alert('Upload failed', result.error || 'Could not upload image')
                 }
@@ -722,11 +590,7 @@ export default function GroupChat() {
                 const asset = picked.assets[0]
                 const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat-media')
                 if (result.success && (result.url || result.path)) {
-                  await callRpc('send_chat_message', {
-                    room_id: chatRoomId,
-                    message_text: (result.url || result.path),
-                    message_type: 'image'
-                  })
+                  await apiClient.sendChatMessage(chatRoomId as string, result.url || result.path, 'image')
                 } else {
                   Alert.alert('Upload failed', result.error || 'Could not upload image')
                 }
@@ -748,38 +612,9 @@ export default function GroupChat() {
                   setIsRecording(false)
                   setRecording(null)
                   if (uri && currentUser) {
-                    try {
-                      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
-                      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-                      const { data: { session } } = await supabase.auth.getSession()
-                      if (!supabaseUrl || !supabaseAnonKey || !session?.access_token) throw new Error('Missing config')
-                      const fileName = `voice_${chatRoomId}_${Date.now()}.m4a`
-                      const path = `${currentUser.id}/${fileName}`
-                      const bucket = 'chat-media'
-                      const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
-                      const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-                        httpMethod: 'POST',
-                        headers: {
-                          'Authorization': `Bearer ${session.access_token}`,
-                          'apikey': supabaseAnonKey,
-                          'Content-Type': 'audio/m4a',
-                          'x-upsert': 'false',
-                        },
-                        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-                      })
-                      if (result.status >= 200 && result.status < 300) {
-                        const publicUrl = `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
-                        await callRpc('send_chat_message', {
-                          room_id: chatRoomId,
-                          message_text: publicUrl,
-                          message_type: 'audio'
-                        })
-                      } else {
-                        Alert.alert('Upload failed', `HTTP ${result.status}`)
-                      }
-                    } catch (e: any) {
-                      Alert.alert('Error', e?.message || 'Failed to upload audio')
-                    }
+                    // TODO: Voice note upload needs storage API implementation
+                    // For now, show a message that this feature is coming soon
+                    Alert.alert('Coming Soon', 'Voice note upload will be available soon')
                   }
                 } catch (e: any) {
                   setIsRecording(false)

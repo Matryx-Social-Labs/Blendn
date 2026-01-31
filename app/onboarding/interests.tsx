@@ -8,7 +8,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { apiClient } from '../../lib/apiClient'
+import { useAuth } from '../../lib/useAuth'
 
 const INTERESTS = [
   '🎵 Music', '🎬 Movies', '📚 Reading', '🏃‍♀️ Running', 
@@ -21,6 +22,7 @@ const INTERESTS = [
 ]
 
 export default function Interests() {
+  const { user } = useAuth()
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
 
   const handleInterestToggle = (interest: string) => {
@@ -32,16 +34,17 @@ export default function Interests() {
   }
 
   const handleContinue = async () => {
+    if (!user) {
+      alert('Please sign in to continue')
+      return
+    }
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('Please sign in to continue')
-        return
+      const result = await apiClient.updateProfile(user.id, {
+        interests: selectedInterests,
+      })
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save')
       }
-      await supabase
-        .from('user_profiles')
-        .update({ interests: selectedInterests })
-        .eq('user_id', user.id)
       router.push('./goals' as any)
     } catch (e) {
       console.error(e)

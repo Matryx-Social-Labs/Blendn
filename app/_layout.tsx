@@ -11,7 +11,7 @@ import {
     setupNotificationListener,
     setupNotificationResponseListener
 } from '../lib/notifications';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/apiClient';
 import { useAuth } from '../lib/useAuth';
 
 function BackgroundGradient() {
@@ -89,12 +89,11 @@ export default function RootLayout() {
       // Check onboarding status, fail-closed (treat errors/missing as not onboarded)
       let onboarded = false;
       try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('onboarded')
-          .eq('id', user.id)
-          .maybeSingle();
-        onboarded = !!profile && profile.onboarded === true && !error;
+        const result = await apiClient.getProfile(user.id);
+        if (result.success && result.data) {
+          // The onboarded flag is in the nested profile object
+          onboarded = result.data.profile?.onboarded === true;
+        }
       } catch {
         onboarded = false;
       }

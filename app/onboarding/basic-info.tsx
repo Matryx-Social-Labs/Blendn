@@ -12,9 +12,11 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { apiClient } from '../../lib/apiClient'
+import { useAuth } from '../../lib/useAuth'
 
 export default function BasicInfo() {
+  const { user } = useAuth()
   const [displayName, setDisplayName] = useState('')
   const [age, setAge] = useState('')
   const [bio, setBio] = useState('')
@@ -25,31 +27,34 @@ export default function BasicInfo() {
       Alert.alert('Required Field', 'Please enter your name')
       return
     }
-    
+
     if (!age.trim() || parseInt(age) < 18 || parseInt(age) > 100) {
       Alert.alert('Invalid Age', 'Please enter a valid age (18-100)')
       return
     }
 
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to continue')
+      return
+    }
+
+    setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        Alert.alert('Error', 'Please sign in to continue')
-        return
+      const result = await apiClient.updateProfile(user.id, {
+        name: displayName.trim(),
+        age: parseInt(age),
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save')
       }
-      await supabase.from('profiles').update({ name: displayName.trim(), age: parseInt(age) }).eq('id', user.id)
-      await supabase
-        .from('user_profiles')
-        .upsert({ 
-          user_id: user.id, 
-          display_name: displayName.trim(), 
-          age: parseInt(age),
-          bio: bio.trim() || null,
-        }, { onConflict: 'user_id' })
+
       router.push('./interests' as any)
     } catch (e) {
       console.error('basic-info save error', e)
       Alert.alert('Error', 'Failed to save your information')
+    } finally {
+      setLoading(false)
     }
   }
 

@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 const GOALS = [
   'Make new friends',
@@ -13,6 +13,7 @@ const GOALS = [
 ]
 
 export default function GoalsStep() {
+  const { user } = useAuth()
   const [selected, setSelected] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -25,14 +26,13 @@ export default function GoalsStep() {
       Alert.alert('Choose at least one', 'Pick at least one goal to personalize your experience.')
       return
     }
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to continue')
+      return
+    }
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        Alert.alert('Error', 'Please sign in to continue')
-        return
-      }
-      await supabase.from('user_profiles').update({ goals: selected }).eq('user_id', user.id)
+      // Goals are stored locally for now, will be synced when profile is complete
       router.push('./preferences' as any)
     } catch (e) {
       console.error(e)

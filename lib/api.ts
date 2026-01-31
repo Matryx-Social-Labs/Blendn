@@ -36,7 +36,12 @@ interface EventsParams {
 
 export async function getEvents(params?: EventsParams) {
   if (USE_API_BACKEND) {
-    const result = await apiClient.getEvents(params)
+    // API expects page starting from 1, not 0
+    const apiParams = params ? {
+      ...params,
+      page: (params.page || 0) + 1,
+    } : { page: 1 }
+    const result = await apiClient.getEvents(apiParams)
     if (result.success && result.data) {
       return { data: result.data.events, error: null }
     }

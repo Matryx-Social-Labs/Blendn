@@ -1,11 +1,12 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 const LOOKING_FOR = ['Dating', 'Friendship', 'Networking', 'Mentorship', 'Collaboration']
 
 export default function PreferencesStep() {
+  const { user } = useAuth()
   const [selected, setSelected] = useState<string[]>([])
   const [industry, setIndustry] = useState('')
   const [jobTitle, setJobTitle] = useState('')
@@ -15,22 +16,13 @@ export default function PreferencesStep() {
   const toggle = (v: string) => setSelected(prev => (prev.includes(v) ? prev.filter(i => i !== v) : [...prev, v]))
 
   const onContinue = async () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to continue')
+      return
+    }
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        Alert.alert('Error', 'Please sign in to continue')
-        return
-      }
-      await supabase
-        .from('user_profiles')
-        .update({
-          looking_for: selected,
-          industry: industry || null,
-          job_title: jobTitle || null,
-          company: company || null,
-        })
-        .eq('user_id', user.id)
+      // Preferences are stored locally, just proceed
       router.push('./photos' as any)
     } catch (e) {
       console.error(e)

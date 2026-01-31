@@ -2,21 +2,22 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { apiClient } from '../../lib/apiClient'
+import { useAuth } from '../../lib/useAuth'
 
 export default function LocationStep() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [granted, setGranted] = useState<boolean | null>(null)
 
   const requestPermissionAndSave = async () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to continue')
+      return
+    }
+
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        Alert.alert('Error', 'Please sign in to continue')
-        return
-      }
-
       const servicesEnabled = await Location.hasServicesEnabledAsync()
       if (!servicesEnabled) {
         Alert.alert('Location Disabled', 'Please enable Location Services in your device settings to continue.')
@@ -34,14 +35,9 @@ export default function LocationStep() {
       setGranted(true)
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
 
-      await supabase
-        .from('user_profiles')
-        .update({
-          location_permission_granted: true,
-          location_lat: position.coords.latitude,
-          location_lng: position.coords.longitude,
-        })
-        .eq('user_id', user.id)
+      await apiClient.updateProfile(user.id, {
+        location: `${position.coords.latitude},${position.coords.longitude}`,
+      })
 
       router.push('./complete' as any)
     } catch (error) {

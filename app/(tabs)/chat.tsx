@@ -20,9 +20,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ModernChat from '../../components/ModernChat'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
+import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
-import { callRpc, supabase } from '../../lib/supabase'
 import { computeUnreadCounts, setConversationLastRead } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 
@@ -191,19 +191,16 @@ export default function Chat() {
     const run = async () => {
       try {
         if (!user) { setMyAvatarUrl(null); return }
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('profile_photos, photos')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        const result = await apiClient.getProfile(user.id)
         if (mounted) {
-          if (error) {
-            Logger.warn('chat', 'header avatar fetch failed', { error })
+          if (!result.success || !result.data) {
+            Logger.warn('chat', 'header avatar fetch failed', { error: result.error })
             setMyAvatarUrl(null)
           } else {
-            const primary = Array.isArray(data?.profile_photos) && data.profile_photos.length > 0
-              ? data.profile_photos[0]
-              : (Array.isArray(data?.photos) && data.photos.length > 0 ? data.photos[0] : null)
+            const profile = result.data.profile || {}
+            const primary = Array.isArray(profile.profile_photos) && profile.profile_photos.length > 0
+              ? profile.profile_photos[0]
+              : (Array.isArray(profile.photos) && profile.photos.length > 0 ? profile.photos[0] : result.data.image || null)
             setMyAvatarUrl(primary || null)
           }
         }
@@ -215,47 +212,13 @@ export default function Chat() {
     return () => { mounted = false }
   }, [user])
 
-  // Realtime: update personal chat list when new private_messages arrive
+  // TODO: Realtime subscriptions will use Socket.io instead of Supabase
+  // For now, rely on manual refresh via pull-to-refresh
   useEffect(() => {
     if (!user || activeTab !== 'personal') return
-    const channel = supabase
-      .channel(`personal_chats_${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'private_messages' },
-        (payload: any) => {
-          const row = payload.new
-          if (!row?.conversation_id) return
-          setPersonalChats(prev => {
-            const idx = prev.findIndex(c => c.conversation_id === row.conversation_id)
-            const updatedTime = row.created_at
-            let next = [...prev]
-            if (idx >= 0) {
-              const item = next[idx]
-              const updated = {
-                ...item,
-                last_message: row.message_text,
-                last_message_time: updatedTime,
-                // increment unread only if message is from the other user
-                unread_count: row.sender_id && user?.id && row.sender_id !== user.id
-                  ? (item.unread_count || 0) + 1
-                  : item.unread_count,
-              }
-              next.splice(idx, 1)
-              next = [updated, ...next]
-            } else {
-              // If conversation is not present, refresh the list to auto-add
-              loadPersonalChats(latestLoadIdRef.current).catch(() => {})
-            }
-            return next
-          })
-        }
-      )
-      .subscribe()
-
-    return () => {
-      try { supabase.removeChannel(channel) } catch {}
-    }
+    // Socket.io implementation will go here
+    Logger.info('chat', 'Realtime subscriptions not yet implemented - use pull to refresh')
+    return () => {}
   }, [user, activeTab])
 
   const loadChats = async () => {
@@ -286,13 +249,12 @@ export default function Chat() {
 
   const loadMessageRequests = async (loadId?: number) => {
     try {
-      const [inc, out] = await Promise.all([
-        callRpc('get_incoming_message_requests', { p_user_id: user.id }),
-        callRpc('get_outgoing_message_requests', { p_user_id: user.id }),
-      ])
+      // TODO: Add API endpoint for message requests
+      // For now, return empty arrays
+      Logger.info('chat', 'Message requests API not yet implemented')
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setIncomingRequests(Array.isArray(inc.data) ? inc.data as MessageRequest[] : [])
-        setOutgoingRequests(Array.isArray(out.data) ? out.data as MessageRequest[] : [])
+        setIncomingRequests([])
+        setOutgoingRequests([])
       }
     } catch (e) {
       Logger.error('chat', 'loadMessageRequests failed', { error: e })
@@ -302,87 +264,28 @@ export default function Chat() {
   const loadGroupChats = async (loadId?: number) => {
     try {
       Logger.debug('chat', 'Fetching group chats...')
-      
-      // Get user's chat participants first (they can only see their own)
-      const { data: userParticipations, error: participantError } = await supabase
-        .from('chat_participants')
-        .select('chat_room_id')
-        .eq('user_id', user.id)
 
-      if (participantError) {
-        Logger.error('chat', 'Error fetching user participations', { error: participantError })
+      // Use API to get chat groups
+      const result = await apiClient.getChatGroups()
+
+      if (!result.success || !result.data) {
+        Logger.error('chat', 'Error fetching group chats', { error: result.error })
         if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
         return
       }
 
-      if (!userParticipations || userParticipations.length === 0) {
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
-      }
-
-      // Get chat room details for each participation
-      const chatRoomIds = userParticipations.map(p => p.chat_room_id)
-       const { data: chatRooms, error: roomError } = await supabase
-         .from('chat_rooms')
-         .select(`
-           id,
-           name,
-           event_id,
-           events (
-             title,
-             venue_name,
-             cover_image_url
-           )
-         `)
-        .in('id', chatRoomIds)
-
-      if (roomError) {
-        Logger.error('chat', 'Error fetching chat rooms', { error: roomError })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
-      }
-
-      // Compute participant counts in one batch
-      const { data: counts, error: countError } = await supabase
-        .from('chat_participants')
-        .select('chat_room_id')
-        .in('chat_room_id', chatRoomIds)
-      if (countError) {
-        Logger.warn('chat', 'Could not fetch participant counts', { error: countError })
-      }
-      const countMap = new Map<string, number>()
-      ;(counts || []).forEach((row: any) => {
-        const id = String(row.chat_room_id)
-        countMap.set(id, (countMap.get(id) || 0) + 1)
-      })
-
-      // Fetch latest message per chat room
-      const { data: lastMsgs } = await supabase
-        .from('chat_messages')
-        .select('chat_room_id, message_text, created_at, sender_id')
-        .in('chat_room_id', chatRoomIds)
-        .order('created_at', { ascending: false })
-        .limit(Math.max(chatRoomIds.length * 2, 50))
-
-      const lastByRoom: Record<string, { text: string, time: string }> = {}
-      ;(lastMsgs || []).forEach((m: any) => {
-        if (!lastByRoom[m.chat_room_id]) {
-          lastByRoom[m.chat_room_id] = { text: m.message_text, time: m.created_at }
-        }
-      })
-
-      // Transform the data to match our GroupChat interface
-       const groupChatData: GroupChat[] = chatRooms?.map((room: any) => ({
+      // Transform API response to GroupChat interface
+      const groupChatData: GroupChat[] = (result.data || []).map((room: any) => ({
         chat_room_id: room.id,
-        event_id: room.event_id || '',
-        event_title: room.events?.title || 'Unknown Event',
-        event_venue: room.events?.venue_name || 'Unknown Venue',
-        participant_count: countMap.get(String(room.id)) || 0,
-        event_image: room.events?.cover_image_url || null,
-        last_message: lastByRoom[String(room.id)]?.text,
-        last_message_time: lastByRoom[String(room.id)]?.time,
-         last_sender_name: undefined
-      })) || []
+        event_id: room.event_id || room.eventId || '',
+        event_title: room.event?.title || room.name || 'Unknown Event',
+        event_venue: room.event?.venue_name || room.event?.venueName || 'Unknown Venue',
+        participant_count: room.participant_count || room.participantCount || 0,
+        event_image: room.event?.cover_image_url || room.event?.coverImageUrl || null,
+        last_message: room.last_message?.text || room.lastMessage?.text,
+        last_message_time: room.last_message?.created_at || room.lastMessage?.createdAt,
+        last_sender_name: undefined
+      }))
 
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
@@ -395,129 +298,16 @@ export default function Chat() {
   const loadPersonalChats = async (loadId?: number) => {
     try {
       Logger.debug('chat', 'Fetching personal chats...')
-      
-      // Get only conversations where the current user is part of the match (server-side filter)
-      const { data: conversations, error: conversationError } = await supabase
-        .from('private_conversations')
-        .select(`
-          id,
-          match_id,
-          last_message_at,
-          matches!inner (
-            user1_id,
-            user2_id
-          )
-        `)
-        // Filter on the joined matches table so only the current user's conversations are returned
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`, { foreignTable: 'matches' })
-        .order('last_message_at', { ascending: false })
 
-      if (conversationError) {
-        Logger.error('chat', 'Error fetching conversations', { error: conversationError })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setPersonalChats([])
-        return
+      // TODO: Add API endpoint for personal/private conversations
+      // For now, return empty - private messaging will be implemented later
+      Logger.info('chat', 'Personal chats API not yet implemented')
+
+      if (loadId === undefined || latestLoadIdRef.current === loadId) {
+        setPersonalChats([])
       }
 
-      // Build list of other user IDs, then batch fetch their profiles
-      const conversationList = (conversations || []) as any[]
-      const otherUserIdsSet = new Set<string>()
-      const otherUserIdByConversationId: Record<string, string> = {}
-      const conversationIds: string[] = []
-
-      for (const conversation of conversationList) {
-        const match = Array.isArray(conversation.matches) ? conversation.matches[0] : conversation.matches
-        if (!match) continue
-
-        const isUser1 = match.user1_id === user.id
-        const otherUserId = isUser1 ? match.user2_id : match.user1_id
-        if (otherUserId) {
-          otherUserIdsSet.add(otherUserId)
-          otherUserIdByConversationId[conversation.id] = otherUserId
-        }
-        if (conversation.id) {
-          conversationIds.push(conversation.id)
-        }
-      }
-
-      const otherUserIds = Array.from(otherUserIdsSet)
-
-      // Fetch user profile display names and avatars
-      let profilesById: Record<string, { user_id: string, display_name: string | null, avatar_url: string | null }> = {}
-      if (otherUserIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('user_profiles')
-          .select('user_id, display_name, profile_photos, photos')
-          .in('user_id', otherUserIds)
-
-        if (profilesError) {
-          Logger.error('chat', 'Error fetching user_profiles', { error: profilesError })
-        } else {
-          profilesById = (profiles || []).reduce((acc: Record<string, { user_id: string, display_name: string | null, avatar_url: string | null }>, p: any) => {
-            // Prefer profile_photos first item, then photos first item if present
-            const primaryPhoto = Array.isArray(p?.profile_photos) && p.profile_photos.length > 0
-              ? p.profile_photos[0]
-              : (Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null)
-            acc[p.user_id] = {
-              user_id: p.user_id,
-              display_name: p.display_name ?? null,
-              avatar_url: primaryPhoto,
-            }
-            return acc
-          }, {})
-        }
-      }
-
-      // Fetch the latest message for each conversation (for preview + time)
-      let lastMessageByConversationId: Record<string, { text: string, time: string }> = {}
-      if (conversationIds.length > 0) {
-        const { data: msgs, error: msgErr } = await supabase
-          .from('private_messages')
-          .select('conversation_id, message_text, created_at')
-          .in('conversation_id', conversationIds)
-          .order('created_at', { ascending: false })
-          .limit(Math.max(conversationIds.length * 2, 50))
-
-        if (msgErr) {
-          Logger.error('chat', 'Error fetching last messages', { error: msgErr })
-        } else if (Array.isArray(msgs)) {
-          for (const m of msgs as any[]) {
-            if (!lastMessageByConversationId[m.conversation_id]) {
-              lastMessageByConversationId[m.conversation_id] = {
-                text: m.message_text,
-                time: m.created_at,
-              }
-            }
-          }
-        }
-      }
-
-      const userConversations = conversationList.map((conversation: any) => {
-        const otherUserId = otherUserIdByConversationId[conversation.id]
-        const otherUserProfile = otherUserId ? profilesById[otherUserId] : undefined
-        const lastMeta = lastMessageByConversationId[conversation.id]
-
-        return {
-          conversation_id: conversation.id,
-          other_user_id: otherUserId,
-          other_user_name: otherUserProfile?.display_name || 'User',
-          other_user_avatar: otherUserProfile?.avatar_url || null,
-          last_message: lastMeta?.text,
-          last_message_time: lastMeta?.time || conversation.last_message_at,
-          unread_count: 0,
-        } as PersonalChat
-      })
-
-      try {
-        const counts = await computeUnreadCounts(conversationIds)
-        const withUnread = userConversations.map(c => ({
-          ...c,
-          unread_count: counts[c.conversation_id] || 0,
-        }))
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setPersonalChats(withUnread)
-      } catch {
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setPersonalChats(userConversations)
-      }
-      Logger.info('chat', `Loaded ${userConversations.length} personal chats`)
+      Logger.info('chat', 'Personal chats: feature coming soon')
     } catch (error) {
       Logger.error('chat', 'Error loading personal chats', { error })
       setPersonalChats([])
@@ -794,20 +584,16 @@ export default function Chat() {
                     )}
                     <View style={styles.requestActions}>
                       <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
-                        try { await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'reject' }); loadChats() } catch {}
+                        // TODO: Add API endpoint for message request response
+                        Logger.info('chat', 'Message request reject - API not yet implemented')
+                        loadChats()
                       }}>
                         <Text style={styles.reqBtnText}>Reject</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.reqBtn, styles.reqBtnSpacing, styles.accept]} onPress={async () => {
-                        try {
-                          const { data } = await callRpc('respond_message_request', { p_request_id: r.request_id, p_user_id: user.id, p_action: 'accept' })
-                          const res = Array.isArray(data) ? data[0] : data
-                          loadChats()
-                          if (res?.success && res.conversation_id) {
-                            const nameParam = `?otherUserName=${encodeURIComponent(r.sender_name || 'User')}`
-                            router.push(`/private-chat/${res.conversation_id}${nameParam}`)
-                          }
-                        } catch {}
+                        // TODO: Add API endpoint for message request response
+                        Logger.info('chat', 'Message request accept - API not yet implemented')
+                        loadChats()
                       }}>
                         <Text style={styles.reqBtnText}>Accept</Text>
                       </TouchableOpacity>

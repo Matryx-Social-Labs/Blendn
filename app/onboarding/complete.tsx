@@ -9,16 +9,18 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { apiClient } from '../../lib/apiClient'
+import { useAuth } from '../../lib/useAuth'
 
 export default function Complete() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [animationStep, setAnimationStep] = useState(0)
   const params = useLocalSearchParams()
 
   // Extract photo URLs from route params
-  const photoUrls = params.photoUrls 
-    ? JSON.parse(params.photoUrls as string) 
+  const photoUrls = params.photoUrls
+    ? JSON.parse(params.photoUrls as string)
     : []
 
   useEffect(() => {
@@ -33,54 +35,28 @@ export default function Complete() {
   }, [animationStep])
 
   const handleComplete = async () => {
+    if (!user) {
+      Alert.alert('Error', 'User not found')
+      return
+    }
+
     setLoading(true)
-    
+
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        Alert.alert('Error', 'User not found')
-        return
-      }
-
       // Update the profile to mark as onboarded
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ 
-          onboarded: true,
-        })
-        .eq('id', user.id)
+      const result = await apiClient.updateProfile(user.id, {
+        onboarded: true,
+      })
 
-      if (profileError) {
-        console.error('Profile update error:', profileError)
+      if (!result.success) {
+        console.error('Profile update error:', result.error)
         Alert.alert('Error', 'Failed to complete onboarding')
         return
       }
 
-      // Mark onboarding completion in user_profiles
-      const updates: any = {
-        onboarding_step: 'complete',
-        onboarding_completed_at: new Date().toISOString(),
-      }
-      if (photoUrls && photoUrls.length > 0) {
-        updates.profile_photos = photoUrls
-      }
-      const { error: userProfileError } = await supabase
-        .from('user_profiles')
-        .update(updates)
-        .eq('user_id', user.id)
-
-      if (userProfileError) {
-        console.error('User profile update error:', userProfileError)
-        // Don't fail the onboarding if this fails, just log it
-        console.log('Photo URLs that failed to save:', photoUrls)
-      } else {
-        console.log('Successfully saved profile photos:', photoUrls)
-      }
-
       // Explicit navigation to main tabs
       router.replace('/(tabs)/events')
-      
+
     } catch (error) {
       console.error('Onboarding completion error:', error)
       Alert.alert('Error', 'Something went wrong. Please try again.')
