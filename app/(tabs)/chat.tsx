@@ -25,6 +25,7 @@ import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { computeUnreadCounts, setConversationLastRead } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
+import { subscribeToUserNotifications, PrivateMessageCallback } from '../../lib/socketClient'
 
 interface GroupChat {
   chat_room_id: string
@@ -212,14 +213,49 @@ export default function Chat() {
     return () => { mounted = false }
   }, [user])
 
-  // TODO: Realtime subscriptions will use Socket.io instead of Supabase
-  // For now, rely on manual refresh via pull-to-refresh
+  // Real-time message updates via Socket.io
   useEffect(() => {
-    if (!user || activeTab !== 'personal') return
-    // Socket.io implementation will go here
-    Logger.info('chat', 'Realtime subscriptions not yet implemented - use pull to refresh')
-    return () => {}
-  }, [user, activeTab])
+    if (!user) return
+
+    Logger.info('chat', 'Setting up real-time message subscription')
+
+    const handleNewMessage: PrivateMessageCallback = (data) => {
+      Logger.debug('chat', 'New message received', { conversationId: data.conversationId })
+
+      // Update the conversation in the personal chats list
+      setPersonalChats(prev => {
+        const idx = prev.findIndex(c => c.conversation_id === data.conversationId)
+
+        if (idx === -1) {
+          // New conversation - reload the list to get full details
+          loadPersonalChats()
+          return prev
+        }
+
+        // Update existing conversation
+        const updated = [...prev]
+        const isFromMe = data.message.senderId === user.id
+        updated[idx] = {
+          ...updated[idx],
+          last_message: data.message.text || '[Media]',
+          last_message_time: data.message.createdAt,
+          // Only increment unread if message is from other user
+          unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
+        }
+
+        // Move updated conversation to top
+        const [item] = updated.splice(idx, 1)
+        return [item, ...updated]
+      })
+    }
+
+    const unsubscribe = subscribeToUserNotifications(user.id, handleNewMessage)
+
+    return () => {
+      Logger.debug('chat', 'Cleaning up message subscription')
+      unsubscribe()
+    }
+  }, [user])
 
   const loadChats = async () => {
     if (!user) return

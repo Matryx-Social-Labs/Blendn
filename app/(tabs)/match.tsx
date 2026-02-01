@@ -24,6 +24,7 @@ import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
+import { subscribeToEvent, EventCheckInCallback, EventCheckOutCallback } from '../../lib/socketClient'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
@@ -90,16 +91,51 @@ export default function Match() {
     }, [authUser])
   )
 
-  // TODO: Realtime check-in updates via Socket.io
+  // Real-time check-in/check-out updates via Socket.io
   useEffect(() => {
-    if (!authUser) return
-    // TODO: Socket.io subscription for check-in updates
-    // socket.on('checkin:update', (data) => {
-    //   if (data.userId === authUser.id) loadActiveEventAndAttendees(authUser.id)
-    // })
-    Logger.debug('match', 'TODO: Socket.io check-in subscription')
-    return () => {}
-  }, [authUser])
+    if (!authUser || !eventInfo?.id) return
+
+    Logger.debug('match', `Subscribing to event check-ins: ${eventInfo.id}`)
+
+    // Handle when someone checks into the event
+    const handleCheckIn: EventCheckInCallback = (data) => {
+      if (data.userId === authUser.id) return // Ignore our own check-in
+
+      Logger.debug('match', 'New check-in received', { userId: data.userId, userName: data.userName })
+
+      setAttendees(prev => {
+        // Don't add if already in list
+        if (prev.some(a => a.user_id === data.userId)) return prev
+
+        // Add new attendee at the beginning
+        const newAttendee: AttendeeProfile = {
+          user_id: data.userId,
+          name: data.userName,
+          profile_photos: data.userImage ? [data.userImage] : undefined,
+          last_seen: data.checkInTime,
+        }
+        return [newAttendee, ...prev]
+      })
+    }
+
+    // Handle when someone checks out of the event
+    const handleCheckOut: EventCheckOutCallback = (data) => {
+      if (data.userId === authUser.id) return // Ignore our own check-out
+
+      Logger.debug('match', 'Check-out received', { userId: data.userId })
+
+      setAttendees(prev => prev.filter(a => a.user_id !== data.userId))
+    }
+
+    const unsubCheckIn = subscribeToEvent(eventInfo.id, handleCheckIn)
+    const unsubCheckOut = subscribeToEvent(eventInfo.id, handleCheckOut)
+
+    return () => {
+      Logger.debug('match', 'Cleaning up event subscription')
+      unsubCheckIn()
+      unsubCheckOut()
+    }
+  }, [authUser, eventInfo?.id])
 
   const loadInitialData = async () => {
     try {

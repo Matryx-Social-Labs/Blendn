@@ -12,7 +12,7 @@ import { Logger } from "./logger"
 const SOCKET_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000"
 
 // Event types from server
-interface ServerToClientEvents {
+export interface ServerToClientEvents {
   "event:checkin": (data: {
     eventId: string
     userId: string
@@ -126,6 +126,7 @@ const RECONNECT_DELAY_BASE = 1000
 const eventSubscriptions = new Map<string, Set<EventCheckInCallback | EventCheckOutCallback | EventInterestCallback>>()
 const chatSubscriptions = new Map<string, Set<ChatMessageCallback | ChatTypingCallback | ChatReactionCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
+const userSubscriptions = new Map<string, Set<(data: any) => void>>()
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -214,6 +215,7 @@ export function disconnect(): void {
   eventSubscriptions.clear()
   chatSubscriptions.clear()
   conversationSubscriptions.clear()
+  userSubscriptions.clear()
 }
 
 /**
@@ -279,8 +281,14 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   // Private messaging updates
   sock.on("private:message", (data) => {
+    // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
+
+    // Also notify user-level subscribers (for chat list updates)
+    userSubscriptions.forEach((userCallbacks) => {
+      userCallbacks.forEach((cb) => cb(data))
+    })
   })
 
   sock.on("private:typing", (data) => {
@@ -452,6 +460,38 @@ export function stopPrivateTyping(conversationId: string): void {
  */
 export function markPrivateMessagesRead(conversationId: string, messageIds: string[]): void {
   socket?.emit("private:markRead", conversationId, messageIds)
+}
+
+// === User-level Subscriptions ===
+
+/**
+ * Subscribe to user-level notifications (private messages when not in conversation)
+ */
+export function subscribeToUserNotifications(
+  userId: string,
+  callback: PrivateMessageCallback
+): () => void {
+  if (!socket?.connected) {
+    connect()
+  }
+
+  // User room is automatically joined on connection, no need to emit join
+  // Add to subscriptions
+  if (!userSubscriptions.has(userId)) {
+    userSubscriptions.set(userId, new Set())
+  }
+  userSubscriptions.get(userId)!.add(callback as (data: any) => void)
+
+  // Return unsubscribe function
+  return () => {
+    const callbacks = userSubscriptions.get(userId)
+    if (callbacks) {
+      callbacks.delete(callback as (data: any) => void)
+      if (callbacks.size === 0) {
+        userSubscriptions.delete(userId)
+      }
+    }
+  }
 }
 
 // === App State Management ===

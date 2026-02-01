@@ -22,7 +22,7 @@ import OptimizedImage from '../../components/OptimizedImage'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
-import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, PrivateMessageCallback } from '../../lib/socketClient'
+import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 
@@ -62,8 +62,11 @@ export default function PrivateChat() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [isOtherTyping, setIsOtherTyping] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const insets = useSafeAreaInsets()
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const otherTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const getInitials = (name: string) => {
     if (!name) return '?'
@@ -84,7 +87,20 @@ export default function PrivateChat() {
     if (!conversationId) return
     const cleanup = subscribeToMessages()
     return cleanup
-  }, [conversationId])
+  }, [conversationId, subscribeToMessages])
+
+  // Mark messages as read when viewing
+  useEffect(() => {
+    if (!authUser?.id || !conversationId || messages.length === 0) return
+
+    const unreadIds = messages
+      .filter(m => !m.isRead && m.senderId !== authUser.id)
+      .map(m => m.id)
+
+    if (unreadIds.length > 0) {
+      markPrivateMessagesRead(String(conversationId), unreadIds)
+    }
+  }, [messages, authUser?.id, conversationId])
 
   const initializeChat = async () => {
     try {
@@ -139,17 +155,58 @@ export default function PrivateChat() {
         return [...prev, mapMessage(data.message)]
       })
 
+      // Clear typing indicator when message is received
+      setIsOtherTyping(false)
+      if (otherTypingTimeoutRef.current) {
+        clearTimeout(otherTypingTimeoutRef.current)
+        otherTypingTimeoutRef.current = null
+      }
+
       // Scroll to bottom
       setTimeout(scrollToBottom, 100)
     }
 
-    const unsubscribe = subscribeToConversation(String(conversationId), handleNewMessage)
+    // Handle typing indicators
+    const handleTyping: PrivateTypingCallback = (data) => {
+      if (data.userId === authUser?.id) return // Ignore our own typing
+
+      setIsOtherTyping(data.isTyping)
+
+      // Auto-clear typing after 3 seconds (in case stopTyping is missed)
+      if (data.isTyping) {
+        if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
+        otherTypingTimeoutRef.current = setTimeout(() => {
+          setIsOtherTyping(false)
+        }, 3000)
+      } else {
+        if (otherTypingTimeoutRef.current) {
+          clearTimeout(otherTypingTimeoutRef.current)
+          otherTypingTimeoutRef.current = null
+        }
+      }
+    }
+
+    // Handle read receipts
+    const handleRead: PrivateReadCallback = (data) => {
+      if (data.readBy === authUser?.id) return // Ignore our own read receipts
+
+      setMessages(prev => prev.map(m =>
+        data.messageIds.includes(m.id) ? { ...m, isRead: true } : m
+      ))
+    }
+
+    const unsubMessage = subscribeToConversation(String(conversationId), handleNewMessage)
+    const unsubTyping = subscribeToConversation(String(conversationId), handleTyping)
+    const unsubRead = subscribeToConversation(String(conversationId), handleRead)
 
     return () => {
       Logger.debug('private-chat', `Unsubscribing from conversation: ${conversationId}`)
-      unsubscribe()
+      unsubMessage()
+      unsubTyping()
+      unsubRead()
+      if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
     }
-  }, [conversationId])
+  }, [conversationId, authUser?.id])
 
   const scrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {
@@ -159,6 +216,10 @@ export default function PrivateChat() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || sending || !authUser || !conversationId) return
+
+    // Stop typing indicator when sending
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    stopPrivateTyping(String(conversationId))
 
     const messageText = newMessage.trim()
     setNewMessage('')
@@ -426,6 +487,15 @@ export default function PrivateChat() {
           />
         )}
 
+        {/* Typing indicator */}
+        {isOtherTyping && (
+          <View style={styles.typingContainer}>
+            <Text style={styles.typingText}>
+              {otherUserName || 'User'} is typing...
+            </Text>
+          </View>
+        )}
+
         {/* Input */}
         <View style={styles.inputContainer}>
           <TouchableOpacity style={styles.inputIcon} onPress={() => {
@@ -436,7 +506,22 @@ export default function PrivateChat() {
           <TextInput
             style={styles.textInput}
             value={newMessage}
-            onChangeText={setNewMessage}
+            onChangeText={(text) => {
+              setNewMessage(text)
+              // Emit typing indicator with debounce
+              if (text.length > 0 && conversationId) {
+                startPrivateTyping(String(conversationId))
+                // Clear previous timeout and set new one to stop typing
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                typingTimeoutRef.current = setTimeout(() => {
+                  stopPrivateTyping(String(conversationId))
+                }, 2000)
+              } else if (text.length === 0 && conversationId) {
+                // Immediately stop typing when input is cleared
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                stopPrivateTyping(String(conversationId))
+              }
+            }}
             placeholder="Type a message..."
             placeholderTextColor="rgba(255,255,255,0.4)"
             multiline
@@ -706,5 +791,17 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#555',
+  },
+
+  // Typing indicator styles
+  typingContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  typingText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontStyle: 'italic',
   },
 }) 

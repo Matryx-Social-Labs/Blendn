@@ -84,14 +84,11 @@ export default function InterestedScreen() {
     }
   }, [authUser, loadInterestedEvents])
 
-  // TODO: Realtime interests updates via Socket.io
-  useEffect(() => {
-    if (!authUser) return
-    // TODO: Socket.io subscription for interest updates
-    // socket.on('interest:update', () => loadInterestedEvents())
-    Logger.debug('interested', 'TODO: Socket.io interest subscription')
-    return () => {}
-  }, [authUser, loadInterestedEvents])
+  // Note: Real-time interest updates work per-event (when viewing event details).
+  // For the favorites list, we rely on pull-to-refresh and focus refresh.
+  // Subscribing to all favorited events would be expensive and unnecessary
+  // since the list is already refreshed on screen focus via useFocusEffect.
+  // To implement: would need server to emit to user's personal room on favorite changes.
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)

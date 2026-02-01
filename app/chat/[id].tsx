@@ -26,7 +26,7 @@ import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Sk
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { pickImage, uploadPhoto } from '../../lib/photoUtils'
-import { subscribeToChat, ChatMessageCallback } from '../../lib/socketClient'
+import { subscribeToChat, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 
 interface Message {
@@ -63,6 +63,11 @@ export default function GroupChat() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showMessageMenu, setShowMessageMenu] = useState(false)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+
+  // Typing indicator states
+  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const typingCleanupRefs = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
   useEffect(() => {
     if (chatRoomId && authUser && !authLoading) {
@@ -244,14 +249,59 @@ export default function GroupChat() {
         return [...prev, newMsg]
       })
 
+      // Clear typing indicator for sender when they send a message
+      setTypingUsers(prev => {
+        if (!prev.has(data.message.userId)) return prev
+        const next = new Map(prev)
+        next.delete(data.message.userId)
+        return next
+      })
+
       setTimeout(() => scrollToBottom(), 100)
     }
 
-    const unsubscribe = subscribeToChat(String(chatRoomId), handleNewMessage)
+    // Subscribe to typing indicators
+    const handleTyping: ChatTypingCallback = (data) => {
+      if (data.userId === currentUser?.id) return // Ignore our own typing
+
+      setTypingUsers(prev => {
+        const next = new Map(prev)
+        if (data.isTyping) {
+          next.set(data.userId, data.userName)
+          // Auto-clear typing after 3 seconds (in case stopTyping is missed)
+          const existingTimeout = typingCleanupRefs.current.get(data.userId)
+          if (existingTimeout) clearTimeout(existingTimeout)
+          const timeout = setTimeout(() => {
+            setTypingUsers(p => {
+              const n = new Map(p)
+              n.delete(data.userId)
+              return n
+            })
+            typingCleanupRefs.current.delete(data.userId)
+          }, 3000)
+          typingCleanupRefs.current.set(data.userId, timeout)
+        } else {
+          next.delete(data.userId)
+          const existingTimeout = typingCleanupRefs.current.get(data.userId)
+          if (existingTimeout) {
+            clearTimeout(existingTimeout)
+            typingCleanupRefs.current.delete(data.userId)
+          }
+        }
+        return next
+      })
+    }
+
+    const unsubMessage = subscribeToChat(String(chatRoomId), handleNewMessage)
+    const unsubTyping = subscribeToChat(String(chatRoomId), handleTyping)
 
     return () => {
       Logger.info('chat', 'Cleaning up chat subscription')
-      unsubscribe()
+      unsubMessage()
+      unsubTyping()
+      // Clear all typing cleanup timeouts
+      typingCleanupRefs.current.forEach(timeout => clearTimeout(timeout))
+      typingCleanupRefs.current.clear()
     }
   }
 
@@ -302,6 +352,10 @@ export default function GroupChat() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUser) return
+
+    // Stop typing indicator when sending
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    if (chatRoomId) stopTyping(String(chatRoomId))
 
     setSending(true)
     const messageText = newMessage.trim()
@@ -560,6 +614,15 @@ export default function GroupChat() {
           />
         )}
 
+        {/* Typing indicator */}
+        {typingUsers.size > 0 && (
+          <View style={styles.typingContainer}>
+            <Text style={styles.typingText}>
+              {Array.from(typingUsers.values()).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+            </Text>
+          </View>
+        )}
+
         {/* Reply indicator above input */}
         {replyingTo && (
           <View style={styles.replyInputContainer}>
@@ -606,7 +669,22 @@ export default function GroupChat() {
           <TextInput
             style={styles.textInput}
             value={newMessage}
-            onChangeText={setNewMessage}
+            onChangeText={(text) => {
+              setNewMessage(text)
+              // Emit typing indicator with debounce
+              if (text.length > 0 && chatRoomId) {
+                startTyping(String(chatRoomId))
+                // Clear previous timeout and set new one to stop typing
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                typingTimeoutRef.current = setTimeout(() => {
+                  stopTyping(String(chatRoomId))
+                }, 2000)
+              } else if (text.length === 0 && chatRoomId) {
+                // Immediately stop typing when input is cleared
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                stopTyping(String(chatRoomId))
+              }
+            }}
             placeholder=""
             placeholderTextColor="rgba(255,255,255,0.6)"
             multiline
@@ -1077,5 +1155,17 @@ const styles = StyleSheet.create({
   },
   menuItemTextDestructive: {
     color: '#FF6B6B',
+  },
+
+  // Typing indicator styles
+  typingContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  typingText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontStyle: 'italic',
   },
 }) 
