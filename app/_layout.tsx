@@ -214,12 +214,6 @@ export default function RootLayout() {
         }} 
       />
       <Stack.Screen 
-        name="test-features" 
-        options={{ 
-          headerShown: false
-        }} 
-      />
-      <Stack.Screen 
         name="user/[id]" 
         options={{ 
           headerShown: false

@@ -148,8 +148,6 @@ export default function GroupChat() {
 
   const loadParticipantAliases = async () => {
     try {
-      // TODO: Add API endpoint to get chat participants
-      // For now, use a simple mapping based on current user
       const mapping: Record<string, string> = {}
 
       // Mark current user as "You"
@@ -157,10 +155,24 @@ export default function GroupChat() {
         mapping[authUser.id] = 'You'
       }
 
+      // Fetch participants from API
+      const result = await apiClient.getChatParticipants(String(chatRoomId), { limit: 100 })
+      if (result.success && result.data?.participants) {
+        result.data.participants.forEach((p: { userId: string; name?: string }) => {
+          if (p.userId !== authUser?.id) {
+            mapping[p.userId] = p.name || 'Attendee'
+          }
+        })
+        Logger.info('chat', 'Participant aliases loaded', { count: result.data.participants.length })
+      }
+
       setParticipantAliases(mapping)
-      Logger.info('chat', 'Participant aliases initialized')
     } catch (error) {
       Logger.error('chat', 'Error loading participant aliases', { error })
+      // Still set at least the current user alias
+      if (authUser?.id) {
+        setParticipantAliases({ [authUser.id]: 'You' })
+      }
     }
   }
 
@@ -724,9 +736,19 @@ export default function GroupChat() {
                   setIsRecording(false)
                   setRecording(null)
                   if (uri && currentUser) {
-                    // TODO: Voice note upload needs storage API implementation
-                    // For now, show a message that this feature is coming soon
-                    Alert.alert('Coming Soon', 'Voice note upload will be available soon')
+                    try {
+                      const filename = `voice_${chatRoomId}_${Date.now()}.m4a`
+                      const uploadResult = await uploadPhoto(uri, currentUser.id, filename, 'chat')
+                      if (uploadResult.success && (uploadResult.url || uploadResult.path)) {
+                        await apiClient.sendChatMessage(chatRoomId as string, (uploadResult.url || uploadResult.path)!, 'audio')
+                        Logger.info('chat', 'Voice note sent successfully')
+                      } else {
+                        Alert.alert('Upload failed', uploadResult.error || 'Could not upload voice note')
+                      }
+                    } catch (uploadError: any) {
+                      Logger.error('chat', 'Voice note upload error', { error: uploadError })
+                      Alert.alert('Error', uploadError?.message || 'Failed to send voice note')
+                    }
                   }
                 } catch (e: any) {
                   setIsRecording(false)

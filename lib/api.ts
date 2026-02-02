@@ -1,20 +1,14 @@
 /**
- * API Migration Helper
+ * API Helper
  *
- * This module provides a unified API layer that can switch between
- * Supabase (legacy) and the new admin backend API.
- *
- * Set EXPO_PUBLIC_USE_API_BACKEND=true to use the new backend.
+ * This module provides a unified API layer using the admin backend API.
+ * Supabase has been deprecated and removed.
  */
 
 import { apiClient } from './apiClient'
-import { supabase, callRpc, EventInterest, EventCheckout, EventChat } from './supabase'
 import { Logger } from './logger'
 
-// Feature flag for gradual migration
-const USE_API_BACKEND = process.env.EXPO_PUBLIC_USE_API_BACKEND === 'true'
-
-Logger.info('api', `Using ${USE_API_BACKEND ? 'admin backend' : 'Supabase'} for API calls`)
+Logger.info('api', 'Using admin backend for API calls')
 
 // ============== EVENTS ==============
 
@@ -35,148 +29,115 @@ interface EventsParams {
 }
 
 export async function getEvents(params?: EventsParams) {
-  if (USE_API_BACKEND) {
-    // API expects page starting from 1, not 0
-    const apiParams = params ? {
-      ...params,
-      page: (params.page || 0) + 1,
-    } : { page: 1 }
-    const result = await apiClient.getEvents(apiParams)
-    if (result.success && result.data) {
-      return { data: result.data.events, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to fetch events' } }
+  // API expects page starting from 1, not 0
+  const apiParams = params ? {
+    ...params,
+    page: (params.page || 0) + 1,
+  } : { page: 1 }
+  const result = await apiClient.getEvents(apiParams)
+  if (result.success && result.data) {
+    return { data: result.data.events, error: null }
   }
-
-  // Legacy Supabase approach
-  let query = supabase
-    .from('events_now_or_upcoming')
-    .select('*')
-    .order('start_time', { ascending: true })
-
-  if (params?.limit) {
-    const from = (params.page || 0) * params.limit
-    query = query.range(from, from + params.limit - 1)
-  }
-
-  const { data, error } = await query
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to fetch events' } }
 }
 
 export async function getEvent(eventId: string, params?: { lat?: number; lon?: number }) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.getEvent(eventId, params)
-    if (result.success && result.data) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to fetch event' } }
+  const result = await apiClient.getEvent(eventId, params)
+  if (result.success && result.data) {
+    return { data: result.data, error: null }
   }
-
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .eq('id', eventId)
-    .single()
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to fetch event' } }
 }
 
 // ============== CHECK-IN ==============
 
 export async function checkInToEvent(
   eventId: string,
-  userId: string,
+  _userId: string,
   latitude: number,
   longitude: number,
   gpsAccuracy?: number
 ) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.checkIn(eventId, {
-      latitude,
-      longitude,
-      deviceInfo: { gpsAccuracy },
-    })
-    if (result.success) {
-      return { data: { success: true, message: 'Checked in successfully' }, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Check-in failed' } }
-  }
-
-  // Legacy RPC call
-  const { data, error } = await callRpc('check_in_to_event_production', {
-    p_event_id: eventId,
-    p_user_id: userId,
-    p_user_latitude: latitude,
-    p_user_longitude: longitude,
-    p_gps_accuracy: gpsAccuracy || 50,
+  const result = await apiClient.checkIn(eventId, {
+    latitude,
+    longitude,
+    deviceInfo: { gpsAccuracy },
   })
-  return { data, error }
+  if (result.success) {
+    return { data: { success: true, message: 'Checked in successfully' }, error: null }
+  }
+  return { data: null, error: { message: result.error || 'Check-in failed' } }
 }
 
 export async function checkOutFromEvent(eventId: string) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.checkOut(eventId)
-    if (result.success) {
-      return { success: true, message: 'Checked out successfully' }
-    }
-    return { success: false, message: result.error || 'Checkout failed' }
+  const result = await apiClient.checkOut(eventId)
+  if (result.success) {
+    return { success: true, message: 'Checked out successfully' }
   }
-
-  return EventCheckout.checkoutFromEvent(eventId)
+  return { success: false, message: result.error || 'Checkout failed' }
 }
 
 export async function getCheckinStatus(eventId: string) {
-  if (USE_API_BACKEND) {
-    // For API backend, we'd need to get this from the event detail
-    // For now, use legacy approach
+  // Get check-in status from batch endpoint
+  const result = await apiClient.getBatchCheckinStatuses([eventId])
+  if (result.success && result.data?.statuses?.[eventId]) {
+    const status = result.data.statuses[eventId]
+    return {
+      status: status.status === 'checked_in' ? 'checked_in' : 'not_checked_in',
+      checked_in_at: status.checkInTime || null,
+      checked_out_at: null,
+    }
   }
-  return EventCheckout.getCheckinStatus(eventId)
+  return { status: 'not_checked_in' }
 }
 
 // ============== INTERESTS/FAVORITES ==============
 
 export async function toggleEventInterest(eventId: string) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.toggleInterest(eventId)
-    if (result.success && result.data) {
-      return result.data
-    }
-    return null
+  const result = await apiClient.toggleInterest(eventId)
+  if (result.success && result.data) {
+    return result.data
   }
-
-  return EventInterest.toggleInterest(eventId)
+  return null
 }
 
 export async function getUserInterestedEventIds(eventIds?: string[]) {
-  if (USE_API_BACKEND) {
-    // Would need a batch endpoint for this
-    // For now, use legacy
+  if (!eventIds || eventIds.length === 0) {
+    return new Set<string>()
   }
-  return EventInterest.getUserInterestedEventIds(eventIds)
+  const result = await apiClient.getBatchInterestStatuses(eventIds)
+  if (result.success && result.data?.interests) {
+    const set = new Set<string>()
+    Object.entries(result.data.interests).forEach(([eventId, interested]) => {
+      if (interested) set.add(eventId)
+    })
+    return set
+  }
+  return new Set<string>()
 }
 
 export async function getEventInterestCounts(eventIds: string[]) {
-  if (USE_API_BACKEND) {
-    // Would need a batch endpoint
-    // For now, use legacy
+  if (!eventIds || eventIds.length === 0) {
+    return {}
   }
-  return EventInterest.getEventInterestCounts(eventIds)
+  const result = await apiClient.getBatchInterestCounts(eventIds)
+  if (result.success && result.data?.counts) {
+    return result.data.counts
+  }
+  return {}
 }
 
 // ============== CHAT ==============
 
-export async function ensureUserInEventChat(eventId: string, eventTitle?: string) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.getEventChat(eventId)
-    if (result.success && result.data) {
-      return {
-        chatRoomId: result.data.id,
-        roomName: result.data.name || 'Event Chat',
-      }
+export async function ensureUserInEventChat(eventId: string, _eventTitle?: string) {
+  const result = await apiClient.getEventChat(eventId)
+  if (result.success && result.data) {
+    return {
+      chatRoomId: result.data.id,
+      roomName: result.data.name || 'Event Chat',
     }
-    return null
   }
-
-  return EventChat.ensureUserInEventChat(eventId, eventTitle)
+  return null
 }
 
 export async function sendChatMessage(
@@ -185,86 +146,29 @@ export async function sendChatMessage(
   type: 'text' | 'image' | 'video' = 'text',
   metadata?: any
 ) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.sendChatMessage(chatGroupId, content, type, metadata)
-    if (result.success) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to send message' } }
+  const result = await apiClient.sendChatMessage(chatGroupId, content, type, metadata)
+  if (result.success) {
+    return { data: result.data, error: null }
   }
-
-  // Legacy Supabase insert
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { data: null, error: { message: 'Not authenticated' } }
-  }
-
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .insert({
-      chat_group_id: chatGroupId,
-      user_id: user.id,
-      content,
-      type,
-      metadata,
-    })
-    .select()
-    .single()
-
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to send message' } }
 }
 
 export async function getChatMessages(chatGroupId: string, params?: { limit?: number; before?: string }) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.getChatMessages(chatGroupId, params)
-    if (result.success && result.data) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to fetch messages' } }
+  const result = await apiClient.getChatMessages(chatGroupId, params)
+  if (result.success && result.data) {
+    return { data: result.data, error: null }
   }
-
-  // Legacy Supabase query
-  let query = supabase
-    .from('chat_messages')
-    .select('*, user:users(id, name, image)')
-    .eq('chat_group_id', chatGroupId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(params?.limit || 50)
-
-  if (params?.before) {
-    const beforeMessage = await supabase
-      .from('chat_messages')
-      .select('created_at')
-      .eq('id', params.before)
-      .single()
-
-    if (beforeMessage.data) {
-      query = query.lt('created_at', beforeMessage.data.created_at)
-    }
-  }
-
-  const { data, error } = await query
-  return { data: data?.reverse() || [], error }
+  return { data: null, error: { message: result.error || 'Failed to fetch messages' } }
 }
 
 // ============== PROFILE ==============
 
 export async function getProfile(userId: string) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.getProfile(userId)
-    if (result.success && result.data) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to fetch profile' } }
+  const result = await apiClient.getProfile(userId)
+  if (result.success && result.data) {
+    return { data: result.data, error: null }
   }
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*, user:users(id, email, name, image)')
-    .eq('id', userId)
-    .single()
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to fetch profile' } }
 }
 
 export async function updateProfile(
@@ -278,62 +182,29 @@ export async function updateProfile(
     onboarded?: boolean
   }
 ) {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.updateProfile(userId, updates)
-    if (result.success && result.data) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to update profile' } }
+  const result = await apiClient.updateProfile(userId, updates)
+  if (result.success && result.data) {
+    return { data: result.data, error: null }
   }
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', userId)
-    .select()
-    .single()
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to update profile' } }
 }
 
 // ============== NOTIFICATIONS ==============
 
 export async function registerPushToken(token: string, platform: 'ios' | 'android') {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.registerPushToken(token, platform)
-    return result.success
-  }
-
-  // Legacy: Store in profiles table or similar
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return false
-
-  const { error } = await supabase
-    .from('profiles')
-    .update({ push_token: token })
-    .eq('id', user.id)
-
-  return !error
+  const result = await apiClient.registerPushToken(token, platform)
+  return result.success
 }
 
 // ============== CATEGORIES ==============
 
 export async function getCategories() {
-  if (USE_API_BACKEND) {
-    const result = await apiClient.getCategories()
-    if (result.success && result.data) {
-      return { data: result.data, error: null }
-    }
-    return { data: null, error: { message: result.error || 'Failed to fetch categories' } }
+  const result = await apiClient.getCategories()
+  if (result.success && result.data) {
+    return { data: result.data, error: null }
   }
-
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .is('parent_id', null)
-    .order('name')
-
-  return { data, error }
+  return { data: null, error: { message: result.error || 'Failed to fetch categories' } }
 }
 
-// Export flag for consumers to check
-export { USE_API_BACKEND }
+// Export flag for consumers to check (always true now)
+export const USE_API_BACKEND = true

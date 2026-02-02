@@ -11,7 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hemanth.blendn.dev",
+      "bundleIdentifier": "com.matrixsociallabs.blendn",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",

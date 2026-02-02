@@ -268,14 +268,17 @@ export default function EventDetail() {
   const loadInterestedAvatars = async () => {
     try {
       if (!id) return
-      // TODO: Add API endpoint to get interested users with avatars
-      // For now, avatars will be populated from event details if available
-      // GET /api/mobile/events/{eventId}/interested-users
-      Logger.debug('events', 'loadInterestedAvatars - TODO: implement API endpoint')
-
-      // Placeholder: avatars should come from event API response
-      // setInterestedAvatars(event?.interested_avatars || [])
-    } catch {}
+      const result = await apiClient.getInterestedUsers(String(id), { limit: 6 })
+      if (result.success && result.data?.users) {
+        const avatars = result.data.users
+          .map((u: { avatar?: string | null }) => u.avatar)
+          .filter((url: string | null | undefined): url is string => !!url)
+        setInterestedAvatars(avatars)
+        Logger.debug('events', 'loadInterestedAvatars success', { count: avatars.length })
+      }
+    } catch (error) {
+      Logger.error('events', 'loadInterestedAvatars failed', { error: error as any })
+    }
   }
 
   const checkUserCheckInStatus = async () => {
@@ -335,27 +338,10 @@ export default function EventDetail() {
         Logger.warn('events', 'location:moduleUnavailable')
         Alert.alert(
           'Location Service Not Available',
-          'For the best experience, please use the latest version of this app with location services enabled.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Use Demo Mode', 
-              onPress: () => {
-                // Return demo coordinates for testing
-                return Promise.resolve({
-                  latitude: 18.5204,
-                  longitude: 73.8567
-                })
-              }
-            }
-          ]
+          'Location services are required to check in to events. Please ensure you have the latest version of this app.',
+          [{ text: 'OK', style: 'default' }]
         )
-        // Return demo coordinates for testing only
-        Logger.journey('proximity', 'detail:location:demoFallback')
-        return {
-          latitude: 18.5204,
-          longitude: 73.8567
-        }
+        return null
       }
 
       // Check if location services are enabled

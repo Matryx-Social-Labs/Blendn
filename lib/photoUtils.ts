@@ -270,13 +270,15 @@ const uploadToTigris = async (
 
 /**
  * Delete photo via admin backend
- * TODO: Add delete endpoint to admin backend
  */
 export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   try {
-    // TODO: Call admin backend to delete photo
-    // For now, just log and return true (photos will be cleaned up later)
-    console.log('Photo deletion requested:', photoUrl)
+    const result = await apiClient.deleteUpload(photoUrl)
+    if (!result.success) {
+      console.error('Photo deletion failed:', result.error)
+      return false
+    }
+    console.log('Photo deleted successfully:', photoUrl)
     return true
   } catch (error) {
     console.error('Error deleting photo:', error)

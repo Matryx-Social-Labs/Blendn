@@ -92,9 +92,17 @@ export default function UserProfile() {
     if (authUser.id === profile.user_id) return
     setActionLoading(true)
     try {
-      // TODO: Add API endpoint for message requests
-      // POST /api/mobile/message-requests
-      Alert.alert('Coming Soon', 'Message requests will be available soon.')
+      const result = await apiClient.createMessageRequest(profile.user_id)
+      if (result.success) {
+        Alert.alert('Request Sent', `Your connection request has been sent to ${profile.name || 'this user'}.`)
+      } else {
+        // Handle specific error cases
+        if (result.error?.includes('already sent') || result.error?.includes('already have')) {
+          Alert.alert('Already Connected', result.error)
+        } else {
+          Alert.alert('Error', result.error || 'Failed to send connection request')
+        }
+      }
     } catch (e) {
       console.error('connect error:', e)
       Alert.alert('Error', 'Something went wrong')

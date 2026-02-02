@@ -9,10 +9,13 @@ import { AppState } from 'react-native'
 import { Logger } from './logger'
 
 // API Configuration
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000'
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
 
 if (!API_BASE_URL) {
-  console.warn('EXPO_PUBLIC_API_BASE_URL not set, using localhost')
+  throw new Error(
+    'EXPO_PUBLIC_API_BASE_URL environment variable is not set. ' +
+    'Please set it in your .env file (e.g., https://admin.blendn.app for production)'
+  )
 }
 
 // Token storage keys
@@ -875,6 +878,175 @@ class ApiClientClass {
       { method: 'DELETE' },
       true,
       5
+    )
+  }
+
+  // === BATCH ENDPOINTS ===
+
+  async getBatchCheckinStatuses(eventIds: string[]): Promise<ApiResponse<{
+    statuses: { [eventId: string]: { status: string; checkInId?: string; checkInTime?: string } }
+  }>> {
+    return this.queuedRequest(
+      '/api/mobile/events/checkins/batch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ eventIds }),
+      },
+      true,
+      4
+    )
+  }
+
+  async getActiveCheckins(): Promise<ApiResponse<{
+    checkIns: Array<{
+      id: string
+      eventId: string
+      checkInTime: string
+      event: {
+        id: string
+        title: string
+        slug: string
+        coverImageUrl: string | null
+        startTime: string
+        endTime: string
+        venueName: string | null
+        address: string | null
+        city: string | null
+        status: string
+      }
+    }>
+  }>> {
+    return this.queuedRequest('/api/mobile/checkins/active')
+  }
+
+  async getBatchInterestStatuses(eventIds: string[]): Promise<ApiResponse<{
+    interests: { [eventId: string]: boolean }
+  }>> {
+    return this.queuedRequest(
+      '/api/mobile/events/interests/batch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ eventIds }),
+      },
+      true,
+      4
+    )
+  }
+
+  async getBatchInterestCounts(eventIds: string[]): Promise<ApiResponse<{
+    counts: { [eventId: string]: number }
+  }>> {
+    return this.queuedRequest(
+      '/api/mobile/events/interest-counts/batch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ eventIds }),
+      },
+      true,
+      4
+    )
+  }
+
+  async getInterestedUsers(eventId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<{
+    users: Array<{ id: string; name: string | null; avatar: string | null }>
+    totalCount: number
+  }>> {
+    const searchParams = new URLSearchParams()
+    if (params?.limit) searchParams.append('limit', String(params.limit))
+    if (params?.offset) searchParams.append('offset', String(params.offset))
+    const query = searchParams.toString()
+    return this.queuedRequest(`/api/mobile/events/${eventId}/interested-users${query ? `?${query}` : ''}`)
+  }
+
+  async getChatParticipants(chatGroupId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<{
+    participants: Array<{
+      userId: string
+      name: string | null
+      avatar: string | null
+      role: string
+      status: string
+      joinedAt: string
+    }>
+    totalCount: number
+  }>> {
+    const searchParams = new URLSearchParams()
+    if (params?.limit) searchParams.append('limit', String(params.limit))
+    if (params?.offset) searchParams.append('offset', String(params.offset))
+    const query = searchParams.toString()
+    return this.queuedRequest(`/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`)
+  }
+
+  async deleteUpload(url: string): Promise<ApiResponse<{ deleted: boolean }>> {
+    return this.queuedRequest(
+      '/api/mobile/uploads/delete',
+      {
+        method: 'DELETE',
+        body: JSON.stringify({ url }),
+      },
+      true,
+      5
+    )
+  }
+
+  // === MESSAGE REQUESTS ===
+
+  async createMessageRequest(recipientId: string, message?: string): Promise<ApiResponse<{
+    request: {
+      id: string
+      recipientId: string
+      recipient: { id: string; name: string | null; avatar: string | null }
+      message: string | null
+      status: string
+      createdAt: string
+    }
+  }>> {
+    return this.queuedRequest(
+      '/api/mobile/message-requests',
+      {
+        method: 'POST',
+        body: JSON.stringify({ recipientId, message }),
+      },
+      true,
+      2
+    )
+  }
+
+  async getMessageRequests(params?: { status?: string; limit?: number; offset?: number }): Promise<ApiResponse<{
+    requests: Array<{
+      id: string
+      senderId: string
+      sender: { id: string; name: string | null; avatar: string | null }
+      message: string | null
+      status: string
+      createdAt: string
+    }>
+    totalCount: number
+  }>> {
+    const searchParams = new URLSearchParams()
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.limit) searchParams.append('limit', String(params.limit))
+    if (params?.offset) searchParams.append('offset', String(params.offset))
+    const query = searchParams.toString()
+    return this.queuedRequest(`/api/mobile/message-requests${query ? `?${query}` : ''}`)
+  }
+
+  async respondToMessageRequest(
+    requestId: string,
+    action: 'accept' | 'decline' | 'block'
+  ): Promise<ApiResponse<{
+    success: boolean
+    status: string
+    conversationId: string | null
+    sender: { id: string; name: string | null; avatar: string | null }
+  }>> {
+    return this.queuedRequest(
+      `/api/mobile/message-requests/${requestId}/respond`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      },
+      true,
+      2
     )
   }
 

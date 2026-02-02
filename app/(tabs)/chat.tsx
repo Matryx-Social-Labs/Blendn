@@ -285,15 +285,28 @@ export default function Chat() {
 
   const loadMessageRequests = async (loadId?: number) => {
     try {
-      // TODO: Add API endpoint for message requests
-      // For now, return empty arrays
-      Logger.info('chat', 'Message requests API not yet implemented')
+      const result = await apiClient.getMessageRequests({ status: 'pending' })
+      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
+
+      if (result.success && result.data?.requests) {
+        const requests = result.data.requests.map((r: any) => ({
+          request_id: r.id,
+          sender_name: r.sender?.name || null,
+          initial_message: r.message || null,
+        }))
+        setIncomingRequests(requests)
+        Logger.info('chat', 'Message requests loaded', { count: requests.length })
+      } else {
+        setIncomingRequests([])
+      }
+      // Note: outgoing requests would need a separate API call if needed
+      setOutgoingRequests([])
+    } catch (e) {
+      Logger.error('chat', 'loadMessageRequests failed', { error: e })
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
         setIncomingRequests([])
         setOutgoingRequests([])
       }
-    } catch (e) {
-      Logger.error('chat', 'loadMessageRequests failed', { error: e })
     }
   }
 
@@ -335,18 +348,36 @@ export default function Chat() {
     try {
       Logger.debug('chat', 'Fetching personal chats...')
 
-      // TODO: Add API endpoint for personal/private conversations
-      // For now, return empty - private messaging will be implemented later
-      Logger.info('chat', 'Personal chats API not yet implemented')
+      const result = await apiClient.getConversations()
 
+      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
+
+      if (result.success && result.data) {
+        // Compute unread counts
+        const unreadMap = await computeUnreadCounts(
+          result.data.map((c: any) => c.id)
+        )
+
+        const personalChatData: PersonalChat[] = result.data.map((conv: any) => ({
+          conversation_id: conv.id,
+          other_user_name: conv.otherUser?.name || 'Unknown',
+          other_user_id: conv.otherUser?.id || '',
+          other_user_avatar: conv.otherUser?.image || null,
+          last_message: conv.lastMessage?.text || undefined,
+          last_message_time: conv.lastMessage?.createdAt || conv.updatedAt,
+          unread_count: unreadMap[conv.id] || conv.unreadCount || 0,
+        }))
+
+        setPersonalChats(personalChatData)
+        Logger.info('chat', `Loaded ${personalChatData.length} personal chats`)
+      } else {
+        setPersonalChats([])
+      }
+    } catch (error) {
+      Logger.error('chat', 'Error loading personal chats', { error })
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
         setPersonalChats([])
       }
-
-      Logger.info('chat', 'Personal chats: feature coming soon')
-    } catch (error) {
-      Logger.error('chat', 'Error loading personal chats', { error })
-      setPersonalChats([])
     }
   }
 
@@ -620,15 +651,38 @@ export default function Chat() {
                     )}
                     <View style={styles.requestActions}>
                       <TouchableOpacity style={[styles.reqBtn, styles.reject]} onPress={async () => {
-                        // TODO: Add API endpoint for message request response
-                        Logger.info('chat', 'Message request reject - API not yet implemented')
+                        try {
+                          const result = await apiClient.respondToMessageRequest(r.request_id, 'decline')
+                          if (result.success) {
+                            Logger.info('chat', 'Message request declined', { requestId: r.request_id })
+                          } else {
+                            Logger.error('chat', 'Failed to decline request', { error: result.error })
+                          }
+                        } catch (e) {
+                          Logger.error('chat', 'Error declining request', { error: e })
+                        }
                         loadChats()
                       }}>
                         <Text style={styles.reqBtnText}>Reject</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.reqBtn, styles.reqBtnSpacing, styles.accept]} onPress={async () => {
-                        // TODO: Add API endpoint for message request response
-                        Logger.info('chat', 'Message request accept - API not yet implemented')
+                        try {
+                          const result = await apiClient.respondToMessageRequest(r.request_id, 'accept')
+                          if (result.success) {
+                            Logger.info('chat', 'Message request accepted', { requestId: r.request_id, conversationId: result.data?.conversationId })
+                            // If a conversation was created, navigate to it
+                            if (result.data?.conversationId) {
+                              router.push({
+                                pathname: '/private-chat/[conversationId]',
+                                params: { conversationId: result.data.conversationId } as any,
+                              })
+                            }
+                          } else {
+                            Logger.error('chat', 'Failed to accept request', { error: result.error })
+                          }
+                        } catch (e) {
+                          Logger.error('chat', 'Error accepting request', { error: e })
+                        }
                         loadChats()
                       }}>
                         <Text style={styles.reqBtnText}>Accept</Text>

@@ -262,10 +262,36 @@ export default function Events() {
     if (!user) return
     try {
       Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
-      // TODO: Add API endpoint to get user's active check-ins
-      // For now, just set empty array
-      setCheckedInEvents([])
-      Logger.journey('checkin', 'loadActiveCheckins:done')
+      const result = await apiClient.getActiveCheckins()
+      if (result.success && result.data?.checkIns) {
+        // Transform check-in data to Event format
+        const activeEvents: Event[] = result.data.checkIns
+          .filter((c: any) => c.event)
+          .map((c: any) => ({
+            id: c.event.id,
+            title: c.event.title,
+            description: c.event.description || '',
+            short_description: c.event.shortDescription || '',
+            venue_name: c.event.venueName || '',
+            address: c.event.address || '',
+            start_time: c.event.startTime,
+            end_time: c.event.endTime,
+            price_cents: c.event.priceCents || 0,
+            max_capacity: c.event.maxCapacity || 0,
+            current_capacity: c.event.currentCapacity || 0,
+            cover_image_url: c.event.coverImageUrl || null,
+            category: c.event.category || '',
+            city: c.event.city,
+            check_in_radius: c.event.checkInRadius || 100,
+            latitude: c.event.latitude,
+            longitude: c.event.longitude,
+          }))
+        setCheckedInEvents(activeEvents)
+        Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
+      } else {
+        setCheckedInEvents([])
+        Logger.journey('checkin', 'loadActiveCheckins:done', { count: 0 })
+      }
     } catch (e) {
       Logger.error('events', 'Unexpected error', { error: e as any })
       setCheckedInEvents([])
@@ -376,14 +402,28 @@ export default function Events() {
 
     try {
       Logger.journey('checkin', 'statusBatch:start', { eventCount: events.length })
-      // TODO: Add API endpoint to get check-in statuses for multiple events
-      // For now, just set all as not checked in
-      const statusMap: { [eventId: string]: any } = {}
-      events.forEach((ev) => {
-        statusMap[ev.id] = { status: 'not_checked_in' }
-      })
-      setCheckinStatuses(statusMap)
-      Logger.journey('checkin', 'statusBatch:done', { count: events.length })
+      const eventIds = events.map(e => e.id)
+      const result = await apiClient.getBatchCheckinStatuses(eventIds)
+
+      if (result.success && result.data?.statuses) {
+        const statusMap: { [eventId: string]: any } = {}
+        Object.entries(result.data.statuses).forEach(([eventId, statusData]: [string, any]) => {
+          statusMap[eventId] = {
+            status: statusData.status === 'checked_in' ? 'checked_in' : 'not_checked_in',
+            checkInId: statusData.checkInId,
+            checkInTime: statusData.checkInTime,
+          }
+        })
+        setCheckinStatuses(statusMap)
+        Logger.journey('checkin', 'statusBatch:done', { count: Object.keys(statusMap).length })
+      } else {
+        // Fallback: set all as not checked in
+        const statusMap: { [eventId: string]: any } = {}
+        events.forEach((ev) => {
+          statusMap[ev.id] = { status: 'not_checked_in' }
+        })
+        setCheckinStatuses(statusMap)
+      }
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
       setCheckinStatuses({})
@@ -536,10 +576,13 @@ export default function Events() {
   const loadInterestData = async () => {
     try {
       if (!user || events.length === 0) return
-      // TODO: Add batch API endpoint to get user's interested events
-      // For now, interest statuses are tracked locally via toggleInterest
-      // and will be properly loaded when the API is available
-      Logger.info('events', 'loadInterestData: batch interest loading not yet implemented in API')
+      const eventIds = events.map(e => e.id)
+      const result = await apiClient.getBatchInterestStatuses(eventIds)
+
+      if (result.success && result.data?.interests) {
+        setInterestStatuses(result.data.interests)
+        Logger.info('events', 'loadInterestData: batch interest loaded', { count: Object.keys(result.data.interests).length })
+      }
     } catch (e) {
       Logger.warn('events', 'loadInterestData failed', { error: e })
       setInterestStatuses({})
@@ -549,10 +592,15 @@ export default function Events() {
   const loadInterestCounts = async () => {
     try {
       if (events.length === 0) return
-      // TODO: Add batch API endpoint to get interest counts for events
-      // For now, interest counts will be empty until API is available
-      Logger.info('events', 'loadInterestCounts: batch count loading not yet implemented in API')
+      const eventIds = events.map(e => e.id)
+      const result = await apiClient.getBatchInterestCounts(eventIds)
+
+      if (result.success && result.data?.counts) {
+        setInterestCounts(result.data.counts)
+        Logger.info('events', 'loadInterestCounts: batch counts loaded', { count: Object.keys(result.data.counts).length })
+      }
     } catch (e) {
+      Logger.warn('events', 'loadInterestCounts failed', { error: e })
       setInterestCounts({})
     }
   }
