@@ -378,7 +378,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.matrixsociallabs.blendn;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matryxsociallabs.blendn;
 				PRODUCT_NAME = blendn;
 				SWIFT_OBJC_BRIDGING_HEADER = "blendn/blendn-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -409,7 +409,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.matrixsociallabs.blendn;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matryxsociallabs.blendn;
 				PRODUCT_NAME = blendn;
 				SWIFT_OBJC_BRIDGING_HEADER = "blendn/blendn-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
