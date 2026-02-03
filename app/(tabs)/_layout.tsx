@@ -2,17 +2,83 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+// Memoized tab button to prevent re-renders
+const TabButton = memo(({
+  routeKey,
+  routeName,
+  isFocused,
+  onPress,
+  onLongPress
+}: {
+  routeKey: string
+  routeName: string
+  isFocused: boolean
+  onPress: () => void
+  onLongPress: () => void
+}) => {
+  const iconColor = '#FFFFFF';
+  const iconSize = 26;
+
+  const iconName = useMemo((): keyof typeof Ionicons.glyphMap => {
+    if (routeName === 'events') return isFocused ? 'home' : 'home-outline';
+    if (routeName === 'match') return isFocused ? 'heart' : 'heart-outline';
+    if (routeName === 'chat') return isFocused ? 'chatbubbles' : 'chatbubbles-outline';
+    if (routeName === 'profile') return isFocused ? 'person' : 'person-outline';
+    return 'ellipse';
+  }, [routeName, isFocused]);
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={isFocused ? { selected: true } : {}}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.item}
+    >
+      <View style={[styles.iconWrapper, isFocused && styles.iconWrapperActive]}>
+        <Ionicons name={iconName} size={iconSize} color={iconColor} />
+      </View>
+    </Pressable>
+  );
+});
+
+TabButton.displayName = 'TabButton';
+
+// Memoized tab bar to prevent re-renders during navigation
+const CustomTabBar = memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
+  const insets = useSafeAreaInsets();
+
+  // Memoize wrapper style
+  const wrapperStyle = useMemo(() => [
+    styles.wrapper,
+    { paddingBottom: Math.max(insets.bottom, 8) }
+  ], [insets.bottom]);
+
+  // Create stable press handlers
+  const createPressHandler = useCallback((routeKey: string, routeName: string, isFocused: boolean) => () => {
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: routeKey,
+      canPreventDefault: true,
+    });
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(routeName);
+    }
+  }, [navigation]);
+
+  const createLongPressHandler = useCallback((routeKey: string) => () => {
+    navigation.emit({
+      type: 'tabLongPress',
+      target: routeKey,
+    });
+  }, [navigation]);
+
+  return (
+    <View pointerEvents="box-none" style={wrapperStyle}>
       <View style={styles.glowOuter} />
       <View style={styles.glowInner} />
       <LinearGradient
@@ -23,48 +89,16 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       >
         <View style={styles.itemsRow}>
           {state.routes.map((route, index) => {
-            const { options } = descriptors[route.key];
             const isFocused = state.index === index;
-
-            const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            };
-
-            const onLongPress = () => {
-              navigation.emit({
-                type: 'tabLongPress',
-                target: route.key,
-              });
-            };
-
-            const iconColor = '#FFFFFF';
-            const iconSize = 26;
-            let iconName: keyof typeof Ionicons.glyphMap = 'ellipse';
-            if (route.name === 'events') iconName = isFocused ? 'home' : 'home-outline';
-            if (route.name === 'match') iconName = isFocused ? 'heart' : 'heart-outline';
-            if (route.name === 'chat') iconName = isFocused ? 'chatbubbles' : 'chatbubbles-outline';
-            if (route.name === 'profile') iconName = isFocused ? 'person' : 'person-outline';
-
             return (
-              <Pressable
+              <TabButton
                 key={route.key}
-                accessibilityRole="button"
-                accessibilityState={isFocused ? { selected: true } : {}}
-                onPress={onPress}
-                onLongPress={onLongPress}
-                style={styles.item}
-              >
-                <View style={[styles.iconWrapper, isFocused && styles.iconWrapperActive]}>
-                  <Ionicons name={iconName} size={iconSize} color={iconColor} />
-                </View>
-              </Pressable>
+                routeKey={route.key}
+                routeName={route.name}
+                isFocused={isFocused}
+                onPress={createPressHandler(route.key, route.name, isFocused)}
+                onLongPress={createLongPressHandler(route.key)}
+              />
             );
           })}
         </View>
@@ -87,7 +121,9 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       </LinearGradient>
     </View>
   );
-}
+});
+
+CustomTabBar.displayName = 'CustomTabBar';
 
 export default function TabLayout() {
   // Onboarding check removed - root layout already handles this

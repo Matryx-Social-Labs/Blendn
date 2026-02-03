@@ -530,12 +530,13 @@ export default function Match() {
               contentContainerStyle={styles.similarList}
               snapToInterval={SIMILAR_CARD_WIDTH + 16}
               decelerationRate="fast"
-              onScroll={(e) => {
+              onMomentumScrollEnd={(e) => {
+                // Only update index when scroll settles, not during scroll
                 const x = e.nativeEvent.contentOffset.x
                 const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
                 setSimilarIndex(Math.max(0, idx))
               }}
-              scrollEventThrottle={16}
+              scrollEventThrottle={100}
               renderItem={({ item }) => renderSimilarCard(item)}
             />
             <View style={styles.dotsRow}>

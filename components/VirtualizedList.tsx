@@ -29,10 +29,10 @@ export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<
     renderItem,
     itemHeight,
     estimatedItemSize = 100,
-    windowSize = 10,
-    initialNumToRender = 10,
-    maxToRenderPerBatch = 5,
-    updateCellsBatchingPeriod = 50,
+    windowSize = 7,              // Reduced from 10 for better memory usage
+    initialNumToRender = 8,      // Reduced from 10 for faster initial render
+    maxToRenderPerBatch = 8,     // Increased from 5 for smoother scrolling
+    updateCellsBatchingPeriod = 30, // Reduced from 50 for more responsive updates
     removeClippedSubviews = true,
     onEndReachedThreshold = 0.5,
     enableVirtualization = true,
@@ -134,8 +134,6 @@ export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<
     />
   )
 }) as <T extends any>(props: VirtualizedListProps<T>) => React.JSX.Element
-
-VirtualizedList.displayName = 'VirtualizedList'
 
 // Hook for managing large dataset pagination
 export const useVirtualizedData = <T extends any>(

@@ -191,7 +191,14 @@ export default function Chat() {
     let mounted = true
     const run = async () => {
       try {
-        if (!user) { setMyAvatarUrl(null); return }
+        if (!user?.id) {
+          if (mounted) setMyAvatarUrl(null)
+          return
+        }
+
+        // Avoid extra fetches when the user object changes but the id is the same.
+        if (myAvatarUrl) return
+
         const result = await apiClient.getProfile(user.id)
         if (mounted) {
           if (!result.success || !result.data) {
@@ -211,7 +218,7 @@ export default function Chat() {
     }
     run()
     return () => { mounted = false }
-  }, [user])
+  }, [user?.id, myAvatarUrl])
 
   // Real-time message updates via Socket.io
   useEffect(() => {
@@ -696,9 +703,9 @@ export default function Chat() {
               data={personalChats}
               renderItem={renderPersonalChatItem}
               keyExtractor={(item) => item.conversation_id}
-              initialNumToRender={12}
-              maxToRenderPerBatch={10}
-              windowSize={12}
+              initialNumToRender={8}
+              maxToRenderPerBatch={5}
+              windowSize={7}
               removeClippedSubviews
               refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -709,7 +716,7 @@ export default function Chat() {
                 personalChats.length === 0 && styles.emptyListContainer
               ]}
               onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
-              scrollEventThrottle={16}
+              scrollEventThrottle={32}
             />
           </>
         )
