@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
@@ -36,6 +36,55 @@ export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
+
+  // Memoize photo collage layout calculations to prevent re-computation on every render
+  const photoCollage = useMemo(() => {
+    const photoList = profile?.profile_photos && profile.profile_photos.length > 0
+      ? profile.profile_photos
+      : profile?.photos || []
+
+    if (photoList.length === 0) return null
+
+    const contentWidthDesign = 460
+    const designWidth = 393
+    const containerWidth = WINDOW_WIDTH - 24
+    const scale = containerWidth / designWidth
+    const S = (n: number) => Math.round(n * scale)
+
+    const items = [
+      { x: 0, y: 0, w: 135, h: 141, i: 0 },
+      { x: 0, y: 141, w: 135, h: 104, i: 1 },
+      { x: 143, y: 0, w: 184, h: 64, i: 2 },
+      { x: 143, y: 71, w: 222, h: 174, i: 3 },
+      { x: 335, y: 0, w: 125, h: 64, i: 4 },
+      { x: 374, y: 71, w: 86, h: 83, i: 5 },
+      { x: 374, y: 162, w: 86, h: 83, i: 6 },
+    ]
+
+    const get = (idx: number) => photoList[idx % photoList.length]
+
+    return (
+      <View style={styles.section}>
+        <Typography variant="h3" style={styles.sectionTitle}>Photos & Videos</Typography>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ width: containerWidth, height: S(245) }}>
+          <View style={{ width: S(contentWidthDesign), height: S(245) }}>
+            {items.map((it, idx) => (
+              <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
+                <OptimizedImage
+                  source={get(idx) as any}
+                  style={{ width: '100%', height: '100%' } as any}
+                  contentFit="cover"
+                  width={S(it.w)}
+                  height={S(it.h)}
+                  quality={60}
+                />
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }, [profile?.profile_photos, profile?.photos])
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -297,48 +346,7 @@ export default function Profile() {
             </View>
           )}
 
-          {(profile?.profile_photos && profile.profile_photos.length > 0) || (profile?.photos && profile.photos.length > 0) ? (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Photos & Videos</Typography>
-              {/* Collage layout based on Figma; horizontally scrollable */}
-              {(() => {
-                const list = (profile?.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile?.photos || []) as string[]
-                const contentWidthDesign = 460
-                const designWidth = 393
-                const containerWidth = WINDOW_WIDTH - 24
-                const scale = containerWidth / designWidth
-                const S = (n: number) => Math.round(n * scale)
-                const items = [
-                  { x: 0, y: 0, w: 135, h: 141, i: 0 },
-                  { x: 0, y: 141, w: 135, h: 104, i: 1 },
-                  { x: 143, y: 0, w: 184, h: 64, i: 2 },
-                  { x: 143, y: 71, w: 222, h: 174, i: 3 },
-                  { x: 335, y: 0, w: 125, h: 64, i: 4 },
-                  { x: 374, y: 71, w: 86, h: 83, i: 5 },
-                  { x: 374, y: 162, w: 86, h: 83, i: 6 },
-                ]
-                const get = (idx: number) => list[idx % list.length]
-                return (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ width: containerWidth, height: S(245) }}>
-                    <View style={{ width: S(contentWidthDesign), height: S(245) }}>
-                      {items.map((it, idx) => (
-                        <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
-                          <OptimizedImage
-                            source={get(idx) as any}
-                            style={{ width: '100%', height: '100%' } as any}
-                            contentFit="cover"
-                            width={S(it.w)}
-                            height={S(it.h)}
-                            quality={60}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
-                )
-              })()}
-            </View>
-          ) : null}
+          {photoCollage}
         </View>
       </ScrollView>
 
