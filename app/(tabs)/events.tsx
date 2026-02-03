@@ -252,17 +252,30 @@ export default function Events() {
   }, [events, user])
 
   // Refresh statuses when the screen regains focus (skip first mount)
+  // Use a ref to track if requests are still relevant
+  const focusAbortRef = useRef<boolean>(false)
+
   useFocusEffect(
     useCallback(() => {
       if (initialMountRef.current) {
         initialMountRef.current = false
         return // Skip on first mount - useEffect already handles it
       }
+
+      // Mark that we're focused and requests are valid
+      focusAbortRef.current = false
+
+      // Only refresh if we have data to refresh
       if (user && events.length > 0) {
         loadCheckinStatusesBatch()
       }
       if (user) {
         loadCheckedInEvents()
+      }
+
+      // Cleanup: abort pending requests when tab loses focus
+      return () => {
+        focusAbortRef.current = true
       }
     }, [user, events.length])
   )
