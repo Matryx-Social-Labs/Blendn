@@ -19,6 +19,7 @@ let globalAuthState: AuthState = {
 
 let authStateListeners: ((state: AuthState) => void)[] = []
 let sessionCheckInterval: NodeJS.Timeout | null = null
+let isInitializing = false // Prevent concurrent initialization
 
 // Update global state and notify listeners
 const updateAuthState = (newState: Partial<AuthState>) => {
@@ -32,6 +33,20 @@ const initializeAuth = async () => {
     return globalAuthState
   }
 
+  // Prevent concurrent initialization
+  if (isInitializing) {
+    // Wait for existing initialization to complete
+    return new Promise<AuthState>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (globalAuthState.initialized) {
+          clearInterval(checkInterval)
+          resolve(globalAuthState)
+        }
+      }, 50)
+    })
+  }
+
+  isInitializing = true
   Logger.info('auth', 'Initializing auth system...')
 
   // Start in loading state
@@ -108,6 +123,7 @@ const initializeAuth = async () => {
       })
     }
 
+    isInitializing = false
     return globalAuthState
   } catch (error) {
     Logger.error('auth', 'Failed to initialize auth', { error })
@@ -117,6 +133,7 @@ const initializeAuth = async () => {
       loading: false,
       initialized: true,
     })
+    isInitializing = false
     return globalAuthState
   }
 }

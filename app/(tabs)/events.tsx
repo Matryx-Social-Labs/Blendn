@@ -208,32 +208,40 @@ export default function Events() {
     setScrollProgress(e.nativeEvent.contentOffset.y, 320)
   }, [setScrollProgress])
 
+  // Single profile fetch for avatar and city
+  const loadUserProfile = useCallback(async () => {
+    if (!user) return
+    try {
+      const result = await apiClient.getProfile(user.id)
+      if (result.success && result.data) {
+        // Set avatar
+        const profile = result.data.profile
+        if (profile) {
+          const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
+                         (Array.isArray(profile.photos) && profile.photos[0]) ||
+                         result.data.image || null
+          setAvatarUrl(primary)
+          // Set city
+          if (profile.location) {
+            const firstPart = String(profile.location).split(',')[0]?.trim()
+            if (firstPart) setUserCity(firstPart)
+          }
+        }
+      }
+    } catch {}
+  }, [user])
+
+  const initialMountRef = useRef(true)
+
   useEffect(() => {
     if (!authLoading && user) {
       Logger.journey('events', 'mount:authorized', { userId: user.id })
       fetchEvents()
       getCurrentLocationQuietly()
       loadCheckedInEvents()
-      fetchUserCity()
-      // Load user avatar from profile
-      ;(async () => {
-        try {
-          const result = await apiClient.getProfile(user.id)
-          if (result.success && result.data?.profile) {
-            const profile = result.data.profile
-            const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
-                           (Array.isArray(profile.photos) && profile.photos[0]) ||
-                           result.data.image || null
-            if (primary) {
-              setAvatarUrl(primary)
-            } else {
-              setAvatarUrl(null)
-            }
-          }
-        } catch {}
-      })()
+      loadUserProfile() // Single profile fetch for avatar + city
     }
-  }, [user, authLoading])
+  }, [user, authLoading, loadUserProfile])
 
   useEffect(() => {
     if (events.length > 0 && user) {
@@ -243,9 +251,13 @@ export default function Events() {
     }
   }, [events, user])
 
-  // Refresh statuses when the screen regains focus
+  // Refresh statuses when the screen regains focus (skip first mount)
   useFocusEffect(
     useCallback(() => {
+      if (initialMountRef.current) {
+        initialMountRef.current = false
+        return // Skip on first mount - useEffect already handles it
+      }
       if (user && events.length > 0) {
         loadCheckinStatusesBatch()
       }
@@ -509,16 +521,7 @@ export default function Events() {
     }
   }
 
-  const fetchUserCity = async () => {
-    try {
-      if (!user) return
-      const result = await apiClient.getProfile(user.id)
-      if (result.success && result.data?.profile?.location) {
-        const firstPart = String(result.data.profile.location).split(',')[0]?.trim()
-        if (firstPart) setUserCity(firstPart)
-      }
-    } catch {}
-  }
+  // fetchUserCity removed - now handled in loadUserProfile
 
   // Removed city override feature
 

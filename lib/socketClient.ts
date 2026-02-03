@@ -156,7 +156,7 @@ export async function connect(): Promise<boolean> {
       return false
     }
 
-    Logger.info("socket", "Connecting to socket server...")
+    Logger.info("socket", `Connecting to socket server at: ${SOCKET_URL}`)
 
     socket = io(SOCKET_URL, {
       auth: { token: accessToken },

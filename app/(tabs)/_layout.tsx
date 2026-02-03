@@ -1,12 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Tabs, router } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import { Tabs } from 'expo-router';
+import React from 'react';
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { apiClient } from '../../lib/apiClient';
-import { useAuth } from '../../lib/useAuth';
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -92,29 +90,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabLayout() {
-  const guardRef = useRef<boolean>(false);
-  const { user, loading } = useAuth();
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (guardRef.current || loading) return;
-      guardRef.current = true;
-      try {
-        if (!user) return; // Root layout will handle auth redirect
-        const result = await apiClient.getProfile(user.id);
-        const profile = result.data;
-        const onboarded = result.success && profile?.onboarded === true;
-        if (!onboarded && !cancelled) {
-          router.replace('/onboarding/welcome');
-        }
-      } finally {
-        setTimeout(() => { guardRef.current = false; }, 200);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [user, loading]);
+  // Onboarding check removed - root layout already handles this
+  // This prevents duplicate profile fetches on app startup
 
   return (
     <Tabs

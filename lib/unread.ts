@@ -39,42 +39,23 @@ export async function computeUnreadCounts(conversationIds: string[]): Promise<Re
     return counts
   }
 
-  // Find the earliest last-read to bound the query
-  const readTimes: string[] = []
-  for (const id of conversationIds) {
-    const t = lastReadMap[id]
-    if (t) readTimes.push(t)
-  }
-  if (readTimes.length === 0) {
-    for (const id of conversationIds) counts[id] = 0
-    return counts
-  }
+  const entries = conversationIds.map(async (id) => {
+    const lastRead = lastReadMap[id]
+    if (!lastRead) return { id, count: 0 }
 
-  const minReadIso = readTimes.sort()[0]
+    const { error, count } = await supabase
+      .from('private_messages')
+      // Only request counts to avoid fetching full message rows
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', id)
+      .gt('created_at', lastRead)
 
-  // Fetch messages newer than the earliest last-read across these conversations
-  const { data, error } = await supabase
-    .from('private_messages')
-    .select('conversation_id, created_at')
-    .in('conversation_id', conversationIds)
-    .gt('created_at', minReadIso)
+    if (error) return { id, count: 0 }
+    return { id, count: count || 0 }
+  })
 
-  if (error) {
-    for (const id of conversationIds) counts[id] = 0
-    return counts
-  }
-
-  const list = Array.isArray(data) ? data : []
-  for (const id of conversationIds) counts[id] = 0
-  for (const row of list as any[]) {
-    const cid = String(row.conversation_id)
-    const lastRead = lastReadMap[cid]
-    if (lastRead && new Date(row.created_at).getTime() > new Date(lastRead).getTime()) {
-      counts[cid] = (counts[cid] || 0) + 1
-    }
-  }
-
+  const results = await Promise.all(entries)
+  for (const { id, count } of results) counts[id] = count
   return counts
 }
-
 
