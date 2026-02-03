@@ -4,7 +4,7 @@ import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { memo, useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Dimensions,
@@ -28,6 +28,98 @@ import { subscribeToEvent, EventCheckInCallback, EventCheckOutCallback } from '.
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
+
+// Memoized card components to prevent re-renders
+const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; onPress: () => void }) => {
+  const rawUrl = attendee.profile_photos?.[0] || ''
+
+  const formatTimeAgo = (iso?: string) => {
+    if (!iso) return ''
+    const diffMs = Date.now() - new Date(iso).getTime()
+    const minutes = Math.max(0, Math.floor(diffMs / 60000))
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes} mins ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  return (
+    <View style={styles.similarCardWrap}>
+      <TouchableOpacity activeOpacity={0.9} style={styles.similarCard} onPress={onPress}>
+        {rawUrl ? (
+          <OptimizedImage
+            source={rawUrl as any}
+            style={styles.similarImage as any}
+            contentFit="cover"
+            width={SIMILAR_CARD_WIDTH}
+            height={SIMILAR_CARD_HEIGHT}
+            quality={70}
+          />
+        ) : (
+          <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
+        )}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)']}
+          style={styles.similarGradient}
+        />
+        <View style={styles.similarInfo}>
+          <Text style={styles.similarName} numberOfLines={1}>
+            {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
+          </Text>
+          <Text style={styles.similarTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  )
+})
+
+SimilarCard.displayName = 'SimilarCard'
+
+const StartupItem = memo(({ attendee, onPress }: { attendee: AttendeeProfile; onPress: () => void }) => {
+  const rawUrl = attendee.profile_photos?.[0] || ''
+  const gridWidth = GRID_ITEM_WIDTH
+  const gridHeight = GRID_ITEM_HEIGHT
+
+  const formatTimeAgo = (iso?: string) => {
+    if (!iso) return ''
+    const diffMs = Date.now() - new Date(iso).getTime()
+    const minutes = Math.max(0, Math.floor(diffMs / 60000))
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes} mins ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  return (
+    <View style={[styles.gridItem, { width: gridWidth, height: gridHeight }]}>
+      <TouchableOpacity activeOpacity={0.9} style={styles.gridTouch} onPress={onPress}>
+        {rawUrl ? (
+          <OptimizedImage
+            source={rawUrl as any}
+            style={styles.gridImage as any}
+            contentFit="cover"
+            width={gridWidth}
+            height={gridHeight}
+            quality={60}
+          />
+        ) : (
+          <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
+        )}
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
+        <View style={styles.gridInfo}>
+          <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
+          <Text style={styles.gridTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  )
+})
+
+StartupItem.displayName = 'StartupItem'
 // Figma base frame width for iPhone 16
 const BASE_FRAME_WIDTH = 393
 
@@ -326,97 +418,6 @@ export default function Match() {
     )
   }
 
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return ''
-    const diffMs = Date.now() - new Date(iso).getTime()
-    const minutes = Math.max(0, Math.floor(diffMs / 60000))
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes} mins ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  const renderSimilarCard = (attendee: AttendeeProfile) => {
-    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0
-      ? attendee.profile_photos[0]
-      : ''
-    const optimized = rawUrl
-      ? getOptimizedImageUrl(rawUrl, { width: SIMILAR_CARD_WIDTH, height: SIMILAR_CARD_HEIGHT, resize: 'cover', quality: 70, format: 'webp' })
-      : undefined
-
-    return (
-      <View key={`similar_${attendee.user_id}`} style={styles.similarCardWrap}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.similarCard}
-          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
-        >
-          {rawUrl ? (
-            <OptimizedImage
-              source={rawUrl as any}
-              style={styles.similarImage as any}
-              contentFit="cover"
-              width={SIMILAR_CARD_WIDTH}
-              height={SIMILAR_CARD_HEIGHT}
-              quality={70}
-            />
-          ) : (
-            <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
-          )}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)']}
-            style={styles.similarGradient}
-          />
-          <View style={styles.similarInfo}>
-            <Text style={styles.similarName} numberOfLines={1}>
-              {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
-            </Text>
-            <Text style={styles.similarTime}>{formatTimeAgo(attendee.last_seen)}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
-  const renderStartupItem = (attendee: AttendeeProfile) => {
-    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0 ? attendee.profile_photos[0] : ''
-    const gridWidth = GRID_ITEM_WIDTH
-    const gridHeight = GRID_ITEM_HEIGHT
-    const optimized = rawUrl
-      ? getOptimizedImageUrl(rawUrl, { width: gridWidth, height: gridHeight, resize: 'cover', quality: 60, format: 'webp' })
-      : undefined
-
-    return (
-      <View key={`grid_${attendee.user_id}`} style={[styles.gridItem, { width: gridWidth, height: gridHeight }]}> 
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.gridTouch}
-          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
-        >
-          {rawUrl ? (
-            <OptimizedImage
-              source={rawUrl as any}
-              style={styles.gridImage as any}
-              contentFit="cover"
-              width={gridWidth}
-              height={gridHeight}
-              quality={60}
-            />
-          ) : (
-            <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
-          )}
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
-          <View style={styles.gridInfo}>
-            <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
-            <Text style={styles.gridTime}>{formatTimeAgo(attendee.last_seen)}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎬</Text>
@@ -516,7 +517,7 @@ export default function Match() {
         ) : attendees.length === 0 ? (
           <View style={styles.noMoreContainer}>
             <Text style={styles.noMoreIcon}>👋</Text>
-            <Text style={styles.noMoreTitle}>You're early!</Text>
+            <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
             <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
           </View>
         ) : (
@@ -537,7 +538,12 @@ export default function Match() {
                 setSimilarIndex(Math.max(0, idx))
               }}
               scrollEventThrottle={100}
-              renderItem={({ item }) => renderSimilarCard(item)}
+              renderItem={({ item }) => (
+                <SimilarCard
+                  attendee={item}
+                  onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } as any })}
+                />
+              )}
             />
             <View style={styles.dotsRow}>
               <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
@@ -547,7 +553,13 @@ export default function Match() {
 
             <Text style={styles.sectionTitle}>Startup</Text>
             <View style={styles.gridWrap}>
-              {attendees.slice(0, 12).map(renderStartupItem)}
+              {attendees.slice(0, 12).map((attendee) => (
+                <StartupItem
+                  key={`grid_${attendee.user_id}`}
+                  attendee={attendee}
+                  onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
+                />
+              ))}
             </View>
           </>
         )}

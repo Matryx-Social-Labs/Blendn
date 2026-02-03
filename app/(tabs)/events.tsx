@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Animated,
@@ -63,6 +63,66 @@ interface Event {
   latitude: number
   longitude: number
 }
+
+// Memoized carousel card component to prevent re-renders
+const CarouselCard = memo(({
+  event,
+  onPress,
+  onToggleInterest,
+  isInterested,
+  showCheckout,
+  onCheckout,
+}: {
+  event: Event
+  onPress: () => void
+  onToggleInterest?: () => void
+  isInterested?: boolean
+  showCheckout?: boolean
+  onCheckout?: () => void
+}) => {
+  if (!event.cover_image_url) return null
+
+  return (
+    <TouchableOpacity style={styles.carouselCard} onPress={onPress}>
+      <ImageBackground
+        source={{ uri: event.cover_image_url }}
+        style={styles.carouselImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+          style={styles.carouselGradient}
+        />
+        <View style={styles.carouselContentOverlay}>
+          <Text style={styles.carouselEventTitle} numberOfLines={1}>{event.title}</Text>
+          <Text style={styles.carouselVenue} numberOfLines={1}>{event.venue_name}</Text>
+          <Text style={styles.carouselTime}>
+            {formatEventDateTime(event.start_time)}
+          </Text>
+          {showCheckout && onCheckout && (
+            <TouchableOpacity
+              onPress={onCheckout}
+              style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 12 }}>Check out</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ImageBackground>
+      {onToggleInterest && (
+        <TouchableOpacity
+          onPress={onToggleInterest}
+          style={styles.carouselHeartButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.carouselHeartText}>{isInterested ? '♥︎' : '♡'}</Text>
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  )
+})
+
+CarouselCard.displayName = 'CarouselCard'
 
 export default function Events() {
   const { user, loading: authLoading } = useAuth()
@@ -1170,7 +1230,7 @@ export default function Events() {
                 {events.length === 0 && (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>No events found</Text>
-                    <Text style={styles.emptySub}>We'll show nearby events automatically.</Text>
+                    <Text style={styles.emptySub}>We&apos;ll show nearby events automatically.</Text>
                   </View>
                 )}
                 {interestedItems.length > 0 ? renderInterestedCarousel(interestedItems.slice(0, 10)) : renderInterestedEmpty()}
