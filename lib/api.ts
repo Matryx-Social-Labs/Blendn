@@ -36,7 +36,28 @@ export async function getEvents(params?: EventsParams) {
   } : { page: 1 }
   const result = await apiClient.getEvents(apiParams)
   if (result.success && result.data) {
-    return { data: result.data.events, error: null }
+    // Transform API response (camelCase) to mobile format (snake_case)
+    const events = result.data.events.map((e: any) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description || '',
+      short_description: e.shortDescription || '',
+      venue_name: e.venueName || '',
+      address: e.address || '',
+      start_time: e.startTime,
+      end_time: e.endTime,
+      price_cents: e.priceCents || 0,
+      max_capacity: e.maxCapacity || 0,
+      current_capacity: e.currentCapacity || 0,
+      cover_image_url: e.coverImageUrl || null,
+      category: e.categories?.[0]?.name || e.category || '',
+      city: e.city,
+      check_in_radius: e.checkInRadius || 100,
+      latitude: e.latitude,
+      longitude: e.longitude,
+      distance: e.distance,
+    }))
+    return { data: events, error: null }
   }
   return { data: null, error: { message: result.error || 'Failed to fetch events' } }
 }

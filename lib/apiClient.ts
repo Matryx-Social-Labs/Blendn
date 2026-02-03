@@ -41,10 +41,10 @@ class RequestQueue {
     type: 'query' | 'mutation' | 'auth'
   }> = []
   private processing = false
-  private maxConcurrent = 3
+  private maxConcurrent = 6  // Increased from 3 for better parallelism
   private currentRequests = 0
   private lastProcessTime = 0
-  private debounceMs = 50
+  private debounceMs = 10   // Reduced from 50ms for faster processing
   private requestCount = 0
   private errorCount = 0
 
@@ -296,6 +296,68 @@ class ApiClientClass {
     this.baseUrl = baseUrl
   }
 
+  private buildErrorMessage(
+    response: Response,
+    payload: unknown,
+    endpoint: string
+  ): string {
+    if (payload && typeof payload === 'object') {
+      const anyPayload = payload as {
+        error?: string
+        message?: string
+        errors?: Array<{ message?: string }>
+      }
+      if (anyPayload.error) return anyPayload.error
+      if (anyPayload.message) return anyPayload.message
+      if (Array.isArray(anyPayload.errors) && anyPayload.errors.length > 0) {
+        const first = anyPayload.errors.find((err) => err?.message)
+        if (first?.message) return first.message
+      }
+    }
+    const statusText = response.statusText ? ` ${response.statusText}` : ''
+    return `HTTP ${response.status}${statusText} (${endpoint})`
+  }
+
+  private async parseResponse<T>(
+    response: Response,
+    endpoint: string
+  ): Promise<ApiResponse<T>> {
+    const raw = await response.text()
+    if (!raw) {
+      if (response.ok) {
+        return { success: true } as ApiResponse<T>
+      }
+      return { success: false, error: this.buildErrorMessage(response, null, endpoint) }
+    }
+
+    let parsed: any
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      if (response.ok) {
+        return { success: true, data: raw as unknown as T }
+      }
+      return {
+        success: false,
+        error: `Invalid JSON response (${response.status}) (${endpoint})`,
+      }
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: this.buildErrorMessage(response, parsed, endpoint),
+        errors: parsed?.errors,
+      }
+    }
+
+    if (parsed && typeof parsed === 'object' && 'success' in parsed) {
+      return parsed as ApiResponse<T>
+    }
+
+    return { success: true, data: parsed as T }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -335,7 +397,7 @@ class ApiClientClass {
             ...options,
             headers,
           })
-          return retryResponse.json()
+          return this.parseResponse<T>(retryResponse, endpoint)
         } else {
           // Refresh failed, clear tokens and return error
           await TokenStorage.clearAll()
@@ -343,13 +405,12 @@ class ApiClientClass {
         }
       }
 
-      const data = await response.json()
-      return data
+      return this.parseResponse<T>(response, endpoint)
     } catch (error) {
       Logger.error('api', 'Request failed', { endpoint, error })
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network error',
+        error: error instanceof Error ? error.message : `Network error (${endpoint})`,
       }
     }
   }
@@ -719,23 +780,6 @@ class ApiClientClass {
     const query = searchParams.toString()
     return this.queuedRequest<any[]>(
       `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
-    )
-  }
-
-  // === NOTIFICATION ENDPOINTS ===
-
-  async registerPushToken(
-    token: string,
-    platform: 'ios' | 'android'
-  ): Promise<ApiResponse<void>> {
-    return this.queuedRequest<void>(
-      '/api/mobile/notifications/token',
-      {
-        method: 'POST',
-        body: JSON.stringify({ token, platform }),
-      },
-      true,
-      3
     )
   }
 

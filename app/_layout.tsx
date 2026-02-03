@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
@@ -14,6 +15,8 @@ import {
 import { apiClient } from '../lib/apiClient';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { useAuth } from '../lib/useAuth';
+
+const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 
 function BackgroundGradient() {
   return (
@@ -105,13 +108,35 @@ export default function RootLayout() {
         });
       }
 
-      // Check onboarding status, fail-closed (treat errors/missing as not onboarded)
+      // Check onboarding status with caching for faster startup
       let onboarded = false;
       try {
-        const result = await apiClient.getProfile(user.id);
-        if (result.success && result.data) {
-          // The onboarded flag is in the nested profile object
-          onboarded = result.data.profile?.onboarded === true;
+        // First check cached value for instant navigation
+        const cachedStatus = await AsyncStorage.getItem(`${ONBOARDED_CACHE_KEY}_${user.id}`);
+        if (cachedStatus === 'true') {
+          onboarded = true;
+        }
+
+        // Fetch fresh status in background and update cache
+        apiClient.getProfile(user.id).then((result) => {
+          if (result.success && result.data) {
+            const freshOnboarded = result.data.profile?.onboarded === true;
+            AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(freshOnboarded));
+            // If status changed from cached, trigger re-navigation
+            if (freshOnboarded !== onboarded && !freshOnboarded) {
+              // User needs to complete onboarding
+              router.replace('/onboarding/welcome');
+            }
+          }
+        }).catch(() => {});
+
+        // If no cache, wait for the API call (first-time users)
+        if (cachedStatus === null) {
+          const result = await apiClient.getProfile(user.id);
+          if (result.success && result.data) {
+            onboarded = result.data.profile?.onboarded === true;
+            AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(onboarded));
+          }
         }
       } catch {
         onboarded = false;
