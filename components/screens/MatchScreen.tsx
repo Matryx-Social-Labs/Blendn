@@ -4,9 +4,10 @@ import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { memo, useCallback, useEffect, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   ScrollView,
@@ -68,7 +69,9 @@ const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
           <Text style={styles.similarName} numberOfLines={1}>
             {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
           </Text>
-          <Text style={styles.similarTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+          <View style={styles.timeChip}>
+            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
+          </View>
         </View>
       </TouchableOpacity>
     </View>
@@ -77,10 +80,10 @@ const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
 
 SimilarCard.displayName = 'SimilarCard'
 
-const StartupItem = memo(({ attendee, onPress }: { attendee: AttendeeProfile; onPress: () => void }) => {
+const StartupItem = memo(({ attendee, onPress, isRightColumn }: { attendee: AttendeeProfile; onPress: () => void; isRightColumn?: boolean }) => {
   const rawUrl = attendee.profile_photos?.[0] || ''
-  const gridWidth = GRID_ITEM_WIDTH
-  const gridHeight = GRID_ITEM_HEIGHT
+  const cardWidth = GRID_ITEM_WIDTH
+  const cardHeight = GRID_ITEM_HEIGHT
 
   const formatTimeAgo = (iso?: string) => {
     if (!iso) return ''
@@ -95,15 +98,20 @@ const StartupItem = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
   }
 
   return (
-    <View style={[styles.gridItem, { width: gridWidth, height: gridHeight }]}>
+    <View
+      style={[
+        styles.gridItem,
+        { width: cardWidth, height: cardHeight, marginRight: isRightColumn ? 0 : GRID_GAP },
+      ]}
+    >
       <TouchableOpacity activeOpacity={0.9} style={styles.gridTouch} onPress={onPress}>
         {rawUrl ? (
           <OptimizedImage
             source={rawUrl as any}
             style={styles.gridImage as any}
             contentFit="cover"
-            width={gridWidth}
-            height={gridHeight}
+            width={cardWidth}
+            height={cardHeight}
             quality={60}
           />
         ) : (
@@ -112,7 +120,9 @@ const StartupItem = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
         <View style={styles.gridInfo}>
           <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
-          <Text style={styles.gridTime}>{formatTimeAgo(attendee.last_seen)}</Text>
+          <View style={[styles.timeChip, styles.timeChipCompact]}>
+            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
+          </View>
         </View>
       </TouchableOpacity>
     </View>
@@ -127,12 +137,12 @@ const BASE_FRAME_WIDTH = 393
 const SIMILAR_CARD_WIDTH = Math.round(width * (163 / BASE_FRAME_WIDTH))
 const SIMILAR_CARD_HEIGHT = Math.round(SIMILAR_CARD_WIDTH * (260 / 163))
 
-// Grid sizing (3 columns) from Figma blocks (105x115) with 26px side padding and 13px gaps
-const CONTENT_SIDE_PADDING = 26
-const GRID_GAP = 13
-const contentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
-const GRID_ITEM_WIDTH = Math.floor((contentWidth - GRID_GAP * 2) / 3)
-const GRID_ITEM_HEIGHT = Math.round(GRID_ITEM_WIDTH * (115 / 105))
+// Content spacing + grid sizing (2 columns)
+const CONTENT_SIDE_PADDING = 18
+const GRID_GAP = 12
+const gridContentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
+const GRID_ITEM_WIDTH = Math.floor((gridContentWidth - GRID_GAP) / 2)
+const GRID_ITEM_HEIGHT = 160
 
 // Legacy attendee tile sizes (kept for potential reuse elsewhere on this screen)
 const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
@@ -164,8 +174,11 @@ export default function Match() {
   const [matches, setMatches] = useState<MatchPreview[]>([])
   const [error, setError] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
-  const [activeSegment, setActiveSegment] = useState<'matching' | 'chat'>('matching')
   const [similarIndex, setSimilarIndex] = useState(0)
+  const lastSimilarIndex = useRef(0)
+  const contentOpacity = useRef(new Animated.Value(0)).current
+  const contentTranslate = useRef(new Animated.Value(8)).current
+  const similarScrollX = useRef(new Animated.Value(0)).current
   const getSimilarItemLayout = useCallback(
     (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
       length: SIMILAR_CARD_WIDTH + 16,
@@ -173,6 +186,47 @@ export default function Match() {
       index,
     }),
     []
+  )
+
+  useEffect(() => {
+    if (loading) {
+      contentOpacity.setValue(0)
+      contentTranslate.setValue(8)
+      return
+    }
+
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslate, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [loading, contentOpacity, contentTranslate])
+
+  const getLiftStyle = useCallback(
+    (index: number) => {
+      const cardSpan = SIMILAR_CARD_WIDTH + 16
+      const inputRange = [(index - 1) * cardSpan, index * cardSpan, (index + 1) * cardSpan]
+      const scale = similarScrollX.interpolate({
+        inputRange,
+        outputRange: [0.98, 1, 0.98],
+        extrapolate: 'clamp',
+      })
+      const translateY = similarScrollX.interpolate({
+        inputRange,
+        outputRange: [2, 0, 2],
+        extrapolate: 'clamp',
+      })
+
+      return { transform: [{ translateY }, { scale }] }
+    },
+    [similarScrollX]
   )
 
   useEffect(() => {
@@ -270,28 +324,20 @@ export default function Match() {
 
   const loadActiveEventAndAttendees = async (userId: string) => {
     try {
-      // Get events to find which one user is checked into
-      // We'll use the getEvents API and check userStatus
-      const eventsResult = await apiClient.getEvents({ limit: 20 })
+      // Use active check-ins endpoint to find current event
+      const activeCheckinsResult = await apiClient.getActiveCheckins()
 
-      if (!eventsResult.success || !eventsResult.data?.events) {
-        Logger.error('match', 'Error fetching events', { error: eventsResult.error })
+      if (!activeCheckinsResult.success || !activeCheckinsResult.data?.checkIns) {
+        Logger.error('match', 'Error fetching active check-ins', { error: activeCheckinsResult.error })
         setEventInfo(null)
         setAttendees([])
         return
       }
 
-      // Find an event where user is checked in
-      let activeEventId: string | null = null
-      let activeEventTitle: string | undefined
-
-      for (const event of eventsResult.data.events) {
-        if (event.userStatus?.isCheckedIn) {
-          activeEventId = event.id
-          activeEventTitle = event.title
-          break
-        }
-      }
+      const activeUserCheckins = activeCheckinsResult.data.checkIns || []
+      const latestCheckin = activeUserCheckins[0]
+      const activeEventId: string | null = latestCheckin?.eventId || null
+      const activeEventTitle: string | undefined = latestCheckin?.event?.title
 
       if (!activeEventId) {
         setEventInfo(null)
@@ -319,27 +365,33 @@ export default function Match() {
         return
       }
 
-      const checkins = checkinsResult.data || []
-      const activeCheckins = checkins.filter((c: any) =>
-        c.user_id !== userId &&
-        c.status === 'checked_in' &&
-        !blockedIds.has(c.user_id)
-      )
+      const payload: any = checkinsResult.data
+      const checkins = Array.isArray(payload) ? payload : (payload.attendees || [])
+      const activeAttendeeCheckins = checkins.filter((c: any) => {
+        const checkinUserId = c.user_id || c.userId || c.user?.id
+        const status = c.status || 'checked_in'
+        return (
+          checkinUserId &&
+          checkinUserId !== userId &&
+          status === 'checked_in' &&
+          !blockedIds.has(checkinUserId)
+        )
+      })
 
-      if (activeCheckins.length === 0) {
+      if (activeAttendeeCheckins.length === 0) {
         setAttendees([])
         return
       }
 
       // Build attendee profiles from check-in data
-      const attendeeProfiles: AttendeeProfile[] = activeCheckins.map((c: any) => ({
-        user_id: c.user_id,
-        name: c.user?.name || c.user?.profile?.name,
-        age: c.user?.profile?.age,
+      const attendeeProfiles: AttendeeProfile[] = activeAttendeeCheckins.map((c: any) => ({
+        user_id: c.user_id || c.userId || c.user?.id,
+        name: c.user?.name || c.name || c.user?.profile?.name,
+        age: c.user?.profile?.age || c.age,
         bio: c.user?.profile?.bio,
         interests: c.user?.profile?.interests,
-        profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined),
-        last_seen: c.check_in_time,
+        profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined) || (c.image ? [c.image] : undefined),
+        last_seen: c.check_in_time || c.checkInTime,
       }))
 
       attendeeProfiles.sort((a, b) => {
@@ -428,7 +480,7 @@ export default function Match() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>🎬</Text>
+      <View style={styles.emptyGlyph} />
       <Text style={styles.emptyTitle}>Meet People at Events</Text>
       <Text style={styles.emptyText}>
         Check in to an event to see other attendees and start a conversation.
@@ -475,31 +527,34 @@ export default function Match() {
           </View>
         </View>
 
-        <View style={styles.segmentContainer}>
-          <View style={[styles.segmentPill, { width: Math.round(width * (370 / BASE_FRAME_WIDTH)), alignSelf: 'center' }]}>
-            <TouchableOpacity
-              style={[styles.segmentBtn, activeSegment === 'matching' && styles.segmentBtnActive]}
-              onPress={() => setActiveSegment('matching')}
-              activeOpacity={0.9}
-            >
-              <Text style={[styles.segmentText, activeSegment === 'matching' && styles.segmentTextActive]}>Start Matching</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.segmentBtn, activeSegment === 'chat' && styles.segmentBtnActive]}
-              onPress={() => {
-                setActiveSegment('chat')
-                router.push('/(tabs)/chat' as any)
-              }}
-              activeOpacity={0.9}
-            >
-              <Text style={[styles.segmentText, activeSegment === 'chat' && styles.segmentTextActive]}>Join Chat</Text>
-            </TouchableOpacity>
+        <View style={styles.liveRow}>
+          <View style={styles.liveTextWrap}>
+            <View style={styles.liveLabelRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveLabel}>Live at</Text>
+            </View>
+            <Text style={styles.liveTitle} numberOfLines={1}>
+              {eventInfo?.title || 'Your Event'}
+            </Text>
           </View>
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() => router.push('/(tabs)/chat' as any)}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.chatButtonText}>Event Room</Text>
+          </TouchableOpacity>
         </View>
 
         {isLoading ? (
           <>
-            <Text style={styles.sectionTitle}>Similar Interests</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Recommended</Text>
+              <View style={styles.sectionCountPill}>
+                <Text style={styles.sectionCountText}>0</Text>
+              </View>
+            </View>
+            <View style={styles.sectionDivider} />
             <View style={styles.similarList}>
               <FlatList
                 horizontal
@@ -518,64 +573,107 @@ export default function Match() {
               <View style={styles.dotSmall} />
             </View>
 
-            <Text style={styles.sectionTitle}>Startup</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Also Here</Text>
+              <View style={styles.sectionCountPill}>
+                <Text style={styles.sectionCountText}>0</Text>
+              </View>
+            </View>
+            <View style={styles.sectionDivider} />
             <View style={styles.gridWrap}>
-              {[...Array(12)].map((_, i) => (
-                <SkeletonBlock key={`sk-g-${i}`} width={GRID_ITEM_WIDTH} height={GRID_ITEM_HEIGHT} borderRadius={24} style={{ marginRight: GRID_GAP, marginBottom: GRID_GAP }} />
+              {[...Array(8)].map((_, i) => (
+                <SkeletonBlock
+                  key={`sk-g-${i}`}
+                  width={GRID_ITEM_WIDTH}
+                  height={GRID_ITEM_HEIGHT}
+                  borderRadius={24}
+                  style={{ marginRight: (i % 2 === 0 ? GRID_GAP : 0), marginBottom: GRID_GAP }}
+                />
               ))}
             </View>
           </>
-        ) : !eventInfo ? (
-          renderEmptyState()
-        ) : attendees.length === 0 ? (
-          <View style={styles.noMoreContainer}>
-            <Text style={styles.noMoreIcon}>👋</Text>
+        ) : (
+          <Animated.View
+            style={[
+              styles.contentReveal,
+              { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] },
+            ]}
+          >
+            {!eventInfo ? (
+              renderEmptyState()
+            ) : attendees.length === 0 ? (
+        <View style={styles.noMoreContainer}>
             <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
             <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
           </View>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>Similar Interests</Text>
-            <FlatList
-              data={attendees}
-              keyExtractor={(a) => `similar_${a.user_id}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.similarList}
-              snapToInterval={SIMILAR_CARD_WIDTH + 16}
-              decelerationRate="fast"
-              getItemLayout={getSimilarItemLayout}
-              onMomentumScrollEnd={(e) => {
-                // Only update index when scroll settles, not during scroll
-                const x = e.nativeEvent.contentOffset.x
-                const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
-                setSimilarIndex(Math.max(0, idx))
-              }}
-              scrollEventThrottle={100}
-              renderItem={({ item }) => (
-                <SimilarCard
-                  attendee={item}
-                  onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } as any })}
+            ) : (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Recommended</Text>
+                  <View style={styles.sectionCountPill}>
+                    <Text style={styles.sectionCountText}>{Math.min(attendees.length, 12)}</Text>
+                  </View>
+                </View>
+                <View style={styles.sectionDivider} />
+                <Animated.FlatList
+                  data={attendees.slice(0, 5)}
+                  keyExtractor={(a) => `similar_${a.user_id}`}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.similarList}
+                  snapToInterval={SIMILAR_CARD_WIDTH + 16}
+                  decelerationRate="fast"
+                  getItemLayout={getSimilarItemLayout}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: similarScrollX } } }],
+                    {
+                      useNativeDriver: true,
+                      listener: (e) => {
+                        const x = e.nativeEvent.contentOffset.x || 0
+                        const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
+                        if (idx !== lastSimilarIndex.current) {
+                          lastSimilarIndex.current = idx
+                          setSimilarIndex(Math.max(0, idx))
+                        }
+                      },
+                    }
+                  )}
+                  scrollEventThrottle={16}
+                  renderItem={({ item, index }) => (
+                    <Animated.View style={getLiftStyle(index)}>
+                      <SimilarCard
+                        attendee={item}
+                        onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } as any })}
+                      />
+                    </Animated.View>
+                  )}
                 />
-              )}
-            />
-            <View style={styles.dotsRow}>
-              <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
-              <View style={[styles.dotSmall, (similarIndex % 3) === 1 && styles.dotActive]} />
-              <View style={[styles.dotSmall, (similarIndex % 3) === 2 && styles.dotActive]} />
-            </View>
+                <View style={styles.dotsRow}>
+                  <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
+                  <View style={[styles.dotSmall, (similarIndex % 3) === 1 && styles.dotActive]} />
+                  <View style={[styles.dotSmall, (similarIndex % 3) === 2 && styles.dotActive]} />
+                </View>
 
-            <Text style={styles.sectionTitle}>Startup</Text>
-            <View style={styles.gridWrap}>
-              {attendees.slice(0, 12).map((attendee) => (
-                <StartupItem
-                  key={`grid_${attendee.user_id}`}
-                  attendee={attendee}
-                  onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
-                />
-              ))}
-            </View>
-          </>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Also Here</Text>
+                  <View style={styles.sectionCountPill}>
+                    <Text style={styles.sectionCountText}>{Math.min(attendees.length, 12)}</Text>
+                  </View>
+                </View>
+                <View style={styles.sectionDivider} />
+                <View style={styles.gridWrap}>
+                  {attendees.slice(0, 12).map((attendee, index) => (
+                    <StartupItem
+                      key={`grid_${attendee.user_id}`}
+                      attendee={attendee}
+                      isRightColumn={(index + 1) % 2 === 0}
+                      onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+          </Animated.View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -593,18 +691,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 14,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerTitleText: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   headerRight: {
     width: 40,
@@ -638,43 +737,63 @@ const styles = StyleSheet.create({
   scrollBody: {
     paddingBottom: 40,
   },
+  contentReveal: {
+    paddingBottom: 4,
+  },
   heroGradient: {
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
   
-  segmentContainer: {
+  liveRow: {
+    paddingHorizontal: 18,
     paddingTop: 10,
-  },
-  segmentPill: {
-    backgroundColor: 'rgba(118,118,128,0.32)',
-    borderRadius: 100,
-    padding: 4,
-    height: 52,
+    paddingBottom: 6,
     flexDirection: 'row',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.20)',
-    overflow: 'hidden',
-  },
-  segmentBtn: {
-    flex: 1,
-    height: 44,
-    paddingVertical: 0,
-    borderRadius: 22,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
-  segmentBtnActive: {
-    backgroundColor: '#480D37',
+  liveTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
-  segmentText: {
+  liveLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#34C759',
+  },
+  liveLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  liveTitle: {
     color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#2C0C22',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  chatButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '600',
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  segmentTextActive: {
-    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
@@ -694,11 +813,36 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    paddingHorizontal: 16,
-    marginTop: 16,
+    marginTop: 18,
     marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+  },
+  sectionCountPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  sectionCountText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionDivider: {
+    height: 1,
+    marginHorizontal: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 6,
   },
   rowHeader: {
     flexDirection: 'row',
@@ -725,7 +869,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   similarList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingBottom: 8,
   },
   similarCardWrap: {
@@ -738,7 +882,13 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#1f0b1e',
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   similarImage: {
     width: '100%',
@@ -764,8 +914,26 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   similarTime: {
-    color: '#e6e6e6',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 12,
+  },
+  timeChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  timeChipCompact: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  timeChipText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
   },
   dotsRow: {
     flexDirection: 'row',
@@ -778,30 +946,35 @@ const styles = StyleSheet.create({
     width: Math.round(width * (60 / BASE_FRAME_WIDTH)),
     height: 6,
     borderRadius: 11,
-    backgroundColor: 'rgba(217,217,217,1)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     marginHorizontal: 7,
   },
   dotSmall: {
     width: Math.round(width * (7 / BASE_FRAME_WIDTH)),
     height: 6,
     borderRadius: 9,
-    backgroundColor: 'rgba(217,217,217,1)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     marginHorizontal: 7,
   },
   dotActive: {
     backgroundColor: '#FFFFFF',
   },
   gridWrap: {
+    paddingHorizontal: CONTENT_SIDE_PADDING,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: CONTENT_SIDE_PADDING,
   },
   gridItem: {
     borderRadius: 24,
     overflow: 'hidden',
-    marginRight: GRID_GAP,
     marginBottom: GRID_GAP,
-    backgroundColor: '#1f0b1e',
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   gridTouch: {
     flex: 1,
@@ -830,7 +1003,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   gridTime: {
-    color: '#e6e6e6',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 10,
   },
   matchItem: {
@@ -874,9 +1047,15 @@ const styles = StyleSheet.create({
   tile: {
     width: '100%',
     height: '100%',
-    borderRadius: 14,
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#f2f2f2',
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   tileImage: {
     width: '100%',
@@ -920,19 +1099,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 40,
   },
-  noMoreIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
   noMoreTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 12,
+    letterSpacing: 0.2,
   },
   noMoreText: {
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255,255,255,0.75)',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 30,
@@ -943,29 +1119,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 40,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 20,
+  emptyGlyph: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 18,
   },
   emptyTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 12,
+    letterSpacing: 0.2,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255,255,255,0.75)',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 40,
   },
   eventsButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#2C0C22',
     paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 25,
+    paddingVertical: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   eventsButtonText: {
     color: '#fff',

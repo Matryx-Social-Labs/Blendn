@@ -57,6 +57,7 @@ export async function getEvents(params?: EventsParams) {
       latitude: e.latitude,
       longitude: e.longitude,
       distance: e.distance,
+      media: Array.isArray(e.media) ? e.media : [],
       is_favorited: e.isFavorited === true,
       favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
       user_checkin: e.userCheckin || null,

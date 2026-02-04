@@ -1,5 +1,5 @@
-import React, { memo, useMemo } from 'react'
-import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import React, { memo, useEffect, useMemo, useRef } from 'react'
+import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { formatEventDateTime } from '../lib/time'
 import OptimizedImage from './OptimizedImage'
 import Typography from './Typography'
@@ -68,8 +68,19 @@ const EventCard = memo<EventCardProps>(({
     return `${km.toFixed(km >= 10 ? 0 : 1)} km`
   }, [proximity])
 
+  const fadeIn = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    Animated.timing(fadeIn, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start()
+  }, [fadeIn])
+
   return (
-    <TouchableOpacity style={styles.eventCard} onPress={handlePress}>
+    <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
+      <TouchableOpacity style={styles.eventCard} onPress={handlePress}>
       {event.cover_image_url ? (
         <OptimizedImage
           source={event.cover_image_url}
@@ -172,6 +183,7 @@ const EventCard = memo<EventCardProps>(({
         </View>
       </View>
     </TouchableOpacity>
+    </Animated.View>
   )
 })
 
@@ -179,15 +191,16 @@ EventCard.displayName = 'EventCard'
 
 const styles = StyleSheet.create({
   eventCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 18,
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginVertical: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: 'hidden',
   },
   eventImage: {
     width: '100%',
@@ -200,18 +213,18 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   eventVenue: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
     marginBottom: 8,
   },
   eventDescription: {
     fontSize: 14,
-    color: '#777',
+    color: 'rgba(255,255,255,0.7)',
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -223,13 +236,13 @@ const styles = StyleSheet.create({
   },
   eventTime: {
     fontSize: 12,
-    color: '#888',
+    color: 'rgba(255,255,255,0.65)',
     flex: 1,
   },
   eventPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#007AFF',
+    color: '#FFFFFF',
   },
   statusRow: {
     flexDirection: 'row',
@@ -250,37 +263,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   chipNeutral: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   chipWarning: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: 'rgba(255,188,92,0.16)',
   },
   chipWarningText: {
-    color: '#E65100',
+    color: '#FFB24A',
   },
   chipText: {
     fontSize: 12,
-    color: '#555',
+    color: 'rgba(255,255,255,0.8)',
   },
   statusBadge: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: 'rgba(88, 201, 119, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   statusText: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: '#7DE59C',
     fontWeight: '500',
   },
   distanceBadge: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   distanceText: {
-    color: '#666',
+    color: 'rgba(255,255,255,0.75)',
   },
   checkinButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#2F6BFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -291,21 +304,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   interestButton: {
-    backgroundColor: '#fde7ef',
+    backgroundColor: 'rgba(255,45,85,0.18)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
   },
   interestButtonActive: {
-    backgroundColor: '#f8cfe0',
+    backgroundColor: 'rgba(255,45,85,0.28)',
   },
   interestButtonText: {
-    color: '#D81B60',
+    color: '#FF7BA2',
     fontSize: 14,
     fontWeight: '600',
   },
   interestButtonTextActive: {
-    color: '#C2185B',
+    color: '#FF8FB3',
   },
   secondaryRow: {
     marginTop: 8,

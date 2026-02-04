@@ -16,6 +16,7 @@ interface OptimizedImageProps {
   enableWebP?: boolean
   enableProgressive?: boolean
   priority?: 'low' | 'normal' | 'high'
+  disableOptimization?: boolean
   onLoad?: () => void
   onError?: (error: any) => void
   blurRadius?: number
@@ -42,6 +43,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   enableWebP = true,
   enableProgressive = false, // Disabled by default - causes double loads
   priority = 'normal',
+  disableOptimization = false,
   onLoad,
   onError,
   blurRadius,
@@ -67,7 +69,8 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     height,
     quality,
     enableWebP,
-    effectiveEnableProgressive
+    effectiveEnableProgressive,
+    disableOptimization
   )
 
   const fadeIn = useCallback((animatedValue: Animated.Value, duration: number = transition) => {
@@ -206,7 +209,8 @@ const useOptimizedUrls = (
   height?: number,
   quality: number = 75,
   enableWebP: boolean = true,
-  enableProgressive: boolean = true
+  enableProgressive: boolean = true,
+  disableOptimization: boolean = false
 ) => {
   const [urls, setUrls] = React.useState<{ lowQualityUrl: string; highQualityUrl: string }>({ lowQualityUrl: '', highQualityUrl: '' })
 
@@ -222,6 +226,11 @@ const useOptimizedUrls = (
 
         const baseOptions = { width, height, resize: 'cover' as const }
         const progressiveEnabled = enableProgressive && (!width || !height || Math.max(width, height) >= 220)
+
+        if (disableOptimization) {
+          if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: sourceStr })
+          return
+        }
 
         // If the source is already a URL, use public optimizer
         if (/^https?:\/\//i.test(sourceStr)) {

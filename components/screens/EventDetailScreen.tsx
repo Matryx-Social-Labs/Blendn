@@ -88,16 +88,59 @@ export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam, interested } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
-  const [event, setEvent] = useState<EventDetail | null>(null)
+
+  // Initialize event from params if available for instant display
+  const hasParams = !!(title || cover || venue)
+  const [event, setEvent] = useState<EventDetail | null>(() => {
+    if (hasParams) {
+      return {
+        id: String(id || ''),
+        title: String(title || ''),
+        venue_name: String(venue || ''),
+        cover_image_url: String(cover || ''),
+        city: String(city || ''),
+        start_time: String(start || new Date().toISOString()),
+        end_time: String(end || new Date().toISOString()),
+        category: String(category || ''),
+        description: String(descriptionParam || ''),
+        short_description: '',
+        address: '',
+        price_cents: 0,
+        max_capacity: 0,
+        current_capacity: 0,
+        organizer: '',
+        latitude: 0,
+        longitude: 0,
+        check_in_radius: 100,
+      }
+    }
+    return null
+  })
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Don't show loading skeleton if we have params - show content immediately
+  const [loading, setLoading] = useState(!hasParams)
   const [checkingIn, setCheckingIn] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   const [proximityStatus, setProximityStatus] = useState<any>(null)
-  const [interestCount, setInterestCount] = useState<number>(0)
+  // Initialize from params for instant display
+  const [interestCount, setInterestCount] = useState<number>(() => {
+    if (interestCountParam && typeof interestCountParam === 'string') {
+      const parsed = parseInt(interestCountParam, 10)
+      return Number.isNaN(parsed) ? 0 : parsed
+    }
+    return 0
+  })
   const [userInterested, setUserInterested] = useState<boolean>(false)
-  const [interestedAvatars, setInterestedAvatars] = useState<string[]>([])
+  const [interestedAvatars, setInterestedAvatars] = useState<string[]>(() => {
+    if (interested && typeof interested === 'string') {
+      try {
+        const parsed = JSON.parse(interested)
+        if (Array.isArray(parsed)) return parsed.filter(Boolean)
+      } catch {}
+    }
+    return []
+  })
   const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
   const [showGallery, setShowGallery] = useState(false)
@@ -110,47 +153,7 @@ export default function EventDetail() {
   useEffect(() => {
     if (id && String(id).trim()) {
       Logger.journey('events', 'detail:mount', { eventId: String(id) })
-      if (cover || title || venue || city || start || end || category || descriptionParam || interestCountParam || interested) {
-        setEvent((prev) => ({
-          id: String(id),
-          title: (title as string) || prev?.title || '',
-          description: (descriptionParam as string) || prev?.description || '',
-          short_description: prev?.short_description || '',
-          city: (city as string) || prev?.city || '',
-          venue_name: (venue as string) || prev?.venue_name || '',
-          address: prev?.address || '',
-          start_time: (start as string) || prev?.start_time || new Date().toISOString(),
-          end_time: (end as string) || prev?.end_time || new Date().toISOString(),
-          category: (category as string) || prev?.category || '',
-          price_cents: prev?.price_cents || 0,
-          max_capacity: prev?.max_capacity || 0,
-          current_capacity: prev?.current_capacity || 0,
-          cover_image_url: (cover as string) || prev?.cover_image_url || '',
-          organizer: prev?.organizer || '',
-          latitude: prev?.latitude || 0,
-          longitude: prev?.longitude || 0,
-          check_in_radius: prev?.check_in_radius || 100,
-          gallery: prev?.gallery,
-          gallery_photos: prev?.gallery_photos,
-          pre_event_gallery: prev?.pre_event_gallery,
-          images: prev?.images,
-        }))
-        if (interestCountParam && typeof interestCountParam === 'string') {
-          const parsed = parseInt(interestCountParam, 10)
-          if (!Number.isNaN(parsed)) {
-            setInterestCount(parsed)
-          }
-        }
-        if (interested && typeof interested === 'string') {
-          try {
-            const parsed = JSON.parse(interested)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setInterestedAvatars(parsed.filter(Boolean))
-            }
-          } catch {}
-        }
-        setLoading(false)
-      }
+      // Params are already handled in initial state - just check cache for more complete data
       const cached = getEventDetailCache<any>(String(id))
       if (cached) {
         const d = cached
@@ -209,12 +212,13 @@ export default function EventDetail() {
     }
   }, [id])
 
+  // Deferred loading for smoother navigation - reduced delays for faster perceived loading
   useEffect(() => {
     setShowMapImage(false)
     setMapFailed(false)
+    // Show map immediately after navigation completes
     const task = InteractionManager.runAfterInteractions(() => {
-      const t = setTimeout(() => setShowMapImage(true), 350)
-      return () => clearTimeout(t)
+      setShowMapImage(true)
     })
     return () => {
       task?.cancel?.()
@@ -228,9 +232,9 @@ export default function EventDetail() {
 
   useEffect(() => {
     setShowAvatars(false)
+    // Show avatars immediately after navigation
     const task = InteractionManager.runAfterInteractions(() => {
-      const t = setTimeout(() => setShowAvatars(true), 250)
-      return () => clearTimeout(t)
+      setShowAvatars(true)
     })
     return () => {
       task?.cancel?.()
@@ -239,8 +243,9 @@ export default function EventDetail() {
 
   useEffect(() => {
     setShowHeroHighRes(false)
+    // Load high-res hero with minimal delay
     const task = InteractionManager.runAfterInteractions(() => {
-      const t = setTimeout(() => setShowHeroHighRes(true), 450)
+      const t = setTimeout(() => setShowHeroHighRes(true), 100)
       return () => clearTimeout(t)
     })
     return () => {
@@ -571,12 +576,30 @@ export default function EventDetail() {
 
       setUserLocation(location)
 
-      // Call check-in API
-      const result = await apiClient.checkIn(String(id), {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        deviceInfo: { platform: Platform.OS }
-      })
+      // Call check-in API with timeout for better UX
+      const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+        return new Promise((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error('CHECKIN_TIMEOUT')), ms)
+          promise
+            .then((res) => {
+              clearTimeout(t)
+              resolve(res)
+            })
+            .catch((err) => {
+              clearTimeout(t)
+              reject(err)
+            })
+        })
+      }
+
+      const result = await withTimeout(
+        apiClient.checkIn(String(id), {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          deviceInfo: { platform: Platform.OS }
+        }),
+        12000
+      )
 
       if (!result.success) {
         Logger.error('events', 'checkin:api:error', { error: result.error })
@@ -589,11 +612,29 @@ export default function EventDetail() {
         } else if (result.error?.includes('too far') || result.error?.includes('TOO_FAR')) {
           handleCheckInError({ code: 'TOO_FAR', error: result.error })
         } else {
-          Alert.alert('Error', result.error || 'Failed to check in. Please try again.')
+          Alert.alert('Check-in Failed', result.error || 'We couldn’t verify your check-in. Please try again.')
         }
       } else {
         const data = result.data
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
+
+        const openEventRoom = async () => {
+          try {
+            const chatResult = await apiClient.getEventChat(String(id))
+            if (chatResult.success && chatResult.data?.id) {
+              router.push({
+                pathname: '/chat/[id]',
+                params: {
+                  id: chatResult.data.id,
+                  roomName: chatResult.data.name || event?.title || 'Event Chat',
+                  eventTitle: event?.title || ''
+                } as any
+              })
+              return
+            }
+          } catch {}
+          router.push('/(tabs)/chat' as any)
+        }
 
         Alert.alert(
           'Check-in Successful! 🎉',
@@ -604,13 +645,9 @@ export default function EventDetail() {
               onPress: () => router.push('/(tabs)/match' as any)
             },
             {
-              text: 'Join Chat',
+              text: 'Event Room',
               onPress: () => {
-                if (eventChatGroupId) {
-                  router.push({ pathname: '/chat/[id]', params: { id: eventChatGroupId, roomName: event?.title || 'Event Chat', eventTitle: event?.title || '' } as any })
-                } else {
-                  router.push('/(tabs)/chat' as any)
-                }
+                openEventRoom()
               }
             },
             { text: 'OK', style: 'default' }
@@ -633,7 +670,18 @@ export default function EventDetail() {
       }
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
-      Alert.alert('Error', 'Something went wrong. Please try again.')
+      if ((error as any)?.message === 'CHECKIN_TIMEOUT') {
+        Alert.alert(
+          'Still checking you in…',
+          'This is taking longer than expected. Please try again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => handleCheckIn() }
+          ]
+        )
+      } else {
+        Alert.alert('Check-in Failed', 'Something went wrong. Please try again.')
+      }
     } finally {
       setCheckingIn(false)
     }
@@ -1311,17 +1359,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     marginTop: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   categoryContainer: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   categoryText: {
     color: '#ffffff',
@@ -1329,8 +1377,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   price: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFFFFF',
     marginRight: 14,
     marginLeft: 'auto',
@@ -1339,10 +1387,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   attendingEmptyText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 13,
     marginLeft: 10,
   },
@@ -1391,18 +1439,18 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 19,
     color: '#FFFFFF',
     marginBottom: 8,
-    paddingHorizontal: 14,
-    fontWeight: '600',
+    paddingHorizontal: 16,
+    fontWeight: '700',
   },
   description: {
-    fontSize: 14,
-    color: '#CCCCCC',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
     lineHeight: 22,
     marginBottom: 16,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   locationCard: {
     marginBottom: 16,
