@@ -107,8 +107,9 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     // Only log errors for non-empty sources
     if (highQualityUrl) {
       Logger.warn('general', 'Image loading failed', {
-        source: highQualityUrl?.substring(0, 50),
-        error: error?.message || 'Unknown error'
+        source: highQualityUrl,
+        error: error?.message || error?.error || 'Unknown error',
+        nativeError: JSON.stringify(error)
       })
     }
   }, [onError, highQualityUrl])
@@ -168,13 +169,26 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         )}
 
         {/* High quality image */}
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}>
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: loadingState.hasError ? 0 : 1 }]}>
           <Image
             source={{ uri: highQualityUrl }}
             style={[StyleSheet.absoluteFill]}
             contentFit={contentFit}
-            onLoad={effectiveEnableProgressive ? handleHighQualityLoad : onLoad}
-            onError={handleError}
+            onLoad={() => {
+              Logger.info('general', 'Image loaded successfully', { url: highQualityUrl?.substring(0, 60) })
+              if (effectiveEnableProgressive) {
+                handleHighQualityLoad()
+              } else {
+                onLoad?.()
+              }
+            }}
+            onError={(e) => {
+              Logger.error('general', 'Image onError triggered', {
+                url: highQualityUrl,
+                event: JSON.stringify(e?.nativeEvent || e)
+              })
+              handleError(e)
+            }}
             transition={effectiveEnableProgressive ? 0 : transition}
             cachePolicy={cachePolicy}
             priority={priority}
@@ -234,12 +248,25 @@ const useOptimizedUrls = (
 
         // If the source is already a URL, use public optimizer
         if (/^https?:\/\//i.test(sourceStr)) {
-          const highQualityUrl = getOptimizedImageUrl(sourceStr, {
-            ...baseOptions,
-            quality,
-            format: enableWebP ? 'webp' : 'jpg'
+          // For external URLs (Unsplash, etc.), use directly without optimization
+          // Only optimize URLs from our own storage (Supabase, Tigris)
+          const isExternalUrl = !sourceStr.includes('supabase') &&
+                                !sourceStr.includes('tigris') &&
+                                !sourceStr.includes('t3.storage.dev')
+
+          const highQualityUrl = isExternalUrl
+            ? sourceStr
+            : getOptimizedImageUrl(sourceStr, {
+                ...baseOptions,
+                quality,
+                format: enableWebP ? 'webp' : 'jpg'
+              })
+          Logger.info('general', 'OptimizedImage URL resolved', {
+            original: sourceStr.substring(0, 80),
+            isExternal: isExternalUrl,
+            optimized: highQualityUrl.substring(0, 80)
           })
-          const lowQualityUrl = progressiveEnabled ? getOptimizedImageUrl(sourceStr, {
+          const lowQualityUrl = progressiveEnabled && !isExternalUrl ? getOptimizedImageUrl(sourceStr, {
             ...baseOptions,
             quality: Math.max(20, quality - 50),
             format: enableWebP ? 'webp' : 'jpg',

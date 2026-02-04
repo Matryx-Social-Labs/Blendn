@@ -36,6 +36,15 @@ export async function getEvents(params?: EventsParams) {
     page: (params.page || 0) + 1,
   } : { page: 1 }
   const result = await apiClient.getEvents(apiParams)
+  Logger.info('api', 'getEvents raw result', {
+    success: result.success,
+    eventCount: result.data?.events?.length || 0,
+    firstEvent: result.data?.events?.[0] ? {
+      id: result.data.events[0].id,
+      title: result.data.events[0].title,
+      coverImageUrl: result.data.events[0].coverImageUrl,
+    } : null
+  })
   if (result.success && result.data) {
     // Transform API response (camelCase) to mobile format (snake_case)
     const events = result.data.events.map((e: any) => ({
@@ -63,6 +72,15 @@ export async function getEvents(params?: EventsParams) {
       user_checkin: e.userCheckin || null,
       interested_preview: Array.isArray(e.interestedPreview) ? e.interestedPreview : [],
     }))
+    Logger.info('api', 'getEvents transformed', {
+      eventCount: events.length,
+      firstEvent: events[0] ? {
+        id: events[0].id,
+        title: events[0].title,
+        cover_image_url: events[0].cover_image_url,
+        venue_name: events[0].venue_name,
+      } : null
+    })
     return {
       data: events,
       meta: {
@@ -72,6 +90,7 @@ export async function getEvents(params?: EventsParams) {
       error: null,
     }
   }
+  Logger.warn('api', 'getEvents failed', { error: result.error })
   return { data: null, error: { message: result.error || 'Failed to fetch events' } }
 }
 
