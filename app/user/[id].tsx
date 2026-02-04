@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import {
     Alert,
     Dimensions,
+    FlatList,
     ScrollView,
     StyleSheet,
     TouchableOpacity,
@@ -145,6 +146,11 @@ export default function UserProfile() {
   const photoList = (profile.photos && profile.photos.length > 0)
     ? profile.photos
     : ['https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=800']
+  const getPhotoStripLayout = (_: ArrayLike<string> | null | undefined, index: number) => ({
+    length: width,
+    offset: width * index,
+    index,
+  })
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -158,15 +164,22 @@ export default function UserProfile() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <>
-            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.photoStrip}>
-              {[...Array(2)].map((_, i) => (
-                <View key={`skp_${i}`} style={styles.photoSlide}>
+            <FlatList
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+              data={[0, 1]}
+              keyExtractor={(item) => `skp_${item}`}
+              getItemLayout={getPhotoStripLayout}
+              renderItem={() => (
+                <View style={styles.photoSlide}>
                   <View style={styles.photoContainer}>
                     <SkeletonBlock width={width - 24} height={PHOTO_HEIGHT - 20} borderRadius={18} />
                   </View>
                 </View>
-              ))}
-            </ScrollView>
+              )}
+            />
             <View style={styles.content}>
               <View style={styles.rowBetween}>
                 <SkeletonLine width={'50%'} />
@@ -197,17 +210,19 @@ export default function UserProfile() {
           </>
         ) : (
           <>
-            <ScrollView
+            <FlatList
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               style={styles.photoStrip}
-            >
-              {photoList.map((uri, idx) => (
-                <View key={idx} style={styles.photoSlide}>
+              data={photoList}
+              keyExtractor={(_, idx) => `photo_${idx}`}
+              getItemLayout={getPhotoStripLayout}
+              renderItem={({ item }) => (
+                <View style={styles.photoSlide}>
                   <View style={styles.photoContainer}>
                     <OptimizedImage
-                      source={uri as any}
+                      source={item as any}
                       style={styles.photo as any}
                       contentFit="cover"
                       width={width}
@@ -216,8 +231,8 @@ export default function UserProfile() {
                     />
                   </View>
                 </View>
-              ))}
-            </ScrollView>
+              )}
+            />
 
             <View style={styles.content}>
               <View style={styles.rowBetween}>
@@ -328,5 +343,4 @@ const styles = StyleSheet.create({
   circleBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: 'rgba(255,255,255,0.35)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
   circleInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center' },
 })
-
 

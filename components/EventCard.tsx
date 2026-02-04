@@ -77,8 +77,6 @@ const EventCard = memo<EventCardProps>(({
           contentFit="cover"
           width={400}
           height={200}
-          enableProgressive
-          enableWebP
           cachePolicy="memory-disk"
         />
       ) : (

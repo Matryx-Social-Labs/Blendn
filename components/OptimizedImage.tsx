@@ -3,7 +3,6 @@ import React, { memo, useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
 import { Logger } from '../lib/logger'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
-import { supabase } from '../lib/supabase'
 
 interface OptimizedImageProps {
   source: string | ImageSource
@@ -41,12 +40,12 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   height,
   quality = 75,
   enableWebP = true,
-  enableProgressive = true,
+  enableProgressive = false, // Disabled by default - causes double loads
   priority = 'normal',
   onLoad,
   onError,
   blurRadius,
-  transition = 300,
+  transition = 200, // Faster transition
   cachePolicy = 'memory-disk',
   testID,
 }) => {
@@ -59,6 +58,8 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   const [opacity] = useState(new Animated.Value(0))
   const [lowQualityOpacity] = useState(new Animated.Value(0))
 
+  const effectiveEnableProgressive = enableProgressive && (!width || !height || Math.max(width, height) >= 220)
+
   // Get optimized URLs
   const { lowQualityUrl, highQualityUrl } = useOptimizedUrls(
     source,
@@ -66,7 +67,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     height,
     quality,
     enableWebP,
-    enableProgressive
+    effectiveEnableProgressive
   )
 
   const fadeIn = useCallback((animatedValue: Animated.Value, duration: number = transition) => {
@@ -88,24 +89,25 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   const handleLowQualityLoad = useCallback(() => {
     setLoadingState(prev => ({ ...prev, lowQualityLoaded: true }))
     fadeIn(lowQualityOpacity)
-    Logger.debug('general', 'Low quality image loaded', { source: lowQualityUrl })
-  }, [lowQualityOpacity, fadeIn, lowQualityUrl])
+  }, [lowQualityOpacity, fadeIn])
 
   const handleHighQualityLoad = useCallback(() => {
     setLoadingState(prev => ({ ...prev, highQualityLoaded: true }))
     fadeOut(lowQualityOpacity)
     fadeIn(opacity)
     onLoad?.()
-    Logger.debug('general', 'High quality image loaded', { source: highQualityUrl })
-  }, [opacity, lowQualityOpacity, fadeIn, fadeOut, onLoad, highQualityUrl])
+  }, [opacity, lowQualityOpacity, fadeIn, fadeOut, onLoad])
 
   const handleError = useCallback((error: any) => {
     setLoadingState(prev => ({ ...prev, hasError: true }))
     onError?.(error)
-    Logger.warn('general', 'Image loading failed', { 
-      source: highQualityUrl,
-      error: error?.message || 'Unknown error'
-    })
+    // Only log errors for non-empty sources
+    if (highQualityUrl) {
+      Logger.warn('general', 'Image loading failed', {
+        source: highQualityUrl?.substring(0, 50),
+        error: error?.message || 'Unknown error'
+      })
+    }
   }, [onError, highQualityUrl])
 
   // Reset state when source changes
@@ -146,7 +148,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         )}
 
         {/* Low quality image for progressive loading */}
-        {enableProgressive && lowQualityUrl && (
+        {effectiveEnableProgressive && lowQualityUrl && (
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: lowQualityOpacity }]}>
             <Image
               source={{ uri: lowQualityUrl }}
@@ -168,9 +170,9 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
             source={{ uri: highQualityUrl }}
             style={[StyleSheet.absoluteFill]}
             contentFit={contentFit}
-            onLoad={enableProgressive ? handleHighQualityLoad : onLoad}
+            onLoad={effectiveEnableProgressive ? handleHighQualityLoad : onLoad}
             onError={handleError}
-            transition={enableProgressive ? 0 : transition}
+            transition={effectiveEnableProgressive ? 0 : transition}
             cachePolicy={cachePolicy}
             priority={priority}
             blurRadius={blurRadius}
@@ -219,6 +221,7 @@ const useOptimizedUrls = (
         }
 
         const baseOptions = { width, height, resize: 'cover' as const }
+        const progressiveEnabled = enableProgressive && (!width || !height || Math.max(width, height) >= 220)
 
         // If the source is already a URL, use public optimizer
         if (/^https?:\/\//i.test(sourceStr)) {
@@ -227,7 +230,7 @@ const useOptimizedUrls = (
             quality,
             format: enableWebP ? 'webp' : 'jpg'
           })
-          const lowQualityUrl = enableProgressive ? getOptimizedImageUrl(sourceStr, {
+          const lowQualityUrl = progressiveEnabled ? getOptimizedImageUrl(sourceStr, {
             ...baseOptions,
             quality: Math.max(20, quality - 50),
             format: enableWebP ? 'webp' : 'jpg',
@@ -238,48 +241,9 @@ const useOptimizedUrls = (
           return
         }
 
-        // Otherwise treat as private storage path in `profile-photos` bucket
-        const expiresIn = 60 * 30 // 30 minutes
-        const bucket = 'profile-photos'
-
-        const transformHigh: any = {
-          width: width || undefined,
-          height: height || undefined,
-          resize: 'cover',
-          quality: quality,
-          format: enableWebP ? 'webp' : 'jpg',
-        }
-
-        const transformLow: any = enableProgressive ? {
-          width: width ? Math.floor(width / 3) : undefined,
-          height: height ? Math.floor(height / 3) : undefined,
-          resize: 'cover',
-          quality: Math.max(20, quality - 50),
-          format: enableWebP ? 'webp' : 'jpg',
-        } : null
-
-        const path = sourceStr.replace(/^\/+/, '')
-        let highQualityUrl = ''
-        let lowQualityUrl = ''
-        try {
-          const { data: high } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn, { transform: transformHigh })
-          highQualityUrl = high?.signedUrl || ''
-        } catch (e) {
-          // Fallback: signed URL without transform
-          const { data: high } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn)
-          highQualityUrl = high?.signedUrl || ''
-        }
-        if (transformLow) {
-          try {
-            const { data: low } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn, { transform: transformLow })
-            lowQualityUrl = low?.signedUrl || ''
-          } catch {
-            lowQualityUrl = ''
-          }
-        }
-        if (!cancelled) setUrls({ lowQualityUrl, highQualityUrl })
-      } catch (error) {
-        Logger.warn('general', 'Failed to resolve signed image URLs', { error })
+        // Non-http sources should already be resolved (backend/CDN). Do not sign on client.
+        if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: sourceStr })
+      } catch {
         if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: '' })
       }
     }
@@ -293,15 +257,10 @@ const useOptimizedUrls = (
 
 // Preload images for better performance
 export const preloadImages = (urls: string[], priority: 'low' | 'normal' | 'high' = 'low') => {
-  Logger.debug('general', `Preloading ${urls.length} images`, { priority })
-  
+  // Deduplicate URLs to avoid redundant preloads
+  const uniqueUrls = [...new Set(urls)]
   return Promise.allSettled(
-    urls.map(url => 
-      Image.prefetch(url).catch(error => {
-        Logger.warn('general', 'Image preload failed', { url, error })
-        return Promise.reject(error)
-      })
-    )
+    uniqueUrls.map(url => Image.prefetch(url).catch(() => Promise.reject()))
   )
 }
 

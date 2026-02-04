@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
-import React, { useEffect, useMemo, useState } from 'react'
-import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Alert, Dimensions, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -10,12 +10,14 @@ import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
+import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
 const placeholderImg = require('../../assets/images/icon.png')
 
 // Screen metrics used in styles (must be module-level to avoid runtime ReferenceError)
 const WINDOW_WIDTH = Dimensions.get('window').width
 const PHOTO_HEIGHT = Math.min(420, Math.floor(WINDOW_WIDTH * 1.1))
+const PROFILE_CACHE_TTL = 2 * 60 * 1000
 
 interface UserProfileViewModel {
   id: string
@@ -30,19 +32,46 @@ interface UserProfileViewModel {
   looking_for?: string[]
 }
 
+const computeProfileStrength = (p: UserProfileViewModel | null): number => {
+  if (!p) return 0
+  const checks = [
+    !!p.name,
+    !!p.age,
+    !!p.location,
+    !!(p.profile_photos && p.profile_photos.length > 0),
+    !!p.bio,
+    !!(p.interests && p.interests.length > 0),
+    !!(p.goals && p.goals.length > 0),
+    !!(p.looking_for && p.looking_for.length > 0),
+  ]
+  const score = checks.reduce((acc, v) => acc + (v ? 1 : 0), 0)
+  return Math.max(10, Math.min(100, Math.round((score / checks.length) * 100)))
+}
+
 export default function Profile() {
   const { user, loading: authLoading } = useAuth()
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
+  const lastBackgroundRefreshRef = React.useRef(0)
+  const photoList = useMemo(() => {
+    if (profile?.profile_photos && profile.profile_photos.length > 0) return profile.profile_photos
+    return profile?.photos || []
+  }, [profile?.profile_photos, profile?.photos])
+  const hasPhotos = photoList.length > 0
+  const profileStrength = useMemo(() => computeProfileStrength(profile), [profile])
+  const getPhotoStripLayout = useCallback(
+    (_: ArrayLike<string> | null | undefined, index: number) => ({
+      length: WINDOW_WIDTH,
+      offset: WINDOW_WIDTH * index,
+      index,
+    }),
+    []
+  )
 
   // Memoize photo collage layout calculations to prevent re-computation on every render
   const photoCollage = useMemo(() => {
-    const photoList = profile?.profile_photos && profile.profile_photos.length > 0
-      ? profile.profile_photos
-      : profile?.photos || []
-
     if (photoList.length === 0) return null
 
     const contentWidthDesign = 460
@@ -66,35 +95,60 @@ export default function Profile() {
     return (
       <View style={styles.section}>
         <Typography variant="h3" style={styles.sectionTitle}>Photos & Videos</Typography>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ width: containerWidth, height: S(245) }}>
-          <View style={{ width: S(contentWidthDesign), height: S(245) }}>
-            {items.map((it, idx) => (
-              <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
-                <OptimizedImage
-                  source={get(idx) as any}
-                  style={{ width: '100%', height: '100%' } as any}
-                  contentFit="cover"
-                  width={S(it.w)}
-                  height={S(it.h)}
-                  quality={60}
-                />
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ width: containerWidth, height: S(245) }}
+          contentContainerStyle={{ width: S(contentWidthDesign), height: S(245) }}
+          data={[0]}
+          keyExtractor={(item) => `collage-${item}`}
+          getItemLayout={() => ({
+            length: S(contentWidthDesign),
+            offset: 0,
+            index: 0,
+          })}
+          renderItem={() => (
+            <View style={{ width: S(contentWidthDesign), height: S(245) }}>
+              {items.map((it, idx) => (
+                <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
+                  <OptimizedImage
+                    source={get(idx) as any}
+                    style={{ width: '100%', height: '100%' } as any}
+                    contentFit="cover"
+                    width={S(it.w)}
+                    height={S(it.h)}
+                    quality={60}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        />
       </View>
     )
-  }, [profile?.profile_photos, profile?.photos])
+  }, [photoList])
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      getUserAndProfile()
-    }
-  }, [user, authLoading])
-
-  const getUserAndProfile = async () => {
+  const getUserAndProfile = useCallback(async (force = false) => {
     if (!user) return
     try {
+      const cacheKey = `profile_${user.id}`
+      if (!force) {
+        const cached = queryCache.get<UserProfileViewModel>(cacheKey)
+        if (cached) {
+          setProfile(cached)
+          setLoading(false)
+          // Background refresh for stale-while-revalidate behavior.
+          setTimeout(() => {
+            const now = Date.now()
+            if (user?.id && now - lastBackgroundRefreshRef.current > 15_000) {
+              lastBackgroundRefreshRef.current = now
+              getUserAndProfile(true)
+            }
+          }, 0)
+          return
+        }
+      }
+
       console.log('[PROFILE] Loading profile for user:', user.id);
       setLoading(true)
       setError(null)
@@ -126,6 +180,7 @@ export default function Profile() {
 
       console.log('[PROFILE] Profile loaded successfully')
       setProfile(viewModel)
+      queryCache.set(cacheKey, viewModel, PROFILE_CACHE_TTL)
 
     } catch (error) {
       console.error('[PROFILE] Unexpected error:', error)
@@ -133,9 +188,15 @@ export default function Profile() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
-  const handleSignOut = async () => {
+  useEffect(() => {
+    if (!authLoading && user) {
+      getUserAndProfile()
+    }
+  }, [user, authLoading, getUserAndProfile])
+
+  const handleSignOut = useCallback(async () => {
     try {
       console.log('[PROFILE] Signing out...')
       const result = await apiClient.signOut()
@@ -150,41 +211,36 @@ export default function Profile() {
       console.error('[PROFILE] Sign out error:', error)
       Alert.alert('Error', 'Failed to sign out')
     }
-  }
+  }, [])
 
-  const [activePhotoIndex, setActivePhotoIndex] = useState(0)
-
-  // Using module-level WINDOW_WIDTH/PHOTO_HEIGHT for styles consistency
-  const computeProfileStrength = (p: UserProfileViewModel | null): number => {
-    if (!p) return 0
-    const checks = [
-      !!p.name,
-      !!p.age,
-      !!p.location,
-      !!(p.profile_photos && p.profile_photos.length > 0),
-      !!p.bio,
-      !!(p.interests && p.interests.length > 0),
-      !!(p.goals && p.goals.length > 0),
-      !!(p.looking_for && p.looking_for.length > 0),
-    ]
-    const score = checks.reduce((acc, v) => acc + (v ? 1 : 0), 0)
-    return Math.max(10, Math.min(100, Math.round((score / checks.length) * 100)))
-  }
+  const handleScroll = useCallback(
+    (e: any) => {
+      setScrollProgress(e.nativeEvent.contentOffset.y, 320)
+    },
+    [setScrollProgress]
+  )
 
   // Show loading while auth is loading
   if (authLoading || loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.photoStrip}>
-            {[...Array(2)].map((_, i) => (
-              <View key={`skp_${i}`} style={styles.photoSlide}>
+          <FlatList
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.photoStrip}
+            data={[0, 1]}
+            keyExtractor={(item) => `skp_${item}`}
+            getItemLayout={getPhotoStripLayout}
+            renderItem={() => (
+              <View style={styles.photoSlide}>
                 <View style={styles.photoContainer}>
                   <SkeletonBlock width={WINDOW_WIDTH - 24} height={PHOTO_HEIGHT - 20} borderRadius={18} />
                 </View>
               </View>
-            ))}
-          </ScrollView>
+            )}
+          />
           <View style={styles.content}>
             <View style={styles.rowBetween}>
               <SkeletonLine width={'50%'} />
@@ -238,27 +294,54 @@ export default function Profile() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
-        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        scrollEventThrottle={32}
       >
-        <ScrollView
+        <FlatList
           horizontal
-          pagingEnabled
+          pagingEnabled={hasPhotos}
           showsHorizontalScrollIndicator={false}
           style={styles.photoStrip}
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(e.nativeEvent.contentOffset.x / WINDOW_WIDTH)
-            setActivePhotoIndex(index)
-          }}
-        >
-          {(profile?.profile_photos && profile.profile_photos.length > 0 ? profile.profile_photos : profile?.photos || []).map((uri, idx) => {
+          data={hasPhotos ? photoList : ['placeholder']}
+          keyExtractor={(_, idx) => `photo_${idx}`}
+          getItemLayout={getPhotoStripLayout}
+          renderItem={({ item, index }) => {
+            if (!hasPhotos) {
+              return (
+                <View style={styles.photoSlide}>
+                  <View style={[styles.photoContainer, styles.photoPlaceholder]}>
+                    <OptimizedImage
+                      source={placeholderImg as any}
+                      style={styles.photo as any}
+                      contentFit="cover"
+                      width={WINDOW_WIDTH}
+                      height={PHOTO_HEIGHT}
+                      quality={60}
+                    />
+                    <View style={styles.photoPlaceholderOverlay}>
+                      <Text style={styles.photoPlaceholderTitle}>Add your first photo</Text>
+                      <Text style={styles.photoPlaceholderSubtitle}>Profiles with photos get more matches</Text>
+                      <TouchableOpacity
+                        onPress={() => router.push('/edit-profile')}
+                        style={styles.photoPlaceholderCta}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add profile photo"
+                      >
+                        <Text style={styles.photoPlaceholderCtaText}>Add Photo</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )
+            }
+            const uri = item as string
             const optimized = getOptimizedImageUrl(uri, { width: WINDOW_WIDTH, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
             const finalUrl = optimized || uri
             return (
-              <View key={idx} style={styles.photoSlide}>
+              <View key={index} style={styles.photoSlide}>
                 <View style={styles.photoContainer}>
                   <OptimizedImage
-                    source={uri as any}
+                    source={finalUrl as any}
                     style={styles.photo as any}
                     contentFit="cover"
                     width={WINDOW_WIDTH}
@@ -282,7 +365,7 @@ export default function Profile() {
                     <View style={styles.matchPill} pointerEvents="none">
                       <View style={styles.matchPillBadge}>
                         {/* Simple filled badge for now; ring removed to avoid extra deps */}
-                        <Text style={styles.matchPillPercent}>{computeProfileStrength(profile)}%</Text>
+                        <Text style={styles.matchPillPercent}>{profileStrength}%</Text>
                       </View>
                       <Text style={styles.matchPillLabel}>  Profile Strength</Text>
                     </View>
@@ -290,8 +373,8 @@ export default function Profile() {
                 </View>
               </View>
             )
-          })}
-        </ScrollView>
+          }}
+        />
 
         <View style={styles.content}>
           <View style={styles.rowBetween}>
@@ -346,7 +429,7 @@ export default function Profile() {
             </View>
           )}
 
-          {photoCollage}
+          {hasPhotos && photoCollage}
         </View>
       </ScrollView>
 
@@ -411,4 +494,10 @@ const styles = StyleSheet.create({
   detailIcon: { marginRight: 10 },
   detailText: { color: '#fff', fontSize: 16 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 18 },
+  photoPlaceholder: { backgroundColor: '#1a0d1f' },
+  photoPlaceholderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: 'rgba(0,0,0,0.35)' },
+  photoPlaceholderTitle: { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  photoPlaceholderSubtitle: { color: '#ffffffcc', fontSize: 14, textAlign: 'center', marginBottom: 14 },
+  photoPlaceholderCta: { backgroundColor: '#F3C614', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8 },
+  photoPlaceholderCtaText: { color: '#000', fontWeight: '800', fontSize: 14 },
 }) 

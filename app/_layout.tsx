@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
@@ -17,6 +18,8 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { useAuth } from '../lib/useAuth';
 
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
+const LOGO_ASSET = require('../assets/logo/logo2.webp');
+const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 
 function BackgroundGradient() {
   return (
@@ -39,6 +42,10 @@ export default function RootLayout() {
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET]).catch(() => {});
+  }, []);
 
   const replaceIfNeeded = (target: string) => {
     if (isNavigatingRef.current) return;
@@ -101,11 +108,13 @@ export default function RootLayout() {
         return;
       }
 
-      // Authenticated → init push once
+      // Authenticated → defer push notification init to avoid blocking startup
       if (!pushInitRef.current) {
-        initializePushNotifications().finally(() => {
-          pushInitRef.current = true;
-        });
+        pushInitRef.current = true;
+        // Delay push init by 2 seconds to let UI render first
+        setTimeout(() => {
+          initializePushNotifications().catch(() => {});
+        }, 2000);
       }
 
       // Check onboarding status with caching for faster startup
@@ -115,23 +124,19 @@ export default function RootLayout() {
         const cachedStatus = await AsyncStorage.getItem(`${ONBOARDED_CACHE_KEY}_${user.id}`);
         if (cachedStatus === 'true') {
           onboarded = true;
-        }
-
-        // Fetch fresh status in background and update cache
-        apiClient.getProfile(user.id).then((result) => {
-          if (result.success && result.data) {
-            const freshOnboarded = result.data.profile?.onboarded === true;
-            AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(freshOnboarded));
-            // If status changed from cached, trigger re-navigation
-            if (freshOnboarded !== onboarded && !freshOnboarded) {
-              // User needs to complete onboarding
-              router.replace('/onboarding/welcome');
+          // Background refresh (non-blocking) - only refresh if cache exists
+          apiClient.getProfile(user.id).then((result) => {
+            if (result.success && result.data) {
+              const freshOnboarded = result.data.profile?.onboarded === true;
+              AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(freshOnboarded));
+              // If status changed to not-onboarded, redirect
+              if (!freshOnboarded) {
+                router.replace('/onboarding/welcome');
+              }
             }
-          }
-        }).catch(() => {});
-
-        // If no cache, wait for the API call (first-time users)
-        if (cachedStatus === null) {
+          }).catch(() => {});
+        } else {
+          // No cache - single API call (first-time users only)
           const result = await apiClient.getProfile(user.id);
           if (result.success && result.data) {
             onboarded = result.data.profile?.onboarded === true;

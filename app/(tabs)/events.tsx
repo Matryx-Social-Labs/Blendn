@@ -9,7 +9,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  ImageBackground,
   Linking,
   RefreshControl,
   ScrollView,
@@ -21,16 +20,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import EventCard from '../../components/EventCard'
 import NearbyEventCard from '../../components/NearbyEventCard'
-import OptimizedImage from '../../components/OptimizedImage'
+import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
-import { apiClient } from '../../lib/apiClient'
+import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
+import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { formatTimeRange as fmtRange, formatEventDateTime } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
-const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
 
 // Helper to calculate distance between two coordinates in km
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -62,6 +61,10 @@ interface Event {
   check_in_radius: number
   latitude: number
   longitude: number
+  is_favorited?: boolean
+  favorite_count?: number
+  user_checkin?: { status: string; checkInId?: string; checkInTime?: string | null } | null
+  interested_preview?: string[]
 }
 
 // Memoized carousel card component to prevent re-renders
@@ -84,11 +87,17 @@ const CarouselCard = memo(({
 
   return (
     <TouchableOpacity style={styles.carouselCard} onPress={onPress}>
-      <ImageBackground
-        source={{ uri: event.cover_image_url }}
-        style={styles.carouselImage}
-        resizeMode="cover"
-      >
+      <View style={styles.carouselImage}>
+        <OptimizedImage
+          source={event.cover_image_url}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+          width={260}
+          height={120}
+          quality={60}
+          cachePolicy="memory-disk"
+          priority="high"
+        />
         <LinearGradient
           colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
           style={styles.carouselGradient}
@@ -108,7 +117,7 @@ const CarouselCard = memo(({
             </TouchableOpacity>
           )}
         </View>
-      </ImageBackground>
+      </View>
       {onToggleInterest && (
         <TouchableOpacity
           onPress={onToggleInterest}
@@ -139,9 +148,15 @@ export default function Events() {
   const [userCity, setUserCity] = useState<string | null>(null)
   const { setScrollProgress } = useGradientOverlay()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarError, setAvatarError] = useState(false)
   const listRef = useRef<any>(null)
   const [netError, setNetError] = useState<string | null>(null)
-  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false)
+  // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
+  const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
+  const locationRequestInFlight = useRef(false)
+  const locationRequestedRef = useRef(false)
+  const lastFetchLocationRef = useRef<string>('none')
+  const initialLoadedRef = useRef(false)
 
   // Memoized style objects to prevent re-creation
   const sectionBgStyle = useMemo(() => ({
@@ -173,8 +188,46 @@ export default function Events() {
 
   // Memoized callbacks to prevent re-creation
   const handleEventPress = useCallback((event: Event) => {
-    router.push({ pathname: '/event/[id]', params: { id: event.id } as any })
-  }, [])
+    // Warm the event detail cache before navigation (fire-and-forget)
+    apiClient.getEvent(event.id, {
+      include: 'interestedUsers',
+      interestedLimit: 6,
+      lat: userLocation?.latitude,
+      lon: userLocation?.longitude,
+    }).catch(() => {})
+
+    if (event.cover_image_url) {
+      const hero = getOptimizedImageUrl(event.cover_image_url, {
+        width: 1080,
+        height: 520,
+        resize: 'cover',
+        quality: 70,
+        format: 'webp',
+      })
+      if (hero) {
+        preloadImages([hero], 'high').catch(() => {})
+      }
+    }
+
+    router.push({
+      pathname: '/event/[id]',
+      params: {
+        id: event.id,
+        title: event.title,
+        cover: event.cover_image_url || '',
+        venue: event.venue_name,
+        city: event.city || '',
+        start: event.start_time,
+        end: event.end_time,
+        category: event.category || '',
+        description: event.description || '',
+        interestCount: String(interestCounts[event.id] ?? event.favorite_count ?? 0),
+        interested: event.interested_preview && event.interested_preview.length > 0
+          ? JSON.stringify(event.interested_preview)
+          : '',
+      } as any,
+    })
+  }, [userLocation, interestCounts])
 
   const handleCheckIn = useCallback(async (event: Event) => {
     try {
@@ -260,27 +313,47 @@ export default function Events() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await fetchEvents()
+    await fetchEvents({ silent: true })
     setRefreshing(false)
   }, [])
 
+  const requestLocationIfNeeded = useCallback((force = false) => {
+    if (userLocation) return
+    if (locationRequestInFlight.current) return
+    if (locationStatus === 'denied' && !force) return
+    locationRequestInFlight.current = true
+    locationRequestedRef.current = true
+    getCurrentLocationQuietly()
+      .finally(() => {
+        locationRequestInFlight.current = false
+      })
+  }, [userLocation, locationStatus])
+
   const onScroll = useCallback((e: any) => {
     setScrollProgress(e.nativeEvent.contentOffset.y, 320)
-  }, [setScrollProgress])
+    if (!locationRequestedRef.current && e.nativeEvent.contentOffset.y > 180) {
+      requestLocationIfNeeded(false)
+    }
+  }, [setScrollProgress, requestLocationIfNeeded])
 
-  // Single profile fetch for avatar and city
+  // Single profile fetch for avatar and city - uses cached profile if available
   const loadUserProfile = useCallback(async () => {
     if (!user) return
     try {
-      const result = await apiClient.getProfile(user.id)
-      if (result.success && result.data) {
-        // Set avatar
-        const profile = result.data.profile
+      // Check cache first (populated by _layout.tsx during onboarding check)
+      const cached = ProfileCache.get(user.id)
+      const data = cached || (await apiClient.getProfile(user.id).then(r => r.success ? r.data : null))
+
+      if (data) {
+        const profile = data.profile
         if (profile) {
+          // Only use URLs that are valid and not empty
           const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
                          (Array.isArray(profile.photos) && profile.photos[0]) ||
-                         result.data.image || null
-          setAvatarUrl(primary)
+                         null // Don't use data.image (Google avatar) as it often fails
+          if (primary && primary.length > 0) {
+            setAvatarUrl(primary)
+          }
           // Set city
           if (profile.location) {
             const firstPart = String(profile.location).split(',')[0]?.trim()
@@ -293,23 +366,73 @@ export default function Events() {
 
   const initialMountRef = useRef(true)
 
+  // Check location permission status on mount (without requesting)
+  useEffect(() => {
+    const checkLocationPermission = async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync()
+        if (status === 'granted') {
+          // Permission already granted - mark as granted immediately (before fetching coords)
+          setLocationStatus('granted')
+          try {
+            const lastKnown = await Location.getLastKnownPositionAsync()
+            if (lastKnown?.coords) {
+              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude })
+            }
+          } catch {}
+          // Defer live GPS to avoid blocking startup render
+          setTimeout(async () => {
+            try {
+              const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+              setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude })
+            } catch {
+              // Position fetch failed but permission is still granted - don't show prompt
+            }
+          }, 600)
+        } else if (status === 'denied') {
+          setLocationStatus('denied')
+        } else {
+          // 'undetermined' - permission not yet requested
+          setLocationStatus('undetermined')
+        }
+      } catch {
+        // On error, assume undetermined
+        setLocationStatus('undetermined')
+      }
+    }
+    checkLocationPermission()
+  }, [])
+
   useEffect(() => {
     if (!authLoading && user) {
       Logger.journey('events', 'mount:authorized', { userId: user.id })
       fetchEvents()
-      getCurrentLocationQuietly()
-      loadCheckedInEvents()
-      loadUserProfile() // Single profile fetch for avatar + city
     }
-  }, [user, authLoading, loadUserProfile])
+  }, [user, authLoading])
 
+  // Preload images - use a ref to track already preloaded URLs and avoid redundant work
+  const preloadedUrlsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (events.length > 0 && user) {
-      loadCheckinStatusesBatch()
-      loadInterestData()
-      loadInterestCounts()
+    if (events.length === 0) return
+    const urls = events
+      .filter((event) => !!event.cover_image_url)
+      .slice(0, 8)
+      .map((event) =>
+        getOptimizedImageUrl(event.cover_image_url as string, {
+          width: 520,
+          height: 240,
+          resize: 'cover',
+          quality: 60,
+          format: 'webp',
+        })
+      )
+      .filter(url => !preloadedUrlsRef.current.has(url))
+
+    if (urls.length > 0) {
+      urls.forEach(url => preloadedUrlsRef.current.add(url))
+      preloadImages(urls, 'normal').catch(() => {})
     }
-  }, [events, user])
+  }, [events])
 
   // Refresh statuses when the screen regains focus (skip first mount)
   // Use a ref to track if requests are still relevant
@@ -325,12 +448,8 @@ export default function Events() {
       // Mark that we're focused and requests are valid
       focusAbortRef.current = false
 
-      // Only refresh if we have data to refresh
-      if (user && events.length > 0) {
-        loadCheckinStatusesBatch()
-      }
       if (user) {
-        loadCheckedInEvents()
+        fetchEvents({ silent: true })
       }
 
       // Cleanup: abort pending requests when tab loses focus
@@ -383,15 +502,37 @@ export default function Events() {
     }
   }
 
+  const CAROUSEL_ITEM_FULL = 268
+  const getCarouselItemLayout = useCallback((_: any, index: number) => ({
+    length: CAROUSEL_ITEM_FULL,
+    offset: CAROUSEL_ITEM_FULL * index,
+    index,
+  }), [])
+
   const renderCheckedInCarousel = () => (
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>You&apos;re checked in</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {checkedInEvents.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
-          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        data={checkedInEvents.filter((item, idx) => !!item.cover_image_url && idx < 10)}
+        keyExtractor={keyExtractor}
+        getItemLayout={getCarouselItemLayout}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            <View style={styles.carouselImage}>
+              <OptimizedImage
+                source={item.cover_image_url as string}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                width={260}
+                height={120}
+                quality={60}
+                cachePolicy="memory-disk"
+              />
               <LinearGradient
                 colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
                 style={styles.carouselGradient}
@@ -422,10 +563,10 @@ export default function Events() {
                   <Text style={{ color: '#fff', fontSize: 12 }}>Check out</Text>
                 </TouchableOpacity>
               </View>
-            </ImageBackground>
+            </View>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
     </View>
   )
 
@@ -437,10 +578,25 @@ export default function Events() {
           <Text style={styles.viewAllText}>See all</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
-          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        data={items.filter((item, idx) => !!item.cover_image_url && idx < 10)}
+        keyExtractor={keyExtractor}
+        getItemLayout={getCarouselItemLayout}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            <View style={styles.carouselImage}>
+              <OptimizedImage
+                source={item.cover_image_url as string}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                width={260}
+                height={120}
+                quality={60}
+                cachePolicy="memory-disk"
+              />
               <LinearGradient
                 colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
                 style={styles.carouselGradient}
@@ -452,7 +608,7 @@ export default function Events() {
                   {formatEventDateTime(item.start_time)}
                 </Text>
               </View>
-            </ImageBackground>
+            </View>
             <TouchableOpacity
               onPress={() => toggleInterest(item)}
               style={styles.carouselHeartButton}
@@ -461,8 +617,8 @@ export default function Events() {
               <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
     </View>
   )
 
@@ -521,7 +677,7 @@ export default function Events() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setUserLocation(null)
-        setLocationPermissionDenied(true)
+        setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
         Logger.warn('events', 'permission:notGranted', {})
         Alert.alert(
           'Turn on Location',
@@ -533,14 +689,13 @@ export default function Events() {
         )
         return
       }
+      setLocationStatus('granted')
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
       setUserLocation(coords)
-      setLocationPermissionDenied(false)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
-      setUserLocation(null)
-      setLocationPermissionDenied(false)
+      // Keep status as granted if permission was granted but position fetch failed
       Logger.warn('events', 'quietLocation:error', { error: error as any })
     }
   }
@@ -598,18 +753,26 @@ export default function Events() {
 
   // Removed city override feature
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true)
+      const isInitial = !initialLoadedRef.current
+      const shouldShowLoading = isInitial || !options?.silent
+      if (shouldShowLoading) {
+        setLoading(true)
+      }
       setNetError(null)
       Logger.journey('events', 'fetch:start')
 
       // Use the API helper which handles Supabase vs admin backend switching
-      const { data: eventsData, error } = await fetchEventsApi({
+      const lat = userLocation?.latitude
+      const lon = userLocation?.longitude
+      const { data: eventsData, meta, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
-        lat: userLocation?.latitude,
-        lon: userLocation?.longitude,
+        lat,
+        lon,
+        include: 'checkins,activeCheckins,profile,interestedPreview',
+        interestedPreviewLimit: 3,
       })
 
       if (error) {
@@ -620,14 +783,88 @@ export default function Events() {
 
       setEvents(eventsData || [])
       setPage(0)
+      lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
+      initialLoadedRef.current = true
+      if (eventsData) {
+        const interestMap: { [eventId: string]: boolean } = {}
+        const countMap: Record<string, number> = {}
+        const checkinMap: { [eventId: string]: any } = {}
+        eventsData.forEach((event) => {
+          interestMap[event.id] = !!event.is_favorited
+          countMap[event.id] = event.favorite_count || 0
+          if (event.user_checkin) {
+            checkinMap[event.id] = {
+              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
+              checkInId: event.user_checkin.checkInId,
+              checkInTime: event.user_checkin.checkInTime,
+            }
+          }
+        })
+        setInterestStatuses(interestMap)
+        setInterestCounts(countMap)
+        setCheckinStatuses(checkinMap)
+      }
+      if (meta?.activeCheckins?.length) {
+        const activeEvents: Event[] = meta.activeCheckins
+          .filter((c: any) => c.event)
+          .map((c: any) => ({
+            id: c.event.id,
+            title: c.event.title,
+            description: '',
+            short_description: '',
+            venue_name: c.event.venueName || '',
+            address: c.event.address || '',
+            start_time: c.event.startTime,
+            end_time: c.event.endTime,
+            price_cents: 0,
+            max_capacity: 0,
+            current_capacity: 0,
+            cover_image_url: c.event.coverImageUrl || null,
+            category: '',
+            city: c.event.city,
+            check_in_radius: 0,
+            latitude: 0,
+            longitude: 0,
+          }))
+        setCheckedInEvents(activeEvents)
+      } else {
+        setCheckedInEvents([])
+      }
+      if (meta?.profile?.profile) {
+        const profile = meta.profile.profile
+        const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
+          (Array.isArray(profile.photos) && profile.photos[0]) ||
+          null
+        if (primary && primary.length > 0) {
+          setAvatarUrl(primary)
+        }
+        if (profile.location) {
+          const firstPart = String(profile.location).split(',')[0]?.trim()
+          if (firstPart) setUserCity(firstPart)
+        }
+      }
+      // Image preloading is handled by useEffect when events change
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
       setNetError('Failed to load events')
     } finally {
-      setLoading(false)
+      if (!options?.silent || !initialLoadedRef.current) {
+        setLoading(false)
+      }
     }
   }
+
+  // If location becomes available after initial load, refetch with coordinates
+  useEffect(() => {
+    if (!user || authLoading) return
+    if (!userLocation) return
+    if (loading) return
+    const key = `${userLocation.latitude},${userLocation.longitude}`
+    if (lastFetchLocationRef.current !== key) {
+      fetchEvents({ silent: true })
+    }
+  }, [user, authLoading, userLocation, loading])
 
   // Basic pagination: fetch next page after current items
   const [page, setPage] = useState(0)
@@ -641,11 +878,30 @@ export default function Events() {
         limit: PAGE_SIZE,
         lat: userLocation?.latitude,
         lon: userLocation?.longitude,
+        include: 'checkins,interestedPreview',
+        interestedPreviewLimit: 3,
       })
       if (error) return
       if (!data || data.length === 0) return
       setEvents(prev => [...prev, ...data])
       setPage(prev => prev + 1)
+      const interestMap: { [eventId: string]: boolean } = {}
+      const countMap: Record<string, number> = {}
+      const checkinMap: { [eventId: string]: any } = {}
+      data.forEach((event) => {
+        interestMap[event.id] = !!event.is_favorited
+        countMap[event.id] = event.favorite_count || 0
+        if (event.user_checkin) {
+          checkinMap[event.id] = {
+            status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
+            checkInId: event.user_checkin.checkInId,
+            checkInTime: event.user_checkin.checkInTime,
+          }
+        }
+      })
+      setInterestStatuses((prev) => ({ ...prev, ...interestMap }))
+      setInterestCounts((prev) => ({ ...prev, ...countMap }))
+      setCheckinStatuses((prev) => ({ ...prev, ...checkinMap }))
     } catch {}
   }, [loading, page, userLocation])
 
@@ -716,10 +972,25 @@ export default function Events() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.filter((item, idx) => !!item.cover_image_url && idx < 10).map((item) => (
-          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        data={items.filter((item, idx) => !!item.cover_image_url && idx < 10)}
+        keyExtractor={keyExtractor}
+        getItemLayout={getCarouselItemLayout}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            <View style={styles.carouselImage}>
+              <OptimizedImage
+                source={item.cover_image_url as string}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                width={260}
+                height={120}
+                quality={60}
+                cachePolicy="memory-disk"
+              />
               <LinearGradient
                 colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
                 style={styles.carouselGradient}
@@ -731,7 +1002,7 @@ export default function Events() {
                   {formatEventDateTime(item.start_time)}
                 </Text>
               </View>
-            </ImageBackground>
+            </View>
             <TouchableOpacity
               onPress={() => toggleInterest(item)}
               style={styles.carouselHeartButton}
@@ -740,8 +1011,8 @@ export default function Events() {
               <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
     </View>
   )
 
@@ -753,7 +1024,7 @@ export default function Events() {
   const UPCOMING_ITEM_SPACING = 14
   const UPCOMING_ITEM_FULL = UPCOMING_ITEM_WIDTH + UPCOMING_ITEM_SPACING
   const UPCOMING_SIDE_PADDING = (screenWidth - UPCOMING_ITEM_WIDTH) / 2
-  const UPCOMING_LOOPS = 7
+  const UPCOMING_LOOPS = 3 // Reduced from 7 to minimize duplicate image loads
   const upcomingListRef = useRef<FlatList<any> | null>(null)
 
   const renderUpcomingFigmaCarousel = () => (
@@ -840,12 +1111,16 @@ export default function Events() {
                   }}
                 >
                   {item.cover_image_url ? (
-                    <ImageBackground
-                      source={{ uri: item.cover_image_url }}
-                      style={{ width: '100%', height: '100%' }}
-                      imageStyle={styles.upcomingImageRadius}
-                      resizeMode="cover"
-                    >
+                    <View style={[styles.upcomingImageRadius, { width: '100%', height: '100%', overflow: 'hidden' }]}>
+                      <OptimizedImage
+                        source={item.cover_image_url}
+                        style={StyleSheet.absoluteFillObject}
+                        contentFit="cover"
+                        width={UPCOMING_ITEM_WIDTH}
+                        height={UPCOMING_ITEM_HEIGHT}
+                        quality={60}
+                        cachePolicy="memory-disk"
+                      />
                       <LinearGradient
                         colors={["rgba(0,0,0,0)", "#000000"]}
                         start={{ x: 0.5, y: 0 }}
@@ -856,7 +1131,7 @@ export default function Events() {
                         <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
                         <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
                       </View>
-                    </ImageBackground>
+                    </View>
                   ) : (
                     <View style={[styles.upcomingImageRadius, { flex: 1, backgroundColor: '#222' }]} />
                   )}
@@ -886,10 +1161,25 @@ export default function Events() {
         </View>
         <View style={styles.sectionDividerLine} />
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-        {items.filter(item => !!item.cover_image_url).map((item) => (
-          <TouchableOpacity key={item.id} style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <ImageBackground source={{ uri: item.cover_image_url as string }} style={styles.carouselImage} resizeMode="cover">
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselList}
+        data={items.filter(item => !!item.cover_image_url)}
+        keyExtractor={keyExtractor}
+        getItemLayout={getCarouselItemLayout}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
+            <View style={styles.carouselImage}>
+              <OptimizedImage
+                source={item.cover_image_url as string}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                width={260}
+                height={120}
+                quality={60}
+                cachePolicy="memory-disk"
+              />
               <LinearGradient
                 colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
                 style={styles.carouselGradient}
@@ -901,7 +1191,7 @@ export default function Events() {
                   {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
-            </ImageBackground>
+            </View>
             <TouchableOpacity
               onPress={() => toggleInterest(item)}
               style={styles.carouselHeartButton}
@@ -910,8 +1200,8 @@ export default function Events() {
               <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
       {/* Pagination indicator to match Figma */}
       <View style={styles.carouselIndicatorRow}>
         <View style={styles.carouselIndicatorLong} />
@@ -935,17 +1225,25 @@ export default function Events() {
 
   const renderFeaturedHero = (ev?: Event) => {
     if (!ev || !ev.cover_image_url) return null
+    const screenW = Dimensions.get('window').width
+    const featuredWidth = Math.max(0, Math.round(screenW - 46))
+    const featuredHeight = Math.round(featuredWidth * (474 / 363))
     return (
       <View style={styles.featuredContainer}>
         <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(ev)}>
-          <ImageBackground
-            source={{ uri: ev.cover_image_url }}
-            style={styles.featuredImage}
-            imageStyle={styles.featuredRadius}
-            resizeMode="cover"
-          >
+          <View style={[styles.featuredImage, styles.featuredRadius, { overflow: 'hidden' }]}>
+            <OptimizedImage
+              source={ev.cover_image_url}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+              width={featuredWidth}
+              height={featuredHeight}
+              quality={65}
+              cachePolicy="memory-disk"
+              priority="high"
+            />
             <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.featuredRadius]} />
-          </ImageBackground>
+          </View>
           <View style={styles.featuredOverlayBox}>
             <Text style={styles.featuredTitle} numberOfLines={1}> - {ev.title} - </Text>
             <View style={styles.featuredChip}>
@@ -993,20 +1291,48 @@ export default function Events() {
     )
   }
 
-  const distanceKmForEvent = (ev: Event): number => {
-    const prox = proximityData[ev.id]
-    if (prox && typeof prox.distance_km === 'number') return prox.distance_km
-    if (!userLocation || !ev.latitude || !ev.longitude) return Number.POSITIVE_INFINITY
-    const toRad = (d: number) => (d * Math.PI) / 180
-    const R = 6371
-    const dLat = toRad(ev.latitude - userLocation.latitude)
-    const dLon = toRad(ev.longitude - userLocation.longitude)
-    const lat1 = toRad(userLocation.latitude)
-    const lat2 = toRad(ev.latitude)
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-  }
+  const renderNearbyPrompt = () => (
+    <View style={styles.nearbyContainer}>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>Nearby Events</Text>
+      </View>
+      <Text style={styles.sectionSubTitle}>
+        Enable location to see events near you.
+      </Text>
+      <TouchableOpacity
+        style={styles.nearbyCta}
+        onPress={() => {
+          if (locationStatus === 'denied') {
+            try { (Linking as any)?.openSettings?.() } catch {}
+          } else {
+            requestLocationIfNeeded(true)
+          }
+        }}
+      >
+        <Text style={styles.nearbyCtaText}>
+          {locationStatus === 'denied' ? 'Open Settings' : 'Enable Location'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  )
+
+  // Compute all distances once and cache - avoids O(n^2) recalculations
+  const distanceMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    if (!userLocation) return map
+    for (const ev of events) {
+      // Use proximity data if available, otherwise calculate
+      const prox = proximityData[ev.id]
+      if (prox && typeof prox.distance_km === 'number') {
+        map[ev.id] = prox.distance_km
+      } else if (ev.latitude && ev.longitude) {
+        map[ev.id] = getDistanceKm(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude)
+      } else {
+        map[ev.id] = Number.POSITIVE_INFINITY
+      }
+    }
+    return map
+  }, [events, userLocation, proximityData])
 
   const interestedItems = useMemo(() => {
     const now = Date.now()
@@ -1038,14 +1364,13 @@ export default function Events() {
 
   const nearbyItems = useMemo(() => {
     if (!userLocation) return [] as Event[]
-    const withDistance = events
+    return events
       .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-      .map(e => ({ e, d: distanceKmForEvent(e) }))
+      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
       .filter(x => Number.isFinite(x.d))
       .sort((a, b) => a.d - b.d)
       .map(x => x.e)
-    return withDistance
-  }, [events, userLocation, proximityData])
+  }, [events, userLocation, distanceMap])
 
   const cityTopItems = useMemo(() => {
     if (!userCity) return [] as Event[]
@@ -1109,12 +1434,17 @@ export default function Events() {
       {/* Sticky top bar */}
       <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="View profile" onPress={() => router.push('/profile' as any)}>
-          {avatarUrl ? (
-            <OptimizedImage source={avatarUrl} style={styles.avatar} width={72} height={72} quality={60} />
+          {avatarUrl && avatarUrl.length > 0 && !avatarError ? (
+            <OptimizedImage
+              source={avatarUrl}
+              style={styles.avatar}
+              width={72}
+              height={72}
+              quality={60}
+              onError={() => setAvatarError(true)}
+            />
           ) : (
-            <View style={[styles.avatar, styles.defaultAvatar]}>
-              <Ionicons name="person" size={24} color="#666" />
-            </View>
+            <Ionicons name="person-circle-outline" size={38} color="#aaa" />
           )}
         </TouchableOpacity>
        
@@ -1134,10 +1464,10 @@ export default function Events() {
         />
         {/* Banners */}
         <View style={styles.filtersBar}>
-          {locationPermissionDenied && (
+          {locationStatus === 'denied' && (
             <View style={styles.bannerWarn}>
               <Text style={styles.bannerText}>
-                Enable Location to show nearby events and check-in. 
+                Enable Location to show nearby events and check-in.
               </Text>
               <TouchableOpacity
                 accessibilityRole="button"
@@ -1189,20 +1519,36 @@ export default function Events() {
                   <SkeletonLine width={160} />
                   <SkeletonLine width={80} />
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselList}>
-                  {[...Array(5)].map((_, i) => (
-                    <SkeletonBlock key={`s-int-${i}`} width={260} height={120} borderRadius={12} style={{ marginHorizontal: 4 }} />
-                  ))}
-                </ScrollView>
+                <FlatList
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.carouselList}
+                  data={[...Array(5)].map((_, i) => i)}
+                  keyExtractor={(item) => `s-int-${item}`}
+                  getItemLayout={getCarouselItemLayout}
+                  renderItem={() => (
+                    <SkeletonBlock width={260} height={120} borderRadius={12} style={{ marginHorizontal: 4 }} />
+                  )}
+                />
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={200} />
                 </View>
                 <Animated.View style={[styles.upcomingViewport, { paddingVertical: 16, height: 300 }]}> 
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
-                    {[...Array(7)].map((_, i) => (
-                      <SkeletonBlock key={`s-up-${i}`} width={163} height={264} borderRadius={20} style={{ marginRight: 14 }} />
-                    ))}
-                  </ScrollView>
+                  <FlatList
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 16 }}
+                    data={[...Array(7)].map((_, i) => i)}
+                    keyExtractor={(item) => `s-up-${item}`}
+                    getItemLayout={(_, index) => ({
+                      length: UPCOMING_ITEM_FULL,
+                      offset: UPCOMING_ITEM_FULL * index,
+                      index,
+                    })}
+                    renderItem={() => (
+                      <SkeletonBlock width={163} height={264} borderRadius={20} style={{ marginRight: 14 }} />
+                    )}
+                  />
                 </Animated.View>
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={180} />
@@ -1237,7 +1583,9 @@ export default function Events() {
 
                 {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
 
-                {userLocation && nearbyItems.length > 0 && renderNearbyList(nearbyItems.slice(0, 4))}
+                {userLocation
+                  ? (nearbyItems.length > 0 ? renderNearbyList(nearbyItems.slice(0, 4)) : null)
+                  : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? renderNearbyPrompt() : null)}
 
                 {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
 
@@ -1616,6 +1964,19 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 14,
   },
+  nearbyCta: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#E53A17',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  nearbyCtaText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   nearbyImage: {
     width: '96%',
     aspectRatio: 363 / 249,
@@ -1794,7 +2155,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   defaultAvatar: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#666',
     justifyContent: 'center',
     alignItems: 'center',
   },

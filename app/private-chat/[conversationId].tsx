@@ -327,6 +327,8 @@ export default function PrivateChat() {
                 source={item.mediaUrl!}
                 style={{ width: 220, height: 160, borderRadius: 14 }}
                 contentFit="cover"
+                width={220}
+                height={160}
               />
             ) : isAudio ? (
               <VoiceNote uri={item.text!} />

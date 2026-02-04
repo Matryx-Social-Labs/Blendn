@@ -26,6 +26,7 @@ import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Sk
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { pickImage, uploadPhoto } from '../../lib/photoUtils'
+import queryCache from '../../lib/queryCache'
 import { subscribeToChat, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 
@@ -40,6 +41,9 @@ interface Message {
   created_at: string
   replyTo?: Message
 }
+
+const MESSAGES_CACHE_TTL = 60 * 1000
+const MESSAGES_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
 
 type ChatListItem =
   | ({ kind: 'message' } & Message)
@@ -68,12 +72,17 @@ export default function GroupChat() {
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const typingCleanupRefs = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const lastMessagesFetchRef = useRef(0)
+  const messagesCacheKey = React.useMemo(
+    () => (chatRoomId ? `chat_messages_${chatRoomId}` : null),
+    [chatRoomId]
+  )
 
   useEffect(() => {
     if (chatRoomId && authUser && !authLoading) {
       setCurrentUser(authUser)
       loadParticipantAliases()
-      loadMessages()
+      loadMessages(false, true)
     }
   }, [chatRoomId, authUser, authLoading])
 
@@ -178,14 +187,28 @@ export default function GroupChat() {
 
   // getCurrentUser is now handled by useAuth hook - user is set from authUser in useEffect
 
-  const loadMessages = async () => {
+  const loadMessages = async (force = false, refreshEvenIfCached = false) => {
     try {
       if (!authUser) {
         Logger.warn('chat', 'No authenticated user found')
         return
       }
 
+      const now = Date.now()
+      if (!force && messagesCacheKey) {
+        const cached = queryCache.get<Message[]>(messagesCacheKey)
+        if (cached) {
+          setMessages(cached)
+          setLoading(false)
+          setTimeout(() => scrollToBottom(), 100)
+          if (!refreshEvenIfCached || now - lastMessagesFetchRef.current <= MESSAGES_BACKGROUND_REFRESH_THROTTLE_MS) {
+            return
+          }
+        }
+      }
+
       Logger.info('chat', `Loading messages for room: ${chatRoomId}`)
+      lastMessagesFetchRef.current = now
 
       // Use API to get chat messages
       const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 100 })
@@ -196,10 +219,18 @@ export default function GroupChat() {
         return
       }
 
-      Logger.info('chat', `Successfully loaded ${result.data.length || 0} messages`)
+      const rawMessages = Array.isArray(result.data)
+        ? result.data
+        : (result.data as any)?.messages || (result.data as any)?.data || []
+
+      if (!Array.isArray(rawMessages)) {
+        Logger.warn('chat', 'Unexpected chat messages payload shape', { data: result.data })
+      }
+
+      Logger.info('chat', `Successfully loaded ${Array.isArray(rawMessages) ? rawMessages.length : 0} messages`)
 
       // Transform data and apply anonymous aliases
-      const transformedMessages = (result.data || []).map((msg: any) => {
+      const transformedMessages = (Array.isArray(rawMessages) ? rawMessages : []).map((msg: any) => {
         const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
         const alias = senderId === 'system'
           ? 'System'
@@ -227,6 +258,9 @@ export default function GroupChat() {
 
       // Messages should be in chronological order (oldest first)
       setMessages(messagesWithReplies)
+      if (messagesCacheKey) {
+        queryCache.set(messagesCacheKey, messagesWithReplies, MESSAGES_CACHE_TTL)
+      }
       setTimeout(() => scrollToBottom(), 100)
     } catch (error) {
       Logger.error('chat', 'Unexpected error loading messages', { error })
@@ -234,6 +268,13 @@ export default function GroupChat() {
       setLoading(false)
     }
   }
+
+  // Keep cache warm as messages update in real time
+  useEffect(() => {
+    if (messagesCacheKey) {
+      queryCache.set(messagesCacheKey, messages, MESSAGES_CACHE_TTL)
+    }
+  }, [messages, messagesCacheKey])
 
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
@@ -520,6 +561,8 @@ export default function GroupChat() {
                 source={item.message_text}
                 style={{ width: 220, height: 160, borderRadius: 14 }}
                 contentFit="cover"
+                width={220}
+                height={160}
               />
             )}
             {item.message_type === 'audio' && (

@@ -79,13 +79,18 @@ export default function Index() {
     }
   }
 
-  // Show loading while auth is initializing
+  // Show splash screen while auth is initializing
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </SafeAreaView>
+      <View style={styles.splashContainer}>
+        <LinearGradient
+          colors={['#480D37', '#000000']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
+      </View>
     )
   }
 
@@ -170,12 +175,17 @@ export default function Index() {
     )
   }
 
-  // This should not be reached due to navigation in useEffect
+  // User is authenticated - show splash while redirecting
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ActivityIndicator size="large" />
-      <Text style={styles.loadingText}>Redirecting...</Text>
-    </SafeAreaView>
+    <View style={styles.splashContainer}>
+      <LinearGradient
+        colors={['#480D37', '#000000']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
+    </View>
   )
 }
 
@@ -186,6 +196,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 0,
     backgroundColor: 'transparent',
+  },
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  splashLogo: {
+    width: 120,
+    height: 120,
   },
   heroContainer: {
     width: '100%',

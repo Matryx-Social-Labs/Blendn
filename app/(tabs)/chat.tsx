@@ -18,11 +18,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 // Removed AppHeader in favor of custom header matching Figma design
 import ModernChat from '../../components/ModernChat'
-import OptimizedImage from '../../components/OptimizedImage'
+import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
+import queryCache from '../../lib/queryCache'
 import { computeUnreadCounts, setConversationLastRead } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { subscribeToUserNotifications, PrivateMessageCallback } from '../../lib/socketClient'
@@ -57,6 +58,34 @@ interface MessageRequest {
 
 type ChatTabType = 'group' | 'personal'
 
+const GROUP_CHAT_CACHE_TTL = 60 * 1000
+const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
+const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
+const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 60 * 1000
+
+const getInitials = (name: string) => {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  const first = parts[0]?.[0] || ''
+  const second = parts[1]?.[0] || ''
+  return (first + second).toUpperCase() || first.toUpperCase() || '?'
+}
+
+const formatRelativeTime = (timeString: string) => {
+  const messageTime = new Date(timeString)
+  const now = new Date()
+  const diffMs = now.getTime() - messageTime.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'now'
+  if (diffHours < 1) return `${diffMins}m`
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays < 7) return `${diffDays}d`
+  return messageTime.toLocaleDateString()
+}
+
 export default function Chat() {
   const insets = useSafeAreaInsets()
   const { user, loading: authLoading } = useAuth()
@@ -72,7 +101,10 @@ export default function Chat() {
   const { setScrollProgress } = useGradientOverlay()
   const latestLoadIdRef = useRef(0)
   const isLoadingRef = useRef(false)
+  const lastFetchRef = useRef({ group: 0, personal: 0, requests: 0 })
+  const skipInitialTabEffectRef = useRef(true)
   const { width, height } = useWindowDimensions()
+  const storyChats = useMemo(() => personalChats.slice(0, 10), [personalChats])
 
   // Responsive sizing based on screen width (baseline ~390)
   const {
@@ -149,6 +181,14 @@ export default function Chat() {
       width: storyItemWidth,
     },
   }), [avatarSize, storyRingSize, storyImageSize, unreadSize, rowPaddingV, segmentPaddingV, emptyPadV, storyItemWidth])
+  const personalItemHeight = useMemo(
+    () => Math.round(avatarSize + rowPaddingV * 2 + 14),
+    [avatarSize, rowPaddingV]
+  )
+  const groupItemHeight = useMemo(
+    () => Math.round(avatarSize + (rowPaddingV + 2) * 2 + 14),
+    [avatarSize, rowPaddingV]
+  )
 
   // Memoized callbacks to prevent re-creation
   const handleGroupChatPress = useCallback((chat: GroupChat) => {
@@ -173,18 +213,29 @@ export default function Chat() {
   const onRefresh = useCallback(async () => {
     if (isLoadingRef.current) return
     setRefreshing(true)
-    await loadChats()
+    await loadChats(true, true)
     setRefreshing(false)
   }, [])
 
   useFocusEffect(
     useCallback(() => {
       if (!authLoading && user) {
-        loadChats()
+        loadChats(false, true)
       }
       return () => {}
-    }, [user, authLoading, activeTab])
+    }, [user, authLoading])
   )
+
+  // Hydrate on tab switch (cache-first, avoid refetch if cached)
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (skipInitialTabEffectRef.current) {
+        skipInitialTabEffectRef.current = false
+        return
+      }
+      loadChats(false, false)
+    }
+  }, [activeTab, user, authLoading])
 
   // Load current user's avatar for header
   useEffect(() => {
@@ -264,21 +315,68 @@ export default function Chat() {
     }
   }, [user])
 
-  const loadChats = async () => {
+  const loadChats = async (force = false, refreshEvenIfCached = false) => {
     if (!user) return
+
+    const perfStart = Date.now()
+    const userId = user.id
+    const groupCacheKey = `group_chats_${userId}`
+    const personalCacheKey = `personal_chats_${userId}`
+    const requestsCacheKey = `message_requests_${userId}`
+
+    const cachedGroupChats = !force && activeTab === 'group'
+      ? queryCache.get<GroupChat[]>(groupCacheKey)
+      : null
+    const cachedPersonalChats = !force && activeTab === 'personal'
+      ? queryCache.get<PersonalChat[]>(personalCacheKey)
+      : null
+    const shouldHydrateRequests = activeTab === 'personal'
+    const cachedRequests = !force && shouldHydrateRequests
+      ? queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
+      : null
+
+    if (cachedGroupChats && activeTab === 'group') setGroupChats(cachedGroupChats)
+    if (cachedPersonalChats && activeTab === 'personal') setPersonalChats(cachedPersonalChats)
+    if (cachedRequests) {
+      setIncomingRequests(cachedRequests.incoming)
+      setOutgoingRequests(cachedRequests.outgoing)
+    }
+
+    const hasCachedList = activeTab === 'group' ? !!cachedGroupChats : !!cachedPersonalChats
+    const hasCachedRequests = !!cachedRequests
+    if (!force && (hasCachedList || hasCachedRequests)) {
+      setLoading(false)
+    }
+
+    const now = Date.now()
+    const shouldFetchList = force
+      || !hasCachedList
+      || (refreshEvenIfCached && now - lastFetchRef.current[activeTab] > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+    const shouldFetchRequests = shouldHydrateRequests && (force
+      || !hasCachedRequests
+      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS))
+
+    if (!shouldFetchList && !shouldFetchRequests) return
 
     const loadId = ++latestLoadIdRef.current
     try {
       isLoadingRef.current = true
-      setLoading(true)
+      if (force || (!hasCachedList && shouldFetchList)) setLoading(true)
       Logger.debug('chat', `Loading chats for tab: ${activeTab}`)
       
-      if (activeTab === 'group') {
-        await loadGroupChats(loadId)
-      } else {
-        await loadPersonalChats(loadId)
+      if (shouldFetchList) {
+        if (activeTab === 'group') {
+          await loadGroupChats(loadId, groupCacheKey)
+          lastFetchRef.current.group = now
+        } else {
+          await loadPersonalChats(loadId, personalCacheKey)
+          lastFetchRef.current.personal = now
+        }
       }
-      await loadMessageRequests(loadId)
+      if (shouldFetchRequests) {
+        await loadMessageRequests(loadId, requestsCacheKey, force)
+        lastFetchRef.current.requests = now
+      }
       
     } catch (error) {
       Logger.error('chat', 'Error loading chats', { error })
@@ -287,24 +385,47 @@ export default function Chat() {
         setLoading(false)
         isLoadingRef.current = false
       }
+      Logger.info('chat', 'loadChats timing', {
+        tab: activeTab,
+        force,
+        refreshEvenIfCached,
+        durationMs: Date.now() - perfStart,
+        fetchedList: shouldFetchList,
+        fetchedRequests: shouldFetchRequests,
+      })
     }
   }
 
-  const loadMessageRequests = async (loadId?: number) => {
+  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false) => {
+    if (cacheKey && !force) {
+      const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
+      if (cached) {
+        if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
+        setIncomingRequests(cached.incoming)
+        setOutgoingRequests(cached.outgoing)
+        return
+      }
+    }
     try {
       const result = await apiClient.getMessageRequests({ status: 'pending' })
       if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
 
       if (result.success && result.data?.requests) {
-        const requests = result.data.requests.map((r: any) => ({
+        const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
           request_id: r.id,
           sender_name: r.sender?.name || null,
           initial_message: r.message || null,
         }))
         setIncomingRequests(requests)
         Logger.info('chat', 'Message requests loaded', { count: requests.length })
+        if (cacheKey) {
+          queryCache.set(cacheKey, { incoming: requests, outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
+        }
       } else {
         setIncomingRequests([])
+        if (cacheKey) {
+          queryCache.set(cacheKey, { incoming: [], outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
+        }
       }
       // Note: outgoing requests would need a separate API call if needed
       setOutgoingRequests([])
@@ -317,7 +438,7 @@ export default function Chat() {
     }
   }
 
-  const loadGroupChats = async (loadId?: number) => {
+  const loadGroupChats = async (loadId?: number, cacheKey?: string) => {
     try {
       Logger.debug('chat', 'Fetching group chats...')
 
@@ -330,20 +451,41 @@ export default function Chat() {
         return
       }
 
+      // Normalize API response shape (array vs wrapped payload)
+      const rooms = Array.isArray(result.data)
+        ? result.data
+        : (result.data as any).groups || (result.data as any).rooms || (result.data as any).data || []
+
+      if (!Array.isArray(rooms)) {
+        Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
+        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
+        return
+      }
+
       // Transform API response to GroupChat interface
-      const groupChatData: GroupChat[] = (result.data || []).map((room: any) => ({
-        chat_room_id: room.id,
+      const groupChatData: GroupChat[] = rooms.map((room: any) => ({
+        chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
         event_id: room.event_id || room.eventId || '',
-        event_title: room.event?.title || room.name || 'Unknown Event',
-        event_venue: room.event?.venue_name || room.event?.venueName || 'Unknown Venue',
-        participant_count: room.participant_count || room.participantCount || 0,
-        event_image: room.event?.cover_image_url || room.event?.coverImageUrl || null,
-        last_message: room.last_message?.text || room.lastMessage?.text,
-        last_message_time: room.last_message?.created_at || room.lastMessage?.createdAt,
+        event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Unknown Event',
+        event_venue: room.event?.venue_name || room.event?.venueName || room.venue_name || room.venueName || 'Unknown Venue',
+        participant_count: room.participant_count || room.participantCount || room.participants || 0,
+        event_image: room.event?.cover_image_url || room.event?.coverImageUrl || room.cover_image_url || room.coverImageUrl || null,
+        last_message: room.last_message?.text || room.lastMessage?.text || room.lastMessageText,
+        last_message_time: room.last_message?.created_at || room.lastMessage?.createdAt || room.lastMessageTime,
         last_sender_name: undefined
-      }))
+      })).filter((chat) => chat.chat_room_id)
 
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
+      if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
+      try {
+        const firstScreenUrls = groupChatData
+          .map((c) => c.event_image)
+          .filter((u): u is string => !!u)
+          .slice(0, 8)
+        if (firstScreenUrls.length > 0) {
+          preloadImages(firstScreenUrls, 'low')
+        }
+      } catch {}
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
     } catch (error) {
       Logger.error('chat', 'Error loading group chats', { error })
@@ -351,8 +493,9 @@ export default function Chat() {
     }
   }
 
-  const loadPersonalChats = async (loadId?: number) => {
+  const loadPersonalChats = async (loadId?: number, cacheKey?: string) => {
     try {
+      const perfStart = Date.now()
       Logger.debug('chat', 'Fetching personal chats...')
 
       const result = await apiClient.getConversations()
@@ -360,23 +503,41 @@ export default function Chat() {
       if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
 
       if (result.success && result.data) {
-        // Compute unread counts
-        const unreadMap = await computeUnreadCounts(
-          result.data.map((c: any) => c.id)
-        )
+        const conversations = result.data
+        const hasUnreadCounts = conversations.some((c: any) => c?.unreadCount !== undefined && c?.unreadCount !== null)
+        const unreadStart = Date.now()
+        const unreadMap = hasUnreadCounts
+          ? {}
+          : await computeUnreadCounts(conversations.map((c: any) => c.id))
+        const unreadDurationMs = Date.now() - unreadStart
 
-        const personalChatData: PersonalChat[] = result.data.map((conv: any) => ({
+        const personalChatData: PersonalChat[] = conversations.map((conv: any) => ({
           conversation_id: conv.id,
           other_user_name: conv.otherUser?.name || 'Unknown',
           other_user_id: conv.otherUser?.id || '',
           other_user_avatar: conv.otherUser?.image || null,
           last_message: conv.lastMessage?.text || undefined,
           last_message_time: conv.lastMessage?.createdAt || conv.updatedAt,
-          unread_count: unreadMap[conv.id] || conv.unreadCount || 0,
+          unread_count: (conv.unreadCount ?? unreadMap[conv.id]) || 0,
         }))
 
         setPersonalChats(personalChatData)
+        if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
+        try {
+          const firstScreenUrls = personalChatData
+            .map((c) => c.other_user_avatar)
+            .filter((u): u is string => !!u)
+            .slice(0, 8)
+          if (firstScreenUrls.length > 0) {
+            preloadImages(firstScreenUrls, 'low')
+          }
+        } catch {}
         Logger.info('chat', `Loaded ${personalChatData.length} personal chats`)
+        Logger.info('chat', 'personal chats timing', {
+          durationMs: Date.now() - perfStart,
+          unreadDurationMs,
+          usedApiUnreadCounts: hasUnreadCounts,
+        })
       } else {
         setPersonalChats([])
       }
@@ -390,9 +551,9 @@ export default function Chat() {
 
   
 
-  const renderGroupChatItem = useCallback(({ item }: { item: GroupChat }) => (
-    <TouchableOpacity 
-      style={[styles.personalItem, dynamicStyles.personalItem]} 
+  const GroupChatRow = useMemo(() => React.memo(({ item }: { item: GroupChat }) => (
+    <TouchableOpacity
+      style={[styles.personalItem, dynamicStyles.personalItem]}
       onPress={() => handleGroupChatPress(item)}
     >
       <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
@@ -418,72 +579,57 @@ export default function Chat() {
         </View>
       </View>
     </TouchableOpacity>
-  ), [handleGroupChatPress])
+  )), [dynamicStyles, handleGroupChatPress])
 
-  const renderPersonalChatItem = useCallback(({ item }: { item: PersonalChat }) => {
+  const renderGroupChatItem = useCallback(({ item }: { item: GroupChat }) => (
+    <GroupChatRow item={item} />
+  ), [GroupChatRow])
+
+  const PersonalChatRow = useMemo(() => React.memo(({ item }: { item: PersonalChat }) => {
     const unreadText = item.unread_count > 99 ? '99+' : String(item.unread_count)
     return (
-    <TouchableOpacity 
-      style={[styles.personalItem, dynamicStyles.personalItem]} 
-      onPress={() => handlePersonalChatPress(item)}
-    >
-      <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
-        {item.other_user_avatar ? (
-          <OptimizedImage source={item.other_user_avatar} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
-        ) : (
-          <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>
+      <TouchableOpacity
+        style={[styles.personalItem, dynamicStyles.personalItem]}
+        onPress={() => handlePersonalChatPress(item)}
+      >
+        <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
+          {item.other_user_avatar ? (
+            <OptimizedImage source={item.other_user_avatar} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
+          ) : (
+            <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.personalContent}>
+          <View style={styles.personalHeader}>
+            <Text style={styles.personalName} numberOfLines={1}>{item.other_user_name}</Text>
+            <View style={styles.personalHeaderRight}>
+              <Text style={styles.personalTime}>
+                {item.last_message_time ? formatRelativeTime(item.last_message_time) : ''}
+              </Text>
+              {item.unread_count > 0 && (
+                <View style={[styles.unreadDot, dynamicStyles.unreadDot]}>
+                  <Text style={styles.unreadDotText}>{unreadText}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        )}
-      </View>
-      <View style={styles.personalContent}>
-        <View style={styles.personalHeader}>
-          <Text style={styles.personalName} numberOfLines={1}>{item.other_user_name}</Text>
-          <View style={styles.personalHeaderRight}>
-            <Text style={styles.personalTime}>
-              {item.last_message_time ? formatRelativeTime(item.last_message_time) : ''}
+          <View style={styles.personalFooter}>
+            <Text style={styles.personalPreview} numberOfLines={1}>
+              {item.last_message || 'Say hi 👋'}
             </Text>
-            {item.unread_count > 0 && (
-              <View style={[styles.unreadDot, dynamicStyles.unreadDot]}>
-                <Text style={styles.unreadDotText}>{unreadText}</Text>
-              </View>
-            )}
           </View>
         </View>
-        <View style={styles.personalFooter}>
-          <Text style={styles.personalPreview} numberOfLines={1}>
-            {item.last_message || 'Say hi 👋'}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  )
-  }, [handlePersonalChatPress])
+      </TouchableOpacity>
+    )
+  }), [dynamicStyles, handlePersonalChatPress])
 
-  const getInitials = (name: string) => {
-    if (!name) return '?'
-    const parts = name.trim().split(/\s+/)
-    const first = parts[0]?.[0] || ''
-    const second = parts[1]?.[0] || ''
-    return (first + second).toUpperCase() || first.toUpperCase() || '?'
-  }
+  const renderPersonalChatItem = useCallback(({ item }: { item: PersonalChat }) => (
+    <PersonalChatRow item={item} />
+  ), [PersonalChatRow])
 
-  const formatRelativeTime = (timeString: string) => {
-    const messageTime = new Date(timeString)
-    const now = new Date()
-    const diffMs = now.getTime() - messageTime.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return 'now'
-    if (diffHours < 1) return `${diffMins}m`
-    if (diffHours < 24) return `${diffHours}h`
-    if (diffDays < 7) return `${diffDays}d`
-    return messageTime.toLocaleDateString()
-  }
-
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
       <Text style={styles.emptyTitle}>
         {activeTab === 'group' ? 'No Group Chats' : 'No Personal Chats'}
@@ -500,9 +646,33 @@ export default function Chat() {
         </View>
       )}
     </View>
-  )
+  ), [activeTab, dynamicStyles.emptyContainer, incomingRequests.length])
 
   const isLoading = authLoading || loading
+  const getGroupKey = useCallback((item: GroupChat) => item.chat_room_id, [])
+  const getPersonalKey = useCallback((item: PersonalChat) => item.conversation_id, [])
+  const getGroupItemLayout = useCallback(
+    (_: ArrayLike<GroupChat> | null | undefined, index: number) => ({
+      length: groupItemHeight,
+      offset: groupItemHeight * index,
+      index,
+    }),
+    [groupItemHeight]
+  )
+  const getPersonalItemLayout = useCallback(
+    (_: ArrayLike<PersonalChat> | null | undefined, index: number) => ({
+      length: personalItemHeight,
+      offset: personalItemHeight * index,
+      index,
+    }),
+    [personalItemHeight]
+  )
+  const handleListScroll = useCallback(
+    (e: any) => {
+      setScrollProgress(e.nativeEvent.contentOffset.y, 240)
+    },
+    [setScrollProgress]
+  )
 
   // Show modern chat demo if toggled
   if (showModernChat) {
@@ -538,41 +708,47 @@ export default function Chat() {
           </TouchableOpacity>
         </View>
 
-      <View style={styles.storiesCard}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.storiesRow}
-          >
-            {(personalChats.slice(0, 10)).map((c, idx) => (
-              <View key={c.conversation_id ?? idx} style={[styles.storyItem, dynamicStyles.storyItem, idx !== personalChats.slice(0, 10).length - 1 && styles.storyItemSpacing]}>
-                <LinearGradient
-                  colors={["#FFD36E", "#FF5BA6"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.storyRing, dynamicStyles.storyRing]}
-                >
-                  {c.other_user_avatar ? (
-                    <OptimizedImage source={c.other_user_avatar} style={[styles.storyImage as any, dynamicStyles.storyImage]} width={Math.round(dynamicStyles.storyImage.width)} height={Math.round(dynamicStyles.storyImage.height)} quality={60} />
-                  ) : (
-                    <View style={[styles.storyImage, dynamicStyles.storyImage, styles.avatarFallback]}>
-                      <Text style={styles.avatarInitials}>{getInitials(c.other_user_name)}</Text>
-                    </View>
-                  )}
-                </LinearGradient>
-                <Text style={styles.storyLabel} numberOfLines={1}>{c.other_user_name?.split(' ')[0] || 'User'}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
+      {activeTab === 'personal' && !isLoading && storyChats.length > 0 && (
+        <View style={styles.storiesCard}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.storiesRow}
+            >
+              {(storyChats).map((c, idx) => (
+                <View key={c.conversation_id ?? idx} style={[styles.storyItem, dynamicStyles.storyItem, idx !== storyChats.length - 1 && styles.storyItemSpacing]}>
+                  <LinearGradient
+                    colors={["#FFD36E", "#FF5BA6"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.storyRing, dynamicStyles.storyRing]}
+                  >
+                    {c.other_user_avatar ? (
+                      <OptimizedImage source={c.other_user_avatar} style={[styles.storyImage as any, dynamicStyles.storyImage]} width={Math.round(dynamicStyles.storyImage.width)} height={Math.round(dynamicStyles.storyImage.height)} quality={60} />
+                    ) : (
+                      <View style={[styles.storyImage, dynamicStyles.storyImage, styles.avatarFallback]}>
+                        <Text style={styles.avatarInitials}>{getInitials(c.other_user_name)}</Text>
+                      </View>
+                    )}
+                  </LinearGradient>
+                  <Text style={styles.storyLabel} numberOfLines={1}>{c.other_user_name?.split(' ')[0] || 'User'}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Segmented control */}
       <View style={styles.segmentContainer}>
         <View style={styles.segmentPill}>
-          {/* Glass background */}
-          <BlurView intensity={30} tint="dark" style={styles.segmentGlassBlur} />
-          <View pointerEvents="none" style={styles.segmentTint} />
+          {/* Gradient background (cheaper than blur) */}
+          <LinearGradient
+            colors={["#2A0B23", "#140812"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.segmentGradient}
+          />
           {/* borderless glass */}
           <TouchableOpacity
             onPress={() => setActiveTab('personal')}
@@ -608,10 +784,12 @@ export default function Chat() {
           <FlatList
             data={groupChats}
             renderItem={renderGroupChatItem}
-            keyExtractor={(item) => item.chat_room_id}
-            initialNumToRender={8}
-            maxToRenderPerBatch={8}
-            windowSize={10}
+            keyExtractor={getGroupKey}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            updateCellsBatchingPeriod={50}
+            windowSize={8}
+            getItemLayout={getGroupItemLayout}
             removeClippedSubviews
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -621,7 +799,7 @@ export default function Chat() {
               styles.listContainer,
               groupChats.length === 0 && styles.emptyListContainer
             ]}
-            onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
+            onScroll={handleListScroll}
             scrollEventThrottle={16}
           />
         )
@@ -702,10 +880,12 @@ export default function Chat() {
             <FlatList
               data={personalChats}
               renderItem={renderPersonalChatItem}
-              keyExtractor={(item) => item.conversation_id}
-              initialNumToRender={8}
-              maxToRenderPerBatch={5}
-              windowSize={7}
+              keyExtractor={getPersonalKey}
+              initialNumToRender={6}
+              maxToRenderPerBatch={4}
+              updateCellsBatchingPeriod={50}
+              windowSize={6}
+              getItemLayout={getPersonalItemLayout}
               removeClippedSubviews
               refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -715,7 +895,7 @@ export default function Chat() {
                 styles.listContainer,
                 personalChats.length === 0 && styles.emptyListContainer
               ]}
-              onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 240)}
+              onScroll={handleListScroll}
               scrollEventThrottle={32}
             />
           </>
@@ -788,14 +968,9 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     alignItems: 'center',
   },
-  segmentGlassBlur: {
+  segmentGradient: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 26,
-  },
-  segmentTint: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 26,
-    backgroundColor: 'rgba(118,118,128,0.32)',
   },
   // no stroke for borderless look
   segmentItem: {

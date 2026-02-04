@@ -10,6 +10,14 @@ import { Logger } from './logger'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
+const EVENTS_LIST_SWR_TTL = 60 * 1000
+const CHAT_LIST_SWR_TTL = 30 * 1000
+const REQUESTS_SWR_TTL = 30 * 1000
+const CHECKINS_SWR_TTL = 30 * 1000
+const CATEGORIES_SWR_TTL = 10 * 60 * 1000
+const PARTICIPANTS_SWR_TTL = 30 * 1000
+const INTERESTED_USERS_SWR_TTL = 30 * 1000
+const EVENT_CHECKINS_SWR_TTL = 30 * 1000
 
 if (!API_BASE_URL) {
   throw new Error(
@@ -247,6 +255,33 @@ class TokenStorage {
   }
 }
 
+// Profile Cache - shared across components to avoid duplicate fetches
+const PROFILE_CACHE_TTL = 60 * 1000 // 60 seconds
+interface ProfileCacheEntry {
+  data: any
+  timestamp: number
+  userId: string
+}
+let profileCache: ProfileCacheEntry | null = null
+
+export const ProfileCache = {
+  get(userId: string): any | null {
+    if (!profileCache) return null
+    if (profileCache.userId !== userId) return null
+    if (Date.now() - profileCache.timestamp > PROFILE_CACHE_TTL) {
+      profileCache = null
+      return null
+    }
+    return profileCache.data
+  },
+  set(userId: string, data: any): void {
+    profileCache = { data, timestamp: Date.now(), userId }
+  },
+  clear(): void {
+    profileCache = null
+  },
+}
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean
@@ -291,9 +326,43 @@ let refreshPromise: Promise<boolean> | null = null
 // API Client Class
 class ApiClientClass {
   private baseUrl: string
+  private inFlight = new Map<string, Promise<ApiResponse<any>>>()
+  private responseCache = new Map<string, { data: ApiResponse<any>; timestamp: number; ttl: number }>()
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
+  }
+
+  private buildRequestKey(endpoint: string, options: RequestInit, requireAuth: boolean): string {
+    const method = (options.method || 'GET').toUpperCase()
+    const body = options.body ? String(options.body) : ''
+    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
+  }
+
+  private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean } | null {
+    const entry = this.responseCache.get(key)
+    if (!entry) return null
+    const age = Date.now() - entry.timestamp
+    return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl }
+  }
+
+  private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
+    this.responseCache.set(key, { data: data as ApiResponse<any>, timestamp: Date.now(), ttl })
+  }
+
+  private refreshCacheInBackground<T>(
+    endpoint: string,
+    options: RequestInit,
+    requireAuth: boolean,
+    priority: number,
+    key: string,
+    ttl: number
+  ) {
+    this.queuedRequest<T>(endpoint, options, requireAuth, priority).then((result) => {
+      if (result.success) {
+        this.setCache(key, result, ttl)
+      }
+    }).catch(() => {})
   }
 
   private buildErrorMessage(
@@ -467,11 +536,61 @@ class ApiClientClass {
     requireAuth: boolean = true,
     priority: number = 5
   ): Promise<ApiResponse<T>> {
-    return requestQueue.add(
+    const method = (options.method || 'GET').toUpperCase()
+    const isGet = method === 'GET'
+    const key = isGet ? this.buildRequestKey(endpoint, options, requireAuth) : ''
+
+    if (isGet && this.inFlight.has(key)) {
+      return this.inFlight.get(key) as Promise<ApiResponse<T>>
+    }
+
+    const promise = requestQueue.add(
       () => this.request<T>(endpoint, options, requireAuth),
       priority,
-      options.method === 'GET' ? 'query' : 'mutation'
+      method === 'GET' ? 'query' : 'mutation'
     )
+
+    if (isGet) {
+      this.inFlight.set(key, promise as Promise<ApiResponse<any>>)
+      promise.finally(() => {
+        this.inFlight.delete(key)
+      })
+    }
+
+    return promise
+  }
+
+  async cachedRequest<T>(
+    endpoint: string,
+    cache: { ttl: number; swr?: boolean; key?: string },
+    options: RequestInit = {},
+    requireAuth: boolean = true,
+    priority: number = 5
+  ): Promise<ApiResponse<T>> {
+    const method = (options.method || 'GET').toUpperCase()
+    if (method !== 'GET') {
+      return this.queuedRequest<T>(endpoint, options, requireAuth, priority)
+    }
+
+    const key = cache.key || this.buildRequestKey(endpoint, options, requireAuth)
+    const cached = this.getCached<T>(key)
+
+    if (cached) {
+      if (cached.isFresh) {
+        return cached.data
+      }
+
+      if (cache.swr) {
+        this.refreshCacheInBackground<T>(endpoint, options, requireAuth, priority, key, cache.ttl)
+        return cached.data
+      }
+    }
+
+    const result = await this.queuedRequest<T>(endpoint, options, requireAuth, priority)
+    if (result.success) {
+      this.setCache(key, result, cache.ttl)
+    }
+    return result
   }
 
   // === AUTH ENDPOINTS ===
@@ -579,7 +698,9 @@ class ApiClientClass {
     status?: string
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
-  }): Promise<ApiResponse<{ events: any[]; pagination: any }>> {
+    include?: string
+    interestedPreviewLimit?: number
+  }): Promise<ApiResponse<{ events: any[]; pagination: any; activeCheckins?: any[]; profile?: any }>> {
     const searchParams = new URLSearchParams()
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -589,22 +710,30 @@ class ApiClientClass {
       })
     }
     const query = searchParams.toString()
-    return this.queuedRequest<{ events: any[]; pagination: any }>(
-      `/api/mobile/events${query ? `?${query}` : ''}`
+    return this.cachedRequest<{ events: any[]; pagination: any }>(
+      `/api/mobile/events${query ? `?${query}` : ''}`,
+      { ttl: EVENTS_LIST_SWR_TTL, swr: true }
     )
   }
 
   async getEvent(
     eventId: string,
-    params?: { lat?: number; lon?: number }
+    params?: { lat?: number; lon?: number; include?: string; interestedLimit?: number }
   ): Promise<ApiResponse<any>> {
     const searchParams = new URLSearchParams()
     if (params) {
       if (params.lat !== undefined) searchParams.append('lat', String(params.lat))
       if (params.lon !== undefined) searchParams.append('lon', String(params.lon))
+      if (params.include) searchParams.append('include', params.include)
+      if (params.interestedLimit !== undefined) {
+        searchParams.append('interestedLimit', String(params.interestedLimit))
+      }
     }
     const query = searchParams.toString()
-    return this.queuedRequest<any>(`/api/mobile/events/${eventId}${query ? `?${query}` : ''}`)
+    return this.cachedRequest<any>(
+      `/api/mobile/events/${eventId}${query ? `?${query}` : ''}`,
+      { ttl: 30 * 1000, swr: true }
+    )
   }
 
   async checkIn(
@@ -634,7 +763,10 @@ class ApiClientClass {
   }
 
   async getEventCheckins(eventId: string): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>(`/api/mobile/events/${eventId}/checkins`)
+    return this.cachedRequest<any[]>(
+      `/api/mobile/events/${eventId}/checkins`,
+      { ttl: EVENT_CHECKINS_SWR_TTL, swr: true }
+    )
   }
 
   async toggleFavorite(eventId: string): Promise<ApiResponse<{ favorited: boolean }>> {
@@ -680,7 +812,20 @@ class ApiClientClass {
   // === PROFILE ENDPOINTS ===
 
   async getProfile(userId: string): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(`/api/mobile/profiles/${userId}`)
+    // Check cache first for instant response
+    const cached = ProfileCache.get(userId)
+    if (cached) {
+      return { success: true, data: cached }
+    }
+
+    const result = await this.queuedRequest<any>(`/api/mobile/profiles/${userId}`)
+
+    // Cache successful responses
+    if (result.success && result.data) {
+      ProfileCache.set(userId, result.data)
+    }
+
+    return result
   }
 
   async updateProfile(
@@ -746,7 +891,10 @@ class ApiClientClass {
   // === CHAT ENDPOINTS ===
 
   async getChatGroups(): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>('/api/mobile/chat/groups')
+    return this.cachedRequest<any[]>(
+      '/api/mobile/chat/groups',
+      { ttl: CHAT_LIST_SWR_TTL, swr: true }
+    )
   }
 
   async getEventChat(eventId: string): Promise<ApiResponse<any>> {
@@ -804,7 +952,10 @@ class ApiClientClass {
   // === CATEGORIES ===
 
   async getCategories(): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>('/api/mobile/categories')
+    return this.cachedRequest<any[]>(
+      '/api/mobile/categories',
+      { ttl: CATEGORIES_SWR_TTL, swr: true }
+    )
   }
 
   // === PUSH NOTIFICATIONS ===
@@ -836,7 +987,10 @@ class ApiClientClass {
   // === PRIVATE CONVERSATIONS ===
 
   async getConversations(): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>('/api/mobile/conversations')
+    return this.cachedRequest<any[]>(
+      '/api/mobile/conversations',
+      { ttl: CHAT_LIST_SWR_TTL, swr: true }
+    )
   }
 
   async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{
@@ -960,7 +1114,10 @@ class ApiClientClass {
       }
     }>
   }>> {
-    return this.queuedRequest('/api/mobile/checkins/active')
+    return this.cachedRequest(
+      '/api/mobile/checkins/active',
+      { ttl: CHECKINS_SWR_TTL, swr: true }
+    )
   }
 
   async getBatchInterestStatuses(eventIds: string[]): Promise<ApiResponse<{
@@ -999,7 +1156,10 @@ class ApiClientClass {
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
-    return this.queuedRequest(`/api/mobile/events/${eventId}/interested-users${query ? `?${query}` : ''}`)
+    return this.cachedRequest(
+      `/api/mobile/events/${eventId}/interested-users${query ? `?${query}` : ''}`,
+      { ttl: INTERESTED_USERS_SWR_TTL, swr: true }
+    )
   }
 
   async getChatParticipants(chatGroupId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<{
@@ -1017,7 +1177,10 @@ class ApiClientClass {
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
-    return this.queuedRequest(`/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`)
+    return this.cachedRequest(
+      `/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`,
+      { ttl: PARTICIPANTS_SWR_TTL, swr: true }
+    )
   }
 
   async deleteUpload(url: string): Promise<ApiResponse<{ deleted: boolean }>> {
@@ -1071,7 +1234,10 @@ class ApiClientClass {
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
-    return this.queuedRequest(`/api/mobile/message-requests${query ? `?${query}` : ''}`)
+    return this.cachedRequest(
+      `/api/mobile/message-requests${query ? `?${query}` : ''}`,
+      { ttl: REQUESTS_SWR_TTL, swr: true }
+    )
   }
 
   async respondToMessageRequest(

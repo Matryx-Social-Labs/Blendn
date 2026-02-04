@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 
@@ -20,6 +21,32 @@ let globalAuthState: AuthState = {
 let authStateListeners: ((state: AuthState) => void)[] = []
 let sessionCheckInterval: NodeJS.Timeout | null = null
 let isInitializing = false // Prevent concurrent initialization
+let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
+let appStateListenerRegistered = false
+let isAppActive = AppState.currentState === 'active'
+
+const registerAppStateListener = () => {
+  if (appStateListenerRegistered) return
+
+  try {
+    AppState.addEventListener('change', (state) => {
+      isAppActive = state === 'active'
+      if (!isAppActive) {
+        Logger.info('auth', 'App backgrounded; pausing session refresh')
+        stopSessionRefresh()
+        return
+      }
+
+      if (globalAuthState.user) {
+        Logger.info('auth', 'App foregrounded; resuming session refresh')
+        startSessionRefresh()
+      }
+    })
+    appStateListenerRegistered = true
+  } catch (error) {
+    Logger.warn('auth', 'Failed to register AppState listener', { error })
+  }
+}
 
 // Update global state and notify listeners
 const updateAuthState = (newState: Partial<AuthState>) => {
@@ -28,114 +55,113 @@ const updateAuthState = (newState: Partial<AuthState>) => {
 }
 
 // Initialize auth system once
-const initializeAuth = async () => {
+const initializeAuth = async (): Promise<AuthState> => {
   if (globalAuthState.initialized) {
     return globalAuthState
   }
 
-  // Prevent concurrent initialization
-  if (isInitializing) {
-    // Wait for existing initialization to complete
-    return new Promise<AuthState>((resolve) => {
-      const checkInterval = setInterval(() => {
-        if (globalAuthState.initialized) {
-          clearInterval(checkInterval)
-          resolve(globalAuthState)
-        }
-      }, 50)
-    })
+  registerAppStateListener()
+
+  // Prevent concurrent initialization - use Promise instead of polling
+  if (isInitializing && initializationPromise) {
+    return initializationPromise
   }
 
   isInitializing = true
   Logger.info('auth', 'Initializing auth system...')
 
-  // Start in loading state
-  updateAuthState({ loading: true })
+  // Create a promise that other callers can await
+  initializationPromise = (async (): Promise<AuthState> => {
+    // Start in loading state
+    updateAuthState({ loading: true })
 
-  try {
-    // Check if we have stored tokens
-    const accessToken = await TokenStorage.getAccessToken()
+    try {
+      // Check if we have stored tokens
+      const accessToken = await TokenStorage.getAccessToken()
 
-    if (accessToken) {
-      // We have a token, verify it's still valid
-      Logger.debug('auth', 'Found stored access token, verifying session...')
+      if (accessToken) {
+        // We have a token, verify it's still valid
+        Logger.debug('auth', 'Found stored access token, verifying session...')
 
-      const result = await apiClient.getSession()
+        const result = await apiClient.getSession()
 
-      if (result.success && result.data) {
-        const user = result.data
-        Logger.info('auth', 'Session verified', { userId: user.id })
+        if (result.success && result.data) {
+          const user = result.data
+          Logger.info('auth', 'Session verified', { userId: user.id })
 
+          updateAuthState({
+            session: { user },
+            user,
+            loading: false,
+            initialized: true,
+          })
+
+          // Store updated user data
+          await TokenStorage.setUser(user)
+
+          // Start session refresh interval
+          startSessionRefresh()
+        } else {
+          // Token might be expired, try to refresh
+          Logger.debug('auth', 'Session verification failed, attempting refresh...')
+
+          const refreshed = await apiClient.refreshSession()
+
+          if (refreshed) {
+            // Retry getting session after refresh
+            const retryResult = await apiClient.getSession()
+
+            if (retryResult.success && retryResult.data) {
+              const user = retryResult.data
+              Logger.info('auth', 'Session refreshed successfully', { userId: user.id })
+
+              updateAuthState({
+                session: { user },
+                user,
+                loading: false,
+                initialized: true,
+              })
+
+              await TokenStorage.setUser(user)
+              startSessionRefresh()
+            } else {
+              // Refresh worked but session still invalid - clear everything
+              Logger.warn('auth', 'Session refresh succeeded but session still invalid')
+              await clearAuthState()
+            }
+          } else {
+            // Refresh failed - user needs to sign in again
+            Logger.warn('auth', 'Session refresh failed')
+            await clearAuthState()
+          }
+        }
+      } else {
+        // No stored token - user is not authenticated
+        Logger.info('auth', 'No stored token, user not authenticated')
         updateAuthState({
-          session: { user },
-          user,
+          session: null,
+          user: null,
           loading: false,
           initialized: true,
         })
-
-        // Store updated user data
-        await TokenStorage.setUser(user)
-
-        // Start session refresh interval
-        startSessionRefresh()
-      } else {
-        // Token might be expired, try to refresh
-        Logger.debug('auth', 'Session verification failed, attempting refresh...')
-
-        const refreshed = await apiClient.refreshSession()
-
-        if (refreshed) {
-          // Retry getting session after refresh
-          const retryResult = await apiClient.getSession()
-
-          if (retryResult.success && retryResult.data) {
-            const user = retryResult.data
-            Logger.info('auth', 'Session refreshed successfully', { userId: user.id })
-
-            updateAuthState({
-              session: { user },
-              user,
-              loading: false,
-              initialized: true,
-            })
-
-            await TokenStorage.setUser(user)
-            startSessionRefresh()
-          } else {
-            // Refresh worked but session still invalid - clear everything
-            Logger.warn('auth', 'Session refresh succeeded but session still invalid')
-            await clearAuthState()
-          }
-        } else {
-          // Refresh failed - user needs to sign in again
-          Logger.warn('auth', 'Session refresh failed')
-          await clearAuthState()
-        }
       }
-    } else {
-      // No stored token - user is not authenticated
-      Logger.info('auth', 'No stored token, user not authenticated')
+
+      isInitializing = false
+      return globalAuthState
+    } catch (error) {
+      Logger.error('auth', 'Failed to initialize auth', { error })
       updateAuthState({
         session: null,
         user: null,
         loading: false,
         initialized: true,
       })
+      isInitializing = false
+      return globalAuthState
     }
+  })()
 
-    isInitializing = false
-    return globalAuthState
-  } catch (error) {
-    Logger.error('auth', 'Failed to initialize auth', { error })
-    updateAuthState({
-      session: null,
-      user: null,
-      loading: false,
-      initialized: true,
-    })
-    isInitializing = false
-    return globalAuthState
-  }
+  return initializationPromise
 }
 
 // Clear auth state
@@ -153,6 +179,10 @@ const clearAuthState = async () => {
 // Start periodic session refresh (every 10 minutes)
 const startSessionRefresh = () => {
   stopSessionRefresh()
+  if (!isAppActive) {
+    Logger.debug('auth', 'Skipping session refresh start; app not active')
+    return
+  }
   sessionCheckInterval = setInterval(
     async () => {
       Logger.debug('auth', 'Periodic session refresh check')

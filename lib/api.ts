@@ -26,6 +26,7 @@ interface EventsParams {
   status?: string
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
+  include?: string
 }
 
 export async function getEvents(params?: EventsParams) {
@@ -56,8 +57,19 @@ export async function getEvents(params?: EventsParams) {
       latitude: e.latitude,
       longitude: e.longitude,
       distance: e.distance,
+      is_favorited: e.isFavorited === true,
+      favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
+      user_checkin: e.userCheckin || null,
+      interested_preview: Array.isArray(e.interestedPreview) ? e.interestedPreview : [],
     }))
-    return { data: events, error: null }
+    return {
+      data: events,
+      meta: {
+        activeCheckins: result.data.activeCheckins,
+        profile: result.data.profile,
+      },
+      error: null,
+    }
   }
   return { data: null, error: { message: result.error || 'Failed to fetch events' } }
 }
