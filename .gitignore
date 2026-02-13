@@ -40,3 +40,9 @@ app-example
 
 .env
 .env.development
+
+# Design assets (re-export from Figma if needed)
+assets/figma/
+
+# Dev tool config
+.claude/
