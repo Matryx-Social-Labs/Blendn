@@ -30,11 +30,6 @@ import { useAuth } from '../../lib/useAuth';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
 import { getMapImageUrlCache, setMapImageUrlCache } from '../../lib/mapImageCache';
 const placeholderImg = require('../../assets/images/icon.png');
-const figmaBg = require('../../assets/figma/400518654fbb40fcec84ab09d6cd2eafa457d336.png')
-const gallery1 = require('../../assets/figma/92e5bab9fd27a0db4c6751d74287d75d6762ca1c.png')
-const gallery2 = require('../../assets/figma/ebafaf4d1b09fd56fd54accaa108ad43fce6a4d9.png')
-const gallery3 = require('../../assets/figma/aa4e9965e198c5e54ec642329ac04399f008edfb.png')
-const gallery4 = require('../../assets/figma/d89da9b93a9694cd7590f5907e2a93715a5950ab.png')
 
 interface EventDetail {
   id: string
@@ -464,8 +459,7 @@ export default function EventDetail() {
   }, [event])
 
   const gallerySources: Array<string | number> = React.useMemo(() => {
-    if (galleryUrls.length > 0) return galleryUrls
-    return [gallery1, gallery2, gallery3, gallery4]
+    return galleryUrls
   }, [galleryUrls])
 
   const getCurrentLocation = async () => {
@@ -615,44 +609,30 @@ export default function EventDetail() {
           Alert.alert('Check-in Failed', result.error || 'We couldn’t verify your check-in. Please try again.')
         }
       } else {
-        const data = result.data
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
 
-        const openEventRoom = async () => {
+        // Navigate directly to the event chat room
+        const navigateToChat = async () => {
           try {
             const chatResult = await apiClient.getEventChat(String(id))
-            if (chatResult.success && chatResult.data?.id) {
+            if (chatResult.success && chatResult.data?.chatGroupId) {
               router.push({
                 pathname: '/chat/[id]',
                 params: {
-                  id: chatResult.data.id,
-                  roomName: chatResult.data.name || event?.title || 'Event Chat',
+                  id: chatResult.data.chatGroupId,
+                  roomName: chatResult.data.chatGroupName || event?.title || 'Event Chat',
                   eventTitle: event?.title || ''
                 } as any
               })
               return
             }
-          } catch {}
+          } catch (err) {
+            Logger.warn('events', 'checkin:navigateToChat:failed', { error: err as any })
+          }
           router.push('/(tabs)/chat' as any)
         }
 
-        Alert.alert(
-          'Check-in Successful! 🎉',
-          `Welcome to ${event?.title || 'this event'}! You can now chat with other attendees and start matching.`,
-          [
-            {
-              text: 'Start Matching',
-              onPress: () => router.push('/(tabs)/match' as any)
-            },
-            {
-              text: 'Event Room',
-              onPress: () => {
-                openEventRoom()
-              }
-            },
-            { text: 'OK', style: 'default' }
-          ]
-        )
+        navigateToChat()
 
         // Send check-in success notification to the user
         try {
@@ -953,7 +933,9 @@ export default function EventDetail() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Image source={figmaBg} style={styles.bgImage} resizeMode="cover" />
+      {event?.cover_image_url ? (
+        <Image source={{ uri: event.cover_image_url }} style={styles.bgImage} contentFit="cover" blurRadius={20} />
+      ) : null}
       <View style={styles.bgScrim} />
       {/* Sticky top bar */}
       <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
