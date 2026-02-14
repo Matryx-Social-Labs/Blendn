@@ -1449,7 +1449,13 @@ export default function Events() {
         </TouchableOpacity>
        
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity style={styles.settingsButton} accessibilityLabel="Open settings" accessibilityRole="button" onPress={() => router.push('/settings')}>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            accessibilityLabel="Open settings"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            onPress={() => router.push('/settings')}
+          >
             <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -2167,6 +2173,11 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     marginLeft: 'auto',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filtersBar: {
     paddingHorizontal: 10,

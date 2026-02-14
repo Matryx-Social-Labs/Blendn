@@ -156,13 +156,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   backButtonText: {
     fontSize: 20,
-    color: '#fff',
+    color: '#111827',
   },
   progressText: {
     fontSize: 14,

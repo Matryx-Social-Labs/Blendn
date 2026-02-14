@@ -3,7 +3,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
 import React, { memo, useCallback, useMemo } from 'react';
-import { Platform, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Memoized tab button to prevent re-renders
@@ -31,9 +31,19 @@ const TabButton = memo(({
     return 'ellipse';
   }, [routeName, isFocused]);
 
+  const accessibilityLabel = useMemo(() => {
+    if (routeName === 'events') return 'Events tab';
+    if (routeName === 'match') return 'Match tab';
+    if (routeName === 'chat') return 'Chat tab';
+    if (routeName === 'profile') return 'Profile tab';
+    return 'Tab';
+  }, [routeName]);
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Double tap to open tab"
       accessibilityState={isFocused ? { selected: true } : {}}
       onPress={onPress}
       onLongPress={onLongPress}

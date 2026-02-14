@@ -642,7 +642,9 @@ export default function Chat() {
       </Text>
       {incomingRequests.length > 0 && (
         <View style={{ marginTop: 16 }}>
-          <Text style={{ textAlign: 'center', color: '#333', fontWeight: '600' }}>You have {incomingRequests.length} chat request(s)</Text>
+          <Text style={{ textAlign: 'center', color: '#E5E7EB', fontWeight: '600' }}>
+            You have {incomingRequests.length} chat request(s)
+          </Text>
         </View>
       )}
     </View>
@@ -1145,15 +1147,15 @@ const styles = StyleSheet.create({
   },
   requestsTitle: {
     fontWeight: '700',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   requestSender: {
     fontWeight: '600',
-    color: '#333',
+    color: '#F3F4F6',
   },
   requestMessage: {
-    color: '#666',
+    color: '#D1D5DB',
     marginTop: 4,
   },
   accept: { backgroundColor: '#4CAF50' },

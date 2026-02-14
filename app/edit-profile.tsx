@@ -4,7 +4,9 @@ import React, { useEffect, useState } from 'react'
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -34,6 +36,8 @@ interface UserProfile {
   looking_for?: string[]
 }
 
+type TagInputMode = 'goal' | 'lookingFor' | 'interest'
+
 export default function EditProfile() {
   const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -50,6 +54,11 @@ export default function EditProfile() {
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
+  const [tagModalVisible, setTagModalVisible] = useState(false)
+  const [tagInputValue, setTagInputValue] = useState('')
+  const [tagInputTitle, setTagInputTitle] = useState('')
+  const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
+  const [tagInputMode, setTagInputMode] = useState<TagInputMode>('interest')
   const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
@@ -115,26 +124,50 @@ export default function EditProfile() {
     setPhotos(newPhotos)
   }
 
+  const openTagInput = (mode: TagInputMode) => {
+    if (mode === 'goal') {
+      setTagInputTitle('Add Goal')
+      setTagInputPlaceholder('What are you looking for?')
+    } else if (mode === 'lookingFor') {
+      setTagInputTitle('Add Preference')
+      setTagInputPlaceholder('What type of person are you looking for?')
+    } else {
+      setTagInputTitle('Add Interest')
+      setTagInputPlaceholder('Enter a new interest')
+    }
+    setTagInputMode(mode)
+    setTagInputValue('')
+    setTagModalVisible(true)
+  }
+
+  const closeTagModal = () => {
+    setTagModalVisible(false)
+    setTagInputValue('')
+  }
+
+  const submitTagInput = () => {
+    const value = tagInputValue.trim()
+    if (!value) return
+
+    if (tagInputMode === 'goal') {
+      if (!goals.includes(value)) {
+        setGoals(prev => [...prev, value])
+      }
+    } else if (tagInputMode === 'lookingFor') {
+      if (!lookingFor.includes(value)) {
+        setLookingFor(prev => [...prev, value])
+      }
+    } else {
+      if (!interests.includes(value)) {
+        setInterests(prev => [...prev, value])
+      }
+    }
+
+    closeTagModal()
+  }
+
   const handleAddGoal = () => {
-    Alert.prompt(
-      'Add Goal',
-      'What are you looking for?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add',
-          onPress: (value) => {
-            if (value && value.trim()) {
-              const newGoal = value.trim()
-              if (!goals.includes(newGoal)) {
-                setGoals(prev => [...prev, newGoal])
-              }
-            }
-          }
-        }
-      ],
-      'plain-text'
-    )
+    openTagInput('goal')
   }
 
   const handleRemoveGoal = (goal: string) => {
@@ -142,25 +175,7 @@ export default function EditProfile() {
   }
 
   const handleAddLookingFor = () => {
-    Alert.prompt(
-      'Add Preference',
-      'What type of person are you looking for?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add',
-          onPress: (value) => {
-            if (value && value.trim()) {
-              const newPref = value.trim()
-              if (!lookingFor.includes(newPref)) {
-                setLookingFor(prev => [...prev, newPref])
-              }
-            }
-          }
-        }
-      ],
-      'plain-text'
-    )
+    openTagInput('lookingFor')
   }
 
   const handleRemoveLookingFor = (pref: string) => {
@@ -168,25 +183,7 @@ export default function EditProfile() {
   }
 
   const handleAddInterest = () => {
-    Alert.prompt(
-      'Add Interest',
-      'Enter a new interest:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add',
-          onPress: (value) => {
-            if (value && value.trim()) {
-              const newInterest = value.trim()
-              if (!interests.includes(newInterest)) {
-                setInterests(prev => [...prev, newInterest])
-              }
-            }
-          }
-        }
-      ],
-      'plain-text'
-    )
+    openTagInput('interest')
   }
 
   const handleRemoveInterest = (interest: string) => {
@@ -449,6 +446,42 @@ export default function EditProfile() {
 
           <View style={styles.bottomPadding} />
         </ScrollView>
+
+        <Modal
+          visible={tagModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeTagModal}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={closeTagModal}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>{tagInputTitle}</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={tagInputValue}
+                onChangeText={setTagInputValue}
+                placeholder={tagInputPlaceholder}
+                placeholderTextColor="#9CA3AF"
+                autoFocus
+                maxLength={60}
+                returnKeyType="done"
+                onSubmitEditing={submitTagInput}
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancelButton} onPress={closeTagModal}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitButton, !tagInputValue.trim() && styles.modalSubmitButtonDisabled]}
+                  onPress={submitTagInput}
+                  disabled={!tagInputValue.trim()}
+                >
+                  <Text style={styles.modalSubmitText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -626,4 +659,64 @@ const styles = StyleSheet.create({
     color: '#FF6B6B',
     fontWeight: '500',
   },
-}) 
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    borderRadius: 14,
+    padding: 16,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#FFFFFF',
+    backgroundColor: '#1F2937',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 14,
+  },
+  modalCancelButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  modalCancelText: {
+    color: '#E5E7EB',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalSubmitButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#FF6B6B',
+  },
+  modalSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+})
