@@ -99,10 +99,10 @@ export default function PhotoManager({
     try {
       const result = await selectAndUploadPhoto(userId)
 
-      if (result.success && (result.path || result.url)) {
+      if (result.success && result.url) {
         const newPhoto: ProfilePhoto = {
           id: `${userId}_${photos.length}`,
-          url: (result.path || result.url) as string,
+          url: result.url,
           order: photos.length,
           isPrimary: photos.length === 0,
           metadata: result.metadata ? {
@@ -112,9 +112,9 @@ export default function PhotoManager({
         }
 
         setPhotos(prev => [...prev, newPhoto])
-        
+
         // Update database
-        const newPhotoUrls = [...photos.map(p => p.url), (result.path || result.url) as string]
+        const newPhotoUrls = [...photos.map(p => p.url), result.url]
         await reorderPhotos(userId, newPhotoUrls)
         
         console.log('PhotoManager: Photo added', { userId, path: result.path || result.url })
