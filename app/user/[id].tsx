@@ -144,8 +144,9 @@ export default function UserProfile() {
   }
 
   const photoList = (profile.photos && profile.photos.length > 0)
-    ? profile.photos
-    : ['https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=800']
+    ? profile.photos.filter((url): url is string => !!url && url.trim() !== '')
+    : []
+  const hasPhotos = photoList.length > 0
   const getPhotoStripLayout = (_: ArrayLike<string> | null | undefined, index: number) => ({
     length: width,
     offset: width * index,
@@ -212,26 +213,44 @@ export default function UserProfile() {
           <>
             <FlatList
               horizontal
-              pagingEnabled
+              pagingEnabled={hasPhotos}
               showsHorizontalScrollIndicator={false}
               style={styles.photoStrip}
-              data={photoList}
+              data={hasPhotos ? photoList : ['placeholder']}
               keyExtractor={(_, idx) => `photo_${idx}`}
               getItemLayout={getPhotoStripLayout}
-              renderItem={({ item }) => (
-                <View style={styles.photoSlide}>
-                  <View style={styles.photoContainer}>
-                    <OptimizedImage
-                      source={item as any}
-                      style={styles.photo as any}
-                      contentFit="cover"
-                      width={width}
-                      height={PHOTO_HEIGHT}
-                      quality={70}
-                    />
+              renderItem={({ item }) => {
+                if (!hasPhotos) {
+                  return (
+                    <View style={styles.photoSlide}>
+                      <View style={[styles.photoContainer, styles.noPhotoContainer]}>
+                        <OptimizedImage
+                          source={placeholderImg as any}
+                          style={styles.photo as any}
+                          contentFit="cover"
+                          width={width}
+                          height={PHOTO_HEIGHT}
+                          quality={60}
+                        />
+                      </View>
+                    </View>
+                  )
+                }
+                return (
+                  <View style={styles.photoSlide}>
+                    <View style={styles.photoContainer}>
+                      <OptimizedImage
+                        source={item as any}
+                        style={styles.photo as any}
+                        contentFit="cover"
+                        width={width}
+                        height={PHOTO_HEIGHT}
+                        quality={70}
+                      />
+                    </View>
                   </View>
-                </View>
-              )}
+                )
+              }}
             />
 
             <View style={styles.content}>
@@ -324,6 +343,7 @@ const styles = StyleSheet.create({
   photoStrip: { width, height: PHOTO_HEIGHT, backgroundColor: 'transparent' },
   photoSlide: { width },
   photoContainer: { marginHorizontal: 12, marginTop: 12, marginBottom: 8, borderRadius: 18, overflow: 'hidden' },
+  noPhotoContainer: { backgroundColor: '#1a0d1f' },
   photo: { width: width - 24, height: PHOTO_HEIGHT - 20, borderRadius: 18 },
   content: { padding: 16 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

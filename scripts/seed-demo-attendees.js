@@ -60,14 +60,8 @@ const SAMPLE_BIOS = [
 const SAMPLE_INTERESTS = [
   'Music', 'Tech', 'Movies', 'Hiking', 'Cooking', 'Startups', 'Fitness', 'Books', 'Art', 'Travel'
 ]
-const SAMPLE_PHOTOS = [
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800',
-  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800',
-  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800',
-  'https://images.unsplash.com/photo-1529665253569-6d01c0eaf7b6?w=800',
-  'https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?w=800',
-]
+// No placeholder photos — demo attendees will have no profile images
+const SAMPLE_PHOTOS = []
 
 function randomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
@@ -91,7 +85,7 @@ async function ensureEvent() {
     category: 'social',
     price_cents: 0,
     max_capacity: 100,
-    cover_image_url: 'https://images.unsplash.com/photo-1510771463146-e89e6e86560e?w=1200',
+    cover_image_url: null,
     start_time: start.toISOString(),
     end_time: end.toISOString(),
     status: 'published', // for Events tab visibility if used
@@ -153,7 +147,7 @@ async function upsertProfiles(userIds) {
     display_name: undefined, // leave undefined to not break columns if absent
     bio: randomItem(SAMPLE_BIOS),
     interests: [randomItem(SAMPLE_INTERESTS), randomItem(SAMPLE_INTERESTS)],
-    profile_photos: [randomItem(SAMPLE_PHOTOS)],
+    profile_photos: [],
   }))
 
   const { error: upError } = await supabase

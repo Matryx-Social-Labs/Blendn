@@ -56,8 +56,10 @@ export default function Profile() {
   const { setScrollProgress } = useGradientOverlay()
   const lastBackgroundRefreshRef = React.useRef(0)
   const photoList = useMemo(() => {
-    if (profile?.profile_photos && profile.profile_photos.length > 0) return profile.profile_photos
-    return profile?.photos || []
+    const raw = (profile?.profile_photos && profile.profile_photos.length > 0)
+      ? profile.profile_photos
+      : (profile?.photos || [])
+    return raw.filter((url): url is string => !!url && url.trim() !== '')
   }, [profile?.profile_photos, profile?.photos])
   const hasPhotos = photoList.length > 0
   const profileStrength = useMemo(() => computeProfileStrength(profile), [profile])

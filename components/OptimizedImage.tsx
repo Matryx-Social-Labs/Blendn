@@ -169,33 +169,35 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         )}
 
         {/* High quality image */}
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: loadingState.hasError ? 0 : 1 }]}>
-          <Image
-            source={{ uri: highQualityUrl }}
-            style={[StyleSheet.absoluteFill]}
-            contentFit={contentFit}
-            onLoad={() => {
-              Logger.info('general', 'Image loaded successfully', { url: highQualityUrl?.substring(0, 60) })
-              if (effectiveEnableProgressive) {
-                handleHighQualityLoad()
-              } else {
-                onLoad?.()
-              }
-            }}
-            onError={(e) => {
-              Logger.error('general', 'Image onError triggered', {
-                url: highQualityUrl,
-                event: JSON.stringify(e?.nativeEvent || e)
-              })
-              handleError(e)
-            }}
-            transition={effectiveEnableProgressive ? 0 : transition}
-            cachePolicy={cachePolicy}
-            priority={priority}
-            blurRadius={blurRadius}
-            testID={`${testID}-high-quality`}
-          />
-        </Animated.View>
+        {highQualityUrl ? (
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: loadingState.hasError ? 0 : 1 }]}>
+            <Image
+              source={{ uri: highQualityUrl }}
+              style={[StyleSheet.absoluteFill]}
+              contentFit={contentFit}
+              onLoad={() => {
+                Logger.info('general', 'Image loaded successfully', { url: highQualityUrl?.substring(0, 60) })
+                if (effectiveEnableProgressive) {
+                  handleHighQualityLoad()
+                } else {
+                  onLoad?.()
+                }
+              }}
+              onError={(e) => {
+                Logger.error('general', 'Image onError triggered', {
+                  url: highQualityUrl,
+                  event: JSON.stringify(e?.nativeEvent || e)
+                })
+                handleError(e)
+              }}
+              transition={effectiveEnableProgressive ? 0 : transition}
+              cachePolicy={cachePolicy}
+              priority={priority}
+              blurRadius={blurRadius}
+              testID={`${testID}-high-quality`}
+            />
+          </Animated.View>
+        ) : null}
 
         {/* Loading indicator */}
         {!loadingState.highQualityLoaded && !loadingState.hasError && (
@@ -248,8 +250,8 @@ const useOptimizedUrls = (
 
         // If the source is already a URL, use public optimizer
         if (/^https?:\/\//i.test(sourceStr)) {
-          // For external URLs (Unsplash, etc.), use directly without optimization
-          // Only optimize URLs from our own storage (Supabase, Tigris)
+          // Only optimize URLs from our own storage (Tigris/t3.storage.dev)
+          // External URLs are used directly without optimization
           const isExternalUrl = !sourceStr.includes('supabase') &&
                                 !sourceStr.includes('tigris') &&
                                 !sourceStr.includes('t3.storage.dev')
