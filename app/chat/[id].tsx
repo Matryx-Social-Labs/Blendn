@@ -27,7 +27,10 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { pickImage, uploadPhoto } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
+import { emitChatListUpdate } from '../../lib/chatListUpdates'
+import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToChat, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback } from '../../lib/socketClient'
+import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 interface Message {
@@ -58,7 +61,6 @@ export default function GroupChat() {
   const [sending, setSending] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
-  const [participantAliases, setParticipantAliases] = useState<Record<string, string>>({})
   const insets = useSafeAreaInsets()
   const [isRecording, setIsRecording] = useState(false)
   const [recording, setRecording] = useState<Audio.Recording | null>(null)
@@ -81,7 +83,6 @@ export default function GroupChat() {
   useEffect(() => {
     if (chatRoomId && authUser && !authLoading) {
       setCurrentUser(authUser)
-      loadParticipantAliases()
       loadMessages(false, true)
     }
   }, [chatRoomId, authUser, authLoading])
@@ -91,27 +92,7 @@ export default function GroupChat() {
     if (!chatRoomId || !currentUser) return
     const cleanup = subscribeToMessages()
     return cleanup
-  }, [chatRoomId, currentUser, participantAliases])
-
-  // Ensure current user alias is set to "You" after currentUser resolves
-  useEffect(() => {
-    if (currentUser?.id) {
-      setParticipantAliases(prev => (
-        prev[currentUser.id] === 'You' ? prev : { ...prev, [currentUser.id]: 'You' }
-      ))
-    }
-  }, [currentUser?.id])
-
-  // Re-apply aliases to existing messages whenever alias map changes
-  useEffect(() => {
-    if (!participantAliases || Object.keys(participantAliases).length === 0) return
-    setMessages(prev => prev.map(m => {
-      if (m.sender_id === 'system') return { ...m, sender_name: 'System' }
-      if (m.sender_id === currentUser?.id) return { ...m, sender_name: 'You' }
-      const alias = participantAliases[m.sender_id] || 'Attendee'
-      return { ...m, sender_name: alias }
-    }))
-  }, [participantAliases, currentUser?.id])
+  }, [chatRoomId, currentUser])
 
   const getInitials = (name: string) => {
     if (!name) return '?'
@@ -155,38 +136,6 @@ export default function GroupChat() {
     return items
   }, [messages])
 
-  const loadParticipantAliases = async () => {
-    try {
-      const mapping: Record<string, string> = {}
-
-      // Mark current user as "You"
-      if (authUser?.id) {
-        mapping[authUser.id] = 'You'
-      }
-
-      // Fetch participants from API
-      const result = await apiClient.getChatParticipants(String(chatRoomId), { limit: 100 })
-      if (result.success && result.data?.participants) {
-        result.data.participants.forEach((p: { userId: string; name?: string }) => {
-          if (p.userId !== authUser?.id) {
-            mapping[p.userId] = p.name || 'Attendee'
-          }
-        })
-        Logger.info('chat', 'Participant aliases loaded', { count: result.data.participants.length })
-      }
-
-      setParticipantAliases(mapping)
-    } catch (error) {
-      Logger.error('chat', 'Error loading participant aliases', { error })
-      // Still set at least the current user alias
-      if (authUser?.id) {
-        setParticipantAliases({ [authUser.id]: 'You' })
-      }
-    }
-  }
-
-  // getCurrentUser is now handled by useAuth hook - user is set from authUser in useEffect
-
   const loadMessages = async (force = false, refreshEvenIfCached = false) => {
     try {
       if (!authUser) {
@@ -229,18 +178,19 @@ export default function GroupChat() {
 
       Logger.info('chat', `Successfully loaded ${Array.isArray(rawMessages) ? rawMessages.length : 0} messages`)
 
-      // Transform data and apply anonymous aliases
+      // Transform data — server now returns anonymous names, only override for current user
       const transformedMessages = (Array.isArray(rawMessages) ? rawMessages : []).map((msg: any) => {
         const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
-        const alias = senderId === 'system'
+        const serverName = msg.user?.name || msg.sender_name || msg.senderName || 'Attendee'
+        const displayName = senderId === 'system'
           ? 'System'
           : senderId === authUser?.id
             ? 'You'
-            : (participantAliases[senderId] || msg.sender_name || msg.senderName || 'Attendee')
+            : serverName
         return {
           message_id: msg.id || msg.message_id,
           sender_id: senderId,
-          sender_name: alias,
+          sender_name: displayName,
           message_text: msg.message_text || msg.content || msg.text || '',
           message_type: msg.message_type || msg.type || 'text',
           reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
@@ -288,7 +238,7 @@ export default function GroupChat() {
       const newMsg: Message = {
         message_id: data.message.id,
         sender_id: data.message.userId,
-        sender_name: data.message.userId === currentUser?.id ? 'You' : (participantAliases[data.message.userId] || data.message.userName || 'Attendee'),
+        sender_name: data.message.userId === currentUser?.id ? 'You' : (data.message.userName || 'Attendee'),
         message_text: data.message.content,
         message_type: data.message.type || 'text',
         reply_to_message_id: data.message.parentId || null,
@@ -436,6 +386,15 @@ export default function GroupChat() {
       setReplyingTo(null) // Clear reply state after sending
       setTimeout(() => scrollToBottom(), 100)
 
+      // Instantly update the chat tab list so swiping back shows the message
+      emitChatListUpdate({
+        type: 'group',
+        chatGroupId: String(chatRoomId),
+        lastMessage: messageText,
+        lastMessageTime: optimisticMessage.created_at,
+        senderName: 'You',
+      })
+
       // Use API to send message
       const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text')
 
@@ -455,6 +414,9 @@ export default function GroupChat() {
             : msg
         ))
       }
+
+      // Mark chat domain dirty so the chat tab refreshes when the user navigates back
+      markDomainsDirty(['chat'])
     } catch (error) {
       Logger.error('chat', 'Unexpected error sending message', { error })
 
@@ -633,16 +595,16 @@ export default function GroupChat() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" backgroundColor="transparent" translucent />
+      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       {/* Gradient top inset to fill the status bar area on iOS */}
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
