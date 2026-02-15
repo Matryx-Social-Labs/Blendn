@@ -1,6 +1,9 @@
+import { Ionicons } from '@expo/vector-icons'
 import React, { memo, useEffect, useMemo, useRef } from 'react'
-import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { formatEventDateTime } from '../lib/time'
+import { APP_COLORS } from '../lib/theme'
 import OptimizedImage from './OptimizedImage'
 import Typography from './Typography'
 
@@ -36,9 +39,12 @@ interface EventCardProps {
     can_check_in: boolean
   }
   interestCount?: number
+  checkInLoading?: boolean
+  interestLoading?: boolean
   capacityHint?: string
   tags?: string[]
   onPress: (event: Event) => void
+  onLongPress?: (event: Event) => void
   onCheckIn: (event: Event) => void
   onToggleInterest: (event: Event) => void
 }
@@ -51,11 +57,15 @@ const EventCard = memo<EventCardProps>(({
   isEnded,
   proximity,
   interestCount,
+  checkInLoading = false,
+  interestLoading = false,
   onPress,
+  onLongPress,
   onCheckIn,
   onToggleInterest
 }) => {
   const handlePress = () => onPress(event)
+  const handleLongPress = () => onLongPress?.(event)
   const handleCheckIn = () => onCheckIn(event)
   const handleToggleInterest = () => onToggleInterest(event)
 
@@ -68,10 +78,10 @@ const EventCard = memo<EventCardProps>(({
     return `${km.toFixed(km >= 10 ? 0 : 1)} km`
   }, [proximity])
 
-  const fadeIn = useRef(new Animated.Value(0)).current
+  const fadeIn = useRef(new RNAnimated.Value(0)).current
 
   useEffect(() => {
-    Animated.timing(fadeIn, {
+    RNAnimated.timing(fadeIn, {
       toValue: 1,
       duration: 220,
       useNativeDriver: true,
@@ -79,30 +89,36 @@ const EventCard = memo<EventCardProps>(({
   }, [fadeIn])
 
   return (
-    <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
-      <TouchableOpacity style={styles.eventCard} onPress={handlePress}>
-      {event.cover_image_url ? (
-        <OptimizedImage
-          source={event.cover_image_url}
-          style={styles.eventImage}
-          contentFit="cover"
-          width={400}
-          height={200}
-          cachePolicy="memory-disk"
-        />
-      ) : (
-        <View style={[styles.eventImage, { backgroundColor: '#1f1f1f' }]} />
-      )}
+    <RNAnimated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
+      <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320}>
+      <Reanimated.View sharedTransitionTag={`event-image-${event.id}`}>
+        {event.cover_image_url ? (
+          <OptimizedImage
+            source={event.cover_image_url}
+            style={styles.eventImage}
+            contentFit="cover"
+            width={400}
+            height={200}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={[styles.eventImage, { backgroundColor: APP_COLORS.backgroundCard }]} />
+        )}
+      </Reanimated.View>
       
       <View style={styles.eventContent}>
-        <Typography variant="h3" style={styles.eventTitle}>{event.title}</Typography>
+        <Reanimated.Text sharedTransitionTag={`event-title-${event.id}`} style={styles.eventTitle}>
+          {event.title}
+        </Reanimated.Text>
         <Typography variant="body2" style={styles.eventVenue}>{event.venue_name}</Typography>
         <Typography variant="body2" style={styles.eventDescription} numberOfLines={2}>
           {event.short_description || event.description}
         </Typography>
         
         <View style={styles.eventMeta}>
-          <Typography variant="caption" style={styles.eventTime}>{formattedStart}</Typography>
+          <Reanimated.Text sharedTransitionTag={`event-date-${event.id}`} style={styles.eventTime}>
+            {formattedStart}
+          </Reanimated.Text>
           <Typography variant="body2" style={styles.eventPrice}>
             {event.price_cents > 0 ? `₹${event.price_cents / 100}` : 'Free'}
           </Typography>
@@ -132,10 +148,15 @@ const EventCard = memo<EventCardProps>(({
           
           {canCheckIn && (
             <TouchableOpacity 
-              style={styles.checkinButton}
+              style={[styles.checkinButton, checkInLoading && styles.actionDisabled]}
               onPress={handleCheckIn}
+              disabled={checkInLoading}
             >
-              <Typography variant="button" uppercaseButton style={styles.checkinButtonText}>Check In</Typography>
+              {checkInLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Typography variant="button" uppercaseButton style={styles.checkinButtonText}>Check In</Typography>
+              )}
             </TouchableOpacity>
           )}
           
@@ -149,12 +170,22 @@ const EventCard = memo<EventCardProps>(({
 
           {!isEnded && (
             <TouchableOpacity 
-              style={[styles.interestButton, interested && styles.interestButtonActive]}
+              style={[styles.interestButton, interested && styles.interestButtonActive, interestLoading && styles.actionDisabled]}
               onPress={handleToggleInterest}
+              disabled={interestLoading}
+              accessibilityRole="button"
+              accessibilityLabel={interested ? 'Remove from interested events' : 'Mark as interested'}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Typography variant="body2" style={[styles.interestButtonText, interested && styles.interestButtonTextActive]}>
-                {interested ? '♥︎' : '♡'}
-              </Typography>
+              {interestLoading ? (
+                <ActivityIndicator size="small" color={APP_COLORS.accent} />
+              ) : (
+                <Ionicons
+                  name={interested ? 'heart' : 'heart-outline'}
+                  size={16}
+                  color={APP_COLORS.accent}
+                />
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -183,7 +214,7 @@ const EventCard = memo<EventCardProps>(({
         </View>
       </View>
     </TouchableOpacity>
-    </Animated.View>
+    </RNAnimated.View>
   )
 })
 
@@ -191,8 +222,10 @@ EventCard.displayName = 'EventCard'
 
 const styles = StyleSheet.create({
   eventCard: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 18,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
     marginHorizontal: 16,
     marginVertical: 10,
     shadowColor: '#000',
@@ -205,28 +238,29 @@ const styles = StyleSheet.create({
   eventImage: {
     width: '100%',
     height: 200,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   eventContent: {
     padding: 16,
   },
   eventTitle: {
-    fontSize: 18,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: APP_COLORS.textPrimary,
+    marginBottom: 6,
   },
   eventVenue: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.75)',
-    marginBottom: 8,
+    color: APP_COLORS.textSecondary,
+    marginBottom: 10,
   },
   eventDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: APP_COLORS.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   eventMeta: {
     flexDirection: 'row',
@@ -235,14 +269,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   eventTime: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
+    fontSize: 13,
+    color: APP_COLORS.textTertiary,
     flex: 1,
   },
   eventPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
   },
   statusRow: {
     flexDirection: 'row',
@@ -263,54 +297,58 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   chipNeutral: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   chipWarning: {
     backgroundColor: 'rgba(255,188,92,0.16)',
   },
   chipWarningText: {
-    color: '#FFB24A',
+    color: APP_COLORS.textPrimary,
   },
   chipText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: APP_COLORS.textSecondary,
   },
   statusBadge: {
-    backgroundColor: 'rgba(88, 201, 119, 0.2)',
+    backgroundColor: 'rgba(52,199,89,0.18)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   statusText: {
     fontSize: 12,
-    color: '#7DE59C',
+    color: APP_COLORS.success,
     fontWeight: '500',
   },
   distanceBadge: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   distanceText: {
-    color: 'rgba(255,255,255,0.75)',
+    color: APP_COLORS.textSecondary,
   },
   checkinButton: {
-    backgroundColor: '#2F6BFF',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   checkinButtonText: {
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
   interestButton: {
-    backgroundColor: 'rgba(255,45,85,0.18)',
+    backgroundColor: 'rgba(10,132,255,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
   },
   interestButtonActive: {
-    backgroundColor: 'rgba(255,45,85,0.28)',
+    backgroundColor: 'rgba(10,132,255,0.26)',
   },
   interestButtonText: {
     color: '#FF7BA2',
@@ -328,6 +366,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  actionDisabled: {
+    opacity: 0.72,
   },
 })
 

@@ -18,8 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
-import { apiClient } from '../lib/apiClient'
+import { apiClient, ProfileCache } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
+import queryCache from '../lib/queryCache'
+import { APP_COLORS } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
 
 interface UserProfile {
@@ -28,6 +30,8 @@ interface UserProfile {
   age?: number
   location?: string
   phone?: string
+  occupation?: string
+  education?: string
   interests?: string[]
   display_name?: string
   bio?: string
@@ -49,11 +53,15 @@ export default function EditProfile() {
   const [age, setAge] = useState('')
   const [location, setLocation] = useState('')
   const [phone, setPhone] = useState('')
+  const [occupation, setOccupation] = useState('')
+  const [education, setEducation] = useState('')
   const [bio, setBio] = useState('')
   const [interests, setInterests] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [ageError, setAgeError] = useState<string | null>(null)
   const [tagModalVisible, setTagModalVisible] = useState(false)
   const [tagInputValue, setTagInputValue] = useState('')
   const [tagInputTitle, setTagInputTitle] = useState('')
@@ -83,20 +91,24 @@ export default function EditProfile() {
       }
 
       const profileData = result.data || {}
+      const p = profileData.profile || {}
 
       // Combine with auth user data
+      // API returns { name, profile: { age, location, phone, bio, ... } }
       const combinedProfile = {
         id: authUser.id,
         name: profileData.name || authUser.name || '',
-        age: profileData.age || '',
-        location: profileData.location || '',
-        phone: profileData.phone || '',
-        interests: profileData.interests || [],
-        display_name: profileData.display_name || '',
-        bio: profileData.bio || '',
-        profile_photos: profileData.photos || profileData.profile_photos || [],
-        goals: profileData.goals || [],
-        looking_for: profileData.looking_for || []
+        age: p.age || '',
+        location: p.location || '',
+        phone: p.phone || '',
+        occupation: p.occupation || '',
+        education: p.education || '',
+        interests: p.interests || [],
+        display_name: p.name || '',
+        bio: p.bio || '',
+        profile_photos: p.photos || [],
+        goals: p.goals || [],
+        looking_for: p.looking_for || []
       }
 
       setProfile(combinedProfile)
@@ -106,6 +118,8 @@ export default function EditProfile() {
       setAge(combinedProfile.age?.toString() || '')
       setLocation(combinedProfile.location || '')
       setPhone(combinedProfile.phone || '')
+      setOccupation(combinedProfile.occupation || '')
+      setEducation(combinedProfile.education || '')
       setBio(combinedProfile.bio || '')
       setInterests(combinedProfile.interests || [])
       setGoals(combinedProfile.goals || [])
@@ -193,38 +207,39 @@ export default function EditProfile() {
   const handleSave = async () => {
     if (!authUser) return
 
+    const trimmedName = name.trim()
+    const trimmedAge = age.trim()
+    const parsedAge = trimmedAge ? parseInt(trimmedAge, 10) : undefined
+    const invalidAge = !!trimmedAge && (Number.isNaN(parsedAge) || (parsedAge as number) < 18 || (parsedAge as number) > 120)
+
+    setNameError(trimmedName ? null : 'Name is required')
+    setAgeError(invalidAge ? 'Enter a valid age between 18 and 120' : null)
+    if (!trimmedName || invalidAge) return
+
     setSaving(true)
     try {
-      // Validate required fields
-      if (!name.trim()) {
-        Alert.alert('Validation Error', 'Name is required')
-        setSaving(false)
-        return
-      }
-
-      const ageNum = parseInt(age)
-      if (age && (isNaN(ageNum) || ageNum < 18 || ageNum > 120)) {
-        Alert.alert('Validation Error', 'Please enter a valid age (18-120)')
-        setSaving(false)
-        return
-      }
-
       // Update profile via API
       const updateData: any = {}
-      if (name !== profile?.name) updateData.name = name
-      if (ageNum !== profile?.age) updateData.age = ageNum
+      if (trimmedName !== profile?.name) updateData.name = trimmedName
+      if (parsedAge !== undefined && parsedAge !== profile?.age) updateData.age = parsedAge
       if (location !== profile?.location) updateData.location = location
       if (phone !== profile?.phone) updateData.phone = phone
+      if (occupation !== (profile?.occupation || '')) updateData.occupation = occupation || null
+      if (education !== (profile?.education || '')) updateData.education = education || null
+      if (bio !== (profile?.bio || '')) updateData.bio = bio || null
       if (JSON.stringify(interests) !== JSON.stringify(profile?.interests)) {
         updateData.interests = interests
       }
-
       const result = await apiClient.updateProfile(authUser.id, updateData)
 
       if (!result.success) {
         console.error('EditProfile: Profile update error', { error: result.error })
         throw new Error(result.error || 'Failed to update profile')
       }
+
+      // Invalidate caches so profile tab shows fresh data
+      ProfileCache.clear()
+      queryCache.invalidate(`profile_${authUser.id}`)
 
       console.log('EditProfile: Profile updated successfully', { userId: authUser.id })
       Alert.alert(
@@ -246,63 +261,35 @@ export default function EditProfile() {
     }
   }
 
-  const renderGoals = () => (
+  const renderTags = (
+    items: string[],
+    onRemove: (item: string) => void,
+    onAdd: () => void,
+    addLabel: string
+  ) => (
     <View style={styles.tagsContainer}>
-      {goals.map((goal, index) => (
+      {items.map((item, index) => (
         <TouchableOpacity
           key={index}
           style={styles.tag}
-          onPress={() => handleRemoveGoal(goal)}
+          onPress={() => onRemove(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${item}`}
         >
-          <Text style={styles.tagText}>{goal}</Text>
-          <Ionicons name="close" size={16} color="#FFFFFF" style={styles.tagIcon} />
+          <Text style={styles.tagText}>{item}</Text>
+          <Ionicons name="close" size={14} color={APP_COLORS.textSecondary} />
         </TouchableOpacity>
       ))}
-      <TouchableOpacity style={styles.addTag} onPress={handleAddGoal}>
-        <Ionicons name="add" size={16} color="#FF6B6B" />
-        <Text style={styles.addTagText}>Add Goal</Text>
+      <TouchableOpacity style={styles.addTag} onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel}>
+        <Ionicons name="add" size={16} color={APP_COLORS.accent} />
+        <Text style={styles.addTagText}>{addLabel}</Text>
       </TouchableOpacity>
     </View>
   )
 
-  const renderLookingFor = () => (
-    <View style={styles.tagsContainer}>
-      {lookingFor.map((pref, index) => (
-        <TouchableOpacity
-          key={index}
-          style={styles.tag}
-          onPress={() => handleRemoveLookingFor(pref)}
-        >
-          <Text style={styles.tagText}>{pref}</Text>
-          <Ionicons name="close" size={16} color="#FFFFFF" style={styles.tagIcon} />
-        </TouchableOpacity>
-      ))}
-      <TouchableOpacity style={styles.addTag} onPress={handleAddLookingFor}>
-        <Ionicons name="add" size={16} color="#FF6B6B" />
-        <Text style={styles.addTagText}>Add Preference</Text>
-      </TouchableOpacity>
-    </View>
-  )
-
-  const renderInterests = () => (
-    <View style={styles.interestsContainer}>
-      {interests.map((interest, index) => (
-        <TouchableOpacity
-          key={index}
-          style={styles.interestTag}
-          onPress={() => handleRemoveInterest(interest)}
-        >
-          <Text style={styles.interestText}>{interest}</Text>
-          <Ionicons name="close" size={16} color="#666" />
-        </TouchableOpacity>
-      ))}
-      <TouchableOpacity
-        style={styles.addInterestButton}
-        onPress={handleAddInterest}
-      >
-        <Ionicons name="add" size={16} color="#FF6B6B" />
-        <Text style={styles.addInterestText}>Add Interest</Text>
-      </TouchableOpacity>
+  const renderSkeletonCard = (children: React.ReactNode) => (
+    <View style={styles.card}>
+      {children}
     </View>
   )
 
@@ -320,30 +307,30 @@ export default function EditProfile() {
           rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
         />
 
-        <ScrollView 
-          style={styles.content} 
+        <ScrollView
+          style={styles.content}
           showsVerticalScrollIndicator={false}
           onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
           scrollEventThrottle={16}
         >
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Photos</Text>
+          {/* Photos Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>PHOTOS</Text>
             {isLoading ? (
-              <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
+              <SkeletonBlock width={'100%'} height={160} borderRadius={12} />
             ) : authUser ? (
               <PhotoManager
                 userId={authUser.id}
                 maxPhotos={6}
                 editable={true}
                 onPhotosChange={handlePhotosChange}
-                style={styles.photoManager}
               />
             ) : null}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Basic Information</Text>
-            
+          {/* Basic Info Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>BASIC INFORMATION</Text>
             {isLoading ? (
               <>
                 <SkeletonLine width={'30%'} style={{ marginBottom: 8 }} />
@@ -353,31 +340,42 @@ export default function EditProfile() {
                 <SkeletonLine width={'25%'} style={{ marginBottom: 8 }} />
                 <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
                 <SkeletonLine width={'22%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
+                <SkeletonBlock width={'100%'} height={48} borderRadius={12} />
               </>
             ) : (
               <>
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Name *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, nameError && styles.inputError]}
                     value={name}
-                    onChangeText={setName}
+                    onChangeText={(value) => {
+                      setName(value)
+                      if (nameError && value.trim()) setNameError(null)
+                    }}
                     placeholder="Enter your name"
+                    placeholderTextColor={APP_COLORS.textTertiary}
                     maxLength={50}
                   />
+                  {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Age</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, ageError && styles.inputError]}
                     value={age}
-                    onChangeText={setAge}
+                    onChangeText={(value) => {
+                      const sanitized = value.replace(/[^0-9]/g, '')
+                      setAge(sanitized)
+                      if (ageError && sanitized) setAgeError(null)
+                    }}
                     placeholder="Enter your age"
+                    placeholderTextColor={APP_COLORS.textTertiary}
                     keyboardType="numeric"
                     maxLength={3}
                   />
+                  {!!ageError && <Text style={styles.errorText}>{ageError}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -387,6 +385,31 @@ export default function EditProfile() {
                     value={location}
                     onChangeText={setLocation}
                     placeholder="City, State"
+                    placeholderTextColor={APP_COLORS.textTertiary}
+                    maxLength={100}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Occupation</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={occupation}
+                    onChangeText={setOccupation}
+                    placeholder="e.g. Software Engineer"
+                    placeholderTextColor={APP_COLORS.textTertiary}
+                    maxLength={100}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Education</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={education}
+                    onChangeText={setEducation}
+                    placeholder="e.g. University of California"
+                    placeholderTextColor={APP_COLORS.textTertiary}
                     maxLength={100}
                   />
                 </View>
@@ -398,6 +421,7 @@ export default function EditProfile() {
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="Phone number"
+                    placeholderTextColor={APP_COLORS.textTertiary}
                     keyboardType="phone-pad"
                     maxLength={20}
                   />
@@ -406,8 +430,9 @@ export default function EditProfile() {
             )}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About You</Text>
+          {/* About Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>ABOUT YOU</Text>
             {isLoading ? (
               <>
                 <SkeletonLine width={'20%'} style={{ marginBottom: 8 }} />
@@ -421,6 +446,7 @@ export default function EditProfile() {
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Tell people about yourself..."
+                  placeholderTextColor={APP_COLORS.textTertiary}
                   multiline
                   numberOfLines={4}
                   maxLength={500}
@@ -430,17 +456,45 @@ export default function EditProfile() {
             )}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Interests</Text>
-            <Text style={styles.sectionSubtitle}>What are you into?</Text>
+          {/* Interests Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>INTERESTS</Text>
             {isLoading ? (
-              <View style={styles.interestsContainer}>
+              <View style={styles.tagsContainer}>
                 {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-i-${i}`} width={120} height={32} borderRadius={20} />
+                  <SkeletonBlock key={`sk-i-${i}`} width={100} height={32} borderRadius={14} />
                 ))}
               </View>
             ) : (
-              renderInterests()
+              renderTags(interests, handleRemoveInterest, handleAddInterest, 'Add Interest')
+            )}
+          </View>
+
+          {/* Goals Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>GOALS</Text>
+            {isLoading ? (
+              <View style={styles.tagsContainer}>
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonBlock key={`sk-g-${i}`} width={100} height={32} borderRadius={14} />
+                ))}
+              </View>
+            ) : (
+              renderTags(goals, handleRemoveGoal, handleAddGoal, 'Add Goal')
+            )}
+          </View>
+
+          {/* Looking For Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>LOOKING FOR</Text>
+            {isLoading ? (
+              <View style={styles.tagsContainer}>
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonBlock key={`sk-l-${i}`} width={100} height={32} borderRadius={14} />
+                ))}
+              </View>
+            ) : (
+              renderTags(lookingFor, handleRemoveLookingFor, handleAddLookingFor, 'Add Preference')
             )}
           </View>
 
@@ -461,7 +515,7 @@ export default function EditProfile() {
                 value={tagInputValue}
                 onChangeText={setTagInputValue}
                 placeholder={tagInputPlaceholder}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={APP_COLORS.textTertiary}
                 autoFocus
                 maxLength={60}
                 returnKeyType="done"
@@ -475,6 +529,8 @@ export default function EditProfile() {
                   style={[styles.modalSubmitButton, !tagInputValue.trim() && styles.modalSubmitButtonDisabled]}
                   onPress={submitTagInput}
                   disabled={!tagInputValue.trim()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add item"
                 >
                   <Text style={styles.modalSubmitText}>Add</Text>
                 </TouchableOpacity>
@@ -492,83 +548,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  
   content: {
     flex: 1,
     paddingHorizontal: 16,
   },
-  section: {
-    marginTop: 24,
+
+  // Card sections
+  card: {
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#d1d5db',
-    marginBottom: 16,
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  photoSlot: {
-    width: '30%',
-    aspectRatio: 1,
-    borderRadius: 12,
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: APP_COLORS.textSecondary,
+    letterSpacing: 0.5,
     marginBottom: 12,
-    overflow: 'hidden',
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
-  photo: {
-    width: '100%',
-    height: '100%',
-  },
-  removePhotoOverlay: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-  },
-  addPhotoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
+  // Form inputs
   inputGroup: {
     marginBottom: 16,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    color: APP_COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
     marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: APP_COLORS.backgroundCard,
+    color: APP_COLORS.textPrimary,
+  },
+  inputError: {
+    borderColor: APP_COLORS.destructive,
+  },
+  errorText: {
+    marginTop: 6,
+    color: APP_COLORS.destructive,
+    fontSize: 12,
+    fontWeight: '500',
   },
   bioInput: {
     height: 100,
@@ -577,88 +606,57 @@ const styles = StyleSheet.create({
   characterCount: {
     textAlign: 'right',
     fontSize: 12,
-    color: '#e5e7eb',
+    color: APP_COLORS.textSecondary,
     marginTop: 4,
   },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  interestTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-  },
-  interestText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  addInterestButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF0F0',
-    borderColor: '#FF6B6B',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-  },
-  addInterestText: {
-    fontSize: 14,
-    color: '#FF6B6B',
-  },
-  bottomPadding: {
-    height: 32,
-  },
-  photoManager: {
-    marginVertical: 8,
-  },
+
+  // Tags (matching profile tab style)
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#7C3AED',
-    borderRadius: 20,
+    backgroundColor: APP_COLORS.backgroundBase,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
+    borderRadius: 14,
+    marginRight: 8,
+    marginBottom: 8,
     gap: 4,
   },
   tagText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-  tagIcon: {
-    marginLeft: 2,
+    fontSize: 13,
+    fontWeight: '600',
+    color: APP_COLORS.textPrimary,
   },
   addTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#FF6B6B',
+    borderColor: APP_COLORS.accent,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderRadius: 20,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
+    marginRight: 8,
+    marginBottom: 8,
     gap: 4,
   },
   addTagText: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    color: APP_COLORS.accent,
   },
+
+  bottomPadding: {
+    height: 32,
+  },
+
+  // Modal
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -666,27 +664,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 12,
   },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#FFFFFF',
-    backgroundColor: '#1F2937',
+    color: APP_COLORS.textPrimary,
+    backgroundColor: APP_COLORS.backgroundCard,
   },
   modalActions: {
     flexDirection: 'row',
@@ -698,10 +696,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     marginRight: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: APP_COLORS.backgroundCard,
   },
   modalCancelText: {
-    color: '#E5E7EB',
+    color: APP_COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -709,13 +707,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.accent,
   },
   modalSubmitButtonDisabled: {
     opacity: 0.5,
   },
   modalSubmitText: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },

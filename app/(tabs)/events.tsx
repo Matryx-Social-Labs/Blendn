@@ -1,26 +1,29 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
-import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Alert,
-  Animated,
+  ActivityIndicator,
+  Animated as RNAnimated,
   Dimensions,
   FlatList,
   Linking,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import EventCard from '../../components/EventCard'
+import FadeInUp from '../../components/motion/FadeInUp'
+import ScalePress from '../../components/motion/ScalePress'
 import NearbyEventCard from '../../components/NearbyEventCard'
 import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
+import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
@@ -28,8 +31,13 @@ import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
-import { formatTimeRange as fmtRange, formatEventDateTime } from '../../lib/time'
+import { formatTimeRange as fmtRange } from '../../lib/time'
+import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
+import { useLiveSync } from '../../lib/useLiveSync'
+import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
+import type { TraySize } from '../../lib/uxStandards'
+import { APP_COLORS } from '../../lib/theme'
 
 // Helper to calculate distance between two coordinates in km
 const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -65,28 +73,112 @@ interface Event {
   favorite_count?: number
   user_checkin?: { status: string; checkInId?: string; checkInTime?: string | null } | null
   interested_preview?: string[]
+  display_city?: string
+}
+
+type EventsTrayState = {
+  visible: boolean
+  title: string
+  message?: string
+  buttons: ActionTrayButton[]
+  size?: TraySize
+  dismissible?: boolean
+}
+
+const COORDINATE_PATTERN = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
+const CAROUSEL_CARD_WIDTH = Math.max(260, SCREEN_WIDTH - 62)
+const CAROUSEL_CARD_HEIGHT = Math.round(CAROUSEL_CARD_WIDTH * 1.55)
+const CAROUSEL_ITEM_SPACING = 14
+const CAROUSEL_ITEM_FULL = CAROUSEL_CARD_WIDTH + CAROUSEL_ITEM_SPACING
+const TYPE_HEADER_SIZE = 22
+const TYPE_HEADER_LINE = 28
+const TYPE_CARD_TITLE_SIZE = 20
+const TYPE_CARD_TITLE_LINE = 26
+const TYPE_BODY_SIZE = 14
+const TYPE_META_SIZE = 13
+const TYPE_CAPTION_SIZE = 12
+const SECTION_MOTION_BASE_DELAY = 34
+const SECTION_MOTION_STAGGER = 44
+
+const formatCarouselCardDate = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return 'Date TBA'
+  }
+}
+
+const isCoordinateLike = (value?: string | null) => {
+  if (!value) return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (COORDINATE_PATTERN.test(trimmed)) return true
+  return /^-?\d+(\.\d+)?$/.test(trimmed)
+}
+
+const resolveDisplayCity = (event: Event): string => {
+  const cityRaw = event.city?.trim() || ''
+  if (cityRaw && !isCoordinateLike(cityRaw)) return cityRaw
+
+  const addressRaw = event.address?.trim() || ''
+  if (!addressRaw || isCoordinateLike(addressRaw)) return 'Location TBA'
+
+  const parts = addressRaw.split(',').map((part) => part.trim()).filter(Boolean)
+  if (parts.length >= 2) {
+    const likelyCity = parts[parts.length - 2]
+    if (!isCoordinateLike(likelyCity)) return likelyCity
+  }
+
+  return 'Location TBA'
+}
+
+const normalizeEvent = (event: Event): Event => ({
+  ...event,
+  display_city: resolveDisplayCity(event),
+})
+
+const getFirstName = (value?: string | null): string | null => {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.split(/\s+/)[0] || null
 }
 
 // Memoized carousel card component to prevent re-renders
 const CarouselCard = memo(({
   event,
   onPress,
+  onLongPress,
   onToggleInterest,
   isInterested,
+  interestLoading,
+  statusLabel,
   showCheckout,
   onCheckout,
+  checkoutLoading,
 }: {
   event: Event
   onPress: () => void
+  onLongPress?: () => void
   onToggleInterest?: () => void
   isInterested?: boolean
+  interestLoading?: boolean
+  statusLabel?: string
   showCheckout?: boolean
   onCheckout?: () => void
+  checkoutLoading?: boolean
 }) => {
   if (!event.cover_image_url) return null
 
   return (
-    <TouchableOpacity style={styles.carouselCard} onPress={onPress}>
+    <TouchableOpacity style={styles.carouselCard} onPress={onPress} onLongPress={onLongPress} delayLongPress={320}>
       <View style={styles.carouselImage}>
         <OptimizedImage
           source={event.cover_image_url}
@@ -99,21 +191,31 @@ const CarouselCard = memo(({
           priority="high"
         />
         <LinearGradient
-          colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
+          colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.24)', 'rgba(0,0,0,0.88)']}
+          locations={[0, 0.5, 1]}
           style={styles.carouselGradient}
         />
+        {statusLabel ? (
+          <View style={styles.carouselStatusPill}>
+            <View style={styles.carouselStatusDot} />
+            <Text style={styles.carouselStatusText}>{statusLabel}</Text>
+          </View>
+        ) : null}
         <View style={styles.carouselContentOverlay}>
-          <Text style={styles.carouselEventTitle} numberOfLines={1}>{event.title}</Text>
-          <Text style={styles.carouselVenue} numberOfLines={1}>{event.venue_name}</Text>
-          <Text style={styles.carouselTime}>
-            {formatEventDateTime(event.start_time)}
-          </Text>
+          <Text style={styles.carouselEventTitle} numberOfLines={2}>{event.title}</Text>
+          <Text style={styles.carouselTime}>{formatCarouselCardDate(event.start_time)}</Text>
+          <Text style={styles.carouselVenue} numberOfLines={1}>{event.venue_name || event.display_city || 'Location TBA'}</Text>
           {showCheckout && onCheckout && (
             <TouchableOpacity
               onPress={onCheckout}
-              style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}
+              disabled={checkoutLoading}
+              style={styles.carouselCheckoutPill}
             >
-              <Text style={{ color: '#fff', fontSize: 12 }}>Check out</Text>
+              {checkoutLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.carouselCheckoutText}>Check out</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -122,9 +224,16 @@ const CarouselCard = memo(({
         <TouchableOpacity
           onPress={onToggleInterest}
           style={styles.carouselHeartButton}
+          disabled={interestLoading}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={isInterested ? 'Remove from interested events' : 'Mark as interested'}
         >
-          <Text style={styles.carouselHeartText}>{isInterested ? '♥︎' : '♡'}</Text>
+          {interestLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Ionicons name={isInterested ? 'heart' : 'heart-outline'} size={18} color="#FFFFFF" />
+          )}
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -135,6 +244,7 @@ CarouselCard.displayName = 'CarouselCard'
 
 export default function Events() {
   const { user, loading: authLoading } = useAuth()
+  const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,46 +255,88 @@ export default function Events() {
   const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
+  const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
+  const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
+  const [checkOutPending, setCheckOutPending] = useState<Record<string, boolean>>({})
   const [userCity, setUserCity] = useState<string | null>(null)
+  const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
+  const [showPreviewHint, setShowPreviewHint] = useState(false)
   const { setScrollProgress } = useGradientOverlay()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarError, setAvatarError] = useState(false)
   const listRef = useRef<any>(null)
+  const scrollY = useRef(new RNAnimated.Value(0)).current
   const [netError, setNetError] = useState<string | null>(null)
+  const [trayState, setTrayState] = useState<EventsTrayState>({
+    visible: false,
+    title: '',
+    message: '',
+    buttons: [],
+    size: 'default',
+    dismissible: true,
+  })
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
   const locationRequestedRef = useRef(false)
+  const interestInFlightRef = useRef<Set<string>>(new Set())
+  const checkInFlightRef = useRef<Set<string>>(new Set())
+  const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
   const initialLoadedRef = useRef(false)
+  const previewHintSeenRef = useRef(false)
 
-  // Memoized style objects to prevent re-creation
-  const sectionBgStyle = useMemo(() => ({
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    top: 120,
-    bottom: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    overflow: 'hidden' as const,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(190, 190, 190, 0.12)'
-  }), [])
+  const closeTray = useCallback(() => {
+    setTrayState((prev) => ({ ...prev, visible: false }))
+  }, [])
 
-  const topBarStyle = useMemo(() => ({
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 3,
-    paddingHorizontal: 14,
-    paddingTop: insets.top + 8,
-    paddingBottom: 12,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const
-  }), [insets.top])
+  const showTray = useCallback((next: Omit<EventsTrayState, 'visible'>) => {
+    setTrayState({
+      visible: true,
+      title: next.title,
+      message: next.message,
+      buttons: next.buttons,
+      size: next.size || 'default',
+      dismissible: next.dismissible ?? true,
+    })
+  }, [])
+
+  const previewHintKey = useMemo(
+    () => (user?.id ? `events_preview_hint_seen_${user.id}` : null),
+    [user?.id]
+  )
+
+  const markPreviewHintSeen = useCallback(() => {
+    if (previewHintSeenRef.current) return
+    previewHintSeenRef.current = true
+    setShowPreviewHint(false)
+    if (!previewHintKey) return
+    AsyncStorage.setItem(previewHintKey, '1').catch(() => {})
+  }, [previewHintKey])
+
+  useEffect(() => {
+    let mounted = true
+    const hydratePreviewHint = async () => {
+      if (!previewHintKey) {
+        previewHintSeenRef.current = true
+        if (mounted) setShowPreviewHint(false)
+        return
+      }
+      try {
+        const seen = await AsyncStorage.getItem(previewHintKey)
+        const hasSeen = seen === '1'
+        previewHintSeenRef.current = hasSeen
+        if (mounted) setShowPreviewHint(!hasSeen)
+      } catch {
+        previewHintSeenRef.current = false
+        if (mounted) setShowPreviewHint(true)
+      }
+    }
+    hydratePreviewHint()
+    return () => {
+      mounted = false
+    }
+  }, [previewHintKey])
 
   // Memoized callbacks to prevent re-creation
   const handleEventPress = useCallback((event: Event) => {
@@ -216,7 +368,7 @@ export default function Events() {
         title: event.title,
         cover: event.cover_image_url || '',
         venue: event.venue_name,
-        city: event.city || '',
+        city: event.display_city || event.city || '',
         start: event.start_time,
         end: event.end_time,
         category: event.category || '',
@@ -229,24 +381,110 @@ export default function Events() {
     })
   }, [userLocation, interestCounts])
 
+  const handleEventPreview = useCallback((event: Event) => {
+    markPreviewHintSeen()
+    const checkinStatus = checkinStatuses[event.id]
+    const proximity = proximityData[event.id]
+    const isCheckedIn = checkinStatus?.status === 'checked_in'
+    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
+    const interested = !!interestStatuses[event.id]
+    const summary = [
+      formatCarouselCardDate(event.start_time),
+      event.venue_name || event.display_city || 'Location TBA',
+      (event.short_description || event.description || '').trim(),
+      'Tip: long-press cards for quick actions.',
+    ].filter(Boolean).join('\n')
+
+    const buttons: ActionTrayButton[] = [
+      {
+        label: interested ? 'Remove Interest' : 'Mark Interested',
+        onPress: () => {
+          closeTray()
+          toggleInterest(event)
+        },
+      },
+      {
+        label: 'View Details',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleEventPress(event)
+        },
+      },
+    ]
+
+    if (canCheckIn) {
+      buttons.unshift({
+        label: 'Check In',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleCheckIn(event)
+        },
+      })
+    }
+
+    showTray({
+      title: event.title,
+      message: summary,
+      buttons,
+      size: 'expanded',
+    })
+  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, showTray, markPreviewHintSeen])
+
   const handleCheckIn = useCallback(async (event: Event) => {
+    if (checkInFlightRef.current.has(event.id)) return
+    let previousStatus: any = undefined
+    let hadCheckedInEvent = false
     try {
       Logger.journey('checkin', 'start', { eventId: event.id })
       if (!user) {
         Logger.journey('auth', 'blocked:notSignedIn')
-        Alert.alert('Sign in required', 'Please sign in to check in to events')
+        showTray({
+          title: 'Sign in required',
+          message: 'Please sign in to check in to events.',
+          buttons: [
+            { label: 'Not now', onPress: closeTray },
+            { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
+          ],
+        })
         return
       }
       if (!userLocation) {
-        Alert.alert(
-          'Location required',
-          'Enable location to verify proximity and check in.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { try { (Linking as any)?.openSettings?.() } catch {} } }
-          ]
-        )
+        showTray({
+          title: 'Location required',
+          message: 'Enable location to verify proximity and check in.',
+          buttons: [
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Open Settings',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                try { (Linking as any)?.openSettings?.() } catch {}
+              }
+            },
+          ],
+        })
         return
+      }
+
+      checkInFlightRef.current.add(event.id)
+      setCheckInPending((prev) => ({ ...prev, [event.id]: true }))
+      feedback.tap()
+      previousStatus = checkinStatuses[event.id]
+      hadCheckedInEvent = checkedInEvents.some((e) => e.id === event.id)
+
+      // Optimistic UI update
+      setCheckinStatuses((prev) => ({
+        ...prev,
+        [event.id]: {
+          status: 'checked_in',
+          checkInTime: new Date().toISOString(),
+        },
+      }))
+      if (!hadCheckedInEvent) {
+        setCheckedInEvents((prev) => [event, ...prev])
       }
       
       // Call standardized production check-in RPC
@@ -258,62 +496,214 @@ export default function Events() {
       })
 
       if (!result.success) {
+        // Rollback optimistic update
+        setCheckinStatuses((prev) => {
+          const next = { ...prev }
+          if (previousStatus) next[event.id] = previousStatus
+          else delete next[event.id]
+          return next
+        })
+        if (!hadCheckedInEvent) {
+          setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+        }
         Logger.error('events', 'Check-in error', { error: result.error })
-        Alert.alert('Check-in Failed', result.error || 'Unknown error')
+        feedback.error()
+        showTray({
+          title: 'Check-in failed',
+          message: result.error || 'Unknown error',
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        })
         return
       }
 
       Logger.journey('checkin', 'success', { eventId: event.id })
+      feedback.success()
       // Get event chat and offer navigation
       const chatResult = await apiClient.getEventChat(event.id)
       if (chatResult.success && chatResult.data?.id) {
-        Alert.alert(
-          'Success!',
-          'You have been checked in and added to the event chat.',
-          [
-            { text: 'Go to Chat', onPress: () => router.push({ pathname: '/chat/[id]', params: { id: chatResult.data.id, roomName: chatResult.data.name || 'Event Chat', eventTitle: event.title } as any }) },
-            { text: 'OK', style: 'default' }
-          ]
-        )
+        showTray({
+          title: 'Checked in',
+          message: 'You have been checked in and added to the event chat.',
+          buttons: [
+            {
+              label: 'Go to Chat',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                router.push({
+                  pathname: '/chat/[id]',
+                  params: {
+                    id: chatResult.data.id,
+                    roomName: chatResult.data.name || 'Event Chat',
+                    eventTitle: event.title,
+                  } as any,
+                })
+              },
+            },
+            { label: 'Stay here', onPress: closeTray },
+          ],
+        })
       } else {
-        Alert.alert('Success!', 'You have been checked in!')
+        showTray({
+          title: 'Checked in',
+          message: 'You have been checked in.',
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        })
       }
 
       // Refresh the checkin status for this event
       loadCheckinStatusesBatch()
+      loadCheckedInEvents()
     } catch (error) {
+      setCheckinStatuses((prev) => {
+        const next = { ...prev }
+        if (previousStatus) next[event.id] = previousStatus
+        else delete next[event.id]
+        return next
+      })
+      if (!hadCheckedInEvent) {
+        setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+      }
       Logger.error('events', 'Unexpected error', { error: error as any })
-      Alert.alert('Error', 'Failed to check in')
+      feedback.error()
+      showTray({
+        title: 'Error',
+        message: 'Failed to check in.',
+        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+      })
+    } finally {
+      checkInFlightRef.current.delete(event.id)
+      setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, userLocation])
+  }, [user, userLocation, checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
 
   const toggleInterest = useCallback(async (event: Event) => {
+    if (interestInFlightRef.current.has(event.id)) return
+    let prevInterested = false
+    let prevCount = 0
     try {
       if (!user) {
-        Alert.alert('Sign in required', 'Please sign in to save events')
+        showTray({
+          title: 'Sign in required',
+          message: 'Please sign in to save events.',
+          buttons: [
+            { label: 'Not now', onPress: closeTray },
+            { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
+          ],
+          size: 'compact',
+        })
         return
       }
-      const prevInterested = !!interestStatuses[event.id]
+      interestInFlightRef.current.add(event.id)
+      setInterestPending((prev) => ({ ...prev, [event.id]: true }))
+      feedback.tap()
+      prevInterested = !!interestStatuses[event.id]
+      prevCount = interestCounts[event.id] ?? event.favorite_count ?? 0
+      const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
       // Optimistic update
       setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
+      setInterestCounts(prev => ({ ...prev, [event.id]: optimisticCount }))
 
       const result = await apiClient.toggleInterest(event.id)
       if (!result.success || !result.data) {
         // rollback
         setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
-        Alert.alert('Error', 'Failed to update interest')
+        setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
+        feedback.error()
+        showTray({
+          title: 'Update failed',
+          message: 'Failed to update interest.',
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          size: 'compact',
+        })
         return
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
+      setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
+      feedback.tap()
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update interest')
+    } catch {
+      setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
+      setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
+      feedback.error()
+      showTray({
+        title: 'Update failed',
+        message: 'Failed to update interest.',
+        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        size: 'compact',
+      })
+    } finally {
+      interestInFlightRef.current.delete(event.id)
+      setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, interestStatuses])
+  }, [user, interestStatuses, interestCounts, feedback, showTray, closeTray])
+
+  const handleCheckOut = useCallback(async (event: Event) => {
+    if (checkOutInFlightRef.current.has(event.id)) return
+    checkOutInFlightRef.current.add(event.id)
+    setCheckOutPending((prev) => ({ ...prev, [event.id]: true }))
+    feedback.tap()
+
+    const previousStatus = checkinStatuses[event.id]
+    const previousCheckedInEvents = checkedInEvents
+
+    // Optimistic removal from checked-in state
+    setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
+    setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+
+    try {
+      const result = await apiClient.checkOut(String(event.id))
+      if (result.success) {
+        feedback.success()
+        showTray({
+          title: 'Checked out',
+          message: 'You have been checked out of this event.',
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          size: 'compact',
+        })
+        loadCheckedInEvents()
+        loadCheckinStatusesBatch()
+      } else {
+        // Rollback on failure
+        setCheckinStatuses((prev) => {
+          const next = { ...prev }
+          if (previousStatus) next[event.id] = previousStatus
+          else delete next[event.id]
+          return next
+        })
+        setCheckedInEvents(previousCheckedInEvents)
+        feedback.error()
+        showTray({
+          title: 'Checkout failed',
+          message: result.error || 'Please try again.',
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          size: 'compact',
+        })
+      }
+    } catch {
+      setCheckinStatuses((prev) => {
+        const next = { ...prev }
+        if (previousStatus) next[event.id] = previousStatus
+        else delete next[event.id]
+        return next
+      })
+      setCheckedInEvents(previousCheckedInEvents)
+      feedback.error()
+      showTray({
+        title: 'Checkout failed',
+        message: 'Please try again.',
+        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        size: 'compact',
+      })
+    } finally {
+      checkOutInFlightRef.current.delete(event.id)
+      setCheckOutPending((prev) => ({ ...prev, [event.id]: false }))
+    }
+  }, [checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await fetchEvents({ silent: true })
+    await fetchEvents({ silent: true, force: true })
     setRefreshing(false)
   }, [])
 
@@ -330,21 +720,29 @@ export default function Events() {
   }, [userLocation, locationStatus])
 
   const onScroll = useCallback((e: any) => {
-    setScrollProgress(e.nativeEvent.contentOffset.y, 320)
-    if (!locationRequestedRef.current && e.nativeEvent.contentOffset.y > 180) {
+    const y = e.nativeEvent.contentOffset.y
+    scrollY.setValue(y)
+    setScrollProgress(y, 320)
+    if (!locationRequestedRef.current && y > 180) {
       requestLocationIfNeeded(false)
     }
-  }, [setScrollProgress, requestLocationIfNeeded])
+  }, [setScrollProgress, requestLocationIfNeeded, scrollY])
 
   // Single profile fetch for avatar and city - uses cached profile if available
   const loadUserProfile = useCallback(async () => {
     if (!user) return
     try {
+      const authFirstName = getFirstName(user.name)
+      if (authFirstName) setUserFirstName(authFirstName)
+
       // Check cache first (populated by _layout.tsx during onboarding check)
       const cached = ProfileCache.get(user.id)
       const data = cached || (await apiClient.getProfile(user.id).then(r => r.success ? r.data : null))
 
       if (data) {
+        const dataFirstName = getFirstName(data.profile?.name) || getFirstName(data.name)
+        if (dataFirstName) setUserFirstName(dataFirstName)
+
         const profile = data.profile
         if (profile) {
           // Only use URLs that are valid and not empty
@@ -363,8 +761,6 @@ export default function Events() {
       }
     } catch {}
   }, [user])
-
-  const initialMountRef = useRef(true)
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -410,6 +806,13 @@ export default function Events() {
     }
   }, [user, authLoading])
 
+  useEffect(() => {
+    const authFirstName = getFirstName(user?.name)
+    if (authFirstName) {
+      setUserFirstName(authFirstName)
+    }
+  }, [user?.name])
+
   // Preload images - use a ref to track already preloaded URLs and avoid redundant work
   const preloadedUrlsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
@@ -433,34 +836,6 @@ export default function Events() {
       preloadImages(urls, 'normal').catch(() => {})
     }
   }, [events])
-
-  // Refresh statuses when the screen regains focus (skip first mount)
-  // Use a ref to track if requests are still relevant
-  const focusAbortRef = useRef<boolean>(false)
-
-  useFocusEffect(
-    useCallback(() => {
-      if (initialMountRef.current) {
-        initialMountRef.current = false
-        return // Skip on first mount - useEffect already handles it
-      }
-
-      // Mark that we're focused and requests are valid
-      focusAbortRef.current = false
-
-      if (user) {
-        fetchEvents({ silent: true })
-      }
-
-      // Cleanup: abort pending requests when tab loses focus
-      return () => {
-        focusAbortRef.current = true
-      }
-    }, [user, events.length])
-  )
-
-  // TODO: Real-time subscriptions will use Socket.io instead of Supabase
-  // For now, we rely on manual refresh and polling
 
   const loadCheckedInEvents = async () => {
     if (!user) return
@@ -490,6 +865,7 @@ export default function Events() {
             latitude: c.event.latitude,
             longitude: c.event.longitude,
           }))
+          .map(normalizeEvent)
         setCheckedInEvents(activeEvents)
         Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
       } else {
@@ -502,7 +878,6 @@ export default function Events() {
     }
   }
 
-  const CAROUSEL_ITEM_FULL = 268
   const getCarouselItemLayout = useCallback((_: any, index: number) => ({
     length: CAROUSEL_ITEM_FULL,
     offset: CAROUSEL_ITEM_FULL * index,
@@ -522,49 +897,15 @@ export default function Events() {
         keyExtractor={keyExtractor}
         getItemLayout={getCarouselItemLayout}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <View style={styles.carouselImage}>
-              <OptimizedImage
-                source={item.cover_image_url as string}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-                width={260}
-                height={120}
-                quality={60}
-                cachePolicy="memory-disk"
-              />
-              <LinearGradient
-                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                style={styles.carouselGradient}
-              />
-              <View style={styles.carouselContentOverlay}>
-                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                <Text style={styles.carouselTime}>
-                  {formatEventDateTime(item.start_time)}
-                </Text>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      const result = await apiClient.checkOut(String(item.id))
-                      if (result.success) {
-                        Alert.alert('Checked Out', 'You have been checked out of this event.')
-                        loadCheckedInEvents()
-                        loadCheckinStatusesBatch()
-                      } else {
-                        Alert.alert('Checkout Failed', result.error || 'Please try again.')
-                      }
-                    } catch (e) {
-                      Alert.alert('Checkout Failed', 'Please try again.')
-                    }
-                  }}
-                  style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 12 }}>Check out</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
+          <CarouselCard
+            event={item}
+            onPress={() => handleEventPress(item)}
+            onLongPress={() => handleEventPreview(item)}
+            statusLabel="Going"
+            showCheckout
+            onCheckout={() => handleCheckOut(item)}
+            checkoutLoading={!!checkOutPending[item.id]}
+          />
         )}
       />
     </View>
@@ -586,51 +927,20 @@ export default function Events() {
         keyExtractor={keyExtractor}
         getItemLayout={getCarouselItemLayout}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <View style={styles.carouselImage}>
-              <OptimizedImage
-                source={item.cover_image_url as string}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-                width={260}
-                height={120}
-                quality={60}
-                cachePolicy="memory-disk"
-              />
-              <LinearGradient
-                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                style={styles.carouselGradient}
-              />
-              <View style={styles.carouselContentOverlay}>
-                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                <Text style={styles.carouselTime}>
-                  {formatEventDateTime(item.start_time)}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => toggleInterest(item)}
-              style={styles.carouselHeartButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
+          <CarouselCard
+            event={item}
+            onPress={() => handleEventPress(item)}
+            onLongPress={() => handleEventPreview(item)}
+            onToggleInterest={() => toggleInterest(item)}
+            isInterested={!!interestStatuses[item.id]}
+            interestLoading={!!interestPending[item.id]}
+            statusLabel="Interested"
+          />
         )}
       />
     </View>
   )
 
-  const renderInterestedEmpty = () => (
-    <View style={styles.interestedEmptyRow}>
-      <View style={styles.interestedThumb} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.interestedTitle}>Interested Events</Text>
-        <Text style={styles.interestedSub}>Events you&apos;ve liked or shown interest in will appear here.</Text>
-      </View>
-    </View>
-  )
 
   useEffect(() => {
     if (userLocation && events.length > 0) {
@@ -679,14 +989,21 @@ export default function Events() {
         setUserLocation(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
         Logger.warn('events', 'permission:notGranted', {})
-        Alert.alert(
-          'Turn on Location',
-          'We need your location to show nearby events and enable check-in.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { try { (Linking as any)?.openSettings?.() } catch {} } }
-          ]
-        )
+        showTray({
+          title: 'Turn on location',
+          message: 'We need your location to show nearby events and enable check-in.',
+          buttons: [
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Open Settings',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                try { (Linking as any)?.openSettings?.() } catch {}
+              }
+            },
+          ],
+        })
         return
       }
       setLocationStatus('granted')
@@ -753,7 +1070,7 @@ export default function Events() {
 
   // Removed city override feature
 
-  const fetchEvents = async (options?: { silent?: boolean }) => {
+  const fetchEvents = async (options?: { silent?: boolean; force?: boolean }) => {
     try {
       const isInitial = !initialLoadedRef.current
       const shouldShowLoading = isInitial || !options?.silent
@@ -773,7 +1090,7 @@ export default function Events() {
         lon,
         include: 'checkins,activeCheckins,profile,interestedPreview',
         interestedPreviewLimit: 3,
-      })
+      }, { force: !!options?.force })
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
@@ -781,7 +1098,7 @@ export default function Events() {
         return
       }
 
-      setEvents(eventsData || [])
+      setEvents((eventsData || []).map(normalizeEvent))
       setPage(0)
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
       initialLoadedRef.current = true
@@ -826,12 +1143,17 @@ export default function Events() {
             latitude: 0,
             longitude: 0,
           }))
+          .map(normalizeEvent)
         setCheckedInEvents(activeEvents)
       } else {
         setCheckedInEvents([])
       }
       if (meta?.profile?.profile) {
         const profile = meta.profile.profile
+        const profileFirstName = getFirstName(profile.name)
+        if (profileFirstName) {
+          setUserFirstName(profileFirstName)
+        }
         const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
           (Array.isArray(profile.photos) && profile.photos[0]) ||
           null
@@ -855,6 +1177,15 @@ export default function Events() {
     }
   }
 
+  const socketStatus = useLiveSync({
+    enabled: !!user && !authLoading,
+    onSync: () => fetchEvents({ silent: true, force: true }),
+    domains: ['events'],
+    connectedIntervalMs: 30000,
+    disconnectedIntervalMs: 12000,
+    maxDisconnectedIntervalMs: 45000,
+  })
+
   // If location becomes available after initial load, refetch with coordinates
   useEffect(() => {
     if (!user || authLoading) return
@@ -862,7 +1193,7 @@ export default function Events() {
     if (loading) return
     const key = `${userLocation.latitude},${userLocation.longitude}`
     if (lastFetchLocationRef.current !== key) {
-      fetchEvents({ silent: true })
+      fetchEvents({ silent: true, force: true })
     }
   }, [user, authLoading, userLocation, loading])
 
@@ -883,7 +1214,7 @@ export default function Events() {
       })
       if (error) return
       if (!data || data.length === 0) return
-      setEvents(prev => [...prev, ...data])
+      setEvents(prev => [...prev, ...data.map(normalizeEvent)])
       setPage(prev => prev + 1)
       const interestMap: { [eventId: string]: boolean } = {}
       const countMap: Record<string, number> = {}
@@ -957,12 +1288,15 @@ export default function Events() {
         isEnded={isEnded}
         proximity={proximity}
         interestCount={interestCounts[event.id]}
+        checkInLoading={!!checkInPending[event.id]}
+        interestLoading={!!interestPending[event.id]}
         onPress={handleEventPress}
+        onLongPress={handleEventPreview}
         onCheckIn={handleCheckIn}
         onToggleInterest={toggleInterest}
       />
     )
-  }, [checkinStatuses, proximityData, interestStatuses, handleEventPress, handleCheckIn, toggleInterest])
+  }, [checkinStatuses, proximityData, interestStatuses, interestCounts, checkInPending, interestPending, handleEventPress, handleEventPreview, handleCheckIn, toggleInterest])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -980,52 +1314,25 @@ export default function Events() {
         keyExtractor={keyExtractor}
         getItemLayout={getCarouselItemLayout}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <View style={styles.carouselImage}>
-              <OptimizedImage
-                source={item.cover_image_url as string}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-                width={260}
-                height={120}
-                quality={60}
-                cachePolicy="memory-disk"
-              />
-              <LinearGradient
-                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                style={styles.carouselGradient}
-              />
-              <View style={styles.carouselContentOverlay}>
-                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                <Text style={styles.carouselTime}>
-                  {formatEventDateTime(item.start_time)}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => toggleInterest(item)}
-              style={styles.carouselHeartButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
+          <CarouselCard
+            event={item}
+            onPress={() => handleEventPress(item)}
+            onLongPress={() => handleEventPreview(item)}
+            onToggleInterest={() => toggleInterest(item)}
+            isInterested={!!interestStatuses[item.id]}
+            interestLoading={!!interestPending[item.id]}
+            statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
+          />
         )}
       />
     </View>
   )
 
-  // Animated scroll state for coverflow-like carousel
-  const upcomingScrollX = useRef(new Animated.Value(0)).current
-  const { width: screenWidth } = Dimensions.get('window')
-  const UPCOMING_ITEM_WIDTH = 163
-  const UPCOMING_ITEM_HEIGHT = 264
-  const UPCOMING_ITEM_SPACING = 14
-  const UPCOMING_ITEM_FULL = UPCOMING_ITEM_WIDTH + UPCOMING_ITEM_SPACING
-  const UPCOMING_SIDE_PADDING = (screenWidth - UPCOMING_ITEM_WIDTH) / 2
-  const UPCOMING_LOOPS = 3 // Reduced from 7 to minimize duplicate image loads
-  const upcomingListRef = useRef<FlatList<any> | null>(null)
+  const UPCOMING_ITEM_WIDTH = CAROUSEL_CARD_WIDTH
+  const UPCOMING_ITEM_HEIGHT = CAROUSEL_CARD_HEIGHT
+  const UPCOMING_ITEM_FULL = CAROUSEL_ITEM_FULL
+  // Compensate item spacing so the snapped card centers visually.
+  const UPCOMING_SIDE_PADDING = ((SCREEN_WIDTH - UPCOMING_ITEM_WIDTH) / 2) - (CAROUSEL_ITEM_SPACING / 2)
 
   const renderUpcomingFigmaCarousel = () => (
     <View style={styles.carouselContainer}>
@@ -1034,123 +1341,37 @@ export default function Events() {
         <Text style={styles.sectionTitle}>Upcoming events</Text>
         <View style={styles.sectionDividerLine} />
       </View>
-      <Animated.FlatList
-        ref={upcomingListRef as any}
+      <FlatList
         horizontal
-        data={upcomingLooped}
-        keyExtractor={(_, idx) => `up-${idx}`}
+        data={upcomingItems}
+        keyExtractor={(item, idx) => `up-${item.id}-${idx}`}
         showsHorizontalScrollIndicator={false}
-        bounces={false}
-        decelerationRate="fast"
         snapToAlignment="center"
         snapToInterval={UPCOMING_ITEM_FULL}
         contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
-        style={[styles.upcomingViewport, { marginHorizontal: 0 }]}
+        style={{ paddingVertical: 12, height: UPCOMING_ITEM_HEIGHT + 24 }}
         removeClippedSubviews={false}
-        disableIntervalMomentum
-        initialScrollIndex={Math.max(0, Math.floor(upcomingLooped.length / 2))}
         getItemLayout={(_, index) => ({ length: UPCOMING_ITEM_FULL, offset: UPCOMING_ITEM_FULL * index, index })}
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: upcomingScrollX } } }],
-          { useNativeDriver: true }
+        renderItem={({ item }) => (
+          <View style={{ width: UPCOMING_ITEM_FULL, alignItems: 'center' }}>
+            <CarouselCard
+              event={item}
+              onPress={() => handleEventPress(item)}
+              onLongPress={() => handleEventPreview(item)}
+              onToggleInterest={() => toggleInterest(item)}
+              isInterested={!!interestStatuses[item.id]}
+              interestLoading={!!interestPending[item.id]}
+              statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
+            />
+          </View>
         )}
-        onScrollEndDrag={undefined}
-        onMomentumScrollEnd={(ev) => {
-          const x = ev.nativeEvent.contentOffset.x
-          const currentIndex = Math.round(x / UPCOMING_ITEM_FULL)
-          const base = Math.max(1, upcomingItems.length)
-          const nearStart = currentIndex <= base
-          const nearEnd = currentIndex >= (upcomingLooped.length - base - 1)
-          if (nearStart || nearEnd) {
-            const normalized = ((currentIndex % base) + base) % base
-            const middleBase = Math.floor(UPCOMING_LOOPS / 2) * base
-            const targetIndex = middleBase + normalized
-            upcomingListRef.current?.scrollToOffset({ offset: targetIndex * UPCOMING_ITEM_FULL, animated: false })
-            return
-          }
-          const snapped = currentIndex * UPCOMING_ITEM_FULL
-          if (Math.abs(snapped - x) > 0.5) {
-            upcomingListRef.current?.scrollToOffset({ offset: snapped, animated: true })
-          }
-        }}
-        renderItem={({ item, index }) => {
-          const inputRange = [
-            (index - 1) * UPCOMING_ITEM_FULL,
-            index * UPCOMING_ITEM_FULL,
-            (index + 1) * UPCOMING_ITEM_FULL,
-          ]
-          const scale = upcomingScrollX.interpolate({
-            inputRange,
-            outputRange: [0.9, 1.18, 0.9],
-            extrapolate: 'clamp',
-          })
-          const opacity = upcomingScrollX.interpolate({
-            inputRange,
-            outputRange: [0.7, 1, 0.7],
-            extrapolate: 'clamp',
-          })
-          const translateY = upcomingScrollX.interpolate({
-            inputRange,
-            outputRange: [8, 0, 8],
-            extrapolate: 'clamp',
-          })
-          return (
-            <View style={{ width: UPCOMING_ITEM_FULL, alignItems: 'center' }}>
-              <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(item)}>
-                <Animated.View
-                  style={{
-                    width: UPCOMING_ITEM_WIDTH,
-                    height: UPCOMING_ITEM_HEIGHT,
-                    borderRadius: 20,
-                    // Allow scale to extend without clipping
-                    overflow: 'visible',
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    transform: [{ scale }, { translateY }],
-                    opacity,
-                  }}
-                >
-                  {item.cover_image_url ? (
-                    <View style={[styles.upcomingImageRadius, { width: '100%', height: '100%', overflow: 'hidden' }]}>
-                      <OptimizedImage
-                        source={item.cover_image_url}
-                        style={StyleSheet.absoluteFillObject}
-                        contentFit="cover"
-                        width={UPCOMING_ITEM_WIDTH}
-                        height={UPCOMING_ITEM_HEIGHT}
-                        quality={60}
-                        cachePolicy="memory-disk"
-                      />
-                      <LinearGradient
-                        colors={["rgba(0,0,0,0)", "#000000"]}
-                        start={{ x: 0.5, y: 0 }}
-                        end={{ x: 0.5, y: 1 }}
-                        style={[styles.gradientFull, styles.upcomingImageRadius]}
-                      />
-                      <View style={styles.upTextOverlay}>
-                        <Text style={styles.upVenueLarge} numberOfLines={1}> - {item.venue_name} - </Text>
-                        <Text style={styles.upTitleLarge} numberOfLines={1}>{item.title}</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={[styles.upcomingImageRadius, { flex: 1, backgroundColor: '#222' }]} />
-                  )}
-                </Animated.View>
-              </TouchableOpacity>
-            </View>
-          )
-        }}
       />
-      {/* Pagination indicator to match Figma */}
-      <View style={styles.carouselIndicatorRow}>
-        <View style={styles.carouselIndicatorLong} />
-        <View style={styles.carouselIndicatorDot} />
-        <View style={styles.carouselIndicatorDot} />
-      </View>
     </View>
   )
 
-  const renderCarouselFancy = (titleLines: string[], items: Event[]) => (
+  const renderCarouselFancy = (titleLines: string[], items: Event[]) => {
+    if (!items.some(item => !!item.cover_image_url)) return null
+    return (
     <View style={styles.carouselContainer}>
       <View style={styles.sectionFancyRow}>
         <View style={styles.sectionDividerLine} />
@@ -1169,47 +1390,19 @@ export default function Events() {
         keyExtractor={keyExtractor}
         getItemLayout={getCarouselItemLayout}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carouselCard} onPress={() => handleEventPress(item)}>
-            <View style={styles.carouselImage}>
-              <OptimizedImage
-                source={item.cover_image_url as string}
-                style={StyleSheet.absoluteFillObject}
-                contentFit="cover"
-                width={260}
-                height={120}
-                quality={60}
-                cachePolicy="memory-disk"
-              />
-              <LinearGradient
-                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.85)"]}
-                style={styles.carouselGradient}
-              />
-              <View style={styles.carouselContentOverlay}>
-                <Text style={styles.carouselEventTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.carouselVenue} numberOfLines={1}>{item.venue_name}</Text>
-                <Text style={styles.carouselTime}>
-                  {new Date(item.start_time).toLocaleDateString()} • {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => toggleInterest(item)}
-              style={styles.carouselHeartButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.carouselHeartText}>{interestStatuses[item.id] ? '♥︎' : '♡'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
+          <CarouselCard
+            event={item}
+            onPress={() => handleEventPress(item)}
+            onLongPress={() => handleEventPreview(item)}
+            onToggleInterest={() => toggleInterest(item)}
+            isInterested={!!interestStatuses[item.id]}
+            interestLoading={!!interestPending[item.id]}
+            statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
+          />
         )}
       />
-      {/* Pagination indicator to match Figma */}
-      <View style={styles.carouselIndicatorRow}>
-        <View style={styles.carouselIndicatorLong} />
-        <View style={styles.carouselIndicatorDot} />
-        <View style={styles.carouselIndicatorDot} />
-      </View>
     </View>
-  )
+  )}
 
   const formatFeaturedDate = (iso: string) => {
     try {
@@ -1223,6 +1416,57 @@ export default function Events() {
     }
   }
 
+  const formatInviteDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    } catch {
+      return 'Date TBA'
+    }
+  }
+
+  const renderInviteHero = (ev?: Event) => {
+    if (!ev || !ev.cover_image_url) return null
+    return (
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => handleEventPress(ev)}
+        onLongPress={() => handleEventPreview(ev)}
+        style={styles.inviteHeroCard}
+        accessibilityRole="button"
+        accessibilityLabel={`Open invite for ${ev.title}`}
+      >
+        <OptimizedImage
+          source={ev.cover_image_url}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+          width={720}
+          height={360}
+          quality={70}
+          cachePolicy="memory-disk"
+          priority="high"
+        />
+        <LinearGradient
+          colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.78)']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.inviteHeroContent}>
+          <Text style={styles.inviteHeroKicker}>Invite</Text>
+          <Text style={styles.inviteHeroTitle} numberOfLines={2}>{ev.title}</Text>
+          <Text style={styles.inviteHeroMeta} numberOfLines={1}>{formatInviteDate(ev.start_time)}</Text>
+          <Text style={styles.inviteHeroMeta} numberOfLines={1}>
+            {ev.venue_name || ev.display_city || 'Location TBA'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    )
+  }
+
   const renderFeaturedHero = (ev?: Event) => {
     if (!ev || !ev.cover_image_url) return null
     const screenW = Dimensions.get('window').width
@@ -1230,7 +1474,7 @@ export default function Events() {
     const featuredHeight = Math.round(featuredWidth * (474 / 363))
     return (
       <View style={styles.featuredContainer}>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(ev)}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(ev)} onLongPress={() => handleEventPreview(ev)}>
           <View style={[styles.featuredImage, styles.featuredRadius, { overflow: 'hidden' }]}>
             <OptimizedImage
               source={ev.cover_image_url}
@@ -1263,16 +1507,16 @@ export default function Events() {
       <View style={styles.nearbyContainer}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Nearby Events</Text>
-          <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/events' as any)}>
+          <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/nearby-events' as any)}>
             <Text style={styles.viewAllText}>View all</Text>
-            <Ionicons name="chevron-forward" size={19} color="#E53A17" />
+            <Ionicons name="chevron-forward" size={19} color={APP_COLORS.accent} />
           </TouchableOpacity>
         </View>
         <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
         <View style={{ paddingHorizontal: 0 }}>
         {items.map((ev) => {
           const screenW = Dimensions.get('window').width
-          const containerPadding = 14 * 2 // styles.nearbyContainer paddingHorizontal
+          const containerPadding = 16 * 2 // styles.nearbyContainer paddingHorizontal
           const innerW = Math.max(0, screenW - containerPadding)
           const containerWidth = Math.min(420, Math.round(innerW * 0.96))
           return (
@@ -1281,6 +1525,7 @@ export default function Events() {
               event={ev as any}
               width={containerWidth}
               onPress={handleEventPress as any}
+              onLongPress={handleEventPreview as any}
               timeLabel={formatTimeRange(ev.start_time, ev.end_time)}
               locationLabel={ev.venue_name || ev.address || ''}
             />
@@ -1346,15 +1591,6 @@ export default function Events() {
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events])
 
-  // Build looped data for infinite-like carousel after upcomingItems is defined
-  const upcomingLooped = useMemo(() => {
-    if (upcomingItems.length === 0) return [] as Event[]
-    const loops = UPCOMING_LOOPS
-    const arr: Event[] = []
-    for (let i = 0; i < loops; i += 1) arr.push(...upcomingItems)
-    return arr
-  }, [upcomingItems])
-
   const happeningNowItems = useMemo(() => {
     const now = Date.now()
     return events
@@ -1376,7 +1612,7 @@ export default function Events() {
     if (!userCity) return [] as Event[]
     const lc = userCity.toLowerCase()
     const inCity = events.filter(e => {
-      const city = ((e as any).city || '') as string
+      const city = (e.display_city || e.city || '') as string
       const address = (e.address || '') as string
       return city.toLowerCase() === lc || address.toLowerCase().includes(lc)
     })
@@ -1422,17 +1658,71 @@ export default function Events() {
     return remaining
   }, [filteredSortedEvents, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
 
+  const inviteHeroEvent = useMemo(
+    () => {
+      const withImage = (list: Event[]) => list.find(e => !!e.cover_image_url)
+      return withImage(upcomingItems) || withImage(bestPartiesItems) || withImage(cityTopItems)
+    },
+    [upcomingItems, bestPartiesItems, cityTopItems]
+  )
+  const todayLabel = useMemo(
+    () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+    []
+  )
+
   const isLoading = authLoading || loading
+  const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
 
   const stickyBarHeight = insets.top + 8 + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
+  const topBarTranslateY = scrollY.interpolate({
+    inputRange: [0, 200],
+    outputRange: [0, -7],
+    extrapolate: 'clamp',
+  })
+  const topBarScale = scrollY.interpolate({
+    inputRange: [0, 240],
+    outputRange: [1, 0.98],
+    extrapolate: 'clamp',
+  })
+  const topBarOpacity = scrollY.interpolate({
+    inputRange: [0, 260],
+    outputRange: [1, 0.93],
+    extrapolate: 'clamp',
+  })
+  const heroParallaxY = scrollY.interpolate({
+    inputRange: [0, 360],
+    outputRange: [0, -18],
+    extrapolate: 'clamp',
+  })
+  const heroOpacity = scrollY.interpolate({
+    inputRange: [0, 340],
+    outputRange: [1, 0.89],
+    extrapolate: 'clamp',
+  })
+  const sectionLiftY = scrollY.interpolate({
+    inputRange: [0, 300],
+    outputRange: [0, -8],
+    extrapolate: 'clamp',
+  })
+  const sectionOpacity = scrollY.interpolate({
+    inputRange: [0, 320],
+    outputRange: [1, 0.94],
+    extrapolate: 'clamp',
+  })
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Background image tint to match Figma */}
       {/* Image moved to global background in RootLayout */}
       {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
+      <RNAnimated.View
+        style={[
+          styles.topBarSticky,
+          { paddingTop: insets.top + 8, transform: [{ translateY: topBarTranslateY }, { scale: topBarScale }], opacity: topBarOpacity },
+        ]}
+        accessibilityRole="header"
+      >
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="View profile" onPress={() => router.push('/profile' as any)}>
           {avatarUrl && avatarUrl.length > 0 && !avatarError ? (
             <OptimizedImage
@@ -1447,7 +1737,12 @@ export default function Events() {
             <Ionicons name="person-circle-outline" size={38} color="#aaa" />
           )}
         </TouchableOpacity>
-       
+        <View style={styles.topBarCenter}>
+          <Text style={styles.topBarTitle}>Hey {userFirstName || 'User'}!</Text>
+          <Text style={styles.topBarSubtitle}>
+            {userCity ? `${userCity} • ${todayLabel}` : todayLabel}
+          </Text>
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <TouchableOpacity
             style={styles.settingsButton}
@@ -1459,17 +1754,33 @@ export default function Events() {
             <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-      </View>
+      </RNAnimated.View>
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
         <LinearGradient
-          colors={["#480D37", "#000000"]}
+          colors={['#111214', APP_COLORS.backgroundBase]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         {/* Banners */}
         <View style={styles.filtersBar}>
+          {showPreviewHint && (
+            <View style={styles.bannerInfo}>
+              <Text style={styles.bannerText}>
+                Tip: Long-press any event card for quick actions.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss quick actions tip"
+                onPress={markPreviewHintSeen}
+                style={styles.bannerCta}
+              >
+                <Text style={styles.bannerCtaText}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <RealtimeStatusBanner status={socketStatus} style={styles.bannerWarn} />
           {locationStatus === 'denied' && (
             <View style={styles.bannerWarn}>
               <Text style={styles.bannerText}>
@@ -1501,7 +1812,7 @@ export default function Events() {
         </View>
         <VirtualizedList
           forwardedRef={listRef as any}
-          data={isLoading ? [] : mainListData}
+          data={showLoadingSkeleton ? [] : mainListData}
           renderItem={renderEventItem}
           keyExtractor={keyExtractor}
           estimatedItemSize={200}
@@ -1519,7 +1830,7 @@ export default function Events() {
           maxToRenderPerBatch={5}
           windowSize={10}
           ListHeaderComponent={(
-            isLoading ? (
+            showLoadingSkeleton ? (
               <View>
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={160} />
@@ -1539,12 +1850,12 @@ export default function Events() {
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={200} />
                 </View>
-                <Animated.View style={[styles.upcomingViewport, { paddingVertical: 16, height: 300 }]}> 
+                <View style={{ paddingVertical: 12, height: UPCOMING_ITEM_HEIGHT + 24 }}>
                   <FlatList
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 16 }}
-                    data={[...Array(7)].map((_, i) => i)}
+                    contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
+                    data={[...Array(3)].map((_, i) => i)}
                     keyExtractor={(item) => `s-up-${item}`}
                     getItemLayout={(_, index) => ({
                       length: UPCOMING_ITEM_FULL,
@@ -1552,10 +1863,10 @@ export default function Events() {
                       index,
                     })}
                     renderItem={() => (
-                      <SkeletonBlock width={163} height={264} borderRadius={20} style={{ marginRight: 14 }} />
+                      <SkeletonBlock width={UPCOMING_ITEM_WIDTH} height={UPCOMING_ITEM_HEIGHT} borderRadius={24} style={{ marginRight: CAROUSEL_ITEM_SPACING }} />
                     )}
                   />
-                </Animated.View>
+                </View>
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={180} />
                 </View>
@@ -1580,36 +1891,90 @@ export default function Events() {
               <View>
                 {/* Friendly empty state when there are no events at all */}
                 {events.length === 0 && (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>No events found</Text>
-                    <Text style={styles.emptySub}>We&apos;ll show nearby events automatically.</Text>
-                  </View>
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyTitle}>No events found</Text>
+                      <Text style={styles.emptySub}>Try refreshing or explore with location enabled.</Text>
+                      <ScalePress
+                        style={styles.ctaGhost}
+                        onPress={() => fetchEvents({ force: true })}
+                        accessibilityRole="button"
+                        accessibilityLabel="Refresh events"
+                      >
+                        <Text style={styles.ctaGhostText}>Refresh Events</Text>
+                      </ScalePress>
+                    </View>
+                  </FadeInUp>
                 )}
-                {interestedItems.length > 0 ? renderInterestedCarousel(interestedItems.slice(0, 10)) : renderInterestedEmpty()}
-
-                {upcomingItems.length > 0 && renderUpcomingFigmaCarousel()}
+                {inviteHeroEvent ? (
+                  <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
+                      {renderInviteHero(inviteHeroEvent)}
+                    </FadeInUp>
+                  </RNAnimated.View>
+                ) : null}
+                {interestedItems.length > 0 && interestedItems.some(e => !!e.cover_image_url) ? (
+                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
+                      {renderInterestedCarousel(interestedItems.slice(0, 10))}
+                    </FadeInUp>
+                  </RNAnimated.View>
+                ) : null}
+                {upcomingItems.length > 0 ? (
+                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                      {renderUpcomingFigmaCarousel()}
+                    </FadeInUp>
+                  </RNAnimated.View>
+                ) : null}
 
                 {userLocation
-                  ? (nearbyItems.length > 0 ? renderNearbyList(nearbyItems.slice(0, 4)) : null)
-                  : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? renderNearbyPrompt() : null)}
+                  ? (nearbyItems.length > 0 ? (
+                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
+                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 4)} distance={8}>
+                        {renderNearbyList(nearbyItems.slice(0, 4))}
+                      </FadeInUp>
+                    </RNAnimated.View>
+                  ) : null)
+                  : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? (
+                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
+                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 4)} distance={8}>
+                        {renderNearbyPrompt()}
+                      </FadeInUp>
+                    </RNAnimated.View>
+                  ) : null)}
 
-                {userCity && cityTopItems.length > 0 && renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
+                {userCity && cityTopItems.length > 0 ? (
+                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 5)} distance={8}>
+                      {renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
+                    </FadeInUp>
+                  </RNAnimated.View>
+                ) : null}
 
-                {/* Discover the Best Parties header without carousel */}
-                {bestPartiesItems.length > 0 && (
-                  <View style={styles.carouselContainer}>
-                    <View style={styles.sectionFancyRow}>
-                      <View style={styles.sectionDividerLine} />
-                      <View>
-                        <Text style={styles.sectionTitle}>Discover the</Text>
-                        <Text style={styles.sectionTitle}>Best Parties</Text>
-                      </View>
-                      <View style={styles.sectionDividerLine} />
-                    </View>
-                  </View>
-                )}
-
-                {renderFeaturedHero(bestPartiesItems[0] || cityTopItems[0] || upcomingItems[0])}
+                {/* Discover the Best Parties header + featured hero — only when a cover image exists */}
+                {(() => {
+                  const withImage = (list: Event[]) => list.find(e => !!e.cover_image_url)
+                  const featuredPartyEvent = withImage(bestPartiesItems) || withImage(cityTopItems) || withImage(upcomingItems)
+                  if (!featuredPartyEvent) return null
+                  return (
+                    <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
+                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 6)} distance={8}>
+                        <View style={styles.carouselContainer}>
+                          <View style={styles.sectionFancyRow}>
+                            <View style={styles.sectionDividerLine} />
+                            <View>
+                              <Text style={styles.sectionTitle}>Discover the</Text>
+                              <Text style={styles.sectionTitle}>Best Parties</Text>
+                            </View>
+                            <View style={styles.sectionDividerLine} />
+                          </View>
+                        </View>
+                        {renderFeaturedHero(featuredPartyEvent)}
+                      </FadeInUp>
+                    </RNAnimated.View>
+                  )
+                })()}
                 <View style={{ height: 8 }} />
               </View>
             )
@@ -1618,6 +1983,15 @@ export default function Events() {
       </View>
 
       {/* City override UI removed */}
+      <ActionTray
+        visible={trayState.visible}
+        title={trayState.title}
+        message={trayState.message}
+        buttons={trayState.buttons}
+        onClose={closeTray}
+        size={trayState.size}
+        dismissible={trayState.dismissible}
+      />
     </SafeAreaView>
   )
 }
@@ -1625,7 +1999,7 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
     
   },
   sectionBg: {
@@ -1638,8 +2012,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(190, 190, 190, 0.12)',
+    borderColor: APP_COLORS.separator,
+    backgroundColor: APP_COLORS.backgroundElevated,
   },
   bgImage: {
     ...StyleSheet.absoluteFillObject,
@@ -1653,78 +2027,59 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#ffffff',
+    color: APP_COLORS.textPrimary,
   },
   listContainer: {
     paddingHorizontal: 1,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingTop: 14,
+    paddingBottom: 24,
     
    
    
   },
-  carouselIndicatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    marginTop: 10,
-  },
-  carouselIndicatorLong: {
-    width: 60,
-    height: 6,
-    borderRadius: 11,
-    backgroundColor: '#D9D9D9',
-    opacity: 1,
-  },
-  carouselIndicatorDot: {
-    width: 7,
-    height: 6,
-    borderRadius: 9,
-    backgroundColor: '#D9D9D9',
-    opacity: 1,
-  },
   carouselContainer: {
-    paddingTop: 12,
+    paddingTop: 16,
   },
   sectionHeaderRow: {
-    paddingHorizontal: 14,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   sectionFancyRow: {
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
   },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: TYPE_HEADER_SIZE,
+    lineHeight: TYPE_HEADER_LINE,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
   },
   sectionDividerLine: {
     height: 1,
     width: 73,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: APP_COLORS.textPrimary,
     opacity: 0.22,
     borderRadius: 11,
     transform: [{ rotate: '180deg' }],
   },
   sectionSubTitle: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    fontSize: TYPE_BODY_SIZE,
+    lineHeight: 20,
+    color: APP_COLORS.textSecondary,
+    paddingHorizontal: 16,
+    marginBottom: 14,
   },
   viewAllRow: {
     flexDirection: 'row',
@@ -1732,47 +2087,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   viewAllText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+    color: APP_COLORS.textSecondary,
+    fontSize: TYPE_BODY_SIZE,
+    fontWeight: '600',
   },
   carouselList: {
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-  },
-  upcomingList: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 14,
-  },
-  upcomingImageRadius: {
-    borderRadius: 20,
-  },
-  upcomingViewport: {
-    // Extra vertical space to avoid top/bottom clipping when scaled
-    paddingVertical: 28,
-    height: 320,
-  },
-  upcomingCardSmall: {
-    width: 139,
-    height: 226,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  upcomingCardLarge: {
-    width: 163,
-    height: 264,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  upcomingImageSmall: {
-    width: 139,
-    height: 226,
-  },
-  upcomingImageLarge: {
-    width: 163,
-    height: 264,
+    paddingHorizontal: 12,
+    paddingBottom: 20,
   },
   gradientFull: {
     position: 'absolute',
@@ -1783,65 +2104,90 @@ const styles = StyleSheet.create({
   },
   upTextOverlay: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 10,
-    alignItems: 'center',
+    left: 16,
+    right: 16,
+    bottom: 20,
   },
-  upVenueSmall: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    textAlign: 'left',
-    marginBottom: 2,
-  },
-  upTitleSmall: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  upVenueLarge: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 4,
+  upCategoryTag: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: TYPE_CAPTION_SIZE,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    marginBottom: 8,
   },
   upTitleLarge: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: TYPE_CARD_TITLE_SIZE,
+    lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
-    textAlign: 'center',
+    marginBottom: 8,
+  },
+  upVenueLarge: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: TYPE_META_SIZE,
   },
   carouselCard: {
-    width: 260,
-    borderRadius: 12,
-    backgroundColor: '#111111',
-    marginHorizontal: 4,
+    width: CAROUSEL_CARD_WIDTH,
+    borderRadius: 36,
+    backgroundColor: APP_COLORS.backgroundCard,
+    marginHorizontal: CAROUSEL_ITEM_SPACING / 2,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   carouselImage: {
     width: '100%',
-    height: 120,
+    height: CAROUSEL_CARD_HEIGHT,
   },
   carouselGradient: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 120,
+    height: CAROUSEL_CARD_HEIGHT,
+  },
+  carouselStatusPill: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(18, 127, 213, 0.84)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    gap: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.38)',
+  },
+  carouselStatusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#46D27B',
+  },
+  carouselStatusText: {
+    color: '#FFFFFF',
+    fontSize: TYPE_CAPTION_SIZE,
+    fontWeight: '700',
   },
   carouselHeartButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 16,
+    right: 16,
+    width: 34,
+    height: 34,
+    backgroundColor: 'rgba(15,35,54,0.62)',
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.32)',
   },
   carouselHeartText: {
     fontSize: 16,
@@ -1853,24 +2199,42 @@ const styles = StyleSheet.create({
   },
   carouselContentOverlay: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 10,
+    left: 14,
+    right: 14,
+    bottom: 20,
+    alignItems: 'center',
   },
   carouselEventTitle: {
-    fontSize: 16,
+    fontSize: TYPE_CARD_TITLE_SIZE,
+    lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
+    textAlign: 'center',
   },
   carouselVenue: {
-    fontSize: 13,
-    color: '#CCCCCC',
-    marginTop: 2,
+    fontSize: TYPE_META_SIZE,
+    color: 'rgba(230,248,255,0.8)',
+    marginTop: 4,
   },
   carouselTime: {
-    fontSize: 12,
-    color: '#AAAAAA',
-    marginTop: 6,
+    fontSize: TYPE_META_SIZE,
+    color: '#AEE5F5',
+    marginTop: 8,
+  },
+  carouselCheckoutPill: {
+    marginTop: 10,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(16,31,48,0.65)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.34)',
+  },
+  carouselCheckoutText: {
+    color: '#FFFFFF',
+    fontSize: TYPE_CAPTION_SIZE,
+    fontWeight: '700',
   },
   eventCard: {
     backgroundColor: '#111111',
@@ -1967,20 +2331,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nearbyContainer: {
-    paddingTop: 8,
-    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingHorizontal: 16,
   },
   nearbyCta: {
-    marginTop: 10,
+    marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: '#E53A17',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    backgroundColor: APP_COLORS.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 18,
   },
   nearbyCtaText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: TYPE_BODY_SIZE,
     fontWeight: '700',
   },
   nearbyImage: {
@@ -2066,12 +2430,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nearbyMetaTextLight: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 12,
   },
  
   nearbyTitle: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
@@ -2088,12 +2452,12 @@ const styles = StyleSheet.create({
     maxWidth: '48%',
   },
   nearbyMetaText: {
-    color: '#878787',
+    color: APP_COLORS.textSecondary,
     fontSize: 11,
   },
   featuredContainer: {
-    paddingHorizontal: 23,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
   },
   featuredImage: {
     width: '100%',
@@ -2112,25 +2476,63 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   featuredTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '500',
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_CARD_TITLE_SIZE,
+    lineHeight: TYPE_CARD_TITLE_LINE,
+    fontWeight: '700',
     textAlign: 'center',
   },
   featuredChip: {
-    backgroundColor: 'rgba(255,56,60,0.5)',
+    backgroundColor: 'rgba(10,132,255,0.32)',
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 8,
   },
   featuredChipText: {
-    color: '#FFFFFF',
-    fontSize: 17,
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_META_SIZE,
+    fontWeight: '600',
   },
   featuredSubtitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_META_SIZE,
+    fontWeight: '600',
+  },
+  inviteHeroCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 14,
+    minHeight: 220,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  inviteHeroContent: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+  },
+  inviteHeroKicker: {
+    color: '#D1E8FF',
+    fontSize: TYPE_CAPTION_SIZE,
+    fontWeight: '600',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  inviteHeroTitle: {
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_CARD_TITLE_SIZE,
+    lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
+    marginBottom: 8,
+  },
+  inviteHeroMeta: {
+    color: APP_COLORS.textSecondary,
+    fontSize: TYPE_META_SIZE,
+    marginBottom: 3,
   },
   topBar: {
     paddingHorizontal: 14,
@@ -2147,7 +2549,7 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 3,
     paddingHorizontal: 14,
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
     
     paddingTop: 8,
     paddingBottom: 12,
@@ -2155,10 +2557,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  topBarCenter: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 10,
+  },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   defaultAvatar: {
     backgroundColor: '#666',
@@ -2166,79 +2573,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topBarTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_HEADER_SIZE,
+    lineHeight: TYPE_HEADER_LINE,
     fontWeight: '700',
-    marginLeft: 12,
+  },
+  topBarSubtitle: {
+    marginTop: 2,
+    color: APP_COLORS.textSecondary,
+    fontSize: TYPE_META_SIZE,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   settingsButton: {
-    marginLeft: 'auto',
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   filtersBar: {
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 10,
   },
-  
-  interestedEmptyRow: {
+  bannerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  interestedThumb: {
-    width: 78,
-    height: 78,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: '#D9D9D9',
-  },
-  interestedTitle: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  interestedSub: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    opacity: 0.9,
+    backgroundColor: 'rgba(10,132,255,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(10,132,255,0.45)',
   },
   bannerWarn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 10,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: '#FFF3E0',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   bannerError: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 10,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: '#FFEBEE',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
   },
   bannerText: {
-    color: '#333',
-    fontSize: 13,
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_BODY_SIZE,
+    lineHeight: 20,
     flex: 1,
-    marginRight: 10,
+    marginRight: 12,
   },
   bannerCta: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
@@ -2246,24 +2649,27 @@ const styles = StyleSheet.create({
   bannerCtaText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: TYPE_CAPTION_SIZE,
   },
   emptyState: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 20,
     alignItems: 'center',
   },
   emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    color: APP_COLORS.textPrimary,
+    fontSize: TYPE_CARD_TITLE_SIZE,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   emptySub: {
-    color: '#E6E6E6',
-    fontSize: 13,
+    color: APP_COLORS.textSecondary,
+    fontSize: TYPE_BODY_SIZE,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   ctaGhost: {
+    marginTop: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 16,
@@ -2282,7 +2688,7 @@ const styles = StyleSheet.create({
   },
   cityPillText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: TYPE_CAPTION_SIZE,
     fontWeight: '600',
   },
 }) 

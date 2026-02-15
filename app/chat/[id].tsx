@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Audio } from 'expo-av'
 import * as FileSystem from 'expo-file-system'
 import * as Haptics from 'expo-haptics'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -7,8 +6,9 @@ import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  Alert,
+  Animated,
   Clipboard,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -20,7 +20,9 @@ import {
   View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import AppHeader from '../../components/AppHeader'
+import ScalePress from '../../components/motion/ScalePress'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
@@ -31,6 +33,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToChat, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback } from '../../lib/socketClient'
 import { APP_COLORS } from '../../lib/theme'
+import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 
 interface Message {
@@ -62,23 +65,43 @@ export default function GroupChat() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const flatListRef = useRef<FlatList>(null)
   const insets = useSafeAreaInsets()
-  const [isRecording, setIsRecording] = useState(false)
-  const [recording, setRecording] = useState<Audio.Recording | null>(null)
 
   // Message interaction states
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showMessageMenu, setShowMessageMenu] = useState(false)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [trayVisible, setTrayVisible] = useState(false)
+  const [trayTitle, setTrayTitle] = useState('')
+  const [trayMessage, setTrayMessage] = useState('')
+  const [trayButtons, setTrayButtons] = useState<ActionTrayButton[]>([])
+  const [composerExpanded, setComposerExpanded] = useState(false)
+  const [composerHeight, setComposerHeight] = useState(64)
+  const [typingBarHeight, setTypingBarHeight] = useState(34)
+  const [replyBarHeight, setReplyBarHeight] = useState(56)
 
   // Typing indicator states
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const typingCleanupRefs = useRef<Map<string, NodeJS.Timeout>>(new Map())
   const lastMessagesFetchRef = useRef(0)
+  const contentOpacity = useRef(new Animated.Value(0)).current
+  const contentTranslate = useRef(new Animated.Value(8)).current
+  const typingIndicatorAnim = useRef(new Animated.Value(0)).current
+  const composerAnim = useRef(new Animated.Value(0)).current
+  const sendPulseAnim = useRef(new Animated.Value(0)).current
   const messagesCacheKey = React.useMemo(
     () => (chatRoomId ? `chat_messages_${chatRoomId}` : null),
     [chatRoomId]
   )
+
+  const closeTray = () => setTrayVisible(false)
+
+  const showTray = (title: string, message: string, buttons?: ActionTrayButton[]) => {
+    setTrayTitle(title)
+    setTrayMessage(message)
+    setTrayButtons(buttons && buttons.length > 0 ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }])
+    setTrayVisible(true)
+  }
 
   useEffect(() => {
     if (chatRoomId && authUser && !authLoading) {
@@ -93,6 +116,44 @@ export default function GroupChat() {
     const cleanup = subscribeToMessages()
     return cleanup
   }, [chatRoomId, currentUser])
+
+  useEffect(() => {
+    if (loading) return
+    contentOpacity.setValue(0)
+    contentTranslate.setValue(6)
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslate, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [loading, contentOpacity, contentTranslate])
+
+  useEffect(() => {
+    Animated.timing(typingIndicatorAnim, {
+      toValue: typingUsers.size > 0 ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start()
+  }, [typingUsers.size, typingIndicatorAnim])
+
+  useEffect(() => {
+    Animated.timing(composerAnim, {
+      toValue: composerExpanded ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start()
+  }, [composerExpanded, composerAnim])
 
   const getInitials = (name: string) => {
     if (!name) return '?'
@@ -164,7 +225,7 @@ export default function GroupChat() {
 
       if (!result.success || !result.data) {
         Logger.error('chat', 'Error loading messages', { error: result.error })
-        Alert.alert('Error', 'Failed to load messages')
+        showTray('Error', 'Failed to load messages.')
         return
       }
 
@@ -334,21 +395,24 @@ export default function GroupChat() {
   }
 
   const handleReportMessage = () => {
-    Alert.alert(
-      'Report Message',
+    showTray(
+      'Report message',
       'Are you sure you want to report this message?',
       [
-        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Report',
-          style: 'destructive',
+          label: 'Cancel',
+          onPress: closeTray,
+        },
+        {
+          label: 'Report',
+          variant: 'destructive',
           onPress: () => {
-            // Handle report logic here
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
             setShowMessageMenu(false)
             setSelectedMessage(null)
-          }
-        }
+            closeTray()
+          },
+        },
       ]
     )
   }
@@ -400,7 +464,7 @@ export default function GroupChat() {
 
       if (!result.success) {
         Logger.error('chat', 'Error sending message', { error: result.error })
-        Alert.alert('Error', 'Failed to send message')
+        showTray('Error', 'Failed to send message.')
         throw new Error(result.error || 'Failed to send message')
       }
 
@@ -417,6 +481,12 @@ export default function GroupChat() {
 
       // Mark chat domain dirty so the chat tab refreshes when the user navigates back
       markDomainsDirty(['chat'])
+
+      sendPulseAnim.setValue(0)
+      Animated.sequence([
+        Animated.timing(sendPulseAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.timing(sendPulseAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+      ]).start()
     } catch (error) {
       Logger.error('chat', 'Unexpected error sending message', { error })
 
@@ -430,7 +500,7 @@ export default function GroupChat() {
 
       // Show error if not already shown
       if (!(error instanceof Error) || !error.message?.includes('Failed to send message')) {
-        Alert.alert('Error', 'Something went wrong')
+        showTray('Error', 'Something went wrong.')
       }
     } finally {
       setSending(false)
@@ -527,10 +597,7 @@ export default function GroupChat() {
                 height={160}
               />
             )}
-            {item.message_type === 'audio' && (
-              <VoiceNote uri={item.message_text} />
-            )}
-            {item.message_type !== 'text' && item.message_type !== 'image' && item.message_type !== 'audio' && (
+            {item.message_type !== 'text' && item.message_type !== 'image' && (
               <Text style={[
                 styles.messageText,
                 isMyMessage ? styles.myMessageText : styles.otherMessageText
@@ -571,6 +638,52 @@ export default function GroupChat() {
   )
 
   const isLoading = loading
+  const showLoadingSkeleton = useMinimumVisible(isLoading, 650)
+  const typingHeight = typingIndicatorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 34],
+  })
+  const typingOpacity = typingIndicatorAnim
+  const typingTranslate = typingIndicatorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 0],
+  })
+  const attachmentOpacity = composerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.74, 1],
+  })
+  const attachmentLift = composerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -2],
+  })
+  const sendScale = sendPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  })
+  const messageListBottomInset = composerHeight
+    + (typingUsers.size > 0 ? typingBarHeight : 0)
+    + (replyingTo ? replyBarHeight : 0)
+    + insets.bottom
+    + 8
+
+  const renderConversationEmpty = () => (
+    <Animated.View style={[styles.emptyNarrative, { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }]}>
+      <Text style={styles.emptyNarrativeTitle}>Start the room conversation</Text>
+      <Text style={styles.emptyNarrativeText}>
+        Be the first to post a message so everyone checked in can join.
+      </Text>
+      <ScalePress
+        style={styles.emptyNarrativeCta}
+        onPress={() => {
+          setNewMessage('Hey everyone 👋')
+          setComposerExpanded(true)
+        }}
+        pressedScale={0.98}
+      >
+        <Text style={styles.emptyNarrativeCtaText}>Send a starter message</Text>
+      </ScalePress>
+    </Animated.View>
+  )
 
   const renderLoadingSkeleton = () => (
     <View style={styles.messagesContainer}>
@@ -615,34 +728,53 @@ export default function GroupChat() {
       >
         {renderHeader()}
 
-        {isLoading ? (
+        {showLoadingSkeleton ? (
           renderLoadingSkeleton()
         ) : (
-          <FlatList
-            ref={flatListRef}
-            data={chatItems}
-            renderItem={renderChatItem}
-            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
-            style={styles.messagesList}
-            contentContainerStyle={styles.messagesContainer}
-            onContentSizeChange={scrollToBottom}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          />
+          <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }}>
+            <FlatList
+              ref={flatListRef}
+              data={chatItems}
+              renderItem={renderChatItem}
+              keyExtractor={(item) => item.kind === 'separator' ? item.id : item.message_id}
+              style={styles.messagesList}
+              contentContainerStyle={[
+                styles.messagesContainer,
+                { paddingBottom: messageListBottomInset },
+                messages.length === 0 && styles.emptyNarrativeContainer,
+              ]}
+              onContentSizeChange={scrollToBottom}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={renderConversationEmpty}
+            />
+          </Animated.View>
         )}
 
         {/* Typing indicator */}
-        {typingUsers.size > 0 && (
-          <View style={styles.typingContainer}>
+        <Animated.View style={{ height: typingHeight, opacity: typingOpacity, transform: [{ translateY: typingTranslate }], overflow: 'hidden' }}>
+          <View
+            style={styles.typingContainer}
+            onLayout={(e) => {
+              const h = Math.round(e.nativeEvent.layout.height)
+              if (h > 0 && h !== typingBarHeight) setTypingBarHeight(h)
+            }}
+          >
             <Text style={styles.typingText}>
               {Array.from(typingUsers.values()).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
             </Text>
           </View>
-        )}
+        </Animated.View>
 
         {/* Reply indicator above input */}
         {replyingTo && (
-          <View style={styles.replyInputContainer}>
+          <View
+            style={styles.replyInputContainer}
+            onLayout={(e) => {
+              const h = Math.round(e.nativeEvent.layout.height)
+              if (h > 0 && h !== replyBarHeight) setReplyBarHeight(h)
+            }}
+          >
             <View style={styles.replyInputContent}>
               <View style={styles.replyInputLine} />
               <View style={styles.replyInputText}>
@@ -661,139 +793,109 @@ export default function GroupChat() {
           </View>
         )}
 
-        <View style={styles.inputContainer}>
-          <TouchableOpacity
-            style={styles.inputIcon}
-            onPress={async () => {
-              if (!currentUser || sending || isLoading) return
-              try {
-                const picked = await pickImage('library')
-                if (!picked || !picked.assets || picked.assets.length === 0) return
-                const asset = picked.assets[0]
-                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
-                if (result.success && (result.url || result.path)) {
-                  await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
-                } else {
-                  Alert.alert('Upload failed', result.error || 'Could not upload image')
-                }
-              } catch (e: any) {
-                Alert.alert('Error', e?.message || 'Failed to send image')
-              }
-            }}
-          >
-            <Ionicons name="attach" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={(text) => {
-              setNewMessage(text)
-              // Emit typing indicator with debounce
-              if (text.length > 0 && chatRoomId) {
-                startTyping(String(chatRoomId))
-                // Clear previous timeout and set new one to stop typing
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                typingTimeoutRef.current = setTimeout(() => {
-                  stopTyping(String(chatRoomId))
-                }, 2000)
-              } else if (text.length === 0 && chatRoomId) {
-                // Immediately stop typing when input is cleared
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                stopTyping(String(chatRoomId))
-              }
-            }}
-            placeholder=""
-            placeholderTextColor="rgba(255,255,255,0.6)"
-            multiline
-            maxLength={1000}
-            onSubmitEditing={sendMessage}
-            blurOnSubmit={false}
-          />
-          <TouchableOpacity
-            style={styles.inputIcon}
-            onPress={async () => {
-              if (!currentUser || sending || isLoading) return
-              try {
-                const picked = await pickImage('camera')
-                if (!picked || !picked.assets || picked.assets.length === 0) return
-                const asset = picked.assets[0]
-                const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
-                if (result.success && (result.url || result.path)) {
-                  await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
-                } else {
-                  Alert.alert('Upload failed', result.error || 'Could not upload image')
-                }
-              } catch (e: any) {
-                Alert.alert('Error', e?.message || 'Failed to send image')
-              }
-            }}
-          >
-            <Ionicons name="camera" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.inputIcon}
-            onPress={async () => {
-              if (!currentUser || isLoading) return
-              if (isRecording) {
-                try {
-                  await recording?.stopAndUnloadAsync()
-                  const uri = recording ? recording.getURI() : null
-                  setIsRecording(false)
-                  setRecording(null)
-                  if (uri && currentUser) {
-                    try {
-                      const filename = `voice_${chatRoomId}_${Date.now()}.m4a`
-                      const uploadResult = await uploadPhoto(uri, currentUser.id, filename, 'chat')
-                      if (uploadResult.success && (uploadResult.url || uploadResult.path)) {
-                        await apiClient.sendChatMessage(chatRoomId as string, (uploadResult.url || uploadResult.path)!, 'audio')
-                        Logger.info('chat', 'Voice note sent successfully')
-                      } else {
-                        Alert.alert('Upload failed', uploadResult.error || 'Could not upload voice note')
-                      }
-                    } catch (uploadError: any) {
-                      Logger.error('chat', 'Voice note upload error', { error: uploadError })
-                      Alert.alert('Error', uploadError?.message || 'Failed to send voice note')
+        <View
+          style={styles.inputContainer}
+          onLayout={(e) => {
+            const h = Math.round(e.nativeEvent.layout.height)
+            if (h > 0 && h !== composerHeight) setComposerHeight(h)
+          }}
+        >
+          <View style={styles.composerShell}>
+            <Animated.View style={{ opacity: attachmentOpacity, transform: [{ translateY: attachmentLift }] }}>
+              <ScalePress
+                style={styles.inputIcon}
+                onPress={async () => {
+                  if (!currentUser || sending || isLoading) return
+                  try {
+                    const picked = await pickImage('library')
+                    if (!picked || !picked.assets || picked.assets.length === 0) return
+                    const asset = picked.assets[0]
+                    const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
+                    if (result.success && (result.url || result.path)) {
+                      await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
+                    } else {
+                      showTray('Upload failed', result.error || 'Could not upload image.')
                     }
+                  } catch (e: any) {
+                    showTray('Error', e?.message || 'Failed to send image.')
                   }
-                } catch (e: any) {
-                  setIsRecording(false)
-                  setRecording(null)
+                }}
+                pressedScale={0.93}
+              >
+                <Ionicons name="attach" size={20} color="#CFCFCF" />
+              </ScalePress>
+            </Animated.View>
+            <TextInput
+              style={styles.textInput}
+              value={newMessage}
+              onChangeText={(text) => {
+                setNewMessage(text)
+                setComposerExpanded(text.length > 0)
+                if (text.length > 0 && chatRoomId) {
+                  startTyping(String(chatRoomId))
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                  typingTimeoutRef.current = setTimeout(() => {
+                    stopTyping(String(chatRoomId))
+                  }, 2000)
+                } else if (text.length === 0 && chatRoomId) {
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                  stopTyping(String(chatRoomId))
                 }
-              } else {
-                try {
-                  const { status } = await Audio.requestPermissionsAsync()
-                  if (status !== 'granted') {
-                    Alert.alert('Permission required', 'Microphone access is needed to record voice notes')
-                    return
+              }}
+              placeholder="Message..."
+              placeholderTextColor="rgba(255,255,255,0.52)"
+              multiline
+              maxLength={1000}
+              onSubmitEditing={sendMessage}
+              blurOnSubmit={false}
+              onFocus={() => {
+                setComposerExpanded(true)
+                setTimeout(scrollToBottom, 90)
+              }}
+              onBlur={() => setComposerExpanded(newMessage.trim().length > 0)}
+            />
+            <Animated.View style={{ opacity: attachmentOpacity, transform: [{ translateY: attachmentLift }] }}>
+              <ScalePress
+                style={styles.inputIcon}
+                onPress={async () => {
+                  if (!currentUser || sending || isLoading) return
+                  try {
+                    const picked = await pickImage('camera')
+                    if (!picked || !picked.assets || picked.assets.length === 0) return
+                    const asset = picked.assets[0]
+                    const result = await uploadPhoto(asset.uri, currentUser.id, `gc_${chatRoomId}_${Date.now()}.jpg`, 'chat')
+                    if (result.success && (result.url || result.path)) {
+                      await apiClient.sendChatMessage(chatRoomId as string, (result.url || result.path)!, 'image')
+                    } else {
+                      showTray('Upload failed', result.error || 'Could not upload image.')
+                    }
+                  } catch (e: any) {
+                    showTray('Error', e?.message || 'Failed to send image.')
                   }
-                  await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
-                  const rec = new Audio.Recording()
-                  await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
-                  await rec.startAsync()
-                  setRecording(rec)
-                  setIsRecording(true)
-                } catch (e: any) {
-                  Alert.alert('Error', e?.message || 'Failed to start recording')
-                }
-              }
-            }}
-          >
-            <Ionicons name={isRecording ? 'stop' : 'mic'} size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TouchableOpacity
+                }}
+                pressedScale={0.93}
+              >
+                <Ionicons name="camera" size={20} color="#CFCFCF" />
+              </ScalePress>
+            </Animated.View>
+          </View>
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+          <ScalePress
             style={[
               styles.sendButton,
               ((!newMessage.trim() || sending || isLoading) && styles.sendButtonDisabled)
             ]}
             onPress={sendMessage}
             disabled={!newMessage.trim() || sending || isLoading}
+            pressedScale={0.96}
           >
             {sending ? (
               <Text style={styles.sendButtonText}>…</Text>
             ) : (
               <Ionicons name="send" size={20} color="#fff" />
             )}
-          </TouchableOpacity>
+          </ScalePress>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
 
@@ -836,63 +938,14 @@ export default function GroupChat() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <ActionTray
+        visible={trayVisible}
+        title={trayTitle}
+        message={trayMessage}
+        buttons={trayButtons}
+        onClose={closeTray}
+      />
     </SafeAreaView>
-  )
-}
-
-// Simple inline voice note player (mirrors private chat)
-const VoiceNote = ({ uri }: { uri: string }) => {
-  const [sound, setSound] = React.useState<Audio.Sound | null>(null)
-  const [playing, setPlaying] = React.useState(false)
-  const [duration, setDuration] = React.useState<number | null>(null)
-  const [position, setPosition] = React.useState(0)
-
-  React.useEffect(() => {
-    let isMounted = true
-    const load = async () => {
-      try {
-        const { sound: s } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false })
-        if (!isMounted) return
-        setSound(s)
-        s.setOnPlaybackStatusUpdate((status: any) => {
-          if (!status) return
-          if ('durationMillis' in status && status.durationMillis != null) setDuration(status.durationMillis)
-          if ('positionMillis' in status && status.positionMillis != null) setPosition(status.positionMillis)
-          if ('didJustFinish' in status && status.didJustFinish) setPlaying(false)
-        })
-      } catch {}
-    }
-    load()
-    return () => {
-      isMounted = false
-      try { sound?.unloadAsync() } catch {}
-    }
-  }, [uri])
-
-  const toggle = async () => {
-    try {
-      if (!sound) return
-      const status = await sound.getStatusAsync()
-      if ((status as any).isPlaying) {
-        await sound.pauseAsync()
-        setPlaying(false)
-      } else {
-        await sound.playAsync()
-        setPlaying(true)
-      }
-    } catch {}
-  }
-
-  const seconds = Math.floor((duration || 0) / 1000)
-  const posSeconds = Math.floor(position / 1000)
-
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <TouchableOpacity onPress={toggle} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#7B2DFA', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-        <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#fff" />
-      </TouchableOpacity>
-      <Text style={{ color: '#FFFFFF' }}>{posSeconds}s / {seconds || 0}s</Text>
-    </View>
   )
 }
 
@@ -917,6 +970,41 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     padding: 16,
+  },
+  emptyNarrativeContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyNarrative: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  emptyNarrativeTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptyNarrativeText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  emptyNarrativeCta: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emptyNarrativeCtaText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
   messageRow: {
     flexDirection: 'row',
@@ -1032,37 +1120,46 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(10,10,12,0.78)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.16)',
+    gap: 8,
+  },
+  composerShell: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    flexDirection: 'row',
     alignItems: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   inputIcon: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    borderRadius: 17,
   },
   textInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     maxHeight: 100,
-    fontSize: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    fontSize: 15,
     color: '#FFFFFF',
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#7B2DFA',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

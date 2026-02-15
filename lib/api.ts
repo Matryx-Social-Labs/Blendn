@@ -29,13 +29,13 @@ interface EventsParams {
   include?: string
 }
 
-export async function getEvents(params?: EventsParams) {
+export async function getEvents(params?: EventsParams, options?: { force?: boolean }) {
   // API expects page starting from 1, not 0
   const apiParams = params ? {
     ...params,
     page: (params.page || 0) + 1,
   } : { page: 1 }
-  const result = await apiClient.getEvents(apiParams)
+  const result = await apiClient.getEvents(apiParams, { force: !!options?.force })
   Logger.info('api', 'getEvents raw result', {
     success: result.success,
     eventCount: result.data?.events?.length || 0,

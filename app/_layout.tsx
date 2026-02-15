@@ -3,7 +3,7 @@ import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import { useEffect, useRef } from 'react';
-import { Animated, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import '../lib/globalText';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
@@ -16,6 +16,8 @@ import {
 import { apiClient } from '../lib/apiClient';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { useAuth } from '../lib/useAuth';
+import { APP_COLORS } from '../lib/theme';
+import queryCache from '../lib/queryCache';
 
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 const LOGO_ASSET = require('../assets/logo/logo2.webp');
@@ -25,7 +27,7 @@ function BackgroundGradient() {
   return (
     <View style={styles.bg} pointerEvents="none">
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -42,6 +44,7 @@ export default function RootLayout() {
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
+  const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
 
   useEffect(() => {
     Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET]).catch(() => {});
@@ -190,6 +193,18 @@ export default function RootLayout() {
     };
   }, [pathname, loading]);
 
+  // Keep data fresh when app returns from background.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      queryCache.clear();
+      apiClient.clearResponseCache();
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
@@ -198,56 +213,107 @@ export default function RootLayout() {
       }}
     >
       <GradientOverlayProvider>
-        <View style={{ flex: 1 }}>
+        <View style={styles.root}>
           <BackgroundGradient />
-          <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              contentStyle: { backgroundColor: APP_COLORS.backgroundBase },
+              animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
+            }}
+          >
+      <Stack.Screen
+        name="index"
+        options={{
+          headerShown: false,
+          animation: 'none',
+        }}
+      />
       <Stack.Screen 
         name="(tabs)" 
         options={{ 
           headerShown: false,
+          animation: 'none',
           gestureEnabled: false // Prevent swipe back to login
         }} 
       />
       <Stack.Screen 
         name="settings" 
         options={{ 
-          headerShown: false
+          headerShown: false,
+          animation: routeTransition,
         }} 
       />
       <Stack.Screen 
         name="onboarding" 
         options={{ 
           headerShown: false,
+          animation: 'none',
           gestureEnabled: false 
         }} 
       />
       <Stack.Screen 
         name="event/[id]" 
         options={{ 
-          headerShown: false
+          headerShown: false,
+          animation: 'slide_from_bottom',
+          presentation: 'modal',
+          animationDuration: 280,
+          gestureEnabled: true,
+          fullScreenGestureEnabled: true,
+          customAnimationOnGesture: true,
         }} 
       />
       {/* Nested segment layouts handle their own screens */}
-      <Stack.Screen name="chat" options={{ headerShown: false }} />
-      <Stack.Screen name="private-chat" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="chat"
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="private-chat"
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: routeTransition,
+        }}
+      />
       <Stack.Screen 
         name="edit-profile" 
         options={{ 
-          headerShown: false
+          headerShown: false,
+          animation: routeTransition,
         }} 
       />
       <Stack.Screen 
         name="blocked-users" 
         options={{ 
-          headerShown: false
+          headerShown: false,
+          animation: routeTransition,
         }} 
       />
-      <Stack.Screen 
-        name="user/[id]" 
-        options={{ 
-          headerShown: false
-        }} 
+      <Stack.Screen
+        name="user/[id]"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="interested"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="nearby-events"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
       />
           </Stack>
         </View>
@@ -257,6 +323,10 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: APP_COLORS.backgroundBase,
+  },
   bg: {
     ...StyleSheet.absoluteFillObject,
   },

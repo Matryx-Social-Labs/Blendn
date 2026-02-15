@@ -21,17 +21,17 @@ export default function BasicInfo() {
   const [age, setAge] = useState('')
   const [bio, setBio] = useState('')
   const [loading, setLoading] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [ageError, setAgeError] = useState<string | null>(null)
 
   const handleContinue = async () => {
-    if (!displayName.trim()) {
-      Alert.alert('Required Field', 'Please enter your name')
-      return
-    }
+    const trimmedName = displayName.trim()
+    const parsedAge = parseInt(age, 10)
+    const invalidAge = !age.trim() || Number.isNaN(parsedAge) || parsedAge < 18 || parsedAge > 100
 
-    if (!age.trim() || parseInt(age) < 18 || parseInt(age) > 100) {
-      Alert.alert('Invalid Age', 'Please enter a valid age (18-100)')
-      return
-    }
+    setNameError(trimmedName ? null : 'Name is required')
+    setAgeError(invalidAge ? 'Enter a valid age between 18 and 100' : null)
+    if (!trimmedName || invalidAge) return
 
     if (!user) {
       Alert.alert('Error', 'Please sign in to continue')
@@ -41,8 +41,9 @@ export default function BasicInfo() {
     setLoading(true)
     try {
       const result = await apiClient.updateProfile(user.id, {
-        name: displayName.trim(),
-        age: parseInt(age),
+        name: trimmedName,
+        age: parsedAge,
+        bio: bio.trim() || undefined,
       })
 
       if (!result.success) {
@@ -85,27 +86,36 @@ export default function BasicInfo() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>What&apos;s your name? *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, nameError && styles.inputError]}
                 value={displayName}
-                onChangeText={setDisplayName}
+                onChangeText={(value) => {
+                  setDisplayName(value)
+                  if (nameError && value.trim()) setNameError(null)
+                }}
                 placeholder="Enter your first name"
                 placeholderTextColor="#999"
                 autoCapitalize="words"
                 maxLength={50}
               />
+              {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>How old are you? *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, ageError && styles.inputError]}
                 value={age}
-                onChangeText={setAge}
+                onChangeText={(value) => {
+                  const sanitized = value.replace(/[^0-9]/g, '')
+                  setAge(sanitized)
+                  if (ageError && sanitized) setAgeError(null)
+                }}
                 placeholder="25"
                 placeholderTextColor="#999"
                 keyboardType="numeric"
-                maxLength={2}
+                maxLength={3}
               />
+              {!!ageError && <Text style={styles.errorText}>{ageError}</Text>}
             </View>
 
             <View style={styles.inputContainer}>
@@ -130,6 +140,7 @@ export default function BasicInfo() {
             style={[styles.continueButton, !displayName.trim() || !age.trim() ? styles.disabledButton : null]} 
             onPress={handleContinue}
             disabled={!displayName.trim() || !age.trim() || loading}
+            activeOpacity={0.9}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
@@ -203,6 +214,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fff',
   },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    marginTop: 6,
+    color: '#FCA5A5',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   bioInput: {
     height: 100,
     paddingTop: 16,
@@ -219,16 +239,17 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     backgroundColor: '#FF6B6B',
-    padding: 16,
-    borderRadius: 12,
+    minHeight: 52,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
-    backgroundColor: '#ccc',
+    opacity: 0.5,
   },
   continueButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
   },
 }) 

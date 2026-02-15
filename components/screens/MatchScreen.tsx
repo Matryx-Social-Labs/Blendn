@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useFocusEffect } from '@react-navigation/native'
+import * as Haptics from 'expo-haptics'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,20 +18,37 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../OptimizedImage'
+import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
-import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
-import { subscribeToEvent, EventCheckInCallback, EventCheckOutCallback } from '../../lib/socketClient'
+import {
+  subscribeToEventCheckIn,
+  subscribeToEventCheckOut,
+  EventCheckInCallback,
+  EventCheckOutCallback
+} from '../../lib/socketClient'
+import { useLiveSync } from '../../lib/useLiveSync'
+import { APP_COLORS } from '../../lib/theme'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
 
 // Memoized card components to prevent re-renders
-const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; onPress: () => void }) => {
+const SimilarCard = memo(({
+  attendee,
+  onOpenProfile,
+  onSafetyPress,
+  reasonLabel,
+}: {
+  attendee: AttendeeProfile
+  onOpenProfile: () => void
+  onSafetyPress: () => void
+  reasonLabel?: string
+}) => {
   const rawUrl = attendee.profile_photos?.[0] || ''
 
   const formatTimeAgo = (iso?: string) => {
@@ -48,7 +65,13 @@ const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
 
   return (
     <View style={styles.similarCardWrap}>
-      <TouchableOpacity activeOpacity={0.9} style={styles.similarCard} onPress={onPress}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={styles.similarCard}
+        onPress={onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
+      >
         {rawUrl ? (
           <OptimizedImage
             source={rawUrl as any}
@@ -67,12 +90,25 @@ const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
         />
         <View style={styles.similarInfo}>
           <Text style={styles.similarName} numberOfLines={1}>
-            {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
+            {getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}
           </Text>
+          {!!reasonLabel && (
+            <View style={styles.reasonPill}>
+              <Text style={styles.reasonPillText} numberOfLines={1}>{reasonLabel}</Text>
+            </View>
+          )}
           <View style={styles.timeChip}>
             <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
           </View>
         </View>
+        <TouchableOpacity
+          style={styles.cardSafety}
+          onPress={onSafetyPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
+        >
+          <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFF" />
+        </TouchableOpacity>
       </TouchableOpacity>
     </View>
   )
@@ -80,7 +116,19 @@ const SimilarCard = memo(({ attendee, onPress }: { attendee: AttendeeProfile; on
 
 SimilarCard.displayName = 'SimilarCard'
 
-const StartupItem = memo(({ attendee, onPress, isRightColumn }: { attendee: AttendeeProfile; onPress: () => void; isRightColumn?: boolean }) => {
+const StartupItem = memo(({
+  attendee,
+  onOpenProfile,
+  onSafetyPress,
+  isRightColumn,
+  statusLabel,
+}: {
+  attendee: AttendeeProfile
+  onOpenProfile: () => void
+  onSafetyPress: () => void
+  isRightColumn?: boolean
+  statusLabel?: string
+}) => {
   const rawUrl = attendee.profile_photos?.[0] || ''
   const cardWidth = GRID_ITEM_WIDTH
   const cardHeight = GRID_ITEM_HEIGHT
@@ -104,7 +152,13 @@ const StartupItem = memo(({ attendee, onPress, isRightColumn }: { attendee: Atte
         { width: cardWidth, height: cardHeight, marginRight: isRightColumn ? 0 : GRID_GAP },
       ]}
     >
-      <TouchableOpacity activeOpacity={0.9} style={styles.gridTouch} onPress={onPress}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={styles.gridTouch}
+        onPress={onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
+      >
         {rawUrl ? (
           <OptimizedImage
             source={rawUrl as any}
@@ -119,11 +173,24 @@ const StartupItem = memo(({ attendee, onPress, isRightColumn }: { attendee: Atte
         )}
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
         <View style={styles.gridInfo}>
-          <Text style={styles.gridName} numberOfLines={1}>{attendee.name}{attendee.age ? `, ${attendee.age}` : ''}</Text>
+          <Text style={styles.gridName} numberOfLines={1}>{getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}</Text>
+          {!!statusLabel && (
+            <View style={styles.gridStatusPill}>
+              <Text style={styles.gridStatusPillText} numberOfLines={1}>{statusLabel}</Text>
+            </View>
+          )}
           <View style={[styles.timeChip, styles.timeChipCompact]}>
             <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
           </View>
         </View>
+        <TouchableOpacity
+          style={styles.gridSafety}
+          onPress={onSafetyPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
+        >
+          <Ionicons name="ellipsis-horizontal" size={14} color="#FFFFFF" />
+        </TouchableOpacity>
       </TouchableOpacity>
     </View>
   )
@@ -144,10 +211,6 @@ const gridContentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
 const GRID_ITEM_WIDTH = Math.floor((gridContentWidth - GRID_GAP) / 2)
 const GRID_ITEM_HEIGHT = 160
 
-// Legacy attendee tile sizes (kept for potential reuse elsewhere on this screen)
-const TILE_WIDTH = Math.min(160, Math.max(130, Math.floor(width * 0.4)))
-const TILE_HEIGHT = TILE_WIDTH * 1.35
-
 interface AttendeeProfile {
   user_id: string
   name?: string
@@ -158,11 +221,28 @@ interface AttendeeProfile {
   last_seen?: string
 }
 
-interface MatchPreview {
-  conversation_id: string
-  other_user_id: string
-  other_user_name: string
-  photo_url?: string
+interface RecommendedEntry {
+  attendee: AttendeeProfile
+  reasonLabel: string
+}
+
+type EventRoomStatus = 'idle' | 'checking' | 'available' | 'unavailable'
+
+const parseTimestamp = (value: any): number => {
+  const ts = new Date(value || 0).getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
+const extractEventIdFromCheckin = (checkin: any): string | null => {
+  const raw = checkin?.eventId || checkin?.event_id || checkin?.event?.id || null
+  if (!raw) return null
+  const normalized = String(raw).trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+const getDisplayName = (name?: string) => {
+  const normalized = String(name || '').trim()
+  return normalized.length > 0 ? normalized : 'Guest'
 }
 
 export default function Match() {
@@ -171,14 +251,22 @@ export default function Match() {
   const [loading, setLoading] = useState(true)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
-  const [matches, setMatches] = useState<MatchPreview[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
   const [similarIndex, setSimilarIndex] = useState(0)
   const lastSimilarIndex = useRef(0)
   const contentOpacity = useRef(new Animated.Value(0)).current
   const contentTranslate = useRef(new Animated.Value(8)).current
   const similarScrollX = useRef(new Animated.Value(0)).current
+  const attendeeLoadIdRef = useRef(0)
+  const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eventInfoRef = useRef<{ id: string; title?: string } | null>(null)
+  const [openRoomPending, setOpenRoomPending] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
+  const [eventRoomId, setEventRoomId] = useState<string | null>(null)
+  const [currentUserInterests, setCurrentUserInterests] = useState<string[]>([])
   const getSimilarItemLayout = useCallback(
     (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
       length: SIMILAR_CARD_WIDTH + 16,
@@ -230,20 +318,23 @@ export default function Match() {
   )
 
   useEffect(() => {
-    if (authUser) {
-      loadInitialData()
-    }
-  }, [authUser])
+    eventInfoRef.current = eventInfo
+  }, [eventInfo])
 
-  // Refresh when screen gains focus
-  useFocusEffect(
-    useCallback(() => {
-      if (authUser) {
-        loadActiveEventAndAttendees(authUser.id)
-        loadMatches(authUser.id)
+  useEffect(() => {
+    setNewJoinsCount(0)
+  }, [eventInfo?.id])
+
+  useEffect(() => {
+    return () => {
+      if (joinPillTimerRef.current) {
+        clearTimeout(joinPillTimerRef.current)
       }
-    }, [authUser])
-  )
+      if (emptyStateTimerRef.current) {
+        clearTimeout(emptyStateTimerRef.current)
+      }
+    }
+  }, [])
 
   // Real-time check-in/check-out updates via Socket.io
   useEffect(() => {
@@ -270,6 +361,12 @@ export default function Match() {
         }
         return [newAttendee, ...prev]
       })
+
+      setNewJoinsCount((count) => count + 1)
+      if (joinPillTimerRef.current) {
+        clearTimeout(joinPillTimerRef.current)
+      }
+      joinPillTimerRef.current = setTimeout(() => setNewJoinsCount(0), 4000)
     }
 
     // Handle when someone checks out of the event
@@ -281,71 +378,57 @@ export default function Match() {
       setAttendees(prev => prev.filter(a => a.user_id !== data.userId))
     }
 
-    const unsubCheckIn = subscribeToEvent(eventInfo.id, handleCheckIn)
-    const unsubCheckOut = subscribeToEvent(eventInfo.id, handleCheckOut)
+    const unsubCheckIn = subscribeToEventCheckIn(eventInfo.id, handleCheckIn)
+    const unsubCheckOut = subscribeToEventCheckOut(eventInfo.id, handleCheckOut)
 
     return () => {
       Logger.debug('match', 'Cleaning up event subscription')
       unsubCheckIn()
       unsubCheckOut()
+      if (joinPillTimerRef.current) {
+        clearTimeout(joinPillTimerRef.current)
+      }
     }
   }, [authUser, eventInfo?.id])
 
-  const loadInitialData = async () => {
-    try {
-      setError(null)
-      if (!authUser) {
-        return
-      }
-
-      // Load active event and attendees
-      await loadActiveEventAndAttendees(authUser.id)
-      await loadMatches(authUser.id)
-    } catch (e) {
-      Logger.error('match', 'Unexpected error during initialization', { error: e })
-      setError('Failed to load')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadMatches = async (userId: string) => {
-    try {
-      // TODO: Add API endpoint for matches/conversations
-      // GET /api/mobile/matches or /api/mobile/conversations
-      // For now, just set empty matches - this feature will be implemented later
-      Logger.debug('match', 'TODO: Load matches via API endpoint')
-      setMatches([])
-    } catch (e) {
-      Logger.error('match', 'Failed to load matches', { error: e })
-      setMatches([])
-    }
-  }
-
-  const loadActiveEventAndAttendees = async (userId: string) => {
+  const loadActiveEventAndAttendees = useCallback(async (userId: string, force = false) => {
+    const loadId = ++attendeeLoadIdRef.current
     try {
       // Use active check-ins endpoint to find current event
-      const activeCheckinsResult = await apiClient.getActiveCheckins()
+      const activeCheckinsResult = await apiClient.getActiveCheckins({ force })
 
       if (!activeCheckinsResult.success || !activeCheckinsResult.data?.checkIns) {
         Logger.error('match', 'Error fetching active check-ins', { error: activeCheckinsResult.error })
-        setEventInfo(null)
-        setAttendees([])
+        // Keep previous stable UI on transient failures to avoid flicker.
         return
       }
 
       const activeUserCheckins = activeCheckinsResult.data.checkIns || []
-      const latestCheckin = activeUserCheckins[0]
-      const activeEventId: string | null = latestCheckin?.eventId || null
-      const activeEventTitle: string | undefined = latestCheckin?.event?.title
+      const sortedCheckins = activeUserCheckins
+        .filter((c: any) => !!extractEventIdFromCheckin(c))
+        .sort((a: any, b: any) => {
+          const aTime = parseTimestamp(a?.checkInTime || a?.check_in_time || a?.createdAt || a?.created_at)
+          const bTime = parseTimestamp(b?.checkInTime || b?.check_in_time || b?.createdAt || b?.created_at)
+          return bTime - aTime
+        })
 
-      if (!activeEventId) {
+      if (sortedCheckins.length === 0) {
+        if (loadId !== attendeeLoadIdRef.current) return
+        if (eventInfoRef.current) {
+          if (emptyStateTimerRef.current) {
+            clearTimeout(emptyStateTimerRef.current)
+          }
+          emptyStateTimerRef.current = setTimeout(() => {
+            // Delay clearing to avoid brief API sync gaps causing UI flicker.
+            setEventInfo(null)
+            setAttendees([])
+          }, 2200)
+          return
+        }
         setEventInfo(null)
         setAttendees([])
         return
       }
-
-      setEventInfo({ id: activeEventId, title: activeEventTitle })
 
       // Get blocked users to filter out
       let blockedIds = new Set<string>()
@@ -356,169 +439,365 @@ export default function Match() {
         Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
       }
 
-      // Get attendees via check-ins API
-      const checkinsResult = await apiClient.getEventCheckins(activeEventId)
+      let selectedEventId: string | null = null
+      let selectedEventTitle: string | undefined
+      let selectedAttendees: AttendeeProfile[] | null = null
 
-      if (!checkinsResult.success || !checkinsResult.data) {
-        Logger.error('match', 'Error fetching event check-ins', { error: checkinsResult.error })
+      for (const checkin of sortedCheckins) {
+        const candidateEventId = extractEventIdFromCheckin(checkin)
+        if (!candidateEventId) continue
+
+        const checkinsResult = await apiClient.getEventCheckins(candidateEventId, { force })
+        if (!checkinsResult.success || !checkinsResult.data) {
+          const err = String(checkinsResult.error || '').toLowerCase()
+          if (err.includes('event not found')) {
+            Logger.warn('match', 'Skipping stale active check-in event', { eventId: candidateEventId })
+            continue
+          }
+          Logger.error('match', 'Error fetching event check-ins', { error: checkinsResult.error, eventId: candidateEventId })
+          if (loadId !== attendeeLoadIdRef.current) return
+          return
+        }
+
+        const payload: any = checkinsResult.data
+        const checkins = Array.isArray(payload)
+          ? payload
+          : (payload.checkIns
+            || payload.checkins
+            || payload.attendees
+            || payload.data
+            || [])
+
+        const activeAttendeeCheckins = checkins.filter((c: any) => {
+          const checkinUserId = c.user_id || c.userId || c.user?.id
+          const status = c.status || 'checked_in'
+          return (
+            checkinUserId &&
+            checkinUserId !== userId &&
+            status === 'checked_in' &&
+            !blockedIds.has(checkinUserId)
+          )
+        })
+
+        const attendeeProfiles: AttendeeProfile[] = activeAttendeeCheckins.map((c: any) => ({
+          user_id: c.user_id || c.userId || c.user?.id,
+          name: c.user?.name || c.name || c.user?.profile?.name,
+          age: c.user?.profile?.age || c.age,
+          bio: c.user?.profile?.bio,
+          interests: c.user?.profile?.interests,
+          profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined) || (c.image ? [c.image] : undefined),
+          last_seen: c.check_in_time || c.checkInTime,
+        }))
+
+        attendeeProfiles.sort((a, b) => {
+          const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
+          const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
+          return tb - ta
+        })
+
+        selectedEventId = candidateEventId
+        selectedEventTitle = checkin?.event?.title
+        selectedAttendees = attendeeProfiles
+        break
+      }
+
+      if (loadId !== attendeeLoadIdRef.current) return
+      if (emptyStateTimerRef.current) {
+        clearTimeout(emptyStateTimerRef.current)
+      }
+      if (!selectedEventId) {
+        setEventInfo(null)
         setAttendees([])
         return
       }
 
-      const payload: any = checkinsResult.data
-      const checkins = Array.isArray(payload) ? payload : (payload.attendees || [])
-      const activeAttendeeCheckins = checkins.filter((c: any) => {
-        const checkinUserId = c.user_id || c.userId || c.user?.id
-        const status = c.status || 'checked_in'
-        return (
-          checkinUserId &&
-          checkinUserId !== userId &&
-          status === 'checked_in' &&
-          !blockedIds.has(checkinUserId)
-        )
-      })
-
-      if (activeAttendeeCheckins.length === 0) {
-        setAttendees([])
-        return
-      }
-
-      // Build attendee profiles from check-in data
-      const attendeeProfiles: AttendeeProfile[] = activeAttendeeCheckins.map((c: any) => ({
-        user_id: c.user_id || c.userId || c.user?.id,
-        name: c.user?.name || c.name || c.user?.profile?.name,
-        age: c.user?.profile?.age || c.age,
-        bio: c.user?.profile?.bio,
-        interests: c.user?.profile?.interests,
-        profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined) || (c.image ? [c.image] : undefined),
-        last_seen: c.check_in_time || c.checkInTime,
-      }))
-
-      attendeeProfiles.sort((a, b) => {
-        const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
-        const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
-        return tb - ta
-      })
-
-      setAttendees(attendeeProfiles)
+      setEventInfo({ id: selectedEventId, title: selectedEventTitle })
+      setAttendees(selectedAttendees || [])
     } catch (e) {
       Logger.error('match', 'Failed to load event attendees', { error: e })
-      setAttendees([])
+      if (loadId !== attendeeLoadIdRef.current) return
+      // Keep prior stable UI to avoid state thrash on transient failures.
     }
-  }
+  }, [])
 
-  const startPrivateConversation = async (candidate: AttendeeProfile) => {
+  const loadInitialData = useCallback(async () => {
     try {
-      // TODO: Add API endpoint for creating private conversations
-      // POST /api/mobile/conversations
-      // For now, just navigate to user profile
-      Alert.alert(
-        'Coming Soon',
-        'Private messaging will be available soon. View their profile instead?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'View Profile', onPress: () => router.push({ pathname: '/user/[id]', params: { id: candidate.user_id } as any }) }
-        ]
-      )
-    } catch (error) {
-      console.error('Error starting conversation:', error)
-      Alert.alert('Error', 'Something went wrong')
+      if (!authUser) {
+        return
+      }
+
+      const profileResult = await apiClient.getProfile(authUser.id)
+      if (profileResult.success && profileResult.data?.profile) {
+        const interests = Array.isArray(profileResult.data.profile.interests)
+          ? profileResult.data.profile.interests
+          : []
+        setCurrentUserInterests(interests.map((i: string) => String(i).toLowerCase()))
+      } else {
+        setCurrentUserInterests([])
+      }
+
+      // Load active event and attendees
+      await loadActiveEventAndAttendees(authUser.id, true)
+    } catch (e) {
+      Logger.error('match', 'Unexpected error during initialization', { error: e })
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [authUser, loadActiveEventAndAttendees])
 
-  // Netflix-style attendee tile
-  const renderAttendeeTile = (attendee: AttendeeProfile) => {
-    const rawUrl = attendee.profile_photos && attendee.profile_photos.length > 0
-      ? attendee.profile_photos[0]
-      : ''
-    const optimized = rawUrl
-      ? getOptimizedImageUrl(rawUrl, { width: TILE_WIDTH, height: TILE_HEIGHT, resize: 'cover', quality: 60, format: 'webp' })
-      : undefined
+  useEffect(() => {
+    if (authUser) {
+      loadInitialData()
+    }
+  }, [authUser, loadInitialData])
 
-    return (
-      <View key={attendee.user_id} style={styles.tileWrapper}>
-        <TouchableOpacity
-          style={styles.tile}
-          activeOpacity={0.85}
-          onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
-        >
-          {rawUrl ? (
-            <OptimizedImage
-              source={rawUrl as any}
-              style={styles.tileImage as any}
-              contentFit="cover"
-              width={TILE_WIDTH}
-              height={TILE_HEIGHT}
-              quality={60}
-            />
-          ) : (
-            <Image source={placeholderImg} style={styles.tileImage} contentFit="cover" />
-          )}
-          <View style={styles.tileGradient} />
-          <View style={styles.tileInfo}>
-            <Text style={styles.tileName} numberOfLines={1}>
-              {attendee.name}{attendee.age ? `, ${attendee.age}` : ''}
-            </Text>
-            {attendee.bio ? (
-              <Text style={styles.tileBio} numberOfLines={1}>{attendee.bio}</Text>
-            ) : null}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tileSafety}
-          onPress={() =>
-            showUserSafetyActions(attendee.name || 'User', attendee.user_id, () => {
-              setAttendees(prev => prev.filter(a => a.user_id !== attendee.user_id))
-            })
-          }
-        >
-          <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    )
-  }
+  const onPullToRefresh = useCallback(async () => {
+    if (!authUser) return
+    void Haptics.selectionAsync()
+    setRefreshing(true)
+    try {
+      await loadActiveEventAndAttendees(authUser.id, true)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [authUser, loadActiveEventAndAttendees])
 
-  const renderEmptyState = () => (
+  const socketStatus = useLiveSync({
+    enabled: !!authUser,
+    onSync: async () => {
+      if (!authUser) return
+      await loadActiveEventAndAttendees(authUser.id, true)
+    },
+    domains: ['match'],
+    connectedIntervalMs: 30000,
+    disconnectedIntervalMs: 12000,
+    maxDisconnectedIntervalMs: 45000,
+  })
+
+  useEffect(() => {
+    let mounted = true
+    const resolveRoom = async () => {
+      if (!eventInfo?.id) {
+        if (!mounted) return
+        setEventRoomStatus('idle')
+        setEventRoomId(null)
+        return
+      }
+      setEventRoomStatus('checking')
+      try {
+        const result = await apiClient.getEventChat(eventInfo.id)
+        if (!mounted) return
+        if (result.success && result.data?.chatGroupId) {
+          setEventRoomStatus('available')
+          setEventRoomId(String(result.data.chatGroupId))
+        } else {
+          setEventRoomStatus('unavailable')
+          setEventRoomId(null)
+        }
+      } catch {
+        if (!mounted) return
+        setEventRoomStatus('unavailable')
+        setEventRoomId(null)
+      }
+    }
+    resolveRoom()
+    return () => {
+      mounted = false
+    }
+  }, [eventInfo?.id])
+
+  const openEventRoom = useCallback(async () => {
+    if (!eventInfo?.id) return
+    if (eventRoomStatus !== 'available') return
+    void Haptics.selectionAsync()
+    if (eventRoomId) {
+      router.push({
+        pathname: '/chat/[id]',
+        params: {
+          id: eventRoomId,
+          roomName: eventInfo.title || 'Event Chat',
+          eventTitle: eventInfo.title || 'Event',
+        } as any,
+      })
+      return
+    }
+    if (openRoomPending) return
+    setOpenRoomPending(true)
+    try {
+      const result = await apiClient.getEventChat(eventInfo.id)
+      if (result.success && result.data?.chatGroupId) {
+        setEventRoomStatus('available')
+        setEventRoomId(String(result.data.chatGroupId))
+        router.push({
+          pathname: '/chat/[id]',
+          params: {
+            id: String(result.data.chatGroupId),
+            roomName: result.data.chatGroupName || eventInfo.title || 'Event Chat',
+            eventTitle: eventInfo.title || 'Event',
+          } as any,
+        })
+      } else {
+        setEventRoomStatus('unavailable')
+        setEventRoomId(null)
+      }
+    } catch {
+      setEventRoomStatus('unavailable')
+      setEventRoomId(null)
+    } finally {
+      setOpenRoomPending(false)
+    }
+  }, [eventInfo?.id, eventInfo?.title, eventRoomId, eventRoomStatus, openRoomPending])
+
+  const openUserProfile = useCallback((userId: string) => {
+    void Haptics.selectionAsync()
+    router.push({ pathname: '/user/[id]', params: { id: userId } as any })
+  }, [])
+
+  const onBrowseEvents = useCallback(() => {
+    void Haptics.selectionAsync()
+    router.push('/(tabs)/events' as any)
+  }, [])
+
+  const removeAttendeeFromFeed = useCallback((userId: string) => {
+    setAttendees((prev) => prev.filter((a) => a.user_id !== userId))
+  }, [])
+
+  const onSafetyPress = useCallback(
+    (userName: string, userId: string) => {
+      showUserSafetyActions(userName || 'User', userId, () => {
+        removeAttendeeFromFeed(userId)
+      })
+    },
+    [removeAttendeeFromFeed]
+  )
+
+  const onHeaderRefreshPress = useCallback(async () => {
+    if (!authUser) return
+    void Haptics.selectionAsync()
+    await loadActiveEventAndAttendees(authUser.id, true)
+  }, [authUser, loadActiveEventAndAttendees])
+
+  const recommendedEntries = useMemo(() => {
+    const sharedCount = (attendee: AttendeeProfile): number => {
+      const attendeeInterests = Array.isArray(attendee.interests)
+        ? attendee.interests.map((i) => String(i).toLowerCase())
+        : []
+      return attendeeInterests.filter((i) => currentUserInterests.includes(i)).length
+    }
+
+    const score = (attendee: AttendeeProfile): number => {
+      let points = 0
+      const shared = sharedCount(attendee)
+      points += shared * 12
+      if (attendee.bio && attendee.bio.trim().length > 0) points += 6
+      if (attendee.profile_photos && attendee.profile_photos.length > 0) points += 8
+      points += Math.max(0, 30 - Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60 * 30)))
+      return points
+    }
+
+    return attendees
+      .slice()
+      .sort((a, b) => score(b) - score(a))
+      .slice(0, 5)
+      .map((attendee): RecommendedEntry => {
+        const shared = sharedCount(attendee)
+        const recentMinutes = Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60))
+        const reasonLabel = shared > 0
+          ? `${shared} shared interest${shared > 1 ? 's' : ''}`
+          : (recentMinutes <= 30 ? 'Active now' : 'Popular nearby')
+        return { attendee, reasonLabel }
+      })
+  }, [attendees, currentUserInterests])
+
+  const recommendedIds = useMemo(
+    () => new Set(recommendedEntries.map((entry) => entry.attendee.user_id)),
+    [recommendedEntries]
+  )
+
+  const alsoHereAttendees = useMemo(
+    () => attendees.filter((a) => !recommendedIds.has(a.user_id)).slice(0, 12),
+    [attendees, recommendedIds]
+  )
+
+  const recommendedKeyExtractor = useCallback((entry: RecommendedEntry) => `similar_${entry.attendee.user_id}`, [])
+  const alsoHereKeyExtractor = useCallback((attendee: AttendeeProfile) => `grid_${attendee.user_id}`, [])
+
+  const renderRecommendedItem = useCallback(
+    ({ item, index }: { item: RecommendedEntry; index: number }) => (
+      <Animated.View style={getLiftStyle(index)}>
+        <SimilarCard
+          attendee={item.attendee}
+          reasonLabel={item.reasonLabel}
+          onSafetyPress={() => onSafetyPress(item.attendee.name || 'User', item.attendee.user_id)}
+          onOpenProfile={() => openUserProfile(item.attendee.user_id)}
+        />
+      </Animated.View>
+    ),
+    [getLiftStyle, onSafetyPress, openUserProfile]
+  )
+
+  const renderAlsoHereItem = useCallback(
+    ({ item: attendee, index }: { item: AttendeeProfile; index: number }) => (
+      <StartupItem
+        attendee={attendee}
+        statusLabel="Here now"
+        onSafetyPress={() => onSafetyPress(attendee.name || 'User', attendee.user_id)}
+        onOpenProfile={() => openUserProfile(attendee.user_id)}
+        isRightColumn={(index + 1) % 2 === 0}
+      />
+    ),
+    [onSafetyPress, openUserProfile]
+  )
+
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyGlyph} />
-      <Text style={styles.emptyTitle}>Meet People at Events</Text>
+      <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
       <Text style={styles.emptyText}>
-        Check in to an event to see other attendees and start a conversation.
+        Check in to an event to unlock recommendations and nearby attendees.
       </Text>
       <TouchableOpacity 
         style={styles.eventsButton}
-        onPress={() => router.push('/(tabs)/events' as any)}
+        onPress={onBrowseEvents}
       >
         <Text style={styles.eventsButtonText}>Browse Events</Text>
       </TouchableOpacity>
     </View>
-  )
+  ), [onBrowseEvents])
 
   const isLoading = loading
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollBody}
         onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onPullToRefresh}
+            tintColor="#FFFFFF"
+            progressBackgroundColor={APP_COLORS.backgroundElevated}
+          />
+        }
       >
         <View style={[styles.headerGradient, { paddingTop: insets.top }]}>
           <LinearGradient
-            colors={['#480D37', '#000000']}
+            colors={['#111214', APP_COLORS.backgroundBase]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
-              <Text style={styles.headerTitleText}>The Grid</Text>
+              <Text style={styles.headerTitleText}>Blend&apos;n Match</Text>
             </View>
             <TouchableOpacity
               style={styles.headerRight}
-              onPress={() => authUser && loadActiveEventAndAttendees(authUser.id)}
+              onPress={onHeaderRefreshPress}
               accessibilityRole="button"
               accessibilityLabel="Refresh"
             >
@@ -527,24 +806,52 @@ export default function Match() {
           </View>
         </View>
 
-        <View style={styles.liveRow}>
-          <View style={styles.liveTextWrap}>
-            <View style={styles.liveLabelRow}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveLabel}>Live at</Text>
-            </View>
-            <Text style={styles.liveTitle} numberOfLines={1}>
-              {eventInfo?.title || 'Your Event'}
+        <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
+        {newJoinsCount > 0 && !!eventInfo && (
+          <View style={styles.newJoinsPill}>
+            <View style={styles.newJoinsDot} />
+            <Text style={styles.newJoinsText}>
+              {newJoinsCount} new {newJoinsCount === 1 ? 'person' : 'people'} joined
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.chatButton}
-            onPress={() => router.push('/(tabs)/chat' as any)}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.chatButtonText}>Event Room</Text>
-          </TouchableOpacity>
-        </View>
+        )}
+
+        {!!eventInfo && (
+          <View style={styles.liveRow}>
+            <View style={styles.liveTextWrap}>
+              <View style={styles.liveLabelRow}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveLabel}>Live at</Text>
+              </View>
+              <Text style={styles.liveTitle} numberOfLines={1}>
+                {eventInfo.title || 'Current Event'}
+              </Text>
+              <View style={styles.liveMetaRow}>
+                <View style={styles.liveCountPill}>
+                  <Text style={styles.liveCountText}>
+                    {attendees.length} {attendees.length === 1 ? 'person' : 'people'} here
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.chatButton, (openRoomPending || eventRoomStatus !== 'available') && styles.chatButtonDisabled]}
+              onPress={openEventRoom}
+              activeOpacity={0.9}
+              disabled={openRoomPending || eventRoomStatus !== 'available'}
+            >
+              <Text style={styles.chatButtonText}>
+                {openRoomPending
+                  ? 'Opening...'
+                  : eventRoomStatus === 'checking'
+                    ? 'Loading Room...'
+                    : eventRoomStatus === 'available'
+                      ? 'Event Room'
+                      : 'Room Unavailable'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {isLoading ? (
           <>
@@ -604,26 +911,53 @@ export default function Match() {
             ) : attendees.length === 0 ? (
         <View style={styles.noMoreContainer}>
             <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
-            <Text style={styles.noMoreText}>No other active attendees yet. Check back soon.</Text>
+            <Text style={styles.noMoreText}>No other active attendees yet. We&apos;ll refresh this automatically.</Text>
+            <TouchableOpacity
+              style={[styles.eventsButton, (openRoomPending || eventRoomStatus !== 'available') && styles.eventsButtonDisabled]}
+              onPress={openEventRoom}
+              disabled={openRoomPending || eventRoomStatus !== 'available'}
+            >
+              <Text style={styles.eventsButtonText}>
+                {openRoomPending
+                  ? 'Opening...'
+                  : eventRoomStatus === 'checking'
+                    ? 'Loading Room...'
+                    : eventRoomStatus === 'available'
+                      ? 'Open Event Room'
+                      : 'Room Unavailable'}
+              </Text>
+            </TouchableOpacity>
+            {eventRoomStatus !== 'available' && (
+              <TouchableOpacity
+                style={styles.secondaryGhostButton}
+                onPress={onBrowseEvents}
+              >
+                <Text style={styles.secondaryGhostText}>Browse Events</Text>
+              </TouchableOpacity>
+            )}
           </View>
             ) : (
               <>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Recommended</Text>
                   <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{Math.min(attendees.length, 12)}</Text>
+                    <Text style={styles.sectionCountText}>{recommendedEntries.length}</Text>
                   </View>
                 </View>
                 <View style={styles.sectionDivider} />
                 <Animated.FlatList
-                  data={attendees.slice(0, 5)}
-                  keyExtractor={(a) => `similar_${a.user_id}`}
+                  data={recommendedEntries}
+                  keyExtractor={recommendedKeyExtractor}
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.similarList}
                   snapToInterval={SIMILAR_CARD_WIDTH + 16}
                   decelerationRate="fast"
                   getItemLayout={getSimilarItemLayout}
+                  removeClippedSubviews
+                  initialNumToRender={3}
+                  maxToRenderPerBatch={4}
+                  windowSize={5}
                   onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { x: similarScrollX } } }],
                     {
@@ -639,14 +973,7 @@ export default function Match() {
                     }
                   )}
                   scrollEventThrottle={16}
-                  renderItem={({ item, index }) => (
-                    <Animated.View style={getLiftStyle(index)}>
-                      <SimilarCard
-                        attendee={item}
-                        onPress={() => router.push({ pathname: '/user/[id]', params: { id: item.user_id } as any })}
-                      />
-                    </Animated.View>
-                  )}
+                  renderItem={renderRecommendedItem}
                 />
                 <View style={styles.dotsRow}>
                   <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
@@ -657,20 +984,23 @@ export default function Match() {
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Also Here</Text>
                   <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{Math.min(attendees.length, 12)}</Text>
+                    <Text style={styles.sectionCountText}>{alsoHereAttendees.length}</Text>
                   </View>
                 </View>
                 <View style={styles.sectionDivider} />
-                <View style={styles.gridWrap}>
-                  {attendees.slice(0, 12).map((attendee, index) => (
-                    <StartupItem
-                      key={`grid_${attendee.user_id}`}
-                      attendee={attendee}
-                      isRightColumn={(index + 1) % 2 === 0}
-                      onPress={() => router.push({ pathname: '/user/[id]', params: { id: attendee.user_id } as any })}
-                    />
-                  ))}
-                </View>
+                <FlatList
+                  data={alsoHereAttendees}
+                  keyExtractor={alsoHereKeyExtractor}
+                  numColumns={2}
+                  scrollEnabled={false}
+                  removeClippedSubviews
+                  windowSize={5}
+                  initialNumToRender={8}
+                  maxToRenderPerBatch={6}
+                  contentContainerStyle={styles.gridListContent}
+                  columnWrapperStyle={styles.gridColumn}
+                  renderItem={renderAlsoHereItem}
+                />
               </>
             )}
           </Animated.View>
@@ -683,7 +1013,7 @@ export default function Match() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   headerGradient: {
   },
@@ -700,39 +1030,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitleText: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    color: APP_COLORS.textPrimary,
+    letterSpacing: 0.1,
   },
   headerRight: {
     width: 40,
     height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  header: {
-    padding: 20,
-    paddingTop: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-  refreshBtn: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    padding: 8,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
   },
   scrollBody: {
     paddingBottom: 40,
@@ -740,18 +1051,42 @@ const styles = StyleSheet.create({
   contentReveal: {
     paddingBottom: 4,
   },
-  heroGradient: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  
   liveRow: {
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 12,
     paddingBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  socketBanner: {
+    marginHorizontal: 18,
+    marginTop: 10,
+  },
+  newJoinsPill: {
+    marginHorizontal: 18,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(52,199,89,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(52,199,89,0.3)',
+  },
+  newJoinsDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+    backgroundColor: '#34C759',
+  },
+  newJoinsText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   liveTextWrap: {
     flex: 1,
@@ -770,14 +1105,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#34C759',
   },
   liveLabel: {
-    color: 'rgba(255,255,255,0.6)',
+    color: APP_COLORS.textTertiary,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
   },
   liveTitle: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 18,
+    fontWeight: '700',
+  },
+  liveMetaRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveCountPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
+  },
+  liveCountText: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 11,
     fontWeight: '700',
   },
   chatButton: {
@@ -785,39 +1138,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: '#2C0C22',
+    borderRadius: 14,
+    backgroundColor: APP_COLORS.backgroundElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: APP_COLORS.separator,
   },
   chatButtonText: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  carouselContainer: {
-    paddingTop: 16,
-  },
-  matchesContainer: {
-    paddingTop: 8,
+  chatButtonDisabled: {
+    opacity: 0.55,
   },
   sectionTitle: {
-    color: '#fff',
-    fontSize: 22,
+    color: APP_COLORS.textPrimary,
+    fontSize: 20,
     fontWeight: '700',
-    marginTop: 18,
-    marginBottom: 10,
-    letterSpacing: 0.2,
+    marginTop: 16,
+    marginBottom: 9,
+    letterSpacing: 0.1,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -829,44 +1169,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: APP_COLORS.backgroundElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: APP_COLORS.separator,
   },
   sectionCountText: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },
   sectionDivider: {
     height: 1,
     marginHorizontal: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: APP_COLORS.separator,
     marginBottom: 6,
-  },
-  rowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  rowTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#222',
-  },
-  rowCount: {
-    fontSize: 14,
-    color: '#888',
-  },
-  carousel: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  matchesScroll: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
   },
   similarList: {
     paddingHorizontal: 18,
@@ -882,12 +1198,12 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: APP_COLORS.backgroundElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: APP_COLORS.separator,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 6 },
   },
   similarImage: {
@@ -907,24 +1223,36 @@ const styles = StyleSheet.create({
     right: 14,
     bottom: 12,
   },
+  reasonPill: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: 'rgba(10,132,255,0.2)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  reasonPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   similarName: {
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 2,
-  },
-  similarTime: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
   },
   timeChip: {
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(28,28,30,0.74)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: APP_COLORS.separator,
   },
   timeChipCompact: {
     paddingHorizontal: 7,
@@ -934,6 +1262,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '600',
+  },
+  cardSafety: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,28,30,0.72)',
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
   },
   dotsRow: {
     flexDirection: 'row',
@@ -946,14 +1287,14 @@ const styles = StyleSheet.create({
     width: Math.round(width * (60 / BASE_FRAME_WIDTH)),
     height: 6,
     borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(235,235,245,0.34)',
     marginHorizontal: 7,
   },
   dotSmall: {
     width: Math.round(width * (7 / BASE_FRAME_WIDTH)),
     height: 6,
     borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(235,235,245,0.34)',
     marginHorizontal: 7,
   },
   dotActive: {
@@ -964,16 +1305,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
+  gridListContent: {
+    paddingHorizontal: CONTENT_SIDE_PADDING,
+  },
+  gridColumn: {
+    justifyContent: 'space-between',
+  },
   gridItem: {
     borderRadius: 24,
     overflow: 'hidden',
     marginBottom: GRID_GAP,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: APP_COLORS.backgroundElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: APP_COLORS.separator,
     shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
+    shadowOpacity: 0.14,
+    shadowRadius: 7,
     shadowOffset: { width: 0, height: 4 },
   },
   gridTouch: {
@@ -996,103 +1343,40 @@ const styles = StyleSheet.create({
     right: 8,
     bottom: 8,
   },
+  gridStatusPill: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(10,132,255,0.22)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  gridStatusPillText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
   gridName: {
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 2,
   },
-  gridTime: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
-  },
-  matchItem: {
-    width: 76,
-    marginRight: 12,
-    alignItems: 'center',
-  },
-  matchAvatarWrapper: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+  gridSafety: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff6cc',
-  },
-  matchAvatarRing: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    padding: 3,
-    backgroundColor: '#FFCC00',
-  },
-  matchAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 33,
-  },
-  matchName: {
-    marginTop: 6,
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '600',
-    maxWidth: 76,
-    textAlign: 'center',
-  },
-  tileWrapper: {
-    width: TILE_WIDTH,
-    height: TILE_HEIGHT,
-    marginRight: 12,
-  },
-  tile: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: 'rgba(28,28,30,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  tileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  tileGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '50%',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  tileInfo: {
-    position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 10,
-  },
-  tileName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  tileBio: {
-    color: '#f0f0f0',
-    fontSize: 12,
-  },
-  tileSafety: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    borderRadius: 12,
+    borderColor: APP_COLORS.separator,
   },
   noMoreContainer: {
     alignItems: 'center',
@@ -1102,13 +1386,13 @@ const styles = StyleSheet.create({
   noMoreTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     marginBottom: 12,
     letterSpacing: 0.2,
   },
   noMoreText: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.75)',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 30,
@@ -1123,37 +1407,54 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: APP_COLORS.backgroundElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: APP_COLORS.separator,
     marginBottom: 18,
   },
   emptyTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 12,
     letterSpacing: 0.2,
   },
   emptyText: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.75)',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 40,
   },
   eventsButton: {
-    backgroundColor: '#2C0C22',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  eventsButtonDisabled: {
+    opacity: 0.58,
   },
   eventsButtonText: {
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryGhostButton: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
+    backgroundColor: APP_COLORS.backgroundElevated,
+  },
+  secondaryGhostText: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 14,
     fontWeight: '600',
   },
 }) 

@@ -22,13 +22,14 @@ type VariantConfig = {
 
 // Base tokens derived from the provided spec.
 export const TYPOGRAPHY_TOKENS: Record<TypographyVariant, VariantConfig> = {
-  h1: { fontSize: 28, lineHeight: 34, fontWeight: '700' },
-  h2: { fontSize: 22, lineHeight: 28, fontWeight: '600' },
-  h3: { fontSize: 18, lineHeight: 24, fontWeight: '500' },
-  body1: { fontSize: 16, lineHeight: 24, fontWeight: '400' },
-  body2: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: '400', letterSpacing: 0.24 }, // tracking +2%
-  button: { fontSize: 16, lineHeight: 20, fontWeight: '500' },
+  // Close to iOS San Francisco text scale for a native feel.
+  h1: { fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: 0.37 },
+  h2: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: 0.36 },
+  h3: { fontSize: 20, lineHeight: 25, fontWeight: '600', letterSpacing: 0.38 },
+  body1: { fontSize: 17, lineHeight: 22, fontWeight: '400', letterSpacing: -0.41 },
+  body2: { fontSize: 15, lineHeight: 20, fontWeight: '400', letterSpacing: -0.24 },
+  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400', letterSpacing: -0.08 },
+  button: { fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: -0.41 },
 }
 
 export type TypographyOptions = {
@@ -73,5 +74,4 @@ export function getTypographyStyle(
 
   return style
 }
-
 

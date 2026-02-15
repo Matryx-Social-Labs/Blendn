@@ -17,6 +17,7 @@ import {
 } from 'react-native'
 import { ChatHeader, SegmentedControl } from './AppHeader'
 import Typography from './Typography'
+import { APP_COLORS } from '../lib/theme'
 
 interface Message {
   id: string
@@ -206,7 +207,7 @@ export default function ModernChat({
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={styles.gradientBackground}

@@ -2,21 +2,23 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Dimensions, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
+import { APP_COLORS } from '../../lib/theme'
 const placeholderImg = require('../../assets/images/icon.png')
 
-// Screen metrics used in styles (must be module-level to avoid runtime ReferenceError)
-const WINDOW_WIDTH = Dimensions.get('window').width
-const PHOTO_HEIGHT = Math.min(420, Math.floor(WINDOW_WIDTH * 1.1))
+const { width: WINDOW_WIDTH } = Dimensions.get('window')
+const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
+const INTERSTITIAL_HEIGHT = Math.round(WINDOW_WIDTH * 1.15)
+const CARD_BORDER_RADIUS = 16
+const PHOTO_BORDER_RADIUS = 20
 const PROFILE_CACHE_TTL = 2 * 60 * 1000
 
 interface UserProfileViewModel {
@@ -25,27 +27,18 @@ interface UserProfileViewModel {
   bio?: string
   age?: number
   location?: string
+  occupation?: string
+  education?: string
   interests?: string[]
-  profile_photos?: string[]
   photos?: string[]
   goals?: string[]
   looking_for?: string[]
-}
-
-const computeProfileStrength = (p: UserProfileViewModel | null): number => {
-  if (!p) return 0
-  const checks = [
-    !!p.name,
-    !!p.age,
-    !!p.location,
-    !!(p.profile_photos && p.profile_photos.length > 0),
-    !!p.bio,
-    !!(p.interests && p.interests.length > 0),
-    !!(p.goals && p.goals.length > 0),
-    !!(p.looking_for && p.looking_for.length > 0),
-  ]
-  const score = checks.reduce((acc, v) => acc + (v ? 1 : 0), 0)
-  return Math.max(10, Math.min(100, Math.round((score / checks.length) * 100)))
+  stats?: {
+    eventsAttended: number
+    eventsFavorited: number
+    eventsOrganized: number
+  }
+  memberSince?: string
 }
 
 export default function Profile() {
@@ -53,82 +46,35 @@ export default function Profile() {
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { setScrollProgress } = useGradientOverlay()
   const lastBackgroundRefreshRef = React.useRef(0)
+
   const photoList = useMemo(() => {
-    const raw = (profile?.profile_photos && profile.profile_photos.length > 0)
-      ? profile.profile_photos
-      : (profile?.photos || [])
+    const raw = profile?.photos || []
     return raw.filter((url): url is string => !!url && url.trim() !== '')
-  }, [profile?.profile_photos, profile?.photos])
-  const hasPhotos = photoList.length > 0
-  const profileStrength = useMemo(() => computeProfileStrength(profile), [profile])
-  const getPhotoStripLayout = useCallback(
-    (_: ArrayLike<string> | null | undefined, index: number) => ({
-      length: WINDOW_WIDTH,
-      offset: WINDOW_WIDTH * index,
-      index,
-    }),
-    []
-  )
+  }, [profile?.photos])
 
-  // Memoize photo collage layout calculations to prevent re-computation on every render
-  const photoCollage = useMemo(() => {
-    if (photoList.length === 0) return null
+  // Split photos: hero = first, interstitials = [1] and [2], gallery = [3+]
+  const heroPhoto = photoList[0] || null
+  const interstitialPhoto1 = photoList[1] || null
+  const interstitialPhoto2 = photoList[2] || null
+  const galleryPhotos = photoList.slice(3)
 
-    const contentWidthDesign = 460
-    const designWidth = 393
-    const containerWidth = WINDOW_WIDTH - 24
-    const scale = containerWidth / designWidth
-    const S = (n: number) => Math.round(n * scale)
+  const hasDetails = !!(profile?.age || profile?.occupation || profile?.education || profile?.location)
+  const hasStats = !!(profile?.stats && (profile.stats.eventsAttended > 0 || profile.stats.eventsFavorited > 0 || profile.stats.eventsOrganized > 0))
 
-    const items = [
-      { x: 0, y: 0, w: 135, h: 141, i: 0 },
-      { x: 0, y: 141, w: 135, h: 104, i: 1 },
-      { x: 143, y: 0, w: 184, h: 64, i: 2 },
-      { x: 143, y: 71, w: 222, h: 174, i: 3 },
-      { x: 335, y: 0, w: 125, h: 64, i: 4 },
-      { x: 374, y: 71, w: 86, h: 83, i: 5 },
-      { x: 374, y: 162, w: 86, h: 83, i: 6 },
-    ]
+  // Profile completion: check if bio, interests, or photos are incomplete
+  const isProfileIncomplete = useMemo(() => {
+    if (!profile) return false
+    const noBio = !profile.bio || profile.bio.trim() === ''
+    const noInterests = !profile.interests || profile.interests.length === 0
+    const noPhotos = photoList.length === 0
+    return noBio || noInterests || noPhotos
+  }, [profile, photoList])
 
-    const get = (idx: number) => photoList[idx % photoList.length]
-
-    return (
-      <View style={styles.section}>
-        <Typography variant="h3" style={styles.sectionTitle}>Photos & Videos</Typography>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ width: containerWidth, height: S(245) }}
-          contentContainerStyle={{ width: S(contentWidthDesign), height: S(245) }}
-          data={[0]}
-          keyExtractor={(item) => `collage-${item}`}
-          getItemLayout={() => ({
-            length: S(contentWidthDesign),
-            offset: 0,
-            index: 0,
-          })}
-          renderItem={() => (
-            <View style={{ width: S(contentWidthDesign), height: S(245) }}>
-              {items.map((it, idx) => (
-                <View key={`cv_${idx}`} style={{ position: 'absolute', left: S(it.x), top: S(it.y), width: S(it.w), height: S(it.h), borderRadius: 16, overflow: 'hidden', backgroundColor: '#1f0b1e' }}>
-                  <OptimizedImage
-                    source={get(idx) as any}
-                    style={{ width: '100%', height: '100%' } as any}
-                    contentFit="cover"
-                    width={S(it.w)}
-                    height={S(it.h)}
-                    quality={60}
-                  />
-                </View>
-              ))}
-            </View>
-          )}
-        />
-      </View>
-    )
-  }, [photoList])
+  const getOptimized = (uri: string, w: number, h: number) => {
+    const optimized = getOptimizedImageUrl(uri, { width: w, height: h, resize: 'cover', quality: 70 })
+    return optimized || uri
+  }
 
   const getUserAndProfile = useCallback(async (force = false) => {
     if (!user) return
@@ -139,7 +85,6 @@ export default function Profile() {
         if (cached) {
           setProfile(cached)
           setLoading(false)
-          // Background refresh for stale-while-revalidate behavior.
           setTimeout(() => {
             const now = Date.now()
             if (user?.id && now - lastBackgroundRefreshRef.current > 15_000) {
@@ -151,11 +96,11 @@ export default function Profile() {
         }
       }
 
-      console.log('[PROFILE] Loading profile for user:', user.id);
+      console.log('[PROFILE] Loading profile for user:', user.id)
       setLoading(true)
       setError(null)
 
-      const result = await apiClient.getProfile(user.id)
+      const result = await apiClient.getPublicProfile(user.id)
 
       if (!result.success || !result.data) {
         console.error('[PROFILE] Error fetching profile:', result.error)
@@ -164,20 +109,26 @@ export default function Profile() {
       }
 
       const data = result.data
-      const profileData = data.profile || {}
+      const photos = data.photos || data.profile_photos || []
+      const interests = Array.isArray(data.interests)
+        ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
+            .filter((n: string) => n)
+        : []
 
       const viewModel: UserProfileViewModel = {
-        id: data.id,
-        name: data.name ?? profileData.name ?? undefined,
-        age: profileData.age ?? undefined,
-        location: profileData.location ?? undefined,
-        bio: profileData.bio ?? undefined,
-        interests: profileData.interests ?? undefined,
-        profile_photos: (profileData.profile_photos && profileData.profile_photos.length > 0)
-          ? profileData.profile_photos
-          : (profileData.photos && profileData.photos.length > 0 ? profileData.photos : undefined),
-        goals: profileData.goals ?? undefined,
-        looking_for: profileData.looking_for ?? undefined,
+        id: data.id || data.user_id || user.id,
+        name: data.name || data.display_name,
+        age: data.age,
+        bio: data.bio,
+        location: data.location,
+        occupation: data.occupation,
+        education: data.education,
+        interests,
+        photos,
+        goals: data.goals,
+        looking_for: data.looking_for,
+        stats: data.stats,
+        memberSince: data.memberSince,
       }
 
       console.log('[PROFILE] Profile loaded successfully')
@@ -198,82 +149,352 @@ export default function Profile() {
     }
   }, [user, authLoading, getUserAndProfile])
 
-  const handleSignOut = useCallback(async () => {
-    try {
-      console.log('[PROFILE] Signing out...')
-      const result = await apiClient.signOut()
-      if (!result.success) {
-        console.error('[PROFILE] Sign out error:', result.error)
-        Alert.alert('Error', 'Failed to sign out')
-      } else {
-        console.log('[PROFILE] Signed out successfully')
-        // Central router handles navigation
-      }
-    } catch (error) {
-      console.error('[PROFILE] Sign out error:', error)
-      Alert.alert('Error', 'Failed to sign out')
-    }
-  }, [])
-
-  const handleScroll = useCallback(
-    (e: any) => {
-      setScrollProgress(e.nativeEvent.contentOffset.y, 320)
-    },
-    [setScrollProgress]
+  const renderSkeleton = () => (
+    <>
+      {/* Hero skeleton */}
+      <SkeletonBlock width={WINDOW_WIDTH} height={HERO_HEIGHT} borderRadius={0} />
+      {/* Quick actions skeleton */}
+      <View style={styles.quickActionsRow}>
+        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
+        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
+      </View>
+      {/* Details card skeleton */}
+      <View style={styles.cardContainer}>
+        <View style={styles.card}>
+          <SkeletonLine width={'60%'} style={{ marginBottom: 12 }} />
+          <SkeletonLine width={'40%'} style={{ marginBottom: 8 }} />
+          <SkeletonLine width={'50%'} style={{ marginBottom: 8 }} />
+          <SkeletonLine width={'35%'} />
+        </View>
+      </View>
+      {/* Interstitial skeleton */}
+      <View style={styles.cardContainer}>
+        <SkeletonBlock width={WINDOW_WIDTH - 32} height={INTERSTITIAL_HEIGHT * 0.5} borderRadius={PHOTO_BORDER_RADIUS} />
+      </View>
+      {/* About card skeleton */}
+      <View style={styles.cardContainer}>
+        <View style={styles.card}>
+          <SkeletonLine width={'25%'} style={{ marginBottom: 10 }} />
+          <SkeletonLine width={'90%'} style={{ marginBottom: 6 }} />
+          <SkeletonLine width={'70%'} />
+        </View>
+      </View>
+      {/* Interests card skeleton */}
+      <View style={styles.cardContainer}>
+        <View style={styles.card}>
+          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
+          <View style={styles.tagsRow}>
+            {[...Array(4)].map((_, i) => (
+              <SkeletonBlock key={`skt_${i}`} width={78} height={32} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
+            ))}
+          </View>
+        </View>
+      </View>
+      {/* Stats card skeleton */}
+      <View style={styles.cardContainer}>
+        <View style={styles.card}>
+          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
+          <View style={styles.statsRow}>
+            {[...Array(3)].map((_, i) => (
+              <View key={`sks_${i}`} style={styles.statItem}>
+                <SkeletonBlock width={24} height={24} borderRadius={12} />
+                <SkeletonBlock width={30} height={20} borderRadius={4} />
+                <SkeletonBlock width={50} height={12} borderRadius={4} />
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </>
   )
 
-  // Show loading while auth is loading
+  const renderContent = () => (
+    <>
+      {/* Hero Photo */}
+      <View style={styles.heroContainer}>
+        {heroPhoto ? (
+          <OptimizedImage
+            source={getOptimized(heroPhoto, WINDOW_WIDTH, HERO_HEIGHT) as any}
+            style={styles.heroImage as any}
+            contentFit="cover"
+            width={WINDOW_WIDTH}
+            height={HERO_HEIGHT}
+            quality={70}
+          />
+        ) : (
+          <View style={styles.heroPlaceholder}>
+            <OptimizedImage
+              source={placeholderImg as any}
+              style={styles.heroImage as any}
+              contentFit="cover"
+              width={WINDOW_WIDTH}
+              height={HERO_HEIGHT}
+              quality={60}
+            />
+            <View style={styles.heroPlaceholderOverlay}>
+              <Typography variant="h3" style={styles.heroPlaceholderTitle}>Add your first photo</Typography>
+              <Typography variant="body2" style={styles.heroPlaceholderSubtitle}>Profiles with photos get more matches</Typography>
+              <TouchableOpacity
+                onPress={() => router.push('/edit-profile')}
+                style={styles.heroPlaceholderCta}
+                accessibilityRole="button"
+                accessibilityLabel="Add profile photo"
+              >
+                <Typography variant="button" style={styles.heroPlaceholderCtaText}>Add Photo</Typography>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)']}
+          locations={[0.4, 0.75, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.heroGradient}
+        />
+        <View style={styles.heroOverlay}>
+          <Typography variant="h1" style={styles.heroName}>
+            {profile?.name || 'New User'}{profile?.age ? `, ${profile.age}` : ''}
+          </Typography>
+          {!!profile?.location && (
+            <View style={styles.heroLocationRow}>
+              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+              <Typography variant="body2" style={styles.heroLocationText}>
+                {profile.location}
+              </Typography>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Quick Actions Row */}
+      <View style={styles.quickActionsRow}>
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => router.push('/edit-profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+        >
+          <Ionicons name="create-outline" size={18} color={APP_COLORS.textPrimary} />
+          <Typography variant="button" style={styles.quickActionText}>Edit Profile</Typography>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickActionButton}
+          onPress={() => router.push('/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
+        >
+          <Ionicons name="settings-outline" size={18} color={APP_COLORS.textPrimary} />
+          <Typography variant="button" style={styles.quickActionText}>Settings</Typography>
+        </TouchableOpacity>
+      </View>
+
+      {/* Details Card */}
+      {hasDetails && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <Typography variant="h3" style={styles.cardTitle}>Details</Typography>
+            <View style={styles.detailsList}>
+              {!!profile?.age && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="calendar-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
+                  <Typography variant="body1" style={styles.detailText}>{profile.age} years old</Typography>
+                </View>
+              )}
+              {!!profile?.occupation && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="briefcase-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
+                  <Typography variant="body1" style={styles.detailText}>{profile.occupation}</Typography>
+                </View>
+              )}
+              {!!profile?.education && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="school-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
+                  <Typography variant="body1" style={styles.detailText}>{profile.education}</Typography>
+                </View>
+              )}
+              {!!profile?.location && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
+                  <Typography variant="body1" style={styles.detailText}>{profile.location}</Typography>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Interstitial Photo 1 */}
+      {interstitialPhoto1 && (
+        <View style={styles.interstitialContainer}>
+          <View style={styles.interstitialWrapper}>
+            <OptimizedImage
+              source={getOptimized(interstitialPhoto1, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
+              style={styles.interstitialImage as any}
+              contentFit="cover"
+              width={WINDOW_WIDTH - 32}
+              height={INTERSTITIAL_HEIGHT}
+              quality={70}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* About Card */}
+      {!!profile?.bio && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <Typography variant="h3" style={styles.cardTitle}>About</Typography>
+            <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
+          </View>
+        </View>
+      )}
+
+      {/* Interstitial Photo 2 */}
+      {interstitialPhoto2 && (
+        <View style={styles.interstitialContainer}>
+          <View style={styles.interstitialWrapper}>
+            <OptimizedImage
+              source={getOptimized(interstitialPhoto2, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
+              style={styles.interstitialImage as any}
+              contentFit="cover"
+              width={WINDOW_WIDTH - 32}
+              height={INTERSTITIAL_HEIGHT}
+              quality={70}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Interests Card */}
+      {profile?.interests && profile.interests.length > 0 && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <Typography variant="h3" style={styles.cardTitle}>Interests</Typography>
+            <View style={styles.tagsRow}>
+              {profile.interests.map((interest, idx) => (
+                <View key={`${interest}-${idx}`} style={styles.tag}>
+                  <Typography variant="caption" style={styles.tagText}>{interest}</Typography>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Stats Card */}
+      {hasStats && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <Typography variant="h3" style={styles.cardTitle}>Activity</Typography>
+            <View style={styles.statsRow}>
+              {(profile?.stats?.eventsAttended ?? 0) > 0 && (
+                <View style={styles.statItem}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={APP_COLORS.accent} />
+                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsAttended}</Typography>
+                  <Typography variant="caption" style={styles.statLabel}>Attended</Typography>
+                </View>
+              )}
+              {(profile?.stats?.eventsFavorited ?? 0) > 0 && (
+                <View style={styles.statItem}>
+                  <Ionicons name="heart-outline" size={20} color={APP_COLORS.accent} />
+                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsFavorited}</Typography>
+                  <Typography variant="caption" style={styles.statLabel}>Favorited</Typography>
+                </View>
+              )}
+              {(profile?.stats?.eventsOrganized ?? 0) > 0 && (
+                <View style={styles.statItem}>
+                  <Ionicons name="megaphone-outline" size={20} color={APP_COLORS.accent} />
+                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsOrganized}</Typography>
+                  <Typography variant="caption" style={styles.statLabel}>Organized</Typography>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Member Since */}
+      {!!profile?.memberSince && (
+        <View style={styles.memberSinceContainer}>
+          <Ionicons name="time-outline" size={14} color={APP_COLORS.textSecondary} />
+          <Typography variant="caption" style={styles.memberSinceText}>
+            Member since {new Date(profile.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </Typography>
+        </View>
+      )}
+
+      {/* Gallery — photos 4+ in 2-column grid */}
+      {galleryPhotos.length > 0 && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <Typography variant="h3" style={styles.cardTitle}>More Photos</Typography>
+            <View style={styles.galleryGrid}>
+              {galleryPhotos.map((uri, idx) => {
+                const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
+                return (
+                  <View key={`gal_${idx}`} style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
+                    <OptimizedImage
+                      source={getOptimized(uri, itemSize, itemSize) as any}
+                      style={styles.galleryImage as any}
+                      contentFit="cover"
+                      width={itemSize}
+                      height={itemSize}
+                      quality={60}
+                    />
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Profile Completion Card */}
+      {isProfileIncomplete && (
+        <View style={styles.cardContainer}>
+          <View style={[styles.card, styles.completionCard]}>
+            <View style={styles.completionHeader}>
+              <Ionicons name="sparkles" size={20} color={APP_COLORS.accent} />
+              <Typography variant="h3" style={styles.completionTitle}>Complete Your Profile</Typography>
+            </View>
+            <Typography variant="body2" style={styles.completionSubtitle}>
+              {!photoList.length ? 'Add photos to stand out.' : !profile?.bio ? 'Write a bio so others can learn about you.' : 'Add your interests to find better matches.'}
+            </Typography>
+            <TouchableOpacity
+              style={styles.completionCta}
+              onPress={() => router.push('/edit-profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Complete your profile"
+            >
+              <Typography variant="button" style={styles.completionCtaText}>Complete Profile</Typography>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Bottom spacer */}
+      <View style={{ height: 40 }} />
+    </>
+  )
+
   if (authLoading || loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <FlatList
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.photoStrip}
-            data={[0, 1]}
-            keyExtractor={(item) => `skp_${item}`}
-            getItemLayout={getPhotoStripLayout}
-            renderItem={() => (
-              <View style={styles.photoSlide}>
-                <View style={styles.photoContainer}>
-                  <SkeletonBlock width={WINDOW_WIDTH - 24} height={PHOTO_HEIGHT - 20} borderRadius={18} />
-                </View>
-              </View>
-            )}
-          />
-          <View style={styles.content}>
-            <View style={styles.rowBetween}>
-              <SkeletonLine width={'50%'} />
-            </View>
-            <View style={styles.section}>
-              <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
-              <View style={styles.tags}>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`skt_${i}`} width={78} height={28} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
-                ))}
-              </View>
-            </View>
-            <View style={styles.section}>
-              <SkeletonLine width={'25%'} style={{ marginBottom: 8 }} />
-              {[...Array(3)].map((_, i) => (
-                <SkeletonLine key={`ska_${i}`} width={`${80 - i * 10}%`} style={{ marginBottom: 6 }} />
-              ))}
-            </View>
-          </View>
+          {renderSkeleton()}
         </ScrollView>
       </SafeAreaView>
     )
   }
 
-  // Show error state
   if (error) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={getUserAndProfile}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <Typography variant="body1" style={styles.errorText}>{error}</Typography>
+        <TouchableOpacity style={styles.retryButton} onPress={() => getUserAndProfile(true)}>
+          <Typography variant="button" style={styles.retryButtonText}>Retry</Typography>
         </TouchableOpacity>
       </SafeAreaView>
     )
@@ -281,225 +502,265 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Typography variant="h1" style={styles.headerTitle}>About me</Typography>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => router.push('/settings')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="settings-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/edit-profile')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginLeft: 12 }}>
-            <Ionicons name="create-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={32}
-      >
-        <FlatList
-          horizontal
-          pagingEnabled={hasPhotos}
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoStrip}
-          data={hasPhotos ? photoList : ['placeholder']}
-          keyExtractor={(_, idx) => `photo_${idx}`}
-          getItemLayout={getPhotoStripLayout}
-          renderItem={({ item, index }) => {
-            if (!hasPhotos) {
-              return (
-                <View style={styles.photoSlide}>
-                  <View style={[styles.photoContainer, styles.photoPlaceholder]}>
-                    <OptimizedImage
-                      source={placeholderImg as any}
-                      style={styles.photo as any}
-                      contentFit="cover"
-                      width={WINDOW_WIDTH}
-                      height={PHOTO_HEIGHT}
-                      quality={60}
-                    />
-                    <View style={styles.photoPlaceholderOverlay}>
-                      <Text style={styles.photoPlaceholderTitle}>Add your first photo</Text>
-                      <Text style={styles.photoPlaceholderSubtitle}>Profiles with photos get more matches</Text>
-                      <TouchableOpacity
-                        onPress={() => router.push('/edit-profile')}
-                        style={styles.photoPlaceholderCta}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add profile photo"
-                      >
-                        <Text style={styles.photoPlaceholderCtaText}>Add Photo</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              )
-            }
-            const uri = item as string
-            const optimized = getOptimizedImageUrl(uri, { width: WINDOW_WIDTH, height: PHOTO_HEIGHT, resize: 'cover', quality: 70 })
-            const finalUrl = optimized || uri
-            return (
-              <View key={index} style={styles.photoSlide}>
-                <View style={styles.photoContainer}>
-                  <OptimizedImage
-                    source={finalUrl as any}
-                    style={styles.photo as any}
-                    contentFit="cover"
-                    width={WINDOW_WIDTH}
-                    height={PHOTO_HEIGHT}
-                    quality={70}
-                  />
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={[ 'rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)' ]}
-                    locations={[0.4, 0.75, 1]}
-                    start={{ x: 0.5, y: 0 }}
-                    end={{ x: 0.5, y: 1 }}
-                    style={styles.heroGradient}
-                  />
-                  {/* Overlay name/subtitle and strength pill */}
-                  <View style={styles.heroOverlay} pointerEvents="none">
-                    <Typography variant="h1" style={styles.heroName}>
-                      {(profile?.name || 'New User')}
-                    </Typography>
-                    <Typography variant="body2" style={styles.heroSubtitle}>Entrepreneur</Typography>
-                    <View style={styles.matchPill} pointerEvents="none">
-                      <View style={styles.matchPillBadge}>
-                        {/* Simple filled badge for now; ring removed to avoid extra deps */}
-                        <Text style={styles.matchPillPercent}>{profileStrength}%</Text>
-                      </View>
-                      <Text style={styles.matchPillLabel}>  Profile Strength</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            )
-          }}
-        />
-
-        <View style={styles.content}>
-          <View style={styles.rowBetween}>
-            <Typography variant="h1" style={styles.name}>
-              {profile?.name || 'New User'}{profile?.age ? `, ${profile.age}` : ''}
-            </Typography>
-          </View>
-
-          {/* Details list - match Figma ordering */}
-          <View style={styles.detailsList}>
-            {!!profile?.age && (
-              <View style={styles.detailRow}>
-                <Ionicons name="male" size={16} color="#fff" style={styles.detailIcon} />
-                <Text style={styles.detailText}>Male, {profile.age}</Text>
-              </View>
-            )}
-            <View style={styles.detailRow}>
-              <Ionicons name="briefcase-outline" size={16} color="#fff" style={styles.detailIcon} />
-              <Text style={styles.detailText}>CEO at Four Fold</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="school-outline" size={16} color="#fff" style={styles.detailIcon} />
-              <Text style={styles.detailText}>BBA, Delhi University</Text>
-            </View>
-            {!!profile?.location && (
-              <View style={styles.detailRow}>
-                <Ionicons name="business-outline" size={16} color="#fff" style={styles.detailIcon} />
-                <Text style={styles.detailText}>{profile.location}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Omit Looking for / Goals on About me screen to match Figma */}
-
-          {!!profile?.interests?.length && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>Interests</Typography>
-              <View style={styles.tags}>
-                {profile.interests.map((i, idx) => (
-                  <View key={`${i}-${idx}`} style={styles.tag}><Typography variant="caption" style={styles.tagText}>{i}</Typography></View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {!!profile?.bio && (
-            <View style={styles.section}>
-              <Typography variant="h3" style={styles.sectionTitle}>About me</Typography>
-              <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-            </View>
-          )}
-
-          {hasPhotos && photoCollage}
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {renderContent()}
       </ScrollView>
-
-     
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: APP_COLORS.backgroundBase,
     padding: 20,
   },
-  errorText: { fontSize: 16, color: '#e74c3c', textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  retryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  errorText: { fontSize: 16, color: APP_COLORS.destructive, textAlign: 'center', marginBottom: 20 },
+  retryButton: { backgroundColor: APP_COLORS.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  retryButtonText: { color: '#000', fontWeight: '600', fontSize: 16 },
 
-  photoStrip: { width: WINDOW_WIDTH, height: PHOTO_HEIGHT, backgroundColor: 'transparent' },
-  photoSlide: { width: WINDOW_WIDTH },
-  photoContainer: { marginHorizontal: 12, marginTop: 12, marginBottom: 8, borderRadius: 18, overflow: 'hidden' },
-  photo: { width: WINDOW_WIDTH - 24, height: PHOTO_HEIGHT - 20, borderRadius: 18 },
+  // Hero
+  heroContainer: {
+    width: WINDOW_WIDTH,
+    height: HERO_HEIGHT,
+    position: 'relative',
+  },
+  heroImage: {
+    width: WINDOW_WIDTH,
+    height: HERO_HEIGHT,
+  },
+  heroPlaceholder: {
+    width: WINDOW_WIDTH,
+    height: HERO_HEIGHT,
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  heroPlaceholderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  heroPlaceholderTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  heroPlaceholderSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center', marginBottom: 14 },
+  heroPlaceholderCta: { backgroundColor: APP_COLORS.accent, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8 },
+  heroPlaceholderCtaText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  heroGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: HERO_HEIGHT * 0.5,
+  },
+  heroOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 20,
+  },
+  heroName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  heroLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  heroLocationText: {
+    color: 'rgba(255,255,255,0.85)',
+    marginLeft: 4,
+    fontSize: 14,
+  },
 
-  content: { padding: 16 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name: { fontSize: 24, fontWeight: '800', color: '#fff' },
-  section: { marginTop: 16 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 8 },
-  aboutText: { color: '#c796e1', fontSize: 16, lineHeight: 25 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap' },
-  tag: { backgroundColor: '#330826', borderWidth: 1, borderColor: '#61114a', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 24, marginRight: 10, marginBottom: 10 },
-  tagText: { color: '#fff', fontSize: 13, fontWeight: '400' },
-  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  galleryItem: { width: Math.floor((WINDOW_WIDTH - 16 * 2 - 4 * 2) / 3), height: Math.floor((WINDOW_WIDTH - 16 * 2 - 4 * 2) / 3), marginBottom: 4, borderRadius: 12, overflow: 'hidden', backgroundColor: '#1f0b1e' },
-  galleryImage: { width: '100%', height: '100%' },
+  // Quick Actions
+  quickActionsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 12,
+  },
+  quickActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  quickActionText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
-  actionsOverlay: { position: 'absolute', left: 0, right: 0, bottom: 28 },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
-  circleBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: 'rgba(255,255,255,0.35)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
-  circleInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center' },
+  // Cards
+  cardContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  card: {
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderRadius: CARD_BORDER_RADIUS,
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: APP_COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
 
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8 },
-  headerAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 8 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800', flex: 1, marginLeft: 0 },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  // Details
+  detailsList: {
+    gap: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailIcon: {
+    marginRight: 10,
+    width: 20,
+  },
+  detailText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 15,
+  },
 
-  heroOverlay: { position: 'absolute', left: 16, right: 16, bottom: 24, alignItems: 'center' },
-  heroName: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  heroSubtitle: { color: '#ffffffcc', marginTop: 4 },
-  heroGradient: { ...StyleSheet.absoluteFillObject, borderRadius: 18 },
+  // Interstitial photos
+  interstitialContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  interstitialWrapper: {
+    borderRadius: PHOTO_BORDER_RADIUS,
+    overflow: 'hidden',
+  },
+  interstitialImage: {
+    width: WINDOW_WIDTH - 32,
+    height: INTERSTITIAL_HEIGHT,
+  },
 
-  matchPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', backgroundColor: '#330826', borderColor: '#61114a', borderWidth: 1, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginTop: 10 },
-  matchPillBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3C614', marginRight: 8, alignItems: 'center', justifyContent: 'center' },
-  matchPillPercent: { color: '#000', fontWeight: '700', fontSize: 10 },
-  matchPillLabel: { color: '#FFFFFF', fontWeight: '700' },
+  // About
+  aboutText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 15,
+    lineHeight: 22,
+  },
 
-  detailsList: { marginTop: 12 },
-  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  detailIcon: { marginRight: 10 },
-  detailText: { color: '#fff', fontSize: 16 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 18 },
-  photoPlaceholder: { backgroundColor: '#1a0d1f' },
-  photoPlaceholderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: 'rgba(0,0,0,0.35)' },
-  photoPlaceholderTitle: { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
-  photoPlaceholderSubtitle: { color: '#ffffffcc', fontSize: 14, textAlign: 'center', marginBottom: 14 },
-  photoPlaceholderCta: { backgroundColor: '#F3C614', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8 },
-  photoPlaceholderCtaText: { color: '#000', fontWeight: '800', fontSize: 14 },
-}) 
+  // Tags / Interests
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tag: {
+    backgroundColor: APP_COLORS.backgroundBase,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: APP_COLORS.textSecondary,
+  },
+
+  // Member since
+  memberSinceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 6,
+  },
+  memberSinceText: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 13,
+  },
+
+  // Gallery
+  galleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  galleryItem: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  galleryImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  // Profile Completion
+  completionCard: {
+    borderWidth: 1,
+    borderColor: APP_COLORS.accent,
+    borderStyle: 'dashed',
+  },
+  completionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  completionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
+  },
+  completionSubtitle: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  completionCta: {
+    backgroundColor: APP_COLORS.accent,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  completionCtaText: {
+    color: '#000',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+})

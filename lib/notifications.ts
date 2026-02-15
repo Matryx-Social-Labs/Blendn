@@ -207,47 +207,89 @@ export function setupNotificationListener(
   return subscription
 }
 
+// Navigate based on notification payload data
+function navigateFromNotificationData(data: Record<string, any> | undefined) {
+  if (!data) return
+
+  // Support both backend payload format (type) and legacy local format (screen)
+  const notifType = data.type || data.screen
+
+  if (!notifType) return
+
+  try {
+    switch (notifType) {
+      // Backend types
+      case 'private_message': {
+        if (data.conversationId) {
+          router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any })
+        } else {
+          router.push('/(tabs)/chat')
+        }
+        break
+      }
+      case 'group_message': {
+        if (data.chatGroupId) {
+          router.push({ pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any })
+        } else {
+          router.push('/(tabs)/chat')
+        }
+        break
+      }
+      case 'event_checkin':
+      case 'event_update': {
+        if (data.eventId) {
+          router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
+        } else {
+          router.push('/(tabs)/events')
+        }
+        break
+      }
+      // Legacy local types (from NotificationHelpers)
+      case 'chat': {
+        if (data.conversationId) {
+          router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any })
+        } else {
+          router.push('/(tabs)/chat')
+        }
+        break
+      }
+      case 'event': {
+        if (data.eventId) {
+          router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
+        } else {
+          router.push('/(tabs)/events')
+        }
+        break
+      }
+      case 'match': {
+        router.push('/(tabs)/match')
+        break
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to navigate from notification', e)
+  }
+}
+
 // Handle notification tapped (app opened from notification)
 export function setupNotificationResponseListener(
   onNotificationResponse?: (response: Notifications.NotificationResponse) => void
 ) {
+  // Handle cold-start: check if app was opened from a notification while killed
+  Notifications.getLastNotificationResponseAsync().then(response => {
+    if (response) {
+      Logger.debug('notifications', 'Cold-start notification tap', { id: response.notification.request.identifier })
+      const data = response.notification.request.content.data
+      navigateFromNotificationData(data)
+    }
+  }).catch(() => {})
+
+  // Handle warm taps (app in background or foreground)
   const subscription = Notifications.addNotificationResponseReceivedListener(response => {
     Logger.debug('notifications', 'Notification tapped', { id: response.notification.request.identifier })
     onNotificationResponse?.(response)
-    
-    // Handle navigation based on notification data
     const data = response.notification.request.content.data
-    if (data?.screen) {
-      try {
-        switch (data.screen) {
-          case 'chat': {
-            if (data.conversationId) {
-              router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any })
-            } else {
-              router.push('/(tabs)/chat')
-            }
-            break
-          }
-          case 'event': {
-            if (data.eventId) {
-              router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
-            } else {
-              router.push('/(tabs)/events')
-            }
-            break
-          }
-          case 'match': {
-            router.push('/(tabs)/match')
-            break
-          }
-          default: {
-            router.push('/(tabs)/events')
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to navigate from notification', e)
-      }
-    }
+    navigateFromNotificationData(data)
   })
 
   return subscription

@@ -1,29 +1,114 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useEffect, useMemo, useState } from 'react'
-import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import OptimizedImage from '../components/OptimizedImage'
 import { apiClient } from '../lib/apiClient'
+import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { useAuth, signOut } from '../lib/useAuth'
+
+type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
+
+interface PreferencesState {
+  pushEnabled: boolean
+  showOnlineStatus: boolean
+  shareReadReceipts: boolean
+  locationSharing: boolean
+}
+
+const DEFAULT_PREFERENCES: PreferencesState = {
+  pushEnabled: true,
+  showOnlineStatus: true,
+  shareReadReceipts: true,
+  locationSharing: true,
+}
+
+const toBoolean = (value: unknown, fallback: boolean) =>
+  typeof value === 'boolean' ? value : fallback
+
+const BLENDN_LINKS = {
+  safety: 'https://blendn.app/safety',
+  guidelines: 'https://blendn.app/community-guidelines',
+  help: 'https://blendn.app/help',
+  terms: 'https://blendn.app/terms',
+  privacy: 'https://blendn.app/privacy',
+} as const
 
 export default function SettingsScreen() {
   const { user } = useAuth()
   const [displayName, setDisplayName] = useState<string>('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [pushEnabled, setPushEnabled] = useState<boolean>(true)
-  const [showOnlineStatus, setShowOnlineStatus] = useState<boolean>(true)
-  const [shareReadReceipts, setShareReadReceipts] = useState<boolean>(true)
-  const [locationSharing, setLocationSharing] = useState<boolean>(true)
+  const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
+  const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
+    pushEnabled: false,
+    showOnlineStatus: false,
+    shareReadReceipts: false,
+    locationSharing: false,
+  })
+  const [loadingPreferences, setLoadingPreferences] = useState(true)
+
+  const settingsStorageKey = useMemo(() => (
+    user?.id ? `settings_preferences_${user.id}` : null
+  ), [user?.id])
+
+  const savePreferencesLocal = useCallback(async (next: PreferencesState) => {
+    if (!settingsStorageKey) return
+    try {
+      await AsyncStorage.setItem(settingsStorageKey, JSON.stringify(next))
+    } catch {}
+  }, [settingsStorageKey])
+
+  const hydratePreferencesFromProfile = useCallback((resultData: any) => {
+    const profile = resultData?.profile || resultData || {}
+    const nestedPrefs = profile?.preferences || {}
+
+    const nextPrefs: PreferencesState = {
+      pushEnabled: toBoolean(
+        nestedPrefs.pushEnabled ?? nestedPrefs.push_enabled ?? profile.pushEnabled ?? profile.push_enabled,
+        DEFAULT_PREFERENCES.pushEnabled
+      ),
+      showOnlineStatus: toBoolean(
+        nestedPrefs.showOnlineStatus ?? nestedPrefs.show_online_status ?? profile.showOnlineStatus ?? profile.show_online_status,
+        DEFAULT_PREFERENCES.showOnlineStatus
+      ),
+      shareReadReceipts: toBoolean(
+        nestedPrefs.shareReadReceipts ?? nestedPrefs.share_read_receipts ?? profile.shareReadReceipts ?? profile.share_read_receipts,
+        DEFAULT_PREFERENCES.shareReadReceipts
+      ),
+      locationSharing: toBoolean(
+        nestedPrefs.locationSharing ?? nestedPrefs.location_sharing ?? profile.locationSharing ?? profile.location_sharing,
+        DEFAULT_PREFERENCES.locationSharing
+      ),
+    }
+
+    return { profile, nextPrefs }
+  }, [])
 
   useEffect(() => {
     const load = async () => {
       try {
         if (!user) return
+        if (settingsStorageKey) {
+          try {
+            const cached = await AsyncStorage.getItem(settingsStorageKey)
+            if (cached) {
+              const parsed = JSON.parse(cached) as Partial<PreferencesState>
+              setPreferences({
+                pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
+                showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
+                shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
+                locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
+              })
+            }
+          } catch {}
+        }
+
         const result = await apiClient.getProfile(user.id)
         if (result.success && result.data) {
-          const profile = result.data
+          const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
           const name = profile.name || user.name || 'You'
           setDisplayName(name)
           // Get avatar from profile photos if available
@@ -34,11 +119,81 @@ export default function SettingsScreen() {
           } else if (user.image) {
             setAvatarUrl(user.image)
           }
+          setPreferences(nextPrefs)
+          savePreferencesLocal(nextPrefs)
         }
-      } catch {}
+      } catch {} finally {
+        setLoadingPreferences(false)
+      }
     }
     load()
-  }, [user])
+  }, [user, settingsStorageKey, savePreferencesLocal, hydratePreferencesFromProfile])
+
+  const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
+    if (!user) return
+    setSaving(prev => ({ ...prev, [key]: true }))
+
+    try {
+      const payload: any = {
+        preferences: {
+          pushEnabled: next.pushEnabled,
+          push_enabled: next.pushEnabled,
+          showOnlineStatus: next.showOnlineStatus,
+          show_online_status: next.showOnlineStatus,
+          shareReadReceipts: next.shareReadReceipts,
+          share_read_receipts: next.shareReadReceipts,
+          locationSharing: next.locationSharing,
+          location_sharing: next.locationSharing,
+        },
+        pushEnabled: next.pushEnabled,
+        showOnlineStatus: next.showOnlineStatus,
+        shareReadReceipts: next.shareReadReceipts,
+        locationSharing: next.locationSharing,
+      }
+
+      const result = await apiClient.updateProfile(user.id, payload)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save setting')
+      }
+
+      if (key === 'pushEnabled') {
+        if (next.pushEnabled) {
+          initializePushNotifications().catch(() => {})
+        } else {
+          removePushTokenFromProfile().catch(() => {})
+        }
+      }
+
+      await savePreferencesLocal(next)
+    } catch {
+      setPreferences(previous)
+      await savePreferencesLocal(previous)
+      Alert.alert('Update failed', 'Could not save this setting. Please try again.')
+    } finally {
+      setSaving(prev => ({ ...prev, [key]: false }))
+    }
+  }, [user, savePreferencesLocal])
+
+  const onTogglePreference = useCallback((key: PreferenceKey) => {
+    const previous = preferences
+    const next = { ...previous, [key]: !previous[key] }
+    setPreferences(next)
+    savePreferencesLocal(next)
+    persistPreference(next, previous, key)
+  }, [preferences, persistPreference, savePreferencesLocal])
+
+  const openExternal = useCallback(async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url)
+      if (!supported) {
+        Alert.alert('Link unavailable', 'Unable to open this link.')
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      Alert.alert('Link unavailable', 'Unable to open this link.')
+    }
+  }, [])
 
   const items = useMemo(() => ([
     { header: 'Account' },
@@ -48,28 +203,28 @@ export default function SettingsScreen() {
       try {
         const result = await signOut()
         if (!result.success) Alert.alert('Error', 'Failed to sign out')
-      } catch (e) {
+      } catch {
         Alert.alert('Error', 'Failed to sign out')
       }
     } },
 
     { header: 'Discovery' },
-    { icon: 'eye-outline', title: 'Show online status', type: 'switch' as const, value: showOnlineStatus, onToggle: setShowOnlineStatus },
-    { icon: 'checkmark-done-outline', title: 'Read receipts', type: 'switch' as const, value: shareReadReceipts, onToggle: setShareReadReceipts },
-    { icon: 'navigate-outline', title: 'Share location for nearby events', type: 'switch' as const, value: locationSharing, onToggle: setLocationSharing },
+    { icon: 'eye-outline', title: 'Show online status', keyName: 'showOnlineStatus' as const },
+    { icon: 'checkmark-done-outline', title: 'Read receipts', keyName: 'shareReadReceipts' as const },
+    { icon: 'navigate-outline', title: 'Share location for nearby events', keyName: 'locationSharing' as const },
 
     { header: 'Notifications' },
-    { icon: 'notifications-outline', title: 'Push notifications', type: 'switch' as const, value: pushEnabled, onToggle: setPushEnabled },
+    { icon: 'notifications-outline', title: 'Push notifications', keyName: 'pushEnabled' as const },
 
     { header: 'Safety' },
-    { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => Linking.openURL('https://www.bumble.com/safety') },
-    { icon: 'flag-outline', title: 'Community guidelines', onPress: () => Linking.openURL('https://www.bumble.com/en-in/community-guidelines') },
+    { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => openExternal(BLENDN_LINKS.safety) },
+    { icon: 'flag-outline', title: 'Community guidelines', onPress: () => openExternal(BLENDN_LINKS.guidelines) },
 
     { header: 'Support' },
-    { icon: 'help-circle-outline', title: 'Help & support', onPress: () => Linking.openURL('https://help.bumble.com/') },
-    { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => Linking.openURL('https://bumble.com/terms') },
-    { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => Linking.openURL('https://bumble.com/privacy') },
-  ]), [pushEnabled, showOnlineStatus, shareReadReceipts, locationSharing])
+    { icon: 'help-circle-outline', title: 'Help & support', onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
+    { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
+  ]), [openExternal])
 
   const renderItem = (item: any, idx: number) => {
     if (item.header) {
@@ -77,24 +232,37 @@ export default function SettingsScreen() {
         <Text key={`h-${idx}`} style={styles.sectionHeader}>{item.header}</Text>
       )
     }
-    if (item.type === 'switch') {
+    if (item.keyName) {
+      const keyName = item.keyName as PreferenceKey
       return (
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name={item.icon} size={20} color="#FFFFFF" />
             <Text style={styles.rowTitle}>{item.title}</Text>
           </View>
-          <Switch
-            value={!!item.value}
-            onValueChange={item.onToggle}
-            trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#7A2CF3' }}
-            thumbColor="#FFFFFF"
-          />
+          <View style={styles.switchWrap}>
+            {saving[keyName] && (
+              <ActivityIndicator size="small" color="#FFFFFFAA" style={styles.switchLoader} />
+            )}
+            <Switch
+              value={preferences[keyName]}
+              onValueChange={() => onTogglePreference(keyName)}
+              disabled={saving[keyName] || loadingPreferences}
+              trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#7A2CF3' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
       )
     }
     return (
-      <TouchableOpacity key={idx} style={styles.row} onPress={item.onPress}>
+      <TouchableOpacity
+        key={idx}
+        style={styles.row}
+        onPress={item.onPress}
+        accessibilityRole="button"
+        accessibilityLabel={item.title}
+      >
         <View style={styles.rowLeft}>
           <Ionicons name={item.icon} size={20} color={item.danger ? '#e74c3c' : '#FFFFFF'} />
           <Text style={[styles.rowTitle, item.danger && { color: '#e74c3c' }]}>{item.title}</Text>
@@ -109,7 +277,12 @@ export default function SettingsScreen() {
       <AppHeader title="Settings" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={styles.profileCard} onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" accessibilityLabel="Open About me">
+        <TouchableOpacity
+          style={styles.profileCard}
+          onPress={() => router.push('/(tabs)/profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Open About me"
+        >
           {avatarUrl ? (
             <OptimizedImage source={avatarUrl} style={styles.avatar as any} contentFit="cover" width={160} height={160} quality={60} />
           ) : (
@@ -117,7 +290,12 @@ export default function SettingsScreen() {
           )}
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.displayName}>{displayName}</Text>
-            <TouchableOpacity onPress={() => router.push('/edit-profile')}>
+            <TouchableOpacity
+              onPress={() => router.push('/edit-profile')}
+              style={styles.editCta}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+            >
               <Text style={styles.editLink}>Edit profile</Text>
             </TouchableOpacity>
           </View>
@@ -144,13 +322,14 @@ const styles = StyleSheet.create({
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#333' },
   avatarFallback: { backgroundColor: '#333' },
   displayName: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
-  editLink: { marginTop: 4, color: '#9CCBFF', fontWeight: '600' },
+  editCta: { marginTop: 8, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  editLink: { color: '#D9ECFF', fontWeight: '700', fontSize: 12 },
   card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   sectionHeader: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14 },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  switchWrap: { flexDirection: 'row', alignItems: 'center' },
+  switchLoader: { marginRight: 6 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 44 },
 })
-
-

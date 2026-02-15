@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import {
+    Alert,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -35,7 +36,7 @@ export default function Interests() {
 
   const handleContinue = async () => {
     if (!user) {
-      alert('Please sign in to continue')
+      Alert.alert('Error', 'Please sign in to continue')
       return
     }
     try {
@@ -48,32 +49,12 @@ export default function Interests() {
       router.push('./goals' as any)
     } catch (e) {
       console.error(e)
-      alert('Failed to save interests')
+      Alert.alert('Error', 'Failed to save interests')
     }
   }
 
   const handleBack = () => {
     router.back()
-  }
-
-  const renderInterest = ({ item }: { item: string }) => {
-    const isSelected = selectedInterests.includes(item)
-    return (
-      <TouchableOpacity
-        style={[
-          styles.interestChip,
-          isSelected ? styles.selectedInterest : styles.unselectedInterest
-        ]}
-        onPress={() => handleInterestToggle(item)}
-      >
-        <Text style={[
-          styles.interestText,
-          isSelected ? styles.selectedInterestText : styles.unselectedInterestText
-        ]}>
-          {item}
-        </Text>
-      </TouchableOpacity>
-    )
   }
 
   return (
@@ -127,6 +108,7 @@ export default function Interests() {
             ]} 
             onPress={handleContinue}
             disabled={selectedInterests.length === 0}
+            activeOpacity={0.9}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
@@ -226,16 +208,17 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     backgroundColor: '#FF6B6B',
-    padding: 16,
-    borderRadius: 12,
+    minHeight: 52,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
-    backgroundColor: '#ccc',
+    opacity: 0.5,
   },
   continueButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
   },
 }) 

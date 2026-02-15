@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Audio } from 'expo-av'  // Keep for VoiceNote component
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
     ActivityIndicator,
-    Alert,
+    Animated,
+    Easing,
     FlatList,
     KeyboardAvoidingView,
     Platform,
@@ -17,12 +17,18 @@ import {
     View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import AppHeader from '../../components/AppHeader'
+import ScalePress from '../../components/motion/ScalePress'
 import OptimizedImage from '../../components/OptimizedImage'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
+import { emitChatListUpdate } from '../../lib/chatListUpdates'
+import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
+import { APP_COLORS } from '../../lib/theme'
+import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 
@@ -67,6 +73,27 @@ export default function PrivateChat() {
   const insets = useSafeAreaInsets()
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const otherTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [trayVisible, setTrayVisible] = useState(false)
+  const [trayTitle, setTrayTitle] = useState('')
+  const [trayMessage, setTrayMessage] = useState('')
+  const [trayButtons, setTrayButtons] = useState<ActionTrayButton[]>([])
+  const [composerExpanded, setComposerExpanded] = useState(false)
+  const [composerHeight, setComposerHeight] = useState(62)
+  const [typingBarHeight, setTypingBarHeight] = useState(32)
+  const contentOpacity = useRef(new Animated.Value(0)).current
+  const contentTranslate = useRef(new Animated.Value(8)).current
+  const typingAnim = useRef(new Animated.Value(0)).current
+  const composerAnim = useRef(new Animated.Value(0)).current
+  const sendPulseAnim = useRef(new Animated.Value(0)).current
+  const showLoadingSkeleton = useMinimumVisible(loading, 650)
+
+  const closeTray = () => setTrayVisible(false)
+  const showTray = (title: string, message: string, buttons?: ActionTrayButton[]) => {
+    setTrayTitle(title)
+    setTrayMessage(message)
+    setTrayButtons(buttons && buttons.length > 0 ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }])
+    setTrayVisible(true)
+  }
 
   const getInitials = (name: string) => {
     if (!name) return '?'
@@ -89,6 +116,44 @@ export default function PrivateChat() {
     return cleanup
   }, [conversationId, subscribeToMessages])
 
+  useEffect(() => {
+    if (loading) return
+    contentOpacity.setValue(0)
+    contentTranslate.setValue(6)
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslate, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [loading, contentOpacity, contentTranslate])
+
+  useEffect(() => {
+    Animated.timing(typingAnim, {
+      toValue: isOtherTyping ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start()
+  }, [isOtherTyping, typingAnim])
+
+  useEffect(() => {
+    Animated.timing(composerAnim, {
+      toValue: composerExpanded ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start()
+  }, [composerExpanded, composerAnim])
+
   // Mark messages as read when viewing
   useEffect(() => {
     if (!authUser?.id || !conversationId || messages.length === 0) return
@@ -109,7 +174,7 @@ export default function PrivateChat() {
       }
     } catch (error) {
       console.error('Error initializing chat:', error)
-      Alert.alert('Error', 'Failed to load conversation')
+      showTray('Error', 'Failed to load conversation.')
     } finally {
       setLoading(false)
     }
@@ -225,6 +290,14 @@ export default function PrivateChat() {
     setNewMessage('')
     setSending(true)
 
+    // Instantly update the chat tab list (before API call) so swiping back shows the message
+    emitChatListUpdate({
+      type: 'personal',
+      conversationId: String(conversationId),
+      lastMessage: messageText,
+      lastMessageTime: new Date().toISOString(),
+    })
+
     try {
       Logger.info('private-chat', 'Sending message')
       const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
@@ -238,15 +311,22 @@ export default function PrivateChat() {
           }
           return [...prev, mapMessage(result.data)]
         })
+        // Mark chat domain dirty so the chat tab refreshes when the user navigates back
+        markDomainsDirty(['chat'])
         setTimeout(scrollToBottom, 100)
+        sendPulseAnim.setValue(0)
+        Animated.sequence([
+          Animated.timing(sendPulseAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+          Animated.timing(sendPulseAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+        ]).start()
       } else {
         Logger.error('private-chat', 'Failed to send message', { error: result.error })
-        Alert.alert('Error', 'Failed to send message. Please try again.')
+        showTray('Error', 'Failed to send message. Please try again.')
         setNewMessage(messageText) // Restore message
       }
     } catch (error) {
       Logger.error('private-chat', 'Failed to send message', { error })
-      Alert.alert('Error', 'Failed to send message. Please try again.')
+      showTray('Error', 'Failed to send message. Please try again.')
       setNewMessage(messageText) // Restore message
     } finally {
       setSending(false)
@@ -279,19 +359,21 @@ export default function PrivateChat() {
 
     const handleMessageLongPress = () => {
       if (!isCurrentUser) {
-        Alert.alert(
-          'Message Options',
+        showTray(
+          'Message options',
           'What would you like to do with this message?',
           [
             {
-              text: 'Report Message',
-              onPress: () => {
-                showMessageReportOptions(item.id, 'private')
-              }
+              label: 'Cancel',
+              onPress: closeTray,
             },
             {
-              text: 'Cancel',
-              style: 'cancel'
+              label: 'Report Message',
+              variant: 'destructive',
+              onPress: () => {
+                closeTray()
+                showMessageReportOptions(item.id, 'private')
+              }
             }
           ]
         )
@@ -301,9 +383,6 @@ export default function PrivateChat() {
     // Check for media
     const hasImage = item.mediaType === 'image' && item.mediaUrl
     const hasVideo = item.mediaType === 'video' && item.mediaUrl
-    // Check for audio in text (legacy support)
-    const lower = String(item.text || '').toLowerCase()
-    const isAudio = lower.startsWith('http') && /(\.m4a|\.mp3|\.aac|\.wav|\.ogg)$/i.test(lower)
 
     return (
       <TouchableOpacity
@@ -330,8 +409,13 @@ export default function PrivateChat() {
                 width={220}
                 height={160}
               />
-            ) : isAudio ? (
-              <VoiceNote uri={item.text!} />
+            ) : hasVideo ? (
+              <Text style={[
+                styles.messageText,
+                isCurrentUser ? styles.myMessageText : styles.otherMessageText
+              ]}>
+                Video message
+              </Text>
             ) : (
               <Text style={[
                 styles.messageText,
@@ -353,13 +437,23 @@ export default function PrivateChat() {
   }
 
   const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>💬</Text>
+    <Animated.View style={[styles.emptyContainer, { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }]}>
+      <Text style={styles.emptyIcon}>Message</Text>
       <Text style={styles.emptyTitle}>Start the conversation!</Text>
       <Text style={styles.emptyText}>
         You matched with {otherUserName}. Say hi and break the ice!
       </Text>
-    </View>
+      <ScalePress
+        style={styles.emptyCta}
+        onPress={() => {
+          setNewMessage('Hey 👋')
+          setComposerExpanded(true)
+        }}
+        pressedScale={0.98}
+      >
+        <Text style={styles.emptyCtaText}>Send a wave</Text>
+      </ScalePress>
+    </Animated.View>
   )
 
   const toDayKey = (iso: string) => {
@@ -405,19 +499,19 @@ export default function PrivateChat() {
     return renderMessage({ item })
   }
 
-  if (loading) {
+  if (showLoadingSkeleton) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <StatusBar style="light" backgroundColor="transparent" translucent />
+        <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
         <LinearGradient
-          colors={["#480D37", "#000000"]}
+          colors={['#111214', APP_COLORS.backgroundBase]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         {/* Gradient top inset to fill the status bar area on iOS */}
         <LinearGradient
-          colors={["#480D37", "#000000"]}
+          colors={['#111214', APP_COLORS.backgroundBase]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
@@ -430,19 +524,42 @@ export default function PrivateChat() {
     )
   }
 
+  const typingHeight = typingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 32],
+  })
+  const typingOpacity = typingAnim
+  const typingTranslate = typingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 0],
+  })
+  const attachmentOpacity = composerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.74, 1],
+  })
+  const attachmentLift = composerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -2],
+  })
+  const sendScale = sendPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  })
+  const messageListBottomInset = composerHeight + (isOtherTyping ? typingBarHeight : 0) + insets.bottom + 8
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" backgroundColor="transparent" translucent />
+      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       {/* Gradient top inset to fill the status bar area on iOS */}
       <LinearGradient
-        colors={["#480D37", "#000000"]}
+        colors={['#111214', APP_COLORS.backgroundBase]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={{ height: insets.top, position: 'absolute', top: 0, left: 0, right: 0 }}
@@ -464,7 +581,7 @@ export default function PrivateChat() {
                   () => router.back()
                 )
               } else {
-                Alert.alert('Coming Soon!', 'User profile view will be available soon!')
+                showTray('Coming soon', 'User profile view will be available soon.')
               }
             },
             accessibilityLabel: 'Safety options',
@@ -473,146 +590,118 @@ export default function PrivateChat() {
 
         {/* Messages */}
         {messages.length === 0 ? (
-          <View style={[styles.messagesContainer, styles.emptyListContainer]}>
+          <Animated.View style={[styles.messagesContainer, styles.emptyListContainer, { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }]}>
             {renderEmptyState()}
-          </View>
+          </Animated.View>
         ) : (
-          <FlatList
-            ref={flatListRef}
-            data={chatItems}
-            keyExtractor={(item) => item.kind === 'separator' ? item.id : item.id}
-            renderItem={renderChatItem}
-            style={styles.messagesList}
-            contentContainerStyle={styles.messagesContainer}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollToBottom()}
-          />
+          <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }}>
+            <FlatList
+              ref={flatListRef}
+              data={chatItems}
+              keyExtractor={(item) => item.kind === 'separator' ? item.id : item.id}
+              renderItem={renderChatItem}
+              style={styles.messagesList}
+              contentContainerStyle={[styles.messagesContainer, { paddingBottom: messageListBottomInset }]}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => scrollToBottom()}
+            />
+          </Animated.View>
         )}
 
         {/* Typing indicator */}
-        {isOtherTyping && (
-          <View style={styles.typingContainer}>
+        <Animated.View style={{ height: typingHeight, opacity: typingOpacity, transform: [{ translateY: typingTranslate }], overflow: 'hidden' }}>
+          <View
+            style={styles.typingContainer}
+            onLayout={(e) => {
+              const h = Math.round(e.nativeEvent.layout.height)
+              if (h > 0 && h !== typingBarHeight) setTypingBarHeight(h)
+            }}
+          >
             <Text style={styles.typingText}>
               {otherUserName || 'User'} is typing...
             </Text>
           </View>
-        )}
+        </Animated.View>
 
         {/* Input */}
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputIcon} onPress={() => {
-            Alert.alert('Coming Soon', 'File attachments will be available soon.')
-          }}>
-            <Ionicons name="attach" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={(text) => {
-              setNewMessage(text)
-              // Emit typing indicator with debounce
-              if (text.length > 0 && conversationId) {
-                startPrivateTyping(String(conversationId))
-                // Clear previous timeout and set new one to stop typing
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                typingTimeoutRef.current = setTimeout(() => {
+        <View
+          style={styles.inputContainer}
+          onLayout={(e) => {
+            const h = Math.round(e.nativeEvent.layout.height)
+            if (h > 0 && h !== composerHeight) setComposerHeight(h)
+          }}
+        >
+          <View style={styles.composerShell}>
+            <Animated.View style={{ opacity: attachmentOpacity, transform: [{ translateY: attachmentLift }] }}>
+              <ScalePress style={styles.inputIcon} onPress={() => {
+                showTray('Coming soon', 'File attachments will be available soon.')
+              }} pressedScale={0.93}>
+                <Ionicons name="attach" size={20} color="#CFCFCF" />
+              </ScalePress>
+            </Animated.View>
+            <TextInput
+              style={styles.textInput}
+              value={newMessage}
+              onChangeText={(text) => {
+                setNewMessage(text)
+                setComposerExpanded(text.length > 0)
+                if (text.length > 0 && conversationId) {
+                  startPrivateTyping(String(conversationId))
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                  typingTimeoutRef.current = setTimeout(() => {
+                    stopPrivateTyping(String(conversationId))
+                  }, 2000)
+                } else if (text.length === 0 && conversationId) {
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
                   stopPrivateTyping(String(conversationId))
-                }, 2000)
-              } else if (text.length === 0 && conversationId) {
-                // Immediately stop typing when input is cleared
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                stopPrivateTyping(String(conversationId))
-              }
-            }}
-            placeholder="Type a message..."
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            multiline
-            maxLength={1000}
-            editable={!sending}
-          />
-          <TouchableOpacity style={styles.inputIcon} onPress={() => {
-            Alert.alert('Coming Soon', 'Photo sharing will be available soon.')
-          }}>
-            <Ionicons name="camera" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.inputIcon} onPress={() => {
-            Alert.alert('Coming Soon', 'Voice notes will be available soon.')
-          }}>
-            <Ionicons name="mic" size={22} color="#CFCFCF" />
-          </TouchableOpacity>
-          <TouchableOpacity
+                }
+              }}
+              placeholder="Message..."
+              placeholderTextColor="rgba(255,255,255,0.52)"
+              multiline
+              maxLength={1000}
+              editable={!sending}
+              onFocus={() => {
+                setComposerExpanded(true)
+                setTimeout(scrollToBottom, 90)
+              }}
+              onBlur={() => setComposerExpanded(newMessage.trim().length > 0)}
+            />
+            <Animated.View style={{ opacity: attachmentOpacity, transform: [{ translateY: attachmentLift }] }}>
+              <ScalePress style={styles.inputIcon} onPress={() => {
+                showTray('Coming soon', 'Photo sharing will be available soon.')
+              }} pressedScale={0.93}>
+                <Ionicons name="camera" size={20} color="#CFCFCF" />
+              </ScalePress>
+            </Animated.View>
+          </View>
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+          <ScalePress
             style={[
               styles.sendButton,
               (!newMessage.trim() || sending) && styles.sendButtonDisabled
             ]}
             onPress={sendMessage}
             disabled={!newMessage.trim() || sending}
+            pressedScale={0.96}
           >
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Ionicons name="send" size={20} color="#fff" />
             )}
-          </TouchableOpacity>
+          </ScalePress>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
+      <ActionTray
+        visible={trayVisible}
+        title={trayTitle}
+        message={trayMessage}
+        buttons={trayButtons}
+        onClose={closeTray}
+      />
     </SafeAreaView>
-  )
-}
-
-// Simple inline voice note player
-const VoiceNote = ({ uri }: { uri: string }) => {
-  const [sound, setSound] = React.useState<Audio.Sound | null>(null)
-  const [playing, setPlaying] = React.useState(false)
-  const [duration, setDuration] = React.useState<number | null>(null)
-  const [position, setPosition] = React.useState(0)
-
-  React.useEffect(() => {
-    let isMounted = true
-    const load = async () => {
-      try {
-        const { sound: s } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false })
-        if (!isMounted) return
-        setSound(s)
-        s.setOnPlaybackStatusUpdate((status: any) => {
-          if (!status) return
-          if ('durationMillis' in status && status.durationMillis != null) setDuration(status.durationMillis)
-          if ('positionMillis' in status && status.positionMillis != null) setPosition(status.positionMillis)
-          if ('didJustFinish' in status && status.didJustFinish) setPlaying(false)
-        })
-      } catch {}
-    }
-    load()
-    return () => {
-      isMounted = false
-      try { sound?.unloadAsync() } catch {}
-    }
-  }, [uri])
-
-  const toggle = async () => {
-    try {
-      if (!sound) return
-      const status = await sound.getStatusAsync()
-      if ((status as any).isPlaying) {
-        await sound.pauseAsync()
-        setPlaying(false)
-      } else {
-        await sound.playAsync()
-        setPlaying(true)
-      }
-    } catch {}
-  }
-
-  const seconds = Math.floor((duration || 0) / 1000)
-  const posSeconds = Math.floor(position / 1000)
-
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <TouchableOpacity onPress={toggle} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#7B2DFA', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-        <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#fff" />
-      </TouchableOpacity>
-      <Text style={{ color: '#FFFFFF' }}>{posSeconds}s / {seconds || 0}s</Text>
-    </View>
   )
 }
 
@@ -647,20 +736,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyIcon: {
-    fontSize: 64,
+    fontSize: 28,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.72)',
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255,255,255,0.72)',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  emptyCta: {
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emptyCtaText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   messageRow: {
     flexDirection: 'row',
@@ -756,38 +861,46 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(10,10,12,0.78)',
+    gap: 8,
+  },
+  composerShell: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   inputIcon: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    borderRadius: 17,
   },
   textInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 15,
     maxHeight: 100,
-    marginRight: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     color: '#FFFFFF',
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#7B2DFA',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

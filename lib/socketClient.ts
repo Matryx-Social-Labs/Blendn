@@ -6,6 +6,7 @@
 import { io, Socket } from "socket.io-client"
 import { AppState, AppStateStatus } from "react-native"
 import { TokenStorage } from "./apiClient"
+import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
 
 // Socket server URL
@@ -104,6 +105,16 @@ interface ClientToServerEvents {
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>
 
+type SocketState = "connected" | "connecting" | "reconnecting" | "disconnected"
+
+interface SocketConnectionStatus {
+  state: SocketState
+  connected: boolean
+  reconnectAttempts: number
+  lastConnectedAt: number | null
+  lastError: string | null
+}
+
 // Subscription callback types
 type EventCheckInCallback = (data: ServerToClientEvents["event:checkin"] extends (data: infer D) => void ? D : never) => void
 type EventCheckOutCallback = (data: ServerToClientEvents["event:checkout"] extends (data: infer D) => void ? D : never) => void
@@ -121,9 +132,42 @@ let isConnecting = false
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
 const RECONNECT_DELAY_BASE = 1000
+let connectionStatus: SocketConnectionStatus = {
+  state: "disconnected",
+  connected: false,
+  reconnectAttempts: 0,
+  lastConnectedAt: null,
+  lastError: null,
+}
+const connectionStatusSubscribers = new Set<(status: SocketConnectionStatus) => void>()
+
+function emitConnectionStatus(patch: Partial<SocketConnectionStatus>): void {
+  connectionStatus = { ...connectionStatus, ...patch }
+  connectionStatusSubscribers.forEach((cb) => {
+    try {
+      cb(connectionStatus)
+    } catch {}
+  })
+}
+
+export function getConnectionStatus(): SocketConnectionStatus {
+  return connectionStatus
+}
+
+export function subscribeConnectionStatus(
+  callback: (status: SocketConnectionStatus) => void
+): () => void {
+  connectionStatusSubscribers.add(callback)
+  callback(connectionStatus)
+  return () => {
+    connectionStatusSubscribers.delete(callback)
+  }
+}
 
 // Subscriptions
-const eventSubscriptions = new Map<string, Set<EventCheckInCallback | EventCheckOutCallback | EventInterestCallback>>()
+const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
+const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
+const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatSubscriptions = new Map<string, Set<ChatMessageCallback | ChatTypingCallback | ChatReactionCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<(data: any) => void>>()
@@ -137,15 +181,29 @@ let appStateSubscription: { remove: () => void } | null = null
 export async function connect(): Promise<boolean> {
   if (socket?.connected) {
     Logger.debug("socket", "Already connected")
+    emitConnectionStatus({
+      state: "connected",
+      connected: true,
+      lastError: null,
+    })
     return true
   }
 
   if (isConnecting) {
     Logger.debug("socket", "Connection already in progress")
+    emitConnectionStatus({
+      state: reconnectAttempts > 0 ? "reconnecting" : "connecting",
+      connected: false,
+    })
     return false
   }
 
   isConnecting = true
+  emitConnectionStatus({
+    state: reconnectAttempts > 0 ? "reconnecting" : "connecting",
+    connected: false,
+    reconnectAttempts,
+  })
 
   try {
     const accessToken = await TokenStorage.getAccessToken()
@@ -153,6 +211,11 @@ export async function connect(): Promise<boolean> {
     if (!accessToken) {
       Logger.warn("socket", "No access token available, cannot connect")
       isConnecting = false
+      emitConnectionStatus({
+        state: "disconnected",
+        connected: false,
+        lastError: "No access token",
+      })
       return false
     }
 
@@ -176,6 +239,11 @@ export async function connect(): Promise<boolean> {
       const timeout = setTimeout(() => {
         Logger.warn("socket", "Connection timeout")
         isConnecting = false
+        emitConnectionStatus({
+          state: "disconnected",
+          connected: false,
+          lastError: "Connection timeout",
+        })
         resolve(false)
       }, 20000)
 
@@ -184,6 +252,13 @@ export async function connect(): Promise<boolean> {
         Logger.info("socket", "Connected successfully")
         isConnecting = false
         reconnectAttempts = 0
+        emitConnectionStatus({
+          state: "connected",
+          connected: true,
+          reconnectAttempts: 0,
+          lastConnectedAt: Date.now(),
+          lastError: null,
+        })
         resolve(true)
       })
 
@@ -191,12 +266,22 @@ export async function connect(): Promise<boolean> {
         clearTimeout(timeout)
         Logger.error("socket", "Connection error", { error: error.message })
         isConnecting = false
+        emitConnectionStatus({
+          state: "disconnected",
+          connected: false,
+          lastError: error.message || "Connection error",
+        })
         resolve(false)
       })
     })
   } catch (error) {
     Logger.error("socket", "Failed to connect", { error })
     isConnecting = false
+    emitConnectionStatus({
+      state: "disconnected",
+      connected: false,
+      lastError: error instanceof Error ? error.message : "Failed to connect",
+    })
     return false
   }
 }
@@ -211,8 +296,15 @@ export function disconnect(): void {
     socket = null
   }
 
+  emitConnectionStatus({
+    state: "disconnected",
+    connected: false,
+  })
+
   // Clear subscriptions
-  eventSubscriptions.clear()
+  eventCheckInSubscriptions.clear()
+  eventCheckOutSubscriptions.clear()
+  eventInterestSubscriptions.clear()
   chatSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
@@ -226,9 +318,37 @@ export function isConnected(): boolean {
 }
 
 /**
+ * Rejoin all rooms that have active subscriptions.
+ * Called after every (re)connect so server-side room membership is restored.
+ */
+function rejoinAllRooms(): void {
+  if (!socket?.connected) return
+
+  const eventIds = new Set<string>([
+    ...eventCheckInSubscriptions.keys(),
+    ...eventCheckOutSubscriptions.keys(),
+    ...eventInterestSubscriptions.keys(),
+  ])
+  eventIds.forEach((id) => socket?.emit("join:event", id))
+  chatSubscriptions.forEach((_, id) => socket?.emit("join:chat", id))
+  conversationSubscriptions.forEach((_, id) => socket?.emit("join:conversation", id))
+
+  const roomCount = eventIds.size + chatSubscriptions.size + conversationSubscriptions.size
+  if (roomCount > 0) {
+    Logger.info("socket", `Rejoined ${roomCount} rooms after connect`)
+  }
+}
+
+/**
  * Set up socket event handlers
  */
 function setupSocketHandlers(sock: TypedSocket): void {
+  // Rejoin all subscribed rooms on every (re)connect
+  sock.on("connect", () => {
+    Logger.info("socket", "Socket (re)connected, rejoining rooms")
+    rejoinAllRooms()
+  })
+
   sock.on("connected", (data) => {
     Logger.info("socket", "Authenticated", { userId: data.userId })
   })
@@ -239,6 +359,11 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("disconnect", (reason) => {
     Logger.warn("socket", "Disconnected", { reason })
+    emitConnectionStatus({
+      state: "disconnected",
+      connected: false,
+      lastError: reason || "Disconnected",
+    })
 
     // Attempt to reconnect if not intentional
     if (reason === "io server disconnect") {
@@ -249,22 +374,26 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   // Event updates
   sock.on("event:checkin", (data) => {
-    const callbacks = eventSubscriptions.get(data.eventId)
-    callbacks?.forEach((cb) => (cb as EventCheckInCallback)(data))
+    markDomainsDirty(["events", "match"])
+    const callbacks = eventCheckInSubscriptions.get(data.eventId)
+    callbacks?.forEach((cb) => cb(data))
   })
 
   sock.on("event:checkout", (data) => {
-    const callbacks = eventSubscriptions.get(data.eventId)
-    callbacks?.forEach((cb) => (cb as EventCheckOutCallback)(data))
+    markDomainsDirty(["events", "match"])
+    const callbacks = eventCheckOutSubscriptions.get(data.eventId)
+    callbacks?.forEach((cb) => cb(data))
   })
 
   sock.on("event:interestUpdate", (data) => {
-    const callbacks = eventSubscriptions.get(data.eventId)
-    callbacks?.forEach((cb) => (cb as EventInterestCallback)(data))
+    markDomainsDirty(["events", "match"])
+    const callbacks = eventInterestSubscriptions.get(data.eventId)
+    callbacks?.forEach((cb) => cb(data))
   })
 
   // Chat updates
   sock.on("chat:message", (data) => {
+    markDomainsDirty(["chat"])
     const callbacks = chatSubscriptions.get(data.chatGroupId)
     callbacks?.forEach((cb) => (cb as ChatMessageCallback)(data))
   })
@@ -281,6 +410,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   // Private messaging updates
   sock.on("private:message", (data) => {
+    markDomainsDirty(["chat", "match"])
     // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
@@ -308,6 +438,12 @@ function setupSocketHandlers(sock: TypedSocket): void {
 async function handleReconnect(): Promise<void> {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     Logger.warn("socket", "Max reconnect attempts reached")
+    emitConnectionStatus({
+      state: "disconnected",
+      connected: false,
+      reconnectAttempts,
+      lastError: "Max reconnect attempts reached",
+    })
     return
   }
 
@@ -315,6 +451,11 @@ async function handleReconnect(): Promise<void> {
   const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts - 1)
 
   Logger.info("socket", `Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`)
+  emitConnectionStatus({
+    state: "reconnecting",
+    connected: false,
+    reconnectAttempts,
+  })
 
   await new Promise((resolve) => setTimeout(resolve, delay))
 
@@ -327,34 +468,81 @@ async function handleReconnect(): Promise<void> {
 /**
  * Subscribe to event updates (check-ins, check-outs, interest)
  */
+function subscribeToEventMap<TCallback>(
+  eventId: string,
+  callback: TCallback,
+  targetMap: Map<string, Set<TCallback>>
+): () => void {
+  if (!socket?.connected) {
+    // connect() is async; room will be joined by the connect handler via rejoinAllRooms()
+    connect()
+  } else {
+    socket.emit("join:event", eventId)
+  }
+
+  // Add to subscriptions
+  if (!targetMap.has(eventId)) {
+    targetMap.set(eventId, new Set())
+  }
+  targetMap.get(eventId)!.add(callback)
+
+  // Return unsubscribe function
+  return () => {
+    const callbacks = targetMap.get(eventId)
+    if (callbacks) {
+      callbacks.delete(callback)
+      if (callbacks.size === 0) {
+        targetMap.delete(eventId)
+        const hasAnyEventSubs = eventCheckInSubscriptions.has(eventId)
+          || eventCheckOutSubscriptions.has(eventId)
+          || eventInterestSubscriptions.has(eventId)
+        if (!hasAnyEventSubs) {
+          socket?.emit("leave:event", eventId)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Subscribe only to event check-in updates.
+ */
+export function subscribeToEventCheckIn(
+  eventId: string,
+  callback: EventCheckInCallback
+): () => void {
+  return subscribeToEventMap(eventId, callback, eventCheckInSubscriptions)
+}
+
+/**
+ * Subscribe only to event check-out updates.
+ */
+export function subscribeToEventCheckOut(
+  eventId: string,
+  callback: EventCheckOutCallback
+): () => void {
+  return subscribeToEventMap(eventId, callback, eventCheckOutSubscriptions)
+}
+
+/**
+ * Subscribe only to event interest updates.
+ */
+export function subscribeToEventInterest(
+  eventId: string,
+  callback: EventInterestCallback
+): () => void {
+  return subscribeToEventMap(eventId, callback, eventInterestSubscriptions)
+}
+
+/**
+ * Backward-compatible helper.
+ * Deprecated: prefer specific subscription helpers above.
+ */
 export function subscribeToEvent(
   eventId: string,
   callback: EventCheckInCallback | EventCheckOutCallback | EventInterestCallback
 ): () => void {
-  if (!socket?.connected) {
-    connect()
-  }
-
-  // Join event room
-  socket?.emit("join:event", eventId)
-
-  // Add to subscriptions
-  if (!eventSubscriptions.has(eventId)) {
-    eventSubscriptions.set(eventId, new Set())
-  }
-  eventSubscriptions.get(eventId)!.add(callback)
-
-  // Return unsubscribe function
-  return () => {
-    const callbacks = eventSubscriptions.get(eventId)
-    if (callbacks) {
-      callbacks.delete(callback)
-      if (callbacks.size === 0) {
-        eventSubscriptions.delete(eventId)
-        socket?.emit("leave:event", eventId)
-      }
-    }
-  }
+  return subscribeToEventCheckIn(eventId, callback as EventCheckInCallback)
 }
 
 // === Chat Subscriptions ===
@@ -367,11 +555,11 @@ export function subscribeToChat(
   callback: ChatMessageCallback | ChatTypingCallback | ChatReactionCallback
 ): () => void {
   if (!socket?.connected) {
+    // connect() is async; room will be joined by the connect handler via rejoinAllRooms()
     connect()
+  } else {
+    socket.emit("join:chat", chatGroupId)
   }
-
-  // Join chat room
-  socket?.emit("join:chat", chatGroupId)
 
   // Add to subscriptions
   if (!chatSubscriptions.has(chatGroupId)) {
@@ -416,11 +604,11 @@ export function subscribeToConversation(
   callback: PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback
 ): () => void {
   if (!socket?.connected) {
+    // connect() is async; room will be joined by the connect handler via rejoinAllRooms()
     connect()
+  } else {
+    socket.emit("join:conversation", conversationId)
   }
-
-  // Join conversation room
-  socket?.emit("join:conversation", conversationId)
 
   // Add to subscriptions
   if (!conversationSubscriptions.has(conversationId)) {
@@ -475,7 +663,7 @@ export function subscribeToUserNotifications(
     connect()
   }
 
-  // User room is automatically joined on connection, no need to emit join
+  // User room is automatically joined server-side on connection, no need to emit join
   // Add to subscriptions
   if (!userSubscriptions.has(userId)) {
     userSubscriptions.set(userId, new Set())
@@ -518,19 +706,9 @@ async function handleAppStateChange(state: AppStateStatus): Promise<void> {
 
   if (state === "active") {
     // App came to foreground, reconnect if needed
+    // Room rejoining is handled automatically by the connect handler in setupSocketHandlers
     if (!socket?.connected) {
       await connect()
-
-      // Rejoin all subscribed rooms
-      eventSubscriptions.forEach((_, eventId) => {
-        socket?.emit("join:event", eventId)
-      })
-      chatSubscriptions.forEach((_, chatGroupId) => {
-        socket?.emit("join:chat", chatGroupId)
-      })
-      conversationSubscriptions.forEach((_, conversationId) => {
-        socket?.emit("join:conversation", conversationId)
-      })
     }
   } else {
     // App went to background, disconnect to save battery
@@ -553,6 +731,7 @@ export function cleanup(): void {
 
 // Export types for consumers
 export type {
+  SocketConnectionStatus,
   EventCheckInCallback,
   EventCheckOutCallback,
   EventInterestCallback,

@@ -177,11 +177,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               contentFit={contentFit}
               onLoad={() => {
                 Logger.info('general', 'Image loaded successfully', { url: highQualityUrl?.substring(0, 60) })
-                if (effectiveEnableProgressive) {
-                  handleHighQualityLoad()
-                } else {
-                  onLoad?.()
-                }
+                handleHighQualityLoad()
               }}
               onError={(e) => {
                 Logger.error('general', 'Image onError triggered', {

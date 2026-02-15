@@ -1,12 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Tabs } from 'expo-router';
-import React, { memo, useCallback, useMemo } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons'
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
+import { Tabs } from 'expo-router'
+import React, { memo, useCallback, useMemo } from 'react'
+import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { APP_COLORS } from '../../lib/theme'
 
-// Memoized tab button to prevent re-renders
 const TabButton = memo(({
   routeKey,
   routeName,
@@ -20,24 +19,23 @@ const TabButton = memo(({
   onPress: () => void
   onLongPress: () => void
 }) => {
-  const iconColor = '#FFFFFF';
-  const iconSize = 26;
+  const iconSize = 22
 
   const iconName = useMemo((): keyof typeof Ionicons.glyphMap => {
-    if (routeName === 'events') return isFocused ? 'home' : 'home-outline';
-    if (routeName === 'match') return isFocused ? 'heart' : 'heart-outline';
-    if (routeName === 'chat') return isFocused ? 'chatbubbles' : 'chatbubbles-outline';
-    if (routeName === 'profile') return isFocused ? 'person' : 'person-outline';
-    return 'ellipse';
-  }, [routeName, isFocused]);
+    if (routeName === 'events') return isFocused ? 'home' : 'home-outline'
+    if (routeName === 'match') return isFocused ? 'heart' : 'heart-outline'
+    if (routeName === 'chat') return isFocused ? 'chatbubbles' : 'chatbubbles-outline'
+    if (routeName === 'profile') return isFocused ? 'person' : 'person-outline'
+    return 'ellipse'
+  }, [routeName, isFocused])
 
   const accessibilityLabel = useMemo(() => {
-    if (routeName === 'events') return 'Events tab';
-    if (routeName === 'match') return 'Match tab';
-    if (routeName === 'chat') return 'Chat tab';
-    if (routeName === 'profile') return 'Profile tab';
-    return 'Tab';
-  }, [routeName]);
+    if (routeName === 'events') return 'Events tab'
+    if (routeName === 'match') return 'Match tab'
+    if (routeName === 'chat') return 'Chat tab'
+    if (routeName === 'profile') return 'Profile tab'
+    return 'Tab'
+  }, [routeName])
 
   return (
     <Pressable
@@ -47,59 +45,61 @@ const TabButton = memo(({
       accessibilityState={isFocused ? { selected: true } : {}}
       onPress={onPress}
       onLongPress={onLongPress}
-      style={styles.item}
+      style={({ pressed }) => [
+        styles.item,
+        isFocused && styles.itemFocused,
+        pressed && styles.itemPressed,
+      ]}
     >
-      <View style={[styles.iconWrapper, isFocused && styles.iconWrapperActive]}>
-        <Ionicons name={iconName} size={iconSize} color={iconColor} />
-      </View>
+      <Ionicons
+        name={iconName}
+        size={iconSize}
+        color={isFocused ? APP_COLORS.accent : APP_COLORS.textSecondary}
+      />
     </Pressable>
-  );
-});
+  )
+})
 
-TabButton.displayName = 'TabButton';
+TabButton.displayName = 'TabButton'
 
-// Memoized tab bar to prevent re-renders during navigation
-const CustomTabBar = memo(({ state, descriptors, navigation }: BottomTabBarProps) => {
-  const insets = useSafeAreaInsets();
+const CustomTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
+  const insets = useSafeAreaInsets()
 
-  // Memoize wrapper style
-  const wrapperStyle = useMemo(() => [
-    styles.wrapper,
-    { paddingBottom: Math.max(insets.bottom, 8) }
-  ], [insets.bottom]);
+  const wrapperStyle = useMemo(
+    () => [styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }],
+    [insets.bottom]
+  )
 
-  // Create stable press handlers
-  const createPressHandler = useCallback((routeKey: string, routeName: string, isFocused: boolean) => () => {
-    const event = navigation.emit({
-      type: 'tabPress',
-      target: routeKey,
-      canPreventDefault: true,
-    });
-    if (!isFocused && !event.defaultPrevented) {
-      navigation.navigate(routeName);
-    }
-  }, [navigation]);
+  const createPressHandler = useCallback(
+    (routeKey: string, routeName: string, isFocused: boolean) => () => {
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: routeKey,
+        canPreventDefault: true,
+      })
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(routeName)
+      }
+    },
+    [navigation]
+  )
 
-  const createLongPressHandler = useCallback((routeKey: string) => () => {
-    navigation.emit({
-      type: 'tabLongPress',
-      target: routeKey,
-    });
-  }, [navigation]);
+  const createLongPressHandler = useCallback(
+    (routeKey: string) => () => {
+      navigation.emit({
+        type: 'tabLongPress',
+        target: routeKey,
+      })
+    },
+    [navigation]
+  )
 
   return (
     <View pointerEvents="box-none" style={wrapperStyle}>
-      <View style={styles.glowOuter} />
-      <View style={styles.glowInner} />
-      <LinearGradient
-        colors={[ '#6E1FD0', '#7E26CC' ]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.pillContainer}
-      >
+      <View style={styles.pillContainer}>
         <View style={styles.itemsRow}>
           {state.routes.map((route, index) => {
-            const isFocused = state.index === index;
+            const isFocused = state.index === index
             return (
               <TabButton
                 key={route.key}
@@ -109,43 +109,24 @@ const CustomTabBar = memo(({ state, descriptors, navigation }: BottomTabBarProps
                 onPress={createPressHandler(route.key, route.name, isFocused)}
                 onLongPress={createLongPressHandler(route.key)}
               />
-            );
+            )
           })}
         </View>
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <LinearGradient
-            colors={[ 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0)' ]}
-            locations={[0, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.topGloss}
-          />
-          <LinearGradient
-            colors={[ 'rgba(0,0,0,0)', 'rgba(0,0,0,0.20)' ]}
-            start={{ x: 0.5, y: 0.4 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.bottomShade}
-          />
-          <View style={[styles.stroke, { borderColor: 'rgba(255,255,255,0.80)' }]} />
-        </View>
-      </LinearGradient>
+      </View>
     </View>
-  );
-});
+  )
+})
 
-CustomTabBar.displayName = 'CustomTabBar';
+CustomTabBar.displayName = 'CustomTabBar'
 
 export default function TabLayout() {
-  // Onboarding check removed - root layout already handles this
-  // This prevents duplicate profile fetches on app startup
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: { backgroundColor: 'transparent' },
-        sceneStyle: { backgroundColor: 'transparent' },
+        tabBarStyle: { backgroundColor: APP_COLORS.backgroundBase },
+        sceneStyle: { backgroundColor: APP_COLORS.backgroundBase },
       }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
@@ -154,7 +135,7 @@ export default function TabLayout() {
       <Tabs.Screen name="chat" options={{ title: 'Chat' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -165,86 +146,44 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
   },
-  glowOuter: {
-    position: 'absolute',
-    bottom: 16,
-    width: 352,
-    height: 51,
-    borderRadius: 1000,
-    backgroundColor: 'transparent',
-    ...Platform.select({
-      ios: {
-        shadowColor: 'rgb(139, 92, 246)',
-        shadowOpacity: 0.55,
-        shadowRadius: 22,
-        shadowOffset: { width: 0, height: 0 },
-      },
-      android: {
-        elevation: 0,
-      },
-      default: {},
-    }),
-  },
-  glowInner: {
-    position: 'absolute',
-    bottom: 16,
-    width: 352,
-    height: 51,
-    borderRadius: 1000,
-    backgroundColor: 'transparent',
-    ...Platform.select({
-      ios: {
-        shadowColor: 'rgb(139, 92, 246)',
-        shadowOpacity: 0.35,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 0 },
-      },
-      android: {
-        elevation: 0,
-      },
-      default: {},
-    }),
-  },
   pillContainer: {
     width: 352,
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    height: 51,
+    height: 56,
     borderRadius: 1000,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOpacity: 0.3,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: {
+        elevation: 8,
+      },
+      default: {},
+    }),
   },
   itemsRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 8,
   },
   item: {
-    height: 39,
-    width: 73,
-    borderRadius: 20,
+    height: 44,
+    width: 80,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconWrapper: {
-    height: 39,
-    width: 56,
-    borderRadius: 1000,
-    alignItems: 'center',
-    justifyContent: 'center',
+  itemFocused: {
+    backgroundColor: 'rgba(10,132,255,0.18)',
   },
-  iconWrapperActive: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.45)'
+  itemPressed: {
+    opacity: 0.75,
   },
-  stroke: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 1000,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  topGloss: {},
-  bottomShade: {},
-  sideGlintLeft: {},
-  sideGlintRight: {},
-});
+})

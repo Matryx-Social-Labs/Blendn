@@ -700,7 +700,7 @@ class ApiClientClass {
     sortOrder?: 'asc' | 'desc'
     include?: string
     interestedPreviewLimit?: number
-  }): Promise<ApiResponse<{ events: any[]; pagination: any; activeCheckins?: any[]; profile?: any }>> {
+  }, options?: { force?: boolean }): Promise<ApiResponse<{ events: any[]; pagination: any; activeCheckins?: any[]; profile?: any }>> {
     const searchParams = new URLSearchParams()
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -710,10 +710,11 @@ class ApiClientClass {
       })
     }
     const query = searchParams.toString()
-    return this.cachedRequest<{ events: any[]; pagination: any }>(
-      `/api/mobile/events${query ? `?${query}` : ''}`,
-      { ttl: EVENTS_LIST_SWR_TTL, swr: true }
-    )
+    const endpoint = `/api/mobile/events${query ? `?${query}` : ''}`
+    if (options?.force) {
+      return this.queuedRequest<{ events: any[]; pagination: any }>(endpoint)
+    }
+    return this.cachedRequest<{ events: any[]; pagination: any }>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
   }
 
   async getEvent(
@@ -762,11 +763,12 @@ class ApiClientClass {
     )
   }
 
-  async getEventCheckins(eventId: string): Promise<ApiResponse<any[]>> {
-    return this.cachedRequest<any[]>(
-      `/api/mobile/events/${eventId}/checkins`,
-      { ttl: EVENT_CHECKINS_SWR_TTL, swr: true }
-    )
+  async getEventCheckins(eventId: string, options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
+    const endpoint = `/api/mobile/events/${eventId}/checkins`
+    if (options?.force) {
+      return this.queuedRequest<any[]>(endpoint)
+    }
+    return this.cachedRequest<any[]>(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
   }
 
   async toggleFavorite(eventId: string): Promise<ApiResponse<{ favorited: boolean }>> {
@@ -835,9 +837,17 @@ class ApiClientClass {
       phone?: string
       age?: number
       location?: string
+      bio?: string
+      occupation?: string
+      education?: string
       interests?: string[]
       photos?: string[]
       onboarded?: boolean
+      pushEnabled?: boolean
+      showOnlineStatus?: boolean
+      shareReadReceipts?: boolean
+      locationSharing?: boolean
+      preferences?: Record<string, unknown>
     }
   ): Promise<ApiResponse<any>> {
     return this.queuedRequest<any>(
@@ -890,11 +900,12 @@ class ApiClientClass {
 
   // === CHAT ENDPOINTS ===
 
-  async getChatGroups(): Promise<ApiResponse<any[]>> {
-    return this.cachedRequest<any[]>(
-      '/api/mobile/chat/groups',
-      { ttl: CHAT_LIST_SWR_TTL, swr: true }
-    )
+  async getChatGroups(options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
+    const endpoint = '/api/mobile/chat/groups'
+    if (options?.force) {
+      return this.queuedRequest<any[]>(endpoint)
+    }
+    return this.cachedRequest<any[]>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
   }
 
   async getEventChat(eventId: string): Promise<ApiResponse<any>> {
@@ -986,11 +997,12 @@ class ApiClientClass {
 
   // === PRIVATE CONVERSATIONS ===
 
-  async getConversations(): Promise<ApiResponse<any[]>> {
-    return this.cachedRequest<any[]>(
-      '/api/mobile/conversations',
-      { ttl: CHAT_LIST_SWR_TTL, swr: true }
-    )
+  async getConversations(options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
+    const endpoint = '/api/mobile/conversations'
+    if (options?.force) {
+      return this.queuedRequest<any[]>(endpoint)
+    }
+    return this.cachedRequest<any[]>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
   }
 
   async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{
@@ -1095,7 +1107,7 @@ class ApiClientClass {
     )
   }
 
-  async getActiveCheckins(): Promise<ApiResponse<{
+  async getActiveCheckins(options?: { force?: boolean }): Promise<ApiResponse<{
     checkIns: Array<{
       id: string
       eventId: string
@@ -1114,10 +1126,11 @@ class ApiClientClass {
       }
     }>
   }>> {
-    return this.cachedRequest(
-      '/api/mobile/checkins/active',
-      { ttl: CHECKINS_SWR_TTL, swr: true }
-    )
+    const endpoint = '/api/mobile/checkins/active'
+    if (options?.force) {
+      return this.queuedRequest(endpoint)
+    }
+    return this.cachedRequest(endpoint, { ttl: CHECKINS_SWR_TTL, swr: true })
   }
 
   async getBatchInterestStatuses(eventIds: string[]): Promise<ApiResponse<{
@@ -1218,7 +1231,10 @@ class ApiClientClass {
     )
   }
 
-  async getMessageRequests(params?: { status?: string; limit?: number; offset?: number }): Promise<ApiResponse<{
+  async getMessageRequests(
+    params?: { status?: string; limit?: number; offset?: number },
+    options?: { force?: boolean }
+  ): Promise<ApiResponse<{
     requests: Array<{
       id: string
       senderId: string
@@ -1234,10 +1250,11 @@ class ApiClientClass {
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
-    return this.cachedRequest(
-      `/api/mobile/message-requests${query ? `?${query}` : ''}`,
-      { ttl: REQUESTS_SWR_TTL, swr: true }
-    )
+    const endpoint = `/api/mobile/message-requests${query ? `?${query}` : ''}`
+    if (options?.force) {
+      return this.queuedRequest(endpoint)
+    }
+    return this.cachedRequest(endpoint, { ttl: REQUESTS_SWR_TTL, swr: true })
   }
 
   async respondToMessageRequest(
@@ -1277,6 +1294,12 @@ class ApiClientClass {
 
   clearQueue() {
     requestQueue.clear()
+  }
+
+  clearResponseCache() {
+    this.responseCache.clear()
+    this.inFlight.clear()
+    Logger.info('api', 'Response cache cleared')
   }
 }
 

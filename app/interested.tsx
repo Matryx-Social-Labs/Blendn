@@ -115,25 +115,12 @@ export default function InterestedScreen() {
     const lat = event.latitude
     const lon = event.longitude
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
-    const label = encodeURIComponent(event.venue_name || 'Event Location')
     const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
-    if (Platform.OS === 'ios') {
-      const googleScheme = 'comgooglemaps://'
-      const googleUrl = hasCoords ? `${googleScheme}?q=${lat},${lon}` : `${googleScheme}?q=${addressQuery}`
-      const appleUrl = hasCoords ? `maps:0,0?q=${label}@${lat},${lon}` : `maps:0,0?q=${addressQuery}`
-      const webUrl = hasCoords ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-      try { if (await Linking.canOpenURL(googleScheme)) return Linking.openURL(googleUrl) } catch {}
-      try { if (await Linking.canOpenURL('maps:')) return Linking.openURL(appleUrl) } catch {}
-      return Linking.openURL(webUrl)
-    } else {
-      const googleScheme = 'comgooglemaps://'
-      const googleUrl = hasCoords ? `${googleScheme}?q=${lat},${lon}` : `${googleScheme}?q=${addressQuery}`
-      const geoUrl = hasCoords ? `geo:0,0?q=${lat},${lon}(${label})` : `geo:0,0?q=${addressQuery}`
-      const webUrl = hasCoords ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-      try { if (await Linking.canOpenURL(googleScheme)) return Linking.openURL(googleUrl) } catch {}
-      try { if (await Linking.canOpenURL('geo:')) return Linking.openURL(geoUrl) } catch {}
-      return Linking.openURL(webUrl)
-    }
+    const googleScheme = 'comgooglemaps://'
+    const googleAppUrl = hasCoords ? `${googleScheme}?q=${lat},${lon}` : `${googleScheme}?q=${addressQuery}`
+    const googleWebUrl = hasCoords ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
+    try { if (await Linking.canOpenURL(googleScheme)) return Linking.openURL(googleAppUrl) } catch {}
+    return Linking.openURL(googleWebUrl)
   }, [])
 
   const shareEvent = useCallback(async (event: EventRow) => {

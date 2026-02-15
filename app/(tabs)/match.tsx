@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react'
 import { View, ActivityIndicator, StyleSheet } from 'react-native'
+import { APP_COLORS } from '../../lib/theme'
 
 const MatchScreen = React.lazy(() => import('../../components/screens/MatchScreen'))
 
@@ -8,7 +9,7 @@ export default function Match() {
     <Suspense
       fallback={
         <View style={styles.fallback}>
-          <ActivityIndicator size="large" color="#7E6CFF" />
+          <ActivityIndicator size="large" color={APP_COLORS.accent} />
         </View>
       }
     >
@@ -22,6 +23,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
 })

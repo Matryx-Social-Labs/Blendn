@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
+import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
-  Alert,
+  Animated as RNAnimated,
   Dimensions,
+  Easing,
   InteractionManager,
   Linking,
   Platform,
@@ -20,13 +23,22 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import ActionTray, { type ActionTrayButton } from '../ActionTray';
+import ScalePress from '../motion/ScalePress';
 import { SkeletonBlock, SkeletonLine } from '../Skeleton';
 import { apiClient } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/photoUtils';
-import { subscribeToEvent, EventCheckInCallback, EventInterestCallback } from '../../lib/socketClient';
+import {
+  subscribeToEventCheckIn,
+  subscribeToEventInterest,
+  EventCheckInCallback,
+  EventInterestCallback
+} from '../../lib/socketClient';
+import { APP_COLORS } from '../../lib/theme';
 import { useAuth } from '../../lib/useAuth';
+import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
 import { getMapImageUrlCache, setMapImageUrlCache } from '../../lib/mapImageCache';
 const placeholderImg = require('../../assets/images/icon.png');
@@ -72,17 +84,79 @@ interface CheckInStatus {
   code?: string
 }
 
+type EventDetailTrayState = {
+  visible: boolean
+  title: string
+  message?: string
+  buttons: ActionTrayButton[]
+}
+
 const { width } = Dimensions.get('window')
 const CONTENT_HORIZONTAL_PADDING = 14
 const GALLERY_GAP = 12
 const galleryTileSize = Math.floor((width - (CONTENT_HORIZONTAL_PADDING * 2) - GALLERY_GAP) / 2)
 const GALLERY_FULL_WIDTH = Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))
 const GALLERY_TALL_HEIGHT = (galleryTileSize * 2) + GALLERY_GAP
+const TOP_BAR_EXTRA_TOP_PADDING = 0
+const TOP_BAR_INSET_REDUCTION = 24
+const CHECKIN_RULES_TEXT = [
+  'Before you check in, please confirm:',
+  '1. You are physically at the event venue.',
+  '2. Location permission is enabled and accurate.',
+  '3. Fake/spoofed check-ins are not allowed.',
+  '4. One active check-in per event/account.',
+  '5. Follow venue rules and Blendn community guidelines.',
+  '6. Harassment, hate speech, or unsafe behavior is prohibited.',
+  '7. Violations can lead to check-in revocation or account restrictions.',
+].join('\n')
+
+const hashSeed = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+const hslToHex = (h: number, s: number, l: number) => {
+  const sat = s / 100
+  const light = l / 100
+  const c = (1 - Math.abs(2 * light - 1)) * sat
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1))
+  const m = light - c / 2
+  let r = 0
+  let g = 0
+  let b = 0
+  if (h < 60) [r, g, b] = [c, x, 0]
+  else if (h < 120) [r, g, b] = [x, c, 0]
+  else if (h < 180) [r, g, b] = [0, c, x]
+  else if (h < 240) [r, g, b] = [0, x, c]
+  else if (h < 300) [r, g, b] = [x, 0, c]
+  else [r, g, b] = [c, 0, x]
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0')
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+const buildEventGradientPalette = (seedInput: string) => {
+  const seed = hashSeed(seedInput || 'blendn-event')
+  const hue = seed % 360
+  const accentHue = (hue + 32 + (seed % 38)) % 360
+  return {
+    pageTop: hslToHex(hue, 44, 30),
+    pageBottom: hslToHex(accentHue, 32, 15),
+    surfaceTop: hslToHex(hue, 36, 24),
+    surfaceBottom: hslToHex(accentHue, 28, 11),
+    heroOverlayStart: 'rgba(0,0,0,0.06)',
+    heroOverlayEnd: `rgba(6,6,10,${0.86 + ((seed % 10) * 0.008)})`,
+  }
+}
 
 export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam, interested } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
+  const feedback = useInteractionFeedback()
 
   // Initialize event from params if available for instant display
   const hasParams = !!(title || cover || venue)
@@ -142,8 +216,34 @@ export default function EventDetail() {
   const [showAvatars, setShowAvatars] = useState(false)
   const [showHeroHighRes, setShowHeroHighRes] = useState(false)
   const [mapFailed, setMapFailed] = useState(false)
+  const [trayState, setTrayState] = useState<EventDetailTrayState>({
+    visible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  })
   const galleryOffsetRef = React.useRef<number | null>(null)
   const lastFetchRef = React.useRef<number>(0)
+  const actionMorph = React.useRef(new RNAnimated.Value(0)).current
+  const checkedInMorphTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
+  const gradientPalette = React.useMemo(() => {
+    const seed = `${event?.cover_image_url || cover || ''}|${event?.category || category || ''}|${event?.title || title || ''}`
+    return buildEventGradientPalette(seed)
+  }, [event?.cover_image_url, event?.category, event?.title, cover, category, title])
+
+  const closeTray = useCallback(() => {
+    setTrayState((prev) => ({ ...prev, visible: false }))
+  }, [])
+
+  const showTray = useCallback((titleText: string, messageText: string, buttons?: ActionTrayButton[]) => {
+    setTrayState({
+      visible: true,
+      title: titleText,
+      message: messageText,
+      buttons: buttons && buttons.length > 0 ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+    })
+  }, [closeTray])
 
   useEffect(() => {
     if (id && String(id).trim()) {
@@ -283,8 +383,8 @@ export default function EventDetail() {
     }
 
     // Subscribe to both check-in and interest events
-    const unsubCheckIn = subscribeToEvent(String(id), handleCheckIn)
-    const unsubInterest = subscribeToEvent(String(id), handleInterest)
+    const unsubCheckIn = subscribeToEventCheckIn(String(id), handleCheckIn)
+    const unsubInterest = subscribeToEventInterest(String(id), handleInterest)
 
     return () => {
       Logger.info('events', 'Cleaning up event subscriptions')
@@ -297,7 +397,10 @@ export default function EventDetail() {
     try {
       if (!id) return
       if (!user) {
-        Alert.alert('Sign in required', 'Please sign in to show interest')
+        showTray('Sign in required', 'Please sign in to show interest.', [
+          { label: 'Not now', onPress: closeTray },
+          { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
+        ])
         return
       }
       const prevInterested = userInterested
@@ -308,15 +411,17 @@ export default function EventDetail() {
         // rollback
         setUserInterested(prevInterested)
         setInterestCount((prev) => Math.max(0, prev + (prevInterested ? 1 : -1)))
-        Alert.alert('Error', 'Failed to update interest')
+        feedback.error()
+        showTray('Error', 'Failed to update interest.')
         return
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
     } catch {
-      Alert.alert('Error', 'Failed to update interest')
+      feedback.error()
+      showTray('Error', 'Failed to update interest.')
     }
-  }, [id, user, userInterested])
+  }, [id, user, userInterested, showTray, closeTray, feedback])
 
   const checkProximityStatus = async () => {
     if (!userLocation || !event) return
@@ -370,7 +475,7 @@ export default function EventDetail() {
 
       if (!result.success || !result.data) {
         Logger.error('events', 'detail:fetch:error', { error: result.error })
-        Alert.alert('Error', 'Failed to load event details')
+        showTray('Error', 'Failed to load event details.')
       } else {
         // Map API response (camelCase) to EventDetail interface (snake_case)
         const d = result.data
@@ -467,10 +572,9 @@ export default function EventDetail() {
       // Fallback if expo-location is not available
       if (!Location) {
         Logger.warn('events', 'location:moduleUnavailable')
-        Alert.alert(
-          'Location Service Not Available',
-          'Location services are required to check in to events. Please ensure you have the latest version of this app.',
-          [{ text: 'OK', style: 'default' }]
+        showTray(
+          'Location service not available',
+          'Location services are required to check in to events. Please ensure you have the latest version of this app.'
         )
         return null
       }
@@ -479,12 +583,19 @@ export default function EventDetail() {
       const serviceEnabled = await Location.hasServicesEnabledAsync()
       if (!serviceEnabled) {
         Logger.warn('events', 'location:servicesDisabled')
-        Alert.alert(
-          'Location Services Disabled',
+        showTray(
+          'Location services disabled',
           'Please enable location services in your device settings to check in to events.',
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Open Settings',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                Linking.openSettings().catch(() => {})
+              }
+            }
           ]
         )
         return null
@@ -494,12 +605,19 @@ export default function EventDetail() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         Logger.warn('events', 'location:permissionDenied')
-        Alert.alert(
-          'Location Permission Required',
-          'Blendn needs location access to verify you\'re at events. This ensures authentic meetups and prevents fake check-ins.',
+        showTray(
+          'Location permission required',
+          'Blendn needs location access to verify you are at events. This keeps check-ins authentic.',
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Open Settings',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                Linking.openSettings().catch(() => {})
+              }
+            }
           ]
         )
         return null
@@ -517,12 +635,19 @@ export default function EventDetail() {
       const accuracy = location.coords.accuracy || 999
       if (accuracy > 50) {
         Logger.warn('events', 'location:lowAccuracy', { accuracy })
-        Alert.alert(
-          'GPS Signal Weak',
-          `GPS accuracy is ${Math.round(accuracy)}m. For accurate check-ins, please move to a location with better GPS signal.`,
+        showTray(
+          'GPS signal weak',
+          `GPS accuracy is ${Math.round(accuracy)}m. Move to a location with better GPS signal for accurate check-ins.`,
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Try Again', onPress: () => getCurrentLocation() },
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Try Again',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                getCurrentLocation().catch(() => {})
+              },
+            },
           ]
         )
         return null
@@ -538,24 +663,39 @@ export default function EventDetail() {
       // Handle specific location errors for production
       const errorCode = (error as any)?.code
       if (errorCode === 'E_LOCATION_TIMEOUT') {
-        Alert.alert('Location Timeout', 'Unable to get your location. Please try again or move to an area with better GPS signal.')
+        showTray('Location timeout', 'Unable to get your location. Please try again or move to an area with better GPS signal.')
       } else if (errorCode === 'E_LOCATION_UNAVAILABLE') {
-        Alert.alert('Location Unavailable', 'Location services are temporarily unavailable. Please try again.')
+        showTray('Location unavailable', 'Location services are temporarily unavailable. Please try again.')
       } else {
-        Alert.alert('Location Error', 'Failed to get your current location. Please check your GPS settings and try again.')
+        showTray('Location error', 'Failed to get your current location. Please check your GPS settings and try again.')
       }
       return null
     }
   }
 
-  const handleCheckIn = async () => {
+  const handleCheckIn = async (skipRules = false) => {
+    if (!skipRules) {
+      showTray('Rules and regulations', CHECKIN_RULES_TEXT, [
+        { label: 'Cancel', onPress: closeTray },
+        {
+          label: "I Agree, Continue",
+          variant: 'primary',
+          onPress: () => {
+            closeTray()
+            handleCheckIn(true)
+          },
+        },
+      ])
+      return
+    }
+
     setCheckingIn(true)
 
     try {
       Logger.journey('checkin', 'detail:start', { eventId: String(id) })
       if (!user) {
         Logger.journey('auth', 'detail:blocked:notSignedIn')
-        Alert.alert('Error', 'Please sign in to check in to events')
+        showTray('Sign in required', 'Please sign in to check in to events.')
         setCheckingIn(false)
         return
       }
@@ -602,37 +742,36 @@ export default function EventDetail() {
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
           // User is already checked in - update state directly
           setCheckInStatus({ success: true, checked_in: true })
-          Alert.alert('Already Checked In', 'You are already checked in to this event.')
+          showTray('Already checked in', 'You are already checked in to this event.')
         } else if (result.error?.includes('too far') || result.error?.includes('TOO_FAR')) {
           handleCheckInError({ code: 'TOO_FAR', error: result.error })
         } else {
-          Alert.alert('Check-in Failed', result.error || 'We couldn’t verify your check-in. Please try again.')
+          feedback.error()
+          showTray('Check-in failed', result.error || 'We could not verify your check-in. Please try again.')
         }
       } else {
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
+        feedback.success()
 
-        // Navigate directly to the event chat room
-        const navigateToChat = async () => {
-          try {
-            const chatResult = await apiClient.getEventChat(String(id))
-            if (chatResult.success && chatResult.data?.chatGroupId) {
-              router.push({
-                pathname: '/chat/[id]',
-                params: {
-                  id: chatResult.data.chatGroupId,
-                  roomName: chatResult.data.chatGroupName || event?.title || 'Event Chat',
-                  eventTitle: event?.title || ''
-                } as any
-              })
-              return
+        // Keep user in context and offer next step instead of forcing a full-screen jump.
+        showTray(
+          'Checked in',
+          'You are now checked in. Join the event chat now, or stay on this screen.',
+          [
+            {
+              label: 'Stay here',
+              onPress: closeTray,
+            },
+            {
+              label: 'Go to Chat',
+              variant: 'primary',
+              onPress: async () => {
+                closeTray()
+                await openEventChat()
+              }
             }
-          } catch (err) {
-            Logger.warn('events', 'checkin:navigateToChat:failed', { error: err as any })
-          }
-          router.push('/(tabs)/chat' as any)
-        }
-
-        navigateToChat()
+          ]
+        )
 
         // Send check-in success notification to the user
         try {
@@ -651,16 +790,20 @@ export default function EventDetail() {
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
       if ((error as any)?.message === 'CHECKIN_TIMEOUT') {
-        Alert.alert(
-          'Still checking you in…',
-          'This is taking longer than expected. Please try again.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Retry', onPress: () => handleCheckIn() }
-          ]
-        )
+        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
+          { label: 'Cancel', onPress: closeTray },
+          {
+            label: 'Retry',
+            variant: 'primary',
+            onPress: () => {
+              closeTray()
+              handleCheckIn(true)
+            }
+          }
+        ])
       } else {
-        Alert.alert('Check-in Failed', 'Something went wrong. Please try again.')
+        feedback.error()
+        showTray('Check-in failed', 'Something went wrong. Please try again.')
       }
     } finally {
       setCheckingIn(false)
@@ -670,31 +813,28 @@ export default function EventDetail() {
   const handleCheckInError = (data: any) => {
     switch (data.code) {
       case 'TOO_FAR':
-        const distance = Math.round(data.distance_meters)
-        const required = data.required_radius
-        Alert.alert(
-          'Too Far From Event 📍',
-          `You need to be within ${required}m of ${data.venue_name} to check in.\n\nYou are currently ${distance}m away.`,
+        const distance = Math.round(data.distance_meters || 0)
+        const required = data.required_radius || event?.check_in_radius || 100
+        showTray(
+          'Too far from event',
+          `You need to be within ${required}m to check in. You are currently ${distance}m away.`,
           [
-            { text: 'OK', style: 'default' },
-            { 
-              text: 'Open Maps', 
-              onPress: () => openInMaps()
-            }
+            { label: 'Done', onPress: closeTray },
+            { label: 'Open Maps', variant: 'primary', onPress: () => { closeTray(); openInMaps() } },
           ]
         )
         break
       case 'ALREADY_CHECKED_IN':
-        Alert.alert('Already Checked In', 'You have already checked in to this event!')
+        showTray('Already checked in', 'You have already checked in to this event.')
         break
       case 'EVENT_NOT_FOUND':
-        Alert.alert('Event Not Found', 'This event is no longer available.')
+        showTray('Event not found', 'This event is no longer available.')
         break
       case 'NO_LOCATION_DATA':
-        Alert.alert('Location Error', 'Event location data is not available.')
+        showTray('Location error', 'Event location data is not available.')
         break
       default:
-        Alert.alert('Check-in Failed', data.error || 'Unknown error occurred')
+        showTray('Check-in failed', data.error || 'Unknown error occurred')
     }
   }
 
@@ -703,14 +843,17 @@ export default function EventDetail() {
     try {
       const result = await apiClient.checkOut(String(id))
       if (result.success) {
-        Alert.alert('Checked Out', 'You have been checked out of this event.')
+        feedback.success()
+        showTray('Checked out', 'You have been checked out of this event.')
         // Update check-in status directly - no need for another API call
         setCheckInStatus({ success: true, checked_in: false })
       } else {
-        Alert.alert('Checkout Failed', result.error || 'Please try again.')
+        feedback.error()
+        showTray('Checkout failed', result.error || 'Please try again.')
       }
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Unknown error')
+      feedback.error()
+      showTray('Error', e?.message || 'Unknown error')
     } finally {
       setCheckingOut(false)
     }
@@ -721,50 +864,21 @@ export default function EventDetail() {
     const lat = event.latitude
     const lon = event.longitude
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
-    const label = encodeURIComponent(event.venue_name || 'Event Location')
     const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
 
-    if (Platform.OS === 'ios') {
-      const googleScheme = 'comgooglemaps://'
-      const googleUrl = hasCoords
-        ? `${googleScheme}?q=${lat},${lon}`
-        : `${googleScheme}?q=${addressQuery}`
-      const appleUrl = hasCoords
-        ? `maps:0,0?q=${label}@${lat},${lon}`
-        : `maps:0,0?q=${addressQuery}`
-      const webUrl = hasCoords
-        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
-        : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-      try {
-        const canOpenGoogle = await Linking.canOpenURL(googleScheme)
-        if (canOpenGoogle) return Linking.openURL(googleUrl)
-      } catch {}
-      try {
-        const canOpenApple = await Linking.canOpenURL('maps:')
-        if (canOpenApple) return Linking.openURL(appleUrl)
-      } catch {}
-      return Linking.openURL(webUrl)
-    } else {
-      const googleScheme = 'comgooglemaps://'
-      const googleUrl = hasCoords
-        ? `${googleScheme}?q=${lat},${lon}`
-        : `${googleScheme}?q=${addressQuery}`
-      const geoUrl = hasCoords
-        ? `geo:0,0?q=${lat},${lon}(${label})`
-        : `geo:0,0?q=${addressQuery}`
-      const webUrl = hasCoords
-        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
-        : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-      try {
-        const canOpenGoogle = await Linking.canOpenURL(googleScheme)
-        if (canOpenGoogle) return Linking.openURL(googleUrl)
-      } catch {}
-      try {
-        const canOpenGeo = await Linking.canOpenURL('geo:')
-        if (canOpenGeo) return Linking.openURL(geoUrl)
-      } catch {}
-      return Linking.openURL(webUrl)
-    }
+    const googleScheme = 'comgooglemaps://'
+    const googleAppUrl = hasCoords
+      ? `${googleScheme}?q=${lat},${lon}`
+      : `${googleScheme}?q=${addressQuery}`
+    const googleWebUrl = hasCoords
+      ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+      : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
+
+    try {
+      const canOpenApp = await Linking.canOpenURL(googleScheme)
+      if (canOpenApp) return Linking.openURL(googleAppUrl)
+    } catch {}
+    return Linking.openURL(googleWebUrl)
   }
 
   const handleShare = async () => {
@@ -813,23 +927,25 @@ export default function EventDetail() {
     })
   }
 
-  const isLoading = loading
-
-  if (!isLoading && !event) {
-    return (
-      <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
-        <Text style={styles.errorText}>Event not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    )
+  const formatHeroDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
   }
+
+  const isLoading = loading
 
   const spotsLeft = event ? (event.max_capacity - event.current_capacity) : 0
   const isCheckedIn = checkInStatus?.checked_in || false
   const isEnded = event ? (new Date(event.end_time).getTime() < Date.now()) : false
-  const stickyBarHeight = insets.top + 8 + 12 + 36
+  const sharedEventId = String(event?.id || id || '')
+  const effectiveTopInset = Math.max(6, insets.top - TOP_BAR_INSET_REDUCTION)
+  const stickyBarHeight = effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
 
   const renderBentoGallery = (sources: Array<string | number>) => {
@@ -931,27 +1047,142 @@ export default function EventDetail() {
     return <View style={styles.galleryColumn}>{rows}</View>
   }
 
+  const openEventChat = useCallback(async () => {
+    try {
+      let chatId = eventChatGroupId
+      let chatName = event?.title || 'Event Chat'
+
+      if (!chatId && id) {
+        const chatResult = await apiClient.getEventChat(String(id))
+        if (chatResult.success && chatResult.data?.chatGroupId) {
+          chatId = chatResult.data.chatGroupId
+          chatName = chatResult.data.chatGroupName || chatName
+        }
+      }
+
+      if (chatId) {
+        const query = `?roomName=${encodeURIComponent(chatName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+        router.replace(`/chat/${chatId}${query}` as any)
+        return
+      }
+    } catch (err) {
+      Logger.warn('events', 'openEventChat:failed', { error: err as any })
+    }
+
+    router.replace('/(tabs)/chat' as any)
+  }, [eventChatGroupId, event?.title, id])
+
+  useEffect(() => {
+    const animateTo = (toValue: number, duration: number) => {
+      RNAnimated.timing(actionMorph, {
+        toValue,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start()
+    }
+
+    if (checkedInMorphTimeoutRef.current) {
+      clearTimeout(checkedInMorphTimeoutRef.current)
+      checkedInMorphTimeoutRef.current = null
+    }
+
+    if (!isCheckedIn) {
+      setActionStage('blend')
+      animateTo(0, 220)
+      return
+    }
+
+    setActionStage('checked')
+    animateTo(1, 220)
+    checkedInMorphTimeoutRef.current = setTimeout(() => {
+      setActionStage('chat')
+      animateTo(2, 260)
+    }, 900)
+
+    return () => {
+      if (checkedInMorphTimeoutRef.current) {
+        clearTimeout(checkedInMorphTimeoutRef.current)
+        checkedInMorphTimeoutRef.current = null
+      }
+    }
+  }, [isCheckedIn, actionMorph])
+
+  const blendOpacity = actionMorph.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [1, 0.15, 0],
+    extrapolate: 'clamp',
+  })
+  const checkedOpacity = actionMorph.interpolate({
+    inputRange: [0.6, 1, 1.4],
+    outputRange: [0, 1, 0],
+    extrapolate: 'clamp',
+  })
+  const chatOpacity = actionMorph.interpolate({
+    inputRange: [1.2, 2],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  })
+
+  const primaryActionDisabled = checkingIn || checkingOut || actionStage === 'checked'
+  const primaryActionPress = () => {
+    if (checkingIn || checkingOut) return
+    if (!isCheckedIn) {
+      handleCheckIn()
+      return
+    }
+    if (actionStage === 'chat') {
+      openEventChat()
+    }
+  }
+
+  if (!isLoading && !event) {
+    return (
+      <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
+        <Text style={styles.errorText}>Event not found</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    )
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {event?.cover_image_url ? (
         <Image source={{ uri: event.cover_image_url }} style={styles.bgImage} contentFit="cover" blurRadius={20} />
       ) : null}
-      <View style={styles.bgScrim} />
+      <LinearGradient
+        colors={[gradientPalette.pageTop, gradientPalette.pageBottom]}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.bgScrim}
+      />
       {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.topBarSticky, { paddingTop: effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING }]}>
         <TouchableOpacity style={styles.navButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>{event?.title || ''}</Text>
-        <TouchableOpacity style={[styles.navButton, { marginLeft: 'auto' }]} onPress={handleShare}>
-          <Ionicons name="share-outline" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.topBarActions}>
+          <TouchableOpacity
+            style={[styles.navButton, userInterested && styles.navButtonActive]}
+            onPress={handleToggleInterest}
+            accessibilityRole="button"
+            accessibilityLabel={userInterested ? 'Remove from interested events' : 'Mark as interested'}
+          >
+            <Ionicons name={userInterested ? 'heart' : 'heart-outline'} size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navButton} onPress={handleShare}>
+            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}>
         <LinearGradient
-          colors={["#480D37", "#000000"]}
+          colors={[gradientPalette.surfaceTop, gradientPalette.surfaceBottom]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.gradientFull}
@@ -971,34 +1202,60 @@ export default function EventDetail() {
           }}
         >
           {isLoading ? (
-            <SkeletonBlock width={'100%'} height={390} borderRadius={25} />
+            <SkeletonBlock width={'100%'} height={430} borderRadius={30} />
           ) : (
-            <Image 
-              source={(() => {
-                const coverUrl = event!.cover_image_url
-                if (!coverUrl) return placeholderImg
-                const opt = getOptimizedImageUrl(coverUrl, {
-                  width,
-                  height: 390,
-                  resize: 'cover',
-                  quality: showHeroHighRes ? 75 : 45,
-                  format: 'webp',
-                })
-                return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-              })()}
-              placeholder={placeholderImg}
-              style={styles.coverImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
+            <View style={styles.heroCard}>
+              <Reanimated.View sharedTransitionTag={`event-image-${sharedEventId}`} style={styles.coverImage}>
+                <Image
+                  source={(() => {
+                    const coverUrl = event!.cover_image_url
+                    if (!coverUrl) return placeholderImg
+                    const opt = getOptimizedImageUrl(coverUrl, {
+                      width,
+                      height: 430,
+                      resize: 'cover',
+                      quality: showHeroHighRes ? 75 : 45,
+                      format: 'webp',
+                    })
+                    return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
+                  })()}
+                  placeholder={placeholderImg}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                />
+              </Reanimated.View>
+              <LinearGradient
+                colors={[gradientPalette.heroOverlayStart, gradientPalette.heroOverlayEnd]}
+                style={styles.heroGradient}
+              />
+              <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.48)']}
+                start={{ x: 0.5, y: 0.25 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.heroInfoGradient}
+              />
+              <View style={styles.heroInfo}>
+                <Reanimated.Text sharedTransitionTag={`event-title-${sharedEventId}`} style={styles.heroTitle} numberOfLines={2}>
+                  {event?.title || ''}
+                </Reanimated.Text>
+                <View style={styles.heroMetaRow}>
+                  <Ionicons name="time-outline" size={13} color="#FFFFFF" />
+                  <Reanimated.Text sharedTransitionTag={`event-date-${sharedEventId}`} style={styles.heroMetaText}>
+                    {event ? formatHeroDate(event.start_time) : ''}
+                  </Reanimated.Text>
+                </View>
+                <View style={styles.heroMetaRow}>
+                  <Ionicons name="location-outline" size={13} color="#FFFFFF" />
+                  <Text style={styles.heroMetaText} numberOfLines={1}>{event?.venue_name || 'Location TBA'}</Text>
+                </View>
+              </View>
+            </View>
           )}
           
           <View style={styles.content}>
-
-          <View style={styles.eventInfo}>
-            </View>
-            {/* <Text style={styles.title}>{event.title}</Text> */}
+            <View style={styles.eventInfo} />
             
             {isLoading ? (
               <View style={styles.metaRow}>
@@ -1012,12 +1269,22 @@ export default function EventDetail() {
                     <Text style={styles.categoryText}>{event.category}</Text>
                   </View>
                 ) : null}
+                {!isEnded ? (
+                  <View style={styles.statusChip}>
+                    <Text style={styles.statusChipText}>{spotsLeft > 0 ? `${spotsLeft} spots left` : 'Full'}</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.statusChip, styles.statusChipMuted]}>
+                    <Text style={styles.statusChipText}>Ended</Text>
+                  </View>
+                )}
                 <Text style={styles.price}>{formatPrice(event!.price_cents)}</Text>
               </View>
             )}
 
-            <View style={styles.attendingRow}>
-              {isLoading ? (
+            {(isLoading || interestCount > 0 || (showAvatars && interestedAvatars.length > 0)) && (
+              <View style={styles.attendingRow}>
+                {isLoading ? (
                 <>
                   <View style={styles.avatarsRow}>
                     <View style={styles.avatarCircle} />
@@ -1045,22 +1312,11 @@ export default function EventDetail() {
                   ) : null}
                   {interestCount > 0 ? (
                     <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
-                  ) : (
-                    <Text style={styles.attendingEmptyText}>Be the first to show interest</Text>
-                  )}
-                  {!userInterested && (
-                    <TouchableOpacity
-                      onPress={handleToggleInterest}
-                      style={styles.interestCta}
-                      accessibilityRole="button"
-                      accessibilityLabel="Show interest in this event"
-                    >
-                      <Text style={styles.interestCtaText}>I'm Interested</Text>
-                    </TouchableOpacity>
-                  )}
+                  ) : null}
                 </>
               )}
-            </View>
+              </View>
+            )}
 
           {isLoading || !event?.description ? (
             <View style={{ paddingHorizontal: 14, marginBottom: 12 }}>
@@ -1071,8 +1327,10 @@ export default function EventDetail() {
             </View>
           ) : (
             <>
-              <Text style={styles.sectionTitle}>About the Event</Text>
-              <Text style={styles.description}>{event.description}</Text>
+              <Text style={styles.sectionTitle}>About The Event</Text>
+              <View style={styles.aboutCard}>
+                <Text style={styles.description}>{event.description}</Text>
+              </View>
             </>
           )}
 
@@ -1103,53 +1361,57 @@ export default function EventDetail() {
             ) : (
               <>
                 <Text style={styles.sectionTitle}>Location</Text>
-                <View style={styles.locationCard}>
-                  <TouchableOpacity onPress={openInMaps} activeOpacity={0.9}>
-                    {showMapImage ? (
-                      <Image 
-                        source={(() => {
-                          const lat = event!.latitude
-                          const lon = event!.longitude
-                          const hasCoords =
-                            Number.isFinite(lat) &&
-                            Number.isFinite(lon) &&
-                            (Math.abs(lat) > 0.0001 || Math.abs(lon) > 0.0001)
-                          const mapHeight = 249
-                          if (!hasCoords || mapFailed) {
-                            const coverUrl = event!.cover_image_url
-                            if (!coverUrl) return placeholderImg
-                            const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
-                            return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-                          }
-                          const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
-                          const cacheKey = `${event!.id}:${mapWidth}x${mapHeight}:${lat},${lon}`
-                          const cachedUrl = getMapImageUrlCache(cacheKey)
-                          if (cachedUrl) {
-                            return { uri: cachedUrl }
-                          }
-                          const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&maptype=mapnik&markers=${lat},${lon},red`
-                          setMapImageUrlCache(cacheKey, url)
-                          return { uri: url }
-                        })()}
-                        placeholder={placeholderImg}
-                        style={styles.locationImage}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={150}
-                        onError={() => setMapFailed(true)}
-                      />
-                    ) : (
-                      <View style={[styles.locationImage, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
-                    )}
-                  </TouchableOpacity>
-                  <View style={styles.locationOverlay} pointerEvents="none" />
-                  <View style={styles.locationPillRow}>
-                    <View style={styles.locationPillIcon} />
-                    <Text style={styles.locationPillText} numberOfLines={1}>{event!.venue_name}</Text>
+                <View style={styles.locationCardFrame}>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.08)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.locationCardBorder}
+                    pointerEvents="none"
+                  />
+                  <View style={styles.locationCard}>
+                    <TouchableOpacity onPress={openInMaps} activeOpacity={0.92}>
+                      {showMapImage ? (
+                        <Image
+                          source={(() => {
+                            const lat = event!.latitude
+                            const lon = event!.longitude
+                            const hasCoords =
+                              Number.isFinite(lat) &&
+                              Number.isFinite(lon) &&
+                              (Math.abs(lat) > 0.0001 || Math.abs(lon) > 0.0001)
+                            const mapHeight = 200
+                            if (!hasCoords || mapFailed) {
+                              const coverUrl = event!.cover_image_url
+                              if (!coverUrl) return placeholderImg
+                              const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
+                              return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
+                            }
+                            const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
+                            const cacheKey = `${event!.id}:${mapWidth}x${mapHeight}:${lat},${lon}`
+                            const cachedUrl = getMapImageUrlCache(cacheKey)
+                            if (cachedUrl) {
+                              return { uri: cachedUrl }
+                            }
+                            const gmapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+                            const marker = `markers=${lat},${lon}`
+                            const darkStyle = 'style=feature:all|element:geometry|color:0x1f1f1f&style=feature:all|element:labels.text.fill|color:0xcfcfcf&style=feature:all|element:labels.text.stroke|color:0x1f1f1f&style=feature:road|element:geometry|color:0x2f2f2f&style=feature:road.highway|element:geometry|color:0x3a3a3a&style=feature:water|element:geometry|color:0x111827&style=feature:poi|element:geometry|color:0x252525'
+                            const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&scale=2&${marker}&${darkStyle}&key=${gmapsKey}`
+                            setMapImageUrlCache(cacheKey, url)
+                            return { uri: url }
+                          })()}
+                          placeholder={placeholderImg}
+                          style={styles.locationImage}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={150}
+                          onError={() => setMapFailed(true)}
+                        />
+                      ) : (
+                        <View style={[styles.locationImage, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+                      )}
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={styles.locationButton} onPress={openInMaps}>
-                    <Text style={styles.locationButtonText}>Get Directions</Text>
-                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -1182,56 +1444,7 @@ export default function EventDetail() {
             <View style={styles.actionSection}>
               {isLoading ? (
                 <SkeletonBlock width={'92%'} height={56} borderRadius={25} style={{ alignSelf: 'center' }} />
-              ) : isCheckedIn ? (
-                <View style={styles.checkedInContainer}>
-                  <Text style={styles.checkedInText}>✅ Checked In!</Text>
-                  <Text style={styles.checkedInSubtext}>
-                    You checked in {checkInStatus?.distance_meters ? 
-                      `${Math.round(checkInStatus.distance_meters)}m` : ''} from the venue
-                  </Text>
-                  <View style={styles.actionsColumn}>
-                    <TouchableOpacity 
-                      style={[styles.swipeButton, { backgroundColor: '#7217b3' }]}
-                      onPress={() => Alert.alert('Coming Soon!', 'Swipe feature will be available soon!')}
-                    >
-                      <Text style={styles.swipeButtonText}>Start Meeting People 💕</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.swipeButton, { backgroundColor: '#007AFF' }]}
-                      onPress={() => {
-                        if (eventChatGroupId) {
-                          const query = `?roomName=${encodeURIComponent(event?.title || 'Event Chat')}&eventTitle=${encodeURIComponent(event?.title || '')}`
-                          router.push(`/chat/${eventChatGroupId}${query}` as any)
-                        } else {
-                          router.push('/(tabs)/chat' as any)
-                        }
-                      }}
-                    >
-                      <Text style={styles.swipeButtonText}>Join Event Chat 💬</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.swipeButton, { backgroundColor: '#6c757d' }]}
-                      onPress={handleCheckout}
-                    >
-                      <Text style={styles.swipeButtonText}>Check Out</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  {/* <TouchableOpacity 
-                    style={[styles.blendnButton, checkingIn && styles.checkInButtonDisabled]}
-                    onPress={handleCheckIn}
-                    disabled={checkingIn}
-                  >
-                    {checkingIn ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.blendnButtonText}>Blend’n</Text>
-                    )}
-                  </TouchableOpacity> */}
-                </>
-              )}
+              ) : null}
             </View>
 
           </View>
@@ -1240,32 +1453,75 @@ export default function EventDetail() {
 
      
       <View style={styles.tabBar}>
-        {isCheckedIn ? (
-          <TouchableOpacity 
-            style={[styles.blendnButton, checkingOut && styles.checkInButtonDisabled]}
+        <ScalePress 
+          style={[
+            styles.blendnButton,
+            isCheckedIn && styles.blendnButtonWithSecondary,
+            primaryActionDisabled && styles.checkInButtonDisabled
+          ]}
+          onPress={primaryActionPress}
+          disabled={primaryActionDisabled}
+          pressedScale={0.975}
+        >
+          <BlurView intensity={42} tint="dark" style={styles.glassButtonBlur} />
+          <LinearGradient
+            colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.06)']}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={styles.glassButtonSheen}
+            pointerEvents="none"
+          />
+          {(checkingIn || checkingOut) ? (
+            <View style={styles.actionRow}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.blendnButtonText}>{checkingIn ? 'Checking in...' : 'Checking out...'}</Text>
+            </View>
+          ) : (
+            <View style={styles.actionLabelStack}>
+              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: blendOpacity }]}>
+                Blend&apos;n
+              </RNAnimated.Text>
+              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: checkedOpacity }]}>
+                Checked In
+              </RNAnimated.Text>
+              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: chatOpacity }]}>
+                Go to Chat
+              </RNAnimated.Text>
+            </View>
+          )}
+        </ScalePress>
+        {isCheckedIn && (
+          <ScalePress
+            style={[styles.secondaryActionButton, checkingOut && styles.checkInButtonDisabled]}
             onPress={handleCheckout}
             disabled={checkingOut}
+            accessibilityRole="button"
+            accessibilityLabel="Check out of event"
+            pressedScale={0.96}
           >
+            <BlurView intensity={36} tint="dark" style={styles.glassButtonBlur} />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.glassButtonSheen}
+              pointerEvents="none"
+            />
             {checkingOut ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.blendnButtonText}>Check Out</Text>
+              <Ionicons name="exit-outline" size={20} color="#FFFFFF" />
             )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.blendnButton, checkingIn && styles.checkInButtonDisabled]}
-            onPress={handleCheckIn}
-            disabled={checkingIn}
-          >
-            {checkingIn ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.blendnButtonText}>Blend’n</Text>
-            )}
-          </TouchableOpacity>
+          </ScalePress>
         )}
       </View>
+      <ActionTray
+        visible={trayState.visible}
+        title={trayState.title}
+        message={trayState.message}
+        buttons={trayState.buttons}
+        onClose={closeTray}
+      />
     </SafeAreaView>
   )
 }
@@ -1273,7 +1529,7 @@ export default function EventDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   bgImage: {
     ...StyleSheet.absoluteFillObject,
@@ -1287,12 +1543,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#ffffff',
+    color: APP_COLORS.textPrimary,
   },
   errorContainer: {
     flex: 1,
@@ -1302,11 +1558,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: '#ffffff',
+    color: APP_COLORS.textPrimary,
     marginBottom: 20,
   },
   backButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.destructive,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -1318,13 +1574,58 @@ const styles = StyleSheet.create({
   },
   coverImage: {
     width: '100%',
-    height: 390,
+    height: 430,
     backgroundColor: '#1A1A1A',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
+    borderRadius: 30,
+  },
+  heroCard: {
+    marginHorizontal: 10,
+    marginTop: 8,
+    borderRadius: 30,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.32)',
+  },
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroInfoGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 180,
+  },
+  heroInfo: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 29,
+    lineHeight: 34,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  heroMetaText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 13,
+    marginLeft: 6,
+    flexShrink: 1,
   },
   content: {
     flex: 1,
+    marginTop: 8,
   },
   // legacy header/back styles removed; using sticky top bar
   eventInfo: {
@@ -1341,54 +1642,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    marginBottom: 14,
-    marginTop: 12,
+    marginBottom: 12,
+    marginTop: 10,
     paddingHorizontal: 16,
+    gap: 8,
   },
   categoryContainer: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    paddingVertical: 7,
+    borderRadius: 100,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.42)',
   },
   categoryText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   price: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginRight: 14,
     marginLeft: 'auto',
+  },
+  statusChip: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.42)',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  statusChipMuted: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  statusChipText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
   },
   attendingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
     paddingHorizontal: 16,
-  },
-  attendingEmptyText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 13,
-    marginLeft: 10,
-  },
-  interestCta: {
-    marginLeft: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
     backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  interestCtaText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    marginHorizontal: 14,
+    paddingVertical: 10,
   },
   avatarsRow: {
     width: 70,
@@ -1421,78 +1727,54 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   sectionTitle: {
-    fontSize: 19,
+    fontSize: 17,
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 7,
     paddingHorizontal: 16,
     fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  aboutCard: {
+    marginHorizontal: 14,
+    marginBottom: 16,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   description: {
     fontSize: 15,
     color: 'rgba(255,255,255,0.85)',
     lineHeight: 22,
+    marginBottom: 0,
+    paddingHorizontal: 0,
+  },
+  locationCardFrame: {
     marginBottom: 16,
-    paddingHorizontal: 16,
+    marginHorizontal: 14,
+    borderRadius: 20,
+    overflow: 'hidden',
+    padding: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  locationCardBorder: {
+    ...StyleSheet.absoluteFillObject,
   },
   locationCard: {
-    marginBottom: 16,
-    borderRadius: 23,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginHorizontal: 14,
+    backgroundColor: 'rgba(26,16,37,0.55)',
   },
   locationImage: {
     width: '100%',
-    height: 249,
-    borderRadius: 23,
-  },
-  locationOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 88,
-    backgroundColor: 'rgba(34,21,42,0.78)',
-    borderBottomLeftRadius: 23,
-    borderBottomRightRadius: 23,
-  },
-  locationPillRow: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-  },
-  locationPillIcon: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#6B6B6B',
-    marginRight: 6,
-  },
-  locationPillText: {
-    color: '#222222',
-    fontSize: 12,
-    maxWidth: 140,
-  },
-  locationButton: {
-    position: 'absolute',
-    left: 16,
-    bottom: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 100,
-  },
-  locationButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    height: 200,
   },
   galleryGrid: {
     flexDirection: 'row',
@@ -1532,18 +1814,18 @@ const styles = StyleSheet.create({
   detailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 16,
     paddingHorizontal: 14,
   },
   detailsCard: {
     width: (width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2,
-    backgroundColor: '#1A1A1A',
-    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: 16,
     paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   detailsTitle: {
     fontSize: 12,
@@ -1580,28 +1862,6 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 14,
   },
-  checkedInContainer: {
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    marginHorizontal: 14,
-  },
-  checkedInText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    marginBottom: 4,
-  },
-  checkedInSubtext: {
-    fontSize: 14,
-    color: '#CCCCCC',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
   actionsColumn: {
     width: '100%',
     flexDirection: 'column',
@@ -1629,7 +1889,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
   },
   checkInButtonDisabled: {
-    backgroundColor: '#333333',
+    opacity: 0.58,
   },
   checkInButtonText: {
     color: '#fff',
@@ -1643,17 +1903,54 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   blendnButton: {
-    backgroundColor: '#7217b3',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.34)',
     padding: 16,
     borderRadius: 100,
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
     width: '100%',
+    overflow: 'hidden',
+  },
+  blendnButtonWithSecondary: {
+    flex: 1,
+    width: 'auto',
+    flexShrink: 1,
+    minWidth: 0,
   },
   blendnButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
+  },
+  actionLabelStack: {
+    height: 24,
+    width: '100%',
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionLabelLayer: {
+    position: 'absolute',
+    textAlign: 'center',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  secondaryActionButton: {
+    width: 52,
+    height: 52,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
   },
   interestButton: {
     backgroundColor: '#fde7ef',
@@ -1732,12 +2029,12 @@ const styles = StyleSheet.create({
     right: 0,
     top: 120,
     bottom: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(190, 190, 190, 0.12)',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#111214',
   },
   gradientFull: {
     position: 'absolute',
@@ -1773,6 +2070,17 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     maxWidth: '62%',
   },
+  topBarActions: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  navButtonActive: {
+    backgroundColor: 'rgba(255, 79, 122, 0.42)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.32)',
+  },
   tabBar: {
     position: 'absolute',
     left: 16,
@@ -1780,12 +2088,20 @@ const styles = StyleSheet.create({
     bottom: 22,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 10,
     paddingVertical: 8,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(18,18,19,0.45)',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+  },
+  glassButtonBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glassButtonSheen: {
+    ...StyleSheet.absoluteFillObject,
   },
 })

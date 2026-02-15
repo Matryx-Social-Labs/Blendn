@@ -11,17 +11,34 @@ type SkeletonProps = {
 
 export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = 8, style, color }) => {
   const opacity = useRef(new Animated.Value(0.6)).current
+  const shimmer = useRef(new Animated.Value(-1)).current
 
   useEffect(() => {
-    const loop = Animated.loop(
+    const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 0.6, duration: 800, useNativeDriver: true })
       ])
     )
-    loop.start()
-    return () => loop.stop()
-  }, [opacity])
+    const shimmerLoop = Animated.loop(
+      Animated.timing(shimmer, {
+        toValue: 1,
+        duration: 1100,
+        useNativeDriver: true,
+      })
+    )
+    pulseLoop.start()
+    shimmerLoop.start()
+    return () => {
+      pulseLoop.stop()
+      shimmerLoop.stop()
+    }
+  }, [opacity, shimmer])
+
+  const shimmerTranslate = shimmer.interpolate({
+    inputRange: [-1, 1],
+    outputRange: [-80, 240],
+  })
 
   return (
     <Animated.View
@@ -30,7 +47,18 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
         { width, height, borderRadius, opacity, backgroundColor: color || 'rgba(255,255,255,0.12)' },
         style,
       ]}
-    />
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.shimmer,
+          {
+            transform: [{ translateX: shimmerTranslate }],
+            opacity: 0.42,
+          },
+        ]}
+      />
+    </Animated.View>
   )
 }
 
@@ -48,10 +76,18 @@ export const SkeletonBlock: React.FC<SkeletonProps> = (props) => (
 
 const styles = StyleSheet.create({
   base: {
-    backgroundColor: 'rgba(255,255,255,0.12)'
-  }
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  shimmer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 72,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
 })
 
 export default Skeleton
-
 

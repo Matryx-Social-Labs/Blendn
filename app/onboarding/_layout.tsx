@@ -1,7 +1,7 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { Stack } from 'expo-router'
 import { useEffect } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { View } from 'react-native'
+import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 export default function OnboardingLayout() {
@@ -12,16 +12,13 @@ export default function OnboardingLayout() {
   }, [loading, user])
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={styles.bg} pointerEvents="none">
-        <LinearGradient
-          colors={["#480D37", "#000000"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+    <View style={{ flex: 1, backgroundColor: APP_COLORS.backgroundBase }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: APP_COLORS.backgroundBase },
+        }}
+      >
         <Stack.Screen name="welcome" />
         <Stack.Screen name="basic-info" />
         <Stack.Screen name="interests" />
@@ -33,10 +30,4 @@ export default function OnboardingLayout() {
       </Stack>
     </View>
   )
-} 
-
-const styles = StyleSheet.create({
-  bg: {
-    ...StyleSheet.absoluteFillObject,
-  },
-})
+}
