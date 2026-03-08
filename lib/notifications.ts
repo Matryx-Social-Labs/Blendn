@@ -235,6 +235,16 @@ function navigateFromNotificationData(data: Record<string, any> | undefined) {
         }
         break
       }
+      case 'announcement': {
+        if (data.chatGroupId) {
+          router.push({ pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any })
+        } else if (data.eventId) {
+          router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
+        } else {
+          router.push('/(tabs)/chat')
+        }
+        break
+      }
       case 'event_checkin':
       case 'event_update': {
         if (data.eventId) {
