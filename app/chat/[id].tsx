@@ -544,6 +544,32 @@ export default function GroupChat() {
       )
     }
 
+    // Announcement messages — centered banner, amber
+    if (item.message_type === 'announcement') {
+      return (
+        <View style={styles.announcementContainer}>
+          <View style={styles.announcementBubble}>
+            <Text style={styles.announcementLabel}>📢 Announcement</Text>
+            <Text style={styles.announcementText}>{item.message_text}</Text>
+            <Text style={styles.announcementTime}>{formatMessageTime(item.created_at)}</Text>
+          </View>
+        </View>
+      )
+    }
+
+    // Sponsored messages — centered banner, blue
+    if (item.message_type === 'sponsored') {
+      return (
+        <View style={styles.announcementContainer}>
+          <View style={styles.sponsoredBubble}>
+            <Text style={styles.announcementLabel}>📣 Sponsored</Text>
+            <Text style={styles.announcementText}>{item.message_text}</Text>
+            <Text style={styles.announcementTime}>{formatMessageTime(item.created_at)}</Text>
+          </View>
+        </View>
+      )
+    }
+
     return (
       <TouchableOpacity
         style={[styles.messageRow, isMyMessage ? styles.myRow : styles.otherRow]}
@@ -602,7 +628,7 @@ export default function GroupChat() {
                 styles.messageText,
                 isMyMessage ? styles.myMessageText : styles.otherMessageText
               ]}>
-                Message type not supported
+                {item.message_text}
               </Text>
             )}
           </View>
@@ -1097,6 +1123,49 @@ const styles = StyleSheet.create({
   otherMessageTime: {
     color: '#B5B5B5',
     marginLeft: 12,
+  },
+  // Announcement / Sponsored banner styles
+  announcementContainer: {
+    alignItems: 'center',
+    marginVertical: 6,
+    paddingHorizontal: 16,
+  },
+  announcementBubble: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  sponsoredBubble: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  announcementLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#F59E0B',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  announcementText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    lineHeight: 20,
+  },
+  announcementTime: {
+    fontSize: 11,
+    color: '#B5B5B5',
+    marginTop: 4,
+    textAlign: 'right',
   },
   dateSeparatorContainer: {
     alignItems: 'center',
