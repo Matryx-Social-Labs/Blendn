@@ -31,7 +31,7 @@ import { pickImage, uploadPhoto } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { subscribeToChat, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback } from '../../lib/socketClient'
+import { subscribeToChat, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { APP_COLORS } from '../../lib/theme'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
@@ -356,13 +356,36 @@ export default function GroupChat() {
       })
     }
 
+    // Handle message deletion by admin/organiser
+    const handleMessageDeleted: ChatMessageDeletedCallback = (data) => {
+      setMessages(prev => prev.filter(m => m.message_id !== data.messageId))
+    }
+
+    // Handle member ban — if current user is banned, show alert and navigate back
+    const handleMemberBanned: ChatMemberBannedCallback = (data) => {
+      if (data.userId === currentUser?.id && data.banned) {
+        showTray('You have been removed', 'You have been removed from this chatroom by the organiser.', [{
+          label: 'OK',
+          variant: 'primary',
+          onPress: () => {
+            closeTray()
+            router.back()
+          },
+        }])
+      }
+    }
+
     const unsubMessage = subscribeToChat(String(chatRoomId), handleNewMessage)
     const unsubTyping = subscribeToChat(String(chatRoomId), handleTyping)
+    const unsubDeleted = subscribeToChatModeration(String(chatRoomId), handleMessageDeleted)
+    const unsubBanned = subscribeToChatModeration(String(chatRoomId), handleMemberBanned)
 
     return () => {
       Logger.info('chat', 'Cleaning up chat subscription')
       unsubMessage()
       unsubTyping()
+      unsubDeleted()
+      unsubBanned()
       // Clear all typing cleanup timeouts
       typingCleanupRefs.current.forEach(timeout => clearTimeout(timeout))
       typingCleanupRefs.current.clear()

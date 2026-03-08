@@ -84,6 +84,9 @@ export interface ServerToClientEvents {
     messageIds: string[]
     readBy: string
   }) => void
+  // Moderation events
+  "chat:messageDeleted": (data: { chatGroupId: string; messageId: string }) => void
+  "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -122,6 +125,8 @@ type EventInterestCallback = (data: ServerToClientEvents["event:interestUpdate"]
 type ChatMessageCallback = (data: ServerToClientEvents["chat:message"] extends (data: infer D) => void ? D : never) => void
 type ChatTypingCallback = (data: ServerToClientEvents["chat:typing"] extends (data: infer D) => void ? D : never) => void
 type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends (data: infer D) => void ? D : never) => void
+type ChatMessageDeletedCallback = (data: ServerToClientEvents["chat:messageDeleted"] extends (data: infer D) => void ? D : never) => void
+type ChatMemberBannedCallback = (data: ServerToClientEvents["chat:memberBanned"] extends (data: infer D) => void ? D : never) => void
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
@@ -169,6 +174,7 @@ const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatSubscriptions = new Map<string, Set<ChatMessageCallback | ChatTypingCallback | ChatReactionCallback>>()
+const chatModerationSubscriptions = new Map<string, Set<ChatMessageDeletedCallback | ChatMemberBannedCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<(data: any) => void>>()
 
@@ -306,6 +312,7 @@ export function disconnect(): void {
   eventCheckOutSubscriptions.clear()
   eventInterestSubscriptions.clear()
   chatSubscriptions.clear()
+  chatModerationSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
 }
@@ -406,6 +413,16 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("chat:reaction", (data) => {
     const callbacks = chatSubscriptions.get(data.chatGroupId)
     callbacks?.forEach((cb) => (cb as ChatReactionCallback)(data))
+  })
+
+  sock.on("chat:messageDeleted", (data) => {
+    const callbacks = chatModerationSubscriptions.get(data.chatGroupId)
+    callbacks?.forEach((cb) => (cb as ChatMessageDeletedCallback)(data))
+  })
+
+  sock.on("chat:memberBanned", (data) => {
+    const callbacks = chatModerationSubscriptions.get(data.chatGroupId)
+    callbacks?.forEach((cb) => (cb as ChatMemberBannedCallback)(data))
   })
 
   // Private messaging updates
@@ -581,6 +598,29 @@ export function subscribeToChat(
 }
 
 /**
+ * Subscribe to chat moderation events (message deleted, member banned)
+ */
+export function subscribeToChatModeration(
+  chatGroupId: string,
+  callback: ChatMessageDeletedCallback | ChatMemberBannedCallback
+): () => void {
+  if (!chatModerationSubscriptions.has(chatGroupId)) {
+    chatModerationSubscriptions.set(chatGroupId, new Set())
+  }
+  chatModerationSubscriptions.get(chatGroupId)!.add(callback)
+
+  return () => {
+    const callbacks = chatModerationSubscriptions.get(chatGroupId)
+    if (callbacks) {
+      callbacks.delete(callback)
+      if (callbacks.size === 0) {
+        chatModerationSubscriptions.delete(chatGroupId)
+      }
+    }
+  }
+}
+
+/**
  * Start typing indicator
  */
 export function startTyping(chatGroupId: string): void {
@@ -738,6 +778,8 @@ export type {
   ChatMessageCallback,
   ChatTypingCallback,
   ChatReactionCallback,
+  ChatMessageDeletedCallback,
+  ChatMemberBannedCallback,
   PrivateMessageCallback,
   PrivateTypingCallback,
   PrivateReadCallback,
