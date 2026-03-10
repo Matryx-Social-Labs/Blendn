@@ -53,6 +53,7 @@ interface EventDetail {
   address: string
   start_time: string
   end_time: string
+  timezone?: string
   category: string
   price_cents: number
   max_capacity: number
@@ -200,6 +201,8 @@ export default function EventDetail() {
     }
     return 0
   })
+  const [averageRating, setAverageRating] = useState<number | null>(null)
+  const [ratingCount, setRatingCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
   const [interestedAvatars, setInterestedAvatars] = useState<string[]>(() => {
     if (interested && typeof interested === 'string') {
@@ -262,6 +265,7 @@ export default function EventDetail() {
           address: d.address || '',
           start_time: d.startTime || d.start_time,
           end_time: d.endTime || d.end_time,
+          timezone: d.timezone,
           category: d.categories?.[0]?.name || '',
           price_cents: d.priceCents || d.price_cents || 0,
           max_capacity: d.maxCapacity || d.max_capacity || 0,
@@ -278,6 +282,8 @@ export default function EventDetail() {
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
+          if (d.stats.averageRating != null) setAverageRating(d.stats.averageRating)
+          setRatingCount(d.stats.ratingCount || 0)
         }
         if (d.userStatus) {
           setUserInterested(d.userStatus.isFavorited || false)
@@ -491,6 +497,7 @@ export default function EventDetail() {
           address: d.address || '',
           start_time: d.startTime || d.start_time,
           end_time: d.endTime || d.end_time,
+          timezone: d.timezone,
           category: d.categories?.[0]?.name || '',
           price_cents: d.priceCents || d.price_cents || 0,
           max_capacity: d.maxCapacity || d.max_capacity || 0,
@@ -517,6 +524,8 @@ export default function EventDetail() {
         }
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
+          if (d.stats.averageRating != null) setAverageRating(d.stats.averageRating)
+          setRatingCount(d.stats.ratingCount || 0)
         }
         if (d.interestedUsers) {
           const avatars = d.interestedUsers
@@ -916,20 +925,26 @@ export default function EventDetail() {
     } catch {}
   }, [event])
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string, tz?: string) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-IN', { 
+    const opts: Intl.DateTimeFormatOptions = {
       weekday: 'long',
-      month: 'long', 
+      month: 'long',
       day: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(tz ? { timeZone: tz, timeZoneName: 'short' } : {}),
+    }
+    try {
+      return date.toLocaleDateString('en-US', opts)
+    } catch {
+      return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    }
   }
 
   const formatHeroDate = (dateString: string) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-IN', {
+    return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
@@ -1344,12 +1359,20 @@ export default function EventDetail() {
               <View style={styles.detailsGrid}>
                 <View style={styles.detailsCard}>
                   <Text style={styles.detailsTitle}>Date & Time</Text>
-                  <Text style={styles.detailsValue}>{formatDate(event!.start_time)}</Text>
+                  <Text style={styles.detailsValue}>{formatDate(event!.start_time, event!.timezone)}</Text>
                 </View>
                 <View style={styles.detailsCard}>
                   <Text style={styles.detailsTitle}>Venue</Text>
                   <Text style={styles.detailsValue} numberOfLines={1}>{event!.venue_name}</Text>
                 </View>
+                {averageRating != null && ratingCount > 0 && (
+                  <View style={styles.detailsCard}>
+                    <Text style={styles.detailsTitle}>Rating</Text>
+                    <Text style={styles.detailsValue}>
+                      {'★'.repeat(Math.round(averageRating))}{'☆'.repeat(5 - Math.round(averageRating))} {averageRating.toFixed(1)} ({ratingCount})
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 

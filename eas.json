@@ -12,10 +12,12 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "prebuildCommand": "npx expo prebuild --platform ios --no-install"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "prebuildCommand": "npx expo prebuild --platform ios --no-install"
     }
   },
   "submit": {

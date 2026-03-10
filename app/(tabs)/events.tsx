@@ -28,6 +28,7 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
+import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -60,6 +61,7 @@ interface Event {
   address: string
   start_time: string
   end_time: string
+  timezone?: string
   price_cents: number
   max_capacity: number
   current_capacity: number
@@ -567,8 +569,8 @@ export default function Events() {
       Logger.error('events', 'Unexpected error', { error: error as any })
       feedback.error()
       showTray({
-        title: 'Error',
-        message: 'Failed to check in.',
+        title: 'Check-in failed',
+        message: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
         buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
       })
     } finally {
@@ -622,6 +624,17 @@ export default function Events() {
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
       feedback.tap()
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
+      // Schedule / cancel event reminder based on interest state
+      if (result.data!.interested) {
+        scheduleEventReminder({
+          id: event.id,
+          title: event.title,
+          start_time: event.start_time,
+          venue_name: event.venue_name,
+        }).catch(() => {})
+      } else {
+        cancelEventReminder(event.id).catch(() => {})
+      }
     } catch {
       setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
@@ -1526,7 +1539,7 @@ export default function Events() {
               width={containerWidth}
               onPress={handleEventPress as any}
               onLongPress={handleEventPreview as any}
-              timeLabel={formatTimeRange(ev.start_time, ev.end_time)}
+              timeLabel={formatTimeRange(ev.start_time, ev.end_time, { timezone: ev.timezone })}
               locationLabel={ev.venue_name || ev.address || ''}
             />
           )
@@ -1642,7 +1655,7 @@ export default function Events() {
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, interestCounts])
 
-  const formatTimeRange = (startIso: string, endIso: string) => fmtRange(startIso, endIso, { includeDate: true })
+  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
 
   const filteredSortedEvents = useMemo(() => events, [events])
 

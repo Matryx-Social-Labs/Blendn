@@ -305,6 +305,73 @@ export function setupNotificationResponseListener(
   return subscription
 }
 
+// === EVENT REMINDER NOTIFICATIONS ===
+
+const REMINDER_IDENTIFIER_PREFIX = 'event-reminder-'
+
+/**
+ * Schedule a local notification 1 hour before an event starts.
+ * Safe to call multiple times — cancels any existing reminder first.
+ */
+export async function scheduleEventReminder(event: {
+  id: string
+  title: string
+  start_time: string
+  venue_name?: string
+}): Promise<boolean> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync()
+    if (status !== 'granted') return false
+
+    const startMs = new Date(event.start_time).getTime()
+    const reminderMs = startMs - 60 * 60 * 1000 // 1 hour before
+    const nowMs = Date.now()
+
+    // Cancel any existing reminder for this event first
+    await cancelEventReminder(event.id)
+
+    if (reminderMs <= nowMs) {
+      // Event starts in < 1 hour or already started — skip
+      return false
+    }
+
+    const identifier = `${REMINDER_IDENTIFIER_PREFIX}${event.id}`
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content: {
+        title: `${event.title} starts in 1 hour`,
+        body: event.venue_name ? `At ${event.venue_name}` : "Don't miss it!",
+        data: { type: 'event_reminder', eventId: event.id },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(reminderMs),
+      },
+    })
+
+    Logger.info('notifications', 'Event reminder scheduled', {
+      eventId: event.id,
+      reminderAt: new Date(reminderMs).toISOString(),
+    })
+    return true
+  } catch (error) {
+    Logger.warn('notifications', 'Failed to schedule event reminder', { error })
+    return false
+  }
+}
+
+/** Cancel a scheduled event reminder. */
+export async function cancelEventReminder(eventId: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(
+      `${REMINDER_IDENTIFIER_PREFIX}${eventId}`
+    )
+  } catch {
+    // Ignore — identifier may not exist
+  }
+}
+
 // Initialize push notifications (call this on app startup)
 export async function initializePushNotifications(): Promise<string | null> {
   try {

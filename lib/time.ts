@@ -1,25 +1,26 @@
 export type DateStyle = 'short' | 'medium' | 'long';
 
-export const formatEventDateTime = (iso: string, opts?: { dateStyle?: DateStyle; showTimezoneIfDifferent?: boolean }) => {
+export const formatEventDateTime = (iso: string, opts?: { dateStyle?: DateStyle; showTimezoneIfDifferent?: boolean; timezone?: string }) => {
   try {
     const date = new Date(iso)
     const dateStyle = opts?.dateStyle || 'medium'
+    const eventTz = opts?.timezone
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    const tzOptions = eventTz ? { timeZone: eventTz } : {}
+
     const datePart = date.toLocaleDateString(undefined, {
       year: 'numeric',
       month: dateStyle === 'short' ? 'short' : dateStyle === 'long' ? 'long' : 'short',
-      day: 'numeric'
+      day: 'numeric',
+      ...tzOptions,
     })
-    const timePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const timePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...tzOptions })
 
     let tzSuffix = ''
-    if (opts?.showTimezoneIfDifferent) {
-      // If event timezone differs from local, append short tz name when available
-      const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-      // Best-effort check using Intl parts
-      const eventTzName = getShortTimeZoneName(date)
-      if (eventTzName && localTz && !isSameTimezoneApprox(date)) {
-        tzSuffix = ` ${eventTzName}`
-      }
+    if (opts?.showTimezoneIfDifferent && eventTz && eventTz !== localTz) {
+      const tzName = getShortTimeZoneName(date, eventTz)
+      if (tzName) tzSuffix = ` ${tzName}`
     }
 
     return `${datePart} • ${timePart}${tzSuffix}`
@@ -28,14 +29,15 @@ export const formatEventDateTime = (iso: string, opts?: { dateStyle?: DateStyle;
   }
 }
 
-export const formatTimeRange = (startIso: string, endIso: string, opts?: { includeDate?: boolean }) => {
+export const formatTimeRange = (startIso: string, endIso: string, opts?: { includeDate?: boolean; timezone?: string }) => {
   try {
     const s = new Date(startIso)
     const e = new Date(endIso)
-    const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const tzOptions = opts?.timezone ? { timeZone: opts.timezone } : {}
+    const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...tzOptions })
     const time = `${fmtTime(s)} - ${fmtTime(e)}`
     if (opts?.includeDate) {
-      const datePart = e.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+      const datePart = e.toLocaleDateString(undefined, { month: 'long', day: 'numeric', ...tzOptions })
       return `${time}, ${datePart}`
     }
     return time
@@ -44,23 +46,12 @@ export const formatTimeRange = (startIso: string, endIso: string, opts?: { inclu
   }
 }
 
-const getShortTimeZoneName = (date: Date): string => {
+const getShortTimeZoneName = (date: Date, timezone?: string): string => {
   try {
-    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(date)
+    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short', ...(timezone ? { timeZone: timezone } : {}) }).formatToParts(date)
     const tz = parts.find(p => p.type === 'timeZoneName')?.value
     return tz || ''
   } catch {
     return ''
   }
 }
-
-const isSameTimezoneApprox = (date: Date): boolean => {
-  try {
-    // Compare offset minutes; not perfect across DST boundaries but sufficient hint
-    return date.getTimezoneOffset() === new Date().getTimezoneOffset()
-  } catch {
-    return true
-  }
-}
-
-

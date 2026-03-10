@@ -23,7 +23,8 @@ interface ViewabilityConfig {
   minimumViewTime: number
 }
 
-export const VirtualizedList = memo(<T extends any>(props: VirtualizedListProps<T>) => {
+// eslint-disable-next-line react/display-name
+export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListProps<T>) => {
   const {
     data,
     renderItem,

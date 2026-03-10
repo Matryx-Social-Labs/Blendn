@@ -27,6 +27,7 @@ interface EventsParams {
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
   include?: string
+  interestedPreviewLimit?: number
 }
 
 export async function getEvents(params?: EventsParams, options?: { force?: boolean }) {
@@ -56,6 +57,7 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
       address: e.address || '',
       start_time: e.startTime,
       end_time: e.endTime,
+      timezone: e.timezone || 'UTC',
       price_cents: e.priceCents || 0,
       max_capacity: e.maxCapacity || 0,
       current_capacity: e.currentCapacity || 0,

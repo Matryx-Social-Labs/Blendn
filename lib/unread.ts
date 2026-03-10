@@ -1,61 +1,69 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { supabase } from './supabase'
+/**
+ * Unread count helpers — server-side tracking via the REST API.
+ *
+ * The server returns unread_count per conversation from GET /api/mobile/conversations
+ * based on `is_read` on private_messages. This module is a thin client-side cache
+ * so screens can pessimistically clear counts locally without waiting for a full refresh.
+ *
+ * Fix #23: replaced the old AsyncStorage + Supabase approach with server-driven counts.
+ */
 
-const STORAGE_KEY = 'unread:lastReadMap:v1'
+const _cache: Record<string, number> = {}
+const _listeners = new Set<() => void>()
 
-export interface LastReadMap {
-  [conversationId: string]: string // ISO timestamp
-}
-
-export async function getLastReadMap(): Promise<LastReadMap> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    return typeof parsed === 'object' && parsed ? parsed : {}
-  } catch {
-    return {}
+/** Update local cache from the server-returned conversation list. */
+export function syncUnreadCache(
+  conversations: Array<{ conversation_id?: string; id?: string; unread_count?: number; unreadCount?: number }>
+): void {
+  for (const conv of conversations) {
+    const id = conv.conversation_id ?? conv.id
+    const count = conv.unread_count ?? conv.unreadCount ?? 0
+    if (id) _cache[id] = count
   }
+  _notify()
 }
 
-export async function setConversationLastRead(conversationId: string, whenIso?: string): Promise<void> {
-  try {
-    const map = await getLastReadMap()
-    map[conversationId] = whenIso || new Date().toISOString()
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(map))
-  } catch {}
+/**
+ * Optimistically mark a conversation as fully read in local cache.
+ * Returns a resolved promise so existing callers using .catch() / await still work.
+ */
+export function setConversationLastRead(conversationId: string): Promise<void> {
+  _cache[conversationId] = 0
+  _notify()
+  return Promise.resolve()
 }
 
-export async function computeUnreadCounts(conversationIds: string[]): Promise<Record<string, number>> {
+/** Get the cached unread count for a conversation. */
+export function getUnreadCount(conversationId: string): number {
+  return _cache[conversationId] ?? 0
+}
+
+/** Get total unread across all conversations. */
+export function getTotalUnread(): number {
+  return Object.values(_cache).reduce((sum, n) => sum + n, 0)
+}
+
+/** Subscribe to cache changes. Returns an unsubscribe function. */
+export function subscribeUnread(fn: () => void): () => void {
+  _listeners.add(fn)
+  return () => _listeners.delete(fn)
+}
+
+/**
+ * @deprecated Unread counts now come from the server.
+ * Use `syncUnreadCache()` with the conversation list response instead.
+ * Kept for backward compatibility — returns zeros so callers don't break.
+ */
+export async function computeUnreadCounts(
+  conversationIds: string[]
+): Promise<Record<string, number>> {
   const counts: Record<string, number> = {}
-  if (!conversationIds || conversationIds.length === 0) return counts
-
-  const lastReadMap = await getLastReadMap()
-
-  // If no last-read info yet, default to 0 for all
-  const hasAny = Object.keys(lastReadMap).length > 0
-  if (!hasAny) {
-    for (const id of conversationIds) counts[id] = 0
-    return counts
+  for (const id of conversationIds) {
+    counts[id] = _cache[id] ?? 0
   }
-
-  const entries = conversationIds.map(async (id) => {
-    const lastRead = lastReadMap[id]
-    if (!lastRead) return { id, count: 0 }
-
-    const { error, count } = await supabase
-      .from('private_messages')
-      // Only request counts to avoid fetching full message rows
-      .select('id', { count: 'exact', head: true })
-      .eq('conversation_id', id)
-      .gt('created_at', lastRead)
-
-    if (error) return { id, count: 0 }
-    return { id, count: count || 0 }
-  })
-
-  const results = await Promise.all(entries)
-  for (const { id, count } of results) counts[id] = count
   return counts
 }
 
+function _notify() {
+  for (const fn of _listeners) fn()
+}

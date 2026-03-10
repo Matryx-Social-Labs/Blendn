@@ -16,6 +16,7 @@ interface Event {
   address: string
   start_time: string
   end_time: string
+  timezone?: string
   price_cents: number
   max_capacity: number
   current_capacity: number
@@ -69,7 +70,7 @@ const EventCard = memo<EventCardProps>(({
   const handleCheckIn = () => onCheckIn(event)
   const handleToggleInterest = () => onToggleInterest(event)
 
-  const formattedStart = useMemo(() => formatEventDateTime(event.start_time, { showTimezoneIfDifferent: true }), [event.start_time])
+  const formattedStart = useMemo(() => formatEventDateTime(event.start_time, { showTimezoneIfDifferent: true, timezone: event.timezone }), [event.start_time, event.timezone])
   const distanceLabel = useMemo(() => {
     if (!proximity || typeof proximity.distance_km !== 'number') return ''
     const meters = Math.round(proximity.distance_km * 1000)

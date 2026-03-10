@@ -153,7 +153,7 @@ export default function Index() {
         {/* Bottom copy and CTA */}
         <View style={styles.ctaContainer}>
           <View style={styles.bottomCopyContainer}>
-            <Text style={styles.bottomTitle}>Blend'n</Text>
+            <Text style={styles.bottomTitle}>Blend&apos;n</Text>
             <Text style={styles.bottomSubtitle}>Same place. Same vibe. Instant connections.</Text>
           </View>
           <Pressable

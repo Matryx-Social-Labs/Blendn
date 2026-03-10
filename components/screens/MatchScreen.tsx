@@ -6,6 +6,7 @@ import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -251,6 +252,11 @@ export default function Match() {
   const [loading, setLoading] = useState(true)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
+  const [attendeesHasMore, setAttendeesHasMore] = useState(false)
+  const [attendeesTotalCount, setAttendeesTotalCount] = useState(0)
+  const [attendeesPage, setAttendeesPage] = useState(1)
+  const [loadingMoreAttendees, setLoadingMoreAttendees] = useState(false)
+  const currentEventIdRef = useRef<string | null>(null)
   const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
   const [similarIndex, setSimilarIndex] = useState(0)
@@ -442,12 +448,13 @@ export default function Match() {
       let selectedEventId: string | null = null
       let selectedEventTitle: string | undefined
       let selectedAttendees: AttendeeProfile[] | null = null
+      let selectedPagination: { page: number; limit: number; totalCount: number; hasMore: boolean } | undefined
 
       for (const checkin of sortedCheckins) {
         const candidateEventId = extractEventIdFromCheckin(checkin)
         if (!candidateEventId) continue
 
-        const checkinsResult = await apiClient.getEventCheckins(candidateEventId, { force })
+        const checkinsResult = await apiClient.getEventCheckins(candidateEventId, { force, page: 1, limit: 20 })
         if (!checkinsResult.success || !checkinsResult.data) {
           const err = String(checkinsResult.error || '').toLowerCase()
           if (err.includes('event not found')) {
@@ -459,35 +466,26 @@ export default function Match() {
           return
         }
 
-        const payload: any = checkinsResult.data
-        const checkins = Array.isArray(payload)
+        const payload = checkinsResult.data
+        const rawAttendees = Array.isArray(payload)
           ? payload
-          : (payload.checkIns
-            || payload.checkins
-            || payload.attendees
-            || payload.data
-            || [])
+          : ((payload as any).attendees || (payload as any).checkIns || (payload as any).checkins || (payload as any).data || [])
+        const pagination = (payload as any).pagination
 
-        const activeAttendeeCheckins = checkins.filter((c: any) => {
-          const checkinUserId = c.user_id || c.userId || c.user?.id
-          const status = c.status || 'checked_in'
-          return (
-            checkinUserId &&
-            checkinUserId !== userId &&
-            status === 'checked_in' &&
-            !blockedIds.has(checkinUserId)
-          )
-        })
-
-        const attendeeProfiles: AttendeeProfile[] = activeAttendeeCheckins.map((c: any) => ({
-          user_id: c.user_id || c.userId || c.user?.id,
-          name: c.user?.name || c.name || c.user?.profile?.name,
-          age: c.user?.profile?.age || c.age,
-          bio: c.user?.profile?.bio,
-          interests: c.user?.profile?.interests,
-          profile_photos: c.user?.profile?.photos || (c.user?.image ? [c.user.image] : undefined) || (c.image ? [c.image] : undefined),
-          last_seen: c.check_in_time || c.checkInTime,
-        }))
+        const attendeeProfiles: AttendeeProfile[] = rawAttendees
+          .filter((c: any) => {
+            const uid = c.userId || c.user_id || c.user?.id
+            return uid && uid !== userId && !blockedIds.has(uid)
+          })
+          .map((c: any) => ({
+            user_id: c.userId || c.user_id || c.user?.id,
+            name: c.name || c.user?.name || c.user?.profile?.name,
+            age: c.age || c.user?.profile?.age,
+            bio: c.user?.profile?.bio,
+            interests: c.user?.profile?.interests,
+            profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
+            last_seen: c.checkInTime || c.check_in_time,
+          }))
 
         attendeeProfiles.sort((a, b) => {
           const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
@@ -498,6 +496,7 @@ export default function Match() {
         selectedEventId = candidateEventId
         selectedEventTitle = checkin?.event?.title
         selectedAttendees = attendeeProfiles
+        selectedPagination = pagination
         break
       }
 
@@ -508,17 +507,56 @@ export default function Match() {
       if (!selectedEventId) {
         setEventInfo(null)
         setAttendees([])
+        setAttendeesHasMore(false)
+        setAttendeesTotalCount(0)
+        setAttendeesPage(1)
         return
       }
 
+      currentEventIdRef.current = selectedEventId
       setEventInfo({ id: selectedEventId, title: selectedEventTitle })
       setAttendees(selectedAttendees || [])
+      setAttendeesHasMore(selectedPagination?.hasMore ?? false)
+      setAttendeesTotalCount(selectedPagination?.totalCount ?? (selectedAttendees?.length ?? 0))
+      setAttendeesPage(1)
     } catch (e) {
       Logger.error('match', 'Failed to load event attendees', { error: e })
       if (loadId !== attendeeLoadIdRef.current) return
       // Keep prior stable UI to avoid state thrash on transient failures.
     }
   }, [])
+
+  const loadMoreAttendees = useCallback(async () => {
+    const eventId = currentEventIdRef.current
+    if (!eventId || loadingMoreAttendees || !attendeesHasMore) return
+    setLoadingMoreAttendees(true)
+    try {
+      const nextPage = attendeesPage + 1
+      const result = await apiClient.getEventCheckins(eventId, { force: true, page: nextPage, limit: 20 })
+      if (!result.success || !result.data) return
+      const payload = result.data
+      const rawAttendees = Array.isArray(payload)
+        ? payload
+        : ((payload as any).attendees || (payload as any).checkIns || [])
+      const pagination = (payload as any).pagination
+      const newProfiles: AttendeeProfile[] = rawAttendees.map((c: any) => ({
+        user_id: c.userId || c.user_id || c.user?.id,
+        name: c.name || c.user?.name,
+        age: c.age || c.user?.profile?.age,
+        bio: c.user?.profile?.bio,
+        interests: c.user?.profile?.interests,
+        profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
+        last_seen: c.checkInTime || c.check_in_time,
+      }))
+      setAttendees(prev => [...prev, ...newProfiles])
+      setAttendeesHasMore(pagination?.hasMore ?? false)
+      setAttendeesPage(nextPage)
+    } catch (e) {
+      Logger.error('match', 'Failed to load more attendees', { error: e })
+    } finally {
+      setLoadingMoreAttendees(false)
+    }
+  }, [attendeesHasMore, attendeesPage, loadingMoreAttendees])
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -984,7 +1022,9 @@ export default function Match() {
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Also Here</Text>
                   <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{alsoHereAttendees.length}</Text>
+                    <Text style={styles.sectionCountText}>
+                      {attendeesTotalCount > attendees.length ? `${attendees.length}/${attendeesTotalCount}` : alsoHereAttendees.length}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.sectionDivider} />
@@ -1001,6 +1041,23 @@ export default function Match() {
                   columnWrapperStyle={styles.gridColumn}
                   renderItem={renderAlsoHereItem}
                 />
+                {attendeesHasMore && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreAttendees}
+                    disabled={loadingMoreAttendees}
+                    accessibilityRole="button"
+                    accessibilityLabel="Load more attendees"
+                  >
+                    {loadingMoreAttendees ? (
+                      <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
+                    ) : (
+                      <Text style={styles.loadMoreText}>
+                        Load More ({attendeesTotalCount - attendees.length} remaining)
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </Animated.View>
@@ -1310,6 +1367,23 @@ const styles = StyleSheet.create({
   },
   gridColumn: {
     justifyContent: 'space-between',
+  },
+  loadMoreButton: {
+    marginHorizontal: CONTENT_SIDE_PADDING,
+    marginTop: 8,
+    marginBottom: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: APP_COLORS.backgroundElevated,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: APP_COLORS.textSecondary,
   },
   gridItem: {
     borderRadius: 24,

@@ -30,7 +30,7 @@ import { Logger } from '../../lib/logger'
 import queryCache from '../../lib/queryCache'
 import { APP_COLORS } from '../../lib/theme'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
-import { computeUnreadCounts, setConversationLastRead } from '../../lib/unread'
+import { computeUnreadCounts, setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
 import { subscribeToUserNotifications, subscribeToChat, PrivateMessageCallback, ChatMessageCallback } from '../../lib/socketClient'
@@ -259,6 +259,18 @@ export default function Chat() {
     await loadChats(true, true)
     setRefreshing(false)
   }, [])
+
+  const handleMarkAllRead = useCallback(async () => {
+    if (activeTab === 'personal' && personalChats.length > 0) {
+      await Promise.all(personalChats.map((c) => setConversationLastRead(c.conversation_id)))
+      setPersonalChats((prev) => prev.map((c) => ({ ...c, unread_count: 0 })))
+    }
+  }, [activeTab, personalChats])
+
+  const hasUnread = useMemo(
+    () => activeTab === 'personal' && personalChats.some((c) => c.unread_count > 0),
+    [activeTab, personalChats]
+  )
 
   // Hydrate on tab switch (cache-first, avoid refetch if cached)
   useEffect(() => {
@@ -662,6 +674,7 @@ export default function Chat() {
         }).filter((conv: PersonalChat) => !!conv.conversation_id)
 
         setPersonalChats(personalChatData)
+        syncUnreadCache(conversations)
         if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
         try {
           const firstScreenUrls = personalChatData
@@ -941,10 +954,23 @@ export default function Chat() {
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>The Banter</Text>
           </View>
-          <TouchableOpacity style={styles.headerRight} onPress={() => router.push('/edit-profile')}
-            accessibilityRole="button" accessibilityLabel="Edit profile">
-            <Ionicons name="pencil" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {hasUnread && (
+              <TouchableOpacity
+                onPress={handleMarkAllRead}
+                style={styles.headerActionBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Mark all conversations as read"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.headerRight} onPress={() => router.push('/edit-profile')}
+              accessibilityRole="button" accessibilityLabel="Edit profile">
+              <Ionicons name="pencil" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
       {activeTab === 'personal' && !showLoadingSkeleton && storyChats.length > 0 && (
@@ -1489,6 +1515,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: APP_COLORS.textPrimary,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerRight: {
     width: 40,

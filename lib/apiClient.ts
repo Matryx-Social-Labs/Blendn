@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import { AppState } from 'react-native'
 import { Logger } from './logger'
+import { markOffline, markOnline } from './networkStatus'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -38,21 +39,31 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 }
 
-// Request Queue for network resilience
+/**
+ * RequestQueue — priority-based concurrency limiter for API calls.
+ *
+ * WHY: The mobile API backend has rate limits and connection pooling constraints.
+ * Firing dozens of concurrent requests (e.g. on app open) causes timeouts and
+ * 503 errors. The queue serialises requests, respects a max-concurrent ceiling,
+ * and lets high-priority calls (auth) jump the line.
+ *
+ * Priority values: lower number = higher priority (auth=1, mutations=3, queries=5).
+ * Debounce: batch rapid simultaneous enqueues into a single processing tick.
+ */
 class RequestQueue {
   private queue: Array<{
-    request: () => Promise<any>
-    resolve: (value: any) => void
-    reject: (error: any) => void
+    request: () => Promise<unknown>
+    resolve: (value: unknown) => void
+    reject: (error: unknown) => void
     priority: number
     timestamp: number
     type: 'query' | 'mutation' | 'auth'
   }> = []
   private processing = false
-  private maxConcurrent = 6  // Increased from 3 for better parallelism
+  private maxConcurrent = 6
   private currentRequests = 0
   private lastProcessTime = 0
-  private debounceMs = 10   // Reduced from 50ms for faster processing
+  private debounceMs = 10
   private requestCount = 0
   private errorCount = 0
 
@@ -61,10 +72,10 @@ class RequestQueue {
     priority: number = 5,
     type: 'query' | 'mutation' | 'auth' = 'query'
   ): Promise<T> {
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       this.queue.push({
-        request,
-        resolve,
+        request: request as () => Promise<unknown>,
+        resolve: resolve as (value: unknown) => void,
         reject,
         priority,
         timestamp: Date.now(),
@@ -433,13 +444,16 @@ class ApiClientClass {
     requireAuth: boolean = true
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`
+    const method = (options.method || 'GET').toUpperCase()
+    const isGet = method === 'GET'
+    // Only retry safe read-only requests to avoid duplicate mutations
+    const MAX_RETRIES = isGet ? 2 : 0
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     }
 
-    // Add auth header if required
     if (requireAuth) {
       const accessToken = await TokenStorage.getAccessToken()
       if (accessToken) {
@@ -447,51 +461,76 @@ class ApiClientClass {
       }
     }
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      })
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.min(800 * Math.pow(2, attempt - 1), 6000)
+        Logger.debug('api', `Retry ${attempt}/${MAX_RETRIES} for ${endpoint} in ${delay}ms`)
+        await new Promise<void>((resolve) => setTimeout(resolve, delay))
+      }
 
-      // Handle 401 - try to refresh token
-      if (response.status === 401 && requireAuth) {
-        const refreshed = await this.refreshTokens()
-        if (refreshed) {
-          // Retry the request with new token
-          const newAccessToken = await TokenStorage.getAccessToken()
-          if (newAccessToken) {
-            headers['Authorization'] = `Bearer ${newAccessToken}`
+      try {
+        const response = await fetch(url, { ...options, headers })
+
+        // Handle 401 - try to refresh token
+        if (response.status === 401 && requireAuth) {
+          const refreshed = await this.refreshTokens()
+          if (refreshed) {
+            const newAccessToken = await TokenStorage.getAccessToken()
+            if (newAccessToken) {
+              headers['Authorization'] = `Bearer ${newAccessToken}`
+            }
+            const retryResponse = await fetch(url, { ...options, headers })
+            return this.parseResponse<T>(retryResponse, endpoint)
+          } else {
+            await TokenStorage.clearAll()
+            return { success: false, error: 'Session expired. Please sign in again.' }
           }
-          const retryResponse = await fetch(url, {
-            ...options,
-            headers,
-          })
-          return this.parseResponse<T>(retryResponse, endpoint)
-        } else {
-          // Refresh failed, clear tokens and return error
-          await TokenStorage.clearAll()
-          return { success: false, error: 'Session expired. Please sign in again.' }
+        }
+
+        // Retry on 5xx server errors for GET requests only
+        if (isGet && response.status >= 500 && attempt < MAX_RETRIES) {
+          Logger.warn('api', `Server error ${response.status}, retrying`, { endpoint, attempt })
+          continue
+        }
+
+        const result = await this.parseResponse<T>(response, endpoint)
+        if (result.success) markOnline()
+        return result
+      } catch (error) {
+        const isNetworkError = error instanceof TypeError
+        if (isNetworkError && attempt < MAX_RETRIES) {
+          Logger.warn('api', `Network error, retry ${attempt + 1}/${MAX_RETRIES}`, { endpoint })
+          continue
+        }
+
+        Logger.error('api', 'Request failed', { endpoint, error })
+        if (isNetworkError) {
+          markOffline()
+          return {
+            success: false,
+            error: 'No internet connection. Check your network and try again.',
+          }
+        }
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : `Network error (${endpoint})`,
         }
       }
-
-      return this.parseResponse<T>(response, endpoint)
-    } catch (error) {
-      Logger.error('api', 'Request failed', { endpoint, error })
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : `Network error (${endpoint})`,
-      }
     }
+
+    return { success: false, error: `Request failed after retries (${endpoint})` }
   }
 
   private async refreshTokens(): Promise<boolean> {
-    // Prevent multiple simultaneous refresh attempts
-    if (isRefreshing) {
-      return refreshPromise || Promise.resolve(false)
+    // If a refresh is already in flight, join it — don't start a second one.
+    // We return the existing promise so all concurrent callers share one result.
+    if (isRefreshing && refreshPromise) {
+      return refreshPromise
     }
 
     isRefreshing = true
-    refreshPromise = (async () => {
+    // Store promise BEFORE any await so concurrent callers see it immediately.
+    const p: Promise<boolean> = (async () => {
       try {
         const refreshToken = await TokenStorage.getRefreshToken()
         if (!refreshToken) {
@@ -520,13 +559,18 @@ class ApiClientClass {
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
         return false
-      } finally {
-        isRefreshing = false
-        refreshPromise = null
       }
     })()
 
-    return refreshPromise
+    refreshPromise = p
+
+    // Reset flags after all awaiting callers have received the result (next microtask).
+    p.finally(() => {
+      isRefreshing = false
+      refreshPromise = null
+    })
+
+    return p
   }
 
   // Queue wrapper for requests
@@ -763,12 +807,14 @@ class ApiClientClass {
     )
   }
 
-  async getEventCheckins(eventId: string, options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
-    const endpoint = `/api/mobile/events/${eventId}/checkins`
-    if (options?.force) {
-      return this.queuedRequest<any[]>(endpoint)
+  async getEventCheckins(eventId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ attendees: any[]; pagination: { page: number; limit: number; totalCount: number; hasMore: boolean } }>> {
+    const page = options?.page ?? 1
+    const limit = options?.limit ?? 20
+    const endpoint = `/api/mobile/events/${eventId}/checkins?page=${page}&limit=${limit}`
+    if (options?.force || page > 1) {
+      return this.queuedRequest(endpoint)
     }
-    return this.cachedRequest<any[]>(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
+    return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
   }
 
   async toggleFavorite(eventId: string): Promise<ApiResponse<{ favorited: boolean }>> {
