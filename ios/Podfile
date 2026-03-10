@@ -60,5 +60,16 @@ target 'blendn' do
         end
       end
     end
+
+    # Ensure the Expo pod exports its Swift module correctly so that
+    # `import Expo` and `ExpoAppDelegate` are resolvable in AppDelegate.swift
+    installer.pods_project.targets.each do |target|
+      if target.name == 'Expo'
+        target.build_configurations.each do |config|
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+          config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
+        end
+      end
+    end
   end
 end
