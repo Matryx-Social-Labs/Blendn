@@ -41,7 +41,7 @@ export default function PhotoManager({
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
-  const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange']>()
+  const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange'] | undefined>(undefined)
   // Measure available width to compute exact 3-col sizing
   const [containerWidth, setContainerWidth] = useState<number>(width - 32)
   const NUM_COLUMNS = 3

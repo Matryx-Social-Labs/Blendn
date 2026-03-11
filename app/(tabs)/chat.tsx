@@ -18,7 +18,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 // Removed AppHeader in favor of custom header matching Figma design
 import ActionTray from '../../components/ActionTray'
-import ModernChat from '../../components/ModernChat'
 import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import FadeInUp from '../../components/motion/FadeInUp'
@@ -30,10 +29,10 @@ import { Logger } from '../../lib/logger'
 import queryCache from '../../lib/queryCache'
 import { APP_COLORS } from '../../lib/theme'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
-import { computeUnreadCounts, setConversationLastRead, syncUnreadCache } from '../../lib/unread'
+import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
-import { subscribeToUserNotifications, subscribeToChat, PrivateMessageCallback, ChatMessageCallback } from '../../lib/socketClient'
+import { subscribeToUserNotifications, subscribeToChatMessage, PrivateMessageCallback, ChatMessageCallback } from '../../lib/socketClient'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { useLiveSync } from '../../lib/useLiveSync'
 
@@ -140,8 +139,6 @@ export default function Chat() {
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [showModernChat, setShowModernChat] = useState(false)
-  const [settingsTrayVisible, setSettingsTrayVisible] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
   const { setScrollProgress } = useGradientOverlay()
   const requestAnimRefs = useRef<Record<string, Animated.Value>>({})
@@ -149,6 +146,7 @@ export default function Chat() {
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ group: 0, personal: 0, requests: 0 })
   const skipInitialTabEffectRef = useRef(true)
+  const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
   const { width, height } = useWindowDimensions()
   const storyChats = useMemo(() => personalChats.slice(0, 10), [personalChats])
 
@@ -362,12 +360,10 @@ export default function Chat() {
     }
   }, [user])
 
-  // Real-time group chat updates — subscribe to loaded group chat rooms
-  // so chat:message events are received and mark the domain dirty
+  // Real-time group chat updates — subscribe to loaded group chat rooms.
+  // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
   useEffect(() => {
-    if (!user || groupChats.length === 0) return
-
-    const unsubs: (() => void)[] = []
+    if (!user) return
 
     const handleGroupMessage: ChatMessageCallback = (data) => {
       Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
@@ -390,14 +386,32 @@ export default function Chat() {
       })
     }
 
-    for (const chat of groupChats) {
-      unsubs.push(subscribeToChat(chat.chat_room_id, handleGroupMessage))
+    const newIds = new Set(groupChats.map(c => c.chat_room_id))
+    const oldIds = new Set(groupChatUnsubsRef.current.keys())
+
+    // Unsubscribe rooms that are no longer in the list
+    for (const id of oldIds) {
+      if (!newIds.has(id)) {
+        groupChatUnsubsRef.current.get(id)?.()
+        groupChatUnsubsRef.current.delete(id)
+      }
     }
 
-    return () => {
-      unsubs.forEach(fn => fn())
+    // Subscribe to newly added rooms only
+    for (const id of newIds) {
+      if (!oldIds.has(id)) {
+        groupChatUnsubsRef.current.set(id, subscribeToChatMessage(id, handleGroupMessage))
+      }
     }
-  }, [user, groupChats.length])
+  }, [user, groupChats])
+
+  // Cleanup all group chat subscriptions on unmount
+  useEffect(() => {
+    return () => {
+      groupChatUnsubsRef.current.forEach(unsub => unsub())
+      groupChatUnsubsRef.current.clear()
+    }
+  }, [])
 
   // Instant local updates from chat screens — fires the moment a message is sent,
   // so the list is already up-to-date before the user finishes swiping back.
@@ -651,13 +665,6 @@ export default function Chat() {
 
       if (result.success && result.data) {
         const conversations = result.data
-        const hasUnreadCounts = conversations.some((c: any) => c?.unreadCount !== undefined && c?.unreadCount !== null)
-        const unreadStart = Date.now()
-        const unreadMap = hasUnreadCounts
-          ? {}
-          : await computeUnreadCounts(conversations.map((c: any) => String(c.id || c.conversation_id || '')).filter(Boolean))
-        const unreadDurationMs = Date.now() - unreadStart
-
         const personalChatData: PersonalChat[] = conversations.map((conv: any) => {
           const convId = String(conv.id || conv.conversation_id || '')
           const preview = previewFromConversation(conv)
@@ -669,7 +676,7 @@ export default function Chat() {
             other_user_avatar: otherUser?.image || otherUser?.avatar || null,
             last_message: preview.text,
             last_message_time: preview.time,
-            unread_count: (conv.unreadCount ?? conv.unread_count ?? unreadMap[convId]) || 0,
+            unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
           }
         }).filter((conv: PersonalChat) => !!conv.conversation_id)
 
@@ -685,11 +692,8 @@ export default function Chat() {
             preloadImages(firstScreenUrls, 'low')
           }
         } catch {}
-        Logger.info('chat', `Loaded ${personalChatData.length} personal chats`)
-        Logger.info('chat', 'personal chats timing', {
+        Logger.info('chat', `Loaded ${personalChatData.length} personal chats`, {
           durationMs: Date.now() - perfStart,
-          unreadDurationMs,
-          usedApiUnreadCounts: hasUnreadCounts,
         })
       } else {
         setPersonalChats([])
@@ -915,28 +919,6 @@ export default function Chat() {
     },
     [setScrollProgress]
   )
-
-  // Show modern chat demo if toggled
-  if (showModernChat) {
-    return (
-      <>
-        <ModernChat
-          groupName="Bobs Chat Room"
-          participantCount={5}
-          onBack={() => setShowModernChat(false)}
-          onSettings={() => setSettingsTrayVisible(true)}
-        />
-        <ActionTray
-          visible={settingsTrayVisible}
-          title="Settings"
-          message="Chat settings will be available soon."
-          buttons={[{ label: 'Done', variant: 'primary', onPress: () => setSettingsTrayVisible(false) }]}
-          onClose={() => setSettingsTrayVisible(false)}
-          size="compact"
-        />
-      </>
-    )
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>

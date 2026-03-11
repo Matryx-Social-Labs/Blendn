@@ -122,9 +122,9 @@ class RequestQueue {
   }
 
   private async executeRequest(item: {
-    request: () => Promise<any>
-    resolve: (value: any) => void
-    reject: (error: any) => void
+    request: () => Promise<unknown>
+    resolve: (value: unknown) => void
+    reject: (error: unknown) => void
     priority: number
     timestamp: number
     type: 'query' | 'mutation' | 'auth'
@@ -239,7 +239,7 @@ class TokenStorage {
     return this.secureSet(REFRESH_TOKEN_KEY, token)
   }
 
-  static async getUser(): Promise<any | null> {
+  static async getUser(): Promise<AuthUser | null> {
     const userStr = await this.secureGet(USER_KEY)
     if (!userStr) return null
     try {
@@ -249,7 +249,7 @@ class TokenStorage {
     }
   }
 
-  static async setUser(user: any): Promise<void> {
+  static async setUser(user: AuthUser): Promise<void> {
     return this.secureSet(USER_KEY, JSON.stringify(user))
   }
 
@@ -269,14 +269,14 @@ class TokenStorage {
 // Profile Cache - shared across components to avoid duplicate fetches
 const PROFILE_CACHE_TTL = 60 * 1000 // 60 seconds
 interface ProfileCacheEntry {
-  data: any
+  data: UserProfileData
   timestamp: number
   userId: string
 }
 let profileCache: ProfileCacheEntry | null = null
 
 export const ProfileCache = {
-  get(userId: string): any | null {
+  get(userId: string): UserProfileData | null {
     if (!profileCache) return null
     if (profileCache.userId !== userId) return null
     if (Date.now() - profileCache.timestamp > PROFILE_CACHE_TTL) {
@@ -285,7 +285,7 @@ export const ProfileCache = {
     }
     return profileCache.data
   },
-  set(userId: string, data: any): void {
+  set(userId: string, data: UserProfileData): void {
     profileCache = { data, timestamp: Date.now(), userId }
   },
   clear(): void {
@@ -294,7 +294,7 @@ export const ProfileCache = {
 }
 
 // API Response Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -318,6 +318,227 @@ export interface AuthUser {
   } | null
 }
 
+export interface PaginationMeta {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  hasMore?: boolean
+}
+
+/** Represents one event item as returned by the mobile API (camelCase). */
+export interface EventApiItem {
+  id: string
+  slug: string
+  title: string
+  description: string | null
+  shortDescription: string | null
+  /** Snake-case alias (may appear in transformed data) */
+  short_description?: string | null
+  coverImageUrl: string | null
+  cover_image_url?: string | null
+  startTime: string
+  start_time?: string
+  endTime: string
+  end_time?: string
+  timezone: string
+  status: string
+  visibility: string
+  venueName: string | null
+  venue_name?: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  country: string | null
+  postalCode: string | null
+  latitude: number | null
+  longitude: number | null
+  maxCapacity: number | null
+  max_capacity?: number | null
+  currentCapacity: number
+  current_capacity?: number
+  checkInRadius: number
+  check_in_radius?: number
+  isFeatured: boolean
+  isRecurring: boolean
+  externalLink: string | null
+  createdAt: string
+  distance: number | null
+  isFavorited?: boolean
+  favoriteCount?: number
+  priceCents?: number
+  price_cents?: number
+  category?: string
+  /** Gallery/media arrays */
+  gallery?: string[]
+  gallery_photos?: string[]
+  pre_event_gallery?: string[]
+  images?: string[]
+  userCheckin?: {
+    id?: string
+    status?: string
+    check_in_time?: string
+    check_out_time?: string
+    /** camelCase aliases from event list API */
+    checkInId?: string
+    checkInTime?: string
+    checkOutTime?: string
+  } | null
+  interestedPreview?: Array<{ id: string; name: string | null; image: string | null }>
+  interested_preview?: Array<{ id: string; name: string | null; image: string | null }>
+  interestedUsers?: Array<{ id: string; name?: string | null; avatar?: string | null }>
+  organizer?: {
+    id?: string
+    name?: string | null
+    image?: string | null
+    email?: string
+  }
+  details?: {
+    fullDescription?: string
+    houseRules?: string | null
+    cancellationPolicy?: string | null
+    additionalInfo?: unknown
+    faq?: unknown
+    accessibilityInfo?: unknown
+  }
+  categories?: Array<{ id: string; name: string; slug: string; icon?: string | null }>
+  media?: Array<{
+    id: string
+    type: string
+    url: string
+    thumbnailUrl?: string | null
+    title?: string | null
+    order: number
+  }>
+  chatGroup?: {
+    id: string
+    name: string
+    status: string
+    member_count?: number
+    memberCount?: number
+  }
+  stats?: {
+    checkInCount?: number
+    favoriteCount?: number
+    ratingCount?: number
+    averageRating?: number | null
+  }
+  userStatus?: {
+    isFavorited?: boolean
+    isCheckedIn?: boolean
+    checkInStatus?: string | null
+    checkInId?: string
+    userRating?: number | null
+    userReview?: string | null
+    rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+  }
+}
+
+export interface EventsListResponse {
+  events: EventApiItem[]
+  pagination: PaginationMeta
+  activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
+  profile?: UserProfileData
+}
+
+export interface CheckinPagination {
+  page: number
+  limit: number
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface CheckinAttendee {
+  id: string
+  userId: string
+  eventId: string
+  checkInTime: string
+  user?: {
+    id: string
+    name: string | null
+    image: string | null
+  }
+  [key: string]: unknown
+}
+
+export interface UserProfileData {
+  id?: string
+  user_id?: string
+  email?: string
+  name?: string
+  display_name?: string
+  image?: string
+  age?: number
+  bio?: string
+  location?: string
+  occupation?: string
+  education?: string
+  interests?: Array<string | { id?: string; name?: string; slug?: string; icon?: string }>
+  photos?: string[]
+  profile_photos?: string[]
+  goals?: string[]
+  looking_for?: string[]
+  memberSince?: string
+  stats?: {
+    eventsAttended: number
+    eventsFavorited: number
+    eventsOrganized: number
+  }
+  isOwnProfile?: boolean
+  onboarded?: boolean
+  /** Nested profile object from /api/mobile/profiles/[userId] */
+  profile?: {
+    id?: string
+    phone?: string
+    name?: string
+    age?: number
+    location?: string
+    bio?: string
+    occupation?: string
+    education?: string
+    interests?: string[]
+    photos?: string[]
+    profile_photos?: string[]
+    onboarded?: boolean
+    goals?: string
+    looking_for?: string
+    created_at?: string
+    updated_at?: string
+  }
+}
+
+export interface ChatMessageData {
+  id: string
+  chatGroupId?: string
+  userId?: string
+  content?: string
+  type?: string
+  createdAt?: string
+  [key: string]: unknown
+}
+
+export interface CheckInResult {
+  checkInId?: string
+  check_in_id?: string
+  status?: string
+  checkedIn?: boolean
+  checked_in?: boolean
+  distanceMeters?: number
+  distance_meters?: number
+  message?: string
+  [key: string]: unknown
+}
+
+export interface EventChatData {
+  chatGroupId?: string
+  chatGroupName?: string
+  id?: string
+  name?: string
+  status?: string
+  memberCount?: number
+  [key: string]: unknown
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
@@ -337,8 +558,8 @@ let refreshPromise: Promise<boolean> | null = null
 // API Client Class
 class ApiClientClass {
   private baseUrl: string
-  private inFlight = new Map<string, Promise<ApiResponse<any>>>()
-  private responseCache = new Map<string, { data: ApiResponse<any>; timestamp: number; ttl: number }>()
+  private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
+  private responseCache = new Map<string, { data: ApiResponse<unknown>; timestamp: number; ttl: number }>()
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
@@ -358,7 +579,7 @@ class ApiClientClass {
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
-    this.responseCache.set(key, { data: data as ApiResponse<any>, timestamp: Date.now(), ttl })
+    this.responseCache.set(key, { data: data as ApiResponse<unknown>, timestamp: Date.now(), ttl })
   }
 
   private refreshCacheInBackground<T>(
@@ -410,9 +631,9 @@ class ApiClientClass {
       return { success: false, error: this.buildErrorMessage(response, null, endpoint) }
     }
 
-    let parsed: any
+    let parsed: Record<string, unknown> | null = null
     try {
-      parsed = JSON.parse(raw)
+      parsed = JSON.parse(raw) as Record<string, unknown>
     } catch {
       if (response.ok) {
         return { success: true, data: raw as unknown as T }
@@ -427,12 +648,12 @@ class ApiClientClass {
       return {
         success: false,
         error: this.buildErrorMessage(response, parsed, endpoint),
-        errors: parsed?.errors,
+        errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
     }
 
     if (parsed && typeof parsed === 'object' && 'success' in parsed) {
-      return parsed as ApiResponse<T>
+      return parsed as unknown as ApiResponse<T>
     }
 
     return { success: true, data: parsed as T }
@@ -595,7 +816,7 @@ class ApiClientClass {
     )
 
     if (isGet) {
-      this.inFlight.set(key, promise as Promise<ApiResponse<any>>)
+      this.inFlight.set(key, promise as Promise<ApiResponse<unknown>>)
       promise.finally(() => {
         this.inFlight.delete(key)
       })
@@ -744,7 +965,7 @@ class ApiClientClass {
     sortOrder?: 'asc' | 'desc'
     include?: string
     interestedPreviewLimit?: number
-  }, options?: { force?: boolean }): Promise<ApiResponse<{ events: any[]; pagination: any; activeCheckins?: any[]; profile?: any }>> {
+  }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
     const searchParams = new URLSearchParams()
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -756,15 +977,15 @@ class ApiClientClass {
     const query = searchParams.toString()
     const endpoint = `/api/mobile/events${query ? `?${query}` : ''}`
     if (options?.force) {
-      return this.queuedRequest<{ events: any[]; pagination: any }>(endpoint)
+      return this.queuedRequest<EventsListResponse>(endpoint)
     }
-    return this.cachedRequest<{ events: any[]; pagination: any }>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<EventsListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
   }
 
   async getEvent(
     eventId: string,
     params?: { lat?: number; lon?: number; include?: string; interestedLimit?: number }
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<EventApiItem>> {
     const searchParams = new URLSearchParams()
     if (params) {
       if (params.lat !== undefined) searchParams.append('lat', String(params.lat))
@@ -775,7 +996,7 @@ class ApiClientClass {
       }
     }
     const query = searchParams.toString()
-    return this.cachedRequest<any>(
+    return this.cachedRequest<EventApiItem>(
       `/api/mobile/events/${eventId}${query ? `?${query}` : ''}`,
       { ttl: 30 * 1000, swr: true }
     )
@@ -783,9 +1004,9 @@ class ApiClientClass {
 
   async checkIn(
     eventId: string,
-    data: { latitude: number; longitude: number; deviceInfo?: any }
-  ): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> }
+  ): Promise<ApiResponse<CheckInResult>> {
+    return this.queuedRequest<CheckInResult>(
       `/api/mobile/events/${eventId}/checkin`,
       {
         method: 'POST',
@@ -796,8 +1017,8 @@ class ApiClientClass {
     )
   }
 
-  async checkOut(eventId: string): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+  async checkOut(eventId: string): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/events/${eventId}/checkout`,
       {
         method: 'POST',
@@ -807,7 +1028,7 @@ class ApiClientClass {
     )
   }
 
-  async getEventCheckins(eventId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ attendees: any[]; pagination: { page: number; limit: number; totalCount: number; hasMore: boolean } }>> {
+  async getEventCheckins(eventId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ attendees: CheckinAttendee[]; pagination: CheckinPagination }>> {
     const page = options?.page ?? 1
     const limit = options?.limit ?? 20
     const endpoint = `/api/mobile/events/${eventId}/checkins?page=${page}&limit=${limit}`
@@ -841,12 +1062,40 @@ class ApiClientClass {
     )
   }
 
+  async rsvpToEvent(
+    eventId: string,
+    status: 'going' | 'maybe' | 'not_going'
+  ): Promise<ApiResponse<{ rsvpStatus: string; rsvpCount: number }>> {
+    return this.queuedRequest<{ rsvpStatus: string; rsvpCount: number }>(
+      `/api/mobile/events/${eventId}/rsvp`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      },
+      true,
+      2
+    )
+  }
+
+  async cancelRsvp(
+    eventId: string
+  ): Promise<ApiResponse<{ rsvpStatus: null; rsvpCount: number }>> {
+    return this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
+      `/api/mobile/events/${eventId}/rsvp`,
+      {
+        method: 'DELETE',
+      },
+      true,
+      2
+    )
+  }
+
   async rateEvent(
     eventId: string,
     rating: number,
     review?: string
-  ): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/events/${eventId}/rating`,
       {
         method: 'POST',
@@ -857,16 +1106,57 @@ class ApiClientClass {
     )
   }
 
+  // === ORGANIZER ENDPOINTS ===
+
+  async updateEvent(
+    eventId: string,
+    data: { title?: string; description?: string; shortDescription?: string; status?: string }
+  ): Promise<ApiResponse<EventApiItem>> {
+    return this.queuedRequest<EventApiItem>(
+      `/api/mobile/events/${eventId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+      true,
+      2
+    )
+  }
+
+  async deleteEvent(eventId: string): Promise<ApiResponse<{ success: boolean }>> {
+    return this.queuedRequest<{ success: boolean }>(
+      `/api/mobile/events/${eventId}`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  async sendAnnouncement(
+    eventId: string,
+    content: string
+  ): Promise<ApiResponse<{ id: string }>> {
+    return this.queuedRequest<{ id: string }>(
+      `/api/mobile/events/${eventId}/announce`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      },
+      true,
+      2
+    )
+  }
+
   // === PROFILE ENDPOINTS ===
 
-  async getProfile(userId: string): Promise<ApiResponse<any>> {
+  async getProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
     // Check cache first for instant response
     const cached = ProfileCache.get(userId)
     if (cached) {
       return { success: true, data: cached }
     }
 
-    const result = await this.queuedRequest<any>(`/api/mobile/profiles/${userId}`)
+    const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
     if (result.success && result.data) {
@@ -895,8 +1185,8 @@ class ApiClientClass {
       locationSharing?: boolean
       preferences?: Record<string, unknown>
     }
-  ): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/profiles/${userId}`,
       {
         method: 'PUT',
@@ -907,12 +1197,12 @@ class ApiClientClass {
     )
   }
 
-  async getProfileInterests(userId: string): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>(`/api/mobile/profiles/${userId}/interests`)
+  async getProfileInterests(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+    return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/profiles/${userId}/interests`)
   }
 
-  async addProfileInterest(userId: string, categoryId: string): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+  async addProfileInterest(userId: string, categoryId: string): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/profiles/${userId}/interests`,
       {
         method: 'POST',
@@ -936,35 +1226,35 @@ class ApiClientClass {
 
   // === USER ENDPOINTS ===
 
-  async getPublicProfile(userId: string): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(`/api/mobile/users/${userId}`)
+  async getPublicProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
+    return this.queuedRequest<UserProfileData>(`/api/mobile/users/${userId}`)
   }
 
-  async getUserFavorites(userId: string): Promise<ApiResponse<any[]>> {
-    return this.queuedRequest<any[]>(`/api/mobile/users/${userId}/favorites`)
+  async getUserFavorites(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+    return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/users/${userId}/favorites`)
   }
 
   // === CHAT ENDPOINTS ===
 
-  async getChatGroups(options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
+  async getChatGroups(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
     const endpoint = '/api/mobile/chat/groups'
     if (options?.force) {
-      return this.queuedRequest<any[]>(endpoint)
+      return this.queuedRequest<Array<Record<string, unknown>>>(endpoint)
     }
-    return this.cachedRequest<any[]>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
   }
 
-  async getEventChat(eventId: string): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(`/api/mobile/events/${eventId}/chat`)
+  async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat`)
   }
 
   async sendChatMessage(
     chatGroupId: string,
     content: string,
     type: 'text' | 'image' | 'video' = 'text',
-    metadata?: any
-  ): Promise<ApiResponse<any>> {
-    return this.queuedRequest<any>(
+    metadata?: Record<string, unknown>
+  ): Promise<ApiResponse<ChatMessageData>> {
+    return this.queuedRequest<ChatMessageData>(
       `/api/mobile/chat/groups/${chatGroupId}/messages`,
       {
         method: 'POST',
@@ -978,12 +1268,12 @@ class ApiClientClass {
   async getChatMessages(
     chatGroupId: string,
     params?: { limit?: number; before?: string }
-  ): Promise<ApiResponse<any[]>> {
+  ): Promise<ApiResponse<Array<Record<string, unknown>>>> {
     const searchParams = new URLSearchParams()
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.before) searchParams.append('before', params.before)
     const query = searchParams.toString()
-    return this.queuedRequest<any[]>(
+    return this.queuedRequest<Array<Record<string, unknown>>>(
       `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
     )
   }
@@ -1008,8 +1298,8 @@ class ApiClientClass {
 
   // === CATEGORIES ===
 
-  async getCategories(): Promise<ApiResponse<any[]>> {
-    return this.cachedRequest<any[]>(
+  async getCategories(): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+    return this.cachedRequest<Array<Record<string, unknown>>>(
       '/api/mobile/categories',
       { ttl: CATEGORIES_SWR_TTL, swr: true }
     )
@@ -1043,12 +1333,12 @@ class ApiClientClass {
 
   // === PRIVATE CONVERSATIONS ===
 
-  async getConversations(options?: { force?: boolean }): Promise<ApiResponse<any[]>> {
+  async getConversations(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
     const endpoint = '/api/mobile/conversations'
     if (options?.force) {
-      return this.queuedRequest<any[]>(endpoint)
+      return this.queuedRequest<Array<Record<string, unknown>>>(endpoint)
     }
-    return this.cachedRequest<any[]>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
   }
 
   async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{

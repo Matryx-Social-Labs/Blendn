@@ -29,6 +29,8 @@ import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { APP_COLORS } from '../../lib/theme'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
+import { useLiveSync } from '../../lib/useLiveSync'
+import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 
@@ -72,7 +74,13 @@ export default function PrivateChat() {
   const flatListRef = useRef<FlatList>(null)
   const insets = useSafeAreaInsets()
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const typingActiveSentRef = useRef(false)
   const otherTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isAtBottomRef = useRef(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [oldestCursor, setOldestCursor] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [trayVisible, setTrayVisible] = useState(false)
   const [trayTitle, setTrayTitle] = useState('')
   const [trayMessage, setTrayMessage] = useState('')
@@ -180,26 +188,48 @@ export default function PrivateChat() {
     }
   }
 
-  const loadMessages = async () => {
+  const loadMessages = async (cursor?: string) => {
     try {
-      Logger.info('private-chat', 'Loading messages', { conversationId })
-      const result = await apiClient.getConversationMessages(String(conversationId))
+      Logger.info('private-chat', 'Loading messages', { conversationId, cursor })
+      const result = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
 
       if (result.success && result.data) {
         // Messages come in reverse order (newest first), reverse for display
         const msgs = result.data.messages.map(mapMessage).reverse()
-        setMessages(msgs)
-        Logger.info('private-chat', `Loaded ${msgs.length} messages`)
+        if (cursor) {
+          // Prepend older messages, preserving scroll position
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.id))
+            const newOnes = msgs.filter(m => !existingIds.has(m.id))
+            return [...newOnes, ...prev]
+          })
+        } else {
+          setMessages(msgs)
+          if (isAtBottomRef.current) setTimeout(scrollToBottom, 100)
+        }
+        setHasMore(result.data.hasMore)
+        setOldestCursor(result.data.nextCursor)
+        Logger.info('private-chat', `Loaded ${msgs.length} messages, hasMore=${result.data.hasMore}`)
       } else {
         Logger.error('private-chat', 'Failed to load messages', { error: result.error })
       }
 
-      // Mark as read when viewing
-      if (conversationId) {
+      // Mark as read on initial load only
+      if (conversationId && !cursor) {
         setConversationLastRead(String(conversationId)).catch(() => {})
       }
     } catch (error) {
       Logger.error('private-chat', 'Failed to load messages', { error })
+    }
+  }
+
+  const loadOlderMessages = async () => {
+    if (loadingOlder || !hasMore || !oldestCursor) return
+    setLoadingOlder(true)
+    try {
+      await loadMessages(oldestCursor)
+    } finally {
+      setLoadingOlder(false)
     }
   }
 
@@ -227,8 +257,7 @@ export default function PrivateChat() {
         otherTypingTimeoutRef.current = null
       }
 
-      // Scroll to bottom
-      setTimeout(scrollToBottom, 100)
+      if (isAtBottomRef.current) setTimeout(scrollToBottom, 100)
     }
 
     // Handle typing indicators
@@ -392,9 +421,19 @@ export default function PrivateChat() {
         activeOpacity={0.7}
       >
         {!isCurrentUser && (
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(String(item.sender?.name || otherUserName || 'User'))}</Text>
-          </View>
+          item.sender?.image ? (
+            <OptimizedImage
+              source={item.sender.image}
+              style={styles.avatar as any}
+              width={32}
+              height={32}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(String(item.sender?.name || otherUserName || 'User'))}</Text>
+            </View>
+          )
         )}
         <View style={[styles.messageContainer, isCurrentUser ? styles.myMessageContainer : styles.otherMessageContainer]}>
           <View style={[
@@ -425,12 +464,19 @@ export default function PrivateChat() {
               </Text>
             )}
           </View>
-          <Text style={[
-            styles.messageTime,
-            isCurrentUser ? styles.myMessageTime : styles.otherMessageTime
-          ]}>
-            {formatTime(item.createdAt)}
-          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[
+              styles.messageTime,
+              isCurrentUser ? styles.myMessageTime : styles.otherMessageTime
+            ]}>
+              {formatTime(item.createdAt)}
+            </Text>
+            {isCurrentUser && (
+              <Text style={[styles.readTick, item.isRead && styles.readTickSeen]}>
+                {item.isRead ? ' ✓✓' : ' ✓'}
+              </Text>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     )
@@ -498,6 +544,14 @@ export default function PrivateChat() {
     if (item.kind === 'separator') return renderSeparator(item.label)
     return renderMessage({ item })
   }
+
+  const socketStatus = useLiveSync({
+    enabled: !!authUser && !!conversationId,
+    onSync: () => loadMessages(),
+    domains: ['chat'],
+    syncOnReconnect: true,
+    disconnectedIntervalMs: 15000,
+  })
 
   if (showLoadingSkeleton) {
     return (
@@ -587,6 +641,7 @@ export default function PrivateChat() {
             accessibilityLabel: 'Safety options',
           }}
         />
+        <RealtimeStatusBanner status={socketStatus} style={styles.realtimeBanner} />
 
         {/* Messages */}
         {messages.length === 0 ? (
@@ -603,9 +658,47 @@ export default function PrivateChat() {
               style={styles.messagesList}
               contentContainerStyle={[styles.messagesContainer, { paddingBottom: messageListBottomInset }]}
               showsVerticalScrollIndicator={false}
-              onContentSizeChange={() => scrollToBottom()}
+              onContentSizeChange={() => { if (isAtBottomRef.current) scrollToBottom() }}
+              keyboardShouldPersistTaps="handled"
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              removeClippedSubviews={Platform.OS === 'android'}
+              windowSize={10}
+              initialNumToRender={20}
+              onScroll={(e) => {
+                const offsetFromBottom =
+                  e.nativeEvent.contentSize.height -
+                  e.nativeEvent.contentOffset.y -
+                  e.nativeEvent.layoutMeasurement.height
+                const atBottom = offsetFromBottom < 100
+                isAtBottomRef.current = atBottom
+                setShowScrollToBottom(!atBottom)
+              }}
+              scrollEventThrottle={100}
+              ListHeaderComponent={hasMore ? (
+                <TouchableOpacity
+                  style={styles.loadMoreButton}
+                  onPress={loadOlderMessages}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder
+                    ? <Text style={styles.loadMoreText}>Loading...</Text>
+                    : <Text style={styles.loadMoreText}>↑ Load older messages</Text>
+                  }
+                </TouchableOpacity>
+              ) : null}
             />
           </Animated.View>
+        )}
+
+        {showScrollToBottom && (
+          <TouchableOpacity
+            style={[styles.scrollToBottomBtn, { bottom: messageListBottomInset + 8 }]}
+            onPress={scrollToBottom}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-down" size={20} color="#fff" />
+          </TouchableOpacity>
         )}
 
         {/* Typing indicator */}
@@ -646,14 +739,19 @@ export default function PrivateChat() {
                 setNewMessage(text)
                 setComposerExpanded(text.length > 0)
                 if (text.length > 0 && conversationId) {
-                  startPrivateTyping(String(conversationId))
+                  if (!typingActiveSentRef.current) {
+                    startPrivateTyping(String(conversationId))
+                    typingActiveSentRef.current = true
+                  }
                   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
                   typingTimeoutRef.current = setTimeout(() => {
                     stopPrivateTyping(String(conversationId))
+                    typingActiveSentRef.current = false
                   }, 2000)
                 } else if (text.length === 0 && conversationId) {
                   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
                   stopPrivateTyping(String(conversationId))
+                  typingActiveSentRef.current = false
                 }
               }}
               placeholder="Message..."
@@ -833,11 +931,12 @@ const styles = StyleSheet.create({
   myMessageTime: {
     color: '#B5B5B5',
     textAlign: 'right',
-    marginRight: 12,
   },
   otherMessageTime: {
     color: '#B5B5B5',
     marginLeft: 12,
+    marginTop: 4,
+    fontSize: 11,
   },
   dateSeparatorContainer: {
     alignItems: 'center',
@@ -908,6 +1007,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#555',
   },
 
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+    marginRight: 12,
+  },
+  readTick: {
+    fontSize: 11,
+    color: '#B5B5B5',
+  },
+  readTickSeen: {
+    color: APP_COLORS.accent,
+  },
+  realtimeBanner: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadMoreText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+  },
+  scrollToBottomBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: APP_COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
   // Typing indicator styles
   typingContainer: {
     paddingHorizontal: 16,

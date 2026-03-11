@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import React, { memo, useEffect, useMemo, useRef } from 'react'
 import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
 import Reanimated from 'react-native-reanimated'
@@ -68,7 +69,10 @@ const EventCard = memo<EventCardProps>(({
   const handlePress = () => onPress(event)
   const handleLongPress = () => onLongPress?.(event)
   const handleCheckIn = () => onCheckIn(event)
-  const handleToggleInterest = () => onToggleInterest(event)
+  const handleToggleInterest = () => {
+    Haptics.selectionAsync()
+    onToggleInterest(event)
+  }
 
   const formattedStart = useMemo(() => formatEventDateTime(event.start_time, { showTimezoneIfDifferent: true, timezone: event.timezone }), [event.start_time, event.timezone])
   const distanceLabel = useMemo(() => {
@@ -91,7 +95,7 @@ const EventCard = memo<EventCardProps>(({
 
   return (
     <RNAnimated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
-      <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320}>
+      <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
       <Reanimated.View sharedTransitionTag={`event-image-${event.id}`}>
         {event.cover_image_url ? (
           <OptimizedImage
@@ -148,10 +152,12 @@ const EventCard = memo<EventCardProps>(({
           )}
           
           {canCheckIn && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.checkinButton, checkInLoading && styles.actionDisabled]}
               onPress={handleCheckIn}
               disabled={checkInLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Check in to event"
             >
               {checkInLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
@@ -201,7 +207,7 @@ const EventCard = memo<EventCardProps>(({
             )}
             {(event.max_capacity > 0) && (
               <View style={[styles.chip, (event.current_capacity / event.max_capacity) > 0.7 ? styles.chipWarning : styles.chipNeutral]}>
-                <Typography variant="caption" style={[styles.chipText, (event.current_capacity / event.max_capacity) > 0.7 && styles.chipWarningText]}>
+                <Typography variant="caption" style={(event.current_capacity / event.max_capacity) > 0.7 ? [styles.chipText, styles.chipWarningText] : styles.chipText}>
                   {capacityLabel(event.current_capacity, event.max_capacity)}
                 </Typography>
               </View>

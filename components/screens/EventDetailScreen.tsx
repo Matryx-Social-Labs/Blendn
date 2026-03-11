@@ -9,16 +9,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
+  Alert,
   Animated as RNAnimated,
   Dimensions,
   Easing,
   InteractionManager,
   Linking,
+  Modal,
   Platform,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -204,6 +207,7 @@ export default function EventDetail() {
   const [averageRating, setAverageRating] = useState<number | null>(null)
   const [ratingCount, setRatingCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
+  const [rsvpStatus, setRsvpStatus] = useState<'going' | 'maybe' | 'not_going' | null>(null)
   const [interestedAvatars, setInterestedAvatars] = useState<string[]>(() => {
     if (interested && typeof interested === 'string') {
       try {
@@ -230,6 +234,10 @@ export default function EventDetail() {
   const actionMorph = React.useRef(new RNAnimated.Value(0)).current
   const checkedInMorphTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
+  const [isOrganizer, setIsOrganizer] = useState(false)
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
+  const [announcementText, setAnnouncementText] = useState('')
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
   const gradientPalette = React.useMemo(() => {
     const seed = `${event?.cover_image_url || cover || ''}|${event?.category || category || ''}|${event?.title || title || ''}`
     return buildEventGradientPalette(seed)
@@ -263,8 +271,8 @@ export default function EventDetail() {
           city: d.city || '',
           venue_name: d.venueName || d.venue_name || '',
           address: d.address || '',
-          start_time: d.startTime || d.start_time,
-          end_time: d.endTime || d.end_time,
+          start_time: d.startTime || d.start_time || '',
+          end_time: d.endTime || d.end_time || '',
           timezone: d.timezone,
           category: d.categories?.[0]?.name || '',
           price_cents: d.priceCents || d.price_cents || 0,
@@ -272,8 +280,8 @@ export default function EventDetail() {
           current_capacity: d.currentCapacity || d.current_capacity || 0,
           cover_image_url: d.coverImageUrl || d.cover_image_url || '',
           organizer: d.organizer?.name || '',
-          latitude: d.latitude,
-          longitude: d.longitude,
+          latitude: d.latitude ?? 0,
+          longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           gallery: d.gallery,
           gallery_photos: d.gallery_photos,
@@ -292,6 +300,7 @@ export default function EventDetail() {
             checked_in: d.userStatus.isCheckedIn || false,
             check_in_id: d.userStatus.checkInId,
           })
+          setRsvpStatus((d.userStatus.rsvpStatus as 'going' | 'maybe' | 'not_going' | null) || null)
         }
         if (d.interestedUsers) {
           const avatars = d.interestedUsers
@@ -301,6 +310,9 @@ export default function EventDetail() {
         }
         if (d.chatGroup?.id) {
           setEventChatGroupId(d.chatGroup.id)
+        }
+        if (user && d.organizer?.id) {
+          setIsOrganizer(d.organizer.id === user.id)
         }
         setLoading(false)
       }
@@ -409,6 +421,7 @@ export default function EventDetail() {
         ])
         return
       }
+      feedback.tap()
       const prevInterested = userInterested
       setUserInterested(!prevInterested)
       setInterestCount((prev) => Math.max(0, prev + (prevInterested ? -1 : 1)))
@@ -428,6 +441,43 @@ export default function EventDetail() {
       showTray('Error', 'Failed to update interest.')
     }
   }, [id, user, userInterested, showTray, closeTray, feedback])
+
+  const handleToggleRsvp = useCallback(async () => {
+    try {
+      if (!id) return
+      if (!user) {
+        showTray('Sign in required', 'Please sign in to RSVP to events.', [
+          { label: 'Not now', onPress: closeTray },
+          { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
+        ])
+        return
+      }
+      feedback.tap()
+      const isCurrentlyGoing = rsvpStatus === 'going'
+      const prevStatus = rsvpStatus
+      setRsvpStatus(isCurrentlyGoing ? null : 'going')
+      if (isCurrentlyGoing) {
+        const result = await apiClient.cancelRsvp(String(id))
+        if (!result.success) {
+          setRsvpStatus(prevStatus)
+          feedback.error()
+          showTray('Error', 'Failed to cancel RSVP.')
+        }
+      } else {
+        const result = await apiClient.rsvpToEvent(String(id), 'going')
+        if (!result.success || !result.data) {
+          setRsvpStatus(prevStatus)
+          feedback.error()
+          showTray('Error', 'Failed to RSVP to event.')
+        } else {
+          setRsvpStatus(result.data.rsvpStatus as 'going' | 'maybe' | 'not_going' | null)
+        }
+      }
+    } catch {
+      feedback.error()
+      showTray('Error', 'Failed to update RSVP.')
+    }
+  }, [id, user, rsvpStatus, showTray, closeTray, feedback])
 
   const checkProximityStatus = async () => {
     if (!userLocation || !event) return
@@ -495,8 +545,8 @@ export default function EventDetail() {
           city: d.city || '',
           venue_name: d.venueName || d.venue_name || '',
           address: d.address || '',
-          start_time: d.startTime || d.start_time,
-          end_time: d.endTime || d.end_time,
+          start_time: d.startTime || d.start_time || '',
+          end_time: d.endTime || d.end_time || '',
           timezone: d.timezone,
           category: d.categories?.[0]?.name || '',
           price_cents: d.priceCents || d.price_cents || 0,
@@ -504,8 +554,8 @@ export default function EventDetail() {
           current_capacity: d.currentCapacity || d.current_capacity || 0,
           cover_image_url: d.coverImageUrl || d.cover_image_url || '',
           organizer: d.organizer?.name || '',
-          latitude: d.latitude,
-          longitude: d.longitude,
+          latitude: d.latitude ?? 0,
+          longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           gallery: d.gallery,
           gallery_photos: d.gallery_photos,
@@ -521,6 +571,7 @@ export default function EventDetail() {
             checked_in: d.userStatus.isCheckedIn || false,
             check_in_id: d.userStatus.checkInId,
           })
+          setRsvpStatus((d.userStatus.rsvpStatus as 'going' | 'maybe' | 'not_going' | null) || null)
         }
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -536,6 +587,10 @@ export default function EventDetail() {
         // Set chat group ID if available
         if (d.chatGroup?.id) {
           setEventChatGroupId(d.chatGroup.id)
+        }
+        // Determine if current user is the organizer
+        if (user && d.organizer?.id) {
+          setIsOrganizer(d.organizer.id === user.id)
         }
         Logger.journey('events', 'detail:fetch:success', { eventId: d.id, isCheckedIn: d.userStatus?.isCheckedIn })
       }
@@ -868,6 +923,90 @@ export default function EventDetail() {
     }
   }
 
+  // === ORGANIZER ACTIONS ===
+
+  const handleSendAnnouncement = async () => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Send Announcement',
+        'Enter your announcement for all attendees:',
+        async (text) => {
+          if (!text || !text.trim()) return
+          try {
+            const result = await apiClient.sendAnnouncement(String(id), text.trim())
+            if (result.success) {
+              feedback.success()
+              showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
+            } else {
+              feedback.error()
+              showTray('Failed', result.error || 'Could not send announcement.')
+            }
+          } catch {
+            feedback.error()
+            showTray('Error', 'Failed to send announcement.')
+          }
+        },
+        'plain-text'
+      )
+    } else {
+      setAnnouncementText('')
+      setShowAnnouncementModal(true)
+    }
+  }
+
+  const handleSendAnnouncementAndroid = async () => {
+    if (!announcementText.trim()) return
+    setSendingAnnouncement(true)
+    try {
+      const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
+      if (result.success) {
+        feedback.success()
+        setShowAnnouncementModal(false)
+        setAnnouncementText('')
+        showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
+      } else {
+        feedback.error()
+        showTray('Failed', result.error || 'Could not send announcement.')
+        setShowAnnouncementModal(false)
+      }
+    } catch {
+      feedback.error()
+      showTray('Error', 'Failed to send announcement.')
+      setShowAnnouncementModal(false)
+    } finally {
+      setSendingAnnouncement(false)
+    }
+  }
+
+  const handleDeleteEvent = () => {
+    Alert.alert(
+      'Delete Event',
+      'Are you sure you want to delete this event? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await apiClient.deleteEvent(String(id))
+              if (result.success) {
+                feedback.success()
+                router.back()
+              } else {
+                feedback.error()
+                showTray('Failed', result.error || 'Could not delete event.')
+              }
+            } catch {
+              feedback.error()
+              showTray('Error', 'Failed to delete event.')
+            }
+          },
+        },
+      ]
+    )
+  }
+
   const openInMaps = async () => {
     if (!event) return
     const lat = event.latitude
@@ -974,17 +1113,21 @@ export default function EventDetail() {
       return src
     }
 
-    const img = (src: string | number, w: number, h: number, key: string) => (
-      <Image
-        key={key}
-        source={buildImageSource(src, { width: w, height: h }) as any}
-        placeholder={placeholderImg}
-        style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={150}
-      />
-    )
+    const img = (src: string | number, w: number, h: number, key: string) => {
+      const photoIndex = parseInt(key.replace('g-', ''), 10)
+      return (
+        <Image
+          key={key}
+          source={buildImageSource(src, { width: w, height: h }) as any}
+          placeholder={placeholderImg}
+          style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={150}
+          accessibilityLabel={`Event photo ${photoIndex + 1}`}
+        />
+      )
+    }
 
     const n = sources.length
 
@@ -1188,7 +1331,7 @@ export default function EventDetail() {
           >
             <Ionicons name={userInterested ? 'heart' : 'heart-outline'} size={20} color="#FFFFFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton} onPress={handleShare}>
+          <TouchableOpacity style={styles.navButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share event">
             <Ionicons name="share-outline" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -1470,13 +1613,39 @@ export default function EventDetail() {
               ) : null}
             </View>
 
+            {isOrganizer && !isLoading && (
+              <View style={styles.organizerPanel}>
+                <Text style={styles.organizerPanelTitle}>Organizer Tools</Text>
+                <View style={styles.organizerButtonRow}>
+                  <TouchableOpacity
+                    style={[styles.organizerButton, styles.organizerButtonAnnounce]}
+                    onPress={handleSendAnnouncement}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send announcement to attendees"
+                  >
+                    <Ionicons name="megaphone-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.organizerButtonText}>Announce</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.organizerButton, styles.organizerButtonDelete]}
+                    onPress={handleDeleteEvent}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete this event"
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.organizerButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
           </View>
         </ScrollView>
       </View>
 
      
       <View style={styles.tabBar}>
-        <ScalePress 
+        <ScalePress
           style={[
             styles.blendnButton,
             isCheckedIn && styles.blendnButtonWithSecondary,
@@ -1485,6 +1654,8 @@ export default function EventDetail() {
           onPress={primaryActionPress}
           disabled={primaryActionDisabled}
           pressedScale={0.975}
+          accessibilityRole="button"
+          accessibilityLabel={isCheckedIn ? (actionStage === 'chat' ? 'Go to event chat' : 'Checked in') : 'Check in to event'}
         >
           <BlurView intensity={42} tint="dark" style={styles.glassButtonBlur} />
           <LinearGradient
@@ -1537,6 +1708,36 @@ export default function EventDetail() {
             )}
           </ScalePress>
         )}
+        {!isCheckedIn && !isLoading && (
+          <ScalePress
+            style={[
+              styles.secondaryActionButton,
+              rsvpStatus === 'going' && styles.rsvpButtonActive,
+            ]}
+            onPress={handleToggleRsvp}
+            accessibilityRole="button"
+            accessibilityLabel={rsvpStatus === 'going' ? 'Cancel RSVP' : 'RSVP as going'}
+            pressedScale={0.96}
+          >
+            <BlurView intensity={36} tint="dark" style={styles.glassButtonBlur} />
+            <LinearGradient
+              colors={
+                rsvpStatus === 'going'
+                  ? ['rgba(94,234,141,0.32)', 'rgba(34,197,94,0.12)']
+                  : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']
+              }
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.glassButtonSheen}
+              pointerEvents="none"
+            />
+            <Ionicons
+              name={rsvpStatus === 'going' ? 'checkmark-circle' : 'calendar-outline'}
+              size={20}
+              color={rsvpStatus === 'going' ? '#4ade80' : '#FFFFFF'}
+            />
+          </ScalePress>
+        )}
       </View>
       <ActionTray
         visible={trayState.visible}
@@ -1545,6 +1746,52 @@ export default function EventDetail() {
         buttons={trayState.buttons}
         onClose={closeTray}
       />
+
+      {/* Announcement modal for Android (iOS uses Alert.prompt) */}
+      <Modal
+        visible={showAnnouncementModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAnnouncementModal(false)}
+      >
+        <View style={styles.announcementOverlay}>
+          <View style={styles.announcementModal}>
+            <Text style={styles.announcementModalTitle}>Send Announcement</Text>
+            <Text style={styles.announcementModalSubtitle}>
+              This message will be broadcast to all event attendees.
+            </Text>
+            <TextInput
+              style={styles.announcementInput}
+              placeholder="Enter your announcement..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={announcementText}
+              onChangeText={setAnnouncementText}
+              multiline
+              maxLength={1000}
+              autoFocus
+            />
+            <View style={styles.announcementModalButtons}>
+              <TouchableOpacity
+                style={[styles.announcementModalBtn, styles.announcementModalBtnCancel]}
+                onPress={() => { setShowAnnouncementModal(false); setAnnouncementText('') }}
+              >
+                <Text style={styles.announcementModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.announcementModalBtn, styles.announcementModalBtnSend, !announcementText.trim() && { opacity: 0.5 }]}
+                onPress={handleSendAnnouncementAndroid}
+                disabled={!announcementText.trim() || sendingAnnouncement}
+              >
+                {sendingAnnouncement ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.announcementModalBtnText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -1975,6 +2222,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     flexShrink: 0,
   },
+  rsvpButtonActive: {
+    backgroundColor: 'rgba(74,222,128,0.12)',
+    borderColor: 'rgba(74,222,128,0.5)',
+  },
   interestButton: {
     backgroundColor: '#fde7ef',
     padding: 16,
@@ -2126,5 +2377,117 @@ const styles = StyleSheet.create({
   },
   glassButtonSheen: {
     ...StyleSheet.absoluteFillObject,
+  },
+  // Organizer tools panel
+  organizerPanel: {
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 16,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  organizerPanelTitle: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  organizerButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  organizerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  organizerButtonAnnounce: {
+    backgroundColor: 'rgba(99,102,241,0.25)',
+    borderColor: 'rgba(99,102,241,0.5)',
+  },
+  organizerButtonDelete: {
+    backgroundColor: 'rgba(239,68,68,0.2)',
+    borderColor: 'rgba(239,68,68,0.4)',
+  },
+  organizerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // Announcement modal (Android)
+  announcementOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  announcementModal: {
+    width: '100%',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  announcementModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  announcementModalSubtitle: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    marginBottom: 14,
+    lineHeight: 18,
+  },
+  announcementInput: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    color: '#FFFFFF',
+    fontSize: 15,
+    padding: 12,
+    minHeight: 90,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  announcementModalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  announcementModalBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  announcementModalBtnCancel: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  announcementModalBtnSend: {
+    backgroundColor: APP_COLORS.accent,
+    borderColor: 'transparent',
+  },
+  announcementModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 })

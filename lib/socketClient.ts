@@ -173,10 +173,12 @@ export function subscribeConnectionStatus(
 const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
-const chatSubscriptions = new Map<string, Set<ChatMessageCallback | ChatTypingCallback | ChatReactionCallback>>()
+const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
+const chatTypingSubscriptions = new Map<string, Set<ChatTypingCallback>>()
+const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
 const chatModerationSubscriptions = new Map<string, Set<ChatMessageDeletedCallback | ChatMemberBannedCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
-const userSubscriptions = new Map<string, Set<(data: any) => void>>()
+const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -311,7 +313,9 @@ export function disconnect(): void {
   eventCheckInSubscriptions.clear()
   eventCheckOutSubscriptions.clear()
   eventInterestSubscriptions.clear()
-  chatSubscriptions.clear()
+  chatMessageSubscriptions.clear()
+  chatTypingSubscriptions.clear()
+  chatReactionSubscriptions.clear()
   chatModerationSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
@@ -337,10 +341,15 @@ function rejoinAllRooms(): void {
     ...eventInterestSubscriptions.keys(),
   ])
   eventIds.forEach((id) => socket?.emit("join:event", id))
-  chatSubscriptions.forEach((_, id) => socket?.emit("join:chat", id))
+  const chatIds = new Set<string>([
+    ...chatMessageSubscriptions.keys(),
+    ...chatTypingSubscriptions.keys(),
+    ...chatReactionSubscriptions.keys(),
+  ])
+  chatIds.forEach((id) => socket?.emit("join:chat", id))
   conversationSubscriptions.forEach((_, id) => socket?.emit("join:conversation", id))
 
-  const roomCount = eventIds.size + chatSubscriptions.size + conversationSubscriptions.size
+  const roomCount = eventIds.size + chatIds.size + conversationSubscriptions.size
   if (roomCount > 0) {
     Logger.info("socket", `Rejoined ${roomCount} rooms after connect`)
   }
@@ -401,18 +410,15 @@ function setupSocketHandlers(sock: TypedSocket): void {
   // Chat updates
   sock.on("chat:message", (data) => {
     markDomainsDirty(["chat"])
-    const callbacks = chatSubscriptions.get(data.chatGroupId)
-    callbacks?.forEach((cb) => (cb as ChatMessageCallback)(data))
+    chatMessageSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   sock.on("chat:typing", (data) => {
-    const callbacks = chatSubscriptions.get(data.chatGroupId)
-    callbacks?.forEach((cb) => (cb as ChatTypingCallback)(data))
+    chatTypingSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   sock.on("chat:reaction", (data) => {
-    const callbacks = chatSubscriptions.get(data.chatGroupId)
-    callbacks?.forEach((cb) => (cb as ChatReactionCallback)(data))
+    chatReactionSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   sock.on("chat:messageDeleted", (data) => {
@@ -564,37 +570,78 @@ export function subscribeToEvent(
 
 // === Chat Subscriptions ===
 
-/**
- * Subscribe to chat updates (messages, typing, reactions)
- */
-export function subscribeToChat(
+function subscribeToChatMap<T>(
   chatGroupId: string,
-  callback: ChatMessageCallback | ChatTypingCallback | ChatReactionCallback
+  callback: T,
+  targetMap: Map<string, Set<T>>
 ): () => void {
   if (!socket?.connected) {
-    // connect() is async; room will be joined by the connect handler via rejoinAllRooms()
     connect()
   } else {
     socket.emit("join:chat", chatGroupId)
   }
 
-  // Add to subscriptions
-  if (!chatSubscriptions.has(chatGroupId)) {
-    chatSubscriptions.set(chatGroupId, new Set())
+  if (!targetMap.has(chatGroupId)) {
+    targetMap.set(chatGroupId, new Set())
   }
-  chatSubscriptions.get(chatGroupId)!.add(callback)
+  targetMap.get(chatGroupId)!.add(callback)
 
-  // Return unsubscribe function
   return () => {
-    const callbacks = chatSubscriptions.get(chatGroupId)
+    const callbacks = targetMap.get(chatGroupId)
     if (callbacks) {
       callbacks.delete(callback)
       if (callbacks.size === 0) {
-        chatSubscriptions.delete(chatGroupId)
-        socket?.emit("leave:chat", chatGroupId)
+        targetMap.delete(chatGroupId)
+        const hasAny = chatMessageSubscriptions.has(chatGroupId)
+          || chatTypingSubscriptions.has(chatGroupId)
+          || chatReactionSubscriptions.has(chatGroupId)
+        if (!hasAny) {
+          socket?.emit("leave:chat", chatGroupId)
+        }
       }
     }
   }
+}
+
+/**
+ * Subscribe to chat messages for a specific chat group.
+ */
+export function subscribeToChatMessage(
+  chatGroupId: string,
+  callback: ChatMessageCallback
+): () => void {
+  return subscribeToChatMap(chatGroupId, callback, chatMessageSubscriptions)
+}
+
+/**
+ * Subscribe to typing indicators for a specific chat group.
+ */
+export function subscribeToChatTyping(
+  chatGroupId: string,
+  callback: ChatTypingCallback
+): () => void {
+  return subscribeToChatMap(chatGroupId, callback, chatTypingSubscriptions)
+}
+
+/**
+ * Subscribe to reaction events for a specific chat group.
+ */
+export function subscribeToChatReaction(
+  chatGroupId: string,
+  callback: ChatReactionCallback
+): () => void {
+  return subscribeToChatMap(chatGroupId, callback, chatReactionSubscriptions)
+}
+
+/**
+ * @deprecated Use subscribeToChatMessage, subscribeToChatTyping, or subscribeToChatReaction instead.
+ * Kept for backward compatibility — routes to subscribeToChatMessage.
+ */
+export function subscribeToChat(
+  chatGroupId: string,
+  callback: ChatMessageCallback | ChatTypingCallback | ChatReactionCallback
+): () => void {
+  return subscribeToChatMap(chatGroupId, callback as ChatMessageCallback, chatMessageSubscriptions)
 }
 
 /**
@@ -708,13 +755,13 @@ export function subscribeToUserNotifications(
   if (!userSubscriptions.has(userId)) {
     userSubscriptions.set(userId, new Set())
   }
-  userSubscriptions.get(userId)!.add(callback as (data: any) => void)
+  userSubscriptions.get(userId)!.add(callback)
 
   // Return unsubscribe function
   return () => {
     const callbacks = userSubscriptions.get(userId)
     if (callbacks) {
-      callbacks.delete(callback as (data: any) => void)
+      callbacks.delete(callback)
       if (callbacks.size === 0) {
         userSubscriptions.delete(userId)
       }

@@ -23,6 +23,8 @@ interface OptimizedImageProps {
   transition?: number
   cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk'
   testID?: string
+  accessibilityLabel?: string
+  accessibilityRole?: string
 }
 
 interface ProgressiveLoadingState {
@@ -50,6 +52,8 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   transition = 200, // Faster transition
   cachePolicy = 'memory-disk',
   testID,
+  accessibilityLabel,
+  accessibilityRole,
 }) => {
   const [loadingState, setLoadingState] = useState<ProgressiveLoadingState>({
     lowQualityLoaded: false,
@@ -182,7 +186,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               onError={(e) => {
                 Logger.error('general', 'Image onError triggered', {
                   url: highQualityUrl,
-                  event: JSON.stringify(e?.nativeEvent || e)
+                  event: JSON.stringify(e as Record<string, unknown>)
                 })
                 handleError(e)
               }}
@@ -206,7 +210,12 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   }
 
   return (
-    <View style={[styles.container, style]} testID={testID}>
+    <View
+      style={[styles.container, style]}
+      testID={testID}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole as any}
+    >
       {renderContent()}
     </View>
   )

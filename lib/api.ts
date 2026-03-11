@@ -48,7 +48,7 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
   })
   if (result.success && result.data) {
     // Transform API response (camelCase) to mobile format (snake_case)
-    const events = result.data.events.map((e: any) => ({
+    const events = result.data.events.map((e) => ({
       id: e.id,
       title: e.title,
       description: e.description || '',
@@ -199,7 +199,7 @@ export async function sendChatMessage(
   chatGroupId: string,
   content: string,
   type: 'text' | 'image' | 'video' = 'text',
-  metadata?: any
+  metadata?: Record<string, unknown>
 ) {
   const result = await apiClient.sendChatMessage(chatGroupId, content, type, metadata)
   if (result.success) {

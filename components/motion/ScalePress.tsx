@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react'
-import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -28,7 +28,7 @@ export default function ScalePress({
   const scale = useSharedValue(1)
 
   const handlePressIn: PressableProps['onPressIn'] = useCallback(
-    (event) => {
+    (event: GestureResponderEvent) => {
       if (!reduceMotion) {
         scale.value = withSpring(pressedScale, MOTION_SPRING.snappy)
       }
@@ -38,7 +38,7 @@ export default function ScalePress({
   )
 
   const handlePressOut: PressableProps['onPressOut'] = useCallback(
-    (event) => {
+    (event: GestureResponderEvent) => {
       if (!reduceMotion) {
         scale.value = withSpring(1, MOTION_SPRING.gentle)
       }

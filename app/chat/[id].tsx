@@ -31,9 +31,11 @@ import { pickImage, uploadPhoto } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { subscribeToChat, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { APP_COLORS } from '../../lib/theme'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
+import { useLiveSync } from '../../lib/useLiveSync'
+import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 
 interface Message {
@@ -46,9 +48,12 @@ interface Message {
   is_edited: boolean
   created_at: string
   replyTo?: Message
+  reactions?: Record<string, string[]>
 }
 
 const MESSAGES_CACHE_TTL = 60 * 1000
+// Monotonic counter for optimistic message IDs — prevents collisions on rapid sends
+let _tempIdCounter = 0
 const MESSAGES_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
 
 type ChatListItem =
@@ -83,7 +88,14 @@ export default function GroupChat() {
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const typingCleanupRefs = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const typingActiveSentRef = useRef(false)
+  const cacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastMessagesFetchRef = useRef(0)
+  const isAtBottomRef = useRef(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [oldestCursor, setOldestCursor] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const contentOpacity = useRef(new Animated.Value(0)).current
   const contentTranslate = useRef(new Animated.Value(8)).current
   const typingIndicatorAnim = useRef(new Animated.Value(0)).current
@@ -197,6 +209,34 @@ export default function GroupChat() {
     return items
   }, [messages])
 
+  const transformRawMessages = (rawMessages: any[], authUserId?: string): Message[] => {
+    const transformed = rawMessages.map((msg: any) => {
+      const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
+      const serverName = msg.user?.name || msg.sender_name || msg.senderName || 'Attendee'
+      const displayName = senderId === 'system'
+        ? 'System'
+        : senderId === authUserId
+          ? 'You'
+          : serverName
+      return {
+        message_id: msg.id || msg.message_id,
+        sender_id: senderId,
+        sender_name: displayName,
+        message_text: msg.message_text || msg.content || msg.text || '',
+        message_type: msg.message_type || msg.type || 'text',
+        reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
+        is_edited: msg.is_edited || msg.isEdited || false,
+        created_at: msg.created_at || msg.createdAt,
+        replyTo: undefined as Message | undefined,
+        reactions: undefined as Record<string, string[]> | undefined,
+      }
+    })
+    return transformed.map(msg => ({
+      ...msg,
+      replyTo: msg.reply_to_message_id ? transformed.find(m => m.message_id === msg.reply_to_message_id) : undefined,
+    }))
+  }
+
   const loadMessages = async (force = false, refreshEvenIfCached = false) => {
     try {
       if (!authUser) {
@@ -210,7 +250,7 @@ export default function GroupChat() {
         if (cached) {
           setMessages(cached)
           setLoading(false)
-          setTimeout(() => scrollToBottom(), 100)
+          if (isAtBottomRef.current) setTimeout(() => scrollToBottom(), 100)
           if (!refreshEvenIfCached || now - lastMessagesFetchRef.current <= MESSAGES_BACKGROUND_REFRESH_THROTTLE_MS) {
             return
           }
@@ -220,8 +260,8 @@ export default function GroupChat() {
       Logger.info('chat', `Loading messages for room: ${chatRoomId}`)
       lastMessagesFetchRef.current = now
 
-      // Use API to get chat messages
-      const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 100 })
+      // Load latest 50 messages
+      const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
 
       if (!result.success || !result.data) {
         Logger.error('chat', 'Error loading messages', { error: result.error })
@@ -237,35 +277,14 @@ export default function GroupChat() {
         Logger.warn('chat', 'Unexpected chat messages payload shape', { data: result.data })
       }
 
-      Logger.info('chat', `Successfully loaded ${Array.isArray(rawMessages) ? rawMessages.length : 0} messages`)
+      // Parse pagination cursor from response
+      const pagination = (result.data as any)?.pagination
+      setHasMore(pagination?.hasMore || false)
+      setOldestCursor(pagination?.nextCursor || null)
 
-      // Transform data — server now returns anonymous names, only override for current user
-      const transformedMessages = (Array.isArray(rawMessages) ? rawMessages : []).map((msg: any) => {
-        const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
-        const serverName = msg.user?.name || msg.sender_name || msg.senderName || 'Attendee'
-        const displayName = senderId === 'system'
-          ? 'System'
-          : senderId === authUser?.id
-            ? 'You'
-            : serverName
-        return {
-          message_id: msg.id || msg.message_id,
-          sender_id: senderId,
-          sender_name: displayName,
-          message_text: msg.message_text || msg.content || msg.text || '',
-          message_type: msg.message_type || msg.type || 'text',
-          reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
-          is_edited: msg.is_edited || msg.isEdited || false,
-          created_at: msg.created_at || msg.createdAt,
-          replyTo: undefined as Message | undefined
-        }
-      })
+      Logger.info('chat', `Loaded ${Array.isArray(rawMessages) ? rawMessages.length : 0} messages, hasMore=${pagination?.hasMore}`)
 
-      // Link reply messages
-      const messagesWithReplies = transformedMessages.map(msg => ({
-        ...msg,
-        replyTo: msg.reply_to_message_id ? transformedMessages.find(m => m.message_id === msg.reply_to_message_id) : undefined
-      }))
+      const messagesWithReplies = transformRawMessages(Array.isArray(rawMessages) ? rawMessages : [], authUser?.id)
 
       // Messages should be in chronological order (oldest first)
       setMessages(messagesWithReplies)
@@ -280,10 +299,15 @@ export default function GroupChat() {
     }
   }
 
-  // Keep cache warm as messages update in real time
+  // Keep cache warm as messages update in real time (debounced to avoid writing on every append)
   useEffect(() => {
-    if (messagesCacheKey) {
+    if (!messagesCacheKey) return
+    if (cacheWriteTimerRef.current) clearTimeout(cacheWriteTimerRef.current)
+    cacheWriteTimerRef.current = setTimeout(() => {
       queryCache.set(messagesCacheKey, messages, MESSAGES_CACHE_TTL)
+    }, 500)
+    return () => {
+      if (cacheWriteTimerRef.current) clearTimeout(cacheWriteTimerRef.current)
     }
   }, [messages, messagesCacheKey])
 
@@ -321,7 +345,7 @@ export default function GroupChat() {
         return next
       })
 
-      setTimeout(() => scrollToBottom(), 100)
+      if (isAtBottomRef.current) setTimeout(() => scrollToBottom(), 100)
     }
 
     // Subscribe to typing indicators
@@ -375,8 +399,29 @@ export default function GroupChat() {
       }
     }
 
-    const unsubMessage = subscribeToChat(String(chatRoomId), handleNewMessage)
-    const unsubTyping = subscribeToChat(String(chatRoomId), handleTyping)
+    // Handle reaction updates from socket
+    const handleReaction: ChatReactionCallback = (data) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg.message_id !== data.messageId) return msg
+        const reactions = { ...(msg.reactions || {}) }
+        if (data.action === 'add') {
+          const existing = reactions[data.emoji] || []
+          reactions[data.emoji] = [...new Set([...existing, data.userId])]
+        } else {
+          const users = (reactions[data.emoji] || []).filter(uid => uid !== data.userId)
+          if (users.length === 0) {
+            delete reactions[data.emoji]
+          } else {
+            reactions[data.emoji] = users
+          }
+        }
+        return { ...msg, reactions }
+      }))
+    }
+
+    const unsubMessage = subscribeToChatMessage(String(chatRoomId), handleNewMessage)
+    const unsubTyping = subscribeToChatTyping(String(chatRoomId), handleTyping)
+    const unsubReaction = subscribeToChatReaction(String(chatRoomId), handleReaction)
     const unsubDeleted = subscribeToChatModeration(String(chatRoomId), handleMessageDeleted)
     const unsubBanned = subscribeToChatModeration(String(chatRoomId), handleMemberBanned)
 
@@ -384,6 +429,7 @@ export default function GroupChat() {
       Logger.info('chat', 'Cleaning up chat subscription')
       unsubMessage()
       unsubTyping()
+      unsubReaction()
       unsubDeleted()
       unsubBanned()
       // Clear all typing cleanup timeouts
@@ -413,7 +459,7 @@ export default function GroupChat() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setShowMessageMenu(false)
       setSelectedMessage(null)
-      // You could show a toast notification here
+      showTray('Copied', 'Message copied to clipboard.')
     }
   }
 
@@ -456,7 +502,7 @@ export default function GroupChat() {
 
       // Create optimistic message to show immediately
       optimisticMessage = {
-        message_id: 'temp-' + Date.now(), // Temporary ID
+        message_id: 'temp-' + (++_tempIdCounter),
         sender_id: currentUser.id,
         sender_name: 'You',
         message_text: messageText,
@@ -494,10 +540,11 @@ export default function GroupChat() {
       Logger.info('chat', 'Message sent successfully')
 
       // Update the optimistic message with real ID from server if available
-      if (result.data?.id) {
+      const newMsgId = result.data?.id
+      if (newMsgId) {
         setMessages(prev => prev.map(msg =>
           msg.message_id === optimisticMessage!.message_id
-            ? { ...msg, message_id: result.data.id }
+            ? { ...msg, message_id: newMsgId }
             : msg
         ))
       }
@@ -533,6 +580,42 @@ export default function GroupChat() {
   const scrollToBottom = () => {
     flatListRef.current?.scrollToEnd({ animated: true })
   }
+
+  const loadOlderMessages = async () => {
+    if (loadingOlder || !hasMore || !oldestCursor || !authUser) return
+    setLoadingOlder(true)
+    try {
+      const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50, before: oldestCursor })
+      if (!result.success || !result.data) return
+
+      const rawMessages = Array.isArray(result.data)
+        ? result.data
+        : (result.data as any)?.messages || (result.data as any)?.data || []
+
+      const pagination = (result.data as any)?.pagination
+      setHasMore(pagination?.hasMore || false)
+      setOldestCursor(pagination?.nextCursor || null)
+
+      const olderMessages = transformRawMessages(Array.isArray(rawMessages) ? rawMessages : [], authUser.id)
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.message_id))
+        const newOnes = olderMessages.filter(m => !existingIds.has(m.message_id))
+        return [...newOnes, ...prev]
+      })
+    } catch (error) {
+      Logger.error('chat', 'Error loading older messages', { error })
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  const socketStatus = useLiveSync({
+    enabled: !!chatRoomId && !!currentUser,
+    onSync: () => loadMessages(false, true),
+    domains: ['chat'],
+    syncOnReconnect: true,
+    disconnectedIntervalMs: 15000,
+  })
 
   const formatMessageTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -659,8 +742,18 @@ export default function GroupChat() {
             styles.messageTime,
             isMyMessage ? styles.myMessageTime : styles.otherMessageTime
           ]}>
-            {formatMessageTime(item.created_at)}
+            {formatMessageTime(item.created_at)}{item.is_edited ? ' · edited' : ''}
           </Text>
+          {item.reactions && Object.keys(item.reactions).length > 0 && (
+            <View style={[styles.reactionsRow, isMyMessage ? styles.reactionsRowMy : styles.reactionsRowOther]}>
+              {Object.entries(item.reactions).map(([emoji, users]) => (
+                <View key={emoji} style={styles.reactionPill}>
+                  <Text style={styles.reactionEmoji}>{emoji}</Text>
+                  {users.length > 1 && <Text style={styles.reactionCount}>{users.length}</Text>}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     )
@@ -776,6 +869,7 @@ export default function GroupChat() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {renderHeader()}
+        <RealtimeStatusBanner status={socketStatus} style={styles.realtimeBanner} />
 
         {showLoadingSkeleton ? (
           renderLoadingSkeleton()
@@ -792,12 +886,49 @@ export default function GroupChat() {
                 { paddingBottom: messageListBottomInset },
                 messages.length === 0 && styles.emptyNarrativeContainer,
               ]}
-              onContentSizeChange={scrollToBottom}
+              onContentSizeChange={() => { if (isAtBottomRef.current) scrollToBottom() }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={renderConversationEmpty}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              removeClippedSubviews={Platform.OS === 'android'}
+              windowSize={10}
+              initialNumToRender={20}
+              onScroll={(e) => {
+                const offsetFromBottom =
+                  e.nativeEvent.contentSize.height -
+                  e.nativeEvent.contentOffset.y -
+                  e.nativeEvent.layoutMeasurement.height
+                const atBottom = offsetFromBottom < 100
+                isAtBottomRef.current = atBottom
+                setShowScrollToBottom(!atBottom)
+              }}
+              scrollEventThrottle={100}
+              ListHeaderComponent={hasMore ? (
+                <TouchableOpacity
+                  style={styles.loadMoreButton}
+                  onPress={loadOlderMessages}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder
+                    ? <Text style={styles.loadMoreText}>Loading...</Text>
+                    : <Text style={styles.loadMoreText}>↑ Load older messages</Text>
+                  }
+                </TouchableOpacity>
+              ) : null}
             />
           </Animated.View>
+        )}
+
+        {showScrollToBottom && (
+          <TouchableOpacity
+            style={[styles.scrollToBottomBtn, { bottom: messageListBottomInset + 8 }]}
+            onPress={scrollToBottom}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-down" size={20} color="#fff" />
+          </TouchableOpacity>
         )}
 
         {/* Typing indicator */}
@@ -881,14 +1012,20 @@ export default function GroupChat() {
                 setNewMessage(text)
                 setComposerExpanded(text.length > 0)
                 if (text.length > 0 && chatRoomId) {
-                  startTyping(String(chatRoomId))
+                  // Only emit startTyping once per burst, not on every keystroke
+                  if (!typingActiveSentRef.current) {
+                    startTyping(String(chatRoomId))
+                    typingActiveSentRef.current = true
+                  }
                   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
                   typingTimeoutRef.current = setTimeout(() => {
                     stopTyping(String(chatRoomId))
+                    typingActiveSentRef.current = false
                   }, 2000)
                 } else if (text.length === 0 && chatRoomId) {
                   if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
                   stopTyping(String(chatRoomId))
+                  typingActiveSentRef.current = false
                 }
               }}
               placeholder="Message..."
@@ -1373,6 +1510,65 @@ const styles = StyleSheet.create({
     color: '#FF6B6B',
   },
 
+  realtimeBanner: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadMoreText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+  },
+  scrollToBottomBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: APP_COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  // Reaction pill styles
+  reactionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+    marginHorizontal: 8,
+  },
+  reactionsRowMy: {
+    justifyContent: 'flex-end',
+  },
+  reactionsRowOther: {
+    justifyContent: 'flex-start',
+  },
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 3,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+  },
+  reactionCount: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+  },
   // Typing indicator styles
   typingContainer: {
     paddingHorizontal: 16,

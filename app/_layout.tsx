@@ -260,7 +260,6 @@ export default function RootLayout() {
           animationDuration: 280,
           gestureEnabled: true,
           fullScreenGestureEnabled: true,
-          customAnimationOnGesture: true,
         }} 
       />
       {/* Nested segment layouts handle their own screens */}
