@@ -789,7 +789,9 @@ export default function Match() {
 
   const renderEmptyState = useCallback(() => (
     <View style={styles.emptyContainer}>
-      <View style={styles.emptyGlyph} />
+      <View style={styles.emptyGlyph}>
+        <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
+      </View>
       <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
       <Text style={styles.emptyText}>
         Check in to an event to unlock recommendations and nearby attendees.
@@ -1485,6 +1487,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: APP_COLORS.separator,
     marginBottom: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: 28,

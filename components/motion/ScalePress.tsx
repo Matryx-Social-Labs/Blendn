@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics'
 import React, { useCallback } from 'react'
 import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
@@ -12,6 +13,7 @@ type ScalePressProps = PressableProps & {
   children: React.ReactNode
   style?: StyleProp<ViewStyle>
   pressedScale?: number
+  haptic?: boolean
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
@@ -22,6 +24,7 @@ export default function ScalePress({
   onPressIn,
   onPressOut,
   pressedScale = 0.97,
+  haptic = true,
   ...rest
 }: ScalePressProps) {
   const reduceMotion = useReducedMotion()
@@ -31,6 +34,9 @@ export default function ScalePress({
     (event: GestureResponderEvent) => {
       if (!reduceMotion) {
         scale.value = withSpring(pressedScale, MOTION_SPRING.snappy)
+      }
+      if (haptic) {
+        Haptics.selectionAsync().catch(() => {})
       }
       onPressIn?.(event)
     },

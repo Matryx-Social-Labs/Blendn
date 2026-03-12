@@ -1,7 +1,6 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import {
-    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -14,9 +13,12 @@ import {
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
 import { useAuth } from '../../lib/useAuth'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useToast } from '../../components/Toast'
 
 export default function BasicInfo() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [displayName, setDisplayName] = useState('')
   const [age, setAge] = useState('')
   const [bio, setBio] = useState('')
@@ -34,7 +36,7 @@ export default function BasicInfo() {
     if (!trimmedName || invalidAge) return
 
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue')
+      showToast('Please sign in to continue', 'error')
       return
     }
 
@@ -53,7 +55,7 @@ export default function BasicInfo() {
       router.push('./interests' as any)
     } catch (e) {
       console.error('basic-info save error', e)
-      Alert.alert('Error', 'Failed to save your information')
+      showToast('Failed to save your information', 'error')
     } finally {
       setLoading(false)
     }
@@ -74,7 +76,7 @@ export default function BasicInfo() {
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
               <Text style={styles.backButtonText}>←</Text>
             </TouchableOpacity>
-            <Text style={styles.progressText}>Step 2 of 8</Text>
+            <OnboardingProgressBar currentStep={2} totalSteps={8} />
           </View>
 
           <View style={styles.formSection}>

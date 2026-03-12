@@ -1,18 +1,21 @@
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useState } from 'react'
-import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
 import { useAuth } from '../../lib/useAuth'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useToast } from '../../components/Toast'
 
 export default function LocationStep() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [granted, setGranted] = useState<boolean | null>(null)
 
   const requestPermissionAndSave = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue')
+      showToast('Please sign in to continue', 'error')
       return
     }
 
@@ -20,7 +23,7 @@ export default function LocationStep() {
     try {
       const servicesEnabled = await Location.hasServicesEnabledAsync()
       if (!servicesEnabled) {
-        Alert.alert('Location Disabled', 'Please enable Location Services in your device settings to continue.')
+        showToast('Please enable Location Services in your device settings.', 'info')
         setGranted(false)
         return
       }
@@ -28,7 +31,7 @@ export default function LocationStep() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setGranted(false)
-        Alert.alert('Permission Required', 'We use your location to verify event check-ins and show nearby events.')
+        showToast('Location is needed to verify event check-ins and show nearby events.', 'info')
         return
       }
 
@@ -42,7 +45,7 @@ export default function LocationStep() {
       router.push('./complete' as any)
     } catch (error) {
       console.error('Location step error:', error)
-      Alert.alert('Error', 'Failed to update your location preferences')
+      showToast('Failed to update your location preferences', 'error')
     } finally {
       setLoading(false)
     }
@@ -52,7 +55,7 @@ export default function LocationStep() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Enable Location</Text>
-        <Text style={{ textAlign: 'center', color: '#fff', marginBottom: 12 }}>Step 7 of 8</Text>
+        <OnboardingProgressBar currentStep={7} totalSteps={8} />
         <Text style={styles.subtitle}>
           Location helps us verify event check-ins and show you people and events nearby. We never share your exact
           location with other users.

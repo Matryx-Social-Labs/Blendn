@@ -1,7 +1,9 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
-import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useAuth } from '../../lib/useAuth'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useToast } from '../../components/Toast'
 
 const GOALS = [
   'Make new friends',
@@ -14,6 +16,7 @@ const GOALS = [
 
 export default function GoalsStep() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [selected, setSelected] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -23,11 +26,11 @@ export default function GoalsStep() {
 
   const onContinue = async () => {
     if (selected.length === 0) {
-      Alert.alert('Choose at least one', 'Pick at least one goal to personalize your experience.')
+      showToast('Pick at least one goal to personalize your experience.', 'info')
       return
     }
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue')
+      showToast('Please sign in to continue', 'error')
       return
     }
     setSaving(true)
@@ -36,7 +39,7 @@ export default function GoalsStep() {
       router.push('./preferences' as any)
     } catch (e) {
       console.error(e)
-      Alert.alert('Error', 'Failed to save your goals')
+      showToast('Failed to save your goals', 'error')
     } finally {
       setSaving(false)
     }
@@ -46,7 +49,7 @@ export default function GoalsStep() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>What brings you here?</Text>
-        <Text style={{ textAlign: 'center', color: '#fff', marginBottom: 12 }}>Step 4 of 8</Text>
+        <OnboardingProgressBar currentStep={4} totalSteps={8} />
         <Text style={styles.subtitle}>Select all that apply</Text>
         <View style={styles.grid}>
           {GOALS.map((g, idx) => {

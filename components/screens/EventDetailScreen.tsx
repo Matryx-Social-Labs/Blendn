@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
+import PhotoLightbox from '../PhotoLightbox';
 import ScalePress from '../motion/ScalePress';
 import { SkeletonBlock, SkeletonLine } from '../Skeleton';
 import { apiClient } from '../../lib/apiClient';
@@ -220,6 +221,12 @@ export default function EventDetail() {
   const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
   const [showGallery, setShowGallery] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [lightboxVisible, setLightboxVisible] = useState(false)
+  const openGalleryLightbox = useCallback((index: number) => {
+    setLightboxIndex(index)
+    setLightboxVisible(true)
+  }, [])
   const [showAvatars, setShowAvatars] = useState(false)
   const [showHeroHighRes, setShowHeroHighRes] = useState(false)
   const [mapFailed, setMapFailed] = useState(false)
@@ -1116,16 +1123,17 @@ export default function EventDetail() {
     const img = (src: string | number, w: number, h: number, key: string) => {
       const photoIndex = parseInt(key.replace('g-', ''), 10)
       return (
-        <Image
-          key={key}
-          source={buildImageSource(src, { width: w, height: h }) as any}
-          placeholder={placeholderImg}
-          style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={150}
-          accessibilityLabel={`Event photo ${photoIndex + 1}`}
-        />
+        <TouchableOpacity key={key} activeOpacity={0.85} onPress={() => openGalleryLightbox(photoIndex)}>
+          <Image
+            source={buildImageSource(src, { width: w, height: h }) as any}
+            placeholder={placeholderImg}
+            style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+            accessibilityLabel={`Event photo ${photoIndex + 1}`}
+          />
+        </TouchableOpacity>
       )
     }
 
@@ -1792,6 +1800,13 @@ export default function EventDetail() {
           </View>
         </View>
       </Modal>
+
+      <PhotoLightbox
+        photos={gallerySources.filter((s): s is string => typeof s === 'string')}
+        initialIndex={lightboxIndex}
+        visible={lightboxVisible}
+        onClose={() => setLightboxVisible(false)}
+      />
     </SafeAreaView>
   )
 }

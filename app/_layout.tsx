@@ -7,6 +7,7 @@ import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'rea
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import '../lib/globalText';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
+import { ToastProvider } from '../components/Toast';
 import {
     initializePushNotifications,
     removePushTokenFromProfile,
@@ -213,6 +214,7 @@ export default function RootLayout() {
       }}
     >
       <GradientOverlayProvider>
+        <ToastProvider>
         <View style={styles.root}>
           <BackgroundGradient />
           <Stack
@@ -316,6 +318,7 @@ export default function RootLayout() {
       />
           </Stack>
         </View>
+        </ToastProvider>
       </GradientOverlayProvider>
     </ErrorBoundary>
   );

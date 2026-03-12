@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import PhotoManager from '../../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { useAuth } from '../../lib/useAuth'
@@ -64,7 +65,7 @@ export default function Photos() {
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.progressText}>Step 6 of 8</Text>
+          <OnboardingProgressBar currentStep={6} totalSteps={8} />
         </View>
 
         <View style={styles.mainContent}>

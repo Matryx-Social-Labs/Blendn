@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 
 export default function Welcome() {
   const handleContinue = () => {
@@ -39,7 +40,7 @@ export default function Welcome() {
         </View>
 
         <View style={styles.bottomSection}>
-          <Text style={styles.progressText}>Step 1 of 8</Text>
+          <OnboardingProgressBar currentStep={1} totalSteps={8} />
           <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
           <Text style={styles.continueButtonText}>Let&apos;s Get Started</Text>
           </TouchableOpacity>

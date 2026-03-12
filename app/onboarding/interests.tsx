@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
+import * as Haptics from 'expo-haptics'
 import {
-    Alert,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -11,6 +11,8 @@ import {
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
 import { useAuth } from '../../lib/useAuth'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useToast } from '../../components/Toast'
 
 const INTERESTS = [
   '🎵 Music', '🎬 Movies', '📚 Reading', '🏃‍♀️ Running', 
@@ -24,19 +26,25 @@ const INTERESTS = [
 
 export default function Interests() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
 
   const handleInterestToggle = (interest: string) => {
     if (selectedInterests.includes(interest)) {
+      Haptics.selectionAsync().catch(() => {})
       setSelectedInterests(prev => prev.filter(i => i !== interest))
     } else if (selectedInterests.length < 10) {
+      Haptics.selectionAsync().catch(() => {})
       setSelectedInterests(prev => [...prev, interest])
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
+      showToast('You can select up to 10 interests', 'info')
     }
   }
 
   const handleContinue = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue')
+      showToast('Please sign in to continue', 'error')
       return
     }
     try {
@@ -49,7 +57,7 @@ export default function Interests() {
       router.push('./goals' as any)
     } catch (e) {
       console.error(e)
-      Alert.alert('Error', 'Failed to save interests')
+      showToast('Failed to save interests', 'error')
     }
   }
 
@@ -64,7 +72,7 @@ export default function Interests() {
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.progressText}>Step 3 of 8</Text>
+          <OnboardingProgressBar currentStep={3} totalSteps={8} />
         </View>
 
         <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>

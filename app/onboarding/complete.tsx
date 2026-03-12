@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     SafeAreaView,
     StyleSheet,
     Text,
@@ -11,9 +10,11 @@ import {
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
 import { useAuth } from '../../lib/useAuth'
+import { useToast } from '../../components/Toast'
 
 export default function Complete() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
   const [animationStep, setAnimationStep] = useState(0)
   const params = useLocalSearchParams()
@@ -36,7 +37,7 @@ export default function Complete() {
 
   const handleComplete = async () => {
     if (!user) {
-      Alert.alert('Error', 'User not found')
+      showToast('User not found. Please sign in again.', 'error')
       return
     }
 
@@ -50,7 +51,7 @@ export default function Complete() {
 
       if (!result.success) {
         console.error('Profile update error:', result.error)
-        Alert.alert('Error', 'Failed to complete onboarding')
+        showToast('Failed to complete onboarding', 'error')
         return
       }
 
@@ -59,7 +60,7 @@ export default function Complete() {
 
     } catch (error) {
       console.error('Onboarding completion error:', error)
-      Alert.alert('Error', 'Something went wrong. Please try again.')
+      showToast('Something went wrong. Please try again.', 'error')
     } finally {
       setLoading(false)
     }

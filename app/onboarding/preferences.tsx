@@ -1,12 +1,15 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
-import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useAuth } from '../../lib/useAuth'
+import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useToast } from '../../components/Toast'
 
 const LOOKING_FOR = ['Dating', 'Friendship', 'Networking', 'Mentorship', 'Collaboration']
 
 export default function PreferencesStep() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [selected, setSelected] = useState<string[]>([])
   const [industry, setIndustry] = useState('')
   const [jobTitle, setJobTitle] = useState('')
@@ -17,7 +20,7 @@ export default function PreferencesStep() {
 
   const onContinue = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue')
+      showToast('Please sign in to continue', 'error')
       return
     }
     setSaving(true)
@@ -26,7 +29,7 @@ export default function PreferencesStep() {
       router.push('./photos' as any)
     } catch (e) {
       console.error(e)
-      Alert.alert('Error', 'Failed to save your preferences')
+      showToast('Failed to save your preferences', 'error')
     } finally {
       setSaving(false)
     }
@@ -36,7 +39,7 @@ export default function PreferencesStep() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Your preferences</Text>
-        <Text style={{ textAlign: 'center', color: '#fff', marginBottom: 12 }}>Step 5 of 8</Text>
+        <OnboardingProgressBar currentStep={5} totalSteps={8} />
         <Text style={styles.subtitle}>Help us tailor your experience</Text>
 
         <Text style={styles.sectionTitle}>What are you looking for?</Text>

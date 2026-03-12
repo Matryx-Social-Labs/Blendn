@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import OptimizedImage from '../../components/OptimizedImage'
+import PhotoLightbox from '../../components/PhotoLightbox'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
@@ -47,6 +48,13 @@ export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const lastBackgroundRefreshRef = React.useRef(0)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [lightboxVisible, setLightboxVisible] = useState(false)
+
+  const openLightbox = useCallback((index: number) => {
+    setLightboxIndex(index)
+    setLightboxVisible(true)
+  }, [])
 
   const photoList = useMemo(() => {
     const raw = profile?.photos || []
@@ -213,6 +221,7 @@ export default function Profile() {
       {/* Hero Photo */}
       <View style={styles.heroContainer}>
         {heroPhoto ? (
+          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(0)}>
           <OptimizedImage
             source={getOptimized(heroPhoto, WINDOW_WIDTH, HERO_HEIGHT) as any}
             style={styles.heroImage as any}
@@ -221,6 +230,7 @@ export default function Profile() {
             height={HERO_HEIGHT}
             quality={70}
           />
+          </TouchableOpacity>
         ) : (
           <View style={styles.heroPlaceholder}>
             <OptimizedImage
@@ -328,6 +338,7 @@ export default function Profile() {
       {/* Interstitial Photo 1 */}
       {interstitialPhoto1 && (
         <View style={styles.interstitialContainer}>
+          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(1)}>
           <View style={styles.interstitialWrapper}>
             <OptimizedImage
               source={getOptimized(interstitialPhoto1, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
@@ -338,6 +349,7 @@ export default function Profile() {
               quality={70}
             />
           </View>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -354,6 +366,7 @@ export default function Profile() {
       {/* Interstitial Photo 2 */}
       {interstitialPhoto2 && (
         <View style={styles.interstitialContainer}>
+          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(2)}>
           <View style={styles.interstitialWrapper}>
             <OptimizedImage
               source={getOptimized(interstitialPhoto2, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
@@ -364,6 +377,7 @@ export default function Profile() {
               quality={70}
             />
           </View>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -434,7 +448,8 @@ export default function Profile() {
               {galleryPhotos.map((uri, idx) => {
                 const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
                 return (
-                  <View key={`gal_${idx}`} style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
+                  <TouchableOpacity key={`gal_${idx}`} activeOpacity={0.85} onPress={() => openLightbox(3 + idx)}>
+                  <View style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
                     <OptimizedImage
                       source={getOptimized(uri, itemSize, itemSize) as any}
                       style={styles.galleryImage as any}
@@ -444,6 +459,7 @@ export default function Profile() {
                       quality={60}
                     />
                   </View>
+                  </TouchableOpacity>
                 )
               })}
             </View>
@@ -476,6 +492,13 @@ export default function Profile() {
 
       {/* Bottom spacer */}
       <View style={{ height: 40 }} />
+
+      <PhotoLightbox
+        photos={photoList}
+        initialIndex={lightboxIndex}
+        visible={lightboxVisible}
+        onClose={() => setLightboxVisible(false)}
+      />
     </>
   )
 
