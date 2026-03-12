@@ -119,12 +119,6 @@ export default function PrivateChat() {
   }, [conversationId, authUser])
 
   useEffect(() => {
-    if (!conversationId) return
-    const cleanup = subscribeToMessages()
-    return cleanup
-  }, [conversationId, subscribeToMessages])
-
-  useEffect(() => {
     if (loading) return
     contentOpacity.setValue(0)
     contentTranslate.setValue(6)
@@ -301,6 +295,12 @@ export default function PrivateChat() {
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
     }
   }, [conversationId, authUser?.id])
+
+  useEffect(() => {
+    if (!conversationId) return
+    const cleanup = subscribeToMessages()
+    return cleanup
+  }, [conversationId, subscribeToMessages])
 
   const scrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {

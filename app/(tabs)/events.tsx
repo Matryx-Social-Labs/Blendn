@@ -383,57 +383,6 @@ export default function Events() {
     })
   }, [userLocation, interestCounts])
 
-  const handleEventPreview = useCallback((event: Event) => {
-    markPreviewHintSeen()
-    const checkinStatus = checkinStatuses[event.id]
-    const proximity = proximityData[event.id]
-    const isCheckedIn = checkinStatus?.status === 'checked_in'
-    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!interestStatuses[event.id]
-    const summary = [
-      formatCarouselCardDate(event.start_time),
-      event.venue_name || event.display_city || 'Location TBA',
-      (event.short_description || event.description || '').trim(),
-      'Tip: long-press cards for quick actions.',
-    ].filter(Boolean).join('\n')
-
-    const buttons: ActionTrayButton[] = [
-      {
-        label: interested ? 'Remove Interest' : 'Mark Interested',
-        onPress: () => {
-          closeTray()
-          toggleInterest(event)
-        },
-      },
-      {
-        label: 'View Details',
-        variant: 'primary',
-        onPress: () => {
-          closeTray()
-          handleEventPress(event)
-        },
-      },
-    ]
-
-    if (canCheckIn) {
-      buttons.unshift({
-        label: 'Check In',
-        variant: 'primary',
-        onPress: () => {
-          closeTray()
-          handleCheckIn(event)
-        },
-      })
-    }
-
-    showTray({
-      title: event.title,
-      message: summary,
-      buttons,
-      size: 'expanded',
-    })
-  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, showTray, markPreviewHintSeen])
-
   const handleCheckIn = useCallback(async (event: Event) => {
     if (checkInFlightRef.current.has(event.id)) return
     let previousStatus: any = undefined
@@ -650,6 +599,57 @@ export default function Events() {
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
   }, [user, interestStatuses, interestCounts, feedback, showTray, closeTray])
+
+  const handleEventPreview = useCallback((event: Event) => {
+    markPreviewHintSeen()
+    const checkinStatus = checkinStatuses[event.id]
+    const proximity = proximityData[event.id]
+    const isCheckedIn = checkinStatus?.status === 'checked_in'
+    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
+    const interested = !!interestStatuses[event.id]
+    const summary = [
+      formatCarouselCardDate(event.start_time),
+      event.venue_name || event.display_city || 'Location TBA',
+      (event.short_description || event.description || '').trim(),
+      'Tip: long-press cards for quick actions.',
+    ].filter(Boolean).join('\n')
+
+    const buttons: ActionTrayButton[] = [
+      {
+        label: interested ? 'Remove Interest' : 'Mark Interested',
+        onPress: () => {
+          closeTray()
+          toggleInterest(event)
+        },
+      },
+      {
+        label: 'View Details',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleEventPress(event)
+        },
+      },
+    ]
+
+    if (canCheckIn) {
+      buttons.unshift({
+        label: 'Check In',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleCheckIn(event)
+        },
+      })
+    }
+
+    showTray({
+      title: event.title,
+      message: summary,
+      buttons,
+      size: 'expanded',
+    })
+  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, showTray, markPreviewHintSeen])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
