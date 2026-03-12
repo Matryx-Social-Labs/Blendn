@@ -2,8 +2,9 @@ name: Deploy iOS to TestFlight
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
   build-and-submit:
