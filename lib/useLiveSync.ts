@@ -30,12 +30,13 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
   const lastSocketStateRef = useRef(socketStatus.state)
   const socketStateRef = useRef(socketStatus.state)
   const onSyncRef = useRef(onSync)
+  const domainsRef = useRef(domains)
   const inFlightRef = useRef(false)
   const pendingRef = useRef(false)
 
-  useEffect(() => {
-    onSyncRef.current = onSync
-  }, [onSync])
+  // Update refs synchronously so stale closures always see current values
+  onSyncRef.current = onSync
+  domainsRef.current = domains
 
   const runSync = useCallback(async () => {
     if (!enabled) return
@@ -46,8 +47,8 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     inFlightRef.current = true
     try {
       await onSyncRef.current()
-      if (domains.length > 0) {
-        clearDirtyDomains(domains)
+      if (domainsRef.current.length > 0) {
+        clearDirtyDomains(domainsRef.current)
       }
     } catch {}
     finally {
@@ -57,7 +58,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
         void runSync()
       }
     }
-  }, [domains, enabled])
+  }, [enabled])
 
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +100,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
           const currentlyConnected = socketStateRef.current === 'connected'
 
           if (currentlyConnected) {
-            if (domains.length === 0 || hasDirtyDomain(domains)) {
+            if (domainsRef.current.length === 0 || hasDirtyDomain(domainsRef.current)) {
               await runSync()
             }
           } else {
@@ -120,7 +121,6 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     }, [
       connectedIntervalMs,
       disconnectedIntervalMs,
-      domains,
       enabled,
       maxDisconnectedIntervalMs,
       runSync,
@@ -147,9 +147,9 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
   }, [enabled, runSync, socketStatus.state, syncOnReconnect])
 
   useEffect(() => {
-    if (!enabled || domains.length === 0) return () => {}
+    if (!enabled) return () => {}
     const unsub = subscribeDirtyDomains((domain) => {
-      if (!domains.includes(domain)) return
+      if (domainsRef.current.length > 0 && !domainsRef.current.includes(domain)) return
       if (socketStateRef.current === 'connected') {
         void runSync()
       }
@@ -157,7 +157,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     return () => {
       unsub()
     }
-  }, [domains, enabled, runSync])
+  }, [enabled, runSync])
 
   return socketStatus
 }

@@ -8,7 +8,6 @@ import {
   Easing,
   FlatList,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -148,35 +147,24 @@ export default function Chat() {
   const skipInitialTabEffectRef = useRef(true)
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
   const { width, height } = useWindowDimensions()
-  const storyChats = useMemo(() => personalChats.slice(0, 10), [personalChats])
-
   // Responsive sizing based on screen width (baseline ~390)
   const {
     avatarSize,
-    storyRingSize,
-    storyImageSize,
     unreadSize,
     rowPaddingV,
     emptyPadV,
-    storyItemWidth,
   } = useMemo(() => {
     const scale = Math.max(0.9, Math.min(width / 390, 1.2))
     const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max)
     const avatar = clamp(56 * scale, 48, 64)
-    const ring = clamp(58 * scale, 54, 68)
-    const image = clamp(52 * scale, 48, 60)
     const unread = clamp(22 * scale, 18, 26)
     const rowPad = clamp(12 * scale, 10, 16)
     const emptyPad = clamp(height * 0.12, 40, 100)
-    const sItemWidth = clamp(60 * scale, 54, 72)
     return {
       avatarSize: avatar,
-      storyRingSize: ring,
-      storyImageSize: image,
       unreadSize: unread,
       rowPaddingV: rowPad,
       emptyPadV: emptyPad,
-      storyItemWidth: sItemWidth,
     }
   }, [width, height])
 
@@ -185,16 +173,6 @@ export default function Chat() {
       width: avatarSize,
       height: avatarSize,
       borderRadius: avatarSize / 2,
-    },
-    storyRing: {
-      width: storyRingSize,
-      height: storyRingSize,
-      borderRadius: storyRingSize / 2,
-    },
-    storyImage: {
-      width: storyImageSize,
-      height: storyImageSize,
-      borderRadius: storyImageSize / 2,
     },
     unreadDot: {
       minWidth: unreadSize,
@@ -218,10 +196,7 @@ export default function Chat() {
     emptyContainer: {
       paddingVertical: emptyPadV,
     },
-    storyItem: {
-      width: storyItemWidth,
-    },
-  }), [avatarSize, storyRingSize, storyImageSize, unreadSize, rowPaddingV, emptyPadV, storyItemWidth])
+  }), [avatarSize, unreadSize, rowPaddingV, emptyPadV])
   const personalItemHeight = useMemo(
     () => Math.round(avatarSize + rowPaddingV * 2 + 14),
     [avatarSize, rowPaddingV]
@@ -239,6 +214,7 @@ export default function Chat() {
         id: chat.chat_room_id,
         roomName: chat.event_title,
         eventTitle: chat.event_title,
+        eventImage: chat.event_image ?? '',
       } as any,
     })
   }, [])
@@ -247,7 +223,12 @@ export default function Chat() {
     setConversationLastRead(chat.conversation_id).catch(() => {})
     router.push({
       pathname: '/private-chat/[conversationId]',
-      params: { conversationId: chat.conversation_id } as any,
+      params: {
+        conversationId: chat.conversation_id,
+        otherUserName: chat.other_user_name,
+        otherUserId: chat.other_user_id,
+        otherUserAvatar: chat.other_user_avatar ?? '',
+      } as any,
     })
   }, [])
 
@@ -514,11 +495,14 @@ export default function Chat() {
       Logger.debug('chat', `Loading chats for tab: ${activeTab}`)
       
       if (shouldFetchList) {
+        // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
+        // internal SWR response cache so we don't get stale data from it either.
+        const bypassApiCache = force || !hasCachedList
         if (activeTab === 'group') {
-          await loadGroupChats(loadId, groupCacheKey, force)
+          await loadGroupChats(loadId, groupCacheKey, bypassApiCache)
           lastFetchRef.current.group = now
         } else {
-          await loadPersonalChats(loadId, personalCacheKey, force)
+          await loadPersonalChats(loadId, personalCacheKey, bypassApiCache)
           lastFetchRef.current.personal = now
         }
       }
@@ -865,30 +849,37 @@ export default function Chat() {
   const renderEmptyState = useCallback(() => (
     <FadeInUp delay={80} distance={10}>
       <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
-      <Text style={styles.emptyTitle}>
-        {activeTab === 'group' ? 'No Group Chats' : 'No Personal Chats'}
-      </Text>
-      <Text style={styles.emptySubtitle}>
-        {activeTab === 'group' 
-          ? 'Check into events to join group chats' 
-          : 'Start conversations with other users'
-        }
-      </Text>
-      <ScalePress
-        style={styles.emptyCta}
-        onPress={() => router.push(activeTab === 'group' ? '/(tabs)/events' as any : '/(tabs)/match' as any)}
-        accessibilityRole="button"
-        accessibilityLabel={activeTab === 'group' ? 'Browse events' : 'Discover people'}
-      >
-        <Text style={styles.emptyCtaText}>{activeTab === 'group' ? 'Browse Events' : 'Discover People'}</Text>
-      </ScalePress>
-      {incomingRequests.length > 0 && (
-        <View style={{ marginTop: 16 }}>
-          <Text style={{ textAlign: 'center', color: '#E5E7EB', fontWeight: '600' }}>
-            You have {incomingRequests.length} chat request(s)
-          </Text>
+        <View style={styles.emptyGlyph}>
+          <Ionicons
+            name={activeTab === 'group' ? 'chatbubbles-outline' : 'people-outline'}
+            size={36}
+            color={APP_COLORS.textTertiary}
+          />
         </View>
-      )}
+        <Text style={styles.emptyTitle}>
+          {activeTab === 'group' ? 'No Group Chats' : 'No Personal Chats'}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          {activeTab === 'group'
+            ? 'Check into events to join group chats'
+            : 'Start conversations with other users'
+          }
+        </Text>
+        <ScalePress
+          style={styles.emptyCta}
+          onPress={() => router.push(activeTab === 'group' ? '/(tabs)/events' as any : '/(tabs)/match' as any)}
+          accessibilityRole="button"
+          accessibilityLabel={activeTab === 'group' ? 'Browse events' : 'Discover people'}
+        >
+          <Text style={styles.emptyCtaText}>{activeTab === 'group' ? 'Browse Events' : 'Discover People'}</Text>
+        </ScalePress>
+        {incomingRequests.length > 0 && (
+          <View style={{ marginTop: 16 }}>
+            <Text style={{ textAlign: 'center', color: '#E5E7EB', fontWeight: '600' }}>
+              You have {incomingRequests.length} chat request(s)
+            </Text>
+          </View>
+        )}
       </View>
     </FadeInUp>
   ), [activeTab, dynamicStyles.emptyContainer, incomingRequests.length])
@@ -955,35 +946,6 @@ export default function Chat() {
           </View>
         </View>
 
-      {activeTab === 'personal' && !showLoadingSkeleton && storyChats.length > 0 && (
-        <View style={styles.storiesCard}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.storiesRow}
-            >
-              {(storyChats).map((c, idx) => (
-                <View key={c.conversation_id ?? idx} style={[styles.storyItem, dynamicStyles.storyItem, idx !== storyChats.length - 1 && styles.storyItemSpacing]}>
-                  <LinearGradient
-                    colors={[APP_COLORS.accent, '#64D2FF']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[styles.storyRing, dynamicStyles.storyRing]}
-                  >
-                    {c.other_user_avatar ? (
-                      <OptimizedImage source={c.other_user_avatar} style={[styles.storyImage as any, dynamicStyles.storyImage]} width={Math.round(dynamicStyles.storyImage.width)} height={Math.round(dynamicStyles.storyImage.height)} quality={60} />
-                    ) : (
-                      <View style={[styles.storyImage, dynamicStyles.storyImage, styles.avatarFallback]}>
-                        <Text style={styles.avatarInitials}>{getInitials(c.other_user_name)}</Text>
-                      </View>
-                    )}
-                  </LinearGradient>
-                  <Text style={styles.storyLabel} numberOfLines={1}>{c.other_user_name?.split(' ')[0] || 'User'}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
       </View>
 
       <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
@@ -1170,36 +1132,6 @@ const styles = StyleSheet.create({
   headerGradient: {
   },
   
-  storiesCard: {
-    borderRadius: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    backgroundColor: APP_COLORS.backgroundElevated,
-  },
-  storiesRow: {
-    paddingHorizontal: 8,
-  },
-  storyItem: {
-    alignItems: 'center',
-  },
-  storyItemSpacing: {
-    marginRight: 16,
-  },
-  storyRing: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 3,
-  },
-  storyImage: {
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
-  storyLabel: {
-    marginTop: 6,
-    fontSize: 14,
-    color: APP_COLORS.textPrimary,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1453,17 +1385,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingTop: 60,
+  },
+  emptyGlyph: {
+    width: 80,
+    height: 80,
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
+    marginBottom: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: APP_COLORS.textPrimary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: APP_COLORS.textSecondary,
     textAlign: 'center',
+    lineHeight: 22,
   },
   emptyCta: {
     marginTop: 14,

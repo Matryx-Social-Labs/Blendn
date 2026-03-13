@@ -1906,7 +1906,10 @@ export default function Events() {
                 {events.length === 0 && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
-                      <Text style={styles.emptyTitle}>No events found</Text>
+                      <View style={styles.emptyGlyph}>
+                        <Ionicons name="calendar-outline" size={36} color={APP_COLORS.textTertiary} />
+                      </View>
+                      <Text style={styles.emptyTitle}>No events nearby</Text>
                       <Text style={styles.emptySub}>Try refreshing or explore with location enabled.</Text>
                       <ScalePress
                         style={styles.ctaGhost}
@@ -1914,7 +1917,7 @@ export default function Events() {
                         accessibilityRole="button"
                         accessibilityLabel="Refresh events"
                       >
-                        <Text style={styles.ctaGhostText}>Refresh Events</Text>
+                        <Text style={styles.ctaGhostText}>Refresh</Text>
                       </ScalePress>
                     </View>
                   </FadeInUp>
@@ -2665,9 +2668,20 @@ const styles = StyleSheet.create({
     fontSize: TYPE_CAPTION_SIZE,
   },
   emptyState: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: 32,
+    paddingVertical: 32,
     alignItems: 'center',
+  },
+  emptyGlyph: {
+    width: 80,
+    height: 80,
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: 1,
+    borderColor: APP_COLORS.separator,
+    marginBottom: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     color: APP_COLORS.textPrimary,

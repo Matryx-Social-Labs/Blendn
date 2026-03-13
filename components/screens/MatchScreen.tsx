@@ -950,6 +950,9 @@ export default function Match() {
               renderEmptyState()
             ) : attendees.length === 0 ? (
         <View style={styles.noMoreContainer}>
+            <View style={styles.emptyGlyph}>
+              <Ionicons name="time-outline" size={36} color={APP_COLORS.textTertiary} />
+            </View>
             <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
             <Text style={styles.noMoreText}>No other active attendees yet. We&apos;ll refresh this automatically.</Text>
             <TouchableOpacity
