@@ -21,19 +21,21 @@ Last audited: 2026-06-28
   - **Still needs:** a real device test (simulator can't fully test Sign in with Apple — needs a physical device or at minimum a development build signed with the real bundle ID), and confirmation the Apple Developer account has the "Sign In with Apple" capability enabled for `com.matryxsociallabs.blendn` (Apple Developer portal, not just app.json).
 
 ### 2. In-app account deletion
-- [x] Implemented, needs migration deploy + device verification
+- [x] Implemented and deployed to production, needs device verification
 - **Why it's required:** App Store Guideline 5.1.1(v) — apps must let users delete their account from within the app, not just sign out.
 - **Scope:** Add a `DELETE /api/mobile/users/me` (or similar) endpoint in blendn-admin handling data cleanup/anonymization, add a "Delete Account" action in `app/settings.tsx` with confirmation flow.
 - Status: 2026-06-28 — implemented as anonymization rather than a hard delete (several relations like `organized_events` cascade-delete on `User` removal, which would destroy other users' event/chat history — anonymizing avoids that entirely). Backend: added `User.deletedAt` field + migration `20260628_account_deletion`, new `DELETE /api/mobile/account` route that scrubs PII (name/email/image/password → null or anonymized email, profile fields cleared) and revokes all auth (refresh tokens, push tokens, OAuth links, NextAuth sessions/accounts) in one transaction. Added `deletedAt` guards to `/api/mobile/auth/session` and `/api/mobile/auth/refresh` so any still-valid token is cut off immediately. Re-auth via Google/Apple after deletion creates a fresh account (OAuth links are deleted, email is anonymized, so the old account can't be matched back into — this is intentional). Mobile: `deleteAccount()` in `lib/apiClient.ts`/`lib/useAuth.ts`, "Delete account" row in `app/settings.tsx` with a double-confirmation flow (Apple-review-friendly pattern). Verified via `tsc`/`eslint`/admin test suite (40 passed).
-  - **Still needs:** the migration (`prisma/migrations/20260628_account_deletion`) needs to actually run against the production DB — it will run automatically on next Railway deploy via `railway.json`'s `preDeployCommand: npm run db:migrate`, but hasn't deployed yet. Also needs a real-device test of the full deletion flow.
+  - **Deployed:** 2026-06-28 — [Blendn-Admin PR #38](https://github.com/Matryx-Social-Labs/Blendn-Admin/pull/38) merged to `prod`, Railway deploy approved and succeeded, `prisma migrate status` confirms the migration applied to production. Live smoke test: `DELETE /api/mobile/account` returns 401 (auth required, not 404) — route is live.
+  - **Still needs:** a real-device test of the full deletion flow (UI confirm flow, server actually anonymizing, re-auth creating a fresh account).
 
 ### 3. Working report mechanism (user + message reporting)
-- [x] Implemented, needs migration deploy + device verification
+- [x] Implemented and deployed to production, needs device verification
 - **Why it's required:** App Store Guideline 1.2 (UGC apps) — must have a functioning mechanism for users to report objectionable content/users, not just a block feature.
 - **Scope:** Design `user_reports`/`message_reports` Prisma model(s) in blendn-admin, add report endpoints, wire `lib/safetyUtils.ts`'s `reportUser`/`reportMessage` (currently return "temporarily unavailable") to call them.
 - Status: 2026-06-28 — implemented. Backend: added `user_reports` and `message_reports` Prisma models (migration `20260628_user_message_reports`, reusing the existing `report_status` enum from `event_reports`), new routes `POST /api/mobile/users/[userId]/report` and `POST /api/mobile/messages/[messageId]/report` (message endpoint validates the message exists in either `chat_messages` or `private_messages` depending on `messageType` before recording the report). Mobile: `apiClient.reportUser`/`reportMessage` added, `lib/safetyUtils.ts`'s `reportUser`/`reportMessage` now call them instead of returning "temporarily unavailable". Verified via `tsc`/`eslint`/admin test suite (40 passed).
   - **Deliberately out of scope:** an admin dashboard UI to review/action reports. Reports are persisted with `status: pending` and can be queried/reviewed directly for now — Apple's requirement is a functioning *report mechanism* for users, not a polished moderation dashboard. Worth building before scale, not before submission.
-  - **Still needs:** the migration (`prisma/migrations/20260628_user_message_reports`) needs to run against production via the next Railway deploy (same as #2), and a real-device test of the report flow end-to-end.
+  - **Deployed:** 2026-06-28 — same PR/deploy as #2. Live smoke test: `GET /api/mobile/users/blocked` returns 401 (not 404) and `POST /api/mobile/auth/apple` returns 400 on empty body (not 404) — confirms the new routes are live on `api.blendn.app`.
+  - **Still needs:** a real-device test of the report flow end-to-end (report submission UI → persisted row with `status: pending`).
 
 ---
 
@@ -102,7 +104,7 @@ Last audited: 2026-06-28
 ---
 
 ## Summary
-- **3 critical blockers — all implemented** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. All still need: production DB migration deploy (account deletion + reports need their migrations applied via Railway), and real-device verification (none of this has run outside `tsc`/`eslint`/unit tests yet).
+- **3 critical blockers — all implemented and deployed to production** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. Backend confirmed live via migration status + smoke tests. Still need: real-device/build verification of the actual mobile UI flows (none of this has been tested outside an iOS simulator or against unit tests).
 - **2 should-fix items**: missing permission strings, EAS credential verification.
 - **4 items confirmed fine** as of 2026-06-28 audit.
 - **4 items not yet investigated**, mostly App Store Connect-side (metadata, privacy disclosure, age rating) plus one engineering item (real production build verification).
