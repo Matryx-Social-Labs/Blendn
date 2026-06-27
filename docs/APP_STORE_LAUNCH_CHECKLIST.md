@@ -42,20 +42,15 @@ Last audited: 2026-06-28
 ## Should-fix before submission (high risk of rejection or poor review)
 
 ### 4. Missing iOS permission usage descriptions
-- [ ] Not started
+- [x] Done
 - **Why it matters:** iOS requires an `NSxxxUsageDescription` string in `Info.plist` for every permission the app requests, or Apple rejects the build / it crashes on permission prompt.
-- **Scope:** Add to `app.json`'s `ios.infoPlist`:
-  - `NSCameraUsageDescription` (used via `expo-image-picker` camera capture in `lib/photoUtils.ts`)
-  - `NSPhotoLibraryUsageDescription` (used via `expo-image-picker` library picker)
-  - `NSPhotoLibraryAddUsageDescription` (used when saving/writing photos)
-  - Confirm whether `NSMicrophoneUsageDescription` is actually needed (check real `expo-av` usage — may be unused and removable instead)
-- Status: Not started — confirmed only `NSLocationWhenInUseUsageDescription` is currently present.
+- Status: 2026-06-28 — added `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` to `app.json`'s `ios.infoPlist` (the only two permissions actually used — `lib/photoUtils.ts` calls `ImagePicker.requestCameraPermissionsAsync()` and `requestMediaLibraryPermissionsAsync()`, both read-only). Confirmed `NSPhotoLibraryAddUsageDescription` isn't needed — no `MediaLibrary.saveToLibraryAsync` or any write-back call exists anywhere in the codebase. Confirmed `expo-av` (which would need `NSMicrophoneUsageDescription`) was an unused dependency — no imports anywhere — so removed it via `npm uninstall expo-av` instead of adding an unnecessary permission string.
 
 ### 5. EAS submit credentials completeness
-- [ ] Not started
+- [~] In progress
 - **Why it matters:** `eas submit` will fail without complete Apple credentials.
-- **Scope:** Confirm `appleId` and `appleTeamId` are set (via EAS secrets or `eas.json`) alongside the existing `ascAppId` in `eas.json`'s `submit.production.ios`.
-- Status: Not started — `ascAppId` present, `appleId`/`appleTeamId` not found in repo (may already be set as EAS account-level secrets — needs verification, not necessarily missing).
+- Status: 2026-06-28 — added `appleTeamId` (`S4PDH4SY2R`, found in `ios/blendn.xcodeproj/project.pbxproj`'s `DEVELOPMENT_TEAM`) to `eas.json`'s `submit.production.ios`, alongside the existing `ascAppId`. Decided against adding a plain `appleId` email to `eas.json` (credential checked into git history) in favor of an App Store Connect API key — more CI-friendly, avoids any personal Apple ID/2FA prompt during submit.
+  - **Blocked on user action:** generating the API key requires App Store Connect web UI access (Admin role) — can't be done from here. Once the `.p8` key file + Key ID + Issuer ID exist, wire up `eas.json`'s `ascApiKeyPath`/`ascApiKeyId`/`ascApiKeyIssuerId` (the `.p8` file itself is already covered by `.gitignore`'s `*.p8` rule).
 
 ---
 
@@ -105,6 +100,6 @@ Last audited: 2026-06-28
 
 ## Summary
 - **3 critical blockers — all implemented and deployed to production** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. Backend confirmed live via migration status + smoke tests. Still need: real-device/build verification of the actual mobile UI flows (none of this has been tested outside an iOS simulator or against unit tests).
-- **2 should-fix items**: missing permission strings, EAS credential verification.
+- **2 should-fix items**: permission strings done; EAS credentials in progress, blocked on user generating an App Store Connect API key.
 - **4 items confirmed fine** as of 2026-06-28 audit.
 - **4 items not yet investigated**, mostly App Store Connect-side (metadata, privacy disclosure, age rating) plus one engineering item (real production build verification).

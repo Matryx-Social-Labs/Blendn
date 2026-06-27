@@ -17,6 +17,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
         "NSLocationWhenInUseUsageDescription": "Blend'n uses your location to show nearby events and validate on-site check-ins.",
+        "NSCameraUsageDescription": "Blend'n uses your camera to let you take photos for your profile.",
+        "NSPhotoLibraryUsageDescription": "Blend'n uses your photo library to let you choose photos for your profile.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
