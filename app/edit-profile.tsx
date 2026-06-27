@@ -231,6 +231,12 @@ export default function EditProfile() {
       if (JSON.stringify(interests) !== JSON.stringify(profile?.interests)) {
         updateData.interests = interests
       }
+      if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
+        updateData.goals = goals
+      }
+      if (JSON.stringify(lookingFor) !== JSON.stringify(profile?.looking_for)) {
+        updateData.looking_for = lookingFor
+      }
       const result = await apiClient.updateProfile(authUser.id, updateData)
 
       if (!result.success) {

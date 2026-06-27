@@ -500,8 +500,8 @@ export interface UserProfileData {
     photos?: string[]
     profile_photos?: string[]
     onboarded?: boolean
-    goals?: string
-    looking_for?: string
+    goals?: string[]
+    looking_for?: string[]
     created_at?: string
     updated_at?: string
   }
@@ -1213,6 +1213,8 @@ class ApiClientClass {
       education?: string
       interests?: string[]
       photos?: string[]
+      goals?: string[]
+      looking_for?: string[]
       onboarded?: boolean
       pushEnabled?: boolean
       showOnlineStatus?: boolean

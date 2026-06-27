@@ -1815,7 +1815,7 @@ export default function Events() {
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Retry loading events"
-                onPress={fetchEvents}
+                onPress={() => fetchEvents({ force: true })}
                 style={styles.bannerCta}
               >
                 <Text style={styles.bannerCtaText}>Retry</Text>
