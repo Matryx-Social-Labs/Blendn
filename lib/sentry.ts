@@ -16,9 +16,6 @@ export function initSentry() {
     enabled: !__DEV__,
     tracesSampleRate: 0.2,
     sendDefaultPii: true,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1,
-    integrations: [Sentry.mobileReplayIntegration()],
   })
 }
 
