@@ -75,11 +75,17 @@ export const reportUser = async (
   reportType: ReportType,
   description?: string
 ): Promise<SafetyActionResult> => {
-  // TODO: no backend endpoint exists yet for user reports (needs a new
-  // Prisma model + /api/mobile/users/[userId]/report route). Tracked
-  // separately from the block/unblock fix since it needs a schema change.
-  Logger.warn('general', 'reportUser called but no backend support exists yet', { userId, reportType, description })
-  return { success: false, message: 'Reporting is temporarily unavailable. Please try again later.' }
+  try {
+    const result = await apiClient.reportUser(userId, reportType, description)
+    if (!result.success) {
+      Logger.error('general', 'Error reporting user', { error: result.error })
+      return { success: false, message: result.error || 'Failed to submit report' }
+    }
+    return { success: true, message: 'Report submitted' }
+  } catch (error) {
+    Logger.error('general', 'Error reporting user', { error })
+    return { success: false, message: 'Something went wrong' }
+  }
 }
 
 /**
@@ -91,11 +97,17 @@ export const reportMessage = async (
   reportType: MessageReportType,
   description?: string
 ): Promise<SafetyActionResult> => {
-  // TODO: no backend endpoint exists yet for message reports (needs a new
-  // Prisma model + endpoint). Tracked separately from the block/unblock fix
-  // since it needs a schema change.
-  Logger.warn('general', 'reportMessage called but no backend support exists yet', { messageId, messageType, reportType, description })
-  return { success: false, message: 'Reporting is temporarily unavailable. Please try again later.' }
+  try {
+    const result = await apiClient.reportMessage(messageId, messageType, reportType, description)
+    if (!result.success) {
+      Logger.error('general', 'Error reporting message', { error: result.error })
+      return { success: false, message: result.error || 'Failed to report message' }
+    }
+    return { success: true, message: 'Report submitted' }
+  } catch (error) {
+    Logger.error('general', 'Error reporting message', { error })
+    return { success: false, message: 'Something went wrong' }
+  }
 }
 
 /**

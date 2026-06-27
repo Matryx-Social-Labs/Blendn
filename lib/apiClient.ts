@@ -948,6 +948,19 @@ class ApiClientClass {
     return result
   }
 
+  async deleteAccount(): Promise<ApiResponse<{ deleted: boolean }>> {
+    const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
+      method: 'DELETE',
+    })
+
+    if (result.success) {
+      await TokenStorage.clearAll()
+      requestQueue.clear()
+    }
+
+    return result
+  }
+
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
     const refreshToken = await TokenStorage.getRefreshToken()
     const result = await this.request<void>('/api/mobile/auth/signout', {
@@ -1665,6 +1678,39 @@ class ApiClientClass {
     }>
   }>> {
     return this.queuedRequest('/api/mobile/users/blocked', undefined, true, 4)
+  }
+
+  async reportUser(
+    userId: string,
+    reason: string,
+    description?: string
+  ): Promise<ApiResponse<{ reported: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/users/${userId}/report`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason, description }),
+      },
+      true,
+      2
+    )
+  }
+
+  async reportMessage(
+    messageId: string,
+    messageType: 'group' | 'private',
+    reason: string,
+    description?: string
+  ): Promise<ApiResponse<{ reported: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/messages/${messageId}/report`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ messageType, reason, description }),
+      },
+      true,
+      2
+    )
   }
 
   // === HELPER METHODS ===

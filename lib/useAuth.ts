@@ -416,6 +416,26 @@ export const signOut = async (revokeAll: boolean = false): Promise<{ success: bo
   }
 }
 
+export const deleteAccount = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    Logger.info('auth', 'Deleting account...')
+
+    const result = await apiClient.deleteAccount()
+
+    if (!result.success) {
+      Logger.error('auth', 'Account deletion failed', { error: result.error })
+      return { success: false, error: result.error || 'Failed to delete account' }
+    }
+
+    await clearAuthState()
+    Logger.info('auth', 'Account deleted successfully')
+    return { success: true }
+  } catch (error) {
+    Logger.error('auth', 'Account deletion exception', { error })
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 // Cleanup function for app shutdown
 export const cleanupAuth = () => {
   stopSessionRefresh()

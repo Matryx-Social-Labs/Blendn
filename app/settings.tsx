@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader'
 import OptimizedImage from '../components/OptimizedImage'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
-import { useAuth, signOut } from '../lib/useAuth'
+import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
 
@@ -49,6 +49,7 @@ export default function SettingsScreen() {
     locationSharing: false,
   })
   const [loadingPreferences, setLoadingPreferences] = useState(true)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   const settingsStorageKey = useMemo(() => (
     user?.id ? `settings_preferences_${user.id}` : null
@@ -195,6 +196,46 @@ export default function SettingsScreen() {
     }
   }, [])
 
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your profile, photos, and personal info. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'Your account will be permanently deleted and cannot be recovered.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true)
+                    try {
+                      const result = await deleteAccount()
+                      if (!result.success) {
+                        Alert.alert('Error', result.error || 'Failed to delete account')
+                      }
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account')
+                    } finally {
+                      setDeletingAccount(false)
+                    }
+                  },
+                },
+              ]
+            )
+          },
+        },
+      ]
+    )
+  }, [])
+
   const items = useMemo(() => ([
     { header: 'Account' },
     { icon: 'person-outline', title: 'Edit profile', onPress: () => router.push('/edit-profile') },
@@ -207,6 +248,7 @@ export default function SettingsScreen() {
         Alert.alert('Error', 'Failed to sign out')
       }
     } },
+    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, onPress: deletingAccount ? () => {} : handleDeleteAccount },
 
     { header: 'Discovery' },
     { icon: 'eye-outline', title: 'Show online status', keyName: 'showOnlineStatus' as const },
@@ -224,7 +266,7 @@ export default function SettingsScreen() {
     { icon: 'help-circle-outline', title: 'Help & support', onPress: () => openExternal(BLENDN_LINKS.help) },
     { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
     { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
-  ]), [openExternal])
+  ]), [openExternal, deletingAccount, handleDeleteAccount])
 
   const renderItem = (item: any, idx: number) => {
     if (item.header) {
