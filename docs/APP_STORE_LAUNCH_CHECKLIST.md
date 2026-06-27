@@ -14,10 +14,11 @@ Last audited: 2026-06-28
 ## Critical blockers (App Store will reject without these)
 
 ### 1. Sign in with Apple
-- [ ] Not started
+- [x] Implemented, needs device/build verification
 - **Why it's required:** App Store Guideline 4.8 — apps offering third-party login (we offer Google Sign-In) must offer Sign in with Apple as an equivalent option.
 - **Scope:** Add `expo-apple-authentication`, implement Apple credential flow alongside existing Google flow in `app/index.tsx`, add corresponding backend auth handling in blendn-admin (`lib/mobile-auth.ts` currently only handles Google).
-- Status: Not started — confirmed missing via codebase audit (no `expo-apple-authentication` in package.json, no Apple auth code anywhere).
+- Status: 2026-06-28 — implemented end-to-end and verified via `tsc`/`eslint`/admin test suite (40 passed). Mobile: `expo-apple-authentication` installed, `app.json` has `ios.usesAppleSignIn: true`, Apple button added to `app/index.tsx` (rendered only when `AppleAuthentication.isAvailableAsync()` is true, iOS only), `signInWithApple` added to `lib/apiClient.ts` and `lib/useAuth.ts` mirroring the Google flow. Backend: added `verifyAppleIdToken`/`findOrCreateAppleUser` to `lib/mobile-auth.ts` (verifies Apple's JWKS via `jose`, audience = bundle ID `com.matryxsociallabs.blendn`), new route `app/api/mobile/auth/apple/route.ts`, new `apple` rate-limit bucket in `lib/rate-limit.ts` (reuses Google's window/limits). Schema already had `provider: 'google'|'apple'` anticipated in `user_oauth_accounts`, no migration needed.
+  - **Still needs:** a real device test (simulator can't fully test Sign in with Apple — needs a physical device or at minimum a development build signed with the real bundle ID), and confirmation the Apple Developer account has the "Sign In with Apple" capability enabled for `com.matryxsociallabs.blendn` (Apple Developer portal, not just app.json).
 
 ### 2. In-app account deletion
 - [ ] Not started

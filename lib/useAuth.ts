@@ -283,6 +283,44 @@ export const signInWithGoogle = async (
   }
 }
 
+// Sign in with Apple - called from login screen
+export const signInWithApple = async (
+  identityToken: string,
+  fullName?: { givenName?: string | null; familyName?: string | null },
+  deviceInfo?: { platform?: string; device?: string; appVersion?: string }
+): Promise<{ success: boolean; error?: string; isNewUser?: boolean }> => {
+  try {
+    Logger.info('auth', 'Signing in with Apple...')
+    updateAuthState({ loading: true })
+
+    const result = await apiClient.signInWithApple(identityToken, fullName, deviceInfo)
+
+    if (result.success && result.data) {
+      const { user, isNewUser } = result.data
+      Logger.info('auth', 'Apple sign in successful', { userId: user.id, isNewUser })
+
+      updateAuthState({
+        session: { user },
+        user,
+        loading: false,
+        initialized: true,
+      })
+
+      startSessionRefresh()
+
+      return { success: true, isNewUser }
+    } else {
+      Logger.error('auth', 'Apple sign in failed', { error: result.error })
+      updateAuthState({ loading: false })
+      return { success: false, error: result.error || 'Sign in failed' }
+    }
+  } catch (error) {
+    Logger.error('auth', 'Apple sign in exception', { error })
+    updateAuthState({ loading: false })
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 // Sign in with email/password
 export const signInWithEmail = async (
   email: string,

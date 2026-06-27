@@ -881,6 +881,28 @@ class ApiClientClass {
     return result
   }
 
+  async signInWithApple(
+    identityToken: string,
+    fullName?: { givenName?: string | null; familyName?: string | null },
+    deviceInfo?: { platform?: string; device?: string; appVersion?: string }
+  ): Promise<ApiResponse<AuthResult>> {
+    const result = await this.request<AuthResult>(
+      '/api/mobile/auth/apple',
+      {
+        method: 'POST',
+        body: JSON.stringify({ identityToken, fullName, deviceInfo }),
+      },
+      false
+    )
+
+    if (result.success && result.data) {
+      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
+      await TokenStorage.setUser(result.data.user)
+    }
+
+    return result
+  }
+
   async signInWithEmail(
     email: string,
     password: string,

@@ -3,19 +3,21 @@ import {
   GoogleSignin,
   statusCodes
 } from '@react-native-google-signin/google-signin'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import Constants from 'expo-constants'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
-import { signInWithGoogle, useAuth } from '../lib/useAuth'
+import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const logo = require('../assets/logo/logo2.webp')
 
 export default function Index() {
   const { session, user, loading } = useAuth()
   const [signingIn, setSigningIn] = useState(false)
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false)
 
   const gradientColors = useMemo(() => (
     ['#FFF4E8', '#F4E9FF', '#EAF7FF', '#FFF0F6'] as const
@@ -28,6 +30,11 @@ export default function Index() {
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
       offlineAccess: true,
     })
+  }, [])
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return
+    AppleAuthentication.isAvailableAsync().then(setAppleSignInAvailable).catch(() => {})
   }, [])
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
@@ -74,6 +81,54 @@ export default function Index() {
         Logger.info('auth', 'Play services not available')
       } else {
         Logger.error('auth', 'Unknown sign in error', { error })
+      }
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
+  const handleAppleSignIn = async () => {
+    try {
+      setSigningIn(true)
+      Logger.info('auth', 'Starting Apple Sign In...')
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      })
+
+      if (!credential.identityToken) {
+        throw new Error('No identity token received from Apple')
+      }
+
+      const deviceInfo = {
+        platform: Platform.OS,
+        device: Constants.deviceName || undefined,
+        appVersion: Constants.expoConfig?.version || undefined,
+      }
+
+      const result = await signInWithApple(
+        credential.identityToken,
+        credential.fullName
+          ? { givenName: credential.fullName.givenName, familyName: credential.fullName.familyName }
+          : undefined,
+        deviceInfo
+      )
+
+      if (!result.success) {
+        Logger.error('auth', 'Backend auth error', { error: result.error })
+        throw new Error(result.error || 'Sign in failed')
+      }
+
+      Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
+      // Navigation will happen automatically via useAuth hook
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        Logger.info('auth', 'User cancelled Apple sign in')
+      } else {
+        Logger.error('auth', 'Apple Sign In failed', { error })
       }
     } finally {
       setSigningIn(false)
@@ -171,6 +226,16 @@ export default function Index() {
               <Text style={styles.ctaText}>Get Started</Text>
             )}
           </Pressable>
+
+          {Platform.OS === 'ios' && appleSignInAvailable && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={28}
+              style={styles.appleButton}
+              onPress={handleAppleSignIn}
+            />
+          )}
         </View>
       </SafeAreaView>
     )
@@ -329,5 +394,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  appleButton: {
+    height: 56,
+    marginTop: 12,
+    width: '100%',
   },
 })

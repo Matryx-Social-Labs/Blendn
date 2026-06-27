@@ -12,6 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
