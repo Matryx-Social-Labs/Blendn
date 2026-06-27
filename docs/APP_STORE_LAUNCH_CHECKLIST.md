@@ -14,10 +14,9 @@ Last audited: 2026-06-28
 ## Critical blockers (App Store will reject without these)
 
 ### 0. App Store Connect agreement missing/expired
-- [ ] Not started — blocked on account holder action
-- **Why it matters:** discovered 2026-06-28 while checking TestFlight/build status via the App Store Connect API — every API call returns `403 FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`. This almost certainly blocks new TestFlight builds and App Store submission entirely, not just API access.
-- **Scope:** account holder/Admin needs to go to [App Store Connect → Business/Agreements](https://appstoreconnect.apple.com/agreements) and accept whatever's pending or expired (commonly the annual Apple Developer Program License Agreement, or a Paid Apps Agreement + tax/banking info if IAP/paid apps were ever configured). This cannot be resolved by me — it requires the account holder's own App Store Connect session.
-- Status: 2026-06-28 — found, not yet resolved. Re-check by re-running the same API call once the user confirms the agreement is accepted.
+- [x] Resolved
+- **Why it mattered:** discovered 2026-06-28 while checking TestFlight/build status via the App Store Connect API — every API call returned `403 FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`.
+- Status: 2026-06-28 — confirmed resolved. Re-ran the same API check: `GET /v1/apps/6757761059` and `GET /v1/apps/6757761059/builds` both succeed now. Found 16 existing builds (versions 18, 19, 25, 26, 27...), all from March 2026 and now `expired: true` (TestFlight builds expire after 90 days) — so while the account is unblocked, there's no current non-expired build. A fresh `eas build` + `eas submit` is needed to get our recent changes (Apple Sign-In, account deletion, reporting) into TestFlight.
 
 ### 1. Sign in with Apple
 - [x] Implemented, needs device/build verification
@@ -105,7 +104,7 @@ Last audited: 2026-06-28
 ---
 
 ## Summary
-- **New blocker found 2026-06-28**: App Store Connect agreement missing/expired (item #0) — blocks API access and likely TestFlight/submission too. Needs account holder action, can't be resolved by me.
+- **App Store Connect agreement issue (item #0) — resolved 2026-06-28.** All existing TestFlight builds (16 total, March 2026) are expired; need a fresh build to get our recent changes into TestFlight.
 - **3 critical blockers — all implemented and deployed to production** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. Backend confirmed live via migration status + smoke tests.
 - **Device/UI testing held off for now** (2026-06-28) — no iOS simulator runtime installed locally (Xcode present, no downloaded runtime), and Sign in with Apple fundamentally can't be verified in a simulator anyway (needs a real Apple ID session on a physical device). User chose to pause testing rather than install a runtime or set up a device build right now — resume when ready to dedicate device time.
 - **2 should-fix items — both done**: permission strings added, EAS submit credentials complete (App Store Connect API key configured).
