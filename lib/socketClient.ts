@@ -8,6 +8,7 @@ import { AppState, AppStateStatus } from "react-native"
 import { TokenStorage } from "./apiClient"
 import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
+import { Sentry } from "./sentry"
 
 // Socket server URL
 const SOCKET_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000"
@@ -151,7 +152,9 @@ function emitConnectionStatus(patch: Partial<SocketConnectionStatus>): void {
   connectionStatusSubscribers.forEach((cb) => {
     try {
       cb(connectionStatus)
-    } catch {}
+    } catch (error) {
+      Sentry.captureException(error, { tags: { context: "socket-status-subscriber" } })
+    }
   })
 }
 
@@ -460,7 +463,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
  */
 async function handleReconnect(): Promise<void> {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    Logger.warn("socket", "Max reconnect attempts reached")
+    Logger.error("socket", "Max reconnect attempts reached, giving up", { reconnectAttempts })
     emitConnectionStatus({
       state: "disconnected",
       connected: false,

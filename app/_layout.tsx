@@ -19,6 +19,9 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { useAuth } from '../lib/useAuth';
 import { APP_COLORS } from '../lib/theme';
 import queryCache from '../lib/queryCache';
+import { initSentry, Sentry } from '../lib/sentry';
+
+initSentry();
 
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 const LOGO_ASSET = require('../assets/logo/logo2.webp');
@@ -39,7 +42,7 @@ function BackgroundGradient() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const lastRedirectRef = useRef<string | null>(null);
@@ -209,8 +212,10 @@ export default function RootLayout() {
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        // Could send error to crash reporting service here
-        console.error('Root layout error:', error, errorInfo)
+        Sentry.captureException(error, {
+          tags: { context: 'root-error-boundary' },
+          extra: { componentStack: errorInfo.componentStack },
+        })
       }}
     >
       <GradientOverlayProvider>
@@ -323,6 +328,8 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   root: {

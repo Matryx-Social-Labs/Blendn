@@ -3,6 +3,7 @@
 // Production-ready with development gating
 
 import Constants from 'expo-constants'
+import { Sentry } from './sentry'
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type LogContext = 'auth' | 'events' | 'chat' | 'match' | 'profile' | 'navigation' | 'network' | 'database' | 'realtime' | 'general' | 'api' | 'interested' | 'private-chat' | 'socket' | 'notifications'
@@ -49,6 +50,28 @@ function baseLog(level: LogLevel, context: LogContext, message: string, details?
   else if (level === 'warn') console.warn(line)
   else if (level === 'debug' && isDebugEnabled) console.log(`🐛 ${line}`)
   else if (level === 'info') console.log(line)
+
+  if (level === 'error' || level === 'warn') {
+    reportToSentry(level, context, message, details)
+  }
+}
+
+function reportToSentry(level: 'warn' | 'error', context: LogContext, message: string, details?: Record<string, unknown>) {
+  Sentry.addBreadcrumb({
+    category: context,
+    message,
+    level: level === 'error' ? 'error' : 'warning',
+    data: details,
+  })
+
+  const errorCandidate = details?.error
+  if (level === 'error') {
+    if (errorCandidate instanceof Error) {
+      Sentry.captureException(errorCandidate, { tags: { context }, extra: { message, ...details } })
+    } else {
+      Sentry.captureMessage(`[${context}] ${message}`, { level: 'error', tags: { context }, extra: details })
+    }
+  }
 }
 
 function getContextEmoji(context: LogContext): string {

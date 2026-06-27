@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
+import { Sentry } from './sentry'
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -50,8 +51,13 @@ const registerAppStateListener = () => {
 
 // Update global state and notify listeners
 const updateAuthState = (newState: Partial<AuthState>) => {
+  const previousUserId = globalAuthState.user?.id
   globalAuthState = { ...globalAuthState, ...newState }
   authStateListeners.forEach((listener) => listener(globalAuthState))
+
+  if (globalAuthState.user?.id !== previousUserId) {
+    Sentry.setUser(globalAuthState.user ? { id: globalAuthState.user.id } : null)
+  }
 }
 
 // Initialize auth system once
