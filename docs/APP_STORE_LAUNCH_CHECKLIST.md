@@ -13,6 +13,12 @@ Last audited: 2026-06-28
 
 ## Critical blockers (App Store will reject without these)
 
+### 0. App Store Connect agreement missing/expired
+- [ ] Not started — blocked on account holder action
+- **Why it matters:** discovered 2026-06-28 while checking TestFlight/build status via the App Store Connect API — every API call returns `403 FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`. This almost certainly blocks new TestFlight builds and App Store submission entirely, not just API access.
+- **Scope:** account holder/Admin needs to go to [App Store Connect → Business/Agreements](https://appstoreconnect.apple.com/agreements) and accept whatever's pending or expired (commonly the annual Apple Developer Program License Agreement, or a Paid Apps Agreement + tax/banking info if IAP/paid apps were ever configured). This cannot be resolved by me — it requires the account holder's own App Store Connect session.
+- Status: 2026-06-28 — found, not yet resolved. Re-check by re-running the same API call once the user confirms the agreement is accepted.
+
 ### 1. Sign in with Apple
 - [x] Implemented, needs device/build verification
 - **Why it's required:** App Store Guideline 4.8 — apps offering third-party login (we offer Google Sign-In) must offer Sign in with Apple as an equivalent option.
@@ -99,7 +105,9 @@ Last audited: 2026-06-28
 ---
 
 ## Summary
-- **3 critical blockers — all implemented and deployed to production** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. Backend confirmed live via migration status + smoke tests. Still need: real-device/build verification of the actual mobile UI flows (none of this has been tested outside an iOS simulator or against unit tests).
+- **New blocker found 2026-06-28**: App Store Connect agreement missing/expired (item #0) — blocks API access and likely TestFlight/submission too. Needs account holder action, can't be resolved by me.
+- **3 critical blockers — all implemented and deployed to production** (2026-06-28): Sign in with Apple, account deletion, working report mechanism. Backend confirmed live via migration status + smoke tests.
+- **Device/UI testing held off for now** (2026-06-28) — no iOS simulator runtime installed locally (Xcode present, no downloaded runtime), and Sign in with Apple fundamentally can't be verified in a simulator anyway (needs a real Apple ID session on a physical device). User chose to pause testing rather than install a runtime or set up a device build right now — resume when ready to dedicate device time.
 - **2 should-fix items — both done**: permission strings added, EAS submit credentials complete (App Store Connect API key configured).
 - **4 items confirmed fine** as of 2026-06-28 audit.
 - **4 items not yet investigated**, mostly App Store Connect-side (metadata, privacy disclosure, age rating) plus one engineering item (real production build verification).
