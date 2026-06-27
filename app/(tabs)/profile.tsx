@@ -9,6 +9,7 @@ import PhotoLightbox from '../../components/PhotoLightbox'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
@@ -104,14 +105,14 @@ export default function Profile() {
         }
       }
 
-      console.log('[PROFILE] Loading profile for user:', user.id)
+      Logger.debug('profile', 'Loading profile for user', { userId: user.id })
       setLoading(true)
       setError(null)
 
       const result = await apiClient.getPublicProfile(user.id)
 
       if (!result.success || !result.data) {
-        console.error('[PROFILE] Error fetching profile:', result.error)
+        Logger.error('profile', 'Error fetching profile', { error: result.error })
         setError('Failed to load profile')
         return
       }
@@ -139,12 +140,12 @@ export default function Profile() {
         memberSince: data.memberSince,
       }
 
-      console.log('[PROFILE] Profile loaded successfully')
+      Logger.debug('profile', 'Profile loaded successfully')
       setProfile(viewModel)
       queryCache.set(cacheKey, viewModel, PROFILE_CACHE_TTL)
 
     } catch (error) {
-      console.error('[PROFILE] Unexpected error:', error)
+      Logger.error('profile', 'Unexpected error loading profile', { error })
       setError('Failed to load profile')
     } finally {
       setLoading(false)

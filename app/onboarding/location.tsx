@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { useAuth } from '../../lib/useAuth'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import { useToast } from '../../components/Toast'
@@ -44,7 +45,7 @@ export default function LocationStep() {
 
       router.push('./complete' as any)
     } catch (error) {
-      console.error('Location step error:', error)
+      Logger.error('profile', 'Onboarding location step error', { error })
       showToast('Failed to update your location preferences', 'error')
     } finally {
       setLoading(false)

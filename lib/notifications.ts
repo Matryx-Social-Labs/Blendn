@@ -279,7 +279,7 @@ function navigateFromNotificationData(data: Record<string, any> | undefined) {
       }
     }
   } catch (e) {
-    console.warn('Failed to navigate from notification', e)
+    Logger.warn('notifications', 'Failed to navigate from notification', { error: e })
   }
 }
 

@@ -1,4 +1,5 @@
 import { Alert } from 'react-native'
+import { Logger } from './logger'
 import { supabase } from './supabase'
 
 export interface SafetyActionResult {
@@ -43,14 +44,14 @@ export const blockUser = async (
     })
 
     if (error) {
-      console.error('Error blocking user:', error)
+      Logger.error('general', 'Error blocking user', { error })
       return { success: false, message: 'Failed to block user' }
     }
 
     const result: any = Array.isArray(data) ? data[0] : data
     return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
-    console.error('Error blocking user:', error)
+    Logger.error('general', 'Error blocking user', { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
@@ -65,14 +66,14 @@ export const unblockUser = async (userId: string): Promise<SafetyActionResult> =
     })
 
     if (error) {
-      console.error('Error unblocking user:', error)
+      Logger.error('general', 'Error unblocking user', { error })
       return { success: false, message: 'Failed to unblock user' }
     }
 
     const result: any = Array.isArray(data) ? data[0] : data
     return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
-    console.error('Error unblocking user:', error)
+    Logger.error('general', 'Error unblocking user', { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
@@ -93,14 +94,14 @@ export const reportUser = async (
     })
 
     if (error) {
-      console.error('Error reporting user:', error)
+      Logger.error('general', 'Error reporting user', { error })
       return { success: false, message: 'Failed to submit report' }
     }
 
     const result: any = Array.isArray(data) ? data[0] : data
     return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
   } catch (error) {
-    console.error('Error reporting user:', error)
+    Logger.error('general', 'Error reporting user', { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
@@ -123,14 +124,14 @@ export const reportMessage = async (
     })
 
     if (error) {
-      console.error('Error reporting message:', error)
+      Logger.error('general', 'Error reporting message', { error })
       return { success: false, message: 'Failed to report message' }
     }
 
     const result = data[0]
     return { success: result.success, message: result.message }
   } catch (error) {
-    console.error('Error reporting message:', error)
+    Logger.error('general', 'Error reporting message', { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
@@ -148,13 +149,13 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
     })
 
     if (error) {
-      console.error('Error fetching blocked users:', error)
+      Logger.error('general', 'Error fetching blocked users', { error })
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching blocked users:', error)
+    Logger.error('general', 'Error fetching blocked users', { error })
     return []
   }
 }
@@ -173,13 +174,13 @@ export const isUserBlocked = async (userId: string): Promise<boolean> => {
     })
 
     if (error) {
-      console.error('Error checking if user is blocked:', error)
+      Logger.error('general', 'Error checking if user is blocked', { error })
       return false
     }
 
     return data || false
   } catch (error) {
-    console.error('Error checking if user is blocked:', error)
+    Logger.error('general', 'Error checking if user is blocked', { error })
     return false
   }
 }

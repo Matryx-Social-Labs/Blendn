@@ -9,6 +9,7 @@ import {
     View
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { useAuth } from '../../lib/useAuth'
 import { useToast } from '../../components/Toast'
 
@@ -50,7 +51,7 @@ export default function Complete() {
       })
 
       if (!result.success) {
-        console.error('Profile update error:', result.error)
+        Logger.error('profile', 'Onboarding completion: profile update error', { error: result.error })
         showToast('Failed to complete onboarding', 'error')
         return
       }
@@ -59,7 +60,7 @@ export default function Complete() {
       router.replace('/(tabs)/events')
 
     } catch (error) {
-      console.error('Onboarding completion error:', error)
+      Logger.error('profile', 'Onboarding completion error', { error })
       showToast('Something went wrong. Please try again.', 'error')
     } finally {
       setLoading(false)

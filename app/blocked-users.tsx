@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
+import { Logger } from '../lib/logger'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
 
 export default function BlockedUsers() {
@@ -29,7 +30,7 @@ export default function BlockedUsers() {
       const users = await getBlockedUsers()
       setBlockedUsers(users)
     } catch (error) {
-      console.error('Error loading blocked users:', error)
+      Logger.error('profile', 'Error loading blocked users', { error })
       Alert.alert('Error', 'Failed to load blocked users')
     } finally {
       setLoading(false)

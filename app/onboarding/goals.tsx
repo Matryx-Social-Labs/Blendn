@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useAuth } from '../../lib/useAuth'
+import { Logger } from '../../lib/logger'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import { useToast } from '../../components/Toast'
 
@@ -38,7 +39,7 @@ export default function GoalsStep() {
       // Goals are stored locally for now, will be synced when profile is complete
       router.push('./preferences' as any)
     } catch (e) {
-      console.error(e)
+      Logger.error('profile', 'Onboarding goals step error', { error: e })
       showToast('Failed to save your goals', 'error')
     } finally {
       setSaving(false)

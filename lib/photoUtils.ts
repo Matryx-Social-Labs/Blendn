@@ -4,6 +4,7 @@ import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import { Alert } from 'react-native'
 import { apiClient } from './apiClient'
+import { Logger } from './logger'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -86,7 +87,7 @@ export const requestPhotoPermissions = async (): Promise<boolean> => {
     
     return true
   } catch (error) {
-    console.error('Error requesting permissions:', error)
+    Logger.error('profile', 'Error requesting permissions', { error })
     return false
   }
 }
@@ -141,7 +142,7 @@ export const pickImage = async (
 
     return result.canceled ? null : result
   } catch (error) {
-    console.error('Error picking image:', error)
+    Logger.error('profile', 'Error picking image', { error })
     Alert.alert('Error', 'Failed to pick image. Please try again.')
     return null
   }
@@ -175,7 +176,7 @@ export const processImage = async (
 
     return processedImage.uri
   } catch (error) {
-    console.error('Error processing image:', error)
+    Logger.error('profile', 'Error processing image', { error })
     return null
   }
 }
@@ -206,12 +207,12 @@ export const uploadPhoto = async (
     const result = await uploadToTigris(processedUri, finalFileName, folder)
 
     if (!result.success) {
-      console.error('Photo upload failed:', result.error)
+      Logger.error('profile', 'Photo upload failed', { error: result.error })
     }
 
     return result
   } catch (error) {
-    console.error('Error uploading photo:', error)
+    Logger.error('profile', 'Error uploading photo', { error })
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed'
@@ -250,7 +251,7 @@ const uploadToTigris = async (
     })
 
     if (result.status < 200 || result.status >= 300) {
-      console.error('Tigris upload error:', result.status, result.body)
+      Logger.error('profile', 'Tigris upload error', { status: result.status, body: result.body })
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
@@ -260,7 +261,7 @@ const uploadToTigris = async (
       path: presignedResult.data.key
     }
   } catch (error) {
-    console.error('Tigris upload error:', error)
+    Logger.error('profile', 'Tigris upload error', { error })
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Tigris upload failed'
@@ -275,13 +276,13 @@ export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   try {
     const result = await apiClient.deleteUpload(photoUrl)
     if (!result.success) {
-      console.error('Photo deletion failed:', result.error)
+      Logger.error('profile', 'Photo deletion failed', { error: result.error })
       return false
     }
-    console.log('Photo deleted successfully:', photoUrl)
+    Logger.info('profile', 'Photo deleted successfully', { photoUrl })
     return true
   } catch (error) {
-    console.error('Error deleting photo:', error)
+    Logger.error('profile', 'Error deleting photo', { error })
     return false
   }
 }
@@ -390,7 +391,7 @@ export const cachePhoto = async (url: string): Promise<string | null> => {
       return localPath
     }
   } catch (error) {
-    console.error('photoUtils: Cache error', { error, url })
+    Logger.error('profile', 'photoUtils: Cache error', { error, url })
   }
   
   return null
@@ -448,7 +449,7 @@ const cleanupCache = async () => {
       }
     }
   } catch (error) {
-    console.error('photoUtils: Cache cleanup error', { error })
+    Logger.error('profile', 'photoUtils: Cache cleanup error', { error })
   }
 }
 
@@ -504,14 +505,14 @@ export const reorderPhotos = async (userId: string, photoUrls: string[]): Promis
     const result = await apiClient.updateProfile(userId, { photos: photoUrls })
 
     if (!result.success) {
-      console.error('photoUtils: Reorder failed', { error: result.error, userId })
+      Logger.error('profile', 'photoUtils: Reorder failed', { error: result.error, userId })
       return false
     }
 
-    console.log('photoUtils: Photos reordered', { userId, count: photoUrls.length })
+    Logger.info('profile', 'photoUtils: Photos reordered', { userId, count: photoUrls.length })
     return true
   } catch (error) {
-    console.error('photoUtils: Reorder error', { error, userId })
+    Logger.error('profile', 'photoUtils: Reorder error', { error, userId })
     return false
   }
 }
@@ -535,7 +536,7 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
       isPrimary: index === 0
     }))
   } catch (error) {
-    console.error('photoUtils: Get photos error', { error, userId })
+    Logger.error('profile', 'photoUtils: Get photos error', { error, userId })
     return []
   }
 }
@@ -569,7 +570,7 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     // Verify photo quality (optional)
     const verification = await verifyPhoto(asset.uri)
     if (!verification.isValid && verification.issues.length > 0) {
-      console.warn('photoUtils: Photo verification issues', { issues: verification.issues })
+      Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
     }
 
     // Upload image
@@ -586,7 +587,7 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     
     return result
   } catch (error) {
-    console.error('photoUtils: Photo selection error', { error })
+    Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 

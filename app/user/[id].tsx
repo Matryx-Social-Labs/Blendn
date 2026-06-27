@@ -16,6 +16,7 @@ import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { APP_COLORS } from '../../lib/theme'
@@ -170,7 +171,7 @@ export default function UserProfile() {
         await hydrateCtaState(nextProfile.user_id)
       }
     } catch (e) {
-      console.error('[USER_PROFILE] load failed:', e)
+      Logger.error('profile', 'User profile load failed', { error: e })
       Alert.alert('Error', 'Failed to load profile')
     } finally {
       setLoading(false)
@@ -220,7 +221,7 @@ export default function UserProfile() {
         }
       }
     } catch (e) {
-      console.error('connect error:', e)
+      Logger.error('profile', 'Connect request error', { error: e })
       setCtaMessage('Something went wrong. Try again.')
     } finally {
       setActionLoading(false)

@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Logger } from '../lib/logger'
 import { signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const logo = require('../assets/logo/logo2.webp')
@@ -34,7 +35,7 @@ export default function Index() {
   const handleGoogleSignIn = async () => {
     try {
       setSigningIn(true)
-      console.log('🔐 [INDEX] Starting Google Sign In...')
+      Logger.info('auth', 'Starting Google Sign In...')
 
       if (Platform.OS === 'android') {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
@@ -53,26 +54,26 @@ export default function Index() {
         const result = await signInWithGoogle(userInfo.data.idToken, deviceInfo)
 
         if (!result.success) {
-          console.error('❌ [INDEX] Backend auth error:', result.error)
+          Logger.error('auth', 'Backend auth error', { error: result.error })
           throw new Error(result.error || 'Sign in failed')
         }
 
-        console.log('✅ [INDEX] Google Sign In successful', { isNewUser: result.isNewUser })
+        Logger.info('auth', 'Google Sign In successful', { isNewUser: result.isNewUser })
         // Navigation will happen automatically via useAuth hook
       } else {
         throw new Error('No ID token received from Google')
       }
     } catch (error: any) {
-      console.error('❌ [INDEX] Google Sign In failed:', error)
+      Logger.error('auth', 'Google Sign In failed', { error })
 
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        console.log('🔐 [INDEX] User cancelled sign in')
+        Logger.info('auth', 'User cancelled sign in')
       } else if (error.code === statusCodes.IN_PROGRESS) {
-        console.log('🔐 [INDEX] Sign in already in progress')
+        Logger.info('auth', 'Sign in already in progress')
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        console.log('🔐 [INDEX] Play services not available')
+        Logger.info('auth', 'Play services not available')
       } else {
-        console.error('🔐 [INDEX] Unknown sign in error:', error)
+        Logger.error('auth', 'Unknown sign in error', { error })
       }
     } finally {
       setSigningIn(false)

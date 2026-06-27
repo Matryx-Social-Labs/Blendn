@@ -12,6 +12,7 @@ import {
     View
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { useAuth } from '../../lib/useAuth'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import { useToast } from '../../components/Toast'
@@ -54,7 +55,7 @@ export default function BasicInfo() {
 
       router.push('./interests' as any)
     } catch (e) {
-      console.error('basic-info save error', e)
+      Logger.error('profile', 'Onboarding basic-info save error', { error: e })
       showToast('Failed to save your information', 'error')
     } finally {
       setLoading(false)

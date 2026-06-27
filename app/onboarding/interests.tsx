@@ -10,6 +10,7 @@ import {
     View
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { useAuth } from '../../lib/useAuth'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import { useToast } from '../../components/Toast'
@@ -56,7 +57,7 @@ export default function Interests() {
       }
       router.push('./goals' as any)
     } catch (e) {
-      console.error(e)
+      Logger.error('profile', 'Onboarding interests save error', { error: e })
       showToast('Failed to save interests', 'error')
     }
   }

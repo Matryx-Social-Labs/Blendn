@@ -18,6 +18,7 @@ import {
     reorderPhotos,
     selectAndUploadPhoto
 } from '../lib/photoUtils'
+import { Logger } from '../lib/logger'
 import OptimizedImage from './OptimizedImage'
 
 const { width } = Dimensions.get('window')
@@ -81,7 +82,7 @@ export default function PhotoManager({
         }
       })
     } catch (error) {
-      console.error('PhotoManager: Load photos error', { error, userId })
+      Logger.error('profile', 'PhotoManager: Load photos error', { error, userId })
     } finally {
       setLoading(false)
     }
@@ -117,12 +118,12 @@ export default function PhotoManager({
         const newPhotoUrls = [...photos.map(p => p.url), result.url]
         await reorderPhotos(userId, newPhotoUrls)
         
-        console.log('PhotoManager: Photo added', { userId, path: result.path || result.url })
+        Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
       } else if (result.error && result.error !== 'User cancelled') {
         Alert.alert('Upload Failed', result.error)
       }
     } catch (error) {
-      console.error('PhotoManager: Add photo error', { error, userId })
+      Logger.error('profile', 'PhotoManager: Add photo error', { error, userId })
       Alert.alert('Error', 'Failed to upload photo')
     } finally {
       setUploading(false)
@@ -154,12 +155,12 @@ export default function PhotoManager({
               
               // Delete from storage in background
               deletePhoto(photo.url).catch(error => {
-                console.error('PhotoManager: Delete photo error', { error, url: photo.url })
+                Logger.error('profile', 'PhotoManager: Delete photo error', { error, url: photo.url })
               })
               
-              console.log('PhotoManager: Photo removed', { userId, url: photo.url })
+              Logger.info('profile', 'PhotoManager: Photo removed', { userId, url: photo.url })
             } catch (error) {
-              console.error('PhotoManager: Remove photo error', { error, userId })
+              Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
               Alert.alert('Error', 'Failed to remove photo')
               // Reload photos to restore state
               loadPhotos()

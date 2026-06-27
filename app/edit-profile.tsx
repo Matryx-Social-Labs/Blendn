@@ -20,6 +20,7 @@ import PhotoManager from '../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
+import { Logger } from '../lib/logger'
 import queryCache from '../lib/queryCache'
 import { APP_COLORS } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
@@ -87,7 +88,7 @@ export default function EditProfile() {
       const result = await apiClient.getProfile(authUser.id)
 
       if (!result.success || !result.data) {
-        console.error('EditProfile: Profile load error', { error: result.error })
+        Logger.error('profile', 'EditProfile: Profile load error', { error: result.error })
       }
 
       const profileData = result.data || {}
@@ -127,7 +128,7 @@ export default function EditProfile() {
       setPhotos(combinedProfile.profile_photos || [])
 
     } catch (error) {
-      console.error('EditProfile: Load profile error', { error })
+      Logger.error('profile', 'EditProfile: Load profile error', { error })
       Alert.alert('Error', 'Failed to load profile data')
     } finally {
       setLoading(false)
@@ -233,7 +234,7 @@ export default function EditProfile() {
       const result = await apiClient.updateProfile(authUser.id, updateData)
 
       if (!result.success) {
-        console.error('EditProfile: Profile update error', { error: result.error })
+        Logger.error('profile', 'EditProfile: Profile update error', { error: result.error })
         throw new Error(result.error || 'Failed to update profile')
       }
 
@@ -241,7 +242,7 @@ export default function EditProfile() {
       ProfileCache.clear()
       queryCache.invalidate(`profile_${authUser.id}`)
 
-      console.log('EditProfile: Profile updated successfully', { userId: authUser.id })
+      Logger.info('profile', 'EditProfile: Profile updated successfully', { userId: authUser.id })
       Alert.alert(
         'Profile Updated',
         'Your profile has been successfully updated!',
@@ -254,7 +255,7 @@ export default function EditProfile() {
       )
 
     } catch (error) {
-      console.error('EditProfile: Save profile error', { error })
+      Logger.error('profile', 'EditProfile: Save profile error', { error })
       Alert.alert('Error', 'Failed to save profile. Please try again.')
     } finally {
       setSaving(false)

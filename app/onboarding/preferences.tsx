@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useAuth } from '../../lib/useAuth'
+import { Logger } from '../../lib/logger'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
 import { useToast } from '../../components/Toast'
 
@@ -28,7 +29,7 @@ export default function PreferencesStep() {
       // Preferences are stored locally, just proceed
       router.push('./photos' as any)
     } catch (e) {
-      console.error(e)
+      Logger.error('profile', 'Onboarding preferences step error', { error: e })
       showToast('Failed to save your preferences', 'error')
     } finally {
       setSaving(false)
