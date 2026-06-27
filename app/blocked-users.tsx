@@ -40,7 +40,7 @@ export default function BlockedUsers() {
   const handleUnblock = (user: BlockedUser) => {
     Alert.alert(
       'Unblock User',
-      `Are you sure you want to unblock ${user.blocked_user_name}? They will be able to see your profile again.`,
+      `Are you sure you want to unblock ${user.blocked_user_name || 'this user'}? They will be able to see your profile again.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -84,14 +84,14 @@ export default function BlockedUsers() {
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarText}>
-                {item.blocked_user_name[0].toUpperCase()}
+                {(item.blocked_user_name?.[0] || '?').toUpperCase()}
               </Text>
             </View>
           )}
         </View>
         
         <View style={styles.userDetails}>
-          <Text style={styles.userName}>{item.blocked_user_name}</Text>
+          <Text style={styles.userName}>{item.blocked_user_name || 'Unknown user'}</Text>
           <Text style={styles.blockDate}>Blocked on {formatDate(item.blocked_at)}</Text>
           {item.reason && (
             <Text style={styles.blockReason}>Reason: {item.reason}</Text>

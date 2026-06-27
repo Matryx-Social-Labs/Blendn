@@ -1613,6 +1613,38 @@ class ApiClientClass {
     )
   }
 
+  // === SAFETY ENDPOINTS ===
+
+  async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/users/${userId}/block`,
+      { method: 'POST' },
+      true,
+      2
+    )
+  }
+
+  async unblockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/users/${userId}/block`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  async getBlockedUsers(): Promise<ApiResponse<{
+    users: Array<{
+      blocked_id: string
+      blocked_user_name: string | null
+      blocked_user_photo: string | null
+      reason: string | null
+      blocked_at: string
+    }>
+  }>> {
+    return this.queuedRequest('/api/mobile/users/blocked', undefined, true, 4)
+  }
+
   // === HELPER METHODS ===
 
   async getCurrentUser(): Promise<AuthUser | null> {

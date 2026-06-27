@@ -25,7 +25,6 @@
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
     "@sentry/react-native": "~6.14.0",
-    "@supabase/supabase-js": "^2.52.0",
     "expo": "~53.0.27",
     "expo-av": "~15.1.7",
     "expo-blur": "~14.1.5",

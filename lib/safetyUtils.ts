@@ -1,6 +1,6 @@
 import { Alert } from 'react-native'
+import { apiClient } from './apiClient'
 import { Logger } from './logger'
-import { supabase } from './supabase'
 
 export interface SafetyActionResult {
   success: boolean
@@ -9,7 +9,7 @@ export interface SafetyActionResult {
 
 export interface BlockedUser {
   blocked_id: string
-  blocked_user_name: string
+  blocked_user_name: string | null
   blocked_user_photo: string | null
   reason: string | null
   blocked_at: string
@@ -34,22 +34,16 @@ export type MessageReportType =
  * Block a user
  */
 export const blockUser = async (
-  userId: string, 
-  reason?: string
+  userId: string,
+  _reason?: string
 ): Promise<SafetyActionResult> => {
   try {
-    const { data, error } = await supabase.rpc('block_user', {
-      p_blocked_id: userId,
-      p_reason: reason
-    })
-
-    if (error) {
-      Logger.error('general', 'Error blocking user', { error })
-      return { success: false, message: 'Failed to block user' }
+    const result = await apiClient.blockUser(userId)
+    if (!result.success) {
+      Logger.error('general', 'Error blocking user', { error: result.error })
+      return { success: false, message: result.error || 'Failed to block user' }
     }
-
-    const result: any = Array.isArray(data) ? data[0] : data
-    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
+    return { success: true, message: 'User blocked' }
   } catch (error) {
     Logger.error('general', 'Error blocking user', { error })
     return { success: false, message: 'Something went wrong' }
@@ -61,17 +55,12 @@ export const blockUser = async (
  */
 export const unblockUser = async (userId: string): Promise<SafetyActionResult> => {
   try {
-    const { data, error } = await supabase.rpc('unblock_user', {
-      p_blocked_id: userId
-    })
-
-    if (error) {
-      Logger.error('general', 'Error unblocking user', { error })
-      return { success: false, message: 'Failed to unblock user' }
+    const result = await apiClient.unblockUser(userId)
+    if (!result.success) {
+      Logger.error('general', 'Error unblocking user', { error: result.error })
+      return { success: false, message: result.error || 'Failed to unblock user' }
     }
-
-    const result: any = Array.isArray(data) ? data[0] : data
-    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
+    return { success: true, message: 'User unblocked' }
   } catch (error) {
     Logger.error('general', 'Error unblocking user', { error })
     return { success: false, message: 'Something went wrong' }
@@ -86,24 +75,11 @@ export const reportUser = async (
   reportType: ReportType,
   description?: string
 ): Promise<SafetyActionResult> => {
-  try {
-    const { data, error } = await supabase.rpc('report_user', {
-      p_reported_id: userId,
-      p_report_type: reportType,
-      p_description: description
-    })
-
-    if (error) {
-      Logger.error('general', 'Error reporting user', { error })
-      return { success: false, message: 'Failed to submit report' }
-    }
-
-    const result: any = Array.isArray(data) ? data[0] : data
-    return { success: !!result?.success, message: result?.message || (result?.success ? 'OK' : 'Failed') }
-  } catch (error) {
-    Logger.error('general', 'Error reporting user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
+  // TODO: no backend endpoint exists yet for user reports (needs a new
+  // Prisma model + /api/mobile/users/[userId]/report route). Tracked
+  // separately from the block/unblock fix since it needs a schema change.
+  Logger.warn('general', 'reportUser called but no backend support exists yet', { userId, reportType, description })
+  return { success: false, message: 'Reporting is temporarily unavailable. Please try again later.' }
 }
 
 /**
@@ -115,25 +91,11 @@ export const reportMessage = async (
   reportType: MessageReportType,
   description?: string
 ): Promise<SafetyActionResult> => {
-  try {
-    const { data, error } = await supabase.rpc('report_message', {
-      p_message_id: messageId,
-      p_message_type: messageType,
-      p_report_type: reportType,
-      p_description: description
-    })
-
-    if (error) {
-      Logger.error('general', 'Error reporting message', { error })
-      return { success: false, message: 'Failed to report message' }
-    }
-
-    const result = data[0]
-    return { success: result.success, message: result.message }
-  } catch (error) {
-    Logger.error('general', 'Error reporting message', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
+  // TODO: no backend endpoint exists yet for message reports (needs a new
+  // Prisma model + endpoint). Tracked separately from the block/unblock fix
+  // since it needs a schema change.
+  Logger.warn('general', 'reportMessage called but no backend support exists yet', { messageId, messageType, reportType, description })
+  return { success: false, message: 'Reporting is temporarily unavailable. Please try again later.' }
 }
 
 /**
@@ -141,19 +103,12 @@ export const reportMessage = async (
  */
 export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
-
-    const { data, error } = await supabase.rpc('get_blocked_users', {
-      p_user_id: user.id
-    })
-
-    if (error) {
-      Logger.error('general', 'Error fetching blocked users', { error })
+    const result = await apiClient.getBlockedUsers()
+    if (!result.success || !result.data) {
+      Logger.error('general', 'Error fetching blocked users', { error: result.error })
       return []
     }
-
-    return data || []
+    return result.data.users
   } catch (error) {
     Logger.error('general', 'Error fetching blocked users', { error })
     return []
@@ -165,20 +120,8 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
  */
 export const isUserBlocked = async (userId: string): Promise<boolean> => {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
-
-    const { data, error } = await supabase.rpc('is_user_blocked', {
-      p_user_id: user.id,
-      p_other_user_id: userId
-    })
-
-    if (error) {
-      Logger.error('general', 'Error checking if user is blocked', { error })
-      return false
-    }
-
-    return data || false
+    const blocked = await getBlockedUsers()
+    return blocked.some((b) => b.blocked_id === userId)
   } catch (error) {
     Logger.error('general', 'Error checking if user is blocked', { error })
     return false
