@@ -46,3 +46,8 @@ assets/figma/
 
 # Dev tool config
 .claude/
+.env.local
+
+# Sentry CLI auth token (sensitive)
+android/sentry.properties
+ios/sentry.properties

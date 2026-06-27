@@ -15,6 +15,10 @@ export function initSentry() {
     environment: __DEV__ ? 'development' : (process.env.EXPO_PUBLIC_APP_ENV || 'production'),
     enabled: !__DEV__,
     tracesSampleRate: 0.2,
+    sendDefaultPii: true,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1,
+    integrations: [Sentry.mobileReplayIntegration()],
   })
 }
 
