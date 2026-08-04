@@ -38,7 +38,7 @@
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>35</string>
     <key>GIDClientID</key>
     <string>$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)</string>
     <key>ITSAppUsesNonExemptEncryption</key>

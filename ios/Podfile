@@ -15,7 +15,16 @@ prepare_react_native_project!
 
 target 'blendn' do
   use_expo_modules!
-  use_modular_headers!
+
+  # AppCheckCore (Swift, pulled in transitively) needs GoogleUtilities and
+  # RecaptchaInterop to define Clang modules to be importable as a static
+  # library. Scoping :modular_headers here (rather than use_modular_headers!
+  # globally) avoids CocoaPods generating a modulemap for every pod --
+  # notably React-jsitooling and React-RuntimeCore, which both set
+  # header_dir 'react_runtime' and would otherwise collide by both declaring
+  # `module react_runtime`.
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'RecaptchaInterop', :modular_headers => true
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
