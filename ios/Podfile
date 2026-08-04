@@ -15,6 +15,7 @@ prepare_react_native_project!
 
 target 'blendn' do
   use_expo_modules!
+  use_modular_headers!
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -58,6 +59,21 @@ target 'blendn' do
         resource_bundle_target.build_configurations.each do |config|
           config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
         end
+      end
+    end
+
+    # fmt (bundled via RCT-Folly) uses a consteval-based FMT_STRING macro that
+    # newer Clang (Xcode 16.3+/26.x) rejects as "not a constant expression".
+    # fmt's base.h unconditionally #defines FMT_USE_CONSTEVAL/FMT_CONSTEVAL
+    # itself (not guarded by #ifndef), so a compiler -D flag gets silently
+    # overridden -- patch the installed header directly instead.
+    fmt_header = File.join(installer.sandbox.pod_dir('fmt').to_s, 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_header)
+      content = File.read(fmt_header)
+      patched = content.sub(/^#if FMT_USE_CONSTEVAL$/, '#if 0 && FMT_USE_CONSTEVAL')
+      if patched != content
+        File.chmod(0644, fmt_header)
+        File.write(fmt_header, patched)
       end
     end
   end
