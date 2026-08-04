@@ -3,6 +3,7 @@ import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { Sentry } from './sentry'
+import { subscribeSessionExpired } from './sessionEvents'
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -181,6 +182,22 @@ const clearAuthState = async () => {
     initialized: true,
   })
 }
+
+// apiClient clears tokens on a failed background refresh (e.g. a 401 whose
+// retry-with-refresh also fails) without going through signOut(). Without
+// this, globalAuthState still says "logged in" until the next explicit
+// getSession()/refresh call, so the UI can show a stale authenticated state.
+let sessionExpiredListenerRegistered = false
+const registerSessionExpiredListener = () => {
+  if (sessionExpiredListenerRegistered) return
+  sessionExpiredListenerRegistered = true
+  subscribeSessionExpired(() => {
+    if (!globalAuthState.user) return
+    Logger.info('auth', 'Session expired during background refresh; clearing auth state')
+    void clearAuthState()
+  })
+}
+registerSessionExpiredListener()
 
 // Start periodic session refresh (every 10 minutes)
 const startSessionRefresh = () => {

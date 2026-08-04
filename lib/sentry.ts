@@ -15,7 +15,11 @@ export function initSentry() {
     environment: __DEV__ ? 'development' : (process.env.EXPO_PUBLIC_APP_ENV || 'production'),
     enabled: !__DEV__,
     tracesSampleRate: 0.2,
-    sendDefaultPii: true,
+    // Off deliberately: useAuth.ts already scopes Sentry.setUser() to just
+    // { id }, not email/IP. sendDefaultPii:true would auto-attach IP
+    // addresses and other PII to every event regardless of that, undoing
+    // the minimal-PII intent already established there.
+    sendDefaultPii: false,
   })
 }
 

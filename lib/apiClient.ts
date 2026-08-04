@@ -5,9 +5,10 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
+import { markSessionExpired } from './sessionEvents'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -186,13 +187,34 @@ class RequestQueue {
 
 const requestQueue = new RequestQueue()
 
+// expo-secure-store has no web implementation and always throws there, so on
+// web we go straight to AsyncStorage (unencrypted) rather than eating a
+// guaranteed failure on every call. Only warn once per session so this
+// shows up in logs/Sentry without spamming every token read/write.
+let warnedAboutWebStorage = false
+function warnUnencryptedWebStorage(): void {
+  if (warnedAboutWebStorage) return
+  warnedAboutWebStorage = true
+  Logger.warn('auth', 'Storing auth tokens in unencrypted AsyncStorage on web — expo-secure-store is unsupported on this platform')
+}
+
 // Token Storage
 class TokenStorage {
   private static async secureGet(key: string): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      warnUnencryptedWebStorage()
+      try {
+        return await AsyncStorage.getItem(key)
+      } catch {
+        return null
+      }
+    }
     try {
       return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
-    } catch {
-      // Fallback to AsyncStorage
+    } catch (error) {
+      // Unexpected on native (e.g. keychain access failure) — fall back but
+      // log it so it's visible in Sentry rather than silently swallowed.
+      Logger.warn('auth', 'SecureStore read failed, falling back to AsyncStorage', { key, error })
       try {
         return await AsyncStorage.getItem(key)
       } catch {
@@ -202,22 +224,31 @@ class TokenStorage {
   }
 
   private static async secureSet(key: string, value: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      warnUnencryptedWebStorage()
+      await AsyncStorage.setItem(key, value)
+      return
+    }
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
       // Clear from AsyncStorage if it was there
       try {
         await AsyncStorage.removeItem(key)
       } catch {}
-    } catch {
-      // Fallback to AsyncStorage
+    } catch (error) {
+      Logger.warn('auth', 'SecureStore write failed, falling back to AsyncStorage', { key, error })
       await AsyncStorage.setItem(key, value)
     }
   }
 
   private static async secureRemove(key: string): Promise<void> {
-    try {
-      await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
-    } catch {}
+    if (Platform.OS !== 'web') {
+      try {
+        await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
+      } catch (error) {
+        Logger.warn('auth', 'SecureStore delete failed', { key, error })
+      }
+    }
     try {
       await AsyncStorage.removeItem(key)
     } catch {}
@@ -704,6 +735,7 @@ class ApiClientClass {
             return this.parseResponse<T>(retryResponse, endpoint)
           } else {
             await TokenStorage.clearAll()
+            markSessionExpired()
             return { success: false, error: 'Session expired. Please sign in again.' }
           }
         }
