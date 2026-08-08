@@ -9,8 +9,15 @@ moving.
 
 ## Where the other half lives
 
-The API and the organiser dashboard are in **`blendn-admin`**. Two documents
-there are the contract, and this file deliberately does not restate them:
+The API and the organiser dashboard are in **`blendn-admin`**. The documents that
+form the contract are **mirrored into [`docs/api/`](docs/api/)** so you can read
+them without a second checkout — start at [`docs/api/README.md`](docs/api/README.md).
+
+They are copies. Edits belong upstream, and
+`./scripts/sync-api-docs.sh ../blendn-admin` refreshes them; the resulting
+`git diff docs/api/` is how you see what changed on the server side.
+
+This file deliberately does not restate them:
 
 | | |
 |---|---|
