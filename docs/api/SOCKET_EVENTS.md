@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/SOCKET_EVENTS.md.
-  From Blendn-Admin @ df78186 (v0.56.0, 2026-08-08).
+  From Blendn-Admin @ 8d22d34 (v0.56.0, 2026-08-08).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
