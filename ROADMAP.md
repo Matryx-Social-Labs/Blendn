@@ -94,7 +94,6 @@ that flow through the same components.
 | **Ratings can be seen, never given** | — | `stats.averageRating` renders on the event card; `rateEvent` has zero call sites. `POST /events/:eventId/rating` is live |
 | **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
 | ~~**Location is stored as a coordinate string**~~ | — | **Wrong when written, corrected 2026-08-10.** The app does send `"12.97,77.59"`, but `PUT /profiles/:userId` runs it through `normalizeLocationToCity` (`route.ts:152`) and stores the reverse-geocoded city. A live account holds `"Paris"`, not `"48.86"`. Nothing to fix |
-| **Home city is captured once and never revisited** | `onboarding/location.tsx` | The real issue behind the above. One GPS read during onboarding becomes a permanent home city with no way to change it from the app — travel, move, or onboard on the wrong side of a border and it is wrong forever. Distinct from live location, which check-in and nearby both read fresh |
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
 | **No test runner at all** | — | `npm test` does not exist and jest is not installed, so CI is typecheck + lint only. There is now pure logic worth pinning — `lib/matchBand.ts`, `getDistanceMetres`, the socket transport config — and each is a silent-failure class. Deferred rather than bolted onto an unrelated fix |
 
