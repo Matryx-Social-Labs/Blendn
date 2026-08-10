@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
+import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
@@ -33,7 +34,11 @@ interface UserProfile {
   phone?: string
   occupation?: string
   education?: string
-  interests?: string[]
+  /*
+   * No `interests` here any more. It held free text written to
+   * `profiles.interests`, which matching does not read; the structured ids live
+   * in `interestIds` and are saved through the interests endpoints.
+   */
   display_name?: string
   bio?: string
   profile_photos?: string[]
@@ -41,7 +46,7 @@ interface UserProfile {
   looking_for?: string[]
 }
 
-type TagInputMode = 'goal' | 'lookingFor' | 'interest'
+type TagInputMode = 'goal' | 'lookingFor'
 
 export default function EditProfile() {
   const { user: authUser } = useAuth()
@@ -57,7 +62,17 @@ export default function EditProfile() {
   const [occupation, setOccupation] = useState('')
   const [education, setEducation] = useState('')
   const [bio, setBio] = useState('')
-  const [interests, setInterests] = useState<string[]>([])
+  /*
+   * Structured category ids, not free text.
+   *
+   * This screen wrote strings to `profiles.interests` — the column
+   * `lib/interest-coverage.ts` exists to warn nobody reads. Matching ranks on
+   * `user_interests -> categories`, so every interest typed here was invisible
+   * to the one feature it was for. `interestsAtLoad` is kept so saving can send
+   * the difference: the endpoints are add and remove, not replace.
+   */
+  const [interestIds, setInterestIds] = useState<string[]>([])
+  const [interestsAtLoad, setInterestsAtLoad] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
@@ -67,7 +82,7 @@ export default function EditProfile() {
   const [tagInputValue, setTagInputValue] = useState('')
   const [tagInputTitle, setTagInputTitle] = useState('')
   const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
-  const [tagInputMode, setTagInputMode] = useState<TagInputMode>('interest')
+  const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
   const { setScrollProgress } = useGradientOverlay()
 
   useEffect(() => {
@@ -99,12 +114,14 @@ export default function EditProfile() {
       const combinedProfile = {
         id: authUser.id,
         name: profileData.name || authUser.name || '',
-        age: p.age || '',
+        // `p.age || ''` typed this `string | number` against an `age?: number`
+        // field. It only ever fed `.toString()` below, so undefined is both
+        // correct and what the type has always said.
+        age: typeof p.age === 'number' ? p.age : undefined,
         location: p.location || '',
         phone: p.phone || '',
         occupation: p.occupation || '',
         education: p.education || '',
-        interests: p.interests || [],
         display_name: p.name || '',
         bio: p.bio || '',
         profile_photos: p.photos || [],
@@ -122,7 +139,17 @@ export default function EditProfile() {
       setOccupation(combinedProfile.occupation || '')
       setEducation(combinedProfile.education || '')
       setBio(combinedProfile.bio || '')
-      setInterests(combinedProfile.interests || [])
+      /*
+       * `profileData.interests` is the structured list the server joins from
+       * `user_interests`; `profile.interests` is the legacy free-text column.
+       * They have the same name one level apart, which is exactly how this
+       * screen came to write the wrong one.
+       */
+      const structured = Array.isArray(profileData.interests)
+        ? (profileData.interests as { id: string }[]).map((i) => String(i.id))
+        : []
+      setInterestIds(structured)
+      setInterestsAtLoad(structured)
       setGoals(combinedProfile.goals || [])
       setLookingFor(combinedProfile.looking_for || [])
       setPhotos(combinedProfile.profile_photos || [])
@@ -146,9 +173,6 @@ export default function EditProfile() {
     } else if (mode === 'lookingFor') {
       setTagInputTitle('Add Preference')
       setTagInputPlaceholder('What type of person are you looking for?')
-    } else {
-      setTagInputTitle('Add Interest')
-      setTagInputPlaceholder('Enter a new interest')
     }
     setTagInputMode(mode)
     setTagInputValue('')
@@ -172,12 +196,13 @@ export default function EditProfile() {
       if (!lookingFor.includes(value)) {
         setLookingFor(prev => [...prev, value])
       }
-    } else {
-      if (!interests.includes(value)) {
-        setInterests(prev => [...prev, value])
-      }
     }
 
+    /*
+     * There is no `interest` branch any more. Interests are picked from the
+     * server's taxonomy rather than typed, so `TagInputMode` covers only the
+     * two fields that are still free text.
+     */
     closeTagModal()
   }
 
@@ -195,14 +220,6 @@ export default function EditProfile() {
 
   const handleRemoveLookingFor = (pref: string) => {
     setLookingFor(prev => prev.filter(p => p !== pref))
-  }
-
-  const handleAddInterest = () => {
-    openTagInput('interest')
-  }
-
-  const handleRemoveInterest = (interest: string) => {
-    setInterests(prev => prev.filter(i => i !== interest))
   }
 
   const handleSave = async () => {
@@ -228,9 +245,6 @@ export default function EditProfile() {
       if (occupation !== (profile?.occupation || '')) updateData.occupation = occupation || null
       if (education !== (profile?.education || '')) updateData.education = education || null
       if (bio !== (profile?.bio || '')) updateData.bio = bio || null
-      if (JSON.stringify(interests) !== JSON.stringify(profile?.interests)) {
-        updateData.interests = interests
-      }
       if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
         updateData.goals = goals
       }
@@ -243,6 +257,17 @@ export default function EditProfile() {
         Logger.error('profile', 'EditProfile: Profile update error', { error: result.error })
         throw new Error(result.error || 'Failed to update profile')
       }
+
+      /*
+       * Interests are a separate pair of endpoints, and a diff rather than a
+       * replace — `POST` adds, `DELETE` removes, and neither accepts an empty
+       * array, so both calls are skipped when there is nothing to say.
+       */
+      const added = interestIds.filter((id) => !interestsAtLoad.includes(id))
+      const removed = interestsAtLoad.filter((id) => !interestIds.includes(id))
+      if (added.length > 0) await apiClient.addProfileInterests(authUser.id, added)
+      if (removed.length > 0) await apiClient.removeProfileInterests(authUser.id, removed)
+      setInterestsAtLoad(interestIds)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
@@ -473,7 +498,7 @@ export default function EditProfile() {
                 ))}
               </View>
             ) : (
-              renderTags(interests, handleRemoveInterest, handleAddInterest, 'Add Interest')
+              <InterestPicker selected={interestIds} onChange={setInterestIds} />
             )}
           </View>
 

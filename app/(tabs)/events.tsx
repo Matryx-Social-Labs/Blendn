@@ -782,7 +782,9 @@ export default function Events() {
       const authFirstName = getFirstName(user.name)
       if (authFirstName) setUserFirstName(authFirstName)
 
-      // Check cache first (populated by _layout.tsx during onboarding check)
+      // Check cache first. `_layout.tsx` used to populate this on every cold
+      // start for its onboarding gate; that gate is gone, so this is now a
+      // genuine miss on first load rather than a warm read.
       const cached = ProfileCache.get(user.id)
       const data = cached || (await apiClient.getProfile(user.id).then(r => r.success ? r.data : null))
 
