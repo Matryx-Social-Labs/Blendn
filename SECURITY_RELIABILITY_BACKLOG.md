@@ -93,11 +93,37 @@ That does not fix 25 advisories, it replaces a working app with a broken one.
 `npx expo install --check` reports dependencies correctly aligned to SDK 53, and
 that alignment is the constraint the audit tool does not model.
 
-### What would actually clear the rest
+### The SDK upgrade was tried, measured, and rolled back
 
-An Expo SDK upgrade — 54, 55 or 56 are all released. That is a real piece of
-work with a native rebuild and its own regression surface, and it wants to be
-its own change, tested on a device, not bundled into a security sweep.
+Not deferred on a hunch — actually performed, on 2026-08-11, and reverted
+because the data said to.
+
+SDK 53 → 54 (`expo@^54`, `expo install --fix`, `@types/react` bumped to satisfy
+a peer) completed and left the tree correctly aligned. The result:
+
+| | SDK 53 | SDK 54 |
+|---|---|---|
+| advisories | 25 | **29** |
+| of which high | 7 | **14** |
+
+**The upgrade made the audit worse.** Newer SDKs pull newer tooling, and that
+tooling has its own fresh advisories — `@expo/metro`, `@react-native/metro-config`,
+`react-native-worklets` and `react-native-reanimated` all appear at 54 and do
+not exist in the 53 tree. Every one of them is still build tooling, which is the
+point: the number moves around, the actual exposure does not.
+
+It also breaks code. Reanimated 4 (which SDK 54 ships) **removed
+`sharedTransitionTag`** — six usages across `EventCard.tsx` and
+`EventDetailScreen.tsx` stop typechecking, and the shared-element transitions
+they implement would need rewriting against a different API.
+
+So the trade on offer was: a native rebuild, an animation migration, and a
+fresh regression surface, in exchange for **four more advisories**. Declined.
+
+This is worth revisiting when there is a reason other than the audit number —
+a platform requirement, an SDK 53 deprecation deadline, or a feature only newer
+Expo has. Doing it *for* the audit is the wrong reason, and now there is a
+measurement saying so rather than an opinion.
 
 ### Deprecation warnings
 
