@@ -166,6 +166,33 @@ rating widget at all.
 
 ## 2. `app/event-preferences/[eventId].tsx` — intent and reveal
 
+**Since #67 this screen has three things it did not have**, and the design
+should keep all three:
+
+1. **The reveal switch is disabled when there is nothing to reveal**, with copy
+   naming what is missing — "Add a photo to your profile first — that's what
+   other people would see." Revealing shows exactly a name and a photo, so with
+   neither, turning it on changes nothing visible and reads as a broken feature.
+   This is a **capability gate**, not a completeness meter: one missing input,
+   for one feature, at the moment it is reached for. Never a percentage.
+
+2. **The status chip on the Match tab** — "You're anonymous here" / "You're
+   visible as Sagar" — taps through to here. It describes **only you**. Showing
+   who else has revealed turns a personal choice into a count and makes the last
+   holdout visible.
+
+3. **The suggestion prompt after check-in**, when `reveal_by_default` is set:
+   *"You usually join as Sagar. Do that here?"* Phrased as a question because
+   nothing has happened yet — check-in always creates `revealed: false`, so
+   declining writes nothing and killing the app mid-prompt leaves you anonymous.
+   Copy implying it was already applied ("you've been revealed — undo?") is
+   wrong and describes a window that does not exist.
+
+There is also no GET for per-event preferences, so **the intent chips open
+empty**. They are only sent on save if touched — otherwise opening this screen
+to flip the reveal switch would silently wipe the intent for the event.
+
+
 **Route:** `/event-preferences/{eventId}` · **Reached from:** nothing yet.
 Should be reachable from the match screen and offered at first check-in.
 

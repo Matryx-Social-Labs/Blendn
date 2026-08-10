@@ -22,6 +22,7 @@ import OptimizedImage from '../OptimizedImage'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../../lib/matchBand'
+import { revealChipLabel } from '../../lib/reveal'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -313,6 +314,16 @@ export default function Match() {
   const [refreshing, setRefreshing] = useState(false)
   const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
   const [eventRoomId, setEventRoomId] = useState<string | null>(null)
+  /*
+   * Whether *you* are named in this room, and what you would be named.
+   *
+   * Read from the roster rather than a dedicated endpoint: the check-ins list
+   * already returns this user's own row, and there is no GET for per-event
+   * preferences. Defaults to anonymous, which is both the server's default and
+   * the safe thing to claim if the read fails.
+   */
+  const [myRevealed, setMyRevealed] = useState(false)
+  const [myName, setMyName] = useState<string | null>(null)
   const getSimilarItemLayout = useCallback(
     (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
       length: SIMILAR_CARD_WIDTH + 16,
@@ -489,6 +500,7 @@ export default function Match() {
       let selectedEventTitle: string | undefined
       let selectedAttendees: AttendeeProfile[] | null = null
       let selectedPagination: { page: number; limit: number; totalCount: number; hasMore: boolean } | undefined
+      let selectedRevealed = false
 
       for (const checkin of sortedCheckins) {
         const candidateEventId = extractEventIdFromCheckin(checkin)
@@ -549,6 +561,10 @@ export default function Match() {
         selectedEventId = candidateEventId
         selectedEventTitle = checkin?.event?.title
         selectedAttendees = attendeeProfiles
+        // Their own reveal state for this room, straight from the check-in row
+        // the list already returned. Absent reads as anonymous, which matches
+        // the server default and is the safe thing to claim.
+        selectedRevealed = checkin?.revealed === true
         // Ranked, not paged: "load more" raises the limit. See loadMoreAttendees.
         selectedPagination = {
           page: 1,
@@ -574,6 +590,7 @@ export default function Match() {
 
       currentEventIdRef.current = selectedEventId
       setEventInfo({ id: selectedEventId, title: selectedEventTitle })
+      setMyRevealed(selectedRevealed)
       setAttendees(selectedAttendees || [])
       setAttendeesHasMore(selectedPagination?.hasMore ?? false)
       setAttendeesTotalCount(selectedPagination?.totalCount ?? (selectedAttendees?.length ?? 0))
@@ -952,6 +969,41 @@ export default function Match() {
           </View>
         </View>
 
+        {/*
+          * Your own state, in the room, at a glance.
+          *
+          * Not who else has revealed — that turns a personal choice into a
+          * count and makes the last holdout visible, which
+          * `PLACEHOLDER_SCREENS.md` rules out. But a person is entitled to know
+          * whether the room can currently see their name, and not knowing is
+          * the state that makes people close the app.
+          *
+          * Tapping opens the per-event screen, carrying the current value so it
+          * does not have to be fetched to be shown correctly.
+          */}
+        {!!eventInfo && (
+          <TouchableOpacity
+            style={styles.revealChip}
+            onPress={() =>
+              router.push({
+                pathname: '/event-preferences/[eventId]',
+                params: { eventId: eventInfo.id, revealed: myRevealed ? '1' : '0' },
+              })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={revealChipLabel(myRevealed, myName)}
+          >
+            <Ionicons
+              name={myRevealed ? 'eye-outline' : 'eye-off-outline'}
+              size={14}
+              color={APP_COLORS.textSecondary}
+            />
+            <Text style={styles.revealChipText} numberOfLines={1}>
+              {revealChipLabel(myRevealed, myName)}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
         {newJoinsCount > 0 && !!eventInfo && (
           <View style={styles.newJoinsPill}>
@@ -1226,6 +1278,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  revealChip: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  revealChipText: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 13,
   },
   socketBanner: {
     marginHorizontal: 18,

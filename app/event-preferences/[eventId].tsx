@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   SafeAreaView,
   ScrollView,
@@ -11,6 +11,8 @@ import {
 } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
+import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
+import { useAuth } from '../../lib/useAuth'
 import { Logger } from '../../lib/logger'
 import { useToast } from '../../components/Toast'
 import { APP_COLORS } from '../../lib/theme'
@@ -58,15 +60,66 @@ const INTENTS: { value: Intent; label: string; hint: string }[] = [
 ]
 
 export default function EventPreferences() {
-  const { eventId } = useLocalSearchParams<{ eventId: string }>()
+  // `revealed` arrives from the status chip, which already knows it. There is
+  // no GET for per-event preferences, and adding a round trip to learn
+  // something the caller is holding would be the wrong trade.
+  const { eventId, revealed: initialRevealed } = useLocalSearchParams<{
+    eventId: string
+    revealed?: string
+  }>()
   const { showToast } = useToast()
+  const { user } = useAuth()
 
   const [intent, setIntent] = useState<Intent[]>([])
-  const [revealed, setRevealed] = useState(false)
-  const [remember, setRemember] = useState(false)
+  /*
+   * Whether the intent chips have been touched at all.
+   *
+   * There is no GET for per-event preferences, so this screen opens with an
+   * empty selection regardless of what the person actually chose. Sending that
+   * empty array on save would wipe their intent for the event every time they
+   * opened this screen to change the reveal switch — a silent reset triggered
+   * by looking. `undefined` means "leave it alone" server-side, so the intent
+   * is only sent once somebody has expressed one here.
+   */
+  const [intentTouched, setIntentTouched] = useState(false)
+  const [revealed, setRevealed] = useState(initialRevealed === '1')
+  const [rememberReveal, setRememberReveal] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  /*
+   * Revealing shows a name and a photo. If there is neither, the switch would
+   * turn on and show nothing — and the person would reasonably conclude the
+   * feature is broken rather than that their profile is empty.
+   */
+  const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!user) return
+    apiClient
+      .getProfile(user.id)
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return
+        setCanReveal(
+          revealReadiness({
+            name: res.data.profile?.name || res.data.name,
+            photos: Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : [],
+          })
+        )
+      })
+      .catch(() => {
+        // Fail open on the *gate*, not on the reveal: an unreachable profile
+        // endpoint should not permanently disable a control, and the server
+        // still decides what a card actually shows.
+        if (!cancelled) setCanReveal({ ok: true, missing: '' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
   const toggleIntent = useCallback((value: Intent) => {
+    setIntentTouched(true)
     setIntent((prev) => {
       // "Just here" is exclusive: it means not looking, so it cannot sit
       // alongside an answer that says you are.
@@ -83,9 +136,16 @@ export default function EventPreferences() {
     setSaving(true)
     try {
       const res = await apiClient.setMatchPreferences(String(eventId), {
-        intent: intent.length > 0 ? intent : undefined,
+        // Only when they actually chose something here. See `intentTouched`.
+        intent: intentTouched ? intent : undefined,
         revealed,
-        remember,
+        /*
+         * `rememberReveal`, not `remember`. The old flag wrote the intent
+         * default too, from a switch sitting under the reveal toggle — so
+         * agreeing to be named at future events silently overwrote a
+         * person-level intent set on a different screen.
+         */
+        rememberReveal,
       })
       if (!res.success) {
         showToast('Could not save. Try again.', 'error')
@@ -98,7 +158,7 @@ export default function EventPreferences() {
     } finally {
       setSaving(false)
     }
-  }, [eventId, intent, remember, revealed, saving, showToast])
+  }, [eventId, intent, intentTouched, rememberReveal, revealed, saving, showToast])
 
   return (
     <SafeAreaView style={styles.container}>
@@ -143,14 +203,29 @@ export default function EventPreferences() {
           <Switch
             value={revealed}
             onValueChange={setRevealed}
+            disabled={canReveal ? !canReveal.ok : false}
             accessibilityLabel="Show my real name and photo at this event"
           />
         </View>
 
+        {canReveal && !canReveal.ok && (
+          /*
+           * Names what is missing, because "disabled" on its own is the least
+           * useful state in an interface. `matching.ts` shows the real name and
+           * photo and nothing else, so these two fields are literally all that
+           * revealing exposes — and with neither, turning it on would show
+           * nothing at all.
+           */
+          <Text style={styles.bodyEmphasis}>
+            Add {canReveal.missing} to your profile first — that&apos;s what other people
+            would see.
+          </Text>
+        )}
+
         {revealed && (
           <View style={styles.switchRow}>
             <Text style={styles.optionText}>Do this at future events too</Text>
-            <Switch value={remember} onValueChange={setRemember} />
+            <Switch value={rememberReveal} onValueChange={setRememberReveal} />
           </View>
         )}
 
