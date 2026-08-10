@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import { ToastProvider } from '../components/Toast';
@@ -41,6 +42,9 @@ SplashScreen.setOptions({ fade: true, duration: 200 });
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
+// Preloaded with the rest, so the splash hands over to a decoded animation
+// rather than to an empty frame that pops in a moment later.
+const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function BackgroundGradient() {
   return (
@@ -65,6 +69,7 @@ function RootLayout() {
   const isNavigatingRef = useRef<boolean>(false);
   const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
   const [assetsReady, setAssetsReady] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
 
   /*
    * This used to fire and gate nothing — `Asset.loadAsync(...).catch(() => {})`,
@@ -73,7 +78,7 @@ function RootLayout() {
    * before it.
    */
   useEffect(() => {
-    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET])
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET])
       .catch(() => {})
       .finally(() => setAssetsReady(true));
   }, []);
@@ -271,6 +276,13 @@ function RootLayout() {
         <ToastProvider>
         <View style={styles.root}>
           <BackgroundGradient />
+          {/*
+            * Rendered last in the tree but drawn on top, so it covers whatever
+            * the router settles on. Deliberately not a gate — auth, assets and
+            * routing all resolve underneath while it plays, and it is simply
+            * removed when done. It never delays a signed-in user.
+            */}
+          {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
           <Stack
             screenOptions={{
               contentStyle: { backgroundColor: APP_COLORS.backgroundBase },

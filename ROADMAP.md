@@ -179,7 +179,48 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
-### 2026-08-10
+### 2026-08-10 — first open and auth
+
+Shipped as six PRs, server first so the app could never mint accounts the API
+would later refuse. API #181–#182, app #55–#58.
+
+- **The auth entry point** (#56, #57). "Get Started" was a Google button with no
+  Google branding — a branding violation and deceptive UI. The Apple button was
+  `BLACK` on black, invisible. Every sign-in error was `Logger.error` and nothing
+  else, which is why a half-configured Google client id went unnoticed in
+  production. Email sign-in, sign-up and password reset now exist as screens;
+  the plumbing had been in `lib/useAuth.ts` for months with zero callers.
+
+  `app/_layout.tsx` bounced any signed-out user off any route but `/`, so a
+  second signed-out screen was unreachable — it would mount and be replaced on
+  the next tick, with nothing in the logs. Now an allow-list.
+
+- **One background from cold start** (#55). White system splash → `#480D37`
+  maroon → pastel sign-in → black app, four backgrounds before the first tap.
+  `expo-splash-screen` was installed and never called, so the handoff could not
+  be coordinated. Now black throughout, held until assets decode and never until
+  auth resolves.
+
+  The supplied logos had **no alpha channel** and two were blank — white
+  knockouts flattened onto white. `scripts/extract-logo-alpha.py` recovers all
+  three, exactly, by inverting the compositing. The Android launcher, adaptive
+  and notification icons were the **Expo starter placeholder**.
+
+- **Startup animation** (#58). The 8.575s ProRes master is an editing codec no
+  phone decodes; `scripts/build-intro-animation.sh` cuts it to 1.08s of animated
+  WebP. Two non-obvious calls, both documented in the script: it starts
+  mid-motion so it continues the native splash instead of redrawing the logo
+  from nothing, and the wordmark is recoloured to white because the master was
+  authored for a light background and measured 3/255 luminance on black.
+
+- **Password reset reaches phones** (API #181). `forgot-password` skipped
+  `role === "attendee"` — every mobile user — while still returning `ok`, so the
+  app would have shown "check your email" for mail never sent. Signup was also
+  non-atomic and accepted 8-character passwords the reset route would refuse
+  forever.
+
+- **App Store review account** (API #182). `npm run seed:review`, idempotent, in
+  `DEPLOYMENT.md` beside `db:migrate` so a prod wipe cannot silently remove it.
 
 - **Realtime survives a blocked websocket** (#51). `socketClient` connected with
   `transports: ["websocket"]` and nothing else, so a single failed upgrade meant
