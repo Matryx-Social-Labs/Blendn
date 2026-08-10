@@ -1281,11 +1281,23 @@ class ApiClientClass {
       goals?: string[]
       looking_for?: string[]
       onboarded?: boolean
-      pushEnabled?: boolean
-      showOnlineStatus?: boolean
-      shareReadReceipts?: boolean
-      locationSharing?: boolean
-      preferences?: Record<string, unknown>
+      /*
+       * The four preference columns, named exactly as the route validates them.
+       *
+       * These were declared here in camelCase -- pushEnabled, showOnlineStatus,
+       * shareReadReceipts, locationSharing -- plus a free-form `preferences`
+       * bag, and the route accepts none of those. The settings screen was
+       * sending twelve spellings and matching zero, so every toggle persisted
+       * nothing and read back its default of `true`.
+       *
+       * Note the asymmetry, which is what made guessing fail: the UI concept
+       * "show online status" is the column `show_online`, "share read receipts"
+       * is `read_receipts`, and "location sharing" is `share_location`.
+       */
+      push_enabled?: boolean
+      show_online?: boolean
+      read_receipts?: boolean
+      share_location?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(

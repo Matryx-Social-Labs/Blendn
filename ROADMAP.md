@@ -69,53 +69,7 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Settings: twelve keys, four columns, no overlap
-
-The columns landed in **0.55.0**. The toggles still persist nothing, now for a
-different reason: **the two sides agree on no key at all.**
-
-`app/settings.tsx:138` sends twelve variants —
-`preferences.{pushEnabled, push_enabled, showOnlineStatus, show_online_status,
-shareReadReceipts, share_read_receipts, locationSharing, location_sharing}` plus
-four camelCase at top level.
-
-`PUT /profiles/:userId` reads exactly four, **top-level, snake_case**:
-
-```
-push_enabled   show_online   read_receipts   share_location
-```
-
-Not one of the twelve matches. And hydration reads
-`profile.shareReadReceipts ?? profile.share_read_receipts`
-(`app/settings.tsx:79`) — the server returns `profile.read_receipts`. No match,
-so it falls back to `true`.
-
-**Every toggle reads ON regardless of what the user chose.** A switch that lies
-is worse than no switch.
-
-**Do:** send the four real keys at top level; read them back from
-`profile.push_enabled` etc. Then delete the shotgun. Confirm against
-`/api-docs` — the spec is generated from the routes and is the honest source.
-
-### 2. The proximity gate compares metres against kilometres
-
-`app/(tabs)/events.tsx:45` — `const R = 6371 // Earth's radius in km`, so
-`distance` is **kilometres**.
-
-Line 877 populates `check_in_radius` from `checkInRadius`, which the API returns
-in **metres** (defaulting to `100`). Line 1048 then evaluates
-`distance <= checkInRadius`.
-
-So `distance <= 100` — true anywhere within **100 kilometres**. Line 1045's
-`|| 0.5 // default 500m` shows the confusion in one file: the same field is
-written as metres and read as kilometres.
-
-`components/screens/EventDetailScreen.tsx:505` has the same comparison.
-
-The server refuses correctly, so nothing false gets in — but the user is shown
-"Check In", taps it, and is rejected. Pick metres, convert once at the boundary.
-
-### 3. Waitlist — RSVP can return a state the app has never heard of
+### 1. Waitlist — RSVP can return a state the app has never heard of
 
 `POST /events/:eventId/rsvp` on a full event now returns **`waitlisted`** instead
 of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
@@ -126,7 +80,7 @@ of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
 Needs the state, the copy, and the promotion notification. It is not a door
 policy — check-in still refuses nobody.
 
-### 4. Peer rating after the event
+### 2. Peer rating after the event
 
 `GET` / `POST /events/:eventId/peer-ratings` shipped in 0.55.0 and has no client
 method.
@@ -144,7 +98,7 @@ him rated him down, at an event where he knows who she is.
 `blendn-admin/__tests__/trust-not-exposed.test.ts` fails the build if any mobile
 route so much as imports the trust module. Keep that true on this side too.
 
-### 5. Three `Event` interfaces, structurally compared
+### 3. Three `Event` interfaces, structurally compared
 
 Surfaced while adding CI. `Event` is declared three times, independently:
 `app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
@@ -162,7 +116,7 @@ item rather than something to sneak into an unrelated change.
 Worth doing before the group work, because group matching will add more shapes
 that flow through the same components.
 
-### 6. Smaller, confirmed
+### 4. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -254,6 +208,26 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **Settings persist, and read back** (#48). The screen sent twelve key
+  spellings and the route accepts four, with no overlap, so nothing was ever
+  saved and every toggle read back its default of `true`. A switch that lies is
+  worse than no switch. The client's `updateProfile` type was also wrong, which
+  is *why* the shotgun existed: nobody could see the right names from the
+  signature. The names are asymmetric on purpose -- "show online status" is
+  `show_online`, "share read receipts" is `read_receipts`, "location sharing"
+  is `share_location` -- and guessing is what produced twelve wrong keys.
+
+- **The proximity gate compares metres to metres** (#48). `getDistanceKm`
+  returned kilometres and was compared against `check_in_radius`, which the API
+  gives in metres, so "Check In" appeared anywhere within a hundred kilometres.
+  The server refused correctly, so the user simply tapped and was rejected.
+  Renamed to `getDistanceMetres` and converted at the boundary rather than at
+  each call site, since two call sites disagreeing about the unit was the bug.
+
+  **Correction to the audit:** it claimed `EventDetailScreen` had the same bug.
+  It does not -- that screen already used `6371e3` metres against a metres
+  radius and was correct.
 
 - **The match screen uses the match endpoint** (#47). It called
   `getEventCheckins`, which stopped returning `image` and the real `name` in API
