@@ -39,6 +39,12 @@ jobs:
         # scripts/typecheck.sh for why this is not a bare `tsc --noEmit`.
         run: ./scripts/typecheck.sh
 
+      - name: Test
+        # A gate from its first run, unlike lint below. There is no backlog to
+        # burn down — the suite starts at zero failures, so anything red is
+        # something this PR did.
+        run: npm test -- --ci
+
       - name: Lint
         # Not a gate yet: this repo has never been linted in CI, so the backlog
         # is unmeasured. Reported so the size is visible, and tightened to a

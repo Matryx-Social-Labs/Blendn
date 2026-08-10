@@ -10,6 +10,7 @@ import {
     View
 } from 'react-native'
 import { apiClient } from '../../lib/apiClient'
+import { flattenToLeaves, type Category, type CategoryNode } from '../../lib/categories'
 import { Logger } from '../../lib/logger'
 import { useAuth } from '../../lib/useAuth'
 import OnboardingProgressBar from '../../components/OnboardingProgressBar'
@@ -44,38 +45,6 @@ import { useToast } from '../../components/Toast'
  * grouping half the room would tick, and an overlap on it says nothing, whereas
  * "Modular synths" says a great deal.
  */
-type Category = { id: string; name: string; icon?: string | null }
-
-/** One tier of the tree as the endpoint sends it. */
-type CategoryNode = {
-  id: unknown
-  name: unknown
-  icon?: unknown
-  children?: { id: unknown; name: unknown; icon?: unknown }[]
-}
-
-/**
- * Tree -> selectable leaves.
- *
- * A parent with no children contributes itself rather than vanishing: dropping
- * it would silently remove a whole branch of the taxonomy from onboarding, and
- * a coarse interest beats a missing one.
- */
-export function flattenToLeaves(nodes: CategoryNode[]): Category[] {
-  const out: Category[] = []
-  for (const node of nodes) {
-    const children = Array.isArray(node.children) ? node.children : []
-    if (children.length > 0) {
-      for (const child of children) {
-        out.push({ id: String(child.id), name: String(child.name), icon: (child.icon as string | null) ?? null })
-      }
-    } else if (node.id != null) {
-      out.push({ id: String(node.id), name: String(node.name), icon: (node.icon as string | null) ?? null })
-    }
-  }
-  return out
-}
-
 const MAX_INTERESTS = 10
 
 export default function Interests() {

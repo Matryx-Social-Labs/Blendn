@@ -61,7 +61,22 @@ compares metres to kilometres.
 
 ## Now
 
-Nothing in flight.
+**After signup: retire onboarding, ask once, gate at the point of use.** The app
+half of a fifteen-PR plan reviewed by `/plan-eng-review` and Codex; the server
+half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
+(API #183–#191), so these can be built against a server that already answers.
+
+| PR | What | State |
+|---|---|---|
+| 10 | A test runner, and the pure logic the rest depends on | **Done** (#62) |
+| 11 | Delete `app/onboarding/` — atomic with the routing gate | Next |
+| 12 | Signup takes an age; one `about-you` screen replaces eight | After 11 |
+| 13 | The card renders what it already knows | After 12 |
+| 14 | Anonymity in the room: the suggestion prompt and the status chip | After 13 |
+
+**PR 11 must be atomic.** `_layout.tsx` still targets `/onboarding/welcome` for
+any `onboarded: false` account; deleting the screens without the gate sends every
+such user to expo-router's Unmatched Route with no way out.
 
 ---
 
@@ -95,7 +110,7 @@ that flow through the same components.
 | **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
 | ~~**Location is stored as a coordinate string**~~ | — | **Wrong when written, corrected 2026-08-10.** The app does send `"12.97,77.59"`, but `PUT /profiles/:userId` runs it through `normalizeLocationToCity` (`route.ts:152`) and stores the reverse-geocoded city. A live account holds `"Paris"`, not `"48.86"`. Nothing to fix |
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
-| **No test runner at all** | — | `npm test` does not exist and jest is not installed, so CI is typecheck + lint only. There is now pure logic worth pinning — `lib/matchBand.ts`, `getDistanceMetres`, the socket transport config — and each is a silent-failure class. Deferred rather than bolted onto an unrelated fix |
+| **Socket transport config is untested** | `lib/socketClient.ts` | `engine.io-client`'s `tryAllTransports` defaults falsy, so listing a second transport alone changes nothing. Pinnable now that a runner exists (#62) — it needs the client mocked, which the three current suites do not |
 
 ### 9. Onboarding becomes one screen — decided
 
@@ -178,6 +193,18 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### 2026-08-10 — a test runner
+
+- **The app can be tested at all** (#62). There was no runner: no `test` script,
+  no jest, no test directory. Eleven PRs shipped in a week verified by a
+  typecheck and a simulator — and the typecheck cannot tell you a function
+  returns the wrong answer.
+
+  `jest-expo`, a gate in CI from its first run, and 26 tests over the three
+  modules the next four PRs depend on. `flattenToLeaves` and the distance
+  helper moved to `lib/` to be testable, which also removed a **second copy** of
+  the Haversine formula living privately inside `EventDetailScreen`.
 
 ### 2026-08-10 — first open and auth
 
