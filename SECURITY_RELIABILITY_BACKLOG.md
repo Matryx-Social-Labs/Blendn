@@ -135,3 +135,46 @@ need jsdom back — add it per-file with a docblock rather than globally.
 
 The rest (`glob@7`, `inflight`, `rimraf@3`, `uuid@7`) are pinned inside Expo and
 React Native tooling and cannot be moved without the SDK upgrade above.
+
+---
+
+## Client security sweep — 2026-08-11
+
+Run after both repositories were made public. Findings are recorded whether or
+not they turned up anything, because "we looked and it was clean" is only worth
+something if it says what was looked at.
+
+| Checked | Result |
+|---|---|
+| **Token storage** | `expo-secure-store` with `WHEN_UNLOCKED_THIS_DEVICE_ONLY` — Keychain/Keystore, not readable while locked, not synced to iCloud. Web falls back to AsyncStorage with an explicit `Logger.warn`; web is not a shipping target |
+| **Sensitive data in logs** | Clean. The only token logged is the **push** token, truncated to 20 chars — an address for delivering notifications, not a credential for the account. No access or refresh token, no password, ever reaches `Logger` |
+| **Hardcoded secrets** | None. `EXPO_PUBLIC_API_BASE_URL` comes from the environment and the client **throws** if it is unset rather than defaulting to something |
+| **TLS** | Enforced. `NSAllowsArbitraryLoads` is **false**; `NSAllowsLocalNetworking` is true, which is for a dev machine on the LAN. Android `usesCleartextTraffic` exists only in the **debug** manifest and never ships |
+| **WebView** | None in the app. No `postMessage` bridge, no remote JS execution surface |
+| **Sentry** | `sendDefaultPii: false`, and the user context is `{ id }` — no email, no IP |
+| **Undeclared imports** | One found and fixed: `expo-asset`, imported by `app/_layout.tsx` and never declared. It resolved by hoisting accident and broke on a clean install |
+
+### Verified against the live API, not just read
+
+`gender`, `orientation`, `interested_in`, `intent_default` and
+`reveal_by_default` were added to `profiles` this week, and all five are
+supposed to be owner-only. Signed in as one seeded account and fetched another
+account's profile through `staging-api.blendn.app`:
+
+    LEAKED to another user: none
+    work_field present (intended, public): True
+
+Which is the allow-list in `app/api/mobile/profiles/[userId]/route.ts` doing its
+job — it is an allow-list precisely because a deny-list once leaked
+`gender` and `interested_in` to any authenticated caller.
+
+### Not checked, and worth knowing
+
+- **No certificate pinning.** A user who installs a custom CA and proxies their
+  own traffic can read their own API calls. That is their data, and pinning
+  mainly buys protection against a compromised device, at the cost of breaking
+  the app whenever a certificate rotates. Deliberate, not an oversight.
+- **No jailbreak/root detection.** Same reasoning: it is defeatable, and it
+  punishes legitimate users on modified devices.
+- **Screenshot and clipboard** of a revealed name are not restricted. A room is
+  a social space; somebody who has seen your name can already write it down.
