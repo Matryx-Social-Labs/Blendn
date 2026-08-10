@@ -30,8 +30,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/logo/monogram-white.png",
+        "backgroundColor": "#1B1931"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.matryxsociallabs.blendn",
@@ -62,10 +62,16 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/logo/monogram-gradient.png",
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000",
+          "dark": {
+            "image": "./assets/logo/monogram-gradient.png",
+            "imageWidth": 180,
+            "resizeMode": "contain",
+            "backgroundColor": "#000000"
+          }
         }
       ],
       [
@@ -78,8 +84,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
-          "color": "#480D37"
+          "icon": "./assets/logo/monogram-white.png",
+          "color": "#F15524"
         }
       ],
       [

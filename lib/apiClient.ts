@@ -1322,7 +1322,7 @@ class ApiClientClass {
       share_location?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
-    return this.queuedRequest<Record<string, unknown>>(
+    const result = await this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/profiles/${userId}`,
       {
         method: 'PUT',
@@ -1331,6 +1331,21 @@ class ApiClientClass {
       true,
       2
     )
+
+    /*
+     * The write invalidates the read. This was missing, and only
+     * `edit-profile.tsx` cleared the cache by hand.
+     *
+     * `ProfileCache` has a 60s TTL and the root layout reads `profile.onboarded`
+     * through it to decide where to route. Finishing onboarding writes
+     * `onboarded: true` and then, well inside those 60 seconds, the gate reads
+     * back a cached `false` and sends the user round the flow again. The
+     * `lastRedirectRef` de-dupe absorbs the bounce today, which is luck rather
+     * than design — and a brand-new account signing up and onboarding in one
+     * sitting is the case most likely to hit it.
+     */
+    if (result.success) ProfileCache.clear()
+    return result
   }
 
   async getProfileInterests(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {

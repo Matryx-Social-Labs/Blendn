@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
-const logo = require('../assets/logo/logo2.webp')
+const logo = require('../assets/logo/monogram-gradient.png')
 
 export default function Index() {
   const { session, user, loading } = useAuth()
@@ -135,16 +135,18 @@ export default function Index() {
     }
   }
 
-  // Show splash screen while auth is initializing
+  /*
+   * Auth is still resolving.
+   *
+   * This used to draw its own `#480D37 -> #000000` gradient, a colour in no
+   * palette and no token file, so the user crossed a white system splash into a
+   * maroon one into a pastel sign-in. It now renders nothing but the root
+   * background, which is the same black the native splash just showed — so the
+   * handoff is invisible rather than a third colour.
+   */
   if (loading) {
     return (
       <View style={styles.splashContainer}>
-        <LinearGradient
-          colors={['#480D37', '#000000']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
         <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
       </View>
     )
@@ -241,15 +243,10 @@ export default function Index() {
     )
   }
 
-  // User is authenticated - show splash while redirecting
+  // Authenticated — held here for the frame or two the root layout takes to
+  // decide where to send them. Same black, so nothing flashes on the way out.
   return (
     <View style={styles.splashContainer}>
-      <LinearGradient
-        colors={['#480D37', '#000000']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
       <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
     </View>
   )
