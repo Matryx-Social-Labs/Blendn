@@ -87,11 +87,28 @@ def best_offset(ref: np.ndarray, mov: np.ndarray, radius: int = 12) -> tuple[int
     return best
 
 
-def write_rgba(rgb: np.ndarray, alpha: np.ndarray, path: Path) -> None:
+def write_rgba(rgb: np.ndarray, alpha: np.ndarray, path: Path, pad: int = 8) -> None:
+    """
+    Write RGBA, cropped to the artwork.
+
+    The source is a square canvas with the mark floating in the middle — the
+    lockup occupies a 799x225 band of a 1024x1024 image. Shipped uncropped, any
+    layout that sets an `aspectRatio` and `resizeMode="contain"` fits the
+    *square* into that box and renders the logo at a fraction of the intended
+    size. Cropping to the alpha bounding box makes the file's aspect ratio the
+    artwork's aspect ratio, which is the only thing a layout can reason about.
+    """
     out = np.dstack([np.clip(rgb, 0, 255), np.clip(alpha * 255.0, 0, 255)]).astype(np.uint8)
+    ys, xs = np.where(out[..., 3] > 8)
+    if len(xs):
+        h, w = out.shape[:2]
+        y0, y1 = max(0, ys.min() - pad), min(h, ys.max() + 1 + pad)
+        x0, x1 = max(0, xs.min() - pad), min(w, xs.max() + 1 + pad)
+        out = out[y0:y1, x0:x1]
     Image.fromarray(out).save(path, optimize=True)
-    covered = int((alpha > 0.5).sum())
-    print(f"  {path.name:24} {out.shape[1]}x{out.shape[0]}  opaque px {covered:,}")
+    covered = int((out[..., 3] > 128).sum())
+    print(f"  {path.name:24} {out.shape[1]}x{out.shape[0]}  "
+          f"aspect {out.shape[1] / out.shape[0]:.3f}  opaque px {covered:,}")
 
 
 def main() -> None:
