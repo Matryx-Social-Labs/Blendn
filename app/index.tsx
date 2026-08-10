@@ -1,27 +1,48 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons'
+import { AntDesign } from '@expo/vector-icons'
 import {
   GoogleSignin,
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import Constants from 'expo-constants'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
+import { APP_COLORS } from '../lib/theme'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
-const logo = require('../assets/logo/monogram-gradient.png')
+const monogram = require('../assets/logo/monogram-gradient.png')
+const lockup = require('../assets/logo/lockup-white.png')
+
+/*
+ * Read the real dimensions rather than hardcoding them.
+ *
+ * Both assets are cropped to their artwork, so their file aspect ratio *is* the
+ * logo's aspect ratio — and asking the bundler for it means a re-export can
+ * change the art without silently distorting the layout. A hardcoded ratio is a
+ * number that is correct exactly once.
+ */
+const MONOGRAM_ASPECT = (() => {
+  const s = Image.resolveAssetSource(monogram)
+  return s?.width && s?.height ? s.width / s.height : 1
+})()
+const LOCKUP_ASPECT = (() => {
+  const s = Image.resolveAssetSource(lockup)
+  return s?.width && s?.height ? s.width / s.height : 3.37
+})()
 
 export default function Index() {
-  const { session, user, loading } = useAuth()
+  const { user, loading } = useAuth()
   const [signingIn, setSigningIn] = useState(false)
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false)
-
-  const gradientColors = useMemo(() => (
-    ['#FFF4E8', '#F4E9FF', '#EAF7FF', '#FFF0F6'] as const
-  ), [])
+  /*
+   * Every failure here used to be `Logger.error` and nothing else: the spinner
+   * stopped, the screen did not change, and the user was left to guess. This is
+   * the single worst thing about the old screen, and it is why a broken Google
+   * client id went unnoticed in production for as long as it did.
+   */
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Configure Google Sign In once
@@ -42,6 +63,7 @@ export default function Index() {
   const handleGoogleSignIn = async () => {
     try {
       setSigningIn(true)
+      setError(null)
       Logger.info('auth', 'Starting Google Sign In...')
 
       if (Platform.OS === 'android') {
@@ -70,17 +92,21 @@ export default function Index() {
       } else {
         throw new Error('No ID token received from Google')
       }
-    } catch (error: any) {
-      Logger.error('auth', 'Google Sign In failed', { error })
+    } catch (err: any) {
+      Logger.error('auth', 'Google Sign In failed', { error: err })
 
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      // Cancelling is a choice, not a failure — saying "something went wrong"
+      // when someone deliberately backed out is both wrong and irritating.
+      if (err.code === statusCodes.SIGN_IN_CANCELLED) {
         Logger.info('auth', 'User cancelled sign in')
-      } else if (error.code === statusCodes.IN_PROGRESS) {
+      } else if (err.code === statusCodes.IN_PROGRESS) {
         Logger.info('auth', 'Sign in already in progress')
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Logger.info('auth', 'Play services not available')
+      } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // Actionable, and nothing we do can fix it — so it gets its own copy
+        // rather than the generic message.
+        setError('Google Play services needs updating before you can sign in with Google.')
       } else {
-        Logger.error('auth', 'Unknown sign in error', { error })
+        setError("Couldn't sign in with Google. Please try again.")
       }
     } finally {
       setSigningIn(false)
@@ -90,6 +116,7 @@ export default function Index() {
   const handleAppleSignIn = async () => {
     try {
       setSigningIn(true)
+      setError(null)
       Logger.info('auth', 'Starting Apple Sign In...')
 
       const credential = await AppleAuthentication.signInAsync({
@@ -124,11 +151,12 @@ export default function Index() {
 
       Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
       // Navigation will happen automatically via useAuth hook
-    } catch (error: any) {
-      if (error.code === 'ERR_REQUEST_CANCELED') {
+    } catch (err: any) {
+      if (err.code === 'ERR_REQUEST_CANCELED') {
         Logger.info('auth', 'User cancelled Apple sign in')
       } else {
-        Logger.error('auth', 'Apple Sign In failed', { error })
+        Logger.error('auth', 'Apple Sign In failed', { error: err })
+        setError("Couldn't sign in with Apple. Please try again.")
       }
     } finally {
       setSigningIn(false)
@@ -147,97 +175,93 @@ export default function Index() {
   if (loading) {
     return (
       <View style={styles.splashContainer}>
-        <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
+        <Image source={monogram} style={styles.splashLogo} resizeMode="contain" />
       </View>
     )
   }
 
-  // Show sign in screen if not authenticated
+  /*
+   * Signed out.
+   *
+   * The previous version was a pastel gradient carrying six absolutely
+   * positioned emoji bubbles and three fixed-diameter rings, at literal pixel
+   * offsets eyeballed against one device. It contradicted every other screen in
+   * the app, which is pure black, and it broke on any other screen size.
+   *
+   * What replaced it is deliberately plain: the mark, the name, and the ways in.
+   * The brand colour arrives through the monogram rather than through a button,
+   * because Google's mark has to sit on Google's chrome and Apple's button is
+   * Apple's — a third brand-orange pill would make this a paint sample.
+   */
   if (!user) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <LinearGradient
-          colors={gradientColors}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Hero with orbits */}
-        <View style={styles.heroContainer}>
-          {/* Concentric rings */}
-          <View style={[styles.ring, { width: 260, height: 260 }]} />
-          <View style={[styles.ring, { width: 330, height: 330 }]} />
-          <View style={[styles.ring, { width: 420, height: 420 }]} />
-
-          {/* Center logo */}
-          <Image source={logo} style={styles.centerLogo} resizeMode="contain" />
-
-          {/* Floating bubbles around the rings - approximate positions */}
-          <View style={[styles.bubble, { top: 10, left: 36 }]}> 
-            <LinearGradient colors={["#FFE6D3", "#FFD5ED"]} style={styles.bubbleBg}>
-              <Text style={styles.emoji}>🗺️</Text>
-            </LinearGradient>
-          </View>
-          <View style={[styles.bubble, { top: 46, right: 54 }]}> 
-            <LinearGradient colors={["#EAF4FF", "#F6E8FF"]} style={styles.bubbleBg}>
-              <Ionicons name="location" size={18} color="#8E5CFF" />
-            </LinearGradient>
-          </View>
-          <View style={[styles.bubble, { top: 160, left: 12 }]}> 
-            <LinearGradient colors={["#FFF0F6", "#FFE7D8"]} style={styles.bubbleBg}>
-              <Text style={styles.emoji}>👩🏻‍🦰</Text>
-            </LinearGradient>
-          </View>
-          <View style={[styles.bubble, { top: 220, right: 20 }]}> 
-            <LinearGradient colors={["#EAF7FF", "#F6E9FF"]} style={styles.bubbleBg}>
-              <FontAwesome6 name="party-horn" size={16} color="#D96DF6" />
-            </LinearGradient>
-          </View>
-          <View style={[styles.bubble, { bottom: 100, left: 36 }]}> 
-            <LinearGradient colors={["#E8E3FF", "#F8E7FF"]} style={styles.bubbleBg}>
-              <Text style={styles.emoji}>🌍</Text>
-            </LinearGradient>
-          </View>
-          <View style={[styles.bubble, { bottom: 140, right: 54 }]}> 
-            <LinearGradient colors={["#EAF7FF", "#FFECD9"]} style={styles.bubbleBg}>
-              <Ionicons name="calendar" size={18} color="#4C7CFB" />
-            </LinearGradient>
-          </View>
+        <View style={styles.brandBlock}>
+          <Image source={monogram} style={styles.monogram} resizeMode="contain" />
+          <Image source={lockup} style={styles.lockup} resizeMode="contain" />
+          <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
         </View>
 
-        {/* No additional copy to keep focus on centered logo */}
+        <View style={styles.actions}>
+          {/*
+            * Announced to screen readers as an alert, so someone mid-gesture is
+            * told rather than left waiting. A toast would auto-dismiss and be
+            * missed entirely.
+            */}
+          {error && (
+            <Text style={styles.error} accessibilityRole="alert">
+              {error}
+            </Text>
+          )}
 
-        {/* Bottom copy and CTA */}
-        <View style={styles.ctaContainer}>
-          <View style={styles.bottomCopyContainer}>
-            <Text style={styles.bottomTitle}>Blend&apos;n</Text>
-            <Text style={styles.bottomSubtitle}>Same place. Same vibe. Instant connections.</Text>
-          </View>
+          {/*
+            * "Continue with Google", not "Get Started".
+            *
+            * The old label was a black pill wired to Google with no Google
+            * branding anywhere on it. That is three problems: it breaks Google's
+            * sign-in branding requirements, it is deceptive — a user expecting a
+            * signup form gets an account chooser for an identity they may not
+            * want to use — and once email sign-in exists it is ambiguous between
+            * three different flows.
+            */}
           <Pressable
             onPress={handleGoogleSignIn}
             disabled={signingIn}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
             style={({ pressed }) => [
-              styles.ctaButton,
-              pressed && { opacity: 0.9 }
+              styles.googleButton,
+              (pressed || signingIn) && styles.pressed,
             ]}
           >
             {signingIn ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#1F1F1F" />
             ) : (
-              <Text style={styles.ctaText}>Get Started</Text>
+              <>
+                <AntDesign name="google" size={18} color="#1F1F1F" style={styles.googleMark} />
+                <Text style={styles.googleLabel}>Continue with Google</Text>
+              </>
             )}
           </Pressable>
 
           {Platform.OS === 'ios' && appleSignInAvailable && (
+            /*
+             * WHITE, not BLACK. The button was BLACK, which was invisible the
+             * moment the background stopped being a pastel gradient — a real bug
+             * the old design was hiding rather than avoiding.
+             */
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
               cornerRadius={28}
               style={styles.appleButton}
               onPress={handleAppleSignIn}
             />
           )}
+
+          <Text style={styles.legal}>
+            By continuing you agree to our Terms and Privacy Policy.
+          </Text>
         </View>
       </SafeAreaView>
     )
@@ -247,7 +271,7 @@ export default function Index() {
   // decide where to send them. Same black, so nothing flashes on the way out.
   return (
     <View style={styles.splashContainer}>
-      <Image source={logo} style={styles.splashLogo} resizeMode="contain" />
+      <Image source={monogram} style={styles.splashLogo} resizeMode="contain" />
     </View>
   )
 }
@@ -255,146 +279,89 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'flex-start',
     alignItems: 'center',
-    padding: 0,
+    justifyContent: 'space-between',
+    paddingHorizontal: 28,
+    // Transparent so the root BackgroundGradient shows through, rather than
+    // this screen owning a fourth background of its own.
     backgroundColor: 'transparent',
   },
   splashContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   splashLogo: {
-    width: 120,
     height: 120,
+    aspectRatio: MONOGRAM_ASPECT,
   },
-  heroContainer: {
+
+  brandBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
     width: '100%',
-    height: '60%',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  ring: {
-    position: 'absolute',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    borderRadius: 9999,
+  monogram: {
+    height: 104,
+    aspectRatio: MONOGRAM_ASPECT,
   },
-  sparkleContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // Percentage width plus aspectRatio, so it scales with the screen instead of
+  // being pinned to numbers measured on one device.
+  lockup: {
+    width: '62%',
+    aspectRatio: LOCKUP_ASPECT,
   },
-  sparkleBackground: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 32,
-  },
-  centerLogo: {
-    width: 160,
-    height: 160,
-  },
-  bubble: {
-    position: 'absolute',
-  },
-  bubbleBg: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  emoji: {
-    fontSize: 18,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 10,
+  tagline: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 15,
     textAlign: 'center',
+    lineHeight: 21,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 40,
+
+  actions: {
+    width: '100%',
+    gap: 12,
+    paddingBottom: 8,
+  },
+  error: {
+    color: APP_COLORS.destructive,
+    fontSize: 14,
+    lineHeight: 19,
     textAlign: 'center',
-  },
-  copyContainer: {
-    width: '100%',
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  brandLogo: {
-    width: 64,
-    height: 24,
-    marginBottom: 8,
-  },
-  headline: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  subHeadline: {
-    fontSize: 22,
-    fontWeight: '600',
-    backgroundColor: 'transparent',
-    color: '#7F53FF',
-    marginTop: 2,
-  },
-  loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    color: '#666',
-  },
-  ctaContainer: {
-    width: '100%',
-    paddingHorizontal: 24,
-    position: 'absolute',
-    bottom: 32,
-  },
-  bottomCopyContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-    minHeight: 140,
-    justifyContent: 'center',
- 
-  },
-  bottomTitle: {
-    fontSize: 44,
-    fontWeight: '700',
-    color: '#1A1A1A',
     marginBottom: 4,
   },
-  bottomSubtitle: {
-    fontSize: 32,
-    color: '#6B6B6B',
-    textAlign: 'center',
-    lineHeight: 38,
-    paddingHorizontal: 8,
-    marginBottom: 8,
-  },
-  ctaButton: {
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#111',
+  googleButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
   },
-  ctaText: {
-    color: '#fff',
+  googleMark: {
+    marginRight: 2,
+  },
+  googleLabel: {
+    color: '#1F1F1F',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   appleButton: {
-    height: 56,
-    marginTop: 12,
     width: '100%',
+    height: 56,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  legal: {
+    color: APP_COLORS.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginTop: 8,
   },
 })
