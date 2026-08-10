@@ -1005,13 +1005,21 @@ class ApiClientClass {
     email: string,
     password: string,
     name?: string,
-    deviceInfo?: { platform?: string; device?: string; appVersion?: string }
+    deviceInfo?: { platform?: string; device?: string; appVersion?: string },
+    /*
+     * Optional here because it is optional on the server, and both are
+     * deliberate. The API accepts an age and does not require one, so that a
+     * build without this field could never be 400'd by a newer server. Google
+     * and Apple create accounts with no age at all, which is why `about-you`
+     * asks for it when it is missing rather than relying on this path.
+     */
+    age?: number
   ): Promise<ApiResponse<AuthResult>> {
     const result = await this.request<AuthResult>(
       '/api/mobile/auth/signup',
       {
         method: 'POST',
-        body: JSON.stringify({ email, password, name, deviceInfo }),
+        body: JSON.stringify({ email, password, name, age, deviceInfo }),
       },
       false
     )
@@ -1332,6 +1340,24 @@ class ApiClientClass {
       goals?: string[]
       looking_for?: string[]
       onboarded?: boolean
+
+      /*
+       * What ranking reads. Snake_case, because that is what the route
+       * validates — the four preference booleans below were sent in twelve
+       * camelCase spellings and matched none, and these are the same shape of
+       * mistake waiting to happen.
+       *
+       * `interested_in` is sent only when the app asked directly (an ambiguous
+       * gender/orientation pair). When it is omitted the server derives it, and
+       * a client-supplied value always wins — so sending it can only make the
+       * stored value more accurate, never less.
+       */
+      intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+      gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
+      orientation?: string | null
+      interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
+      /** A slug from `getWorkFields()`, never free text. */
+      work_field?: string | null
       /*
        * The four preference columns, named exactly as the route validates them.
        *
@@ -1635,6 +1661,21 @@ class ApiClientClass {
   async getCategories(): Promise<ApiResponse<Array<Record<string, unknown>>>> {
     return this.cachedRequest<Array<Record<string, unknown>>>(
       '/api/mobile/categories',
+      { ttl: CATEGORIES_SWR_TTL, swr: true }
+    )
+  }
+
+  /**
+   * The coarse fields of work, from the server.
+   *
+   * Served rather than hardcoded for the reason `profiles.interests` exists as
+   * a warning: a list typed into the client is a list two people spell
+   * differently and never match on. Same cache treatment as categories — it is
+   * eighteen strings, identical for everybody, and changes about once a year.
+   */
+  async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
+    return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
+      '/api/mobile/work-fields',
       { ttl: CATEGORIES_SWR_TTL, swr: true }
     )
   }
