@@ -95,7 +95,8 @@
           "project": "react-native",
           "organization": "matryx-social-labs-private-lim"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

@@ -25,6 +25,22 @@
  */
 module.exports = {
   preset: "jest-expo",
+  /*
+   * Node, not jsdom.
+   *
+   * `jest-expo` defaults to a jsdom environment, which pulls in `jsdom` and
+   * with it three packages npm reports as deprecated — `abab`,
+   * `domexception` and `whatwg-encoding`, all shimming browser APIs that
+   * exist natively now. Nothing in `__tests__` renders a component or touches
+   * a DOM: these are pure functions over data. Paying for a browser
+   * environment to test `getDistanceMetres` is the definition of carrying
+   * weight for nothing.
+   *
+   * When component tests arrive they will need jsdom back — add it per-file
+   * with a `@jest-environment jsdom` docblock rather than globally, so the
+   * logic suites stay fast.
+   */
+  testEnvironment: "node",
   // Only `__tests__`. `jest-expo`'s default also sweeps `**/*.test.ts` anywhere,
   // which would pick up files inside `node_modules/**/__tests__` on some
   // packages and fail for reasons that have nothing to do with this app.

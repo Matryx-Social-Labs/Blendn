@@ -54,3 +54,58 @@ Scope: `blendn/` findings from an end-to-end flow audit (auth guard, onboarding 
 - No hardcoded secrets in the app bundle — anything sensitive here would be fully extractable by anyone who downloads the app, and none was found.
 - Sentry configured with `sendDefaultPii: false`.
 - Mutations (check-in, RSVP, interest toggle) correctly never auto-retry; have proper in-flight guards and optimistic-rollback on failure. Chat send has proper optimistic UI with failure rollback.
+
+---
+
+## Dependency audit — 2026-08-11
+
+`npm audit` reported 42 advisories. It now reports 25, and the number matters
+much less than the classification.
+
+**Every remaining advisory is build or CLI tooling. None reaches the app
+bundle.** Traced by walking each advisory's effect chain to a top-level package:
+
+| Reached via | What it is |
+|---|---|
+| `metro`, `metro-config`, `metro-transform-worker`, `image-size` | the bundler |
+| `@expo/cli`, `@expo/config`, `@expo/prebuild-config`, `xcode` | build and prebuild tooling |
+| `@react-native/community-cli-plugin` | the RN CLI, not the runtime |
+| `postcss`, `ajv`, `uuid` | transitive deps of the above |
+| `jest-expo` | the test runner |
+
+`expo-notifications`, `expo-linking` and `react-native` appear in the list only
+because they depend on those — `expo-constants` → `@expo/config`, which reads
+`app.json` at build time. Nothing flagged is imported by anything in `app/`,
+`lib/` or `components/`.
+
+So the threat model is **a compromised build**, not a compromised phone. That is
+still worth fixing; it is not worth breaking the SDK for.
+
+### Why `npm audit fix --force` is not the answer
+
+Its dry run proposes:
+
+- Expo **53 → 57** (four SDK majors)
+- React Native **0.79.6 → 0.72.17** — a *downgrade*, incoherent with Expo 57
+- a React peer conflict (`react@19.0.0` against a required `^19.2.3`)
+
+That does not fix 25 advisories, it replaces a working app with a broken one.
+`npx expo install --check` reports dependencies correctly aligned to SDK 53, and
+that alignment is the constraint the audit tool does not model.
+
+### What would actually clear the rest
+
+An Expo SDK upgrade — 54, 55 or 56 are all released. That is a real piece of
+work with a native rebuild and its own regression surface, and it wants to be
+its own change, tested on a device, not bundled into a security sweep.
+
+### Deprecation warnings
+
+Three (`abab`, `domexception`, `whatwg-encoding`) came from `jest-environment-jsdom`,
+pulled in by the `jest-expo` preset and shimming browser APIs that exist
+natively now. The suites here are pure functions over data and never touch a
+DOM, so `testEnvironment: "node"` removes the whole chain. Component tests will
+need jsdom back — add it per-file with a docblock rather than globally.
+
+The rest (`glob@7`, `inflight`, `rimraf@3`, `uuid@7`) are pinned inside Expo and
+React Native tooling and cannot be moved without the SDK upgrade above.
