@@ -31,6 +31,7 @@ import { APP_COLORS } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
+import { showMessageReportOptions } from '../../lib/safetyUtils'
 
 interface Message {
   message_id: string
@@ -651,11 +652,25 @@ export default function GroupChat() {
               <Text style={styles.menuText}>Copy</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => {
+              /*
+               * Reuses the same flow the DM screen uses, rather than a second
+               * confirmation tray.
+               *
+               * This used to show a tray whose Report button fired a SUCCESS
+               * haptic and called nothing. So the room where abuse is most
+               * likely had a report button that silently did nothing, and the
+               * person who pressed it was actively told it had worked. Worse
+               * than no button.
+               *
+               * The message id is captured before the menu closes: the old code
+               * called setSelectedMessage(null) first, so by the time any
+               * handler ran the id was already gone. Wiring the API call
+               * without this would have reported `undefined`.
+               */
+              const messageId = selectedMessage?.message_id
               setShowMessageMenu(false); setSelectedMessage(null)
-              showTray('Report message', 'Are you sure you want to report this message?', [
-                { label: 'Cancel', onPress: closeTray },
-                { label: 'Report', variant: 'destructive', onPress: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); closeTray() } },
-              ])
+              if (!messageId) return
+              showMessageReportOptions(messageId, 'group')
             }}>
               <Text style={styles.menuIcon}>🚩</Text>
               <Text style={[styles.menuText, styles.menuTextDestructive]}>Report</Text>
