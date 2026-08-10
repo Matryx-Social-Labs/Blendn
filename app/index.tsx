@@ -5,6 +5,7 @@ import {
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import Constants from 'expo-constants'
+import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -259,6 +260,21 @@ export default function Index() {
             />
           )}
 
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.divider} />
+          </View>
+
+          <Pressable
+            onPress={() => router.push('/sign-in')}
+            disabled={signingIn}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.emailLabel}>Continue with email</Text>
+          </Pressable>
+
           <Text style={styles.legal}>
             By continuing you agree to our Terms and Privacy Policy.
           </Text>
@@ -353,6 +369,36 @@ const styles = StyleSheet.create({
   appleButton: {
     width: '100%',
     height: 56,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 4,
+  },
+  divider: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: APP_COLORS.separator,
+  },
+  dividerText: {
+    color: APP_COLORS.textTertiary,
+    fontSize: 13,
+  },
+  // Outlined rather than filled: email is the third option, and giving it the
+  // same weight as the two OAuth buttons would make the screen three shouts.
+  emailButton: {
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  emailLabel: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '500',
   },
   pressed: {
     opacity: 0.85,

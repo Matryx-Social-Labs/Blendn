@@ -1024,6 +1024,35 @@ class ApiClientClass {
     return result
   }
 
+  /**
+   * Request a password reset link.
+   *
+   * Not under `/api/mobile` — this is the same route the dashboard uses, and
+   * duplicating a working, rate-limited, tested endpoint to give it a mobile
+   * prefix would buy nothing. Two details make it reachable from here:
+   * `middleware.ts` only guards `/api/auth/callback/credentials`, and
+   * `parseResponse` falls through to `{ success: true, data }` for a body with
+   * no `success` key, which is the bare `{ ok, message }` this route returns.
+   *
+   * The emailed link opens the **web** reset page in a browser. Deep-linking it
+   * back into the app needs associated domains, DNS and a native rebuild, and
+   * an https link is required anyway because a custom scheme is unreliable in
+   * mail and dead if the app is not installed.
+   *
+   * The server answers identically whether or not the address exists, so there
+   * is nothing here to distinguish the two — deliberately.
+   */
+  async forgotPassword(email: string): Promise<ApiResponse<{ ok?: boolean; message?: string }>> {
+    return this.request<{ ok?: boolean; message?: string }>(
+      '/api/auth/forgot-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+      false
+    )
+  }
+
   async deleteAccount(): Promise<ApiResponse<{ deleted: boolean }>> {
     const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
       method: 'DELETE',
