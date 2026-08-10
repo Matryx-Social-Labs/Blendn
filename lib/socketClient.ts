@@ -234,7 +234,23 @@ export async function connect(): Promise<boolean> {
 
     socket = io(SOCKET_URL, {
       auth: { token: accessToken },
-      transports: ["websocket"],
+      /*
+       * WebSocket first, HTTP long-polling as a fallback.
+       *
+       * This was `["websocket"]` alone, which gives a single point of failure:
+       * one failed upgrade and the client has no realtime at all, ever. That is
+       * the wrong trade for a product used in venues -- conference and club
+       * wifi, captive portals and some mobile carriers block or mangle
+       * WebSocket while leaving ordinary HTTP alone, and chat going permanently
+       * dead is far worse than chat running over polling.
+       *
+       * `tryAllTransports` is required, not optional. engine.io-client leaves it
+       * `undefined` (falsy) by default, and its fallback is gated on it
+       * (`socket.js:512`) -- so listing a second transport without this flag
+       * changes nothing at all: the first failure is still terminal.
+       */
+      transports: ["websocket", "polling"],
+      tryAllTransports: true,
       reconnection: true,
       reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
       reconnectionDelay: RECONNECT_DELAY_BASE,
@@ -275,7 +291,24 @@ export async function connect(): Promise<boolean> {
 
       socket!.on("connect_error", (error) => {
         clearTimeout(timeout)
-        Logger.error("socket", "Connection error", { error: error.message })
+        /*
+         * `error.message` alone is not diagnosable. A transport failure and a
+         * rejected token are the same shape to the caller, and "websocket
+         * error" says nothing about which transport was in play, what the
+         * underlying cause was, or which host was even being dialled -- all of
+         * which cost real time to establish by hand. engine.io attaches a
+         * `description` (the underlying event or HTTP status) and `context`.
+         */
+        const detail = error as Error & { description?: unknown; context?: unknown }
+        Logger.error("socket", "Connection error", {
+          error: detail.message,
+          description:
+            detail.description instanceof Error
+              ? detail.description.message
+              : detail.description,
+          transport: socket?.io?.engine?.transport?.name,
+          url: SOCKET_URL,
+        })
         isConnecting = false
         emitConnectionStatus({
           state: "disconnected",

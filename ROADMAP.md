@@ -95,6 +95,7 @@ that flow through the same components.
 | **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
 | **Location is stored as a coordinate string** | `onboarding/location.tsx` | Writes `"12.97,77.59"`; the events tab renders `location.split(',')[0]`, so it displays **"12.97"** |
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
+| **No test runner at all** | — | `npm test` does not exist and jest is not installed, so CI is typecheck + lint only. There is now pure logic worth pinning — `lib/matchBand.ts`, `getDistanceMetres`, the socket transport config — and each is a silent-failure class. Deferred rather than bolted onto an unrelated fix |
 
 ### 9. Onboarding becomes one screen — decided
 
@@ -179,6 +180,22 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **Realtime survives a blocked websocket** (#51). `socketClient` connected with
+  `transports: ["websocket"]` and nothing else, so a single failed upgrade meant
+  no realtime at all, permanently — the wrong trade for a product used on
+  conference and club wifi, where WebSocket is blocked or mangled far more often
+  than plain HTTP.
+
+  Now `["websocket", "polling"]` with `tryAllTransports: true`. The flag is not
+  optional: engine.io-client leaves it undefined and gates its fallback on it
+  (`socket.js:512`), so listing a second transport alone changes nothing. Verified
+  against staging that websocket is still preferred when it works and that
+  polling reaches auth on its own.
+
+  Also widened the `connect_error` log, which is what made this expensive to
+  diagnose: `error.message` alone said "websocket error" and nothing about the
+  transport, the underlying cause or even which host was being dialled.
 
 - **Placeholder screens, logic complete** (#50). Peer rating
   (`app/rate/[eventId].tsx`), intent and reveal
