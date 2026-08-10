@@ -21,7 +21,12 @@ let globalAuthState: AuthState = {
 }
 
 let authStateListeners: ((state: AuthState) => void)[] = []
-let sessionCheckInterval: NodeJS.Timeout | null = null
+// `ReturnType<typeof setInterval>`, not `NodeJS.Timeout`: in React Native the
+// timer id is a number, and whether TypeScript agrees depends on whether
+// `@types/node` happens to be in scope — which varies between a fresh clone and
+// one that has run `pod install`. That made the same source typecheck on one
+// machine and fail on another. This form is correct under either resolution.
+let sessionCheckInterval: ReturnType<typeof setInterval> | null = null
 let isInitializing = false // Prevent concurrent initialization
 let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
 let appStateListenerRegistered = false
