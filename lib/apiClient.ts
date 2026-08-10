@@ -1270,23 +1270,41 @@ class ApiClientClass {
     return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/profiles/${userId}/interests`)
   }
 
-  async addProfileInterest(userId: string, categoryId: string): Promise<ApiResponse<Record<string, unknown>>> {
+  /*
+   * Both of these take an ARRAY, because the server does.
+   *
+   * They were written singular and neither worked. `addProfileInterest` sent
+   * `{ categoryId }` where the route validates `{ categoryIds: string[] }` with
+   * `.min(1)`, so every call would have failed validation. `removeProfileInterest`
+   * built `/interests/:categoryId`, a path that does not exist -- the server
+   * takes DELETE on `/interests` with the ids in the body.
+   *
+   * Neither had a call site, so nothing broke in production. They would have
+   * broken the moment anyone wired up the interest picker, which is exactly what
+   * this change does. Renamed to plural so the mistake cannot be repeated by
+   * someone reading the signature.
+   */
+  async addProfileInterests(
+    userId: string,
+    categoryIds: string[]
+  ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
       `/api/mobile/profiles/${userId}/interests`,
       {
         method: 'POST',
-        body: JSON.stringify({ categoryId }),
+        body: JSON.stringify({ categoryIds }),
       },
       true,
       3
     )
   }
 
-  async removeProfileInterest(userId: string, categoryId: string): Promise<ApiResponse<void>> {
+  async removeProfileInterests(userId: string, categoryIds: string[]): Promise<ApiResponse<void>> {
     return this.queuedRequest<void>(
-      `/api/mobile/profiles/${userId}/interests/${categoryId}`,
+      `/api/mobile/profiles/${userId}/interests`,
       {
         method: 'DELETE',
+        body: JSON.stringify({ categoryIds }),
       },
       true,
       3
