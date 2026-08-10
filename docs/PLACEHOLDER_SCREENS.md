@@ -85,6 +85,36 @@ is why the Google and Apple handlers have no `router` call either.
 | **The Google mark is a monochrome glyph** | `AntDesign`, chosen to avoid a new dependency. Google's guidelines ask for their supplied multicolour asset — swap before store submission |
 | **No social proof, no illustration, no motion** | The old screen had six emoji bubbles at hardcoded pixel offsets. They are gone because they broke on every screen size. If the Figma wants imagery here, it needs to be responsive |
 
+### The launch sequence, and what is decided in it
+
+Cold start is now one black background end to end. Four things happen, and only
+the last is a screen:
+
+1. **Native splash** — black, completed monogram, 180pt. Configured in
+   `app.json`; changing it needs `npx expo prebuild`, not just a reload.
+2. **Handoff** — held until assets are decoded, never until auth resolves. Auth
+   is a network round trip and gating on it means a frozen splash for the length
+   of a request.
+3. **Intro animation** (`components/IntroAnimation.tsx`, 1.08s) — the monogram
+   slides left and the wordmark writes on. An **overlay, not a gate**: routing
+   and auth resolve underneath.
+4. Whatever the router settled on, revealed by a 260ms fade.
+
+| Decided | Why |
+|---|---|
+| **The animation starts mid-motion** | The native splash already shows the completed monogram. The master opens by drawing it from nothing, so playing from the start would erase the logo on screen and redraw it. The asset is cut to begin exactly where the native splash ends |
+| **The wordmark is white, not brand ink** | The master was authored for a light background; the ink measured 3/255 luminance on black — invisible. Recoloured by saturation, which leaves the gradient monogram untouched |
+| **It never blocks startup** | An animation that gates the app is a tax paid on every launch, including by a signed-in user who just wants their events |
+| **Timing is a timeout, not a callback** | `expo-image` exposes no reliable end-of-animation event. Do not architect around one |
+
+**To change the animation**, edit `scripts/build-intro-animation.sh` and re-run
+it against the ProRes master — do not hand-edit `assets/logo/intro.webp`. The
+script documents every cut and why.
+
+**Open for the designer:** the intro currently plays on *every* launch. Once per
+install, or once per day, is a legitimate alternative and is a one-line change
+(persist a flag). Nobody has decided which.
+
 ### Design notes
 
 The segmented Sign in / Create account control is the cheapest thing that works,
