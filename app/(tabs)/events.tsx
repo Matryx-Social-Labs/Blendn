@@ -41,9 +41,20 @@ import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
 import { APP_COLORS } from '../../lib/theme'
 
-// Helper to calculate distance between two coordinates in km
-const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371 // Earth's radius in km
+/*
+ * Distance in METRES, not kilometres.
+ *
+ * This returned kilometres and was compared against `check_in_radius`, which
+ * the API supplies in metres -- so `distance <= 100` was true anywhere within a
+ * hundred kilometres and the "Check In" button appeared across the city. The
+ * server refused correctly, so the user simply tapped and was rejected.
+ *
+ * Converting once here, at the boundary, rather than at each call site: the
+ * bug existed because two call sites disagreed about the unit, and the fix
+ * should remove the opportunity rather than patch both.
+ */
+const getDistanceMetres = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6_371_000 // Earth's radius in METRES
   const dLat = (lat2 - lat1) * Math.PI / 180
   const dLon = (lon2 - lon1) * Math.PI / 180
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -1074,13 +1085,16 @@ export default function Events() {
       // For now, calculate distance client-side
       const proximityResults = events.map(event => {
         if (!event.latitude || !event.longitude) return null
-        const distance = getDistanceKm(userLocation.latitude, userLocation.longitude, event.latitude, event.longitude)
-        const checkInRadius = event.check_in_radius || 0.5 // default 500m
+        const distanceMetres = getDistanceMetres(userLocation.latitude, userLocation.longitude, event.latitude, event.longitude)
+        // Metres, matching what the API returns. The old default of 0.5 was a
+        // kilometre value standing in for "500m" and made the mismatch invisible.
+        const checkInRadiusMetres = event.check_in_radius || 500
         return {
           event_id: event.id,
-          within_radius: distance <= checkInRadius,
-          distance_km: distance,
-          can_check_in: distance <= checkInRadius
+          within_radius: distanceMetres <= checkInRadiusMetres,
+          // The field name is the contract: kilometres here, metres above.
+          distance_km: distanceMetres / 1000,
+          can_check_in: distanceMetres <= checkInRadiusMetres
         }
       }).filter(Boolean)
 
@@ -1617,7 +1631,11 @@ export default function Events() {
       if (prox && typeof prox.distance_km === 'number') {
         map[ev.id] = prox.distance_km
       } else if (ev.latitude && ev.longitude) {
-        map[ev.id] = getDistanceKm(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude)
+        // This map is in kilometres -- it sits alongside `prox.distance_km`
+        // and feeds sorting, not the check-in gate. Converting explicitly
+        // rather than keeping a second helper in a different unit.
+        map[ev.id] =
+          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
       } else {
         map[ev.id] = Number.POSITIVE_INFINITY
       }

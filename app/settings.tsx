@@ -62,27 +62,34 @@ export default function SettingsScreen() {
     } catch {}
   }, [settingsStorageKey])
 
+  /*
+   * Read the four keys the server actually returns.
+   *
+   * This used to try twelve spellings -- nested under `preferences`, camelCase,
+   * snake_case -- and match none of them, because the server returns exactly
+   * four, flat, under `profile`:
+   *
+   *   push_enabled   show_online   read_receipts   share_location
+   *
+   * Every lookup missed, every toggle fell back to its default of `true`, and
+   * so every switch read ON regardless of what the user had chosen. A switch
+   * that lies is worse than no switch.
+   *
+   * The names are asymmetric on purpose and worth reading twice: the UI calls
+   * it `showOnlineStatus` and the column is `show_online`; the UI says
+   * `shareReadReceipts` and the column is `read_receipts`; the UI says
+   * `locationSharing` and the column is `share_location`. Guessing the
+   * translation is what produced the twelve-key shotgun. Confirm against
+   * /api-docs, which is generated from the route.
+   */
   const hydratePreferencesFromProfile = useCallback((resultData: any) => {
     const profile = resultData?.profile || resultData || {}
-    const nestedPrefs = profile?.preferences || {}
 
     const nextPrefs: PreferencesState = {
-      pushEnabled: toBoolean(
-        nestedPrefs.pushEnabled ?? nestedPrefs.push_enabled ?? profile.pushEnabled ?? profile.push_enabled,
-        DEFAULT_PREFERENCES.pushEnabled
-      ),
-      showOnlineStatus: toBoolean(
-        nestedPrefs.showOnlineStatus ?? nestedPrefs.show_online_status ?? profile.showOnlineStatus ?? profile.show_online_status,
-        DEFAULT_PREFERENCES.showOnlineStatus
-      ),
-      shareReadReceipts: toBoolean(
-        nestedPrefs.shareReadReceipts ?? nestedPrefs.share_read_receipts ?? profile.shareReadReceipts ?? profile.share_read_receipts,
-        DEFAULT_PREFERENCES.shareReadReceipts
-      ),
-      locationSharing: toBoolean(
-        nestedPrefs.locationSharing ?? nestedPrefs.location_sharing ?? profile.locationSharing ?? profile.location_sharing,
-        DEFAULT_PREFERENCES.locationSharing
-      ),
+      pushEnabled: toBoolean(profile.push_enabled, DEFAULT_PREFERENCES.pushEnabled),
+      showOnlineStatus: toBoolean(profile.show_online, DEFAULT_PREFERENCES.showOnlineStatus),
+      shareReadReceipts: toBoolean(profile.read_receipts, DEFAULT_PREFERENCES.shareReadReceipts),
+      locationSharing: toBoolean(profile.share_location, DEFAULT_PREFERENCES.locationSharing),
     }
 
     return { profile, nextPrefs }
@@ -135,21 +142,14 @@ export default function SettingsScreen() {
     setSaving(prev => ({ ...prev, [key]: true }))
 
     try {
-      const payload: any = {
-        preferences: {
-          pushEnabled: next.pushEnabled,
-          push_enabled: next.pushEnabled,
-          showOnlineStatus: next.showOnlineStatus,
-          show_online_status: next.showOnlineStatus,
-          shareReadReceipts: next.shareReadReceipts,
-          share_read_receipts: next.shareReadReceipts,
-          locationSharing: next.locationSharing,
-          location_sharing: next.locationSharing,
-        },
-        pushEnabled: next.pushEnabled,
-        showOnlineStatus: next.showOnlineStatus,
-        shareReadReceipts: next.shareReadReceipts,
-        locationSharing: next.locationSharing,
+      // The four keys the route validates, top level, snake_case. There is no
+      // `preferences` wrapper and no camelCase alias -- the previous twelve
+      // variants matched none of them, so nothing was ever persisted.
+      const payload = {
+        push_enabled: next.pushEnabled,
+        show_online: next.showOnlineStatus,
+        read_receipts: next.shareReadReceipts,
+        share_location: next.locationSharing,
       }
 
       const result = await apiClient.updateProfile(user.id, payload)
