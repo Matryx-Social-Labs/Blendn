@@ -28,6 +28,7 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
 import { getDistanceMetres } from '../../lib/geo'
+import { revealPromptText } from '../../lib/reveal'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
@@ -498,6 +499,45 @@ export default function Events() {
 
       Logger.journey('checkin', 'success', { eventId: event.id })
       feedback.success()
+
+      /*
+       * The reveal suggestion, offered rather than applied.
+       *
+       * `revealSuggestion` is true when this person has `reveal_by_default`
+       * set. Check-in used to *apply* that — so walking into a room could name
+       * you, and someone visible at a work meetup in March was visible at a
+       * club in August without touching anything. The server now always creates
+       * `revealed: false` and hands the preference back for the app to ask
+       * about.
+       *
+       * Asking rather than undoing is the point: there is no moment at which
+       * they are named before answering. Dismissing writes nothing, because the
+       * row is already false — and so does killing the app mid-prompt, which is
+       * the right way for this to fail.
+       */
+      if (result.data?.revealSuggestion) {
+        showTray({
+          title: 'Show your name here?',
+          message: revealPromptText(userFirstName),
+          buttons: [
+            {
+              label: 'Yes, show my name',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                apiClient
+                  .setMatchPreferences(event.id, { revealed: true })
+                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
+              },
+            },
+            // Deliberately not "No" — nothing is being refused. Staying
+            // anonymous is the state they are already in.
+            { label: 'Stay anonymous', onPress: closeTray },
+          ],
+        })
+        return
+      }
+
       // Get event chat and offer navigation
       const chatResult = await apiClient.getEventChat(event.id)
       if (chatResult.success && chatResult.data?.id) {

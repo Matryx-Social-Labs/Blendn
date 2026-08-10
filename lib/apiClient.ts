@@ -617,6 +617,16 @@ export interface CheckInResult {
   distanceMeters?: number
   distance_meters?: number
   message?: string
+  /**
+   * Offer to name them here. A **suggestion**, never a state.
+   *
+   * True when this account has `reveal_by_default` set. Check-in always creates
+   * `revealed: false` — it used to seed from that default, which meant walking
+   * into a room could name you — so this is the server handing back the
+   * preference for the app to *ask* about. A tap applies it; anything else,
+   * including killing the app, leaves them anonymous.
+   */
+  revealSuggestion?: boolean
   [key: string]: unknown
 }
 
@@ -1588,7 +1598,21 @@ class ApiClientClass {
    */
   async setMatchPreferences(
     eventId: string,
-    prefs: { intent?: Array<'dating' | 'networking' | 'friendship' | 'just_here'>; revealed?: boolean; remember?: boolean }
+    prefs: {
+      intent?: Array<'dating' | 'networking' | 'friendship' | 'just_here'>
+      revealed?: boolean
+      /*
+       * Two flags, because one of them wrote something it never said.
+       *
+       * `remember` set BOTH `intent_default` and `reveal_by_default`, and the
+       * switch that sent it sits under the reveal toggle labelled "Do this at
+       * future events too" — so agreeing to be named at future events silently
+       * overwrote a person-level intent. It is still accepted server-side for
+       * builds already in the store; nothing new should send it.
+       */
+      rememberIntent?: boolean
+      rememberReveal?: boolean
+    }
   ): Promise<ApiResponse<{ intent: string[]; revealed: boolean }>> {
     return this.queuedRequest<{ intent: string[]; revealed: boolean }>(
       `/api/mobile/events/${eventId}/matches/preferences`,
@@ -1839,6 +1863,15 @@ class ApiClientClass {
       id: string
       eventId: string
       checkInTime: string
+      /**
+       * Whether **you** are named in this room. Never anyone else's state.
+       *
+       * The only way the app can know: the roster returns pseudonyms, matches
+       * never include the viewer, and there is no GET for per-event
+       * preferences. Drives the status chip, which must not guess — a chip that
+       * is wrong about your own anonymity is worse than no chip.
+       */
+      revealed?: boolean
       event: {
         id: string
         title: string

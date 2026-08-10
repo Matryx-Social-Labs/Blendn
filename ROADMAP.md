@@ -72,7 +72,7 @@ half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
 | 11 | Delete `app/onboarding/` — atomic with the routing gate | **Done** (#63) |
 | 12 | Signup takes an age; one `about-you` screen replaces eight | **Done** (#64) |
 | 13 | The card renders what it already knows | **Done** (#66) |
-| 14 | Anonymity in the room: the suggestion prompt and the status chip | After 13 |
+| 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
 
 **PR 11 must be atomic.** `_layout.tsx` still targets `/onboarding/welcome` for
 any `onboarded: false` account; deleting the screens without the gate sends every
@@ -177,6 +177,29 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### 2026-08-10 — anonymity you can see
+
+- **The suggestion prompt** (#67). Check-in used to *apply* `reveal_by_default`,
+  so walking into a room could name you. The server now always creates
+  `revealed: false` and returns `revealSuggestion`; the app asks, and a tap
+  applies it. Dismissing writes nothing, and so does killing the app — which is
+  the right way for this to fail.
+
+- **A status chip** (#67) — "You're anonymous here" / "You're visible as Sagar",
+  tapping through to the per-event screen. Your own state only; showing who else
+  revealed would turn a personal choice into a count.
+
+- **The reveal gate** (#67): with no name and no photo the switch is disabled
+  and says which is missing. Revealing shows exactly those two things, so
+  without them it changes nothing visible and reads as broken.
+
+- **`remember` split** (#67) into `rememberIntent` / `rememberReveal`. One flag
+  wrote both defaults from a switch labelled as reveal only.
+
+- **Opening the screen no longer wipes your intent.** There is no GET for
+  per-event preferences, so the chips open empty — and saving sent that empty
+  array. Intent is now only sent once touched.
 
 ### 2026-08-10 — the card says what it knows
 
