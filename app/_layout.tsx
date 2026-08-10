@@ -286,6 +286,26 @@ function RootLayout() {
           animation: routeTransition,
         }}
       />
+      {/*
+        * Placeholder screens: logic complete, design provisional.
+        * See docs/PLACEHOLDER_SCREENS.md before restyling either.
+        */}
+      <Stack.Screen
+        name="rate"
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="event-preferences"
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: routeTransition,
+        }}
+      />
       <Stack.Screen 
         name="edit-profile" 
         options={{ 

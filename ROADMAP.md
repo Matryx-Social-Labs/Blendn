@@ -69,25 +69,7 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Peer rating — the screen, which needs design first
-
-The client methods landed (#49): `getRatablePeers` and `ratePeer`. What is
-missing is the screen, and it is deliberately not built.
-
-`DESIGN_HANDOFF.md` asks for something that "feels like a private note to us,
-not a public review". That is a real design decision on a safety-sensitive
-surface, and guessing it is worse than leaving it: a screen that reads like a
-public review invites retaliation, which is the exact failure the invisible
-trust signal exists to prevent.
-
-The rules the screen must not break, all enforced server-side already:
-
-- Only people you connected with — a mutual like, so both opted in
-- Only after the event ends — during the night a rating is leverage
-- **Never visible to the person rated**, and no screen where it could surface
-- `harassment` routes to moderation and is never averaged into anything
-
-### 2. Three `Event` interfaces, structurally compared
+### 1. Three `Event` interfaces, structurally compared
 
 Surfaced while adding CI. `Event` is declared three times, independently:
 `app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
@@ -105,7 +87,7 @@ item rather than something to sneak into an unrelated change.
 Worth doing before the group work, because group matching will add more shapes
 that flow through the same components.
 
-### 3. Smaller, confirmed
+### 2. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -197,6 +179,17 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **Placeholder screens, logic complete** (#50). Peer rating
+  (`app/rate/[eventId].tsx`), intent and reveal
+  (`app/event-preferences/[eventId].tsx`), and the Strong/Good/Some band
+  (`lib/matchBand.ts`). Every rule is implemented and every layout is
+  provisional, each carrying a visible PLACEHOLDER banner so nothing gets
+  mistaken for finished in a demo.
+
+  `docs/PLACEHOLDER_SCREENS.md` is the designer handover: what each screen does,
+  the rules a redesign must not break and why, the screens that do not exist at
+  all, and the honest state of the design system.
 
 - **The app knows what `waitlisted` means** (#49). A full event returns
   `waitlisted` rather than `going` and promotes whoever waited longest when a
