@@ -93,7 +93,8 @@ that flow through the same components.
 |---|---|---|
 | **Ratings can be seen, never given** | — | `stats.averageRating` renders on the event card; `rateEvent` has zero call sites. `POST /events/:eventId/rating` is live |
 | **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
-| **Location is stored as a coordinate string** | `onboarding/location.tsx` | Writes `"12.97,77.59"`; the events tab renders `location.split(',')[0]`, so it displays **"12.97"** |
+| ~~**Location is stored as a coordinate string**~~ | — | **Wrong when written, corrected 2026-08-10.** The app does send `"12.97,77.59"`, but `PUT /profiles/:userId` runs it through `normalizeLocationToCity` (`route.ts:152`) and stores the reverse-geocoded city. A live account holds `"Paris"`, not `"48.86"`. Nothing to fix |
+| **Home city is captured once and never revisited** | `onboarding/location.tsx` | The real issue behind the above. One GPS read during onboarding becomes a permanent home city with no way to change it from the app — travel, move, or onboard on the wrong side of a border and it is wrong forever. Distinct from live location, which check-in and nearby both read fresh |
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
 | **No test runner at all** | — | `npm test` does not exist and jest is not installed, so CI is typecheck + lint only. There is now pure logic worth pinning — `lib/matchBand.ts`, `getDistanceMetres`, the socket transport config — and each is a silent-failure class. Deferred rather than bolted onto an unrelated fix |
 
@@ -258,6 +259,18 @@ two answers to one question, and the client's is the one an attacker controls.
   server judge inside/outside rather than reimplementing the geofence, stops on
   a terminal status, and pauses in the background so a stale fix never asserts
   presence at a place and time that have both passed.
+
+- **Interests actually reach the structured graph** (#52). #43 below wired the
+  write path and it was correct, but nobody could ever reach it: the screen
+  filtered `GET /categories` for rows with a non-null `parent_id`, which is
+  exactly the set that endpoint never returns, so it discarded 100% of every
+  response and rendered no selectable chips. Continue was gated on a selection,
+  so onboarding could not be completed at all.
+
+  **First real rows, 2026-08-10**: 10 interests on a live account, from the
+  simulator, end to end. `user_interests` had been empty across every user on
+  both databases since the feature was built — the emptiness was this screen,
+  not the API.
 
 - **Interests reach the structured graph** (#43). Onboarding loaded 28 hardcoded
   emoji strings into `profiles.interests`, free text, while matching ranked on
