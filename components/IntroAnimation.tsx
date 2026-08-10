@@ -41,8 +41,15 @@ const intro = require('../assets/logo/intro.webp')
  * are in `scripts/build-intro-animation.sh`.
  */
 
-/** 26 frames at 24fps, plus a beat to land on the final frame. */
-const DURATION_MS = 1080
+/**
+ * 31 frames at 24fps (1.29s), plus a beat to land on the final frame.
+ *
+ * Must track `scripts/build-intro-animation.sh`. Cutting away too early is not
+ * hypothetical: the first build ended at 4.65s of the master and stopped with a
+ * coloured wipe still sitting on the final "n", so the wordmark read as
+ * unfinished. If the asset is rebuilt with different bounds, change this too.
+ */
+const DURATION_MS = 1340
 const FADE_MS = 260
 
 export function IntroAnimation({ onDone }: { onDone: () => void }) {

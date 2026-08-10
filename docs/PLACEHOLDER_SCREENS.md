@@ -95,7 +95,7 @@ the last is a screen:
 2. **Handoff** — held until assets are decoded, never until auth resolves. Auth
    is a network round trip and gating on it means a frozen splash for the length
    of a request.
-3. **Intro animation** (`components/IntroAnimation.tsx`, 1.08s) — the monogram
+3. **Intro animation** (`components/IntroAnimation.tsx`, 1.29s) — the monogram
    slides left and the wordmark writes on. An **overlay, not a gate**: routing
    and auth resolve underneath.
 4. Whatever the router settled on, revealed by a 260ms fade.
@@ -108,8 +108,15 @@ the last is a screen:
 | **Timing is a timeout, not a callback** | `expo-image` exposes no reliable end-of-animation event. Do not architect around one |
 
 **To change the animation**, edit `scripts/build-intro-animation.sh` and re-run
-it against the ProRes master — do not hand-edit `assets/logo/intro.webp`. The
-script documents every cut and why.
+it against the ProRes master — do not hand-edit `assets/logo/intro.webp` or
+`lockup-hero.png`, which the script generates together so the still and the
+animation cannot disagree. The script documents every cut and why.
+
+If you change the trim bounds, **change `DURATION_MS` in `IntroAnimation.tsx`
+too**, and check the last frame. A coloured wipe trails the letters as they
+draw and is still on the final "n" until 5.43s of the master; an earlier cut
+ends on a wordmark that looks unfinished. That is not hypothetical — it shipped
+once.
 
 **Open for the designer:** the intro currently plays on *every* launch. Once per
 install, or once per day, is a legitimate alternative and is a one-line change
