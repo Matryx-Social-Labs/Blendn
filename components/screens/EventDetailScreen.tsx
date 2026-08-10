@@ -30,7 +30,7 @@ import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import PhotoLightbox from '../PhotoLightbox';
 import ScalePress from '../motion/ScalePress';
 import { SkeletonBlock, SkeletonLine } from '../Skeleton';
-import { apiClient } from '../../lib/apiClient';
+import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
 import { getOptimizedImageUrl } from '../../lib/photoUtils';
@@ -208,7 +208,16 @@ export default function EventDetail() {
   const [averageRating, setAverageRating] = useState<number | null>(null)
   const [ratingCount, setRatingCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
-  const [rsvpStatus, setRsvpStatus] = useState<'going' | 'maybe' | 'not_going' | null>(null)
+  /*
+   * `waitlisted` is included because the server can return it.
+   *
+   * A full event answers `waitlisted` rather than `going` (API 0.51.0) and
+   * promotes whoever waited longest when a seat frees. This state was typed
+   * without it and the three reads below cast the response to fit, so someone
+   * on the waitlist saw a green "Going" tick -- and would have turned up to an
+   * event they had no seat at.
+   */
+  const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
   const [interestedAvatars, setInterestedAvatars] = useState<string[]>(() => {
     if (interested && typeof interested === 'string') {
       try {
@@ -307,7 +316,7 @@ export default function EventDetail() {
             checked_in: d.userStatus.isCheckedIn || false,
             check_in_id: d.userStatus.checkInId,
           })
-          setRsvpStatus((d.userStatus.rsvpStatus as 'going' | 'maybe' | 'not_going' | null) || null)
+          setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
         }
         if (d.interestedUsers) {
           const avatars = d.interestedUsers
@@ -460,10 +469,13 @@ export default function EventDetail() {
         return
       }
       feedback.tap()
-      const isCurrentlyGoing = rsvpStatus === 'going'
+      // Waitlisted counts as "already committed": tapping should take you off
+      // the list, not try to RSVP again. Treating it as not-going would send a
+      // second RSVP and leave the user unable to withdraw.
+      const isCommitted = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
       const prevStatus = rsvpStatus
-      setRsvpStatus(isCurrentlyGoing ? null : 'going')
-      if (isCurrentlyGoing) {
+      setRsvpStatus(isCommitted ? null : 'going')
+      if (isCommitted) {
         const result = await apiClient.cancelRsvp(String(id))
         if (!result.success) {
           setRsvpStatus(prevStatus)
@@ -477,7 +489,15 @@ export default function EventDetail() {
           feedback.error()
           showTray('Error', 'Failed to RSVP to event.')
         } else {
-          setRsvpStatus(result.data.rsvpStatus as 'going' | 'maybe' | 'not_going' | null)
+          setRsvpStatus(result.data.rsvpStatus)
+          if (result.data.rsvpStatus === 'waitlisted') {
+            // Say it plainly. An amber icon alone would let someone believe
+            // they have a place and turn up to an event that is full.
+            showTray(
+              "You're on the waitlist",
+              "This event is full. We'll let you know if a place frees up — you'll be first in line in the order you joined."
+            )
+          }
         }
       }
     } catch {
@@ -578,7 +598,7 @@ export default function EventDetail() {
             checked_in: d.userStatus.isCheckedIn || false,
             check_in_id: d.userStatus.checkInId,
           })
-          setRsvpStatus((d.userStatus.rsvpStatus as 'going' | 'maybe' | 'not_going' | null) || null)
+          setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
         }
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -1720,11 +1740,17 @@ export default function EventDetail() {
           <ScalePress
             style={[
               styles.secondaryActionButton,
-              rsvpStatus === 'going' && styles.rsvpButtonActive,
+              (rsvpStatus === 'going' || rsvpStatus === 'waitlisted') && styles.rsvpButtonActive,
             ]}
             onPress={handleToggleRsvp}
             accessibilityRole="button"
-            accessibilityLabel={rsvpStatus === 'going' ? 'Cancel RSVP' : 'RSVP as going'}
+            accessibilityLabel={
+              rsvpStatus === 'waitlisted'
+                ? 'On the waitlist. Tap to leave it'
+                : rsvpStatus === 'going'
+                  ? 'Cancel RSVP'
+                  : 'RSVP as going'
+            }
             pressedScale={0.96}
           >
             <BlurView intensity={36} tint="dark" style={styles.glassButtonBlur} />
@@ -1732,7 +1758,10 @@ export default function EventDetail() {
               colors={
                 rsvpStatus === 'going'
                   ? ['rgba(94,234,141,0.32)', 'rgba(34,197,94,0.12)']
-                  : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']
+                  : rsvpStatus === 'waitlisted'
+                    // Amber, not green: on the list is not the same as in.
+                    ? ['rgba(251,191,36,0.32)', 'rgba(217,119,6,0.12)']
+                    : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']
               }
               start={{ x: 0.1, y: 0 }}
               end={{ x: 0.9, y: 1 }}
@@ -1740,9 +1769,17 @@ export default function EventDetail() {
               pointerEvents="none"
             />
             <Ionicons
-              name={rsvpStatus === 'going' ? 'checkmark-circle' : 'calendar-outline'}
+              name={
+                rsvpStatus === 'going'
+                  ? 'checkmark-circle'
+                  : rsvpStatus === 'waitlisted'
+                    ? 'hourglass-outline'
+                    : 'calendar-outline'
+              }
               size={20}
-              color={rsvpStatus === 'going' ? '#4ade80' : '#FFFFFF'}
+              color={
+                rsvpStatus === 'going' ? '#4ade80' : rsvpStatus === 'waitlisted' ? '#fbbf24' : '#FFFFFF'
+              }
             />
           </ScalePress>
         )}

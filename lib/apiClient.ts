@@ -331,6 +331,17 @@ export const ProfileCache = {
  * which `rankMatches` enforces internally so no route and no client can forget
  * them.
  */
+/**
+ * What an RSVP can come back as.
+ *
+ * `waitlisted` is the one the app has never handled: you send `going`, a full
+ * event answers `waitlisted`, and the UI showed "Going" anyway.
+ */
+/** Mirrors the route's enum exactly. `harassment` bypasses the average entirely. */
+export type PeerRatingIssue = 'none' | 'uncomfortable' | 'no_show' | 'misrepresented' | 'harassment'
+
+export type RsvpStatus = 'going' | 'maybe' | 'not_going' | 'waitlisted'
+
 export interface MatchCard {
   userId: string
   /** Pseudonym unless they revealed for this event. Never the real name otherwise. */
@@ -1162,11 +1173,22 @@ class ApiClientClass {
     )
   }
 
+  /**
+   * RSVP. Note the return can be `waitlisted`, which you did not ask for.
+   *
+   * A full event returns `waitlisted` rather than `going` (API 0.51.0) and
+   * promotes whoever waited longest when a seat frees. Sending `going` and
+   * assuming you got `going` back is the bug this signature exists to prevent.
+   *
+   * This is not a door policy: check-in still refuses nobody, and the geofence
+   * deliberately covers the queue outside. Capacity is a signal to the
+   * organiser, not a bouncer.
+   */
   async rsvpToEvent(
     eventId: string,
     status: 'going' | 'maybe' | 'not_going'
-  ): Promise<ApiResponse<{ rsvpStatus: string; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: string; rsvpCount: number }>(
+  ): Promise<ApiResponse<{ rsvpStatus: RsvpStatus; rsvpCount: number }>> {
+    return this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
       `/api/mobile/events/${eventId}/rsvp`,
       {
         method: 'POST',
@@ -1483,6 +1505,50 @@ class ApiClientClass {
     return this.queuedRequest<{ intent: string[]; revealed: boolean }>(
       `/api/mobile/events/${eventId}/matches/preferences`,
       { method: 'PUT', body: JSON.stringify(prefs) },
+      true,
+      3
+    )
+  }
+
+  // === PEER RATINGS ===
+
+  /**
+   * Who you may rate for this event.
+   *
+   * Only people you actually connected with -- a mutual like, so both of you
+   * opted in -- and only once the event has ended. Rating anyone who merely
+   * shared a room would be a review-bombing surface and a way to punish someone
+   * for declining; asked during the night a rating is leverage rather than
+   * reflection. The server enforces both, and drops people you have already
+   * rated.
+   */
+  async getRatablePeers(eventId: string): Promise<ApiResponse<{ userIds: string[] }>> {
+    return this.queuedRequest<{ userIds: string[] }>(
+      `/api/mobile/events/${eventId}/peer-ratings`
+    )
+  }
+
+  /**
+   * Rate someone you met. **Never visible to the person rated.**
+   *
+   * There is no endpoint that returns it to them and there must never be a
+   * screen where it could surface. The person most likely to rate someone badly
+   * is the person who felt least safe with them, and showing it would tell him
+   * that the woman who met him rated him down -- at an event where he knows who
+   * she is and may still be in the room. The feature meant to protect her
+   * becomes what exposes her.
+   *
+   * `harassment` is not a low rating with a label. It routes to moderation and
+   * is never averaged into a score: four glowing ratings and one harassment
+   * report is not a 4.2.
+   */
+  async ratePeer(
+    eventId: string,
+    input: { userId: string; rating: number; issue?: PeerRatingIssue; note?: string }
+  ): Promise<ApiResponse<{ recorded: boolean }>> {
+    return this.queuedRequest<{ recorded: boolean }>(
+      `/api/mobile/events/${eventId}/peer-ratings`,
+      { method: 'POST', body: JSON.stringify(input) },
       true,
       3
     )
