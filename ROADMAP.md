@@ -69,36 +69,25 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Waitlist — RSVP can return a state the app has never heard of
+### 1. Peer rating — the screen, which needs design first
 
-`POST /events/:eventId/rsvp` on a full event now returns **`waitlisted`** instead
-of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
+The client methods landed (#49): `getRatablePeers` and `ratePeer`. What is
+missing is the screen, and it is deliberately not built.
 
-`waitlisted` appears **zero times** in this repo. The app handles `going`,
-`not_going`, `maybe`, `interested`.
+`DESIGN_HANDOFF.md` asks for something that "feels like a private note to us,
+not a public review". That is a real design decision on a safety-sensitive
+surface, and guessing it is worse than leaving it: a screen that reads like a
+public review invites retaliation, which is the exact failure the invisible
+trust signal exists to prevent.
 
-Needs the state, the copy, and the promotion notification. It is not a door
-policy — check-in still refuses nobody.
+The rules the screen must not break, all enforced server-side already:
 
-### 2. Peer rating after the event
+- Only people you connected with — a mutual like, so both opted in
+- Only after the event ends — during the night a rating is leverage
+- **Never visible to the person rated**, and no screen where it could surface
+- `harassment` routes to moderation and is never averaged into anything
 
-`GET` / `POST /events/:eventId/peer-ratings` shipped in 0.55.0 and has no client
-method.
-
-After the event ends, for **people you actually connected with** (a mutual like —
-not everyone who shared a room), one screen per person: a 1–5, an optional
-"something went wrong", an optional note.
-
-**The rating is never visible to the person rated, and there must be no screen
-where it could be.** No badge, no star average on a profile, no "verified" tick
-derived from it. The person most likely to rate someone badly is the person who
-felt least safe with them; show it and you have told him that the woman who met
-him rated him down, at an event where he knows who she is.
-
-`blendn-admin/__tests__/trust-not-exposed.test.ts` fails the build if any mobile
-route so much as imports the trust module. Keep that true on this side too.
-
-### 3. Three `Event` interfaces, structurally compared
+### 2. Three `Event` interfaces, structurally compared
 
 Surfaced while adding CI. `Event` is declared three times, independently:
 `app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
@@ -116,7 +105,7 @@ item rather than something to sneak into an unrelated change.
 Worth doing before the group work, because group matching will add more shapes
 that flow through the same components.
 
-### 4. Smaller, confirmed
+### 3. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -208,6 +197,17 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **The app knows what `waitlisted` means** (#49). A full event returns
+  `waitlisted` rather than `going` and promotes whoever waited longest when a
+  seat frees, and the app had never heard of it: the state was typed as
+  going/maybe/not_going and three reads *cast* the response to fit, so someone
+  on the waitlist saw a green "Going" tick and would have turned up to an event
+  they had no place at. Now amber with an hourglass, an explicit message, and
+  tapping leaves the list rather than sending a second RSVP.
+
+- **Peer rating is callable** (#49). `getRatablePeers` and `ratePeer` added. The
+  screen is deliberately still unbuilt — see Next.
 
 - **Settings persist, and read back** (#48). The screen sent twelve key
   spellings and the route accepts four, with no overlap, so nothing was ever
