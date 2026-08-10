@@ -69,36 +69,7 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Interests must reach `user_interests` — this blocks matchmaking entirely
-
-**The single highest-value item in either repo.**
-
-`app/onboarding/interests.tsx:52` writes the picked interests to
-`profiles.interests` via `updateProfile` — a **free-text string array**, from a
-hardcoded emoji list (`'🎵 Music'`).
-
-Matching ranks on the **structured** `user_interests → categories` graph.
-Nothing writes to it. The three client methods that would —
-`getProfileInterests`, `addProfileInterest`, `removeProfileInterest`
-(`lib/apiClient.ts:1270`, `:1275`, `:1287`) — have **zero call sites**.
-
-So every match card comes back with **no shared interests, for everyone**. The
-ranking, the IDF rarity weighting and the "you both picked Techno and Board
-games" card are all correct, all tested, and all fed by an empty table.
-
-**Do:**
-- `GET /api/mobile/categories` for the real list — stop shipping the emoji array
-- `POST /api/mobile/profiles/:userId/interests` with `{ categoryIds: string[] }`
-- **Fix `removeProfileInterest` first — it calls a route that does not exist.**
-  It builds `DELETE /profiles/:userId/interests/:categoryId`
-  (`lib/apiClient.ts:1287`). The server has no such path. The real shape is
-  `DELETE /profiles/:userId/interests` with a body `{ categoryIds: string[] }`.
-  It has no call sites, so it 404s the day someone wires it up.
-
-Free text and the graph can coexist — `profiles.interests` for display, the
-graph for ranking — but nothing will match until the graph is populated.
-
-### 2. Presence pings — a shipped feature producing a wrong number on someone else's screen
+### 1. Presence pings — a shipped feature producing a wrong number on someone else's screen
 
 `POST /api/mobile/events/:eventId/presence` has been live since **v0.42.0**.
 There is no `presence` method in `lib/apiClient.ts` at all — not unused,
@@ -114,7 +85,7 @@ geofence client-side.** A sweeper checks out anyone who stops pinging.
 
 Read `CHECKIN.md` before starting.
 
-### 3. The match surface — three endpoints, zero client methods
+### 2. The match surface — three endpoints, zero client methods
 
 Shipped 0.49.0–0.50.0. `lib/apiClient.ts` contains **no** `matches`, `likes` or
 `preferences` method.
@@ -140,7 +111,7 @@ There is no match score and there will not be a raw one. A coarse band —
 **Strong / Good / Some** — was agreed instead; the design's `Match Percentage` is
 not being built. See `DESIGN_HANDOFF.md`.
 
-### 4. Settings: twelve keys, four columns, no overlap
+### 3. Settings: twelve keys, four columns, no overlap
 
 The columns landed in **0.55.0**. The toggles still persist nothing, now for a
 different reason: **the two sides agree on no key at all.**
@@ -168,7 +139,7 @@ is worse than no switch.
 `profile.push_enabled` etc. Then delete the shotgun. Confirm against
 `/api-docs` — the spec is generated from the routes and is the honest source.
 
-### 5. The proximity gate compares metres against kilometres
+### 4. The proximity gate compares metres against kilometres
 
 `app/(tabs)/events.tsx:45` — `const R = 6371 // Earth's radius in km`, so
 `distance` is **kilometres**.
@@ -186,7 +157,7 @@ written as metres and read as kilometres.
 The server refuses correctly, so nothing false gets in — but the user is shown
 "Check In", taps it, and is rejected. Pick metres, convert once at the boundary.
 
-### 6. Waitlist — RSVP can return a state the app has never heard of
+### 5. Waitlist — RSVP can return a state the app has never heard of
 
 `POST /events/:eventId/rsvp` on a full event now returns **`waitlisted`** instead
 of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
@@ -197,7 +168,7 @@ of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
 Needs the state, the copy, and the promotion notification. It is not a door
 policy — check-in still refuses nobody.
 
-### 7. Peer rating after the event
+### 6. Peer rating after the event
 
 `GET` / `POST /events/:eventId/peer-ratings` shipped in 0.55.0 and has no client
 method.
@@ -215,11 +186,28 @@ him rated him down, at an event where he knows who she is.
 `blendn-admin/__tests__/trust-not-exposed.test.ts` fails the build if any mobile
 route so much as imports the trust module. Keep that true on this side too.
 
+### 7. Three `Event` interfaces, structurally compared
+
+Surfaced while adding CI. `Event` is declared three times, independently:
+`app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
+
+They are passed to each other, so TypeScript compares them structurally and they
+have already drifted. Widening `city` in one of them by a single `| null` -- to
+match what the API actually returns -- immediately produced
+`Type 'Event' is not assignable to type 'Event'. Two different types with the
+same name`, and broke a call site three files away.
+
+That is the root cause of 3 of the 6 remaining baseline type errors. The fix is
+one shared type, and it is a real refactor rather than a patch, so it is its own
+item rather than something to sneak into an unrelated change.
+
+Worth doing before the group work, because group matching will add more shapes
+that flow through the same components.
+
 ### 8. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
-| **Group-chat report is a stub** | `app/chat/[id].tsx:655` | Shows a tray, fires a haptic, calls nothing. `POST /messages/:messageId/report` exists and the DM path already uses it |
 | **Ratings can be seen, never given** | — | `stats.averageRating` renders on the event card; `rateEvent` has zero call sites. `POST /events/:eventId/rating` is live |
 | **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
 | **Location is stored as a coordinate string** | `onboarding/location.tsx` | Writes `"12.97,77.59"`; the events tab renders `location.split(',')[0]`, so it displays **"12.97"** |
@@ -307,5 +295,33 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
-Nothing yet under this ledger — it starts today, 2026-08-08. Shipped work before
-this date is in the git history.
+### 2026-08-10
+
+- **Interests reach the structured graph** (#43). Onboarding loaded 28 hardcoded
+  emoji strings into `profiles.interests`, free text, while matching ranked on
+  the `user_interests → categories` graph that nothing wrote to. Every match card
+  said "no shared interests" for everyone, for weeks. Now loads `GET /categories`
+  and writes real category ids. Leaf categories only — a parent everyone holds
+  says nothing.
+
+  Both client methods for this were broken and neither had a call site, so
+  nothing failed in production: `addProfileInterest` sent `{ categoryId }` where
+  the route validates `{ categoryIds: string[] }` with `.min(1)`, and
+  `removeProfileInterest` built a path that does not exist. Renamed to plural.
+
+  The API side gained a health signal that reports interest coverage
+  (Blendn-Admin#176), so the next time this silently empties, something says so.
+
+- **The group-chat report button reports** (#44). It showed a tray, fired a
+  *success* haptic, and called nothing — so the room where abuse is most likely
+  had a button that silently failed while telling the user it had worked.
+  `showMessageReportOptions` in `lib/safetyUtils.ts` already did this correctly
+  and `private-chat` already used it; the group screen had never imported it.
+
+  Two bugs, not one: the handler cleared `selectedMessage` before showing the
+  tray, so capturing the id first was required or it would have reported
+  `undefined` and still looked fine.
+
+- **CI exists** (#45). This repo had no CI and no tests. Typecheck now runs on
+  every PR against a recorded baseline: the 6 known errors do not block, any new
+  one does. Verified by injecting an error and watching it fail.
