@@ -69,23 +69,7 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Presence pings — a shipped feature producing a wrong number on someone else's screen
-
-`POST /api/mobile/events/:eventId/presence` has been live since **v0.42.0**.
-There is no `presence` method in `lib/apiClient.ts` at all — not unused,
-**absent**.
-
-Nobody is ever checked out. Occupancy is therefore **cumulative**: it climbs all
-night and never falls, on the organiser's live operations screen. Someone is
-looking at that number to decide whether to open a second bar or hold the door.
-
-**Do:** while checked in, ping `{ lat, lng, accuracy }` every 5 minutes.
-The server judges whether that is still inside — **do not reimplement the
-geofence client-side.** A sweeper checks out anyone who stops pinging.
-
-Read `CHECKIN.md` before starting.
-
-### 2. The match surface — three endpoints, zero client methods
+### 1. The match surface — three endpoints, zero client methods
 
 Shipped 0.49.0–0.50.0. `lib/apiClient.ts` contains **no** `matches`, `likes` or
 `preferences` method.
@@ -111,7 +95,7 @@ There is no match score and there will not be a raw one. A coarse band —
 **Strong / Good / Some** — was agreed instead; the design's `Match Percentage` is
 not being built. See `DESIGN_HANDOFF.md`.
 
-### 3. Settings: twelve keys, four columns, no overlap
+### 2. Settings: twelve keys, four columns, no overlap
 
 The columns landed in **0.55.0**. The toggles still persist nothing, now for a
 different reason: **the two sides agree on no key at all.**
@@ -139,7 +123,7 @@ is worse than no switch.
 `profile.push_enabled` etc. Then delete the shotgun. Confirm against
 `/api-docs` — the spec is generated from the routes and is the honest source.
 
-### 4. The proximity gate compares metres against kilometres
+### 3. The proximity gate compares metres against kilometres
 
 `app/(tabs)/events.tsx:45` — `const R = 6371 // Earth's radius in km`, so
 `distance` is **kilometres**.
@@ -157,7 +141,7 @@ written as metres and read as kilometres.
 The server refuses correctly, so nothing false gets in — but the user is shown
 "Check In", taps it, and is rejected. Pick metres, convert once at the boundary.
 
-### 5. Waitlist — RSVP can return a state the app has never heard of
+### 4. Waitlist — RSVP can return a state the app has never heard of
 
 `POST /events/:eventId/rsvp` on a full event now returns **`waitlisted`** instead
 of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
@@ -168,7 +152,7 @@ of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
 Needs the state, the copy, and the promotion notification. It is not a door
 policy — check-in still refuses nobody.
 
-### 6. Peer rating after the event
+### 5. Peer rating after the event
 
 `GET` / `POST /events/:eventId/peer-ratings` shipped in 0.55.0 and has no client
 method.
@@ -186,7 +170,7 @@ him rated him down, at an event where he knows who she is.
 `blendn-admin/__tests__/trust-not-exposed.test.ts` fails the build if any mobile
 route so much as imports the trust module. Keep that true on this side too.
 
-### 7. Three `Event` interfaces, structurally compared
+### 6. Three `Event` interfaces, structurally compared
 
 Surfaced while adding CI. `Event` is declared three times, independently:
 `app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
@@ -204,7 +188,7 @@ item rather than something to sneak into an unrelated change.
 Worth doing before the group work, because group matching will add more shapes
 that flow through the same components.
 
-### 8. Smaller, confirmed
+### 7. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -296,6 +280,14 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **Presence pings** (#46). The endpoint had been live since API v0.42.0 and
+  nothing had ever called it, so nobody was ever checked out: occupancy climbed
+  all night and never fell, on the screen an organiser uses to decide whether to
+  open a second bar. `lib/usePresence.ts` pings while checked in, lets the
+  server judge inside/outside rather than reimplementing the geofence, stops on
+  a terminal status, and pauses in the background so a stale fix never asserts
+  presence at a place and time that have both passed.
 
 - **Interests reach the structured graph** (#43). Onboarding loaded 28 hardcoded
   emoji strings into `profiles.interests`, free text, while matching ranked on

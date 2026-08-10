@@ -31,6 +31,7 @@ import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
+import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { formatTimeRange as fmtRange } from '../../lib/time'
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
@@ -254,9 +255,36 @@ export default function Events() {
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
+
+  /*
+   * Presence: keep the organiser's live occupancy number honest.
+   *
+   * Check-in was a one-shot gate, so anyone who left without pressing check out
+   * stayed counted all night and occupancy only ever climbed. The endpoint has
+   * existed since API v0.42.0 and nothing has ever called it.
+   *
+   * Only ever one event: you cannot be physically inside two venues, and the
+   * server would reject the second anyway. `find` rather than a list keeps that
+   * assumption visible.
+   */
   const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
+
+  const checkedInEventId =
+    Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
+  const presence = usePresence(checkedInEventId)
+
+  // The server has ended this check-in -- the user walked out and the grace
+  // period expired, or the sweeper got there first. Reflect it rather than
+  // leaving a stale "checked in" chip on screen.
+  useEffect(() => {
+    if (!presence.finished || !checkedInEventId) return
+    setCheckinStatuses((prev) => ({
+      ...prev,
+      [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
+    }))
+  }, [presence.finished, checkedInEventId])
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
   const [checkOutPending, setCheckOutPending] = useState<Record<string, boolean>>({})

@@ -325,6 +325,15 @@ export const ProfileCache = {
 }
 
 // API Response Types
+/** What the presence endpoint answers. Mirrors the route's successResponse. */
+export interface PresencePing {
+  status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'
+  reason?: string
+  shortfallMetres?: number | null
+  graceEndsAt?: string | null
+  nextPingInSeconds?: number
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
@@ -1380,6 +1389,36 @@ class ApiClientClass {
       },
       true,
       3
+    )
+  }
+
+  // === PRESENCE ===
+
+  /**
+   * "Am I still counted as here?"
+   *
+   * Check-in used to be a one-shot gate: it proved you were at the venue once
+   * and nothing revisited the claim, so anyone who left without pressing check
+   * out stayed counted forever. Occupancy climbed all night and never fell, on
+   * the organiser's live operations screen -- a shipped feature producing a
+   * wrong number on someone else's display.
+   *
+   * The server judges whether the coordinates are still inside. Do NOT
+   * reimplement the geofence here: two implementations of one rule will
+   * disagree, and the client's is the one an attacker controls.
+   *
+   * Not queued and not retried. A stale ping is worse than no ping -- it would
+   * assert presence at a location and time that have both passed. The next tick
+   * is five minutes away and carries fresher truth.
+   */
+  async sendPresencePing(
+    eventId: string,
+    coords: { latitude: number; longitude: number; accuracy?: number | null }
+  ): Promise<ApiResponse<PresencePing>> {
+    return this.request<PresencePing>(
+      `/api/mobile/events/${eventId}/presence`,
+      { method: 'POST', body: JSON.stringify(coords) },
+      true
     )
   }
 
