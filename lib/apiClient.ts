@@ -1365,13 +1365,15 @@ class ApiClientClass {
      * The write invalidates the read. This was missing, and only
      * `edit-profile.tsx` cleared the cache by hand.
      *
-     * `ProfileCache` has a 60s TTL and the root layout reads `profile.onboarded`
-     * through it to decide where to route. Finishing onboarding writes
-     * `onboarded: true` and then, well inside those 60 seconds, the gate reads
-     * back a cached `false` and sends the user round the flow again. The
-     * `lastRedirectRef` de-dupe absorbs the bounce today, which is luck rather
-     * than design — and a brand-new account signing up and onboarding in one
-     * sitting is the case most likely to hit it.
+     * `ProfileCache` has a 60s TTL, and the routing gate that read
+     * `profile.onboarded` through it is gone — so the specific bounce this was
+     * written for (finish onboarding, gate reads back a cached `false`, round
+     * you go again) can no longer happen.
+     *
+     * The invalidation stays, because the reason generalises: the profile tab,
+     * the events header and the match gate all read this cache, and a save that
+     * leaves them showing the old value for up to a minute is the same bug
+     * wearing a different screen.
      */
     if (result.success) ProfileCache.clear()
     return result

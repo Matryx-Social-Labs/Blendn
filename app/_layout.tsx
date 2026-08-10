@@ -39,7 +39,6 @@ initSentry();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({ fade: true, duration: 200 });
 
-const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 // Preloaded with the rest, so the splash hands over to a decoded animation
@@ -142,7 +141,6 @@ function RootLayout() {
   useEffect(() => {
     if (loading) return;
     const run = async () => {
-      const isOnboarding = !!pathname && pathname.startsWith('/onboarding');
       const isIndex = pathname === '/' || pathname === '/index';
       /*
        * Routes a signed-out user is allowed to be on.
@@ -178,43 +176,26 @@ function RootLayout() {
         }, 2000);
       }
 
-      // Check onboarding status with caching for faster startup
-      let onboarded = false;
-      try {
-        // First check cached value for instant navigation
-        const cachedStatus = await AsyncStorage.getItem(`${ONBOARDED_CACHE_KEY}_${user.id}`);
-        if (cachedStatus === 'true') {
-          onboarded = true;
-          // Background refresh (non-blocking) - only refresh if cache exists
-          apiClient.getProfile(user.id).then((result) => {
-            if (result.success && result.data) {
-              const freshOnboarded = result.data.profile?.onboarded === true;
-              AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(freshOnboarded));
-              // If status changed to not-onboarded, redirect
-              if (!freshOnboarded) {
-                router.replace('/onboarding/welcome');
-              }
-            }
-          }).catch(() => {});
-        } else {
-          // No cache - single API call (first-time users only)
-          const result = await apiClient.getProfile(user.id);
-          if (result.success && result.data) {
-            onboarded = result.data.profile?.onboarded === true;
-            AsyncStorage.setItem(`${ONBOARDED_CACHE_KEY}_${user.id}`, String(onboarded));
-          }
-        }
-      } catch {
-        onboarded = false;
-      }
-
-      if (!onboarded) {
-        const target = '/onboarding/welcome';
-        if (!isOnboarding) {
-          replaceIfNeeded(target);
-        }
-        return;
-      }
+      /*
+       * There is no onboarding gate any more.
+       *
+       * This used to read `profiles.onboarded` — from an AsyncStorage cache,
+       * then from the API — and send anyone false to `/onboarding/welcome`.
+       * Those eight screens are gone, so a gate pointing at them would send
+       * every such account to expo-router's Unmatched Route with no way out,
+       * which is why the deletion and this removal are one commit.
+       *
+       * It also cost a `getProfile` round trip on every cold start with an
+       * empty cache, to make a routing decision nothing makes any more. What
+       * replaces it is an explicit push from the signup success path (PR 12)
+       * and the interest gate on the Match tab, which asks at the moment
+       * somebody reaches for the feature rather than before they have seen it.
+       *
+       * `profiles.onboarded` is NOT dead: the dashboard still counts it
+       * (`dashboard/actions.ts`, `users/actions.ts`). It stops meaning "has
+       * finished onboarding" and starts meaning "existed before 2026-08-10",
+       * which is noted in the API roadmap rather than backfilled.
+       */
 
       /*
        * Onboarded users should not stay on any signed-out screen.
@@ -232,7 +213,7 @@ function RootLayout() {
        * `isAuthRoute` is a superset of `isIndex`, so this covers what it did
        * plus the two screens that were missing.
        */
-      if (isOnboarding || isAuthRoute) {
+      if (isAuthRoute) {
         const target = '/(tabs)/events';
         replaceIfNeeded(target);
       } else {
@@ -248,12 +229,12 @@ function RootLayout() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const onBackPress = () => {
-      const isOnboarding = !!pathname && pathname.startsWith('/onboarding');
       const isIndex = pathname === '/' || pathname === '/index';
       const isTabsRoot = pathname?.startsWith('/(tabs)');
 
-      // Block back on login, onboarding, and tabs root
-      if (isIndex || isOnboarding || isTabsRoot) {
+      // Block back on login and the tabs root. Onboarding used to be here too,
+      // and was the only screen set that swallowed back with nowhere to go.
+      if (isIndex || isTabsRoot) {
         return true; // prevent default
       }
       // Otherwise perform a normal back
@@ -342,14 +323,6 @@ function RootLayout() {
         options={{ 
           headerShown: false,
           animation: routeTransition,
-        }} 
-      />
-      <Stack.Screen 
-        name="onboarding" 
-        options={{ 
-          headerShown: false,
-          animation: 'none',
-          gestureEnabled: false 
         }} 
       />
       <Stack.Screen 

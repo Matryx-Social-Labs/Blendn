@@ -69,7 +69,7 @@ half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
 | PR | What | State |
 |---|---|---|
 | 10 | A test runner, and the pure logic the rest depends on | **Done** (#62) |
-| 11 | Delete `app/onboarding/` — atomic with the routing gate | Next |
+| 11 | Delete `app/onboarding/` — atomic with the routing gate | **Done** (#63) |
 | 12 | Signup takes an age; one `about-you` screen replaces eight | After 11 |
 | 13 | The card renders what it already knows | After 12 |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | After 13 |
@@ -107,12 +107,19 @@ that flow through the same components.
 | | Where | |
 |---|---|---|
 | **Ratings can be seen, never given** | — | `stats.averageRating` renders on the event card; `rateEvent` has zero call sites. `POST /events/:eventId/rating` is live |
-| **Onboarding throws away two screens** | `onboarding/goals.tsx:39`, `onboarding/preferences.tsx:31` | Both say "stored locally for now" and never sync, though `PUT /profiles/:userId` has always accepted `goals` and `looking_for` |
 | ~~**Location is stored as a coordinate string**~~ | — | **Wrong when written, corrected 2026-08-10.** The app does send `"12.97,77.59"`, but `PUT /profiles/:userId` runs it through `normalizeLocationToCity` (`route.ts:152`) and stores the reverse-geocoded city. A live account holds `"Paris"`, not `"48.86"`. Nothing to fix |
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
 | **Socket transport config is untested** | `lib/socketClient.ts` | `engine.io-client`'s `tryAllTransports` defaults falsy, so listing a second transport alone changes nothing. Pinnable now that a runner exists (#62) — it needs the client mocked, which the three current suites do not |
 
-### 9. Onboarding becomes one screen — decided
+### 9. Onboarding becomes one screen — half done
+
+**The eight screens are gone (#63).** What is left of this entry is the *one*
+screen that replaces them, which is PR 12 in the table under `Now`: intent,
+field of work and interests, asked once, with gender and orientation appearing
+only if dating is ticked.
+
+Original reasoning, kept because the decision is still the decision:
+
 
 **Decided: minimal.** Nothing between installing and browsing. Sign in → browse →
 check in.
@@ -193,6 +200,24 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### 2026-08-10 — onboarding retired
+
+- **Eight screens deleted, and the gate that pointed at them, in one commit**
+  (#63). Two of them threw away everything typed into them, one was unfinishable
+  until two days ago, and the whole flow was hard-gated with no skip and no
+  back. Deleting the screens without the gate would have sent every
+  `onboarded: false` account to expo-router's Unmatched Route with no way out,
+  which is why it is one commit and not two.
+
+  The gate also cost a `getProfile` round trip on every cold start with an empty
+  cache — to make a routing decision nothing makes any more.
+
+- **`components/InterestPicker.tsx`** (#63), extracted before the screen was
+  deleted because three places need it, and **`edit-profile` now writes the
+  structured graph** instead of free text into `profiles.interests` — the column
+  `interest-coverage.ts` exists to warn nobody reads. `addProfileInterests` and
+  `removeProfileInterests` had been correct in `apiClient.ts` with zero callers.
 
 ### 2026-08-10 — a test runner
 
