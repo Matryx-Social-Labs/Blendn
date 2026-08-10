@@ -28,8 +28,53 @@ import { useToast } from '../../components/Toast'
  * `GET /categories` is the same taxonomy events are filed under, so an interest
  * and an event category are now the same vocabulary and can actually be
  * compared.
+ *
+ * ## The shape the endpoint actually returns
+ *
+ * A tree, not a flat list: 13 top-level categories, each carrying its leaves in
+ * `children`, because the route selects `where: { parent_id: null }`. This
+ * screen previously read the response flat and kept rows with a non-null
+ * `parent_id` -- which is every row the endpoint does *not* return. It
+ * discarded 100% of the response every time, showed "Couldn't load interests",
+ * and left Continue disabled with nothing selectable. Onboarding could not be
+ * completed at all, which is why `user_interests` was still empty across every
+ * account.
+ *
+ * So: flatten `children`. Leaves are what we want anyway -- "Music" is a
+ * grouping half the room would tick, and an overlap on it says nothing, whereas
+ * "Modular synths" says a great deal.
  */
 type Category = { id: string; name: string; icon?: string | null }
+
+/** One tier of the tree as the endpoint sends it. */
+type CategoryNode = {
+  id: unknown
+  name: unknown
+  icon?: unknown
+  children?: { id: unknown; name: unknown; icon?: unknown }[]
+}
+
+/**
+ * Tree -> selectable leaves.
+ *
+ * A parent with no children contributes itself rather than vanishing: dropping
+ * it would silently remove a whole branch of the taxonomy from onboarding, and
+ * a coarse interest beats a missing one.
+ */
+export function flattenToLeaves(nodes: CategoryNode[]): Category[] {
+  const out: Category[] = []
+  for (const node of nodes) {
+    const children = Array.isArray(node.children) ? node.children : []
+    if (children.length > 0) {
+      for (const child of children) {
+        out.push({ id: String(child.id), name: String(child.name), icon: (child.icon as string | null) ?? null })
+      }
+    } else if (node.id != null) {
+      out.push({ id: String(node.id), name: String(node.name), icon: (node.icon as string | null) ?? null })
+    }
+  }
+  return out
+}
 
 const MAX_INTERESTS = 10
 
@@ -46,17 +91,7 @@ export default function Interests() {
       .then((res) => {
         if (cancelled) return
         if (res.success && Array.isArray(res.data)) {
-          setCategories(
-            (res.data as Array<Record<string, unknown>>)
-              // Leaf categories only: the parents are groupings like "Music",
-              // and matching on a parent everyone holds says nothing.
-              .filter((c) => c.parent_id != null)
-              .map((c) => ({
-                id: String(c.id),
-                name: String(c.name),
-                icon: (c.icon as string | null) ?? null,
-              }))
-          )
+          setCategories(flattenToLeaves(res.data as unknown as CategoryNode[]))
         } else {
           showToast('Could not load interests', 'error')
         }
@@ -166,17 +201,33 @@ export default function Interests() {
           </View>
         </ScrollView>
 
+        {/*
+          * Only gated while there is something to pick.
+          *
+          * `disabled={selected.length === 0}` on its own made an empty list a
+          * dead end: no chips to tap, so the button could never enable, and
+          * onboarding is hard-gated with no skip and no back. Whatever the
+          * cause -- the response shape, a flaky network, a bad deploy -- the
+          * user was stuck in the app forever. That is a far worse outcome than
+          * an account with no interests, and it contradicted the message right
+          * above, which already promises they can add them later.
+          *
+          * `handleContinue` already skips the write when nothing is selected,
+          * so this needs no other change.
+          */}
         <View style={styles.bottomSection}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.continueButton, 
-              selectedInterests.length === 0 ? styles.disabledButton : null
-            ]} 
+              styles.continueButton,
+              categories.length > 0 && selectedInterests.length === 0 ? styles.disabledButton : null
+            ]}
             onPress={handleContinue}
-            disabled={selectedInterests.length === 0}
+            disabled={categories.length > 0 && selectedInterests.length === 0}
             activeOpacity={0.9}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            <Text style={styles.continueButtonText}>
+              {categories.length === 0 ? 'Skip for now' : 'Continue'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
