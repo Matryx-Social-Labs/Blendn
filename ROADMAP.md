@@ -69,33 +69,7 @@ Nothing in flight.
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. The match surface — three endpoints, zero client methods
-
-Shipped 0.49.0–0.50.0. `lib/apiClient.ts` contains **no** `matches`, `likes` or
-`preferences` method.
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /events/:eventId/matches` | The ranked room. `403` unless you checked in |
-| `POST /events/:eventId/matches/likes` | Like someone. Mutual → a conversation opens |
-| `PUT /events/:eventId/matches/preferences` | Your intent and reveal flag, per event |
-
-**And stop calling the wrong endpoint.** `components/screens/MatchScreen.tsx:457`
-and `:535` call `getEventCheckins`. That endpoint stopped returning `image` and
-the real `name` in **v0.46.0** when it stopped handing out attendee identities
-(`app/api/mobile/events/[eventId]/checkins/route.ts:117` — the omission is
-deliberate and commented). The screen renders **blank avatars on production
-today**, and its card links to `/user/[id]`, which still shows the real profile —
-so the anonymity is one tap deep.
-
-`matches` returns `displayName` (pseudonym unless revealed), `photo` (null unless
-revealed) and `sharedInterests` **as names, ready to render**.
-
-There is no match score and there will not be a raw one. A coarse band —
-**Strong / Good / Some** — was agreed instead; the design's `Match Percentage` is
-not being built. See `DESIGN_HANDOFF.md`.
-
-### 2. Settings: twelve keys, four columns, no overlap
+### 1. Settings: twelve keys, four columns, no overlap
 
 The columns landed in **0.55.0**. The toggles still persist nothing, now for a
 different reason: **the two sides agree on no key at all.**
@@ -123,7 +97,7 @@ is worse than no switch.
 `profile.push_enabled` etc. Then delete the shotgun. Confirm against
 `/api-docs` — the spec is generated from the routes and is the honest source.
 
-### 3. The proximity gate compares metres against kilometres
+### 2. The proximity gate compares metres against kilometres
 
 `app/(tabs)/events.tsx:45` — `const R = 6371 // Earth's radius in km`, so
 `distance` is **kilometres**.
@@ -141,7 +115,7 @@ written as metres and read as kilometres.
 The server refuses correctly, so nothing false gets in — but the user is shown
 "Check In", taps it, and is rejected. Pick metres, convert once at the boundary.
 
-### 4. Waitlist — RSVP can return a state the app has never heard of
+### 3. Waitlist — RSVP can return a state the app has never heard of
 
 `POST /events/:eventId/rsvp` on a full event now returns **`waitlisted`** instead
 of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
@@ -152,7 +126,7 @@ of `going`, and promotes whoever waited longest when a seat frees (0.51.0).
 Needs the state, the copy, and the promotion notification. It is not a door
 policy — check-in still refuses nobody.
 
-### 5. Peer rating after the event
+### 4. Peer rating after the event
 
 `GET` / `POST /events/:eventId/peer-ratings` shipped in 0.55.0 and has no client
 method.
@@ -170,7 +144,7 @@ him rated him down, at an event where he knows who she is.
 `blendn-admin/__tests__/trust-not-exposed.test.ts` fails the build if any mobile
 route so much as imports the trust module. Keep that true on this side too.
 
-### 6. Three `Event` interfaces, structurally compared
+### 5. Three `Event` interfaces, structurally compared
 
 Surfaced while adding CI. `Event` is declared three times, independently:
 `app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
@@ -188,7 +162,7 @@ item rather than something to sneak into an unrelated change.
 Worth doing before the group work, because group matching will add more shapes
 that flow through the same components.
 
-### 7. Smaller, confirmed
+### 6. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -280,6 +254,18 @@ two answers to one question, and the client's is the one an attacker controls.
 ## Done
 
 ### 2026-08-10
+
+- **The match screen uses the match endpoint** (#47). It called
+  `getEventCheckins`, which stopped returning `image` and the real `name` in API
+  v0.46.0 when it stopped handing out attendee identities -- so it rendered
+  blank avatars in production and its card linked to `/user/[id]`, which still
+  showed the real profile. Anonymity one tap deep.
+
+  Added `getEventMatches`, `likeAtEvent` and `setMatchPreferences`; the match
+  surface is reachable from the app for the first time since it shipped in
+  0.49-0.50. Dropped the client-side sort by `last_seen`, which would have
+  thrown away the server's IDF-weighted ranking in favour of arrival order --
+  the exact thing the old endpoint did wrong.
 
 - **Presence pings** (#46). The endpoint had been live since API v0.42.0 and
   nothing had ever called it, so nobody was ever checked out: occupancy climbed

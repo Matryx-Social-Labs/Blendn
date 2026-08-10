@@ -99,7 +99,7 @@ const SimilarCard = memo(({
             </View>
           )}
           <View style={styles.timeChip}>
-            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
+            <Text style={styles.timeChipText}>{attendeePresenceLabel(attendee, formatTimeAgo)}</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -181,7 +181,7 @@ const StartupItem = memo(({
             </View>
           )}
           <View style={[styles.timeChip, styles.timeChipCompact]}>
-            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
+            <Text style={styles.timeChipText}>{attendeePresenceLabel(attendee, formatTimeAgo)}</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -212,6 +212,17 @@ const gridContentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
 const GRID_ITEM_WIDTH = Math.floor((gridContentWidth - GRID_GAP) / 2)
 const GRID_ITEM_HEIGHT = 160
 
+/**
+ * A person in the room, as the MATCH endpoint describes them.
+ *
+ * `name` is a pseudonym unless they revealed for this event, and
+ * `profile_photos` is empty unless they did. That rule is enforced server-side
+ * inside `rankMatches`, not here, so no screen can forget it.
+ *
+ * `interests` are shared-interest NAMES, already intersected with yours by the
+ * server -- "you both picked Techno and Board games" is the whole card. It is
+ * not their full interest list.
+ */
 interface AttendeeProfile {
   user_id: string
   name?: string
@@ -220,6 +231,30 @@ interface AttendeeProfile {
   interests?: string[]
   profile_photos?: string[]
   last_seen?: string
+  /** Still physically in the room, per presence. */
+  insideNow?: boolean
+  /** You already liked them. The reverse is never disclosed. */
+  youLiked?: boolean
+}
+
+/**
+ * What the chip on a match card says.
+ *
+ * "Still here" beats "checked in 40 mins ago" on this screen, because the
+ * question the user is actually asking is whether they can walk over now.
+ *
+ * Match cards carry `insideNow` from presence but no check-in time, so the old
+ * time chip rendered empty against the match endpoint. Attendees added live
+ * over the socket still carry a timestamp and nothing else, so both are
+ * handled here rather than at two call sites that could drift.
+ */
+function attendeePresenceLabel(
+  attendee: { insideNow?: boolean; last_seen?: string },
+  formatTimeAgo: (iso?: string) => string
+): string {
+  if (attendee.insideNow === true) return 'Still here'
+  if (attendee.insideNow === false) return ''
+  return formatTimeAgo(attendee.last_seen)
 }
 
 interface RecommendedEntry {
@@ -454,7 +489,20 @@ export default function Match() {
         const candidateEventId = extractEventIdFromCheckin(checkin)
         if (!candidateEventId) continue
 
-        const checkinsResult = await apiClient.getEventCheckins(candidateEventId, { force, page: 1, limit: 20 })
+        /*
+         * `matches`, not `checkins`.
+         *
+         * This called getEventCheckins, which stopped returning `image` and the
+         * real `name` in API v0.46.0 when it stopped handing out attendee
+         * identities. The screen has been rendering blank avatars in production
+         * ever since, and its card linked to /user/[id] which still showed the
+         * real profile -- so the anonymity was one tap deep.
+         *
+         * `matches` is the endpoint built for this screen: ranked by shared
+         * interests with rarity weighting, pseudonymous unless revealed, and it
+         * returns 403 rather than data if you were not in the room.
+         */
+        const checkinsResult = await apiClient.getEventMatches(candidateEventId, { force, limit: 20 })
         if (!checkinsResult.success || !checkinsResult.data) {
           const err = String(checkinsResult.error || '').toLowerCase()
           if (err.includes('event not found')) {
@@ -466,37 +514,41 @@ export default function Match() {
           return
         }
 
-        const payload = checkinsResult.data
-        const rawAttendees = Array.isArray(payload)
-          ? payload
-          : ((payload as any).attendees || (payload as any).checkIns || (payload as any).checkins || (payload as any).data || [])
-        const pagination = (payload as any).pagination
-
-        const attendeeProfiles: AttendeeProfile[] = rawAttendees
-          .filter((c: any) => {
-            const uid = c.userId || c.user_id || c.user?.id
-            return uid && uid !== userId && !blockedIds.has(uid)
-          })
-          .map((c: any) => ({
-            user_id: c.userId || c.user_id || c.user?.id,
-            name: c.name || c.user?.name || c.user?.profile?.name,
-            age: c.age || c.user?.profile?.age,
-            bio: c.user?.profile?.bio,
-            interests: c.user?.profile?.interests,
-            profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
-            last_seen: c.checkInTime || c.check_in_time,
+        /*
+         * Typed, not `as any`. The previous shape-sniffing here
+         * (payload.attendees || payload.checkIns || payload.data) silently
+         * produced an empty list the moment the endpoint changed, because none
+         * of those keys exist on the match response -- and the casts hid that
+         * from the type checker.
+         */
+        const attendeeProfiles: AttendeeProfile[] = (checkinsResult.data.matches ?? [])
+          .filter((m) => m.userId !== userId && !blockedIds.has(m.userId))
+          .map((m) => ({
+            user_id: m.userId,
+            name: m.displayName,
+            profile_photos: m.photo ? [m.photo] : undefined,
+            interests: m.sharedInterests,
+            insideNow: m.insideNow,
+            youLiked: m.youLiked,
           }))
 
-        attendeeProfiles.sort((a, b) => {
-          const ta = a.last_seen ? new Date(a.last_seen).getTime() : 0
-          const tb = b.last_seen ? new Date(b.last_seen).getTime() : 0
-          return tb - ta
-        })
-
+        /*
+         * No client-side sort. `matches` arrives ranked -- IDF-weighted shared
+         * interests, intent, presence, then arrival recency as a tiebreak -- and
+         * re-sorting by `last_seen` here would throw that away for a field the
+         * match card does not even carry. Arrival order is what the OLD
+         * endpoint returned; ranking is the reason to have moved off it.
+         */
         selectedEventId = candidateEventId
         selectedEventTitle = checkin?.event?.title
         selectedAttendees = attendeeProfiles
-        selectedPagination = pagination
+        // Ranked, not paged: "load more" raises the limit. See loadMoreAttendees.
+        selectedPagination = {
+          page: 1,
+          limit: 20,
+          totalCount: attendeeProfiles.length,
+          hasMore: attendeeProfiles.length >= 20,
+        }
         break
       }
 
@@ -526,37 +578,48 @@ export default function Match() {
     }
   }, [])
 
+  /**
+   * Fetch a bigger slice rather than a next page.
+   *
+   * `matches` is ranked, not paginated: page 2 of a ranking is not a stable
+   * concept, because the order changes as people arrive, leave and like each
+   * other. The endpoint takes a limit (capped server-side at 100) and returns
+   * the top N, so "load more" raises N and replaces the list rather than
+   * appending a page that might repeat or drop people.
+   *
+   * This previously called getEventCheckins with page+1, which returned
+   * pseudonyms with no photos and in arrival order, not match order.
+   */
   const loadMoreAttendees = useCallback(async () => {
     const eventId = currentEventIdRef.current
     if (!eventId || loadingMoreAttendees || !attendeesHasMore) return
     setLoadingMoreAttendees(true)
     try {
-      const nextPage = attendeesPage + 1
-      const result = await apiClient.getEventCheckins(eventId, { force: true, page: nextPage, limit: 20 })
+      const nextLimit = (attendeesPage + 1) * 20
+      const result = await apiClient.getEventMatches(eventId, { force: true, limit: nextLimit })
       if (!result.success || !result.data) return
-      const payload = result.data
-      const rawAttendees = Array.isArray(payload)
-        ? payload
-        : ((payload as any).attendees || (payload as any).checkIns || [])
-      const pagination = (payload as any).pagination
-      const newProfiles: AttendeeProfile[] = rawAttendees.map((c: any) => ({
-        user_id: c.userId || c.user_id || c.user?.id,
-        name: c.name || c.user?.name,
-        age: c.age || c.user?.profile?.age,
-        bio: c.user?.profile?.bio,
-        interests: c.user?.profile?.interests,
-        profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
-        last_seen: c.checkInTime || c.check_in_time,
-      }))
-      setAttendees(prev => [...prev, ...newProfiles])
-      setAttendeesHasMore(pagination?.hasMore ?? false)
-      setAttendeesPage(nextPage)
+
+      const profiles: AttendeeProfile[] = (result.data.matches ?? [])
+        .filter((m) => m.userId !== authUser?.id)
+        .map((m) => ({
+          user_id: m.userId,
+          name: m.displayName,
+          profile_photos: m.photo ? [m.photo] : undefined,
+          interests: m.sharedInterests,
+          insideNow: m.insideNow,
+          youLiked: m.youLiked,
+        }))
+
+      setAttendees(profiles)
+      // Fewer back than we asked for means we have reached the end of the room.
+      setAttendeesHasMore(profiles.length >= nextLimit)
+      setAttendeesPage(attendeesPage + 1)
     } catch (e) {
-      Logger.error('match', 'Failed to load more attendees', { error: e })
+      Logger.error('match', 'Failed to load more matches', { error: e })
     } finally {
       setLoadingMoreAttendees(false)
     }
-  }, [attendeesHasMore, attendeesPage, loadingMoreAttendees])
+  }, [attendeesHasMore, attendeesPage, loadingMoreAttendees, authUser?.id])
 
   const loadInitialData = useCallback(async () => {
     try {
