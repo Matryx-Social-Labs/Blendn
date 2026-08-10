@@ -14,24 +14,44 @@ import { APP_COLORS } from '../lib/theme'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
-const lockup = require('../assets/logo/lockup-white.png')
+/*
+ * The frame the intro animation lands on — gradient mark, white wordmark.
+ *
+ * Not `monogram-gradient` above `lockup-white`, which is what this was: the
+ * lockup *contains* the mark, so that stacked it twice, once alone and once
+ * inside the lockup. And not `lockup-white` on its own, which loses the brand
+ * gradient entirely. This is generated from the animation's last frame, so the
+ * still and the animation agree exactly and the overlay fade is invisible.
+ */
+const lockup = require('../assets/logo/lockup-hero.png')
 
 /*
- * Read the real dimensions rather than hardcoding them.
+ * Fixed heights, and width derived from the asset's own aspect ratio.
  *
- * Both assets are cropped to their artwork, so their file aspect ratio *is* the
- * logo's aspect ratio — and asking the bundler for it means a re-export can
- * change the art without silently distorting the layout. A hardcoded ratio is a
- * number that is correct exactly once.
+ * This started as `width: '<pct>%'` plus `aspectRatio`, which reads correctly
+ * and rendered the lockup several times too large, overflowing the screen on
+ * both sides. Percentage widths resolve against a parent whose own width is a
+ * percentage inside a flex column, and the result did not match the arithmetic.
+ * Driving from a fixed height instead removes the ambiguity entirely: the
+ * height is a number, the width follows from the file, and `maxWidth` means
+ * even a wrong ratio can only letterbox rather than overflow.
+ *
+ * The ratio still comes from the bundler rather than a literal, so re-exporting
+ * the art cannot silently distort the layout — a hardcoded ratio is a number
+ * that is correct exactly once.
  */
-const MONOGRAM_ASPECT = (() => {
-  const s = Image.resolveAssetSource(monogram)
-  return s?.width && s?.height ? s.width / s.height : 1
-})()
-const LOCKUP_ASPECT = (() => {
-  const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 3.37
-})()
+function assetAspect(mod: number, fallback: number): number {
+  const s = Image.resolveAssetSource(mod)
+  return s?.width && s?.height ? s.width / s.height : fallback
+}
+
+const MONOGRAM_ASPECT = assetAspect(monogram, 453 / 534)
+const LOCKUP_ASPECT = assetAspect(lockup, 683 / 204)
+
+/** The mark alone, used only on the two brief holding states. */
+const MONOGRAM_HEIGHT = 96
+/** ~200pt wide at this ratio — the hero of the signed-out screen. */
+const LOCKUP_HEIGHT = 60
 
 export default function Index() {
   const { user, loading } = useAuth()
@@ -198,7 +218,6 @@ export default function Index() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.brandBlock}>
-          <Image source={monogram} style={styles.monogram} resizeMode="contain" />
           <Image source={lockup} style={styles.lockup} resizeMode="contain" />
           <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
         </View>
@@ -309,8 +328,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   splashLogo: {
-    height: 120,
-    aspectRatio: MONOGRAM_ASPECT,
+    height: MONOGRAM_HEIGHT,
+    width: MONOGRAM_HEIGHT * MONOGRAM_ASPECT,
+    maxWidth: '60%',
   },
 
   brandBlock: {
@@ -320,15 +340,12 @@ const styles = StyleSheet.create({
     gap: 24,
     width: '100%',
   },
-  monogram: {
-    height: 104,
-    aspectRatio: MONOGRAM_ASPECT,
-  },
-  // Percentage width plus aspectRatio, so it scales with the screen instead of
-  // being pinned to numbers measured on one device.
   lockup: {
-    width: '62%',
-    aspectRatio: LOCKUP_ASPECT,
+    height: LOCKUP_HEIGHT,
+    width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
+    // Belt and braces: with `resizeMode="contain"` a capped width can only
+    // letterbox, never crop or overflow.
+    maxWidth: '86%',
   },
   tagline: {
     color: APP_COLORS.textSecondary,

@@ -21,10 +21,18 @@ import { APP_COLORS } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 
 const lockup = require('../assets/logo/lockup-white.png')
+/*
+ * Fixed height, width derived from the file. Not `width: '<pct>%'` plus
+ * `aspectRatio` — that combination rendered the lockup several times too large
+ * on device, overflowing the screen, because a percentage width resolving
+ * against a percentage-width parent inside a flex column did not match the
+ * arithmetic. A number for the height removes the ambiguity.
+ */
 const LOCKUP_ASPECT = (() => {
   const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 3.37
+  return s?.width && s?.height ? s.width / s.height : 816 / 242
 })()
+const LOCKUP_HEIGHT = 40
 
 /**
  * Email sign-in and account creation.
@@ -301,8 +309,9 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 28, paddingBottom: 40, gap: 16 },
   back: { alignSelf: 'flex-start', paddingVertical: 8, marginLeft: -6 },
   lockup: {
-    width: '55%',
-    aspectRatio: LOCKUP_ASPECT,
+    height: LOCKUP_HEIGHT,
+    width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
+    maxWidth: '80%',
     alignSelf: 'center',
     marginTop: 8,
     marginBottom: 12,

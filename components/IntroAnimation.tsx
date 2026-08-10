@@ -98,7 +98,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  // Width-driven so the wide lockup scales with the screen; the asset is
-  // cropped to its artwork, so its own aspect ratio is the right one.
-  image: { width: '68%', aspectRatio: 720 / 346 },
+  /*
+   * Height-driven, not `width: '<pct>%'` plus `aspectRatio`. That combination
+   * rendered the sign-in lockup several times too large on device, overflowing
+   * the screen — a percentage resolving against a percentage-width parent
+   * inside a flex column did not match the arithmetic. With `contentFit`
+   * contain and a capped width, a wrong number can only letterbox.
+   */
+  image: { height: 132, width: 132 * (720 / 346), maxWidth: '88%' },
 })

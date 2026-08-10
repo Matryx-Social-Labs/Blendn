@@ -87,6 +87,35 @@ for path in sorted(glob.glob(f"{work}/*.png")):
     Image.fromarray(np.dstack([rgb, alpha]).astype(np.uint8)).save(path)
 PY
 
-echo "3/3 encoding animated WebP"
+echo "3/4 encoding animated WebP"
 img2webp -loop 1 -d 42 -lossy -q 82 -m 6 "$WORK"/*.png -o "$OUT" >/dev/null
 printf "    %s  %.0f KB\n" "$OUT" "$(( $(stat -f%z "$OUT") / 1024 ))"
+
+# The animation's final frame, as a still.
+#
+# The sign-in screen needs the same composition the animation lands on —
+# gradient monogram beside a white wordmark — and no such asset exists in the
+# supplied artwork: `lockup-white.png` is white throughout, and
+# `monogram-gradient.png` is the mark alone. Showing both of those stacked
+# renders the monogram twice, once on its own and once inside the lockup.
+#
+# Taking the last frame guarantees the still and the animation agree exactly,
+# because it *is* the animation, so the handoff when the overlay fades is
+# invisible rather than a jump between two near-identical images.
+echo "4/4 extracting the final frame as the static hero"
+HERO="$ROOT/assets/logo/lockup-hero.png"
+LAST="$(ls "$WORK"/*.png | tail -1)"
+python3 - "$LAST" "$HERO" <<'PY'
+import sys
+import numpy as np
+from PIL import Image
+
+a = np.asarray(Image.open(sys.argv[1]).convert("RGBA"))
+ys, xs = np.where(a[..., 3] > 8)          # crop to the artwork, as the logos are
+pad = 6
+y0, y1 = max(0, ys.min() - pad), min(a.shape[0], ys.max() + 1 + pad)
+x0, x1 = max(0, xs.min() - pad), min(a.shape[1], xs.max() + 1 + pad)
+out = Image.fromarray(a[y0:y1, x0:x1])
+out.save(sys.argv[2], optimize=True)
+print(f"    {sys.argv[2]}  {out.width}x{out.height}  aspect {out.width / out.height:.3f}")
+PY
