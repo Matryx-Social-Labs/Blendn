@@ -1,4 +1,4 @@
-import { matchBand, matchBandLabel, sharedInterestSentence } from '../lib/matchBand'
+import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../lib/matchBand'
 
 /**
  * The card's band and its sentence — both written, neither called.
@@ -88,5 +88,40 @@ describe('sharedInterestSentence', () => {
   it('never invents an overlap', () => {
     const sentence = sharedInterestSentence(card(['Techno']))
     expect(sentence).not.toMatch(/Board games/)
+  })
+})
+
+describe('intentSentence', () => {
+  it('names the shared intent', () => {
+    // `sharedIntents` is the overlap only — the server intersects the viewer's
+    // social intents with theirs — so "Both here to network" is literally true.
+    expect(intentSentence(['networking'])).toBe('Both here to network')
+    expect(intentSentence(['friendship'])).toBe('Both here to make friends')
+  })
+
+  it('says dating only when the server put it there', () => {
+    /*
+     * And by then compatibility has already been checked — which is exactly
+     * what lets the card claim it without ever stating anyone's gender.
+     */
+    expect(intentSentence(['dating'])).toBe('Both open to dating')
+  })
+
+  it('never claims a shared "just here"', () => {
+    // The server excludes it from the shared set, and "we are both merely
+    // present" is not a thing to say to anybody. No phrase is invented for it.
+    expect(intentSentence(['just_here'])).toBeNull()
+  })
+
+  it('returns null for nothing shared, so the caller falls through', () => {
+    expect(intentSentence([])).toBeNull()
+    expect(intentSentence(undefined)).toBeNull()
+  })
+
+  it('ignores an intent it does not recognise rather than rendering it raw', () => {
+    // A value added server-side before the app knows about it must not appear
+    // on a card as a bare slug.
+    expect(intentSentence(['speed_dating'])).toBeNull()
+    expect(intentSentence(['speed_dating', 'networking'])).toBe('Both here to network')
   })
 })

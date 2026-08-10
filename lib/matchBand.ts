@@ -75,3 +75,27 @@ export function sharedInterestSentence(card: Pick<MatchCard, 'sharedInterests'>)
   if (items.length === 2) return `You both picked ${items[0]} and ${items[1]}`
   return `You both picked ${items.slice(0, 2).join(', ')} and ${items.length - 2} more`
 }
+
+/**
+ * The shared intent, said out loud.
+ *
+ * `sharedIntents` is the **overlap only** — the server intersects the viewer's
+ * social intents with theirs, so "Both here to network" is literally true and
+ * never states what either person wants on their own. It also never contains
+ * `dating` unless compatibility has already been checked, which is what lets
+ * the card say it without ever mentioning anyone's gender.
+ *
+ * `just_here` is deliberately absent from the map. The server excludes it from
+ * the shared set — "we are both merely present" is not a thing to say to
+ * anybody — and this returns null rather than inventing a phrase for it.
+ */
+const INTENT_PHRASES: Record<string, string> = {
+  dating: 'Both open to dating',
+  networking: 'Both here to network',
+  friendship: 'Both here to make friends',
+}
+
+export function intentSentence(sharedIntents: readonly string[] | undefined): string | null {
+  const phrase = (sharedIntents ?? []).map((i) => INTENT_PHRASES[i]).find(Boolean)
+  return phrase ?? null
+}

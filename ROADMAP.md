@@ -71,7 +71,7 @@ half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
 | 10 | A test runner, and the pure logic the rest depends on | **Done** (#62) |
 | 11 | Delete `app/onboarding/` — atomic with the routing gate | **Done** (#63) |
 | 12 | Signup takes an age; one `about-you` screen replaces eight | **Done** (#64) |
-| 13 | The card renders what it already knows | After 12 |
+| 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | After 13 |
 
 **PR 11 must be atomic.** `_layout.tsx` still targets `/onboarding/welcome` for
@@ -177,6 +177,26 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### 2026-08-10 — the card says what it knows
+
+- **The overlap is named, not counted** (#66). `sharedInterestSentence()` had
+  zero callers since it was written; the card rendered "3 shared interests"
+  where the server had already sent "Techno, Board games, Hiking". Shared intent
+  and field of work now render too.
+
+- **The client-side re-sort is gone** (#66), and one of its terms was actively
+  harmful: `+8 for having a photo` is `+8 for not being anonymous`, because a
+  photo only reaches the client when `revealed` is true. It promoted people who
+  had revealed themselves, on the one screen whose premise is that staying
+  anonymous costs nothing.
+
+  The other terms were dead or wrong: `last_seen` scored zero for everyone
+  because the card has never carried it, and the shared count recomputed an
+  overlap the server had already computed.
+
+- **`'Popular nearby'` deleted** (#66) — a fabricated label that fired on every
+  card with no overlap, claiming a popularity the app does not measure.
 
 ### 2026-08-10 — one screen instead of eight
 
