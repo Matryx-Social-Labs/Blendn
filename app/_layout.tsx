@@ -216,8 +216,23 @@ function RootLayout() {
         return;
       }
 
-      // Onboarded users should not stay on onboarding or index
-      if (isOnboarding || isIndex) {
+      /*
+       * Onboarded users should not stay on any signed-out screen.
+       *
+       * This read `isOnboarding || isIndex`, which is the mirror image of the
+       * allow-list above and was half a fix. Adding `/sign-in` to the
+       * signed-out branch stopped it being bounced away — but nothing here
+       * moved a user *off* it once they signed in, so `/sign-in` fell into the
+       * `else` and was treated as an ordinary app screen. Signing in with email
+       * therefore succeeded completely, stored its tokens, logged "sign in
+       * successful", and left the user looking at the form. Relaunching picked
+       * up the stored session and landed on the events tab, which made it look
+       * like the sign-in had failed and the reload had fixed it.
+       *
+       * `isAuthRoute` is a superset of `isIndex`, so this covers what it did
+       * plus the two screens that were missing.
+       */
+      if (isOnboarding || isAuthRoute) {
         const target = '/(tabs)/events';
         replaceIfNeeded(target);
       } else {
@@ -370,7 +385,10 @@ function RootLayout() {
         * See docs/PLACEHOLDER_SCREENS.md before restyling either.
         */}
       <Stack.Screen
-        name="rate"
+        // The route is `rate/[eventId]`, not `rate` — there is no bare
+        // `rate.tsx`. The mismatch warned on every render and the options were
+        // silently applied to nothing.
+        name="rate/[eventId]"
         options={{
           headerShown: false,
           presentation: 'card',
@@ -378,7 +396,7 @@ function RootLayout() {
         }}
       />
       <Stack.Screen
-        name="event-preferences"
+        name="event-preferences/[eventId]"
         options={{
           headerShown: false,
           presentation: 'card',
