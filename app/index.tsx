@@ -112,21 +112,8 @@ export default function Index() {
 
         Logger.info('auth', 'Google Sign In successful', { isNewUser: result.isNewUser })
 
-        /*
-         * A brand-new OAuth account goes to `about-you`.
-         *
-         * `isNewUser` has been returned by these routes all along and only ever
-         * logged. It matters more here than on the email path: Google and Apple
-         * create a profile with **no age**, so without this an OAuth user could
-         * never satisfy the 18+ rule and the dating chip would silently do
-         * nothing for them forever.
-         *
-         * A returning user falls through to the root layout's routing effect.
-         */
-        if (result.isNewUser) {
-          router.replace('/about-you')
-          return
-        }
+        // Where a new account goes is decided in `app/_layout.tsx`, which
+        // owns routing. Pushing from here raced that effect and lost.
       } else {
         throw new Error('No ID token received from Google')
       }
@@ -189,12 +176,7 @@ export default function Index() {
 
       Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
 
-      // Same as Google above: Apple creates a profile with no age either, and
-      // Apple's private relay means the name is often absent too.
-      if (result.isNewUser) {
-        router.replace('/about-you')
-        return
-      }
+      // Same as Google above: the layout effect routes new accounts.
       // Navigation will happen automatically via useAuth hook
     } catch (err: any) {
       if (err.code === 'ERR_REQUEST_CANCELED') {

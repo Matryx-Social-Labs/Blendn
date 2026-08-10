@@ -27,7 +27,7 @@ import {
   type Orientation,
 } from '../lib/dating'
 import { Logger } from '../lib/logger'
-import { useAuth } from '../lib/useAuth'
+import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
 
 /**
  * The one screen that replaced eight.
@@ -100,6 +100,18 @@ export default function AboutYou() {
   const [orientation, setOrientation] = useState<Orientation | null>(null)
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
 
+  /*
+   * Prefilled from the account, and editable.
+   *
+   * Google and Apple hand back a name and it is usually right — but "usually"
+   * is doing work there. Apple's private relay often gives nothing at all, and
+   * a Google display name can be a nickname, an initial, or a full legal name
+   * somebody would not choose to show a room. This is the **only** name anyone
+   * ever sees, and only if they reveal, so the moment to check it is before the
+   * first room rather than after.
+   */
+  const [name, setName] = useState('')
+
   /** Only asked when the account has none — Google and Apple create profiles without one. */
   const [needsAge, setNeedsAge] = useState(false)
   const [age, setAge] = useState('')
@@ -122,6 +134,10 @@ export default function AboutYou() {
       if (cancelled) return
 
       if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
+
+      if (profile?.success && profile.data) {
+        setName(((profile.data.profile?.name || profile.data.name) as string | undefined) ?? '')
+      }
 
       const existingAge = profile?.success ? (profile.data?.profile?.age as number | undefined) : undefined
       if (typeof existingAge === 'number') {
@@ -211,6 +227,7 @@ export default function AboutYou() {
 
       const years = effectiveAge()
       const result = await apiClient.updateProfile(user.id, {
+        ...(name.trim() ? { name: name.trim() } : {}),
         ...(years !== null && needsAge ? { age: years } : {}),
         ...(intents.length > 0 ? { intent_default: intents } : {}),
         ...(workField ? { work_field: workField } : {}),
@@ -225,6 +242,7 @@ export default function AboutYou() {
 
       if (!result.success) throw new Error(result.error || 'Could not save')
 
+      clearNewAccountFlag()
       router.replace('/(tabs)/events')
     } catch (e) {
       Logger.error('profile', 'about-you: save failed', { error: e })
@@ -235,7 +253,10 @@ export default function AboutYou() {
   }
 
   /** Writes nothing at all. See the header. */
-  const skip = () => router.replace('/(tabs)/events')
+  const skip = () => {
+    clearNewAccountFlag()
+    router.replace('/(tabs)/events')
+  }
 
   if (loading) {
     return (
@@ -257,6 +278,21 @@ export default function AboutYou() {
           <Text style={styles.title}>A bit about you</Text>
           <Text style={styles.subtitle}>
             This is what matching uses. You can change any of it later.
+          </Text>
+
+          <Text style={styles.section}>What should we call you?</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Your name"
+            placeholderTextColor="rgba(255,255,255,0.4)"
+            style={styles.input}
+            maxLength={100}
+            autoCapitalize="words"
+          />
+          <Text style={styles.hint}>
+            Only shown in a room if you choose to reveal yourself. Rooms are anonymous by
+            default.
           </Text>
 
           <Text style={styles.section}>What are you open to?</Text>
@@ -438,6 +474,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  hint: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 },
   error: { color: '#FF6B6B', fontSize: 14, marginTop: 20 },
   primary: {
     alignItems: 'center',

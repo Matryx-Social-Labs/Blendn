@@ -166,6 +166,13 @@ rating widget at all.
 
 ## 2. `app/event-preferences/[eventId].tsx` — intent and reveal
 
+**Reveal comes first on this screen, and that is a decision, not a layout
+accident.** It is reached from the anonymity chip, and landing on "Why are you
+here tonight?" answers a question nobody asked. Intent is also the *less*
+per-event of the two now: it has a person-level default set once on
+`about-you`, so what this screen offers is an override for tonight. Reveal has
+no equivalent — it is decided per room, every room, on purpose.
+
 **Since #67 this screen has three things it did not have**, and the design
 should keep all three:
 
