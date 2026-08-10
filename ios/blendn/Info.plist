@@ -38,7 +38,7 @@
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>35</string>
+    <string>1</string>
     <key>GIDClientID</key>
     <string>$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
@@ -56,6 +56,8 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Blend'n uses your camera to let you take photos for your profile.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Blend'n uses your location to show nearby events and validate on-site check-ins.</string>
     <key>NSPhotoLibraryUsageDescription</key>

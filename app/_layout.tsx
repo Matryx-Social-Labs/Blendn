@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
-import { useEffect, useRef } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import '../lib/globalText';
@@ -23,8 +24,22 @@ import { initSentry, Sentry } from '../lib/sentry';
 
 initSentry();
 
+/*
+ * Hold the native splash until the first screen has something to show.
+ *
+ * `expo-splash-screen` was installed and never called, so the native splash
+ * auto-hid on first render and the user saw the app's own stand-in splash
+ * behind it — a white system splash, then a maroon gradient, then a pastel
+ * sign-in, then a black app. Four backgrounds before the first tap.
+ *
+ * Called at module scope because auto-hide races the first render; by the time
+ * a component effect runs it has already happened.
+ */
+SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ fade: true, duration: 200 });
+
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
-const LOGO_ASSET = require('../assets/logo/logo2.webp');
+const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 
 function BackgroundGradient() {
@@ -49,10 +64,32 @@ function RootLayout() {
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
   const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
+  const [assetsReady, setAssetsReady] = useState(false);
 
+  /*
+   * This used to fire and gate nothing — `Asset.loadAsync(...).catch(() => {})`,
+   * result discarded. It is now the readiness signal the splash waits on, so
+   * the handoff happens when the logo is actually decoded rather than one frame
+   * before it.
+   */
   useEffect(() => {
-    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET]).catch(() => {});
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET])
+      .catch(() => {})
+      .finally(() => setAssetsReady(true));
   }, []);
+
+  /*
+   * Hide on assets, deliberately NOT on `loading`.
+   *
+   * Auth resolution is a network round trip. Gating the splash on it means a
+   * user on bad wifi stares at a frozen splash for as long as the request
+   * takes, and a user with no connection stares at it until the timeout. The
+   * sign-in screen renders its own state while auth settles, which is the
+   * honest place for that wait to live.
+   */
+  useEffect(() => {
+    if (assetsReady) SplashScreen.hideAsync().catch(() => {});
+  }, [assetsReady]);
 
   const replaceIfNeeded = (target: string) => {
     if (isNavigatingRef.current) return;
