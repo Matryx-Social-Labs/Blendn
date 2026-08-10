@@ -46,7 +46,9 @@ function assetAspect(mod: number, fallback: number): number {
 }
 
 const MONOGRAM_ASPECT = assetAspect(monogram, 453 / 534)
-const LOCKUP_ASPECT = assetAspect(lockup, 683 / 204)
+// Fallback only — the real ratio comes from the bundler. Kept close to the
+// generated asset so a failed lookup still lays out sensibly rather than square.
+const LOCKUP_ASPECT = assetAspect(lockup, 675 / 202)
 
 /** The mark alone, used only on the two brief holding states. */
 const MONOGRAM_HEIGHT = 96

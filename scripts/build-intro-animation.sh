@@ -12,10 +12,15 @@
 #
 # ## What this does, and why each step
 #
-# 1. **Trim to 1.55-4.65s.** Two separate cuts, for two reasons.
+# 1. **Trim to 1.55-5.50s.** Two separate cuts, for two reasons.
 #
-#    The tail first: the visual animation is over by ~4.6s and everything after
-#    is a static hold carrying the end of the audio.
+#    The tail first. The animation is *not* over at 4.6s, which a coarse contact
+#    sheet suggested and which was wrong. A coloured wipe trails the letters as
+#    they draw, and it is still sitting on the final "n" well past that point —
+#    cutting at 4.65s left the last letter visibly unfinished. Counting
+#    saturated pixels in the wordmark region frame by frame puts the last of it
+#    leaving at **5.43s**, so the cut is 5.50s. Everything after that is a
+#    static hold carrying the end of the audio.
 #
 #    The head matters more. The master opens by drawing the monogram from
 #    nothing over ~1.6s — but the *native splash already shows the completed
@@ -25,7 +30,7 @@
 #    splash was already displaying, and the handoff is invisible. What plays is
 #    the part that adds something: the mark sliding left and the wordmark
 #    writing on.
-# 2. **Speed up 2.9x** to ~1.1s. A launch animation people see every single time
+# 2. **Speed up 3x** to ~1.3s. A launch animation people see every single time
 #    has to be brief; several seconds of logo is a toll booth.
 # 3. **Crop to the artwork.** The logo occupies 916x440 of the 1920x1080 frame.
 #    Shipping the empty margin spends the pixel budget on nothing.
@@ -61,7 +66,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # 720px wide is ~3x the on-screen width, right for the densest phones.
-FILTER="trim=1.55:4.65,setpts=0.345*(PTS-STARTPTS),crop=916:440:503:319,fps=24,scale=720:-2:flags=lanczos"
+FILTER="trim=1.55:5.50,setpts=0.33*(PTS-STARTPTS),crop=916:440:503:319,fps=24,scale=720:-2:flags=lanczos"
 
 echo "1/3 extracting frames (-an strips the audio track)"
 ffmpeg -v error -y -i "$SRC" -vf "$FILTER" -an "$WORK/f%03d.png"
