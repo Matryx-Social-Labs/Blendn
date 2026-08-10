@@ -23,6 +23,81 @@ and the notes under each screen say how.
 
 ---
 
+## 0. The auth entry point — `app/index.tsx`, `app/sign-in.tsx`, `app/forgot-password.tsx`
+
+**The first thing anyone sees, and the only screen every user meets.** Three
+files, one flow.
+
+`app/index.tsx` is **not** a placeholder — it was rebuilt to fix real defects
+(an invisible Apple button, a Google button labelled "Get Started" with no
+Google branding, and errors that were logged and never shown). It is plain
+rather than designed, and is yours to restyle, but the *behaviour* in it is
+load-bearing. The two email screens are placeholders in the usual sense.
+
+### The flow
+
+```
+index.tsx                     sign-in.tsx                    forgot-password.tsx
+┌────────────────────┐        ┌──────────────────────┐       ┌───────────────────┐
+│ monogram + lockup  │        │ [Sign in|Create acct]│       │ email             │
+│ tagline            │        │ name (signup only)   │       │ [Send reset link] │
+│ ── error region ── │        │ email                │       │        ↓          │
+│ Continue w/ Google │───┐    │ password  👁          │       │ "Check your email"│
+│ Sign in with Apple │   │    │ ── error region ──   │       └───────────────────┘
+│ ──── or ────       │   │    │ [Sign in]            │                 ▲
+│ Continue with email│───┼───▶│ Forgot your password?│─────────────────┘
+│ Terms & Privacy    │   │    └──────────────────────┘
+└────────────────────┘   │
+                         └──▶ root layout routes to onboarding or events
+```
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Errors are visible and persistent** | Every failure used to be `Logger.error` only — the spinner stopped and nothing changed. This is why a broken Google client id sat unnoticed in production. Use an inline region, not a toast: toasts auto-dismiss and are missed by anyone mid-gesture |
+| **Cancelling is not an error** | Backing out of the Google or Apple sheet shows nothing at all. "Something went wrong" for a deliberate choice is both wrong and irritating |
+| **The Apple button is Apple's** | Their component, their styling. It must be the `WHITE` variant — `BLACK` is invisible on our background, which is a bug that already shipped once |
+| **The Google button is Google's** | Their mark, their approved wording, on approved chrome. "Get Started" wired to Google is a branding violation *and* deceptive |
+| **Email is the third option, visually** | Outlined, not filled. Three equally-weighted buttons make the screen three shouts |
+| **Never say whether an address has an account** | `forgot-password` answers identically either way, deliberately. A "no account with that email" message would hand back the exact answer the server refused to give |
+| **Never render the wordmark as text** | `lockup-white.png` *contains* it. The old screen drew "Blend'n" twice, the second time in a font that is not the brand's |
+
+### Data each screen needs
+
+| Screen | Reads | Writes |
+|---|---|---|
+| `index.tsx` | `useAuth().user`, `.loading` | `signInWithGoogle`, `signInWithApple` |
+| `sign-in.tsx` | nothing | `signUp` / `signInWithEmail` → `/auth/signup`, `/auth/signin` |
+| `forgot-password.tsx` | nothing | `apiClient.forgotPassword` → `/api/auth/forgot-password` |
+
+**No screen navigates on success.** The root layout's routing effect watches
+auth state and moves the user. Navigating from a screen as well races it — this
+is why the Google and Apple handlers have no `router` call either.
+
+### Still missing — decisions and work, not styling
+
+| | |
+|---|---|
+| **Terms and Privacy are not links** | The text is there; there are no URLs behind it. App Review will check this |
+| **Email verification** | Cut from this scope by decision. Nothing sends a verification mail, and `signin` does not gate on `emailVerified` |
+| **Reset happens in a browser** | The emailed link opens the web page. Deep-linking it into the app needs associated domains, DNS and a native rebuild |
+| **The Google mark is a monochrome glyph** | `AntDesign`, chosen to avoid a new dependency. Google's guidelines ask for their supplied multicolour asset — swap before store submission |
+| **No social proof, no illustration, no motion** | The old screen had six emoji bubbles at hardcoded pixel offsets. They are gone because they broke on every screen size. If the Figma wants imagery here, it needs to be responsive |
+
+### Design notes
+
+The segmented Sign in / Create account control is the cheapest thing that works,
+not a decision — one screen was chosen over two because the flows differ by a
+single field. If the Figma separates them, the logic splits cleanly.
+
+The password field already sets `textContentType` and `autoComplete` correctly
+per mode (`newPassword` on signup, `password` on sign-in). Keep that on any
+rewrite; getting it wrong is why password managers so often fail to fill on
+React Native.
+
+---
+
 ## 1. `app/rate/[eventId].tsx` — peer rating
 
 **Route:** `/rate/{eventId}` · **Reached from:** nothing yet. Needs an entry

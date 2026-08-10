@@ -139,10 +139,22 @@ function RootLayout() {
     const run = async () => {
       const isOnboarding = !!pathname && pathname.startsWith('/onboarding');
       const isIndex = pathname === '/' || pathname === '/index';
+      /*
+       * Routes a signed-out user is allowed to be on.
+       *
+       * This was `isIndex` alone, which quietly made any other signed-out screen
+       * impossible: mount `/sign-in`, and this effect replaces it with `/` on
+       * the very next tick. The screen would appear to flash and vanish, with
+       * nothing in the logs to explain it. An allow-list is the smallest change
+       * that lets a second signed-out screen exist at all.
+       */
+      const isAuthRoute =
+        isIndex || pathname === '/sign-in' || pathname === '/forgot-password';
 
       if (!user) {
-        // Not authenticated → send to login index, unless already there
-        if (!isIndex) {
+        // Not authenticated → send to login index, unless already somewhere
+        // a signed-out user is meant to be
+        if (!isAuthRoute) {
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort
@@ -272,8 +284,26 @@ function RootLayout() {
           animation: 'none',
         }}
       />
-      <Stack.Screen 
-        name="(tabs)" 
+      {/*
+        * The two signed-out screens. Both are also listed in `isAuthRoute`
+        * above — without that they mount and are replaced on the next tick.
+        */}
+      <Stack.Screen
+        name="sign-in"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="forgot-password"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="(tabs)"
         options={{ 
           headerShown: false,
           animation: 'none',
