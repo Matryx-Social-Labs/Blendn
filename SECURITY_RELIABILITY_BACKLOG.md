@@ -54,3 +54,127 @@ Scope: `blendn/` findings from an end-to-end flow audit (auth guard, onboarding 
 - No hardcoded secrets in the app bundle — anything sensitive here would be fully extractable by anyone who downloads the app, and none was found.
 - Sentry configured with `sendDefaultPii: false`.
 - Mutations (check-in, RSVP, interest toggle) correctly never auto-retry; have proper in-flight guards and optimistic-rollback on failure. Chat send has proper optimistic UI with failure rollback.
+
+---
+
+## Dependency audit — 2026-08-11
+
+`npm audit` reported 42 advisories. It now reports 25, and the number matters
+much less than the classification.
+
+**Every remaining advisory is build or CLI tooling. None reaches the app
+bundle.** Traced by walking each advisory's effect chain to a top-level package:
+
+| Reached via | What it is |
+|---|---|
+| `metro`, `metro-config`, `metro-transform-worker`, `image-size` | the bundler |
+| `@expo/cli`, `@expo/config`, `@expo/prebuild-config`, `xcode` | build and prebuild tooling |
+| `@react-native/community-cli-plugin` | the RN CLI, not the runtime |
+| `postcss`, `ajv`, `uuid` | transitive deps of the above |
+| `jest-expo` | the test runner |
+
+`expo-notifications`, `expo-linking` and `react-native` appear in the list only
+because they depend on those — `expo-constants` → `@expo/config`, which reads
+`app.json` at build time. Nothing flagged is imported by anything in `app/`,
+`lib/` or `components/`.
+
+So the threat model is **a compromised build**, not a compromised phone. That is
+still worth fixing; it is not worth breaking the SDK for.
+
+### Why `npm audit fix --force` is not the answer
+
+Its dry run proposes:
+
+- Expo **53 → 57** (four SDK majors)
+- React Native **0.79.6 → 0.72.17** — a *downgrade*, incoherent with Expo 57
+- a React peer conflict (`react@19.0.0` against a required `^19.2.3`)
+
+That does not fix 25 advisories, it replaces a working app with a broken one.
+`npx expo install --check` reports dependencies correctly aligned to SDK 53, and
+that alignment is the constraint the audit tool does not model.
+
+### The SDK upgrade was tried, measured, and rolled back
+
+Not deferred on a hunch — actually performed, on 2026-08-11, and reverted
+because the data said to.
+
+SDK 53 → 54 (`expo@^54`, `expo install --fix`, `@types/react` bumped to satisfy
+a peer) completed and left the tree correctly aligned. The result:
+
+| | SDK 53 | SDK 54 |
+|---|---|---|
+| advisories | 25 | **29** |
+| of which high | 7 | **14** |
+
+**The upgrade made the audit worse.** Newer SDKs pull newer tooling, and that
+tooling has its own fresh advisories — `@expo/metro`, `@react-native/metro-config`,
+`react-native-worklets` and `react-native-reanimated` all appear at 54 and do
+not exist in the 53 tree. Every one of them is still build tooling, which is the
+point: the number moves around, the actual exposure does not.
+
+It also breaks code. Reanimated 4 (which SDK 54 ships) **removed
+`sharedTransitionTag`** — six usages across `EventCard.tsx` and
+`EventDetailScreen.tsx` stop typechecking, and the shared-element transitions
+they implement would need rewriting against a different API.
+
+So the trade on offer was: a native rebuild, an animation migration, and a
+fresh regression surface, in exchange for **four more advisories**. Declined.
+
+This is worth revisiting when there is a reason other than the audit number —
+a platform requirement, an SDK 53 deprecation deadline, or a feature only newer
+Expo has. Doing it *for* the audit is the wrong reason, and now there is a
+measurement saying so rather than an opinion.
+
+### Deprecation warnings
+
+Three (`abab`, `domexception`, `whatwg-encoding`) came from `jest-environment-jsdom`,
+pulled in by the `jest-expo` preset and shimming browser APIs that exist
+natively now. The suites here are pure functions over data and never touch a
+DOM, so `testEnvironment: "node"` removes the whole chain. Component tests will
+need jsdom back — add it per-file with a docblock rather than globally.
+
+The rest (`glob@7`, `inflight`, `rimraf@3`, `uuid@7`) are pinned inside Expo and
+React Native tooling and cannot be moved without the SDK upgrade above.
+
+---
+
+## Client security sweep — 2026-08-11
+
+Run after both repositories were made public. Findings are recorded whether or
+not they turned up anything, because "we looked and it was clean" is only worth
+something if it says what was looked at.
+
+| Checked | Result |
+|---|---|
+| **Token storage** | `expo-secure-store` with `WHEN_UNLOCKED_THIS_DEVICE_ONLY` — Keychain/Keystore, not readable while locked, not synced to iCloud. Web falls back to AsyncStorage with an explicit `Logger.warn`; web is not a shipping target |
+| **Sensitive data in logs** | Clean. The only token logged is the **push** token, truncated to 20 chars — an address for delivering notifications, not a credential for the account. No access or refresh token, no password, ever reaches `Logger` |
+| **Hardcoded secrets** | None. `EXPO_PUBLIC_API_BASE_URL` comes from the environment and the client **throws** if it is unset rather than defaulting to something |
+| **TLS** | Enforced. `NSAllowsArbitraryLoads` is **false**; `NSAllowsLocalNetworking` is true, which is for a dev machine on the LAN. Android `usesCleartextTraffic` exists only in the **debug** manifest and never ships |
+| **WebView** | None in the app. No `postMessage` bridge, no remote JS execution surface |
+| **Sentry** | `sendDefaultPii: false`, and the user context is `{ id }` — no email, no IP |
+| **Undeclared imports** | One found and fixed: `expo-asset`, imported by `app/_layout.tsx` and never declared. It resolved by hoisting accident and broke on a clean install |
+
+### Verified against the live API, not just read
+
+`gender`, `orientation`, `interested_in`, `intent_default` and
+`reveal_by_default` were added to `profiles` this week, and all five are
+supposed to be owner-only. Signed in as one seeded account and fetched another
+account's profile through `staging-api.blendn.app`:
+
+    LEAKED to another user: none
+    work_field present (intended, public): True
+
+Which is the allow-list in `app/api/mobile/profiles/[userId]/route.ts` doing its
+job — it is an allow-list precisely because a deny-list once leaked
+`gender` and `interested_in` to any authenticated caller.
+
+### Not checked, and worth knowing
+
+- **No certificate pinning.** A user who installs a custom CA and proxies their
+  own traffic can read their own API calls. That is their data, and pinning
+  mainly buys protection against a compromised device, at the cost of breaking
+  the app whenever a certificate rotates. Deliberate, not an oversight.
+- **No jailbreak/root detection.** Same reasoning: it is defeatable, and it
+  punishes legitimate users on modified devices.
+- **Screenshot and clipboard** of a revealed name are not restricted. A room is
+  a social space; somebody who has seen your name can already write it down.
