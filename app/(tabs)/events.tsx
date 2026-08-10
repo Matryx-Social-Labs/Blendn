@@ -27,6 +27,7 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
+import { getDistanceMetres } from '../../lib/geo'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
@@ -53,17 +54,6 @@ import { APP_COLORS } from '../../lib/theme'
  * bug existed because two call sites disagreed about the unit, and the fix
  * should remove the opportunity rather than patch both.
  */
-const getDistanceMetres = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6_371_000 // Earth's radius in METRES
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-  return R * c
-}
-
 interface Event {
   id: string
   title: string

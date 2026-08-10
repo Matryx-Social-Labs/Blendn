@@ -30,6 +30,7 @@ import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import PhotoLightbox from '../PhotoLightbox';
 import ScalePress from '../motion/ScalePress';
 import { SkeletonBlock, SkeletonLine } from '../Skeleton';
+import { getDistanceMetres } from '../../lib/geo'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
@@ -515,7 +516,7 @@ export default function EventDetail() {
 
       // Calculate distance client-side for now
       // TODO: Add proximity check API endpoint if needed
-      const distance = calculateDistance(
+      const distance = getDistanceMetres(
         userLocation.latitude,
         userLocation.longitude,
         event.latitude,
@@ -532,20 +533,6 @@ export default function EventDetail() {
     } catch (error) {
       Logger.error('events', 'detail:check:exception', { error: error as any })
     }
-  }
-
-  // Helper function to calculate distance between two coordinates (Haversine formula)
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371e3 // Earth's radius in meters
-    const φ1 = lat1 * Math.PI / 180
-    const φ2 = lat2 * Math.PI / 180
-    const Δφ = (lat2 - lat1) * Math.PI / 180
-    const Δλ = (lon2 - lon1) * Math.PI / 180
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
   }
 
   const fetchEventDetails = async () => {
