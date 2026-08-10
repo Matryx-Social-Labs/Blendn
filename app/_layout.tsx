@@ -61,7 +61,7 @@ function BackgroundGradient() {
 }
 
 function RootLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, isNewAccount } = useAuth();
   const pathname = usePathname();
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
@@ -214,7 +214,20 @@ function RootLayout() {
        * plus the two screens that were missing.
        */
       if (isAuthRoute) {
-        const target = '/(tabs)/events';
+        /*
+         * A brand-new account is asked about itself once, here.
+         *
+         * This used to be a `router.replace('/about-you')` inside the sign-in
+         * screens, and it never fired: this effect runs on the auth-state
+         * change with `pathname` still `/` or `/sign-in` — both signed-out
+         * routes — so it replaced with the events tab and clobbered the push.
+         * about-you was unreachable from either entry point, which is why a
+         * fresh Google signup landed on events with an empty profile.
+         *
+         * Routing has one owner. The screens now record *what happened*
+         * (`isNewAccount`) and this decides where that leads.
+         */
+        const target = isNewAccount ? '/about-you' : '/(tabs)/events';
         replaceIfNeeded(target);
       } else {
         // Clear last target if user navigated to a normal screen

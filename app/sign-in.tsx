@@ -151,21 +151,8 @@ export default function SignIn() {
         setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
         return
       }
-      /*
-       * A new account goes to `about-you`; a returning one falls through to the
-       * root layout's routing effect, which lands it on the events tab.
-       *
-       * An explicit push rather than a flag on the profile. The old gate read
-       * `onboarded` on every cold start and sent anyone false round the flow
-       * again, which is a persistent trap; this is a one-time nudge that a
-       * "Skip" or a killed app simply ends. The Match tab's interest gate is
-       * the backstop, and it asks at the moment the feature is reached for.
-       */
-      if (isSignup) {
-        router.replace('/about-you')
-        return
-      }
-      // Returning user: the root layout's routing effect takes it from here.
+      // Both cases: the root layout's routing effect takes it from here. A
+      // new account lands on about-you, a returning one on the events tab.
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')

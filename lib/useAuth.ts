@@ -10,12 +10,30 @@ export interface AuthState {
   user: AuthUser | null
   loading: boolean
   initialized: boolean
+  /**
+   * This account was created moments ago and has not seen `about-you`.
+   *
+   * Lives here rather than in a `router.replace` at each call site because
+   * routing has exactly one owner — the effect in `app/_layout.tsx`. Pushing
+   * from the sign-in screens *raced* that effect and lost: the effect fires on
+   * the auth-state change with `pathname` still `/` or `/sign-in`, both of
+   * which it treats as signed-out routes, so it replaced with the events tab
+   * before or after the push and about-you never appeared. Two things deciding
+   * where to navigate is the bug; a flag the one decider reads is the fix.
+   *
+   * Transient by design. It is not persisted, so a killed app lands on events —
+   * the Match tab's interest gate is the backstop, and being asked once at the
+   * moment matching is reached for beats a prompt that resurrects on every
+   * launch.
+   */
+  isNewAccount: boolean
 }
 
 // Global auth state to prevent duplicate checks
 let globalAuthState: AuthState = {
   session: null,
   user: null,
+  isNewAccount: false,
   loading: true,
   initialized: false,
 }
@@ -288,6 +306,9 @@ export const signInWithGoogle = async (
         user,
         loading: false,
         initialized: true,
+        // The server tells us whether it created the row; only then is
+        // there anything to ask about.
+        isNewAccount: isNewUser === true,
       })
 
       startSessionRefresh()
@@ -326,6 +347,9 @@ export const signInWithApple = async (
         user,
         loading: false,
         initialized: true,
+        // The server tells us whether it created the row; only then is
+        // there anything to ask about.
+        isNewAccount: isNewUser === true,
       })
 
       startSessionRefresh()
@@ -404,6 +428,8 @@ export const signUp = async (
         user,
         loading: false,
         initialized: true,
+        // Always true here: this endpoint only ever creates.
+        isNewAccount: true,
       })
 
       startSessionRefresh()
@@ -459,6 +485,18 @@ export const deleteAccount = async (): Promise<{ success: boolean; error?: strin
   }
 }
 
+/**
+ * The about-you screen has been dealt with — by saving or by skipping.
+ *
+ * Called by that screen either way, so the routing effect stops treating this
+ * session as brand new. Skipping is a complete answer: somebody who skipped is
+ * in the same state as somebody who never saw it, and the Match tab's interest
+ * gate is what asks again, at the moment matching is actually reached for.
+ */
+export const clearNewAccountFlag = () => {
+  if (globalAuthState.isNewAccount) updateAuthState({ isNewAccount: false })
+}
+
 // Cleanup function for app shutdown
 export const cleanupAuth = () => {
   stopSessionRefresh()
@@ -468,6 +506,9 @@ export const cleanupAuth = () => {
     user: null,
     loading: true,
     initialized: false,
+    // Cleared with everything else: a resumed or restarted app is not a
+    // freshly created account, and re-prompting on resume would be a trap.
+    isNewAccount: false,
   }
 }
 
@@ -478,6 +519,9 @@ export const reinitializeAuth = async (): Promise<AuthState> => {
     user: null,
     loading: true,
     initialized: false,
+    // Cleared with everything else: a resumed or restarted app is not a
+    // freshly created account, and re-prompting on resume would be a trap.
+    isNewAccount: false,
   }
   return initializeAuth()
 }

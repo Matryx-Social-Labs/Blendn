@@ -167,27 +167,20 @@ export default function EventPreferences() {
           PLACEHOLDER DESIGN — logic is final, layout is not
         </Text>
 
-        <Text style={styles.h1}>Why are you here tonight?</Text>
-        <Text style={styles.body}>
-          Pick any that fit. This helps us suggest people, and you can change it at any
-          point during the event.
-        </Text>
-
-        {INTENTS.map((opt) => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.option, intent.includes(opt.value) && styles.optionSelected]}
-            onPress={() => toggleIntent(opt.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: intent.includes(opt.value) }}
-          >
-            <Text style={styles.optionText}>{opt.label}</Text>
-            <Text style={styles.optionHint}>{opt.hint}</Text>
-          </TouchableOpacity>
-        ))}
-
-        <View style={styles.divider} />
-
+        {/*
+          * Reveal leads, intent follows — and that ordering is a decision.
+          *
+          * This screen is reached from the anonymity chip ("You're anonymous
+          * here"), and landing on "Why are you here tonight?" answers a
+          * question nobody asked. Tapping a control about being named should
+          * put the control about being named first.
+          *
+          * It is also the more per-event of the two now. Intent has a
+          * person-level default set once on `about-you`, so what appears below
+          * is an *override* for tonight. Reveal has no equivalent — it is
+          * deliberately decided per room, every room, because being visible at
+          * a work meetup is not being visible at a club.
+          */}
         <Text style={styles.h1}>Can people see who you are?</Text>
         <Text style={styles.body}>
           By default you appear as a made-up name, and people see what you have in common
@@ -228,6 +221,27 @@ export default function EventPreferences() {
             <Switch value={rememberReveal} onValueChange={setRememberReveal} />
           </View>
         )}
+
+        <View style={styles.divider} />
+
+        <Text style={styles.h1}>Why are you here tonight?</Text>
+        <Text style={styles.body}>
+          Just for this event. You set a general answer when you signed up, and this
+          overrides it for tonight without changing it.
+        </Text>
+
+        {INTENTS.map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.option, intent.includes(opt.value) && styles.optionSelected]}
+            onPress={() => toggleIntent(opt.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: intent.includes(opt.value) }}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+            <Text style={styles.optionHint}>{opt.hint}</Text>
+          </TouchableOpacity>
+        ))}
 
         <TouchableOpacity
           style={[styles.primaryButton, saving && styles.buttonDisabled]}
