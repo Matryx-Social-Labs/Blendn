@@ -21,6 +21,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../OptimizedImage'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
+import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../../lib/matchBand'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -228,7 +229,12 @@ interface AttendeeProfile {
   name?: string
   age?: number
   bio?: string
+  /** The *shared* interests, named, as the server computed them. Not their whole list. */
   interests?: string[]
+  /** The shared subset only — "Both here to network". Never their full intent. */
+  sharedIntents?: string[]
+  /** A label like "Design". Null in rooms under 8, where it would identify. */
+  workField?: string | null
   profile_photos?: string[]
   last_seen?: string
   /** Still physically in the room, per presence. */
@@ -307,7 +313,6 @@ export default function Match() {
   const [refreshing, setRefreshing] = useState(false)
   const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
   const [eventRoomId, setEventRoomId] = useState<string | null>(null)
-  const [currentUserInterests, setCurrentUserInterests] = useState<string[]>([])
   const getSimilarItemLayout = useCallback(
     (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
       length: SIMILAR_CARD_WIDTH + 16,
@@ -528,6 +533,8 @@ export default function Match() {
             name: m.displayName,
             profile_photos: m.photo ? [m.photo] : undefined,
             interests: m.sharedInterests,
+            sharedIntents: m.sharedIntents,
+            workField: m.workField,
             insideNow: m.insideNow,
             youLiked: m.youLiked,
           }))
@@ -627,16 +634,19 @@ export default function Match() {
         return
       }
 
-      const profileResult = await apiClient.getProfile(authUser.id)
-      if (profileResult.success && profileResult.data?.profile) {
-        const interests = Array.isArray(profileResult.data.profile.interests)
-          ? profileResult.data.profile.interests
-          : []
-        setCurrentUserInterests(interests.map((i: string) => String(i).toLowerCase()))
-      } else {
-        setCurrentUserInterests([])
-      }
-
+      /*
+       * The viewer's own interests are no longer fetched here.
+       *
+       * They existed only to feed the client-side re-sort deleted below, and
+       * they were read from `profile.interests` — the **free-text** column that
+       * `interest-coverage.ts` exists to warn nobody reads, not the structured
+       * graph the ranking actually uses. So this screen was intersecting the
+       * server's computed overlap with a legacy list that was usually empty, on
+       * every load, to produce a number it then sorted by.
+       *
+       * One fewer round trip before the room can render, and one fewer reader
+       * of a column that is on its way out.
+       */
       // Load active event and attendees
       await loadActiveEventAndAttendees(authUser.id, true)
     } catch (e) {
@@ -779,36 +789,69 @@ export default function Match() {
   }, [authUser, loadActiveEventAndAttendees])
 
   const recommendedEntries = useMemo(() => {
-    const sharedCount = (attendee: AttendeeProfile): number => {
-      const attendeeInterests = Array.isArray(attendee.interests)
-        ? attendee.interests.map((i) => String(i).toLowerCase())
-        : []
-      return attendeeInterests.filter((i) => currentUserInterests.includes(i)).length
-    }
+    /*
+     * The server's order, kept.
+     *
+     * This used to re-sort with a local score, and every term in it was wrong:
+     *
+     *   points += shared * 12
+     *   if (attendee.bio) points += 6
+     *   if (attendee.profile_photos?.length) points += 8      // <- the bad one
+     *   points += max(0, 30 - minutesSince(last_seen) / 30)
+     *
+     * **The photo term promoted people who had revealed themselves.** A photo
+     * only reaches the client when `revealed` is true — the ranking nulls it
+     * otherwise — so `+8 for having a photo` is `+8 for not being anonymous`,
+     * in the one screen whose entire premise is that staying anonymous costs
+     * you nothing. It quietly inverted rule 2.
+     *
+     * The `last_seen` term scored zero for everyone, because the match card has
+     * never carried that field. And `shared * 12` recomputed an overlap the
+     * server had already computed, by lowercasing names and intersecting them —
+     * so it double-counted, and produced a different answer whenever a category
+     * name did not survive the round trip identically.
+     *
+     * Meanwhile the real ranking — IDF-weighted rarity, so two people who both
+     * picked "Modular synths" outrank two who both picked "Music", plus intent,
+     * presence and arrival recency — was being thrown away four lines after it
+     * arrived. The comment at the fetch site already said "no client-side
+     * sort"; this is the place that was doing it anyway.
+     *
+     * `slice(0, 5)` stays: the top of the list is a shelf, not the whole room.
+     */
+    return attendees.slice(0, 5).map((attendee): RecommendedEntry => {
+      /*
+       * `interests` is the *shared* set, already computed by the server, so its
+       * length is the count — no intersection needed, and no chance of
+       * disagreeing with what the sentence below says.
+       */
+      const shared = attendee.interests ?? []
+      const band = matchBand({ sharedInterests: shared, sharedIntents: attendee.sharedIntents ?? [] })
 
-    const score = (attendee: AttendeeProfile): number => {
-      let points = 0
-      const shared = sharedCount(attendee)
-      points += shared * 12
-      if (attendee.bio && attendee.bio.trim().length > 0) points += 6
-      if (attendee.profile_photos && attendee.profile_photos.length > 0) points += 8
-      points += Math.max(0, 30 - Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60 * 30)))
-      return points
-    }
+      /*
+       * What the card actually says, in order of how much it tells you:
+       *
+       *  1. the overlap, named        — "You both picked Techno and Board games"
+       *  2. the shared intent         — "Both here to network"
+       *  3. their field of work       — "Works in design"
+       *  4. the band                  — "Worth saying hello"
+       *
+       * The old fallback was `'Popular nearby'`, which was a fabrication: it
+       * fired whenever there was no overlap *and* `last_seen` was stale, and
+       * `last_seen` is never populated — so it fired on every card with nothing
+       * in common, claiming a popularity the app does not measure. The band is
+       * the honest version, and `matchBandLabel('some')` is deliberately
+       * "Worth saying hello" rather than anything that reads as a failure.
+       */
+      const reasonLabel =
+        sharedInterestSentence({ sharedInterests: shared }) ??
+        intentSentence(attendee.sharedIntents) ??
+        (attendee.workField ? `Works in ${attendee.workField}` : null) ??
+        matchBandLabel(band)
 
-    return attendees
-      .slice()
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, 5)
-      .map((attendee): RecommendedEntry => {
-        const shared = sharedCount(attendee)
-        const recentMinutes = Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60))
-        const reasonLabel = shared > 0
-          ? `${shared} shared interest${shared > 1 ? 's' : ''}`
-          : (recentMinutes <= 30 ? 'Active now' : 'Popular nearby')
-        return { attendee, reasonLabel }
-      })
-  }, [attendees, currentUserInterests])
+      return { attendee, reasonLabel }
+    })
+  }, [attendees])
 
   const recommendedIds = useMemo(
     () => new Set(recommendedEntries.map((entry) => entry.attendee.user_id)),

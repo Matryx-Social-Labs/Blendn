@@ -350,7 +350,23 @@ export interface MatchCard {
   photo: string | null
   /** Category NAMES, ready to render: "you both picked Techno and Board games". */
   sharedInterests: string[]
+  /**
+   * The shared subset only, so "Both here to network" is literally true.
+   *
+   * `dating` appears here only when the server has already checked mutual
+   * compatibility, which is what lets the card say it without ever stating
+   * anyone's gender. `just_here` never appears — "we are both merely present"
+   * is not something to say to anybody.
+   */
   sharedIntents: string[]
+  /**
+   * A label like "Design" — never a slug, never an employer.
+   *
+   * Null when they have not said, and null in rooms under eight people, where
+   * an age, a city and a field of work together name one person. The server
+   * applies that floor; the client only renders what arrives.
+   */
+  workField: string | null
   insideNow: boolean
   youLiked: boolean
 }
