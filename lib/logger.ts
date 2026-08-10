@@ -6,7 +6,7 @@ import Constants from 'expo-constants'
 import { Sentry } from './sentry'
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-type LogContext = 'auth' | 'events' | 'chat' | 'match' | 'profile' | 'navigation' | 'network' | 'database' | 'realtime' | 'general' | 'api' | 'interested' | 'private-chat' | 'socket' | 'notifications'
+type LogContext = 'auth' | 'events' | 'chat' | 'match' | 'profile' | 'navigation' | 'network' | 'database' | 'realtime' | 'general' | 'api' | 'interested' | 'private-chat' | 'socket' | 'notifications' | 'presence'
 
 // Development mode detection
 const isDevelopment = __DEV__ || Constants.expoConfig?.extra?.isDevelopment || process.env.NODE_ENV === 'development'
@@ -90,7 +90,8 @@ function getContextEmoji(context: LogContext): string {
     interested: '❤️',
     'private-chat': '🔒',
     socket: '🔗',
-    notifications: '🔔'
+    notifications: '🔔',
+    presence: '📍'
   }
   return emojis[context] || '📱'
 }
