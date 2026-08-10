@@ -386,13 +386,14 @@ export const signUp = async (
   email: string,
   password: string,
   name?: string,
-  deviceInfo?: { platform?: string; device?: string; appVersion?: string }
+  deviceInfo?: { platform?: string; device?: string; appVersion?: string },
+  age?: number
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     Logger.info('auth', 'Signing up...')
     updateAuthState({ loading: true })
 
-    const result = await apiClient.signUp(email, password, name, deviceInfo)
+    const result = await apiClient.signUp(email, password, name, deviceInfo, age)
 
     if (result.success && result.data) {
       const { user } = result.data

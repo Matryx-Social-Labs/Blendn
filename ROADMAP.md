@@ -70,7 +70,7 @@ half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
 |---|---|---|
 | 10 | A test runner, and the pure logic the rest depends on | **Done** (#62) |
 | 11 | Delete `app/onboarding/` — atomic with the routing gate | **Done** (#63) |
-| 12 | Signup takes an age; one `about-you` screen replaces eight | After 11 |
+| 12 | Signup takes an age; one `about-you` screen replaces eight | **Done** (#64) |
 | 13 | The card renders what it already knows | After 12 |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | After 13 |
 
@@ -111,32 +111,9 @@ that flow through the same components.
 | **`/events/search` is never called** | — | The endpoint exists. Search may be entirely app-side work |
 | **Socket transport config is untested** | `lib/socketClient.ts` | `engine.io-client`'s `tryAllTransports` defaults falsy, so listing a second transport alone changes nothing. Pinnable now that a runner exists (#62) — it needs the client mocked, which the three current suites do not |
 
-### 9. Onboarding becomes one screen — half done
-
-**The eight screens are gone (#63).** What is left of this entry is the *one*
-screen that replaces them, which is PR 12 in the table under `Now`: intent,
-field of work and interests, asked once, with gender and orientation appearing
-only if dating is ticked.
-
-Original reasoning, kept because the decision is still the decision:
 
 
-**Decided: minimal.** Nothing between installing and browsing. Sign in → browse →
-check in.
-
-At **first check-in**, one screen with two chip-pickers: *why are you here
-tonight* (intent, multi-select, "just the event" a first-class answer) and *what
-are you into* (interests, from `GET /categories`). Both are things matching needs
-anyway. Photo and bio are prompted only when someone chooses to reveal — the
-first moment a photo means anything.
-
-Today onboarding is eight screens, hard-gated (`gestureEnabled: false`, Android
-back swallowed, no skip), and two of them produce nothing. So the real comparison
-is **six working screens against one**.
-
-Intent goes to `PUT /events/:eventId/matches/preferences`.
-
-### 10. Designed, built nowhere, now in scope
+### 9. Designed, built nowhere, now in scope
 
 Map · Notifications centre · Search and filters · Profile strength.
 
@@ -200,6 +177,29 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### 2026-08-10 — one screen instead of eight
+
+- **`app/about-you.tsx`** (#64) — intent, age when missing, field of work and
+  interests, asked once after signup. Gender and orientation appear **only** if
+  dating is ticked, and unticking it clears them rather than hiding them.
+
+  Reached by an explicit push from the signup success path and from both OAuth
+  paths using `isNewUser`, which those routes have returned all along and the
+  app only ever logged. That matters most for OAuth: Google and Apple create a
+  profile with **no age**, so without this the 18+ rule could never be satisfied
+  and the dating chip would silently do nothing for them forever.
+
+  Interests save before the profile fields on purpose — that call is idempotent
+  and re-runnable from edit-profile, while the profile fields cannot be
+  re-asked, so if one of the two has to fail it must be the recoverable one.
+
+  Skip writes nothing at all. Someone who skips is in exactly the state of
+  someone who never saw the screen, and the Match tab's interest gate asks at
+  the moment the feature is reached for.
+
+- **Signup takes an optional age** (#64), optional because the server accepts a
+  signup without one — which is what let the API ship first.
 
 ### 2026-08-10 — onboarding retired
 

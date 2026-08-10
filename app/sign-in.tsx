@@ -82,6 +82,7 @@ export default function SignIn() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [age, setAge] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +101,10 @@ export default function SignIn() {
   const validate = (): string | null => {
     if (!trimmedEmail.includes('@')) return 'Enter a valid email address.'
     if (isSignup && !name.trim()) return 'Enter your name.'
+    if (isSignup && age.trim()) {
+      const years = Number.parseInt(age, 10)
+      if (!Number.isFinite(years) || years < 13 || years > 120) return 'Enter a valid age.'
+    }
     if (!password) return 'Enter your password.'
     if (isSignup && password.length < MIN_PASSWORD_LENGTH) {
       return `Use at least ${MIN_PASSWORD_LENGTH} characters. Length beats symbols.`
@@ -123,8 +128,17 @@ export default function SignIn() {
         appVersion: Constants.expoConfig?.version || undefined,
       }
 
+      /*
+       * Age is optional on the form because it is optional on the server, and
+       * both are the same decision: a build that does not send it must never be
+       * refused by a newer API. `about-you` asks for it when it is missing,
+       * which is also the path every Google and Apple account takes — those
+       * routes create a profile with no age at all.
+       */
+      const years = age.trim() ? Number.parseInt(age, 10) : undefined
+
       const result = isSignup
-        ? await signUp(trimmedEmail, password, name.trim(), deviceInfo)
+        ? await signUp(trimmedEmail, password, name.trim(), deviceInfo, years)
         : await signInWithEmail(trimmedEmail, password, deviceInfo)
 
       if (!result.success) {
@@ -137,7 +151,21 @@ export default function SignIn() {
         setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
         return
       }
-      // Success: the root layout's routing effect takes it from here.
+      /*
+       * A new account goes to `about-you`; a returning one falls through to the
+       * root layout's routing effect, which lands it on the events tab.
+       *
+       * An explicit push rather than a flag on the profile. The old gate read
+       * `onboarded` on every cold start and sent anyone false round the flow
+       * again, which is a persistent trap; this is a one-time nudge that a
+       * "Skip" or a killed app simply ends. The Match tab's interest gate is
+       * the backstop, and it asks at the moment the feature is reached for.
+       */
+      if (isSignup) {
+        router.replace('/about-you')
+        return
+      }
+      // Returning user: the root layout's routing effect takes it from here.
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')
@@ -203,6 +231,28 @@ export default function SignIn() {
                 textContentType="name"
                 returnKeyType="next"
                 maxLength={100}
+              />
+            </View>
+          )}
+
+          {isSignup && (
+            <View style={styles.field}>
+              {/*
+                Optional, and labelled as such, because the server accepts a
+                signup without one — that is what lets this build ship before
+                the field is required. `about-you` asks again when it is
+                missing, which is the path every OAuth account takes anyway.
+              */}
+              <Text style={styles.label}>Age (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={age}
+                onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
+                placeholder="Used for age-restricted events"
+                placeholderTextColor={APP_COLORS.textTertiary}
+                keyboardType="number-pad"
+                returnKeyType="next"
+                maxLength={3}
               />
             </View>
           )}

@@ -212,6 +212,81 @@ Techno and Board games"*. That sentence is the product; the band is decoration
 around it. It returns null when there is nothing to claim, so nothing is ever
 invented.
 
+
+---
+
+## 4. `app/about-you.tsx` — the one screen that replaced eight
+
+Reached once, immediately after signup, and never again on its own. Skipping it
+writes nothing.
+
+### What it collects, and why each field is there
+
+| Field | Stored as | Who ever sees it |
+|---|---|---|
+| Intent (multi-select) | `profiles.intent_default` | the **shared subset only**, as "Both here to network" on a card |
+| Age | `profiles.age` | on the roster, as a number |
+| Field of work | `profiles.work_field` | on a match card as a label, **and only in rooms of 8+** |
+| Interests | `user_interests` | as the named overlap — the card's real content |
+| Gender | `profiles.gender` | **nobody but them** |
+| Orientation | `profiles.orientation` | **nobody but them** |
+| Interested in | `profiles.interested_in` | **nobody but them** |
+
+### Rules the design must not break
+
+1. **Gender and orientation appear only when "Dating" is ticked.** A networking
+   user is never asked their gender. Unticking dating *clears* both rather than
+   hiding them — nothing should be stored that the person can no longer see they
+   gave.
+
+2. **"Just here for the event" is a first-class answer**, not a way of declining
+   to answer. The ranking damps it exactly as hard as silence, so it must not
+   look like the option for people who could not be bothered.
+
+3. **Nothing here may be presented as a completeness meter.** No progress bar,
+   no "your profile is 60% complete", no percentage anywhere. The Match tab asks
+   for interests at the moment somebody reaches for matching; that is the whole
+   prompting strategy.
+
+4. **The age field is optional and labelled optional.** It is asked again here
+   only when the account has none, which is every Google and Apple account —
+   those routes create a profile without one.
+
+5. **Dating requires 18+**, refused client-side *and* server-side. The copy is
+   `"Dating is for 18+ only. Your other choices are fine."` — the second
+   sentence matters: it is a refusal of one chip, not of the screen.
+
+6. **"Interested in" appears only sometimes**, and the designer needs to know
+   why so the layout does not assume a fixed height. "Straight" plus
+   "non-binary" has no defined target set, and "queer" and "pansexual" are
+   identities rather than tables — in those cases the server derives nothing and
+   the app must ask directly, or the person ends up with no dating tag anywhere
+   and no explanation. See `lib/dating.ts`.
+
+7. **Skip writes nothing.** Not "skip and mark them done". Someone who skips is
+   in exactly the state of someone who never saw the screen.
+
+### What it looks like now
+
+Chips on black, a number input, one primary button and a text "Skip for now".
+Every list is a wrapping row of pill chips, including the eighteen work fields,
+which is the part most obviously wanting a designer: eighteen pills is a wall.
+
+### Data it needs
+
+- `GET /api/mobile/work-fields` → `{ slug, label }[]` — served, never hardcoded
+- `GET /api/mobile/categories` → the category **tree**, flattened to leaves
+- `GET /api/mobile/profiles/:id` → to know whether an age is already on file
+
+### The save, which the design should not restructure
+
+Interests go first through their own endpoint, then everything else in one
+`PUT /profiles/:userId`. That order is deliberate: the interests call is
+idempotent and re-runnable from edit-profile, while the profile fields cannot be
+re-asked — so if one of the two must fail, it has to be the recoverable one. A
+design that splits this into two steps with separate buttons would reintroduce
+exactly the loss this ordering avoids.
+
 ---
 
 ## Screens that do not exist at all
@@ -221,7 +296,7 @@ Named so the gap is visible, not to imply they are next.
 | | Status |
 |---|---|
 | **Presence prompt** — "are you still here?" | Logic exists in `lib/usePresence.ts`, which knows when the server says you are outside the geofence. Nothing renders it |
-| **First-check-in screen** — the two chip-pickers replacing onboarding | Decided in `DESIGN_HANDOFF.md`, unbuilt. Interests are collected in onboarding today |
+| ~~**First-check-in screen**~~ | **Built as `app/about-you.tsx`, and moved.** It is asked once at signup rather than at every check-in — see section 4 below |
 | **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. See `ROADMAP.md` |
 | **Map, notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like |
 | **`/join` attendee landing page** | Deferred by decision. Spec in `BlendnLanding/docs/JOIN_PAGE_BRIEF.md` |
