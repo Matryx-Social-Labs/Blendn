@@ -472,6 +472,11 @@ export default function Events() {
       // Get event chat and offer navigation
       const chatResult = await apiClient.getEventChat(event.id)
       if (chatResult.success && chatResult.data?.id) {
+        // Captured before the closure: the guard above narrows `data` here, but
+        // TypeScript drops that narrowing inside `onPress`, which runs later and
+        // could in principle see a reassigned value.
+        const chatId = chatResult.data.id
+        const chatName = chatResult.data.name || 'Event Chat'
         showTray({
           title: 'Checked in',
           message: 'You have been checked in and added to the event chat.',
@@ -484,8 +489,8 @@ export default function Events() {
                 router.push({
                   pathname: '/chat/[id]',
                   params: {
-                    id: chatResult.data.id,
-                    roomName: chatResult.data.name || 'Event Chat',
+                    id: chatId,
+                    roomName: chatName,
                     eventTitle: event.title,
                   } as any,
                 })
