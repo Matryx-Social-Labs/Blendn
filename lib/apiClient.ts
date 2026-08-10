@@ -326,6 +326,30 @@ export const ProfileCache = {
 
 // API Response Types
 /** What the presence endpoint answers. Mirrors the route's successResponse. */
+/**
+ * A match card. The server decides what is on it -- notably the identity rules,
+ * which `rankMatches` enforces internally so no route and no client can forget
+ * them.
+ */
+export interface MatchCard {
+  userId: string
+  /** Pseudonym unless they revealed for this event. Never the real name otherwise. */
+  displayName: string
+  /** Null unless they revealed. A photo identifies as surely as a name does. */
+  photo: string | null
+  /** Category NAMES, ready to render: "you both picked Techno and Board games". */
+  sharedInterests: string[]
+  sharedIntents: string[]
+  insideNow: boolean
+  youLiked: boolean
+}
+
+export interface LikeOutcome {
+  mutual: boolean
+  /** Present only on a mutual like -- the conversation it just opened. */
+  conversationId?: string
+}
+
 export interface PresencePing {
   status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'
   reason?: string
@@ -1387,6 +1411,66 @@ class ApiClientClass {
         method: 'POST',
         body: JSON.stringify({ filename, contentType, folder }),
       },
+      true,
+      3
+    )
+  }
+
+  // === MATCHES ===
+
+  /**
+   * The people in this room, ranked for you.
+   *
+   * 403 unless you checked in: this is a view of a room you attended, not a
+   * directory anyone with a token can browse.
+   *
+   * Replaces the old use of `getEventCheckins` on the match screen. That
+   * endpoint stopped returning `image` and the real `name` in API v0.46.0 when
+   * it stopped handing out attendee identities, so the screen rendered blank
+   * avatars in production and its card linked to the real profile -- anonymity
+   * one tap deep. `matches` is the endpoint built for this, and it already
+   * carries `sharedInterests` as names, ready to render.
+   */
+  async getEventMatches(
+    eventId: string,
+    options?: { limit?: number; force?: boolean }
+  ): Promise<ApiResponse<{ matches: MatchCard[] }>> {
+    const query = options?.limit ? `?limit=${options.limit}` : ''
+    const endpoint = `/api/mobile/events/${eventId}/matches${query}`
+    // Same idiom as getEventCheckins: force bypasses the cache rather than
+    // being passed into it.
+    if (options?.force) return this.queuedRequest<{ matches: MatchCard[] }>(endpoint)
+    return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, { ttl: 30_000, swr: true })
+  }
+
+  /**
+   * Like someone you were in a room with. Mutual opens a conversation.
+   *
+   * Nothing in the response reveals who liked you first -- that asymmetry is
+   * the whole point of the mutual gate.
+   */
+  async likeAtEvent(eventId: string, userId: string): Promise<ApiResponse<LikeOutcome>> {
+    return this.queuedRequest<LikeOutcome>(
+      `/api/mobile/events/${eventId}/matches/likes`,
+      { method: 'POST', body: JSON.stringify({ userId }) },
+      true,
+      3
+    )
+  }
+
+  /**
+   * Your intent and reveal flag for this event.
+   *
+   * `revealed` is per event on purpose: choosing to be visible at a work
+   * meetup is not choosing to be visible at a club.
+   */
+  async setMatchPreferences(
+    eventId: string,
+    prefs: { intent?: Array<'dating' | 'networking' | 'friendship' | 'just_here'>; revealed?: boolean; remember?: boolean }
+  ): Promise<ApiResponse<{ intent: string[]; revealed: boolean }>> {
+    return this.queuedRequest<{ intent: string[]; revealed: boolean }>(
+      `/api/mobile/events/${eventId}/matches/preferences`,
+      { method: 'PUT', body: JSON.stringify(prefs) },
       true,
       3
     )
