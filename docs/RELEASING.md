@@ -148,13 +148,23 @@ Because the Expo project moved accounts, the keystore from any previous Android
 build lives in the **old** account (`@matrixsociallabs/blendn`), and a new
 project generates a fresh one.
 
-**Before generating anything Android:** check expo.dev → the old account →
-blendn → Credentials → Android. If a keystore is there, download it and import
-it into this project with `npx eas-cli credentials --platform android`.
+**Checked, 2026-08-12: there is nothing to inherit.** The old account
+(`@matrixsociallabs/blendn`) has Apple distribution certificates and an empty
+Google Service Account Keys section, and no Android keystore at all — so no
+Android build was ever made through EAS and nothing was ever submitted to Play
+from it.
 
-If Play has never had a build, let EAS generate one — and back it up
-immediately, because from that moment it is the only key that can ever update
-the app.
+So this project generates a fresh keystore, which is clean. **From the moment it
+exists it becomes the only key that can ever update the app on Play** — back it
+up somewhere that is not one laptop and not one Expo account:
+
+```bash
+npx eas-cli credentials --platform android    # → Keystore → Download
+```
+
+If you are reading this after a future account move, redo the check above before
+generating anything. The rule that made it safe this time was that nothing had
+shipped yet, not that Android keystores are replaceable.
 
 ### Google Play service account
 
