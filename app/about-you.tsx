@@ -196,6 +196,28 @@ export default function AboutYou() {
         // refusal that would read as a bug.
         return `Dating is for ${DATING_MIN_AGE}+ only. Your other choices are fine.`
       }
+      /*
+       * The bug that made dating silently inert.
+       *
+       * Nothing required these, and the save below drops them when they are
+       * absent (`...(wantsDating && orientation ? { orientation } : {})`). So a
+       * user could tick Dating, continue, and land with `gender: man`,
+       * `orientation: null`, `interested_in: []` — at which point
+       * `matchCompatibleForDating` fails closed, no card can ever carry a
+       * dating tag, and nothing anywhere says why. That is exactly what device
+       * testing found.
+       *
+       * Refusing here is the whole fix: these are not optional extras, they are
+       * the entire input to dating compatibility.
+       */
+      if (!gender) return 'Pick how you identify so dating matches can work.'
+      if (!orientation) return 'Pick who you are interested in so dating matches can work.'
+      if (askInterestedIn && interestedIn.length === 0) {
+        // `deriveInterestedIn` returns null for genuinely ambiguous pairs
+        // (non-binary + straight, queer, pansexual, prefer-not-to-say), so for
+        // these the server has nothing to fall back on.
+        return 'Pick who you would like to meet.'
+      }
     }
     return null
   }

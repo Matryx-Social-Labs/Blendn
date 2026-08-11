@@ -5,10 +5,11 @@
 
 import { io, Socket } from "socket.io-client"
 import { AppState, AppStateStatus } from "react-native"
-import { TokenStorage } from "./apiClient"
+import { apiClient, TokenStorage } from "./apiClient"
 import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
 import { Sentry } from "./sentry"
+import { buildAuthPayload } from "./socketAuth"
 
 // Socket server URL
 const SOCKET_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000"
@@ -136,7 +137,22 @@ type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (
 let socket: TypedSocket | null = null
 let isConnecting = false
 let reconnectAttempts = 0
-const MAX_RECONNECT_ATTEMPTS = 5
+/*
+ * Unlimited, deliberately.
+ *
+ * This was 5. socket.io counts failed attempts and, on reaching the cap, sets
+ * `skipReconnect` — which is **permanent for the life of the socket**, not a
+ * pause. Nothing listened for `reconnect_failed`, so five failures during a lift
+ * ride, a tunnel or a token expiry killed realtime for the rest of the session
+ * with no path back except the user finding the Retry button.
+ *
+ * A cap only makes sense where giving up is correct. For a socket whose whole
+ * job is "tell me what is happening in this room right now", it never is: the
+ * user is standing in the venue and the answer is always to keep trying.
+ * `reconnectionDelayMax` already bounds how hard we try, so unlimited attempts
+ * cost a poll every ten seconds rather than a busy loop.
+ */
+const MAX_RECONNECT_ATTEMPTS = Infinity
 const RECONNECT_DELAY_BASE = 1000
 let connectionStatus: SocketConnectionStatus = {
   state: "disconnected",
@@ -233,7 +249,31 @@ export async function connect(): Promise<boolean> {
     Logger.info("socket", `Connecting to socket server at: ${SOCKET_URL}`)
 
     socket = io(SOCKET_URL, {
-      auth: { token: accessToken },
+      /*
+       * A callback, and one that refreshes.
+       *
+       * This was `auth: { token: accessToken }` — a plain object captured once.
+       * socket.io replays it verbatim on every reconnection attempt, and the
+       * access token lives 15 minutes, so after a quarter of an hour idle every
+       * retry failed the handshake with the same dead credential. Realtime only
+       * came back if the user hit Retry, because only a fresh connect re-read
+       * storage.
+       *
+       * Note that a callback alone would not have fixed it:
+       * `TokenStorage.getAccessToken()` is a bare SecureStore read with no
+       * expiry awareness, so re-reading serves the same expired token.
+       * `buildAuthPayload` refreshes first. See lib/socketAuth.ts.
+       */
+      auth: (cb: (data: { token: string | null }) => void) => {
+        buildAuthPayload({
+          getToken: () => TokenStorage.getAccessToken(),
+          refresh: () => apiClient.refreshSession(),
+        })
+          .then(cb)
+          // buildAuthPayload does not reject, but socket.io does not await this
+          // callback either — an escaped rejection here would be unhandled.
+          .catch(() => cb({ token: accessToken }))
+      },
       /*
        * WebSocket first, HTTP long-polling as a fallback.
        *
@@ -422,6 +462,34 @@ function setupSocketHandlers(sock: TypedSocket): void {
       // Server disconnected us, try to reconnect with new token
       handleReconnect()
     }
+  })
+
+  /*
+   * The listener whose absence made the retry cap permanent.
+   *
+   * socket.io fires this once it has exhausted `reconnectionAttempts` and set
+   * `skipReconnect`, after which the manager never tries again on its own. With
+   * the cap now Infinity this should be unreachable — which is exactly why it is
+   * worth having: if it ever fires, something has reintroduced a finite cap, and
+   * a silent permanent disconnect is the hardest failure in this file to
+   * diagnose from a user report ("it just stopped updating").
+   */
+  sock.io.on("reconnect_failed", () => {
+    Logger.error("socket", "Reconnection gave up permanently — this should be unreachable")
+    Sentry.captureMessage("socket reconnect_failed despite unlimited attempts")
+    emitConnectionStatus({
+      state: "disconnected",
+      connected: false,
+      lastError: "Reconnection gave up",
+    })
+    // Do not leave it dead. Once skipReconnect is set, a fresh socket is the
+    // only way back — `connect()` tears the old one down and builds one.
+    void connect()
+  })
+
+  sock.io.on("reconnect", (attempt: number) => {
+    Logger.info("socket", "Reconnected", { attempt })
+    reconnectAttempts = 0
   })
 
   // Event updates

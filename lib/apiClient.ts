@@ -6,6 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
+import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import { markSessionExpired } from './sessionEvents'
@@ -791,7 +792,9 @@ class ApiClientClass {
       }
 
       try {
-        const response = await fetch(url, { ...options, headers })
+        // Every fetch in this class goes through fetchWithTimeout. A deadline
+        // on the first call alone still hangs the queue on the other two.
+        const response = await fetchWithTimeout(url, { ...options, headers })
 
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
@@ -801,7 +804,7 @@ class ApiClientClass {
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
-            const retryResponse = await fetch(url, { ...options, headers })
+            const retryResponse = await fetchWithTimeout(url, { ...options, headers })
             return this.parseResponse<T>(retryResponse, endpoint)
           } else {
             await TokenStorage.clearAll()
@@ -834,6 +837,18 @@ class ApiClientClass {
             error: 'No internet connection. Check your network and try again.',
           }
         }
+        /*
+         * A timeout is not "no internet" and must not be reported as one.
+         *
+         * The device is online — something upstream accepted the connection and
+         * went quiet. Telling someone to check their wifi when their wifi is
+         * fine sends them to fix the wrong thing, and `markOffline()` would put
+         * the whole app into an offline state on the strength of one slow
+         * endpoint.
+         */
+        if (isTimeoutError(error)) {
+          return { success: false, error: TIMEOUT_MESSAGE }
+        }
         return {
           success: false,
           error: error instanceof Error ? error.message : `Network error (${endpoint})`,
@@ -860,7 +875,11 @@ class ApiClientClass {
           return false
         }
 
-        const response = await fetch(`${this.baseUrl}/api/mobile/auth/refresh`, {
+        // Deliberately on a deadline too. A hung refresh is the worst version
+        // of this bug: `isRefreshing` gates every other caller behind one
+        // promise, so a single stalled refresh silently blocks re-auth for the
+        // whole app until it is killed.
+        const response = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),

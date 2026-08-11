@@ -51,3 +51,9 @@ assets/figma/
 # Sentry CLI auth token (sensitive)
 android/sentry.properties
 ios/sentry.properties
+
+# Figma source and its PDF export. 183 MB and 202 MB — over GitHub's 100 MB
+# hard limit, so committing them fails the push and needs history surgery to
+# undo. They live in the design tool, not the app repo.
+*.fig
+Blendn.pdf
