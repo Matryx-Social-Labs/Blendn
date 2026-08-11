@@ -148,23 +148,32 @@ Because the Expo project moved accounts, the keystore from any previous Android
 build lives in the **old** account (`@matrixsociallabs/blendn`), and a new
 project generates a fresh one.
 
-**Checked, 2026-08-12: there is nothing to inherit.** The old account
-(`@matrixsociallabs/blendn`) has Apple distribution certificates and an empty
-Google Service Account Keys section, and no Android keystore at all — so no
-Android build was ever made through EAS and nothing was ever submitted to Play
-from it.
+**Checked, 2026-08-12: an upload key IS registered, and we do not hold it.**
 
-So this project generates a fresh keystore, which is clean. **From the moment it
-exists it becomes the only key that can ever update the app on Play** — back it
-up somewhere that is not one laptop and not one Expo account:
+Play has `Blend'n` / `com.matryxsociallabs.blendn` with internal-testing release
+**3 (1.0.0)**, live to testers since 15 Feb 2026. The old Expo account
+(`@matrixsociallabs/blendn`) has no Android keystore at all — so that build was
+made **locally**, and the keystore is on somebody's machine rather than in any
+Expo account.
 
-```bash
-npx eas-cli credentials --platform android    # → Keystore → Download
-```
+A first read of the Expo credentials suggested nothing had ever been built. That
+was wrong, and the reason is worth keeping: **Expo only knows about builds EAS
+made.** The store is the source of truth for what has shipped, not the build
+service.
 
-If you are reading this after a future account move, redo the check above before
-generating anything. The rule that made it safe this time was that nothing had
-shipped yet, not that Android keystores are replaceable.
+**This is recoverable.** Play App Signing has been mandatory for every app
+created since August 2021, so Google holds the *app signing key* — the one that
+can never be replaced — and we only need an *upload key*, which is just proof of
+identity. Two paths:
+
+1. **Find the original keystore** (whoever ran the 15 Feb build) and import it:
+   `npx eas-cli credentials --platform android`.
+2. **Reset it.** Generate a fresh keystore in EAS, then Play Console →
+   Protected with Play → App signing → *Request upload key reset*, supplying the
+   new certificate. Google turns these round in a day or two.
+
+Either way, **back up the keystore once it is settled** — not on one laptop and
+not in one Expo account. That is how this situation arose.
 
 ### Google Play service account
 
@@ -196,8 +205,10 @@ the `EXPO_PUBLIC_*` values, this one is a real secret.
    skip**, and without it the workflow files sit there doing nothing.
 4. **Environment variables**, above.
 5. **Restrict the Maps key**, above.
-6. **Android keystore and Play service account**, above. Check the old Expo
-   account for an existing keystore *first*.
+6. **Android keystore and Play service account**, above.
+7. **Set the remote version counters above what the stores already have** — see
+   below. Skipping this makes the first automated build on each platform fail
+   at submit, after it has already spent the build minutes.
 
 ## The native directories are committed, and that has a cost
 
@@ -214,6 +225,31 @@ than `$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)`. That placeholder is Xcode
 build-setting interpolation, resolves against nothing on EAS, and would have
 shipped a build where Google Sign-In failed with an error that reads like a code
 bug.
+
+## The version counters start from zero, and the stores do not
+
+`appVersionSource: "remote"` means EAS keeps the build number, and
+`autoIncrement` bumps it. **A new EAS project starts that counter fresh**, while
+the stores remember everything the old project uploaded:
+
+| | Store already has | So the counter must start above |
+|---|---|---|
+| Play | `versionCode 3` (internal, 15 Feb 2026) | 3 |
+| App Store Connect | the TestFlight builds shipped over the last 6 months | the highest of those |
+
+Left alone, the first automated build submits a number the store has seen and is
+rejected — *after* the build has run, so it costs the full build time to learn
+nothing.
+
+Set them once, before the first build:
+
+```bash
+npx eas-cli build:version:set --platform android   # e.g. 10
+npx eas-cli build:version:set --platform ios       # above the highest in ASC
+```
+
+Round up rather than picking the exact next number. Version codes are free and a
+gap costs nothing; a collision costs a build.
 
 ## Testers
 
