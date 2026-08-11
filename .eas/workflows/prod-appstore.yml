@@ -1,0 +1,53 @@
+# prod -> App Store Connect, against the production API.
+#
+# The build lands in App Store Connect and stops there. `eas submit` uploads a
+# binary; it does not create a version, attach release notes, or submit for
+# review -- those stay in App Store Connect, done by a person.
+#
+# That is deliberate rather than a gap. Releasing to the App Store is the one
+# step where somebody should look at what is about to reach the public, and it
+# is also where the App Privacy answers and the age rating get confirmed. The
+# automation earns its keep by removing the mechanical part: no downloading an
+# .ipa, no Transporter, no wondering which build is which.
+#
+# Play works the same way by design: `releaseStatus: draft` on the production
+# track means the bundle is uploaded and nothing is rolled out. Somebody opens
+# Play Console and decides. Without it, a merge to prod would push straight to
+# every Android user, which is a far sharper edge than the iOS side has -- there
+# is no review queue in between to catch a mistake.
+#
+# So: merge to prod, wait ~20 minutes, and a build is waiting in each console
+# for a person to release.
+
+name: prod -> App Store Connect + Play (draft)
+
+on:
+  push:
+    branches: ['prod']
+
+jobs:
+  build_ios:
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios:
+    needs: [build_ios]
+    type: submit
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: production
+
+  build_android:
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  submit_android:
+    needs: [build_android]
+    type: submit
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      profile: production

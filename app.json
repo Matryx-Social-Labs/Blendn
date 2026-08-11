@@ -3,7 +3,7 @@
     "name": "blendn",
     "slug": "blendn",
     "version": "1.0.0",
-    "owner": "matrixsociallabs",
+    "owner": "matryx-social-labs-private-limited",
     "orientation": "portrait",
     "icon": "./assets/logo/ios-dark.png",
     "scheme": "blendn",
@@ -104,7 +104,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9fbe009f-ee8b-4d9b-8837-aba0223864d5"
+        "projectId": "fa9b288d-6ff5-460b-8231-44ba9537caaf"
       }
     }
   }
