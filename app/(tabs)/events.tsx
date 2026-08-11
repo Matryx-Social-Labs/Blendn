@@ -982,7 +982,16 @@ export default function Events() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.carouselList}
-        data={checkedInEvents.filter((item, idx) => !!item.cover_image_url && idx < 10)}
+        /*
+         * No cover-image condition.
+         *
+         * This filtered on `!!item.cover_image_url`, so an event without one
+         * silently vanished from the strip -- and with it the only Check out
+         * button, for exactly the events most likely to be small and hastily
+         * created. A missing image is a reason to render a placeholder, never a
+         * reason to hide the thing somebody is currently checked in to.
+         */
+        data={checkedInEvents.slice(0, 10)}
         keyExtractor={keyExtractor}
         getItemLayout={getCarouselItemLayout}
         renderItem={({ item }) => (
@@ -1861,6 +1870,15 @@ export default function Events() {
         />
         {/* Banners */}
         <View style={styles.filtersBar}>
+          {/*
+            * The checked-in strip, at the top of the events tab.
+            *
+            * `renderCheckedInCarousel` and `handleCheckOut` were both complete
+            * -- optimistic update, rollback, in-flight dedupe, a Check out pill
+            * -- and neither had a caller, so checking out took three taps
+            * through the event detail screen. This is the whole fix.
+            */}
+          {checkedInEvents.length > 0 && renderCheckedInCarousel()}
           {showPreviewHint && (
             <View style={styles.bannerInfo}>
               <Text style={styles.bannerText}>

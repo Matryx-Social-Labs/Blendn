@@ -130,6 +130,39 @@ export default function PhotoManager({
     }
   }
 
+  /**
+   * Make a photo the primary one.
+   *
+   * A reorder, not a flag: `photos[0]` **is** the primary everywhere -- the
+   * match card, the DM avatar, and `User.image`, which the server mirrors from
+   * it. So promoting is moving the item to the front, and there is no second
+   * source of truth to keep in step.
+   *
+   * The PRIMARY badge already existed and the array was already ordered; what
+   * was missing was any way to choose, so it was whichever photo happened to be
+   * uploaded first.
+   */
+  const handleMakePrimary = useCallback(
+    async (photoIndex: number) => {
+      if (!editable || photoIndex === 0) return
+
+      const reordered = [
+        photos[photoIndex],
+        ...photos.filter((_, i) => i !== photoIndex),
+      ]
+      // Optimistic: the grid reorders under the finger, and a failed write
+      // puts it back rather than leaving the UI ahead of the server.
+      setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
+
+      const ok = await reorderPhotos(userId, reordered.map((p) => p.url))
+      if (!ok) {
+        setPhotos(photos)
+        Alert.alert('Could not update', 'Your photo order was not saved. Try again.')
+      }
+    },
+    [editable, photos, userId]
+  )
+
   const handleRemovePhoto = (photoIndex: number) => {
     if (!editable) return
 
@@ -199,10 +232,27 @@ export default function PhotoManager({
             quality={80}
           />
           
-          {item.isPrimary && (
+          {item.isPrimary ? (
             <View style={styles.primaryBadge}>
               <Text style={styles.primaryText}>PRIMARY</Text>
             </View>
+          ) : (
+            editable && (
+              /*
+               * The badge existed and there was no way to move it, so the
+               * primary photo was whichever one happened to be uploaded first.
+               * `photos[0]` is the primary everywhere -- match card, DM avatar,
+               * and `User.image`, which the server mirrors from it.
+               */
+              <TouchableOpacity
+                style={styles.makePrimaryButton}
+                onPress={() => handleMakePrimary(index)}
+                accessibilityRole="button"
+                accessibilityLabel="Make this my main photo"
+              >
+                <Text style={styles.makePrimaryText}>Make main</Text>
+              </TouchableOpacity>
+            )
           )}
           
           {editable && (
@@ -353,6 +403,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  makePrimaryButton: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  makePrimaryText: { color: '#fff', fontSize: 10, fontWeight: '600' },
   primaryBadge: {
     position: 'absolute',
     top: 8,

@@ -89,21 +89,73 @@ Needs a real device — simulators do not receive push.
 
 ---
 
-## C. Not built yet — do not test
+## C. Identity in a DM (app #71)
 
-These have no UI. The server is ready and waiting for them.
+The deploy gate is closed — the reveal UI now exists, so pseudonymous DMs are
+usable rather than a dead end.
+
+### C1. The header shows what the server says, not what the last screen knew
+1. Match with somebody, open the DM.
+2. **Correct:** the header shows **the same pseudonym the match card showed**,
+   with "You're both anonymous here" underneath.
+3. **The bug:** it rendered `otherUserName` straight off the navigation params,
+   so it showed whatever the screen that pushed it happened to know.
+
+### C2. One control, never two
+1. Look at the bar under the header in each state.
+2. **Correct:** exactly one — "Show them who you are" while you are anonymous,
+   "Ask X to reveal" once you have revealed and they have not, and **nothing**
+   once you both have.
+3. **Wrong:** both buttons at once, or an "Ask" button on somebody who has
+   already revealed (the server answers that with a 400).
+
+### C3. Revealing says it cannot be undone, before the tap
+1. Tap **Show them who you are**.
+2. **Correct:** "This can't be undone — you can block them, but you can't take
+   it back." Confirm, and your name and photos appear to them.
+3. This is the one sentence that must not be softened. There is no path back to
+   `false` on the server.
+
+### C4. Revealing with no photo is refused, usefully
+1. On an account with no photo, tap Reveal.
+2. **Correct:** "Add a photo to your profile first" — the one missing input,
+   named at the moment it is reached for. Not a percentage, not a checklist.
+
+### C5. Asking cannot nag
+1. Reveal, then tap **Ask X to reveal**. Do it again.
+2. **Correct:** the same quiet confirmation both times. No counter, no "asked
+   2 times", and **no way for them to decline** — silence is the only answer
+   they can give, by design.
+
+### C6. The asymmetric case
+1. Reveal in a room *before* matching, then match with an anonymous person.
+2. **Correct:** they see your real name immediately (you were public on the
+   card — nothing left to reveal); you see their pseudonym; only *you* get the
+   Ask button.
+
+### C7. Leaving, and the copy that changes
+1. Options → the sheet offers **Unmatch**, **Unmatch and report**, **Block and
+   report**.
+2. **Before revealing:** "They never saw your name."
+3. **After revealing:** "They already know your name and photos — unmatching
+   doesn't undo that." Both say it closes **for both of you**.
+4. Leave, and confirm the thread is gone from **both** inboxes.
+
+### C8. Photos
+- **Make main** appears on every non-primary tile; tapping it promotes that
+  photo, and the match card and DM avatar follow.
+- Signing up with Google gives you **no** photo until you choose one. That is
+  correct: an avatar is not a choice, and it had never been moderated.
+
+---
+
+## D. Not built yet — do not test
 
 | | Blocked on |
 |---|---|
-| Revealing from inside a DM | **T2b** — no reveal button exists |
-| The leaving sheet (unmatch / block / report) | **T21** |
-| Blurred photos for anonymous people | **T4c** |
-| "Make primary" on a photo | **T4b** |
-
-> ⚠️ **Deploy gate.** API #201 makes the server return **pseudonyms** for DMs
-> opened by a mutual like. The shipped app has no reveal button, so on staging a
-> tester will see a pseudonymous DM they cannot un-anonymise. That is expected.
-> **#201 must not reach production until T2b ships**, or real users are stuck.
+| Blurred photos rendering for anonymous people | The client makes the 40px derivative; the server does not yet serve it in place of the full URL |
+| Interests as 13 parents | Stage 2 |
+| A settings home for the five matching fields | Stage 3 |
 
 ---
 
@@ -130,6 +182,33 @@ Run against `staging-api.blendn.app` with seeded accounts, 2026-08-11.
 | Leaving is permanent — re-liking cannot reopen | ✅ refused, gone from the pool |
 | Block hides room history, both directions of matching | ✅ |
 | Block does not over-reach (unblocked people still visible) | ✅ control passed |
+
+### Second round — the photo pipeline (API #204), 2026-08-11
+
+| What | Result |
+|---|---|
+| A real 37 KB photo in our bucket and folder | ✅ accepted |
+| A 900-byte file, same folder | ✅ `too_small` |
+| Our bucket, object does not exist | ✅ `too_small` (proves the ownership check *passed* it) |
+| Someone else's folder | ✅ `not_ours` |
+| `chat/` folder (different trust class) | ✅ `not_ours` |
+| Host *ending* with our bucket name | ✅ `not_ours` |
+| AWS metadata endpoint | ✅ `not_ours` |
+| `User.image` mirrors `photos[0]` | ✅ |
+| Deleting every photo clears it | ✅ |
+| `photo_checks` row written | ✅ `checked: true` |
+| Users with an image but no photos, post-migration | ✅ 0 |
+
+> **A note on how this was verified.** The first run of that matrix was
+> worthless: staging's bucket is `blendn-media-staging`, not `blendn-media`, so
+> every URL failed on the hostname before reaching any interesting check — seven
+> "refused" lines that a completely broken guard would also have produced. What
+> makes the second run meaningful is that the outcomes **differ**, and that a
+> nonexistent object in the right folder returns `too_small`, which proves the
+> ownership check passed it through.
+>
+> The same trap produced the `rohan-ohan` pseudonym bug. **First question of any
+> negative-test suite: did any input succeed?**
 
 **One real gap found while testing**, and it is what **T4** exists to fix:
 `User.image` and `profiles.photos` are two columns and the surfaces disagree.
