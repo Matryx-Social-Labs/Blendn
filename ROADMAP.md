@@ -73,6 +73,12 @@ identity work in `Next`.
 | — | Honest cold-start states: auth-loading ≠ signed-out ≠ empty ≠ failed | **Done** (#70) |
 | T9 | `about-you` requires gender + orientation when dating is ticked | **Done** (#70) |
 | T12 | Sweep the #67 debris — `myName`, `attendeesTotalCount` | **Done** (#70) |
+| T2b | The DM keeps the room's pseudonym; one reveal control | **Done** (#71) |
+| T21 | The leaving sheet — unmatch / block, report bundled in | **Done** (#71) |
+| T4b | "Make main" on any photo | **Done** (#71) |
+| T4c | The 40px blur derivative, client half | **Done** (#71) |
+| T8 | The checked-in strip is wired, and stops hiding events | **Done** (#71) |
+| T13 | `PHOTO_MANAGEMENT_IMPLEMENTATION.md` rewritten off Supabase | **Done** (#71) |
 
 Tests 56 → 98. **Still owed a device pass:** idle 20 minutes foregrounded and
 confirm realtime returns with no Retry, and that the reconnect handshake carries

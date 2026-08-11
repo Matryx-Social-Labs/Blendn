@@ -1,4 +1,5 @@
 import { Alert } from 'react-native'
+import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
 
@@ -143,6 +144,65 @@ export const isUserBlocked = async (userId: string): Promise<boolean> => {
 /**
  * Show user safety action sheet
  */
+/**
+ * Leaving a conversation: unmatch, block, or either one with a report.
+ *
+ * Distinct from `showUserSafetyActions`, which is the general "this person is a
+ * problem" sheet available from a profile. This one is about *this
+ * conversation*, and the difference that matters is that it can close it.
+ *
+ * ## Report is bundled, not offered afterwards
+ *
+ * "Unmatch and report" is one tap and one request. Composing them -- close,
+ * then report -- can half-fail into exactly the state the whole design exists
+ * to prevent: a closed thread whose evidence is out of reach, or a report with
+ * no safety action. The server does both in one transaction.
+ *
+ * It also matters psychologically. The safest-feeling act is "make it go
+ * away", and if that is the button that loses the case, the people most in
+ * need of the report are the least likely to file one.
+ *
+ * ## The copy changes once they have seen your face
+ *
+ * `leaveConfirmation` says so. Before a reveal, unmatching genuinely ends it.
+ * After, the app can close the channel and nothing more, and a sheet implying
+ * otherwise sells a protection it cannot provide.
+ */
+export const showLeaveConversationActions = (
+  conversationId: string,
+  displayName: string,
+  youRevealed: boolean,
+  onLeft?: () => void
+): void => {
+  const copy = leaveConfirmation(displayName, youRevealed)
+
+  const leave = async (action: 'unmatch' | 'block', withReport: boolean) => {
+    const result = await apiClient.leaveConversation(conversationId, {
+      action,
+      ...(withReport ? { report: { reason: 'other' } } : {}),
+    })
+    if (result.success) {
+      onLeft?.()
+    } else {
+      Alert.alert('Could not do that', result.error || 'Try again in a moment.')
+    }
+  }
+
+  Alert.alert(copy.title, copy.body, [
+    { text: 'Unmatch', style: 'destructive', onPress: () => void leave('unmatch', false) },
+    { text: 'Unmatch and report', style: 'destructive', onPress: () => void leave('unmatch', true) },
+    {
+      // Block is the stronger option, surfaced here rather than buried,
+      // because somebody who wants to be *unseen* rather than merely
+      // disconnected needs the other button and may not know it exists.
+      text: 'Block and report',
+      style: 'destructive',
+      onPress: () => void leave('block', true),
+    },
+    { text: 'Cancel', style: 'cancel' },
+  ])
+}
+
 export const showUserSafetyActions = (
   userName: string,
   userId: string,

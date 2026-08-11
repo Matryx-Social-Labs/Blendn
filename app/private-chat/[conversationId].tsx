@@ -1,6 +1,13 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import {
+  revealAction,
+  revealConfirmation,
+  revealSubtitle,
+  type ConversationRevealState,
+  type RevealAction,
+} from '../../lib/conversationReveal'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -20,7 +27,7 @@ import OptimizedImage from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
+import { showLeaveConversationActions, showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
 import queryCache from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -81,8 +88,9 @@ const getInitials = (name: string) => {
   return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : '')).toUpperCase() || '?'
 }
 
-function ChatHeader({ name, avatarUrl, isTyping, onBack, onOptions }: {
+function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: {
   name: string
+  subtitle?: string | null
   avatarUrl: string | null
   isTyping: boolean
   onBack: () => void
@@ -106,6 +114,16 @@ function ChatHeader({ name, avatarUrl, isTyping, onBack, onOptions }: {
 
       <View style={headerStyles.titleArea}>
         <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+        {/*
+          * Whether they know who you are, at a glance.
+          *
+          * Not knowing is the state that makes people close the app. Suppressed
+          * once both sides are visible -- at that point there is nothing left to
+          * say and a permanent banner would just be noise.
+          */}
+        {!!subtitle && (
+          <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
+        )}
         {isTyping && <Text style={headerStyles.typing}>typing…</Text>}
       </View>
 
@@ -134,7 +152,71 @@ const headerStyles = StyleSheet.create({
   avatarText: { fontSize: 14, fontWeight: '700', color: '#fff' },
   titleArea: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
   typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
+})
+
+/**
+ * The one control that says what you can do about identity right now.
+ *
+ * One, not two: `revealAction` collapses the four combinations into a single
+ * affordance, because a screen offering both "Reveal" and "Ask them to reveal"
+ * makes the person work out which applies to them.
+ */
+function RevealBar({
+  state,
+  busy,
+  onPress,
+}: {
+  state: ConversationRevealState
+  busy: boolean
+  onPress: (action: RevealAction) => void
+}) {
+  const action = revealAction(state)
+  if (action.kind === 'none' || action.kind === 'done') return null
+
+  return (
+    <View style={revealStyles.bar}>
+      {action.kind === 'reveal' && !!action.nudge && (
+        <Text style={revealStyles.nudge} numberOfLines={2}>{action.nudge}</Text>
+      )}
+      <TouchableOpacity
+        style={revealStyles.button}
+        onPress={() => onPress(action)}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={action.label}
+      >
+        <Ionicons
+          name={action.kind === 'reveal' ? 'eye-outline' : 'hand-left-outline'}
+          size={16}
+          color={APP_COLORS.textPrimary}
+        />
+        <Text style={revealStyles.buttonText}>{action.label}</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+const revealStyles = StyleSheet.create({
+  bar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    gap: 8,
+  },
+  nudge: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  buttonText: { color: APP_COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
 })
 
 export default function PrivateChat() {
@@ -153,6 +235,36 @@ export default function PrivateChat() {
   const [trayTitle, setTrayTitle] = useState('')
   const [trayMessage, setTrayMessage] = useState('')
   const [trayButtons, setTrayButtons] = useState<ActionTrayButton[]>([])
+  /*
+   * The identity of this conversation, from the server rather than the route.
+   *
+   * The header rendered `otherUserName` straight off the navigation params, so
+   * it showed whatever the screen that pushed it happened to know. Under the
+   * pseudonymous model that is the wrong source: only the server can say
+   * whether this person has revealed to you, and it already resolves the name
+   * and the photo before returning them.
+   */
+  const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
+  const [revealBusy, setRevealBusy] = useState(false)
+
+  const loadReveal = useCallback(async () => {
+    if (!conversationId) return
+    const r = await apiClient.getConversation(conversationId as string)
+    if (!r.success || !r.data) return
+    setReveal({
+      displayName: r.data.otherUser?.name || 'Someone',
+      youRevealed: r.data.youRevealed ?? false,
+      theyRevealed: r.data.theyRevealed ?? false,
+      revealRequested: r.data.revealRequested ?? false,
+      // A conversation with no reveal fields at all is one from an accepted
+      // message request: real names throughout, nothing to reveal.
+      pseudonymous: r.data.youRevealed !== undefined,
+    })
+  }, [conversationId])
+
+  useEffect(() => {
+    void loadReveal()
+  }, [loadReveal])
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
@@ -167,6 +279,69 @@ export default function PrivateChat() {
     setTrayButtons(buttons?.length ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }])
     setTrayVisible(true)
   }
+
+  /**
+   * Revealing, or asking them to.
+   *
+   * The confirmation is not ceremony. The server has no path back to `false`,
+   * so this is the only moment the person can be told that -- a control that
+   * reads like a toggle implies it can be toggled back, and nothing can unsee a
+   * name and a face.
+   */
+  const onRevealPress = useCallback(
+    (action: RevealAction) => {
+      if (!reveal || !conversationId) return
+
+      if (action.kind === 'ask') {
+        setRevealBusy(true)
+        void apiClient
+          .requestReveal(conversationId as string)
+          .then((r) => {
+            if (r.success) {
+              setReveal((prev) => (prev ? { ...prev, revealRequested: prev.revealRequested } : prev))
+              showTray('Asked', `We let ${reveal.displayName} know. They'll decide in their own time.`)
+            } else {
+              showTray('Could not ask', r.error || 'Try again in a moment.')
+            }
+          })
+          .finally(() => setRevealBusy(false))
+        return
+      }
+
+      const copy = revealConfirmation(reveal.displayName)
+      setTrayTitle(copy.title)
+      setTrayMessage(copy.body)
+      setTrayButtons([
+        {
+          label: copy.confirm,
+          onPress: () => {
+            setTrayVisible(false)
+            setRevealBusy(true)
+            void apiClient
+              .revealInConversation(conversationId as string)
+              .then((r) => {
+                if (r.success) {
+                  setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
+                } else {
+                  /*
+                   * `reveal_incomplete` is the photo gate, and its message is
+                   * already the copy -- "Add a photo to your profile first".
+                   * Surfaced verbatim rather than translated, so the one
+                   * missing input is named at the moment it is reached for.
+                   */
+                  showTray('Not yet', r.error || 'Could not reveal. Try again.')
+                }
+              })
+              .finally(() => setRevealBusy(false))
+          },
+        },
+        { label: 'Not now', variant: 'secondary', onPress: () => setTrayVisible(false) },
+      ])
+      setTrayVisible(true)
+    },
+    [reveal, conversationId, showTray]
+  )
+
 
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
@@ -360,18 +535,37 @@ export default function PrivateChat() {
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ChatHeader
-          name={(otherUserName as string) || 'Chat'}
+          // Server-resolved. A pseudonym until they reveal, and the route param
+          // only as a first paint before the fetch lands.
+          name={reveal?.displayName || (otherUserName as string) || 'Chat'}
           avatarUrl={(otherUserAvatar as string) || null}
           isTyping={isOtherTyping}
+          subtitle={reveal ? revealSubtitle(reveal) : null}
           onBack={() => router.back()}
           onOptions={() => {
-            if (otherUserId) {
+            /*
+             * The conversation sheet, not the profile one.
+             *
+             * `showUserSafetyActions` blocks and reports a person; it cannot
+             * close this conversation, so from here it left the thread sitting
+             * in both inboxes. `showLeaveConversationActions` is about *this*
+             * conversation and bundles the report into the same request.
+             */
+            if (conversationId) {
+              showLeaveConversationActions(
+                conversationId as string,
+                reveal?.displayName || (otherUserName as string) || 'them',
+                reveal?.youRevealed ?? false,
+                () => router.back()
+              )
+            } else if (otherUserId) {
               showUserSafetyActions((otherUserName as string) || 'User', otherUserId as string, () => router.back())
             } else {
               showTray('Coming soon', 'Safety options will be available soon.')
             }
           }}
         />
+        {reveal && <RevealBar state={reveal} busy={revealBusy} onPress={onRevealPress} />}
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
 
         <FlatList

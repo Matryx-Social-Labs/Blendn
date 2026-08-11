@@ -1794,11 +1794,79 @@ class ApiClientClass {
 
   async getConversation(conversationId: string): Promise<ApiResponse<{
     id: string
+    /**
+     * Already resolved by the server: a pseudonym until they reveal, and
+     * `image` null until then too. Never re-derive this on the client -- the
+     * whole rule lives in one place server-side so it cannot drift.
+     */
     otherUser: { id: string; name: string | null; image: string | null }
+    /** Whether you have shown them who you are. */
+    youRevealed?: boolean
+    /** Whether they have shown you. */
+    theyRevealed?: boolean
+    /** Whether they asked you to. There is no "declined". */
+    revealRequested?: boolean
     createdAt: string
     lastMessageAt: string | null
   }>> {
     return this.queuedRequest(`/api/mobile/conversations/${conversationId}`)
+  }
+
+  /**
+   * Show them who you are. One way -- the server has no path back to false.
+   *
+   * Refused with `reveal_incomplete` when there is no name or no photo:
+   * revealing shows exactly those two things, so without them the switch turns
+   * on and their screen is unchanged.
+   */
+  async revealInConversation(conversationId: string): Promise<ApiResponse<{
+    revealed: boolean
+    mutual: boolean
+  }>> {
+    return this.queuedRequest(
+      `/api/mobile/conversations/${conversationId}/reveal`,
+      { method: 'POST', body: JSON.stringify({}) },
+      true,
+      3
+    )
+  }
+
+  /**
+   * Ask them to reveal.
+   *
+   * Idempotent by construction -- it sets one boolean on their side, so asking
+   * twice changes nothing and sends nothing. There is deliberately no decline
+   * to receive back.
+   */
+  async requestReveal(conversationId: string): Promise<ApiResponse<{ requested: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/conversations/${conversationId}/reveal`,
+      { method: 'POST', body: JSON.stringify({ ask: true }) },
+      true,
+      3
+    )
+  }
+
+  /**
+   * Leave a conversation, optionally blocking and reporting in the same call.
+   *
+   * One request rather than two, because composing them client-side can
+   * half-fail into the worst state: a closed thread whose evidence is out of
+   * reach, or a report with no safety action.
+   */
+  async leaveConversation(
+    conversationId: string,
+    options: {
+      action?: 'unmatch' | 'block'
+      report?: { reason: string; description?: string; messageId?: string }
+    } = {}
+  ): Promise<ApiResponse<{ closed: boolean; blocked: boolean; reported: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/conversations/${conversationId}/leave`,
+      { method: 'POST', body: JSON.stringify({ action: options.action ?? 'unmatch', ...options }) },
+      true,
+      3
+    )
   }
 
   async getConversationMessages(

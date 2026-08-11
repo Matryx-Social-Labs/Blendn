@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as FileSystem from 'expo-file-system'
 import * as ImageManipulator from 'expo-image-manipulator'
+import { BLUR_WIDTH } from './conversationReveal'
 import * as ImagePicker from 'expo-image-picker'
 import { Alert } from 'react-native'
 import { apiClient } from './apiClient'
@@ -495,6 +496,42 @@ export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationRe
       issues: ['Verification failed']
     }
   }
+}
+
+/**
+ * A deliberately tiny copy of a photo, for people who have not revealed.
+ *
+ * ## Why a derivative and not a blur filter
+ *
+ * The obvious implementation is `blurRadius` on the real image. It is also
+ * wrong: the real URL has already reached the device by then, so a proxy, a
+ * cache dump or devtools undoes it in one step. This repo has shipped exactly
+ * that bug before -- `MatchScreen.tsx` still carries the comment "the anonymity
+ * was one tap deep".
+ *
+ * So the server never sends the full URL to a viewer who has not earned it. It
+ * sends this instead, and 40 pixels scaled up to a card *is* the blur -- no
+ * filter required, and nothing to undo because the detail is not there.
+ *
+ * ## Why the client makes it
+ *
+ * The image is already decoded here, and `expo-image-manipulator` is already a
+ * dependency. Doing it server-side would mean `sharp` -- a native build in the
+ * Railway image and a full download per photo.
+ *
+ * A client could upload something sharp as its own "blur", but that exposes
+ * only their own photo. They cannot affect anybody else's, so this is
+ * self-harm rather than an attack, and the server's size ceiling catches the
+ * careless version anyway.
+ */
+export const createBlurDerivative = async (uri: string): Promise<string | null> => {
+  return processImage(uri, {
+    width: BLUR_WIDTH,
+    height: BLUR_WIDTH,
+    // Low quality on a 40px image is inconsequential visually and keeps the
+    // object comfortably under the server's ceiling for what counts as a blur.
+    quality: 0.4,
+  })
 }
 
 /**
