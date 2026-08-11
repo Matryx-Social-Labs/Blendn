@@ -21,6 +21,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../OptimizedImage'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
+import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
 import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../../lib/matchBand'
 import { revealChipLabel } from '../../lib/reveal'
 import { apiClient } from '../../lib/apiClient'
@@ -271,17 +272,13 @@ interface RecommendedEntry {
 
 type EventRoomStatus = 'idle' | 'checking' | 'available' | 'unavailable'
 
-const parseTimestamp = (value: any): number => {
-  const ts = new Date(value || 0).getTime()
-  return Number.isFinite(ts) ? ts : 0
-}
-
-const extractEventIdFromCheckin = (checkin: any): string | null => {
-  const raw = checkin?.eventId || checkin?.event_id || checkin?.event?.id || null
-  if (!raw) return null
-  const normalized = String(raw).trim()
-  return normalized.length > 0 ? normalized : null
-}
+/*
+ * `parseTimestamp` and `extractEventIdFromCheckin` moved to `lib/activeRoom.ts`
+ * along with the loop that used them. They were untestable here — the suite has
+ * no React Native testing library, so nothing inside a component file is
+ * reachable from a test, and the loop shipped a bug that abandoned every
+ * remaining check-in after one failure.
+ */
 
 const getDisplayName = (name?: string) => {
   const normalized = String(name || '').trim()
@@ -290,12 +287,22 @@ const getDisplayName = (name?: string) => {
 
 export default function Match() {
   const insets = useSafeAreaInsets()
-  const { user: authUser } = useAuth()
+  /*
+   * `initialized`, not just `user`.
+   *
+   * The screen gated on `authUser` alone, so while auth was still restoring
+   * from SecureStore it showed the same spinner as a request in flight — and if
+   * auth never finished, that spinner was permanent with nothing to explain it.
+   * Auth-still-loading and signed-out are different states and need different
+   * words.
+   */
+  const { user: authUser, initialized: authInitialized } = useAuth()
   const [loading, setLoading] = useState(true)
+  // Distinct from "no room": something failed and we can say what.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
   const [attendeesHasMore, setAttendeesHasMore] = useState(false)
-  const [attendeesTotalCount, setAttendeesTotalCount] = useState(0)
   const [attendeesPage, setAttendeesPage] = useState(1)
   const [loadingMoreAttendees, setLoadingMoreAttendees] = useState(false)
   const currentEventIdRef = useRef<string | null>(null)
@@ -310,6 +317,13 @@ export default function Match() {
   const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const eventInfoRef = useRef<{ id: string; title?: string } | null>(null)
+  /*
+   * The loader is `useCallback(..., [])` on purpose — it is handed to
+   * `useLiveSync` and to the pull-to-refresh handler, and a changing identity
+   * would re-subscribe the poller on every render. So anything it needs from
+   * props or state is read through a ref rather than closed over.
+   */
+  const authUserNameRef = useRef<string | null>(null)
   const [openRoomPending, setOpenRoomPending] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
@@ -377,6 +391,10 @@ export default function Match() {
   useEffect(() => {
     eventInfoRef.current = eventInfo
   }, [eventInfo])
+
+  useEffect(() => {
+    authUserNameRef.current = authUser?.name ?? null
+  }, [authUser?.name])
 
   useEffect(() => {
     setNewJoinsCount(0)
@@ -450,155 +468,130 @@ export default function Match() {
 
   const loadActiveEventAndAttendees = useCallback(async (userId: string, force = false) => {
     const loadId = ++attendeeLoadIdRef.current
+    // Stale-response guard: a later load has started, so this one's answer is
+    // no longer the truth. Bail before touching any state.
+    const superseded = () => loadId !== attendeeLoadIdRef.current
+
     try {
-      // Use active check-ins endpoint to find current event
       const activeCheckinsResult = await apiClient.getActiveCheckins({ force })
+      if (superseded()) return
 
       if (!activeCheckinsResult.success || !activeCheckinsResult.data?.checkIns) {
-        Logger.error('match', 'Error fetching active check-ins', { error: activeCheckinsResult.error })
-        // Keep previous stable UI on transient failures to avoid flicker.
-        return
-      }
-
-      const activeUserCheckins = activeCheckinsResult.data.checkIns || []
-      const sortedCheckins = activeUserCheckins
-        .filter((c: any) => !!extractEventIdFromCheckin(c))
-        .sort((a: any, b: any) => {
-          const aTime = parseTimestamp(a?.checkInTime || a?.check_in_time || a?.createdAt || a?.created_at)
-          const bTime = parseTimestamp(b?.checkInTime || b?.check_in_time || b?.createdAt || b?.created_at)
-          return bTime - aTime
+        /*
+         * An honest error, not a frozen screen.
+         *
+         * This used to `return` with the comment "keep previous stable UI on
+         * transient failures to avoid flicker". On a warm screen that is
+         * reasonable; on a cold start the previous state is nothing at all, so
+         * the spinner never stopped. That was the "matchmaking page just keeps
+         * loading" report.
+         */
+        Logger.error('match', 'Error fetching active check-ins', {
+          error: activeCheckinsResult.error,
         })
-
-      if (sortedCheckins.length === 0) {
-        if (loadId !== attendeeLoadIdRef.current) return
-        if (eventInfoRef.current) {
-          if (emptyStateTimerRef.current) {
-            clearTimeout(emptyStateTimerRef.current)
-          }
-          emptyStateTimerRef.current = setTimeout(() => {
-            // Delay clearing to avoid brief API sync gaps causing UI flicker.
-            setEventInfo(null)
-            setAttendees([])
-          }, 2200)
-          return
+        if (!eventInfoRef.current) {
+          setLoadError(activeCheckinsResult.error || 'Could not reach the server.')
         }
-        setEventInfo(null)
-        setAttendees([])
         return
       }
 
-      // Get blocked users to filter out
       let blockedIds = new Set<string>()
       try {
         const blocked = await getBlockedUsers()
-        blockedIds = new Set(blocked.map(b => b.blocked_id))
+        blockedIds = new Set(blocked.map((b) => b.blocked_id))
       } catch (blockErr) {
+        // Not fatal. Showing the room without the block filter is worse than
+        // showing it late, but far better than showing nothing.
         Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
       }
+      if (superseded()) return
 
-      let selectedEventId: string | null = null
-      let selectedEventTitle: string | undefined
-      let selectedAttendees: AttendeeProfile[] | null = null
-      let selectedPagination: { page: number; limit: number; totalCount: number; hasMore: boolean } | undefined
-      let selectedRevealed = false
+      const outcome = await pickActiveRoom(
+        activeCheckinsResult.data.checkIns as CheckinLike[],
+        async (eventId) => {
+          const r = await apiClient.getEventMatches(eventId, { force, limit: 20 })
+          return { success: r.success, error: r.error, matches: r.data?.matches }
+        },
+        { excludeUserId: userId, isBlocked: (id) => blockedIds.has(id) }
+      )
+      if (superseded()) return
 
-      for (const checkin of sortedCheckins) {
-        const candidateEventId = extractEventIdFromCheckin(checkin)
-        if (!candidateEventId) continue
-
-        /*
-         * `matches`, not `checkins`.
-         *
-         * This called getEventCheckins, which stopped returning `image` and the
-         * real `name` in API v0.46.0 when it stopped handing out attendee
-         * identities. The screen has been rendering blank avatars in production
-         * ever since, and its card linked to /user/[id] which still showed the
-         * real profile -- so the anonymity was one tap deep.
-         *
-         * `matches` is the endpoint built for this screen: ranked by shared
-         * interests with rarity weighting, pseudonymous unless revealed, and it
-         * returns 403 rather than data if you were not in the room.
-         */
-        const checkinsResult = await apiClient.getEventMatches(candidateEventId, { force, limit: 20 })
-        if (!checkinsResult.success || !checkinsResult.data) {
-          const err = String(checkinsResult.error || '').toLowerCase()
-          if (err.includes('event not found')) {
-            Logger.warn('match', 'Skipping stale active check-in event', { eventId: candidateEventId })
-            continue
-          }
-          Logger.error('match', 'Error fetching event check-ins', { error: checkinsResult.error, eventId: candidateEventId })
-          if (loadId !== attendeeLoadIdRef.current) return
-          return
-        }
-
-        /*
-         * Typed, not `as any`. The previous shape-sniffing here
-         * (payload.attendees || payload.checkIns || payload.data) silently
-         * produced an empty list the moment the endpoint changed, because none
-         * of those keys exist on the match response -- and the casts hid that
-         * from the type checker.
-         */
-        const attendeeProfiles: AttendeeProfile[] = (checkinsResult.data.matches ?? [])
-          .filter((m) => m.userId !== userId && !blockedIds.has(m.userId))
-          .map((m) => ({
-            user_id: m.userId,
-            name: m.displayName,
-            profile_photos: m.photo ? [m.photo] : undefined,
-            interests: m.sharedInterests,
-            sharedIntents: m.sharedIntents,
-            workField: m.workField,
-            insideNow: m.insideNow,
-            youLiked: m.youLiked,
-          }))
-
-        /*
-         * No client-side sort. `matches` arrives ranked -- IDF-weighted shared
-         * interests, intent, presence, then arrival recency as a tiebreak -- and
-         * re-sorting by `last_seen` here would throw that away for a field the
-         * match card does not even carry. Arrival order is what the OLD
-         * endpoint returned; ranking is the reason to have moved off it.
-         */
-        selectedEventId = candidateEventId
-        selectedEventTitle = checkin?.event?.title
-        selectedAttendees = attendeeProfiles
-        // Their own reveal state for this room, straight from the check-in row
-        // the list already returned. Absent reads as anonymous, which matches
-        // the server default and is the safe thing to claim.
-        selectedRevealed = checkin?.revealed === true
-        // Ranked, not paged: "load more" raises the limit. See loadMoreAttendees.
-        selectedPagination = {
-          page: 1,
-          limit: 20,
-          totalCount: attendeeProfiles.length,
-          hasMore: attendeeProfiles.length >= 20,
-        }
-        break
-      }
-
-      if (loadId !== attendeeLoadIdRef.current) return
       if (emptyStateTimerRef.current) {
         clearTimeout(emptyStateTimerRef.current)
+        emptyStateTimerRef.current = null
       }
-      if (!selectedEventId) {
-        setEventInfo(null)
-        setAttendees([])
-        setAttendeesHasMore(false)
-        setAttendeesTotalCount(0)
-        setAttendeesPage(1)
+
+      if (outcome.kind === 'error') {
+        Logger.error('match', 'Every active check-in failed to load', {
+          message: outcome.message,
+        })
+        // Same rule: only claim failure if there is nothing good on screen.
+        if (!eventInfoRef.current) setLoadError(outcome.message)
         return
       }
 
-      currentEventIdRef.current = selectedEventId
-      setEventInfo({ id: selectedEventId, title: selectedEventTitle })
-      setMyRevealed(selectedRevealed)
-      setAttendees(selectedAttendees || [])
-      setAttendeesHasMore(selectedPagination?.hasMore ?? false)
-      setAttendeesTotalCount(selectedPagination?.totalCount ?? (selectedAttendees?.length ?? 0))
+      setLoadError(null)
+
+      if (outcome.kind === 'notCheckedIn') {
+        const clearRoom = () => {
+          currentEventIdRef.current = null
+          setEventInfo(null)
+          setAttendees([])
+          setAttendeesHasMore(false)
+          setAttendeesPage(1)
+        }
+
+        /*
+         * Leaving a room you are visibly in gets a grace period; arriving at
+         * "no room" from nothing does not.
+         *
+         * `/checkins/active` briefly returns an empty list during a check-out
+         * round trip and after some sync gaps. Without this, the room vanishes
+         * and reappears two seconds later. The delay is kept from the original
+         * code for that reason — but it is now scoped to the transition that
+         * actually flickers. On a cold start there is nothing to protect, so
+         * "Not Checked In Yet" appears immediately rather than after a
+         * pointless 2.2s of spinner.
+         */
+        if (eventInfoRef.current) {
+          emptyStateTimerRef.current = setTimeout(clearRoom, 2200)
+          return
+        }
+        clearRoom()
+        return
+      }
+
+      const attendeeProfiles: AttendeeProfile[] = outcome.attendees.map((m) => ({
+        user_id: m.userId,
+        name: m.displayName,
+        profile_photos: m.photo ? [m.photo] : undefined,
+        interests: m.sharedInterests,
+        sharedIntents: m.sharedIntents,
+        workField: m.workField,
+        insideNow: m.insideNow,
+        youLiked: m.youLiked,
+      }))
+
+      currentEventIdRef.current = outcome.eventId
+      setEventInfo({ id: outcome.eventId, title: outcome.eventTitle })
+      setMyRevealed(outcome.revealed)
+      /*
+       * Debris from #67: `setMyName` was declared and never called, so
+       * `revealChipLabel(true, myName)` always fell through to its no-name
+       * branch and the chip could only ever say "You're visible here" — never
+       * "You're visible as Sagar". The name is your own, already in the auth
+       * session, and needs no request.
+       */
+      setMyName(authUserNameRef.current)
+      setAttendees(attendeeProfiles)
+      setAttendeesHasMore(attendeeProfiles.length >= 20)
       setAttendeesPage(1)
     } catch (e) {
       Logger.error('match', 'Failed to load event attendees', { error: e })
-      if (loadId !== attendeeLoadIdRef.current) return
-      // Keep prior stable UI to avoid state thrash on transient failures.
+      if (superseded()) return
+      if (!eventInfoRef.current) {
+        setLoadError(e instanceof Error ? e.message : 'Something went wrong loading the room.')
+      }
     }
   }, [])
 
@@ -910,25 +903,77 @@ export default function Match() {
     [onSafetyPress, openUserProfile]
   )
 
-  const renderEmptyState = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
-      <Text style={styles.emptyText}>
-        Check in to an event to unlock recommendations and nearby attendees.
-      </Text>
-      <TouchableOpacity 
-        style={styles.eventsButton}
-        onPress={onBrowseEvents}
-      >
-        <Text style={styles.eventsButtonText}>Browse Events</Text>
-      </TouchableOpacity>
-    </View>
-  ), [onBrowseEvents])
+  /**
+   * Four states, four answers.
+   *
+   * This rendered "Not Checked In Yet" for every one of them — including to
+   * somebody standing in the venue whose request had just failed. Each branch
+   * below is a different thing to tell the user and a different next action.
+   */
+  const renderEmptyState = useCallback(() => {
+    if (!authInitialized) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={APP_COLORS.textTertiary} />
+        </View>
+      )
+    }
 
-  const isLoading = loading
+    if (!authUser) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyGlyph}>
+            <Ionicons name="person-outline" size={40} color={APP_COLORS.textTertiary} />
+          </View>
+          <Text style={styles.emptyTitle}>Sign in to see the room</Text>
+          <Text style={styles.emptyText}>
+            Matches are tied to the event you are checked in to.
+          </Text>
+        </View>
+      )
+    }
+
+    if (loadError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyGlyph}>
+            <Ionicons name="cloud-offline-outline" size={40} color={APP_COLORS.textTertiary} />
+          </View>
+          <Text style={styles.emptyTitle}>Could not load the room</Text>
+          <Text style={styles.emptyText}>{loadError}</Text>
+          <TouchableOpacity
+            style={styles.eventsButton}
+            onPress={onPullToRefresh}
+            accessibilityRole="button"
+          >
+            <Text style={styles.eventsButtonText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyGlyph}>
+          <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
+        </View>
+        <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
+        <Text style={styles.emptyText}>
+          Check in to an event to unlock recommendations and nearby attendees.
+        </Text>
+        <TouchableOpacity style={styles.eventsButton} onPress={onBrowseEvents}>
+          <Text style={styles.eventsButtonText}>Browse Events</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }, [authInitialized, authUser, loadError, onBrowseEvents, onPullToRefresh])
+
+  /*
+   * Auth still restoring counts as loading. Otherwise the screen flashes
+   * "Sign in to see the room" at somebody who is signed in, every cold start,
+   * for as long as SecureStore takes.
+   */
+  const isLoading = loading || !authInitialized
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -1184,10 +1229,17 @@ export default function Match() {
 
                 <View style={styles.sectionHeaderRow}>
                   <Text style={styles.sectionTitle}>Also Here</Text>
+                  {/*
+                    * How many we are showing, not "of how many".
+                    *
+                    * `/matches` is ranked, not paginated — it returns the top N
+                    * and no room total, so a denominator was never available.
+                    * `attendeesTotalCount` was set to the length of the first
+                    * page and then never moved, so this read "20/20" forever
+                    * and the button below counted down to a negative number.
+                    */}
                   <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>
-                      {attendeesTotalCount > attendees.length ? `${attendees.length}/${attendeesTotalCount}` : alsoHereAttendees.length}
-                    </Text>
+                    <Text style={styles.sectionCountText}>{alsoHereAttendees.length}</Text>
                   </View>
                 </View>
                 <View style={styles.sectionDivider} />
@@ -1215,9 +1267,7 @@ export default function Match() {
                     {loadingMoreAttendees ? (
                       <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
                     ) : (
-                      <Text style={styles.loadMoreText}>
-                        Load More ({attendeesTotalCount - attendees.length} remaining)
-                      </Text>
+                      <Text style={styles.loadMoreText}>Load More</Text>
                     )}
                   </TouchableOpacity>
                 )}

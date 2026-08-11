@@ -61,10 +61,35 @@ compares metres to kilometres.
 
 ## Now
 
-**After signup: retire onboarding, ask once, gate at the point of use.** The app
-half of a fifteen-PR plan reviewed by `/plan-eng-review` and Codex; the server
-half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
-(API #183–#191), so these can be built against a server that already answers.
+**Stage 1 — the six bugs device testing found.** Reviewed by `/plan-eng-review`
+and Codex. Everything here is app-side and ships as one PR, independent of the
+identity work in `Next`.
+
+| # | What | State |
+|---|---|---|
+| T5 | Per-attempt `AbortController` on all four fetch sites — no timeout exists anywhere today | |
+| T6 | Extract `pickActiveRoom`; one bad check-in must not abandon the rest | |
+| T1 | Socket auth callback that **refreshes**, not just re-reads | |
+| — | Honest cold-start states: auth-loading ≠ signed-out ≠ empty ≠ timed out | |
+| T9 | `about-you` requires gender + orientation when dating is ticked | |
+| T12 | Sweep the #67 debris — `myName`, `attendeesTotalCount` | |
+
+**T1 is the one that looks done and isn't.** Making socket.io's `auth`
+function-valued is the obvious fix and changes nothing on its own:
+`TokenStorage.getAccessToken()` is a bare SecureStore read with no expiry
+awareness, so the callback re-serves the same expired token. It has to call
+`apiClient.refreshSession()` first.
+
+**T6 before the `continue` fix.** The suite is `jest-expo` with no
+`@testing-library/react-native`, so the loop cannot be tested while it lives
+inside `MatchScreen.tsx` — same reason `lib/reveal.ts` and `lib/geo.ts` were
+extracted in #62/#67.
+
+### Previously in Now — done
+
+**After signup: retire onboarding, ask once, gate at the point of use.** The
+server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
+#183–#195).
 
 | PR | What | State |
 |---|---|---|
@@ -73,10 +98,6 @@ half is `blendn-admin/docs/ROADMAP.md` and is **already deployed to staging**
 | 12 | Signup takes an age; one `about-you` screen replaces eight | **Done** (#64) |
 | 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
-
-**PR 11 must be atomic.** `_layout.tsx` still targets `/onboarding/welcome` for
-any `onboarded: false` account; deleting the screens without the gate sends every
-such user to expo-router's Unmatched Route with no way out.
 
 ---
 
