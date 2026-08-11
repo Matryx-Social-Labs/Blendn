@@ -74,12 +74,30 @@ Marking these `secret` in EAS would be worse than useless: it hides them from
 you and your own CLI while leaving them fully readable in the shipped app, and
 it breaks `expo start` locally.
 
-**The Maps key is the one real action item, and it has nothing to do with the
-repo.** It will be readable inside every build forever, so the mitigation is a
-Google Cloud Console restriction: application → iOS bundle
-`com.matryxsociallabs.blendn` and the matching Android package; API → only the
-Maps SDKs. Do this before the first TestFlight build, because afterwards the
-unrestricted key is already in other people's hands.
+**The Maps key cannot be restricted the way the others could be, and that is a
+real limitation rather than an oversight.**
+
+`EventDetailScreen` calls `maps.googleapis.com/maps/api/staticmap` directly from
+the device. **Maps Static API is a web service, not a mobile SDK**, so it accepts
+only HTTP-referrer and IP restrictions — there is no iOS bundle or Android
+package restriction to apply, and IP restriction is meaningless for phones.
+Google's own guidance for this exact case is "use a secure proxy server".
+
+So the key ships extractable and unrestrictable. What actually bounds the
+damage:
+
+- **API restriction** → *Maps Static API only*, so a lifted key cannot be spent
+  on anything more expensive.
+- **A daily quota cap** on that API (APIs & Services → Maps Static API →
+  Quotas). This is the real control: a key with a 2,000/day ceiling is a
+  nuisance rather than a bill.
+- **A billing budget alert**, low.
+
+**The proper fix, not done here:** proxy the request through `blendn-admin`,
+which already exists and can hold the key server-side, or move to
+`react-native-maps` whose SDK *does* support bundle restrictions. Either is real
+work; the quota cap is what makes shipping without them acceptable in the
+meantime.
 
 The genuinely secret things never touch the repo either way — the App Store
 Connect API key (`.p8`) and the iOS distribution certificate both live on EAS
@@ -177,15 +195,34 @@ not in one Expo account. That is how this situation arose.
 
 ### Google Play service account
 
-`eas submit` needs a service account to talk to Play, the way it needs the ASC
-API key for Apple:
+`eas submit` needs this to talk to Play, exactly as it needs the ASC API key for
+Apple. **An existing app record and an existing build do not remove the need for
+it** — those say the app exists, this is how a machine gets in.
 
-1. **Play Console** → Setup → API access → link a Google Cloud project.
-2. In Google Cloud, create a **service account**; grant it no project roles.
-3. Back in Play Console, grant that account **Release manager** on this app.
-4. Create a **JSON key** for the service account and download it.
-5. `npx eas-cli credentials --platform android` → upload it under Google
-   Service Account. It is then stored on EAS, exactly like the `.p8`.
+**Google Cloud Console:**
+
+1. **IAM & Admin → Service Accounts** → **Create service account**. Name it and
+   **Create and close** — skip the "grant roles" step; it needs no project role.
+2. Select it → **Keys → Add key → Create new key → JSON** → **Create**.
+3. **APIs & Services → Library** → **Google Play Android Developer API** →
+   **Enable**. Easy to miss, and without it every submit fails with a permission
+   error that does not mention the API.
+
+**Play Console — under Users and permissions, not API access:**
+
+4. **Users and permissions → Invite new users**, with the service account's
+   email from the JSON (`…@….iam.gserviceaccount.com`).
+5. Grant, under **App access** and **Releases**: view app information
+   (read-only) · edit and delete draft apps · release to production, exclude
+   devices, and use Play App Signing · release apps to testing tracks · manage
+   testing tracks and edit tester lists · manage store presence.
+
+**Then:**
+
+```bash
+npx eas-cli credentials --platform android
+# → production → Google Service Account → Upload a Google Service Account Key
+```
 
 Do **not** put the JSON path in `eas.json`. A path only works on the machine
 holding the file, which is the opposite of what a workflow needs — and unlike
