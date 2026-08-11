@@ -67,12 +67,16 @@ identity work in `Next`.
 
 | # | What | State |
 |---|---|---|
-| T5 | Per-attempt `AbortController` on all four fetch sites — no timeout exists anywhere today | |
-| T6 | Extract `pickActiveRoom`; one bad check-in must not abandon the rest | |
-| T1 | Socket auth callback that **refreshes**, not just re-reads | |
-| — | Honest cold-start states: auth-loading ≠ signed-out ≠ empty ≠ timed out | |
-| T9 | `about-you` requires gender + orientation when dating is ticked | |
-| T12 | Sweep the #67 debris — `myName`, `attendeesTotalCount` | |
+| T5 | Per-attempt `AbortController` on every fetch site — no timeout existed anywhere | **Done** (#70) |
+| T6 | Extract `pickActiveRoom`; one bad check-in must not abandon the rest | **Done** (#70) |
+| T1 | Socket auth callback that **refreshes**, not just re-reads | **Done** (#70) |
+| — | Honest cold-start states: auth-loading ≠ signed-out ≠ empty ≠ failed | **Done** (#70) |
+| T9 | `about-you` requires gender + orientation when dating is ticked | **Done** (#70) |
+| T12 | Sweep the #67 debris — `myName`, `attendeesTotalCount` | **Done** (#70) |
+
+Tests 56 → 98. **Still owed a device pass:** idle 20 minutes foregrounded and
+confirm realtime returns with no Retry, and that the reconnect handshake carries
+a *new* token — the fix is invisible otherwise.
 
 **T1 is the one that looks done and isn't.** Making socket.io's `auth`
 function-valued is the obvious fix and changes nothing on its own:
