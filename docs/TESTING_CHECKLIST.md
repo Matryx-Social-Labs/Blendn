@@ -210,6 +210,27 @@ Run against `staging-api.blendn.app` with seeded accounts, 2026-08-11.
 > The same trap produced the `rohan-ohan` pseudonym bug. **First question of any
 > negative-test suite: did any input succeed?**
 
+### Third round — reveal lifecycle + `just_here` (API #201, #202, #205), 2026-08-11
+
+Run end to end on a fresh pair (`meera` / `arjun`) against staging.
+
+| What | Result |
+|---|---|
+| Both anonymous at the start | ✅ "Twilight Coyote" / "Clever Canyon" |
+| Asking sets the flag on the *other* side | ✅ |
+| Asking twice cannot nag | ✅ same response, one flag |
+| Reveal with no photo | ✅ refused — "Add a photo to your profile first" |
+| Reveal with a photo | ✅ name **and** photo appear to the other side |
+| The revealer still sees *their* pseudonym | ✅ per-side, not a mutual switch |
+| Asking somebody already revealed | ✅ refused |
+| All four intents at once | ✅ refused |
+| `just_here` alone / `dating`+`networking` | ✅ both accepted |
+
+> **Leaving is permanent, confirmed by accident.** A re-like on the pair closed
+> in the previous round returned `mutual: false` with no conversation id — the
+> close survived a full re-seed of the room, which is what "no path back" is
+> supposed to mean.
+
 **One real gap found while testing**, and it is what **T4** exists to fix:
 `User.image` and `profiles.photos` are two columns and the surfaces disagree.
 The match card reads `photos[0] ?? user.image`; conversations read `user.image`.
