@@ -1,0 +1,34 @@
+# prod -> App Store Connect, against the production API.
+#
+# The build lands in App Store Connect and stops there. `eas submit` uploads a
+# binary; it does not create a version, attach release notes, or submit for
+# review -- those stay in App Store Connect, done by a person.
+#
+# That is deliberate rather than a gap. Releasing to the App Store is the one
+# step where somebody should look at what is about to reach the public, and it
+# is also where the App Privacy answers and the age rating get confirmed. The
+# automation earns its keep by removing the mechanical part: no downloading an
+# .ipa, no Transporter, no wondering which build is which.
+#
+# So: merge to prod, wait ~20 minutes, and the build is sitting in App Store
+# Connect ready to submit.
+
+name: prod -> App Store Connect
+
+on:
+  push:
+    branches: ['prod']
+
+jobs:
+  build:
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit:
+    needs: [build]
+    type: submit
+    params:
+      build_id: ${{ needs.build.outputs.build_id }}
+      profile: production

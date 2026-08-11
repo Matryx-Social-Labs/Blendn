@@ -1,0 +1,36 @@
+# stage -> TestFlight, against the staging API.
+#
+# This replaces the manual loop: build on EAS, download the .ipa, upload it by
+# hand. Nothing here needs a GitHub secret -- the build runs on Expo's
+# infrastructure and reads its environment from EAS, so the repository being
+# public is not a factor, and making it private later changes nothing.
+#
+# The API the build talks to is decided by `environment: preview` on the
+# `staging` profile in eas.json, which resolves EXPO_PUBLIC_API_BASE_URL to
+# staging-api.blendn.app. It is not set here, on purpose: a URL in two places
+# is a URL that will disagree with itself.
+#
+# `autoIncrement` is on the profile because App Store Connect refuses a build
+# number it has already seen, and staging and production share one app record
+# (ascAppId 6757761059). TestFlight and the App Store are the same app; a
+# TestFlight build is simply one that has not been released.
+
+name: stage -> TestFlight
+
+on:
+  push:
+    branches: ['stage']
+
+jobs:
+  build:
+    type: build
+    params:
+      platform: ios
+      profile: staging
+
+  submit:
+    needs: [build]
+    type: submit
+    params:
+      build_id: ${{ needs.build.outputs.build_id }}
+      profile: staging
