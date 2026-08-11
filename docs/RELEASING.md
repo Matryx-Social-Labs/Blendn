@@ -1,15 +1,22 @@
 # Releasing
 
-Push to `stage` → TestFlight, against the staging API.
-Push to `prod` → App Store Connect, against production, waiting for a human.
+Push to `stage` → TestFlight and Play internal, against the staging API.
+Push to `prod` → both stores, against production, waiting for a human.
 
-Nobody downloads an `.ipa` and nobody opens Transporter.
+Nobody downloads an `.ipa` or an `.aab`, and nobody opens Transporter.
 
 ```
-  stage ──► eas build (staging)  ──► eas submit ──► TestFlight        (staging-api.blendn.app)
-  prod  ──► eas build (production) ─► eas submit ──► App Store Connect (api.blendn.app)
-                                                     └─ you press Submit for Review
+            ┌─ iOS     ──► TestFlight
+  stage ────┤                                    (staging-api.blendn.app)
+            └─ Android ──► Play, internal track
+
+            ┌─ iOS     ──► App Store Connect ──► you press Submit for Review
+  prod  ────┤                                    (api.blendn.app)
+            └─ Android ──► Play, production track as a DRAFT ──► you roll out
 ```
+
+The two platforms are independent chains in each workflow. An iOS signing
+problem does not stop Android testers getting a build.
 
 ## Why EAS Workflows and not GitHub Actions
 
@@ -118,6 +125,53 @@ source in both directions.
 > does not show an error screen. If a TestFlight build dies instantly on launch,
 > check this first.
 
+## Android
+
+Play's `internal` track is the TestFlight equivalent: testers you name, no
+review, available in minutes.
+
+**Production uploads as a `draft`.** Nothing rolls out until somebody opens
+Play Console and releases it. This matters more on Android than on iOS: the App
+Store has a review queue between a mistake and the public, and Play does not. A
+merge to `prod` without `releaseStatus: draft` would reach every Android user
+directly.
+
+### ⚠️ The upload keystore, which is the one irreversible thing here
+
+Android signing is not like iOS. An iOS distribution certificate can be revoked
+and regenerated in a minute. **An Android upload key cannot** — if Play has ever
+accepted a build signed with a key you no longer hold, uploads are rejected
+(*"signed with the wrong key"*) and the only remedy is a reset request to Google
+Play support, which takes days.
+
+Because the Expo project moved accounts, the keystore from any previous Android
+build lives in the **old** account (`@matrixsociallabs/blendn`), and a new
+project generates a fresh one.
+
+**Before generating anything Android:** check expo.dev → the old account →
+blendn → Credentials → Android. If a keystore is there, download it and import
+it into this project with `npx eas-cli credentials --platform android`.
+
+If Play has never had a build, let EAS generate one — and back it up
+immediately, because from that moment it is the only key that can ever update
+the app.
+
+### Google Play service account
+
+`eas submit` needs a service account to talk to Play, the way it needs the ASC
+API key for Apple:
+
+1. **Play Console** → Setup → API access → link a Google Cloud project.
+2. In Google Cloud, create a **service account**; grant it no project roles.
+3. Back in Play Console, grant that account **Release manager** on this app.
+4. Create a **JSON key** for the service account and download it.
+5. `npx eas-cli credentials --platform android` → upload it under Google
+   Service Account. It is then stored on EAS, exactly like the `.p8`.
+
+Do **not** put the JSON path in `eas.json`. A path only works on the machine
+holding the file, which is the opposite of what a workflow needs — and unlike
+the `EXPO_PUBLIC_*` values, this one is a real secret.
+
 ## One-time setup
 
 1. **App Store Connect API key.** Users and Access → Integrations → App Store
@@ -132,6 +186,8 @@ source in both directions.
    skip**, and without it the workflow files sit there doing nothing.
 4. **Environment variables**, above.
 5. **Restrict the Maps key**, above.
+6. **Android keystore and Play service account**, above. Check the old Expo
+   account for an existing keystore *first*.
 
 ## The native directories are committed, and that has a cost
 

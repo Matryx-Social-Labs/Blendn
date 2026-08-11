@@ -12,32 +12,41 @@
         "simulator": true
       }
     },
-
     "preview": {
       "distribution": "internal",
       "environment": "preview"
     },
-
     "staging": {
       "environment": "preview",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     },
-
     "production": {
       "environment": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
-
   "submit": {
     "staging": {
       "ios": {
         "ascAppId": "6757761059"
+      },
+      "android": {
+        "track": "internal"
       }
     },
     "production": {
       "ios": {
         "ascAppId": "6757761059"
+      },
+      "android": {
+        "track": "production",
+        "releaseStatus": "draft"
       }
     }
   }

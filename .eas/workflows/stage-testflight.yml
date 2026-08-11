@@ -10,27 +10,45 @@
 # staging-api.blendn.app. It is not set here, on purpose: a URL in two places
 # is a URL that will disagree with itself.
 #
-# `autoIncrement` is on the profile because App Store Connect refuses a build
-# number it has already seen, and staging and production share one app record
-# (ascAppId 6757761059). TestFlight and the App Store are the same app; a
-# TestFlight build is simply one that has not been released.
+# `autoIncrement` is on the profile because both stores refuse a version they
+# have already seen -- App Store Connect a build number, Play a versionCode --
+# and staging and production share one app record on each. TestFlight and the
+# App Store are the same app; a TestFlight build is one that has not been
+# released. Play's `internal` track is the same idea.
 
-name: stage -> TestFlight
+name: stage -> TestFlight + Play internal
 
 on:
   push:
     branches: ['stage']
 
+# The two platforms are independent chains on purpose: an iOS signing problem
+# should not stop Android testers getting a build, and vice versa. They fan out
+# in parallel and neither waits on the other.
+
 jobs:
-  build:
+  build_ios:
     type: build
     params:
       platform: ios
       profile: staging
 
-  submit:
-    needs: [build]
+  submit_ios:
+    needs: [build_ios]
     type: submit
     params:
-      build_id: ${{ needs.build.outputs.build_id }}
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: staging
+
+  build_android:
+    type: build
+    params:
+      platform: android
+      profile: staging
+
+  submit_android:
+    needs: [build_android]
+    type: submit
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
       profile: staging
