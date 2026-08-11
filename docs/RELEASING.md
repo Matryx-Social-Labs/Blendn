@@ -50,7 +50,7 @@ private repo, a public repo, and a repo that does not exist. **The repository
 was never the exposure. The binary is.**
 
 So the rule is not "hide them better", it is **never put a secret behind that
-prefix**. All five are stored `plaintext` in EAS:
+prefix**. All eight are stored `plaintext` in EAS:
 
 | | Secret? | |
 |---|---|---|
@@ -59,6 +59,9 @@ prefix**. All five are stored `plaintext` in EAS:
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | no | Already in `app.json` and `Info.plist` in the clear |
 | `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | **billable** | Restrict it — see below |
 | `EXPO_PUBLIC_DISABLE_DEBUG_LOGS` | no | |
+| `EXPO_PUBLIC_SENTRY_DSN` | no | A DSN only permits *writing* events; it is meant to ship in clients |
+| `EXPO_PUBLIC_APP_ENV` | no | A label on Sentry events |
+| `EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED` | no | Dead — the app has no Supabase dependency. Listed so it reads as a leftover, not a mystery |
 
 Marking these `secret` in EAS would be worse than useless: it hides them from
 you and your own CLI while leaving them fully readable in the shipped app, and
@@ -73,16 +76,42 @@ unrestricted key is already in other people's hands.
 
 The genuinely secret things never touch the repo either way — the App Store
 Connect API key (`.p8`) and the iOS distribution certificate both live on EAS
-servers, uploaded once through `eas credentials`.
+servers, uploaded once through `npx eas-cli credentials`.
 
 ### Setting them
 
+`eas` is not installed globally in this repo — it is `npx eas-cli`. And it is
+`env:set`, not `env:create`: the latter is deprecated, and `env:set` upserts, so
+re-running it is safe.
+
 ```bash
-eas env:create --environment preview    --name EXPO_PUBLIC_API_BASE_URL --value https://staging-api.blendn.app --visibility plaintext
-eas env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://api.blendn.app          --visibility plaintext
+set -a; source .env; set +a     # the client ids, without retyping them
+
+# The one value that differs between the two — the whole point of the split
+npx eas-cli env:set --environment preview    --name EXPO_PUBLIC_API_BASE_URL --value https://staging-api.blendn.app --visibility plaintext
+npx eas-cli env:set --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://api.blendn.app          --visibility plaintext
+
+# Identical in both
+for E in preview production; do
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID --value "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" --visibility plaintext
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID --value "$EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID" --visibility plaintext
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY  --value "$EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"  --visibility plaintext
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_DISABLE_DEBUG_LOGS   --value 1 --visibility plaintext
+done
+
+npx eas-cli env:set --environment preview    --name EXPO_PUBLIC_APP_ENV --value staging    --visibility plaintext
+npx eas-cli env:set --environment production --name EXPO_PUBLIC_APP_ENV --value production --visibility plaintext
 ```
 
-…and the other four in **both** environments. `.env.example` is the manifest.
+`.env.example` is the manifest — eight variables, cross-checked against the
+source in both directions.
+
+> **`EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is currently unset everywhere**, including
+> local `.env`. `EventDetailScreen` interpolates it straight into a Static Maps
+> URL, so the request goes out as `key=undefined` and Google returns an error
+> image. The map on event detail is broken today, and would be broken for
+> testers. Because these bake in at build time, adding the key later needs a new
+> build — so set it before the first one.
 
 > A build with no `EXPO_PUBLIC_API_BASE_URL` **crashes before the first screen
 > renders** — `lib/apiClient.ts` throws at module scope. It does not degrade, it
@@ -94,7 +123,7 @@ eas env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value 
 1. **App Store Connect API key.** Users and Access → Integrations → App Store
    Connect API → Team Keys → **+**, role **App Manager**. Download the `.p8`
    once — Apple never shows it again. Note the Key ID and Issuer ID.
-2. **`eas credentials --platform ios`** — upload that key, and let EAS create a
+2. **`npx eas-cli credentials --platform ios`** — upload that key, and let EAS create a
    distribution certificate. Apple caps you at 2; revoking one does **not**
    affect builds already on TestFlight or the App Store, but does break any
    other pipeline still signing with it.
