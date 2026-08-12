@@ -420,14 +420,28 @@ want `Enabled:` this time), then **regenerate the provisioning profile** —
 answer *no* to "reuse the original profile", because a profile minted under the
 old capability set does not acquire the new entitlement.
 
-## ⚠️ Xcode 26 is required for App Store submission, and `auto` will not pick it
+## ⚠️ Xcode 26 is required for TestFlight too, and `auto` will not pick it
 
-Since **28 April 2026**, Apple refuses App Store submissions built with anything
-older than Xcode 26. EAS's default `image: auto` chooses by Expo SDK version,
-and this project is on **SDK 53**, so `auto` resolves to
+Since **28 April 2026**, Apple refuses **any upload to App Store Connect** built
+with anything older than Xcode 26. EAS's default `image: auto` chooses by Expo
+SDK version, and this project is on **SDK 53**, so `auto` resolves to
 `macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
 
 > *This build can no longer be submitted to the App Store.*
+
+**Read that warning as blocking TestFlight, not just the App Store.** It says
+"App Store", the build succeeds, and `eas submit` reports success — then the
+upload is rejected asynchronously and the failure arrives by email:
+
+```
+90725: SDK version issue. This app was built with the iOS 18.5 SDK.
+All iOS and iPadOS apps must be built with the iOS 26 SDK or later,
+included in Xcode 26 or later, in order to be uploaded to App Store
+Connect or submitted for distribution.
+```
+
+Nothing in the CLI output tells you. Build 102 went through the whole pipeline —
+built, submitted, "scheduled" — and died in App Store Connect afterwards.
 
 **Upgrading the SDK is not the fix here.** SDK 54 was tried on 2026-08-11 and
 rolled back with reasons — it raised the advisory count from 25 to 29 and
@@ -444,6 +458,12 @@ Pin the image instead, on both profiles in `eas.json`:
 `macos-tahoe-26.5-xcode-26.6` is paired with SDK 57 — and the further the jump
 from SDK 53, the likelier some native module fails to compile. Take the smallest
 step that satisfies Apple.
+
+**Confirmed working, 2026-08-12.** SDK 53 / React Native 0.79.6 compiles cleanly
+under Xcode 26.0, submits without 90725, and reaches TestFlight. The pairing was
+an open question when the pin was made (#79) and is not one any more — so an SDK
+upgrade is not required to satisfy Apple's deadline, and the rollback recorded in
+`SECURITY_RELIABILITY_BACKLOG.md` stands.
 
 ## The native directories are committed, and that has a cost
 
