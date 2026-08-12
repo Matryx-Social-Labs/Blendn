@@ -372,7 +372,16 @@ The behaviour above is **shipped**. The look of it is not.
 | The header trigger — `📍 City ▾` | **Placeholder.** Inherits `topBarSubtitle`, sized as a caption rather than a control |
 | *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |
 | Section-level empty states | Built |
-| Distance labels on cards | **Not built.** The plan calls for *"2.4 km away"*; the card has no slot for it yet |
+| Distance labels on cards | Built. `formatDistance` in `lib/geo.ts`, rendered in the card's `locationLabel` slot **in place of** the venue name |
+
+**The distance label needs a decision it has not had.** The card has one
+metadata slot, so *"2.4km away"* currently **replaces** the venue name rather
+than sitting beside it — and it only appears while you are browsing the city you
+are in, because a distance measured from Munich to a Bengaluru event is a true
+number and useless information. So the same card shows the venue in one state
+and a distance in another. That is defensible and it is not designed. Both
+matter: distance is what stops someone tapping into an event across town, and
+the venue is what tells them whether they know the place.
 
 **The two worth real attention:**
 

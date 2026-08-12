@@ -66,6 +66,18 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
       current_capacity: e.currentCapacity || 0,
       cover_image_url: e.coverImageUrl || null,
       category: e.categories?.[0]?.name || e.category || '',
+      /*
+       * The family this event belongs to, from the server's taxonomy.
+       *
+       * Events are tagged to leaves, so `category` is "Classical and Carnatic"
+       * and grouping on it can only ever match that one leaf. The parent slug
+       * is what "everything musical" means, and it comes from the same tree the
+       * interest picker uses rather than from reading the leaf's name.
+       *
+       * Falls back to the leaf's own slug when the category is top level, so a
+       * caller can group on this field alone without special-casing.
+       */
+      category_group: e.categories?.[0]?.parent?.slug || e.categories?.[0]?.slug || '',
       city: e.city,
       check_in_radius: e.checkInRadius || 100,
       latitude: e.latitude,

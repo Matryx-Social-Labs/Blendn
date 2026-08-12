@@ -16,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import NearbyEventCard from '../components/NearbyEventCard'
 import { getEvents as fetchEventsApi } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
+import { readStoredCity } from '../lib/cityStorage'
+import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
 import { formatTimeRange } from '../lib/time'
@@ -40,16 +42,14 @@ interface Event {
   category?: string
 }
 
-const getDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
+/*
+ * `getDistanceKm` now comes from `lib/geo.ts`.
+ *
+ * This file had its own copy — the same haversine, written out again and
+ * untested. Two implementations of one formula do not stay identical: the
+ * shared one already carries the correction that this one never got, where the
+ * metres/kilometres confusion made check-in distances wrong by 1000x.
+ */
 
 const screenW = Dimensions.get('window').width
 
@@ -91,10 +91,23 @@ export default function NearbyEventsScreen() {
         return
       }
 
+      /*
+       * The same city as the home screen, nearest first.
+       *
+       * This is the "View all" behind the Nearby section, so it has to expand
+       * that section rather than answer a different question. It used to send
+       * `radius: 50` — the same hard cut that blanked the home screen, just at
+       * a bigger number, so someone 60km from everything got an empty list with
+       * no way to tell whether that meant "nothing here" or "you are too far".
+       *
+       * The city comes from the same stored selection the home screen uses, so
+       * "View all" cannot silently show a different city than the one you were
+       * just looking at.
+       */
       const result = await fetchEventsApi({
+        city: (await readStoredCity()) ?? undefined,
         lat: coords.latitude,
         lon: coords.longitude,
-        radius: 50,
         limit: 50,
         sortBy: 'distance',
         sortOrder: 'asc',
@@ -169,9 +182,9 @@ export default function NearbyEventsScreen() {
 
   const renderItem = useCallback(({ item }: { item: Event }) => {
     const dist = (item as any)._distance
-    const distLabel = dist !== undefined
-      ? dist < 1 ? `${Math.round(dist * 1000)}m away` : `${dist.toFixed(1)}km away`
-      : undefined
+    // Shared with the home screen's Nearby cards, so the same event does not
+    // read "1.2km away" on one screen and "1km away" on the other.
+    const distLabel = formatDistance(dist)
 
     return (
       <View style={styles.cardWrapper}>

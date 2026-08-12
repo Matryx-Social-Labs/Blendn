@@ -76,8 +76,27 @@ blendn-admin #212/#213. Plan: `~/.claude/plans/sprightly-questing-aho.md`.
 | — | Empty state names the city and offers the picker, instead of blaming location | **Done** |
 | — | Interested fetched by user, not filtered out of the browse list | **Done** |
 | — | Socket banner off the home screen; offline banner stays | **Done** |
-| — | Distance labels on cards (*"2.4 km away"*) | Next |
-| — | `bestPartiesItems` onto the real taxonomy; both "featured" heroes named honestly | Next |
+| — | Distance labels on cards, shown only while browsing the city you are in | **Done** |
+| — | Nightlife by the taxonomy, not by substring; both heroes named for what they select | **Done** |
+| — | `happeningNowItems` deleted; `nearby-events.tsx` on the shared `getDistanceKm` | **Done** |
+
+**"Best Parties" was two wrongs compounding.** It substring-matched
+`party|night|club|music` against the category name, so Classical and Carnatic —
+sitting under Music — was a Best Party. And when nothing matched it fell back to
+*every* event sorted by interest, so the section still rendered under a parties
+heading showing whatever had a cover image. A book club presented as the best
+party in town. It groups on the parent slug now (blendn-admin #214 puts it on
+the payload) and has no fallback: no nightlife, no section.
+
+**The top hero was never editorial.** `inviteHeroEvent` walked three lists and
+took the first item with a cover image — an image-availability check wearing a
+curator's hat. It is `soonestWithImage` now, which is what it does. Real
+curation stays a separate feature rather than something the naming implies
+already exists.
+
+**"View all" was answering a different question than the section it expands.**
+`nearby-events.tsx` sent `radius: 50` — the same hard cut that blanked the home
+screen, at a bigger number. It reads the same stored city now.
 
 **`profile.location` no longer decides anything.** It was reverse-geocoded once
 at signup, so it was stale for anyone who had travelled — and it was being shown

@@ -1,4 +1,4 @@
-import { getDistanceKm, getDistanceMetres } from '../lib/geo'
+import { formatDistance, getDistanceKm, getDistanceMetres } from '../lib/geo'
 
 /**
  * The unit, pinned.
@@ -72,5 +72,49 @@ describe('getDistanceKm', () => {
     // bug is back.
     const m = getDistanceMetres(12.97, 77.59, 12.99, 77.61)
     expect(getDistanceKm(12.97, 77.59, 12.99, 77.61)).toBeCloseTo(m / 1000, 9)
+  })
+})
+
+/**
+ * How far away, phrased for a card.
+ *
+ * This label carries real weight now: distance stopped being a filter, so
+ * nothing is hidden for being far and this sentence is the only thing between
+ * "that's across town" and someone tapping into an event they cannot reach.
+ */
+describe('formatDistance', () => {
+  it('uses metres under a kilometre', () => {
+    // "0.4km" reads as precision that walking distance does not need.
+    expect(formatDistance(0.42)).toBe('420m away')
+  })
+
+  it('uses one decimal in the near range', () => {
+    expect(formatDistance(2.44)).toBe('2.4km away')
+  })
+
+  it('drops the decimal once it stops meaning anything', () => {
+    // Nobody plans around 41.2 vs 41.3km; the digit only costs legibility.
+    expect(formatDistance(41.2)).toBe('41km away')
+  })
+
+  it('is null for an unknown distance, not a placeholder', () => {
+    // Callers fall back to the venue name. A placeholder would render
+    // "— away", which reads as a bug rather than as missing data.
+    expect(formatDistance(null)).toBeNull()
+    expect(formatDistance(undefined)).toBeNull()
+  })
+
+  it('is null for values that are not real distances', () => {
+    // `distanceMap` stores Infinity for an event with no coordinates, and a
+    // NaN would render as "NaNkm away" on a card.
+    expect(formatDistance(Number.POSITIVE_INFINITY)).toBeNull()
+    expect(formatDistance(NaN)).toBeNull()
+    expect(formatDistance(-1)).toBeNull()
+  })
+
+  it('never rounds a far event down to something reachable', () => {
+    // The failure that matters is a big distance reading small.
+    expect(formatDistance(0.999)).toBe('999m away')
+    expect(formatDistance(1)).toBe('1.0km away')
   })
 })
