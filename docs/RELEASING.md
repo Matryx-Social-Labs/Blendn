@@ -133,30 +133,62 @@ Sentry. A second project would split the issue history for nothing.
 runs fine, silently reporting nothing. That is the failure mode to watch for: it
 looks identical to an app that simply is not crashing.
 
-**The Maps key cannot be restricted the way the others could be, and that is a
-real limitation rather than an oversight.**
+**The Maps key is the hardest of the eight to protect, and the reasons are
+specific.** This section has been wrong twice; what follows is what was actually
+checked in the console on 2026-08-12.
 
-`EventDetailScreen` calls `maps.googleapis.com/maps/api/staticmap` directly from
-the device. **Maps Static API is a web service, not a mobile SDK**, so it accepts
-only HTTP-referrer and IP restrictions — there is no iOS bundle or Android
-package restriction to apply, and IP restriction is meaningless for phones.
-Google's own guidance for this exact case is "use a secure proxy server".
+`EventDetailScreen.tsx:1580` calls `maps.googleapis.com/maps/api/staticmap`
+directly from the device. That is a **web service**, not a mobile SDK.
 
-So the key ships extractable and unrestrictable. What actually bounds the
-damage:
+**An iOS/Android app restriction is offered, and it is conditional.** The console
+does present "iOS apps" and "Android apps" for this key — an earlier version of
+this document claimed otherwise and was wrong. But per Google's
+[API security best practices](https://developers.google.com/maps/api-security-best-practices),
+a web service only honours it when the request carries the right header:
+
+| Platform | Header the request must send |
+|---|---|
+| iOS | `X-Ios-Bundle-Identifier` |
+| Android | `X-Android-Package` **and** `X-Android-Cert` |
+
+**The app sends none of these today.** It builds a URL string and hands it to
+`expo-image` as `{ uri }`. So applying the restriction before shipping the
+headers takes the map from *grey* to *broken*.
+
+Two further constraints, both found the hard way:
+
+1. **One key restricts to one platform.** An app restriction is *either* iOS
+   *or* Android, never both — so app-restricting means **two keys and two env
+   vars**, with the app choosing by `Platform.OS`.
+2. **`X-Android-Cert` is the signing certificate SHA-1, which differs between a
+   debug build and a Play-distributed one** (`5E:8F:16…` vs `28:30:4F…`) — the
+   same split that broke Google Sign-In. A hardcoded value breaks the map in
+   whichever case it does not match. iOS has no equivalent problem.
+
+**There is no daily quota cap.** Google removed them for Maps Platform APIs, so
+the ceiling this document previously recommended does not exist. Check for a
+**per-minute** limit, which does survive and at least throttles someone hammering
+the key.
+
+So what actually bounds the damage today:
 
 - **API restriction** → *Maps Static API only*, so a lifted key cannot be spent
-  on anything more expensive.
-- **A daily quota cap** on that API (APIs & Services → Maps Static API →
-  Quotas). This is the real control: a key with a 2,000/day ceiling is a
-  nuisance rather than a bill.
-- **A billing budget alert**, low.
+  on anything more expensive. **Applied.**
+- **A billing budget alert**, low. Reactive — it reports the spend, it does not
+  stop it.
+
+**The verification that matters, if app restrictions are ever applied:** Google
+says to *"verify that requests with **incorrect** application identifiers are
+rejected"*, because *"application restrictions may not be fully supported on
+older legacy Google Maps Platform services"* — and Static Maps is legacy. If the
+endpoint ignores the header, the app keeps working and the restriction does
+nothing, which looks exactly like success. The only honest test is a `curl` with
+a **wrong** bundle id that must fail.
 
 **The proper fix, not done here:** proxy the request through `blendn-admin`,
-which already exists and can hold the key server-side, or move to
-`react-native-maps` whose SDK *does* support bundle restrictions. Either is real
-work; the quota cap is what makes shipping without them acceptable in the
-meantime.
+which already exists and can hold the key server-side. That is also Google's own
+recommendation when the verification above fails. With no quota cap available,
+this is worth more than it was.
 
 The genuinely secret things never touch the repo either way — the App Store
 Connect API key (`.p8`) and the iOS distribution certificate both live on EAS
