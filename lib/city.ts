@@ -150,6 +150,41 @@ export function shouldOfferSwitch(input: {
 }
 
 /**
+ * Say where you are, when there is nothing to be done about it.
+ *
+ * `shouldOfferSwitch` only speaks when the device's city has events — because a
+ * prompt whose only outcome is an empty screen is worse than no prompt. The
+ * consequence, found on a device in Saarbrücken, is that someone standing in a
+ * city we have not launched in gets **total silence about their own location**:
+ * no banner, no mention, just a Bengaluru list and a "In Bengaluru" heading
+ * they have to infer the meaning of.
+ *
+ * That is the population we would most want to say something to.
+ *
+ * So this is the other half, and the two are **mutually exclusive by
+ * construction** — this fires exactly when the switch offer cannot. Passive on
+ * purpose: there is nothing useful to tap, so a call to action would be a dead
+ * end, and the picker in the header is already the way to move.
+ *
+ * Returns the pair to render, or `null` when there is nothing worth saying.
+ */
+export function awayNotice(input: {
+  selected: string | null
+  deviceCity: string | null
+  available: readonly CityOption[]
+}): { deviceCity: string; selected: string } | null {
+  const { selected, deviceCity, available } = input
+
+  if (!deviceCity || !selected) return null
+  if (sameCity(selected, deviceCity)) return null
+  // If the device's city has events, the switch offer is the right message and
+  // this one must stay quiet. Never both.
+  if (available.some((option) => sameCity(option.city, deviceCity))) return null
+
+  return { deviceCity, selected }
+}
+
+/**
  * Is the device in the city being browsed?
  *
  * Decides whether distances are shown. Browsing a city you are not in makes

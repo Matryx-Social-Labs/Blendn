@@ -30,6 +30,7 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
 import {
+  awayNotice,
   cityOnResume,
   isBrowsingHere,
   isServedCity,
@@ -1423,6 +1424,18 @@ export default function Events() {
     [selectedCity, deviceCity, cityOptions]
   )
 
+  /**
+   * The other half of `switchSuggestion`, for when there is nowhere to switch.
+   *
+   * Mutually exclusive with it by construction — `lib/city.ts` pins that across
+   * every combination — so the screen never carries two messages about the same
+   * fact.
+   */
+  const away = useMemo(
+    () => awayNotice({ selected: selectedCity, deviceCity, available: cityOptions }),
+    [selectedCity, deviceCity, cityOptions]
+  )
+
   const browsingHere = isBrowsingHere(selectedCity, deviceCity)
 
   /**
@@ -2282,6 +2295,33 @@ export default function Events() {
               >
                 <Text style={styles.bannerCtaText}>Switch</Text>
               </TouchableOpacity>
+            </View>
+          )}
+          {/*
+            Where you are, when there is nothing to be done about it.
+
+            Found on a device in Saarbrücken: browsing Bengaluru, the app knew
+            exactly where the user was and never said so. The switch banner
+            above only speaks when the device's city has events — correct, since
+            offering a move to an empty screen is worse than silence — and the
+            consequence was that the people we have not launched near got no
+            acknowledgement at all.
+
+            **Passive on purpose.** There is nothing useful to tap: switching to
+            a city with no events is a dead end, and the picker in the header is
+            already the way to move. A button here would be a call to action
+            leading nowhere.
+
+            Never shown alongside the switch banner — `awayNotice` fires exactly
+            when `shouldOfferSwitch` cannot, and `lib/city.ts` pins that across
+            every combination rather than leaving it to inspection.
+          */}
+          {away && (
+            <View style={styles.bannerNeutral}>
+              <Ionicons name="location-outline" size={14} color={APP_COLORS.textSecondary} />
+              <Text style={styles.bannerNeutralText}>
+                You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
+              </Text>
             </View>
           )}
           {locationStatus === 'denied' && (
@@ -3294,6 +3334,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  /*
+    Neutral, not a warning.
+
+    The other banners on this screen are red or amber because something is
+    wrong and an action is owed. This one is a statement of fact — you are
+    somewhere we do not serve yet — and dressing it as an alert would make an
+    ordinary situation read as a fault.
+  */
+  bannerNeutral: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  bannerNeutralText: {
+    flex: 1,
+    color: APP_COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
   },
   cityPickerRowLocate: {
     backgroundColor: 'rgba(255,255,255,0.02)',

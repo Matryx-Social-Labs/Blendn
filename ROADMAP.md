@@ -124,6 +124,15 @@ not be undone.
 | — | Re-check location on foreground — reopening did nothing before | **Done** |
 | — | *"Use my current location"* in the picker, **not** gated on having events there | **Done** |
 | — | *"Coming soon to {city}"* vs *"Nothing on in {city}"* — two different empties | **Done** |
+| — | *"You're in {city} — nothing here yet"* when there is nowhere to switch to | **Done** |
+
+**Device testing in Saarbrücken found the next layer of the same hole.** With
+Bengaluru selected, backgrounding and reopening correctly did nothing — a chosen
+city is never moved, and Saarbrücken has no events to move to. But the app knew
+exactly where the user was and **never said so**: the switch banner only speaks
+when the device's city has events, so the people we have not launched near got
+no acknowledgement at all. `awayNotice` is the other half, mutually exclusive
+with the switch offer by construction and pinned across every combination.
 
 **No time-based expiry, deliberately.** A home city does not go stale after
 thirty days and any threshold would be arbitrary. "My trip ended" is already
