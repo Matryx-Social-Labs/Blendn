@@ -95,6 +95,26 @@ awareness, so the callback re-serves the same expired token. It has to call
 inside `MatchScreen.tsx` — same reason `lib/reveal.ts` and `lib/geo.ts` were
 extracted in #62/#67.
 
+**Stage 3 — the five stranded fields get a way back.**
+
+| What | State |
+|---|---|
+| `intent_default`, `work_field`, `gender`, `orientation`, `interested_in` editable after signup | **Done** 2026-08-12 |
+
+`about-you` already loaded the profile, prefilled all five, validated the
+conditional rules and saved them. The only signup-specific lines were the last
+two, so it takes an `?edit=1` param instead of getting a twin: same screen,
+different wording, `router.back()` instead of onward.
+
+**A second screen was the obvious option and the wrong one.** Every rule here is
+conditional — dating needs gender *and* orientation, `interested_in` is asked
+only when the pair is ambiguous, `just_here` excludes the rest — and a copy of
+that is a copy that drifts. It also makes the subtitle true: it has always said
+"You can change any of it later", and until now there was no path.
+
+Still open from this stage: **Stage 2**, interests as 13 parents with
+parent-aware matching, and **Stage 4**, the match card naming shared interests.
+
 **Stage 7 — builds that ship themselves.** `stage` → TestFlight and Play
 internal against staging; `prod` → both stores against production, waiting for a
 human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).

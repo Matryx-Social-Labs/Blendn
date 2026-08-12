@@ -251,6 +251,13 @@ export default function SettingsScreen() {
     { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, onPress: deletingAccount ? () => {} : handleDeleteAccount },
 
     { header: 'Discovery' },
+    /*
+     * The way back to the five fields matching actually reads — intent, work
+     * field, and when dating is on, gender, orientation and interested_in.
+     * They were writable on the signup screen and nowhere else, so choosing
+     * "networking" once meant never seeing a dating match again.
+     */
+    { icon: 'sparkles-outline', title: 'You and matching', onPress: () => router.push('/about-you?edit=1') },
     { icon: 'eye-outline', title: 'Show online status', keyName: 'showOnlineStatus' as const },
     { icon: 'checkmark-done-outline', title: 'Read receipts', keyName: 'shareReadReceipts' as const },
     { icon: 'navigate-outline', title: 'Share location for nearby events', keyName: 'locationSharing' as const },
