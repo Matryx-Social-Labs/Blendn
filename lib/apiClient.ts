@@ -1214,6 +1214,27 @@ class ApiClientClass {
     )
   }
 
+  /**
+   * "I'm here and there's nothing on."
+   *
+   * Fire-and-forget: the caller must not await this to render anything, and a
+   * failure is not worth surfacing — a lost demand signal costs a data point,
+   * and a spinner over it would cost a user.
+   *
+   * Send at most once per session. The server counts *people* per city, not
+   * opens, so a second call from the same user changes nothing.
+   */
+  async recordCityDemand(city: string, country?: string): Promise<void> {
+    try {
+      await this.queuedRequest('/api/mobile/events/demand', {
+        method: 'POST',
+        body: JSON.stringify(country ? { city, country } : { city }),
+      })
+    } catch {
+      // Deliberately silent. See above.
+    }
+  }
+
   async getEvent(
     eventId: string,
     params?: { lat?: number; lon?: number; include?: string; interestedLimit?: number }

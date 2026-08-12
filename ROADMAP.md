@@ -144,8 +144,17 @@ the conservative reading means the worst case is being *asked* to switch. Being
 
 **Choosing a city with no events is allowed, and useful.** It gets an honest
 "we're not live here yet" instead of a blank page, and it is the clearest signal
-we have about where to launch next. Capturing that as a demand signal is not
-built.
+we have about where to launch next — **and it is now recorded**, via
+`POST /events/demand` (blendn-admin #215). One row per person per city, not per
+open: "forty people in Saarbrücken" has to mean forty people, and a log of opens
+would let one enthusiast outrank a crowd. No coordinates are stored.
+
+The dashboard view of it, and the rest of the investor-facing metrics — MAU,
+WAU, DAU, stickiness, retention curves, activation — are written up in
+`blendn-admin/docs/ROADMAP.md` section 8b and are **not built**. They share one
+dependency, an activity table, and retention is the one metric that cannot be
+backfilled: a D30 curve needs that cohort's day 30 to have been written down at
+the time.
 
 **Still placeholder:** the picker sheet and the header trigger. The trigger is
 styled as a caption and is the primary control for the whole screen; the sheet
