@@ -16,8 +16,11 @@
 # every Android user, which is a far sharper edge than the iOS side has -- there
 # is no review queue in between to catch a mistake.
 #
-# So: merge to prod, wait ~20 minutes, and a build is waiting in each console
-# for a person to release.
+# So: merge to prod and a build ends up waiting in each console for a person to
+# release. How long that takes is a plan question, not a pipeline one -- on the
+# free tier the low-priority queue can sit for 90+ minutes before a ~15 minute
+# build starts. That is fine here precisely because nobody is watching it; see
+# "How long a build actually takes" in docs/RELEASING.md.
 
 name: prod -> App Store Connect + Play (draft)
 
