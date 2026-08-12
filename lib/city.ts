@@ -4,7 +4,7 @@
  * Browse scope is **one** variable. It used to be three things pretending to be
  * one: a 10 km box around device GPS decided what was fetched, `profile.location`
  * decided what the header said, and a city-name filter ran over the result. A
- * device in Germany therefore showed a "Bengaluru" header above a query that
+ * device in Germany therefore showed a "Bengaluru" header over a query that
  * could only ever return German events — of which there were none, so the whole
  * screen went blank.
  *
@@ -15,13 +15,35 @@
  * Anything worth pinning has to leave the screen first — the same move
  * `lib/geo.ts`, `lib/reveal.ts` and `lib/activeRoom.ts` already made.
  *
- * ## GPS suggests. It never decides.
+ * ## A guess is not a choice, and the difference is the whole policy
  *
- * The device's own city is used for exactly two things: ordering the Nearby
- * section, and offering *"you're in Munich — switch?"*. It is never applied on
- * the user's behalf, because a two-hour layover must not delete the plans
- * someone was making for home.
+ * The first version stored one string, so "Bengaluru because you tapped it" and
+ * "Bengaluru because we guessed on install" were indistinguishable — which
+ * forced the code to treat both as sacred and never update either.
+ *
+ * That produced a trap on a real device. Three guards, each sensible alone:
+ * `resolveBrowseCity` fell back to the busiest city when the device's own had
+ * no events; `shouldOfferSwitch` stayed quiet for a city with nothing to switch
+ * to; and the picker only ever listed cities that have events. Together they
+ * put a user in Germany into Bengaluru with **no way to say where they
+ * actually were** — their city was absent from the list, absent from the
+ * banner, and the selection that had never been theirs could not be undone.
+ *
+ * So: an **inferred** city may be replaced by a better inference. A **chosen**
+ * one never is — it is offered a switch and left alone. And the picker offers
+ * "use my current location" unconditionally, because being able to say where
+ * you are must not depend on us having events there.
+ *
+ * ## GPS suggests. It never decides.
  */
+
+export type CitySource = 'chosen' | 'inferred'
+
+export interface StoredCity {
+  city: string
+  /** `chosen` means the user picked it — from the list, the banner, or "use my location". */
+  source: CitySource
+}
 
 export interface CityOption {
   city: string
@@ -31,57 +53,88 @@ export interface CityOption {
 /**
  * Are these the same place?
  *
- * Mirrors the server's case-insensitive match so the client never shows a
- * "switch?" prompt for a city it is already browsing.
+ * Mirrors the server's case-insensitive match so the client never offers to
+ * switch to the city it is already showing.
  */
 export function sameCity(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
+/** The server's spelling for a place, when it knows it. Otherwise the input. */
+function canonical(city: string, available: readonly CityOption[]): string {
+  return available.find((option) => sameCity(option.city, city))?.city ?? city
+}
+
 /**
  * Which city to browse on this launch.
  *
- * Order matters and each step is a fallback for a real failure:
- *
  * 1. **What they chose last time.** A selection that does not survive a restart
  *    is not a selection.
- * 2. **Where the device says it is**, if that city actually has events. Guarded
- *    on the list because suggesting a city that opens empty is worse than not
- *    suggesting one.
- * 3. **The busiest city.** So a cold install with location denied still lands
- *    on a populated screen rather than an empty one with a prompt.
- * 4. **Nothing**, only when the platform genuinely has no events anywhere.
+ * 2. **Where the device is**, if that city has events — inferred, so a later
+ *    launch somewhere else may replace it.
+ * 3. **The busiest city**, also inferred, so a cold install with location denied
+ *    still lands somewhere populated rather than on an empty screen.
+ * 4. **Nothing**, only when the platform has no events anywhere.
  *
- * The stored city is honoured even when it is absent from `available` — it may
- * simply have nothing on this week, and silently moving someone to a different
- * city is worse than showing them an empty one they chose, with a picker.
+ * A stored city is honoured even when it has nothing on this week: it may be
+ * home, and moving someone off their own choice is worse than showing them an
+ * empty city they picked, with a way out.
  */
 export function resolveBrowseCity(input: {
-  stored: string | null
+  stored: StoredCity | null
   deviceCity: string | null
   available: readonly CityOption[]
-}): string | null {
+}): StoredCity | null {
   const { stored, deviceCity, available } = input
 
   if (stored) return stored
 
   if (deviceCity && available.some((option) => sameCity(option.city, deviceCity))) {
-    // Return the server's spelling, not the geocoder's, so the value sent back
-    // as a filter is one the server will match.
-    return available.find((option) => sameCity(option.city, deviceCity))!.city
+    return { city: canonical(deviceCity, available), source: 'inferred' }
   }
 
-  return available.length > 0 ? available[0].city : null
+  return available.length > 0 ? { city: available[0].city, source: 'inferred' } : null
+}
+
+/**
+ * Should the app move you, without asking, now that it knows where you are?
+ *
+ * Returns the city to switch to, or `null` to leave the selection alone.
+ *
+ * Only ever replaces a guess with a better guess. A city you actually picked is
+ * never overridden — you get the banner instead — because a two-hour layover
+ * must not silently delete the plans you were making for home.
+ *
+ * Deliberately **not** time-based. A home city does not go stale after thirty
+ * days, and any threshold would be arbitrary; the "my trip ended" case is
+ * already covered by being offered your own city when you get back to it.
+ */
+export function cityOnResume(input: {
+  stored: StoredCity | null
+  deviceCity: string | null
+  available: readonly CityOption[]
+}): string | null {
+  const { stored, deviceCity, available } = input
+
+  if (!deviceCity) return null
+  if (stored?.source === 'chosen') return null
+  if (sameCity(stored?.city, deviceCity)) return null
+
+  // Never move someone onto an empty screen on our own initiative. If they want
+  // to go there anyway, "use my current location" in the picker is explicit and
+  // always available.
+  const match = available.find((option) => sameCity(option.city, deviceCity))
+  return match ? match.city : null
 }
 
 /**
  * Should we offer to switch to the city the device is in?
  *
- * Only when all three are true: we know where the device is, that city has
- * events, and it is not already the one being browsed. Offering a switch to a
- * city with nothing in it would be a prompt whose only outcome is an empty
- * screen.
+ * Only when we know where the device is, that city has events, and it is not
+ * already the one being browsed. A prompt whose only outcome is an empty screen
+ * is worse than no prompt — and for that case the picker's "use my current
+ * location" is the honest route, because it is a decision rather than a nudge.
  */
 export function shouldOfferSwitch(input: {
   selected: string | null
@@ -99,13 +152,61 @@ export function shouldOfferSwitch(input: {
 /**
  * Is the device in the city being browsed?
  *
- * Decides whether the Nearby section shows distances. When someone is browsing
- * a city they are not in, "2.4 km away" would be measured from wherever they
- * actually are and would be noise — so the section is **relabelled, not
- * hidden**. Hiding it would change the page's shape for a reason the user
- * cannot see, and would flicker for someone who *is* in the city but whose GPS
- * has not resolved yet.
+ * Decides whether distances are shown. Browsing a city you are not in makes
+ * "2.4 km away" a true number and useless information, so the Nearby section is
+ * **relabelled, not hidden** — hiding it would change the page's shape for a
+ * reason the user cannot see, and would flicker for someone who *is* in the
+ * city but whose GPS has not resolved yet.
  */
 export function isBrowsingHere(selected: string | null, deviceCity: string | null): boolean {
   return sameCity(selected, deviceCity)
+}
+
+/**
+ * Read whatever is in storage, including what the previous version wrote.
+ *
+ * v1 stored a bare city name. v2 stores `{city, source}`, because the app has
+ * to tell a city you picked from one it guessed.
+ *
+ * **A bare string is read as `chosen`**, which is the conservative reading and
+ * the deliberate one. Everyone upgrading either picked their city or accepted a
+ * default; treating it as a choice means the worst case is being *asked* to
+ * switch, and being *moved* without warning is the harm.
+ *
+ * Here rather than in `cityStorage.ts` so it can be tested — the migration is
+ * the part with edge cases, and AsyncStorage does not load under
+ * `testEnvironment: node`.
+ */
+export function parseStoredCity(raw: string | null | undefined): StoredCity | null {
+  const trimmed = raw?.trim()
+  if (!trimmed) return null
+
+  // Not JSON, so this is v1. Checked rather than caught, because a bare city
+  // name is expected input and not an error.
+  if (!trimmed.startsWith('{')) {
+    return { city: trimmed, source: 'chosen' }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { city?: unknown; source?: unknown }
+    const city = typeof parsed.city === 'string' ? parsed.city.trim() : ''
+    if (!city) return null
+    return { city, source: parsed.source === 'inferred' ? 'inferred' : 'chosen' }
+  } catch {
+    // Corrupt entry. A fresh inference beats throwing on the launch path.
+    return null
+  }
+}
+
+/**
+ * Do we have events in the city being browsed?
+ *
+ * `cityOptions` is exactly the set of cities with something on, so a selection
+ * outside it is a place the product does not serve yet — which is a different
+ * message from "nothing on this week" and deserves one. It is reachable on
+ * purpose: someone choosing their own empty city is telling us where to launch.
+ */
+export function isServedCity(selected: string | null, available: readonly CityOption[]): boolean {
+  if (!selected) return false
+  return available.some((option) => sameCity(option.city, selected))
 }

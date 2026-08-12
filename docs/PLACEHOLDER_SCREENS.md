@@ -368,7 +368,8 @@ The behaviour above is **shipped**. The look of it is not.
 |---|---|
 | City scoping the fetch, radius gone | Built |
 | `GET /events/cities`, counts that match what opens | Built |
-| The picker sheet — a plain list of city + count | **Placeholder.** Dark sheet from the bottom, no search, no grouping, no recents |
+| The picker sheet — "use my current location", then city + count | **Placeholder.** Dark sheet from the bottom, no search, no grouping, no recents |
+| *"Coming soon to {city}"* when we have no events there | Built |
 | The header trigger — `📍 City ▾` | **Placeholder.** Inherits `topBarSubtitle`, sized as a caption rather than a control |
 | *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |
 | Section-level empty states | Built |
@@ -382,6 +383,37 @@ number and useless information. So the same card shows the venue in one state
 and a distance in another. That is defensible and it is not designed. Both
 matter: distance is what stops someone tapping into an event across town, and
 the venue is what tells them whether they know the place.
+
+#### The trap this closed, because the design must not reintroduce it
+
+Three rules, each defensible alone:
+
+1. No stored city → browse the **busiest** city, so nobody lands on a blank page.
+2. Don't offer *"you're in X, switch?"* when X has no events — the offer would only lead somewhere empty.
+3. The picker lists only cities that **have** events, so every entry opens with something.
+
+Together, on a real device in Germany: dropped into Bengaluru, no banner back,
+and their own city absent from the picker. **No way to say where they were.**
+
+The fix is a *"Use my current location"* row that is **not conditional on that
+city having events**. Choosing an empty city is allowed, and it is the clearest
+signal we get about where to launch next.
+
+**So the picker has two kinds of row** — one locator, then the list — and the
+design has to make that legible without making the locator look like just
+another city. The current build uses a dashed border and a `navigate` icon,
+which is a placeholder, not a decision. The row hides once you are already
+browsing where you are.
+
+**And there are now two different empty states, which must not read the same:**
+
+| State | Copy | Why it differs |
+|---|---|---|
+| City is on the list, nothing on | *"Nothing on in Bengaluru"* | A quiet week. Check back. |
+| City is **not** on the list | *"Coming soon to Munich — we're not live here yet, you're early"* | We have not launched. Refreshing will never help, and the user did nothing wrong |
+
+Conflating them would tell someone in Munich that "nobody has published anything
+yet", which reads as the app being broken rather than as us not being there.
 
 **The two worth real attention:**
 
