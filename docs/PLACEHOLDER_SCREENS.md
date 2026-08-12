@@ -323,6 +323,105 @@ exactly the loss this ordering avoids.
 
 ---
 
+## 5. `app/(tabs)/events.tsx` — the home screen, and the city it is about
+
+**This one is not a placeholder that needs styling. It is a finished screen
+almost nobody has ever seen**, and the reason is worth understanding before
+redesigning it.
+
+### What it already has
+
+Seven sections, all built, all wired: *You're checked in*, an invite hero,
+*Interested*, *Upcoming events*, *Nearby Events*, *{City}'s Top Events*, and a
+featured hero.
+
+They are all derived from **one** query, and that query was filtered to a 10 km
+box around the phone. So on a device 10 km from the nearest event, every section
+is empty at once and the screen collapses into a single *"No events nearby"*
+with a Refresh button — which is the only state most people have seen it in.
+
+### The change being made, and what the design has to carry
+
+**Browse scope becomes a city you choose**, the way a food-delivery app works.
+
+```
+   ┌──────────────────────────────────────────┐
+   │  Hey Sagar!                          ⚙︎  │
+   │  📍 Bengaluru ▾   ·  Wednesday, 12 Aug   │   ← the picker is the change
+   └──────────────────────────────────────────┘
+   │  You're checked in        ← never scoped by city (see below)
+   │  Nearby            2.4 km · 6.1 km · 11 km
+   │  Bengaluru's top
+   │  Upcoming
+   │  Interested               ← never scoped by city
+```
+
+**The picker is the new element.** Tapping the city opens a list of cities that
+actually have events, with counts. It is set automatically on first launch and
+changeable forever after.
+
+### Rules the design must not break
+
+- **Distance is a label, never a filter.** Every event in the chosen city is
+  shown; far ones sort last and say *"42 km away"*. The design must have room
+  for that label and must not hide or truncate it — it is the only thing
+  standing between "this is far" and a user tapping into something they cannot
+  attend.
+- **Empty states are per section, never the page.** A city with no events shows
+  one honest empty section naming the city and offering the picker. The heroes,
+  the checked-in strip and Interested stay. **The whole-page empty state is the
+  bug being removed** — do not design a new one.
+- **Checked-in and Interested are never scoped by the chosen city.** If someone
+  is checked into an event in Munich while browsing Bengaluru, the way back into
+  that room must still be on screen. It is a live conversation, not a listing.
+- **Never silently switch the city for them.** GPS may *offer*
+  — *"You're in Munich. Switch?"* — and only a tap changes it. A two-hour layover
+  must not delete somebody's plans at home.
+- **Cards must render without a cover image.** Fixed in `NearbyEventCard`, and
+  it is a rule rather than a fix: many real events ship without artwork, and the
+  card used to render as an empty grey rectangle. Design the no-image state
+  deliberately.
+
+### The flow, including the case that broke it
+
+```
+  first launch
+      │
+      ├─ location granted ──► server resolves the city ──► "Bengaluru" selected
+      │                                                          │
+      └─ location denied ───► city list shown, user picks ───────┤
+                                                                 │
+                                        ┌────────────────────────┴───────────┐
+                                        │                                    │
+                            device IS in that city              device is NOT
+                                        │                                    │
+                              "Nearby", by distance,           "In Bengaluru", by time
+                              distances shown                  no distances (they would be noise)
+                                                               ┌──────────────────────────────┐
+                                                               │ You're in Munich.  Switch? → │
+                                                               └──────────────────────────────┘
+```
+
+### Ambiguities in the current screen the design should not inherit
+
+Named because several look like features and are not:
+
+| On screen | Actually |
+|---|---|
+| **"Discover the Best Parties"** | `category` matched by substring on `party`/`night`/`club`/`music`, so a **Classical and Carnatic** concert is a Best Party. Being rebuilt on the real category tree |
+| **Both "featured" heroes** | The first event that happens to have a cover image. No editorial choice exists yet — if the design wants one, it needs a rule behind it |
+| **"Nearby Events" subtitle** | Showed a stored profile city while the list was sorted by live GPS. Two different notions of "where you are" in one component |
+| **"{City}'s Top Events"** | Filtered by city name out of a list already limited to 10 km. The city label was decorative |
+
+### Data it needs
+
+Per event: title, cover image (**optional**), start and end time, venue name,
+city, and — for the Nearby section only — distance from the device. Plus the
+selected city, the list of cities with counts, and whether the device is
+currently in the selected city.
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
