@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "owner": "matryx-social-labs-private-limited",
     "orientation": "portrait",
-    "icon": "./assets/logo/ios-dark.png",
+    "icon": "./assets/logo/icon-ios.png",
     "scheme": "blendn",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,7 +15,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "GIDClientID": "$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)",
+        "GIDClientID": "689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6.apps.googleusercontent.com",
         "NSLocationWhenInUseUsageDescription": "Blend'n uses your location to show nearby events and validate on-site check-ins.",
         "NSCameraUsageDescription": "Blend'n uses your camera to let you take photos for your profile.",
         "NSPhotoLibraryUsageDescription": "Blend'n uses your photo library to let you choose photos for your profile.",
@@ -30,8 +30,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo/monogram-white.png",
-        "backgroundColor": "#1B1931"
+        "foregroundImage": "./assets/logo/adaptive-foreground.png",
+        "backgroundImage": "./assets/logo/adaptive-background.png",
+        "backgroundColor": "#F05524"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.matryxsociallabs.blendn",

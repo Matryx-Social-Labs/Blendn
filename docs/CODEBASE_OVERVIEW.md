@@ -149,7 +149,7 @@ blendn/
 ├── assets/
 │   ├── fonts/SpaceMono-Regular.ttf
 │   ├── images/                 # icons, splash
-│   └── logo/                   # ios-dark.png, logo2.webp
+│   └── logo/                   # icon-ios.png, adaptive-*.png, monogram-*.png
 │
 ├── docs/                       # Reference documentation
 ├── scripts/                    # Dev/seed scripts

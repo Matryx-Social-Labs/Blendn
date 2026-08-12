@@ -119,7 +119,7 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | **First iOS build on `staging`** | **Done** 2026-08-12 — build 102, after 101 failed on a capability mismatch |
 | Merge to `stage` and confirm a build starts unattended | **Next** — the actual acceptance test |
 | **Xcode 26 image pin** | **Required before any App Store submission** — see below |
-| Android `adaptiveIcon.foregroundImage` is 453×534, not square | **Open** — breaks the Android launcher icon, harmless on iOS |
+| App icon rebuilt — opaque, centred, on the brand gradient, both platforms | **Done** 2026-08-12 |
 | Maps API key restriction | **Blocked** — needs billing, which needs Google 2FA |
 | ~~Sign in with Apple~~ | **Already built** — see correction below |
 
