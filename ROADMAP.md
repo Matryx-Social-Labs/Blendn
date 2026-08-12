@@ -112,8 +112,22 @@ only when the pair is ambiguous, `just_here` excludes the rest — and a copy of
 that is a copy that drifts. It also makes the subtitle true: it has always said
 "You can change any of it later", and until now there was no path.
 
-Still open from this stage: **Stage 2**, interests as 13 parents with
-parent-aware matching, and **Stage 4**, the match card naming shared interests.
+**Stage 2 — the taxonomy the database already had.**
+
+| What | State |
+|---|---|
+| Parent-aware matching: membership expands, scoring collapses | **Done** — `blendn-admin` #210 |
+| The interest cap, enforced server-side for the first time | **Done** — `blendn-admin` #210 |
+| `toPickerTree` + the grouped picker | **Done** 2026-08-12 |
+
+Parents are **headings, not options**. Making them selectable would have needed
+a tri-state control, an explicit-vs-implied distinction in the data model, and a
+save path diffing two levels — to express "I like music broadly", which nobody
+asked for. Ranking gets the parent anyway: the server expands a stored leaf
+upward, so two people into different genres meet at Music.
+
+Still open: **Stage 4**, the match card naming shared interests with the
+overlapping ones highlighted.
 
 **Stage 7 — builds that ship themselves.** `stage` → TestFlight and Play
 internal against staging; `prod` → both stores against production, waiting for a
