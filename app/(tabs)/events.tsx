@@ -1436,6 +1436,30 @@ export default function Events() {
     [selectedCity, deviceCity, cityOptions]
   )
 
+  /*
+   * Tell the server where somebody is waiting.
+   *
+   * Fires on exactly the condition the banner renders on — the user is standing
+   * in a city we have not launched in — because that is the only demand data
+   * this product gets before it has any supply, and until now the app noticed
+   * it, said so on screen, and discarded it.
+   *
+   * **Once per city per session.** The server counts people rather than opens,
+   * so repeating it changes nothing; the ref is here to avoid a pointless
+   * request every time this memo recomputes, not to protect the count.
+   *
+   * Deliberately not awaited and deliberately silent on failure. A lost signal
+   * costs a data point; a spinner over it would cost a user.
+   */
+  const demandSentRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!away) return
+    const key = away.deviceCity.trim().toLowerCase()
+    if (demandSentRef.current === key) return
+    demandSentRef.current = key
+    void apiClient.recordCityDemand(away.deviceCity)
+  }, [away])
+
   const browsingHere = isBrowsingHere(selectedCity, deviceCity)
 
   /**
