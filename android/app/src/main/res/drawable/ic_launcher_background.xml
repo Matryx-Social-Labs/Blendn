@@ -1,6 +1,14 @@
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-  <item android:drawable="@color/splashscreen_background"/>
-  <item>
-    <bitmap android:gravity="center" android:src="@drawable/splashscreen_logo"/>
-  </item>
-</layer-list>
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The brand gradient, so the Android launcher icon matches iOS rather than
+  sitting on a flat colour. Endpoints sampled from monogram-gradient.png.
+  angle=315 runs top-left to bottom-right, the way the mark's own ramp does.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="315"
+        android:startColor="#F05524"
+        android:endColor="#915DA7" />
+</shape>

@@ -63,7 +63,7 @@ Last audited: 2026-06-28
 
 ### 6. App icon & splash screen assets
 - [x] Confirmed present
-- Status: 2026-06-28 — `assets/logo/ios-dark.png` (4096×4096) and `assets/images/splash-icon.png` (1024×1024) both exist and are referenced correctly in `app.json`. Worth a final visual QA pass (no transparency in icon, correct corner radius handling) but not a blocker.
+- Status: 2026-06-28 — `assets/logo/icon-ios.png` (1024×1024, opaque) is the app icon and `assets/images/splash-icon.png` (1024×1024) the splash. Replaced 2026-08-12: the previous `ios-dark.png` carried an alpha channel, which iOS forbids, and sat the mark off-centre on a grey matching nothing in the brand.
 
 ### 7. Privacy Policy / Terms of Service links
 - [x] Confirmed present
