@@ -360,6 +360,31 @@ with a Refresh button — which is the only state most people have seen it in.
 actually have events, with counts. It is set automatically on first launch and
 changeable forever after.
 
+#### What is built, and what is still a placeholder
+
+The behaviour above is **shipped**. The look of it is not.
+
+| | State |
+|---|---|
+| City scoping the fetch, radius gone | Built |
+| `GET /events/cities`, counts that match what opens | Built |
+| The picker sheet — a plain list of city + count | **Placeholder.** Dark sheet from the bottom, no search, no grouping, no recents |
+| The header trigger — `📍 City ▾` | **Placeholder.** Inherits `topBarSubtitle`, sized as a caption rather than a control |
+| *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |
+| Section-level empty states | Built |
+| Distance labels on cards | **Not built.** The plan calls for *"2.4 km away"*; the card has no slot for it yet |
+
+**The two worth real attention:**
+
+**The header trigger is a caption that happens to be tappable.** It reads as
+supporting text and has no affordance beyond a chevron. This is the primary
+control for what the entire screen shows — it should look like one.
+
+**The sheet does not scale past a handful of cities.** It is fine at three and
+unusable at forty: no search field, no way to see where you are in the list, and
+nothing separating "cities near you" from "everywhere else". Design it for the
+launch case *and* the case where this works.
+
 ### Rules the design must not break
 
 - **Distance is a label, never a filter.** Every event in the chosen city is

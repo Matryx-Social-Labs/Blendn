@@ -61,6 +61,43 @@ compares metres to kilometres.
 
 ## Now
 
+**The homepage nobody could see.** A device build in Germany showed a
+full-screen *"No events nearby"* with a Refresh button that did nothing. Every
+section of the home screen was already built and wired; all of them were
+`useMemo`s over **one** query filtered to a 10 km box around device GPS, so one
+empty result blanked the page, both heroes included. The server half is
+blendn-admin #212/#213. Plan: `~/.claude/plans/sprightly-questing-aho.md`.
+
+| # | What | State |
+|---|---|---|
+| — | `city` scopes the fetch; no `radius` is sent, and the server no longer supplies one | **Done** |
+| — | `lib/city.ts` — which city to browse, and when to offer a switch. Pure, 16 tests | **Done** |
+| — | Header city picker, selection persisted in `AsyncStorage` | **Done** |
+| — | Empty state names the city and offers the picker, instead of blaming location | **Done** |
+| — | Interested fetched by user, not filtered out of the browse list | **Done** |
+| — | Socket banner off the home screen; offline banner stays | **Done** |
+| — | Distance labels on cards (*"2.4 km away"*) | Next |
+| — | `bestPartiesItems` onto the real taxonomy; both "featured" heroes named honestly | Next |
+
+**`profile.location` no longer decides anything.** It was reverse-geocoded once
+at signup, so it was stale for anyone who had travelled — and it was being shown
+as the header above a query filtered to wherever the device actually was. Two
+notions of "where you are" in one screen, which is the bug in one sentence.
+
+**Interested was about to become a second version of the same bug.** It was
+`events.filter(is_favorited)`, harmless while `events` was everything and wrong
+the moment `events` is one city: favourite something in Munich, browse
+Bengaluru, and it vanishes from the section whose whole promise is "things you
+said you wanted". It is fetched by user now, like the checked-in strip already
+was.
+
+**Still placeholder:** the picker sheet and the header trigger. The trigger is
+styled as a caption and is the primary control for the whole screen; the sheet
+has no search and does not scale past a handful of cities. See
+`docs/PLACEHOLDER_SCREENS.md` section 5.
+
+---
+
 **Stage 1 — the six bugs device testing found.** Reviewed by `/plan-eng-review`
 and Codex. Everything here is app-side and ships as one PR, independent of the
 identity work in `Next`.

@@ -1146,8 +1146,17 @@ class ApiClientClass {
     page?: number
     limit?: number
     search?: string
+    /** Scopes the list. Values come from `getEventCities()`. */
+    city?: string
     lat?: number
     lon?: number
+    /**
+     * A hard cut in km. **Leave it undefined for browsing.**
+     *
+     * The server no longer defaults this, and passing it here is what used to
+     * blank the home screen: `lat`/`lon` alone sort and label by distance
+     * without excluding anything, which is what a browse list wants.
+     */
     radius?: number
     categoryId?: string
     categorySlug?: string
@@ -1173,6 +1182,24 @@ class ApiClientClass {
       return this.queuedRequest<EventsListResponse>(endpoint)
     }
     return this.cachedRequest<EventsListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+  }
+
+  /**
+   * The cities that currently have events, busiest first.
+   *
+   * Server-owned rather than derived on the device: a reverse-geocode on the
+   * cold path can fail and leave a new install with nothing to show, and a
+   * second naming authority would disagree with the server's about spelling.
+   * GPS still gets to *suggest* a city; it never decides what can be seen.
+   *
+   * Cached for longer than the event list — a city gaining its first event is
+   * not something the picker has to notice within seconds.
+   */
+  async getEventCities(): Promise<ApiResponse<{ cities: { city: string; eventCount: number }[] }>> {
+    return this.cachedRequest<{ cities: { city: string; eventCount: number }[] }>(
+      '/api/mobile/events/cities',
+      { ttl: 5 * 60 * 1000, swr: true }
+    )
   }
 
   async getEvent(
