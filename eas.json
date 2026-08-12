@@ -19,6 +19,9 @@
     "staging": {
       "environment": "preview",
       "autoIncrement": true,
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.0"
+      },
       "android": {
         "buildType": "app-bundle"
       }
@@ -26,6 +29,9 @@
     "production": {
       "environment": "production",
       "autoIncrement": true,
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.0"
+      },
       "android": {
         "buildType": "app-bundle"
       }
