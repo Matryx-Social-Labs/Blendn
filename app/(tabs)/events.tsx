@@ -36,7 +36,7 @@ import {
   type CityOption,
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
-import { getDistanceMetres } from '../../lib/geo'
+import { formatDistance, getDistanceMetres } from '../../lib/geo'
 import { revealPromptText } from '../../lib/reveal'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
@@ -79,6 +79,17 @@ interface Event {
   current_capacity: number
   cover_image_url: string | null
   category: string
+  /** Parent category slug — the family, not the leaf. See `lib/api.ts`. */
+  category_group?: string
+  /*
+   * Deliberately *not* widened to `string | null`, even though the server's is.
+   *
+   * There are three `Event` interfaces in this app (see `ROADMAP.md` — "Three
+   * `Event` interfaces, structurally compared"). Widening this one alone makes
+   * it diverge from the others and produces a `Type 'Event' is not assignable
+   * to type 'Event'` error that says nothing useful. The nullability belongs in
+   * the shared type, when there is one.
+   */
   city?: string
   check_in_radius: number
   latitude: number
@@ -114,6 +125,20 @@ const TYPE_META_SIZE = 13
 const TYPE_CAPTION_SIZE = 12
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
+
+/**
+ * Which parent categories count as a night out.
+ *
+ * Parent **slugs** from the server's taxonomy (`scripts/seed-categories.ts` in
+ * blendn-admin), not names — slugs are what shared links and the mobile filter
+ * already match on, and they do not change when someone retitles a category.
+ *
+ * Deliberately just `nightlife`. Adding `music` would sweep in the whole family
+ * including Classical and Carnatic, which is the exact false positive the old
+ * substring match produced. A gig is not a party, and if music deserves a
+ * section it should get its own rather than being smuggled into this one.
+ */
+const NIGHTLIFE_GROUPS = new Set(['nightlife'])
 
 const formatCarouselCardDate = (iso: string) => {
   try {
@@ -1811,7 +1836,20 @@ export default function Events() {
               onPress={handleEventPress as any}
               onLongPress={handleEventPreview as any}
               timeLabel={formatTimeRange(ev.start_time, ev.end_time, { timezone: ev.timezone })}
-              locationLabel={ev.venue_name || ev.address || ''}
+              /*
+                How far, when that means something.
+
+                Distance no longer filters anything, so this label is the only
+                thing between "that's across town" and someone tapping into an
+                event they cannot reach. It is shown **only while browsing the
+                city you are in** — measured from a device in Munich to an event
+                in Bengaluru it is a true number and useless information, so the
+                venue name is the better thing to give up the space to.
+              */
+              locationLabel={
+                (browsingHere ? formatDistance(distanceMap[ev.id]) : null)
+                  || ev.venue_name || ev.address || ''
+              }
             />
           )
         })}
@@ -1897,12 +1935,14 @@ export default function Events() {
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events])
 
-  const happeningNowItems = useMemo(() => {
-    const now = Date.now()
-    return events
-      .filter(e => new Date(e.start_time).getTime() <= now && new Date(e.end_time).getTime() >= now)
-      .sort((a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime())
-  }, [events])
+  /*
+   * `happeningNowItems` is gone. It was recomputed on every render and
+   * rendered nowhere — its only remaining use was seeding the "already shown"
+   * set below, which the sections that *do* render already cover.
+   *
+   * If a "happening now" section is wanted, it should be built deliberately
+   * against the checked-in strip, which already knows what you are at.
+   */
 
   const nearbyItems = useMemo(() => {
     if (!userLocation) return [] as Event[]
@@ -1936,22 +1976,27 @@ export default function Events() {
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, interestCounts])
 
+  /*
+   * Nightlife, by the taxonomy rather than by guessing at names.
+   *
+   * This used to substring-match `party|night|club|music` against the category
+   * name. Events are tagged to leaves, so "Classical and Carnatic" matched on
+   * `music` and was presented as one of the Best Parties.
+   *
+   * `category_group` is the parent slug, which is what "everything of this
+   * kind" actually means — added to the payload in blendn-admin #214 so the
+   * client stops inferring a tree it is already being told about.
+   *
+   * **The fallback is gone, and it was the worse half.** When nothing matched,
+   * this returned *every* event sorted by interest — so a section titled
+   * "Discover the Best Parties" would confidently show a book club. An empty
+   * section is honest; a full one that ignores its own title is not. The
+   * render already guards on `length > 0`, so nothing appears rather than
+   * something wrong.
+   */
   const bestPartiesItems = useMemo(() => {
-    const isPartyLike = (cat?: string) => {
-      if (!cat) return false
-      const c = cat.toLowerCase()
-      return c.includes('party') || c.includes('night') || c.includes('club') || c.includes('music')
-    }
-    const partyEvents = events.filter(e => isPartyLike(e.category))
-    if (partyEvents.length > 0) {
-      return partyEvents
-        .slice()
-        .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
-          new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-    }
-    // Fallback: overall top by interest
     return events
-      .slice()
+      .filter(e => NIGHTLIFE_GROUPS.has((e.category_group || '').toLowerCase()))
       .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, interestCounts])
@@ -1963,21 +2008,29 @@ export default function Events() {
   const mainListData = useMemo(() => {
     const shown = new Set<string>()
     interestedItems.forEach(e => shown.add(e.id))
-    happeningNowItems.slice(0, 10).forEach(e => shown.add(e.id))
     upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 10).forEach(e => shown.add(e.id))
     cityTopItems.slice(0, 10).forEach(e => shown.add(e.id))
     bestPartiesItems.slice(0, 10).forEach(e => shown.add(e.id))
     const remaining = filteredSortedEvents.filter(e => !shown.has(e.id))
     return remaining
-  }, [filteredSortedEvents, interestedItems, happeningNowItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
+  }, [filteredSortedEvents, interestedItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
 
-  const inviteHeroEvent = useMemo(
-    () => {
-      const withImage = (list: Event[]) => list.find(e => !!e.cover_image_url)
-      return withImage(upcomingItems) || withImage(bestPartiesItems) || withImage(cityTopItems)
-    },
-    [upcomingItems, bestPartiesItems, cityTopItems]
+  /*
+   * The top hero: the soonest event that has a cover image.
+   *
+   * Named for what it is. It used to be `inviteHeroEvent` and was presented as
+   * a featured invitation, but the selection has never been editorial — it
+   * walks three lists and takes the first item with an image. That is an
+   * image-availability check wearing a curator's hat.
+   *
+   * `upcomingItems` is already sorted by start time, so "first with an image"
+   * genuinely means "the soonest one we can show properly". Real curation is a
+   * separate feature; this at least stops claiming to be it.
+   */
+  const soonestWithImage = useMemo(
+    () => upcomingItems.find(e => !!e.cover_image_url),
+    [upcomingItems]
   )
   const todayLabel = useMemo(
     () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
@@ -2313,10 +2366,10 @@ export default function Events() {
                     </View>
                   </FadeInUp>
                 )}
-                {inviteHeroEvent ? (
+                {soonestWithImage ? (
                   <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
-                      {renderInviteHero(inviteHeroEvent)}
+                      {renderInviteHero(soonestWithImage)}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
@@ -2359,11 +2412,24 @@ export default function Events() {
                   </RNAnimated.View>
                 ) : null}
 
-                {/* Discover the Best Parties header + featured hero — only when a cover image exists */}
+                {/*
+                  Nightlife, and only when there is actually nightlife.
+
+                  Two things were wrong here and they compounded. The heading
+                  said "Discover the Best Parties" — "Best" being an editorial
+                  claim nothing backs, since the ordering is interest count.
+                  And the hero fell back through `cityTopItems` and
+                  `upcomingItems`, so when no nightlife existed the section
+                  still rendered, under a parties heading, showing whatever
+                  happened to have a cover image. A book club presented as the
+                  best party in town.
+
+                  No fallback now. If there is no nightlife, there is no
+                  section — which is what an honest empty looks like.
+                */}
                 {(() => {
-                  const withImage = (list: Event[]) => list.find(e => !!e.cover_image_url)
-                  const featuredPartyEvent = withImage(bestPartiesItems) || withImage(cityTopItems) || withImage(upcomingItems)
-                  if (!featuredPartyEvent) return null
+                  const featuredNightlife = bestPartiesItems.find(e => !!e.cover_image_url)
+                  if (!featuredNightlife) return null
                   return (
                     <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
                       <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 6)} distance={8}>
@@ -2371,13 +2437,13 @@ export default function Events() {
                           <View style={styles.sectionFancyRow}>
                             <View style={styles.sectionDividerLine} />
                             <View>
-                              <Text style={styles.sectionTitle}>Discover the</Text>
-                              <Text style={styles.sectionTitle}>Best Parties</Text>
+                              <Text style={styles.sectionTitle}>Nightlife in</Text>
+                              <Text style={styles.sectionTitle}>{selectedCity ?? 'your city'}</Text>
                             </View>
                             <View style={styles.sectionDividerLine} />
                           </View>
                         </View>
-                        {renderFeaturedHero(featuredPartyEvent)}
+                        {renderFeaturedHero(featuredNightlife)}
                       </FadeInUp>
                     </RNAnimated.View>
                   )

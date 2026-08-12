@@ -493,7 +493,19 @@ export interface EventApiItem {
     faq?: unknown
     accessibilityInfo?: unknown
   }
-  categories?: Array<{ id: string; name: string; slug: string; icon?: string | null }>
+  categories?: Array<{
+    id: string
+    name: string
+    slug: string
+    icon?: string | null
+    /**
+     * The family this leaf belongs to, or null at top level.
+     *
+     * Events are tagged to leaves — "Classical and Carnatic", never "Music" —
+     * so grouping by kind needs this rather than a guess at the leaf's name.
+     */
+    parent?: { id: string; name: string; slug: string } | null
+  }>
   media?: Array<{
     id: string
     type: string
