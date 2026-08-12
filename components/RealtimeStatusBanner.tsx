@@ -3,12 +3,35 @@ import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-nativ
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
 
+/**
+ * Two different failures wearing one banner.
+ *
+ * **Offline** means actions will genuinely fail, and is worth saying anywhere.
+ * **Socket not connected** only means missed *live* updates, and is worth
+ * saying only on a screen that depends on them.
+ *
+ * The events home screen does not. Events arrive over HTTP, so a red "Realtime
+ * disconnected" bar was sitting above a list that had loaded perfectly — crying
+ * wolf about a subsystem the screen does not use, and training people to ignore
+ * the bar on the screens where it does matter.
+ */
 interface RealtimeStatusBannerProps {
   status: SocketConnectionStatus
   style?: ViewStyle
+  /**
+   * Whether a dead socket is worth mentioning here.
+   *
+   * `false` on screens that read over HTTP. Offline is still reported — this
+   * suppresses the socket half, not the banner.
+   */
+  showSocketIssues?: boolean
 }
 
-export default function RealtimeStatusBanner({ status, style }: RealtimeStatusBannerProps) {
+export default function RealtimeStatusBanner({
+  status,
+  style,
+  showSocketIssues = true,
+}: RealtimeStatusBannerProps) {
   const [networkState, setNetworkState] = useState<NetworkState>(getNetworkState())
   const [retrying, setRetrying] = useState(false)
 
@@ -18,7 +41,7 @@ export default function RealtimeStatusBanner({ status, style }: RealtimeStatusBa
   }, [])
 
   const isOffline = networkState === 'offline'
-  const isSocketIssue = status.state !== 'connected'
+  const isSocketIssue = showSocketIssues && status.state !== 'connected'
 
   if (!isOffline && !isSocketIssue) return null
 

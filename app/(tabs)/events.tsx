@@ -10,6 +10,7 @@ import {
   Dimensions,
   FlatList,
   Linking,
+  Modal,
   RefreshControl,
   StyleSheet,
   Text,
@@ -27,6 +28,14 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
+import {
+  isBrowsingHere,
+  resolveBrowseCity,
+  sameCity,
+  shouldOfferSwitch,
+  type CityOption,
+} from '../../lib/city'
+import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { getDistanceMetres } from '../../lib/geo'
 import { revealPromptText } from '../../lib/reveal'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
@@ -290,7 +299,21 @@ export default function Events() {
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
   const [checkOutPending, setCheckOutPending] = useState<Record<string, boolean>>({})
-  const [userCity, setUserCity] = useState<string | null>(null)
+  /*
+   * Browse scope, and the two things that are *not* it.
+   *
+   * `selectedCity` decides what is fetched and what every section is scoped to.
+   * `deviceCity` is where the phone thinks it is — used only to offer a switch
+   * and to decide whether distances are meaningful. `profile.location` no
+   * longer feeds either: it is reverse-geocoded once at signup and goes stale
+   * the moment anyone travels, which is how a Bengaluru header ended up over a
+   * German query.
+   */
+  const [favoriteEvents, setFavoriteEvents] = useState<Event[]>([])
+  const [selectedCity, setSelectedCity] = useState<string | null>(null)
+  const [cityOptions, setCityOptions] = useState<CityOption[]>([])
+  const [deviceCity, setDeviceCity] = useState<string | null>(null)
+  const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const { setScrollProgress } = useGradientOverlay()
@@ -860,11 +883,15 @@ export default function Events() {
           if (primary && primary.length > 0) {
             setAvatarUrl(primary)
           }
-          // Set city
-          if (profile.location) {
-            const firstPart = String(profile.location).split(',')[0]?.trim()
-            if (firstPart) setUserCity(firstPart)
-          }
+          /*
+           * `profile.location` deliberately no longer sets the browse city.
+           *
+           * It is reverse-geocoded once at signup and never again, so it is
+           * stale for anyone who has travelled — and it was being shown as the
+           * header ("Bengaluru") above a query filtered to wherever the device
+           * actually was. Two different notions of "where you are" in one
+           * screen, and the reason this investigation started.
+           */
         }
       }
     } catch {}
@@ -907,12 +934,23 @@ export default function Events() {
     checkLocationPermission()
   }, [])
 
+  /*
+   * Refetch when the browsed city changes, as well as on sign-in.
+   *
+   * `selectedCity` is in the dependency list because it is what the request is
+   * scoped by — without it, picking a city would change the header and leave
+   * the list showing the previous city's events, which is the same class of
+   * mismatch this whole change exists to remove.
+   */
   useEffect(() => {
     if (!authLoading && user) {
-      Logger.journey('events', 'mount:authorized', { userId: user.id })
+      Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
       fetchEvents()
     }
-  }, [user, authLoading])
+    // `fetchEvents` is redefined every render and is deliberately not a
+    // dependency — including it would refetch on every state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading, selectedCity])
 
   useEffect(() => {
     const authFirstName = getFirstName(user?.name)
@@ -1186,9 +1224,118 @@ export default function Events() {
     }
   }
 
-  // fetchUserCity removed - now handled in loadUserProfile
+  /*
+   * Decide which city to browse, once, before the first fetch.
+   *
+   * The server owns the list, so this is one request and never a geocode on
+   * the cold path — a first launch on a bad connection still gets a populated
+   * screen rather than a blank one. `resolveBrowseCity` holds the fallback
+   * order and is tested in `__tests__/city.test.ts`.
+   */
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [stored, response] = await Promise.all([
+        readStoredCity(),
+        apiClient.getEventCities(),
+      ])
+      if (cancelled) return
 
-  // Removed city override feature
+      const available = response.success && response.data ? response.data.cities : []
+      setCityOptions(available)
+      setSelectedCity((current) =>
+        // Never overwrite a choice the user made while this was in flight.
+        current ?? resolveBrowseCity({ stored, deviceCity: null, available })
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /*
+   * Where the device is, in city terms. Used to *offer* a switch and to decide
+   * whether distances mean anything — never to change the selection.
+   *
+   * `expo-location`'s reverse geocode rather than the server's: this is about
+   * the phone, not about an event, and it works offline from the platform's own
+   * cache. Its spelling is only ever compared against the server's list, never
+   * stored or sent — `resolveBrowseCity` returns the server's spelling when the
+   * two match, so the value used as a filter is always one the server knows.
+   */
+  useEffect(() => {
+    if (!userLocation) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [place] = await Location.reverseGeocodeAsync({
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        })
+        if (cancelled) return
+        setDeviceCity(place?.city || place?.subregion || place?.region || null)
+      } catch (error) {
+        // Not being able to name where you are costs a "switch?" prompt and a
+        // distance label. It must not interrupt browsing.
+        Logger.warn('events', 'Could not resolve the device city', { error: error as any })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userLocation])
+
+  /*
+   * Once the device city is known, it can improve a *first* choice — but only
+   * when nothing was stored and nothing has been picked. A stored selection is
+   * never overridden, because a two-hour layover must not silently delete the
+   * plans someone was making for home.
+   */
+  useEffect(() => {
+    if (!deviceCity || cityOptions.length === 0) return
+    setSelectedCity((current) => current ?? resolveBrowseCity({ stored: null, deviceCity, available: cityOptions }))
+  }, [deviceCity, cityOptions])
+
+  /*
+   * Favourites, fetched by user rather than read out of the browse list.
+   *
+   * Refetched when the events list is, so favouriting something on this screen
+   * still updates the carousel — `interestStatuses` covers the optimistic case
+   * in between.
+   */
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    ;(async () => {
+      const result = await apiClient.getUserFavorites(user.id)
+      if (cancelled || !result.success || !result.data) return
+      setFavoriteEvents(
+        (result.data as any[]).map((e) => normalizeEvent({
+          ...e,
+          venue_name: e.venueName ?? e.venue_name ?? '',
+          start_time: e.startTime ?? e.start_time,
+          end_time: e.endTime ?? e.end_time,
+          cover_image_url: e.coverImageUrl ?? e.cover_image_url ?? null,
+        } as any))
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, events])
+
+  const chooseCity = useCallback((city: string) => {
+    setSelectedCity(city)
+    setCityPickerOpen(false)
+    void storeCity(city)
+  }, [])
+
+  const switchSuggestion = useMemo(
+    () => shouldOfferSwitch({ selected: selectedCity, deviceCity, available: cityOptions }),
+    [selectedCity, deviceCity, cityOptions]
+  )
+
+  const browsingHere = isBrowsingHere(selectedCity, deviceCity)
 
   const fetchEvents = async (options?: { silent?: boolean; force?: boolean }) => {
     try {
@@ -1200,12 +1347,20 @@ export default function Events() {
       setNetError(null)
       Logger.journey('events', 'fetch:start')
 
-      // Use the API helper which handles Supabase vs admin backend switching
+      /*
+       * `city` scopes; `lat`/`lon` only sort and label.
+       *
+       * No `radius` is sent, and the server no longer supplies one. That
+       * default — 10 km around the device — is what made this screen blank:
+       * every section below is a `useMemo` over this one array, so an empty
+       * result took the whole page with it, carousels and heroes included.
+       */
       const lat = userLocation?.latitude
       const lon = userLocation?.longitude
       const { data: eventsData, meta, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
+        city: selectedCity ?? undefined,
         lat,
         lon,
         include: 'checkins,activeCheckins,profile,interestedPreview',
@@ -1280,10 +1435,8 @@ export default function Events() {
         if (primary && primary.length > 0) {
           setAvatarUrl(primary)
         }
-        if (profile.location) {
-          const firstPart = String(profile.location).split(',')[0]?.trim()
-          if (firstPart) setUserCity(firstPart)
-        }
+        // `profile.location` does not set the browse city — see the note where
+        // the profile is loaded above.
       }
       // Image preloading is handled by useEffect when events change
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
@@ -1622,11 +1775,22 @@ export default function Events() {
 
   const renderNearbyList = (items: Event[]) => {
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
-    const place = userCity || 'Your area'
+    const place = selectedCity || 'Your area'
+    /*
+     * Relabelled when you are not in the city you are browsing, never hidden.
+     *
+     * "Nearby" is a promise about distance, and distance from a device in
+     * Munich to an event in Bengaluru is noise rather than information — so the
+     * section says *where* instead. Hiding it would change the page's shape for
+     * a reason the user cannot see, and would flicker for someone who *is* in
+     * the city but whose GPS has not resolved yet.
+     */
     return (
       <View style={styles.nearbyContainer}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Nearby Events</Text>
+          <Text style={styles.sectionTitle}>
+            {browsingHere ? 'Nearby Events' : `In ${place}`}
+          </Text>
           <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/nearby-events' as any)}>
             <Text style={styles.viewAllText}>View all</Text>
             <Ionicons name="chevron-forward" size={19} color={APP_COLORS.accent} />
@@ -1703,10 +1867,28 @@ export default function Events() {
     return map
   }, [events, userLocation, proximityData])
 
+  /*
+   * Your own list, and therefore **not** scoped by the city you are browsing.
+   *
+   * This used to be `events.filter(is_favorited)`, which was harmless while
+   * `events` was everything and becomes a bug the moment `events` is one city:
+   * favourite something in Munich, browse Bengaluru, and it silently vanishes
+   * from a section whose whole promise is "things you said you wanted".
+   *
+   * Personal state is not discovery inventory. The checked-in strip already
+   * gets this right — `activeCheckins` is queried by user, not by the browse
+   * filter — and this brings Interested into line.
+   *
+   * Falls back to the in-page events if the favourites call fails, so a flaky
+   * network degrades the section rather than emptying it.
+   */
   const interestedItems = useMemo(() => {
     const now = Date.now()
-    return events.filter(e => !!interestStatuses[e.id] && new Date(e.end_time).getTime() >= now)
-  }, [events, interestStatuses])
+    const source = favoriteEvents.length > 0
+      ? favoriteEvents
+      : events.filter(e => !!interestStatuses[e.id])
+    return source.filter(e => new Date(e.end_time).getTime() >= now)
+  }, [favoriteEvents, events, interestStatuses])
 
   const upcomingItems = useMemo(() => {
     const now = Date.now()
@@ -1732,19 +1914,27 @@ export default function Events() {
       .map(x => x.e)
   }, [events, userLocation, distanceMap])
 
+  /*
+   * "{City}'s Top Events" — now just an ordering, because the fetch is already
+   * scoped to the city.
+   *
+   * This used to re-filter by city name over `events`, which was itself only
+   * whatever fell inside a 10km box around the device. So the section could
+   * never show a Bengaluru event you were not standing next to, and its title
+   * was a radius wearing a city's name. It also matched on `address.includes`,
+   * which quietly pulled in anything with the city's name in its street line.
+   *
+   * With `city` scoping the query, the filter can only subtract — an event
+   * whose `display_city` disagrees with the server's `city` would vanish from a
+   * list it belongs in. So it is gone, and this is what it always meant: the
+   * city's events, most-wanted first.
+   */
   const cityTopItems = useMemo(() => {
-    if (!userCity) return [] as Event[]
-    const lc = userCity.toLowerCase()
-    const inCity = events.filter(e => {
-      const city = (e.display_city || e.city || '') as string
-      const address = (e.address || '') as string
-      return city.toLowerCase() === lc || address.toLowerCase().includes(lc)
-    })
-    return inCity
+    return events
       .slice()
       .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events, userCity, interestCounts])
+  }, [events, interestCounts])
 
   const bestPartiesItems = useMemo(() => {
     const isPartyLike = (cat?: string) => {
@@ -1863,9 +2053,29 @@ export default function Events() {
         </TouchableOpacity>
         <View style={styles.topBarCenter}>
           <Text style={styles.topBarTitle}>Hey {userFirstName || 'User'}!</Text>
-          <Text style={styles.topBarSubtitle}>
-            {userCity ? `${userCity} • ${todayLabel}` : todayLabel}
-          </Text>
+          {/*
+            The city is a control now, not a caption.
+
+            It used to read `profile.location` — a string reverse-geocoded once
+            at signup — while the list underneath was filtered to wherever the
+            device currently was. Tapping it does the thing the label always
+            implied: change where you are browsing.
+          */}
+          <TouchableOpacity
+            style={styles.cityPickerTrigger}
+            onPress={() => setCityPickerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              selectedCity ? `Browsing ${selectedCity}. Change city` : 'Choose a city'
+            }
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            <Ionicons name="location-outline" size={13} color={APP_COLORS.textSecondary} />
+            <Text style={styles.topBarSubtitle} numberOfLines={1}>
+              {selectedCity ? `${selectedCity} • ${todayLabel}` : todayLabel}
+            </Text>
+            <Ionicons name="chevron-down" size={13} color={APP_COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <TouchableOpacity
@@ -1913,7 +2123,40 @@ export default function Events() {
               </TouchableOpacity>
             </View>
           )}
-          <RealtimeStatusBanner status={socketStatus} style={styles.bannerWarn} />
+          {/*
+            Offline is worth saying here. A dead socket is not.
+
+            This screen loads over HTTP, so "Realtime disconnected" was showing
+            above a list that had loaded perfectly — a warning about a subsystem
+            the page does not use. Chat, private chat and the room keep both,
+            because there a dead socket means messages you will not see.
+
+            No status dot replaces it either. `profiles.show_online` already
+            means "other attendees can see you're here", so a green dot on your
+            own avatar reads as exactly that — and wiring it to socket health
+            would show green while `show_online: false` made you invisible to
+            everyone. A lie in both directions, and unexplainable in support.
+          */}
+          <RealtimeStatusBanner
+            status={socketStatus}
+            style={styles.bannerWarn}
+            showSocketIssues={false}
+          />
+          {switchSuggestion && (
+            <View style={styles.bannerInfo}>
+              <Text style={styles.bannerText}>
+                You&apos;re in {switchSuggestion}. Browse events here?
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Switch to ${switchSuggestion}`}
+                onPress={() => chooseCity(switchSuggestion)}
+                style={styles.bannerCta}
+              >
+                <Text style={styles.bannerCtaText}>Switch</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {locationStatus === 'denied' && (
             <View style={styles.bannerWarn}>
               <Text style={styles.bannerText}>
@@ -2022,15 +2265,43 @@ export default function Events() {
               </View>
             ) : (
               <View>
-                {/* Friendly empty state when there are no events at all */}
+                {/*
+                  Empty means "this city has nothing on", and says so.
+
+                  The old copy was "No events nearby / Try refreshing or explore
+                  with location enabled" — which named the cause as the cure.
+                  Location *was* enabled; enabling it is what produced the 10km
+                  box that emptied the screen. Refresh could not help, because
+                  nothing about the query would change.
+
+                  The way out is now a real one: browse a different city. The
+                  picker is the primary action, and it is reachable even when
+                  every other section is empty.
+                */}
                 {events.length === 0 && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       <View style={styles.emptyGlyph}>
                         <Ionicons name="calendar-outline" size={36} color={APP_COLORS.textTertiary} />
                       </View>
-                      <Text style={styles.emptyTitle}>No events nearby</Text>
-                      <Text style={styles.emptySub}>Try refreshing or explore with location enabled.</Text>
+                      <Text style={styles.emptyTitle}>
+                        {selectedCity ? `Nothing on in ${selectedCity}` : 'No events yet'}
+                      </Text>
+                      <Text style={styles.emptySub}>
+                        {selectedCity
+                          ? 'Nobody has published anything here yet. Try another city.'
+                          : 'There are no published events to show right now.'}
+                      </Text>
+                      {cityOptions.length > 0 && (
+                        <ScalePress
+                          style={styles.ctaGhost}
+                          onPress={() => setCityPickerOpen(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Choose a different city"
+                        >
+                          <Text style={styles.ctaGhostText}>Change city</Text>
+                        </ScalePress>
+                      )}
                       <ScalePress
                         style={styles.ctaGhost}
                         onPress={() => fetchEvents({ force: true })}
@@ -2080,10 +2351,10 @@ export default function Events() {
                     </RNAnimated.View>
                   ) : null)}
 
-                {userCity && cityTopItems.length > 0 ? (
+                {selectedCity && cityTopItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 5)} distance={8}>
-                      {renderCarouselFancy([`${userCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
+                      {renderCarouselFancy([`${selectedCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
@@ -2118,7 +2389,63 @@ export default function Events() {
         />
       </View>
 
-      {/* City override UI removed */}
+      {/*
+        The city picker.
+
+        A plain sheet of the server's list, because that list is the whole
+        contract: every entry opens with the number of events it claims. The
+        selection is written to storage on tap, so a restart does not re-ask —
+        a selection that does not survive a restart is not a selection.
+
+        Design is a placeholder, like the interest picker before it. See
+        `docs/PLACEHOLDER_SCREENS.md`.
+      */}
+      <Modal
+        visible={cityPickerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCityPickerOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.cityPickerBackdrop}
+          activeOpacity={1}
+          onPress={() => setCityPickerOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close city picker"
+        >
+          <View style={styles.cityPickerSheet}>
+            <Text style={styles.cityPickerTitle} accessibilityRole="header">
+              Browse events in
+            </Text>
+            {cityOptions.length === 0 ? (
+              <Text style={styles.cityPickerEmpty}>
+                No cities have published events yet.
+              </Text>
+            ) : (
+              <FlatList
+                data={cityOptions}
+                keyExtractor={(item) => item.city}
+                renderItem={({ item }) => {
+                  const active = sameCity(item.city, selectedCity)
+                  return (
+                    <TouchableOpacity
+                      style={[styles.cityPickerRow, active && styles.cityPickerRowActive]}
+                      onPress={() => chooseCity(item.city)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${item.city}, ${item.eventCount} event${item.eventCount === 1 ? '' : 's'}`}
+                    >
+                      <Text style={styles.cityPickerCity}>{item.city}</Text>
+                      <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
+                    </TouchableOpacity>
+                  )
+                }}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <ActionTray
         visible={trayState.visible}
         title={trayState.title}
@@ -2720,6 +3047,60 @@ const styles = StyleSheet.create({
     fontSize: TYPE_META_SIZE,
     lineHeight: 18,
     fontWeight: '500',
+  },
+  cityPickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cityPickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  cityPickerSheet: {
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+    maxHeight: '70%',
+  },
+  cityPickerTitle: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  cityPickerEmpty: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 15,
+    paddingVertical: 12,
+  },
+  cityPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  cityPickerRowActive: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  cityPickerCity: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cityPickerCount: {
+    color: APP_COLORS.textSecondary,
+    fontSize: 14,
   },
   settingsButton: {
     width: 44,

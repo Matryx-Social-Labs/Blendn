@@ -16,8 +16,11 @@ interface EventsParams {
   page?: number
   limit?: number
   search?: string
+  /** Scopes the list to one city. Values come from `apiClient.getEventCities()`. */
+  city?: string
   lat?: number
   lon?: number
+  /** A hard cut in km. Omit it for browsing — see `apiClient.getEvents`. */
   radius?: number
   categoryId?: string
   categorySlug?: string
