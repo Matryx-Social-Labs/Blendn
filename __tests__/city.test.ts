@@ -1,4 +1,5 @@
 import {
+  awayNotice,
   cityOnResume,
   isBrowsingHere,
   isServedCity,
@@ -163,6 +164,55 @@ describe('shouldOfferSwitch', () => {
     expect(
       shouldOfferSwitch({ selected: 'Bengaluru', deviceCity: 'Reykjavík', available: AVAILABLE })
     ).toBeNull()
+  })
+})
+
+describe('awayNotice — the half that speaks when switching is not an option', () => {
+  it('says where you are when your city has no events', () => {
+    // Saarbrücken, browsing Bengaluru. Before this, the app knew exactly where
+    // the user was and said nothing at all — no banner, no mention, just a
+    // heading they had to infer the meaning of.
+    expect(
+      awayNotice({ selected: 'Bengaluru', deviceCity: 'Saarbrücken', available: AVAILABLE })
+    ).toEqual({ deviceCity: 'Saarbrücken', selected: 'Bengaluru' })
+  })
+
+  it('stays quiet when the switch offer will speak instead', () => {
+    // The exclusivity that matters: never two messages about the same fact.
+    expect(
+      awayNotice({ selected: 'Bengaluru', deviceCity: 'Mumbai', available: AVAILABLE })
+    ).toBeNull()
+  })
+
+  it('stays quiet when you are where you are browsing', () => {
+    expect(
+      awayNotice({ selected: 'Bengaluru', deviceCity: 'bengaluru', available: AVAILABLE })
+    ).toBeNull()
+  })
+
+  it('stays quiet without a location fix', () => {
+    expect(
+      awayNotice({ selected: 'Bengaluru', deviceCity: null, available: AVAILABLE })
+    ).toBeNull()
+  })
+
+  it('stays quiet before a city has been resolved', () => {
+    expect(
+      awayNotice({ selected: null, deviceCity: 'Saarbrücken', available: AVAILABLE })
+    ).toBeNull()
+  })
+
+  it('is never shown at the same time as the switch offer', () => {
+    // The property, checked across every combination rather than by inspection:
+    // exactly one of these may speak, and neither may speak twice.
+    const cities = ['Bengaluru', 'Mumbai', 'Saarbrücken', 'bengaluru', null]
+    for (const selected of cities) {
+      for (const deviceCity of cities) {
+        const away = awayNotice({ selected, deviceCity, available: AVAILABLE })
+        const switchTo = shouldOfferSwitch({ selected, deviceCity, available: AVAILABLE })
+        expect(Boolean(away) && Boolean(switchTo)).toBe(false)
+      }
+    }
   })
 })
 

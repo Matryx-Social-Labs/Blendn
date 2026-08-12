@@ -372,6 +372,7 @@ The behaviour above is **shipped**. The look of it is not.
 | *"Coming soon to {city}"* when we have no events there | Built |
 | The header trigger — `📍 City ▾` | **Placeholder.** Inherits `topBarSubtitle`, sized as a caption rather than a control |
 | *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |
+| *"You're in Saarbrücken — nothing here yet. Showing Bengaluru."* | Built, neutral style, no action |
 | Section-level empty states | Built |
 | Distance labels on cards | Built. `formatDistance` in `lib/geo.ts`, rendered in the card's `locationLabel` slot **in place of** the venue name |
 
@@ -404,6 +405,27 @@ design has to make that legible without making the locator look like just
 another city. The current build uses a dashed border and a `navigate` icon,
 which is a placeholder, not a decision. The row hides once you are already
 browsing where you are.
+
+#### Two messages about where you are, and only ever one at a time
+
+| When | Message | Action |
+|---|---|---|
+| Device is in a city that **has** events | *"You're in Munich. Browse events here?"* | **Switch** button |
+| Device is in a city that **has none** | *"You're in Saarbrücken — nothing here yet. Showing Bengaluru."* | none |
+
+They are mutually exclusive by construction, so the design never has to stack
+them. The second is **passive on purpose**: there is nothing useful to tap —
+switching to an empty city is a dead end and the header picker is already the
+way to move — so a button would be a call to action leading nowhere.
+
+**It is styled neutral, not as a warning.** Every other banner on this screen is
+red or amber because something is wrong and an action is owed. This one states a
+fact about the world. Dressing it as an alert would make "you live somewhere we
+haven't launched" read as a fault, which is both untrue and the wrong first
+impression for exactly the users we most want.
+
+Found on a device in Saarbrücken, where the app knew precisely where the user
+was and said nothing at all.
 
 **And there are now two different empty states, which must not read the same:**
 
