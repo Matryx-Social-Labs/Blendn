@@ -74,7 +74,7 @@ number it has seen, and both profiles submit to the same app record
 (`ascAppId 6757761059`). TestFlight and the App Store are the same app — a
 TestFlight build is one that has not been released.
 
-## Environment variables, and why none of them are secret
+## Environment variables — the prefix decides everything
 
 **`EXPO_PUBLIC_*` variables are compiled into the JavaScript bundle.** Anyone
 who installs the app can unzip the `.ipa` and read every one. This is true of a
@@ -82,7 +82,7 @@ private repo, a public repo, and a repo that does not exist. **The repository
 was never the exposure. The binary is.**
 
 So the rule is not "hide them better", it is **never put a secret behind that
-prefix**. All eight are stored `plaintext` in EAS:
+prefix**. Everything below is stored `plaintext` in EAS:
 
 | | Secret? | |
 |---|---|---|
@@ -98,6 +98,40 @@ prefix**. All eight are stored `plaintext` in EAS:
 Marking these `secret` in EAS would be worse than useless: it hides them from
 you and your own CLI while leaving them fully readable in the shipped app, and
 it breaks `expo start` locally.
+
+### Three that have no prefix, and one of those is a real secret
+
+Sentry needs more than the DSN. Uploading source maps happens on the **build
+machine**, not in the app, so these deliberately lack `EXPO_PUBLIC_` and
+therefore never enter the bundle:
+
+| | Visibility | |
+|---|---|---|
+| `SENTRY_ORG` | plaintext | `matryx-social-labs-private-lim` |
+| `SENTRY_PROJECT` | plaintext | `blendn` |
+| `SENTRY_AUTH_TOKEN` | **`secret`** | Writes to the Sentry org. The one genuinely secret value in this setup |
+
+`SENTRY_AUTH_TOKEN` is an **Organization Token** (Sentry → Settings → Developer
+Settings → Organization Tokens), not a personal one. Org tokens carry only
+CI-scoped permissions; a personal token carries everything its owner can do.
+Stored `secret`, so it is unreadable in the dashboard and the CLI, and exists
+only inside a build — which is exactly right, because unlike the `EXPO_PUBLIC_*`
+values there is no copy of it in the shipped app to undermine the effort.
+
+**Why org and project are needed as variables at all:** `ios/sentry.properties`
+and `android/sentry.properties` carry them locally, and both are **gitignored**.
+EAS checks out the repo, so those files are simply absent there. Without the
+variables the upload step cannot resolve the project and fails quietly, leaving
+crash reports full of minified stack traces — which is close to having no crash
+reporting while looking like you do.
+
+**Sentry is one project across both environments.** `lib/sentry.ts` tags each
+event with `EXPO_PUBLIC_APP_ENV`, so staging and production separate inside
+Sentry. A second project would split the issue history for nothing.
+
+**Missing the DSN degrades cleanly** — `lib/sentry.ts` returns early and the app
+runs fine, silently reporting nothing. That is the failure mode to watch for: it
+looks identical to an app that simply is not crashing.
 
 **The Maps key cannot be restricted the way the others could be, and that is a
 real limitation rather than an oversight.**
