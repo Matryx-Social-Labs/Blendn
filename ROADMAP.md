@@ -117,8 +117,11 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | `build:version:set` — iOS at 100, Android at 10 | **Done** 2026-08-12 |
 | Demo organiser + org + membership row in `seed:room` | **Done** — `blendn-admin` #206 |
 | **First iOS build on `staging`** | **Done** 2026-08-12 — build 102, after 101 failed on a capability mismatch |
-| Merge to `stage` and confirm a build starts unattended | **Next** — the actual acceptance test |
-| **Xcode 26 image pin** | **Required before any App Store submission** — see below |
+| **First build on TestFlight** | **Done** 2026-08-12 — build 103, Xcode 26, no 90725 |
+| Merge to `stage` and confirm a build starts unattended | **Next** — the last untested piece |
+| Internal testers added in App Store Connect | **Next** |
+| Device pass against `docs/TESTING_CHECKLIST.md` | **Next** — six months of unverified work |
+| **Xcode 26 image pin** | **Done** #79 — SDK 53 / RN 0.79.6 compiles under Xcode 26.0, confirmed |
 | App icon rebuilt — opaque, centred, on the brand gradient, both platforms | **Done** 2026-08-12 |
 | Maps API key restriction | **Blocked** — needs billing, which needs Google 2FA |
 | ~~Sign in with Apple~~ | **Already built** — see correction below |
