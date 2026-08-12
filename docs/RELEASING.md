@@ -251,6 +251,50 @@ above is the bundled one; there is no `java` on the PATH of this machine.
 local `.jks` and `.pem`. EAS holds it, but a keystore existing in exactly one
 place is what caused all of this.
 
+The self-service form is the whole flow — **Test and release → App integrity →
+Protected with Play → App signing → Request upload key reset**. No support ticket
+is needed. The page then reads *"There is a pending request…"*, and the upload
+key fingerprints shown on it swap to the new ones when Google completes it, which
+is how you know without waiting for the email. 48–72 hours.
+
+### ⚠️ Three certificates, and Google Sign-In only accepts one of them
+
+Android has **three different signing certificates** in play here, and confusing
+them breaks Google Sign-In in a way that is close to undebuggable.
+
+| Certificate | SHA-1 | Signs |
+|---|---|---|
+| **App signing** (Google holds it) | `28:30:4F:51:91:BB:58:D7:5C:EC:D6:97:C3:2B:46:AE:F3:6C:56:D1` | **every build a user installs** |
+| Upload key | ours, resettable | the AAB we hand to Play, and nothing else |
+| Debug (`android/app/debug.keystore`) | `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` | local and emulator builds |
+
+**Google re-signs everything.** Whatever key we upload with, what lands on a
+phone is signed with *Google's* app signing key — so that is the fingerprint an
+Android OAuth client must carry. The upload key never signs anything a user runs
+and is irrelevant to OAuth.
+
+**Found 2026-08-12, and it had been broken the whole time.** The only Android
+OAuth client (`Blendn-Android`) carried the **debug** fingerprint. So Google
+Sign-In worked on every machine anyone would debug it on, and failed on
+everything installed from Play — including release 3, live to internal testers
+since 15 Feb 2026. The failure is `DEVELOPER_ERROR` / `code 10`, which names no
+certificate and reads like a bug in the auth code.
+
+**Two OAuth clients, one per certificate**, which is the intended design:
+
+| Client | SHA-1 | For |
+|---|---|---|
+| `Blendn-Android` | debug `5E:8F:16…` | `expo run:android`, emulators |
+| `Blendn-Android-Play` | app signing `28:30:4F…` | TestFlight-equivalent and production |
+
+Neither client id appears in the app — Android signs in with the **web** client
+id. The Android clients only need to *exist* and match, or Google refuses the
+request. That is exactly why this is invisible in code review.
+
+This is the Android twin of the iOS `$(EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)` bug
+fixed in #72: different cause, same shape — **works locally, dead in a real
+build, error message points nowhere near the truth**.
+
 ### Google Play service account
 
 `eas submit` needs this to talk to Play, exactly as it needs the ASC API key for
