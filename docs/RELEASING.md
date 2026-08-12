@@ -383,6 +383,68 @@ the `EXPO_PUBLIC_*` values, this one is a real secret.
    below. Skipping this makes the first automated build on each platform fail
    at submit, after it has already spent the build minutes.
 
+## ⚠️ `eas credentials` writes to Apple from whichever branch you are standing in
+
+**This cost a build on 2026-08-12 and will cost another one.**
+
+`eas credentials` does not only read. It **syncs capabilities on the App ID** —
+shared state at Apple, affecting every branch and every build — from the
+`app.json` in your current working directory.
+
+What happened: credentials were set up from `~/conductor/repos/blendn`, which
+sits on `prod`. That branch has no `usesAppleSignIn` and no
+`com.apple.developer.applesignin` entitlement, so EAS did as it was told:
+
+```
+✔ Synced capabilities: Disabled: Sign In with Apple
+```
+
+The build then ran from a `dev` worktree, where the native project **does**
+declare that entitlement. The provisioning profile had been minted without it,
+and fastlane refused to sign:
+
+```
+Provisioning profile "…" doesn't support the Sign in with Apple capability.
+Provisioning profile "…" doesn't include the com.apple.developer.applesignin entitlement.
+```
+
+Nothing was wrong with the code. The credentials were simply configured from a
+branch 61 commits behind the one being built.
+
+**So: run `eas credentials` from a checkout of the branch you intend to
+build**, and read the `Synced capabilities:` line rather than skimming past it.
+It is the tool telling you what it just changed at Apple.
+
+Recovering is straightforward once you know: re-run from the right branch (you
+want `Enabled:` this time), then **regenerate the provisioning profile** —
+answer *no* to "reuse the original profile", because a profile minted under the
+old capability set does not acquire the new entitlement.
+
+## ⚠️ Xcode 26 is required for App Store submission, and `auto` will not pick it
+
+Since **28 April 2026**, Apple refuses App Store submissions built with anything
+older than Xcode 26. EAS's default `image: auto` chooses by Expo SDK version,
+and this project is on **SDK 53**, so `auto` resolves to
+`macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
+
+> *This build can no longer be submitted to the App Store.*
+
+**Upgrading the SDK is not the fix here.** SDK 54 was tried on 2026-08-11 and
+rolled back with reasons — it raised the advisory count from 25 to 29 and
+Reanimated 4 removed `sharedTransitionTag`, which six components use. See
+`SECURITY_RELIABILITY_BACKLOG.md`.
+
+Pin the image instead, on both profiles in `eas.json`:
+
+```json
+"ios": { "image": "macos-sequoia-15.6-xcode-26.0" }
+```
+
+**The lowest Xcode 26 image, deliberately.** Newer ones exist —
+`macos-tahoe-26.5-xcode-26.6` is paired with SDK 57 — and the further the jump
+from SDK 53, the likelier some native module fails to compile. Take the smallest
+step that satisfies Apple.
+
 ## The native directories are committed, and that has a cost
 
 `ios/` and `android/` are in git, and they carry hand-fixes for real EAS build

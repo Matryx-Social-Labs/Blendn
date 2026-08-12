@@ -112,12 +112,16 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | **Upload key reset** — the old key is lost, Google must swap it | **Submitted** 2026-08-12, pending (48–72h) |
 | Google Sign-In on Play builds — OAuth client had only the *debug* SHA-1 | **Fixed** 2026-08-12 |
 | iOS distribution certificate + provisioning profile | **Done** 2026-08-12 (expire 12 Aug 2027) |
+| Apple Push Notifications key | **Done** 2026-08-12 |
+| Sentry DSN + org/project/auth token in both environments | **Done** 2026-08-12 |
+| `build:version:set` — iOS at 100, Android at 10 | **Done** 2026-08-12 |
 | Demo organiser + org + membership row in `seed:room` | **Done** — `blendn-admin` #206 |
-| `build:version:set` on both platforms, before the first build | **Next** — costs a whole build to skip |
-| **First iOS build** on `staging`, by hand, to prove the app opens | **Next** |
+| **First iOS build on `staging`** | **Done** 2026-08-12 — build 102, after 101 failed on a capability mismatch |
 | Merge to `stage` and confirm a build starts unattended | **Next** — the actual acceptance test |
+| **Xcode 26 image pin** | **Required before any App Store submission** — see below |
+| Android `adaptiveIcon.foregroundImage` is 453×534, not square | **Open** — breaks the Android launcher icon, harmless on iOS |
 | Maps API key restriction | **Blocked** — needs billing, which needs Google 2FA |
-| Sign in with Apple | **Not started** — Guideline 4.8 rejection risk, sharpened below |
+| ~~Sign in with Apple~~ | **Already built** — see correction below |
 
 **Nothing left here is code.** The repo half shipped in #72–#74.
 
@@ -127,14 +131,30 @@ project uploaded, so the first automated build is rejected *at submit* — after
 paying the full queue wait and build time. Play is at versionCode 3; ASC has six
 months of TestFlight builds.
 
-**Sign in with Apple got slightly worse.** Setting up iOS credentials synced
-capabilities from `app.json`, which does not declare `usesAppleSignIn` — so EAS
-**disabled** the capability on the App ID. No effect on TestFlight (internal
-testing has no review), but the app now offers Google Sign-In and explicitly
-declares no Apple equivalent, which is the most common Guideline 4.8 rejection
-for this category. The server half exists
-(`blendn-admin/app/api/mobile/auth/apple/route.ts`); the app side is a
-dependency, a button, `usesAppleSignIn: true`, and a `prebuild` re-run.
+**Correction: Sign in with Apple is built.** Earlier entries in this file called
+it "not started" and a Guideline 4.8 risk. That was read off the plan document
+and was already stale — commit `113bd24` shipped it. `expo-apple-authentication`
+is a dependency, `app/index.tsx` has the button and calls `signInAsync`,
+`app.json` sets `usesAppleSignIn: true`, and the entitlement is in
+`ios/blendn/blendn.entitlements`. The server half was always there
+(`blendn-admin/app/api/mobile/auth/apple/route.ts`). **4.8 is not a live risk.**
+
+**It is, however, what broke build 101.** `eas credentials` had been run from
+`~/conductor/repos/blendn`, which sits on `prod` — 61 commits behind, with no
+`usesAppleSignIn` and no entitlement. EAS therefore **disabled** the capability
+on the App ID (shared Apple state, all branches), minted a profile without the
+entitlement, and fastlane refused to sign a native project that requires it. Not
+a code fault: credentials configured from the wrong branch. Written up in
+RELEASING.md, because the same command will do the same thing again.
+
+**Xcode 26 is a hard deadline on the App Store path.** Since 28 April 2026 Apple
+refuses submissions built with older Xcode, and EAS's `image: auto` picks by SDK
+version — SDK 53 resolves to Xcode 16.4, so every build so far carries *"can no
+longer be submitted to the App Store"*. Upgrading the SDK is not the fix (54 was
+tried and rolled back — see `SECURITY_RELIABILITY_BACKLOG.md`); pinning
+`macos-sequoia-15.6-xcode-26.0` in `eas.json` is. Deliberately the **lowest**
+Xcode 26 image, since the further from SDK 53, the likelier a native module
+fails to compile.
 
 **Google Sign-In was broken on every Play build** until 2026-08-12 — the only
 Android OAuth client carried the *debug* SHA-1, so it worked on every machine
