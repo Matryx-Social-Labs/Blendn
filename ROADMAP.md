@@ -109,7 +109,8 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | GitHub ↔ EAS connected (so no `EXPO_TOKEN` anywhere) | **Done** 2026-08-11 |
 | Play service account: key, API enabled, invited, uploaded to EAS | **Done** 2026-08-12 |
 | Android upload keystore — generated, on EAS | **Done** 2026-08-12 |
-| **Upload key reset** — the old key is lost, Google must swap it | **Waiting on Google** (~1–2 days) |
+| **Upload key reset** — the old key is lost, Google must swap it | **Submitted** 2026-08-12, pending (48–72h) |
+| Google Sign-In on Play builds — OAuth client had only the *debug* SHA-1 | **Fixed** 2026-08-12 |
 | **iOS distribution certificate** | **Blocked** — Apple 2FA is on a colleague's phone in another timezone |
 | Maps API key restriction | **Blocked** — needs billing, which needs the same 2FA |
 | `build:version:set` on both platforms, before the first build | **Not started** |
