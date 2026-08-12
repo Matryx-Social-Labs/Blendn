@@ -49,9 +49,35 @@ person their afternoon. Wall-clock is cheap when it is not attached to a human;
 attention is not.
 
 Upgrade to **Starter ($19/mo — high-priority queue, $45 of build credit)** when
-the wait or the 15-build cap actually bites, and not before. Two builds per
-merge (iOS + Android) means the cap is roughly seven merges a month to `stage`.
-That is the number to watch, more than the queue.
+the wait or the build cap actually bites, and not before.
+
+**The cap is fifteen merges a month, not seven.** An earlier version of this
+paragraph halved it by treating 30 as a shared pool. The limits are **per
+platform** — 15 iOS *and* 15 Android — and a merge to `stage` spends one of
+each, so fifteen merges is the ceiling.
+
+### Testing does not need EAS at all, and this is the part that protects the quota
+
+```bash
+npx expo run:ios --device      # compiles locally, installs on a plugged-in iPhone
+npx expo run:android           # emulator, or a USB device
+```
+
+**Unlimited, free, and the same binary shape EAS produces** — the native
+directories are committed, so nothing about a local build is a rehearsal.
+Push notifications, GPS check-in and Google Sign-In all work on a locally-built
+device install.
+
+So the rule is:
+
+| | |
+|---|---|
+| Verifying something yourself | `expo run:*` — costs nothing, do it freely |
+| Getting a build to someone else | EAS — this is the only thing the quota buys |
+
+**EAS builds are for distribution, not confidence.** Framed that way, fifteen a
+month is generous: it is fifteen *tester-facing drops*, not fifteen chances to
+check your own work.
 
 > **Do not go back to hand-built Xcode uploads.** It is how the Android upload
 > key was lost (below), and a build made on a laptop carries whatever that laptop

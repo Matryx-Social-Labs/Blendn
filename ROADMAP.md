@@ -119,7 +119,10 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | **First iOS build on `staging`** | **Done** 2026-08-12 — build 102, after 101 failed on a capability mismatch |
 | **First build on TestFlight** | **Done** 2026-08-12 — build 103, Xcode 26, no 90725 |
 | **Merge to `stage`, build starts unattended** | **Done** 2026-08-12 — iOS + Android both started by the GitHub App, 1s after the push |
-| Internal testers — both stores | **Next** — see RELEASING.md; check whether the Play account is personal (12 testers × 14 days) or organisation (exempt) |
+| Internal + external testers, iOS | **Done** 2026-08-12 — public join link issued |
+| Internal testers, Android | **Blocked** on the upload key reset |
+| `docs/TESTER_GUIDE.md` for non-technical testers | **Done** 2026-08-12 |
+| Play account type — personal (12 testers × 14 days) or organisation (exempt) | **Open** — decides whether a two-week wall exists before production |
 | Device pass against `docs/TESTING_CHECKLIST.md` | **In progress** — A3, the realtime reconnect, verified on device 2026-08-12 |
 | **Xcode 26 image pin** | **Done** #79 — SDK 53 / RN 0.79.6 compiles under Xcode 26.0, confirmed |
 | App icon rebuilt — opaque, centred, on the brand gradient, both platforms | **Done** 2026-08-12 |
