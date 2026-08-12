@@ -110,6 +110,34 @@ Bengaluru, and it vanishes from the section whose whole promise is "things you
 said you wanted". It is fetched by user now, like the checked-in strip already
 was.
 
+**The fix had its own trap, found on a device rather than by reading code.**
+Three guards — fall back to the busiest city, stay quiet about a city with no
+events, list only cities that have events — put a user in Germany into
+Bengaluru with **no way to say where they were**. Their city was absent from the
+list, absent from the banner, and the selection that had never been theirs could
+not be undone.
+
+| # | What | State |
+|---|---|---|
+| — | Storage records **how** a city was set: `chosen` vs `inferred` | **Done** |
+| — | A guess may be replaced when you travel; a choice never is | **Done** |
+| — | Re-check location on foreground — reopening did nothing before | **Done** |
+| — | *"Use my current location"* in the picker, **not** gated on having events there | **Done** |
+| — | *"Coming soon to {city}"* vs *"Nothing on in {city}"* — two different empties | **Done** |
+
+**No time-based expiry, deliberately.** A home city does not go stale after
+thirty days and any threshold would be arbitrary. "My trip ended" is already
+covered: you are back in a city that has events, so the switch is offered.
+
+**Old installs read as `chosen`.** They stored a bare string with no source, and
+the conservative reading means the worst case is being *asked* to switch. Being
+*moved* without warning is the harm.
+
+**Choosing a city with no events is allowed, and useful.** It gets an honest
+"we're not live here yet" instead of a blank page, and it is the clearest signal
+we have about where to launch next. Capturing that as a demand signal is not
+built.
+
 **Still placeholder:** the picker sheet and the header trigger. The trigger is
 styled as a caption and is the primary control for the whole screen; the sheet
 has no search and does not scale past a handful of cities. See

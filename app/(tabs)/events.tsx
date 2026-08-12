@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Animated as RNAnimated,
   Dimensions,
+  AppState,
   FlatList,
   Linking,
   Modal,
@@ -29,11 +30,14 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi } from '../../lib/api'
 import {
+  cityOnResume,
   isBrowsingHere,
+  isServedCity,
   resolveBrowseCity,
   sameCity,
   shouldOfferSwitch,
   type CityOption,
+  type StoredCity,
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres } from '../../lib/geo'
@@ -335,7 +339,18 @@ export default function Events() {
    * German query.
    */
   const [favoriteEvents, setFavoriteEvents] = useState<Event[]>([])
-  const [selectedCity, setSelectedCity] = useState<string | null>(null)
+  /*
+   * The selection carries **how it was set**, not just what it is.
+   *
+   * A city you tapped and a city we guessed look identical as strings, and
+   * treating them the same is what produced the trap: a device in Germany got
+   * dropped into Bengaluru by the busiest-city fallback and then had no way
+   * back, because the guess was defended as if it were a decision.
+   *
+   * A guess may be replaced by a better guess. A choice never is.
+   */
+  const [selection, setSelection] = useState<StoredCity | null>(null)
+  const selectedCity = selection?.city ?? null
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
@@ -1268,7 +1283,7 @@ export default function Events() {
 
       const available = response.success && response.data ? response.data.cities : []
       setCityOptions(available)
-      setSelectedCity((current) =>
+      setSelection((current) =>
         // Never overwrite a choice the user made while this was in flight.
         current ?? resolveBrowseCity({ stored, deviceCity: null, available })
       )
@@ -1311,15 +1326,57 @@ export default function Events() {
   }, [userLocation])
 
   /*
-   * Once the device city is known, it can improve a *first* choice — but only
-   * when nothing was stored and nothing has been picked. A stored selection is
-   * never overridden, because a two-hour layover must not silently delete the
-   * plans someone was making for home.
+   * Once the device city is known, a **guess** may be improved. A choice is not.
+   *
+   * `cityOnResume` is the whole policy and it is tested; this effect only feeds
+   * it. It returns null far more often than not — for a chosen city, for a
+   * device city with no events, for no location fix — and null means leave the
+   * selection exactly where it is.
+   *
+   * The replacement stays `inferred`, so it can be improved again next time.
    */
   useEffect(() => {
     if (!deviceCity || cityOptions.length === 0) return
-    setSelectedCity((current) => current ?? resolveBrowseCity({ stored: null, deviceCity, available: cityOptions }))
+    setSelection((current) => {
+      if (!current) {
+        return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions })
+      }
+      const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
+      return next ? { city: next, source: 'inferred' } : current
+    })
   }, [deviceCity, cityOptions])
+
+  /*
+   * Re-check where the phone is when the app comes back to the foreground.
+   *
+   * Without this, "reopened after a long time" does nothing at all: the screen
+   * resolves its city in a mount effect, and returning from background does not
+   * remount. Someone could fly to another city, reopen the app, and be shown
+   * the old one with no banner and no update — the app would not have looked.
+   *
+   * Only the *coordinates* are refreshed here. What happens next is the effect
+   * above, which is where the never-override-a-choice rule lives.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return
+      Location.getLastKnownPositionAsync()
+        .then((position) => {
+          if (!position) return
+          setUserLocation((current) =>
+            current &&
+            Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
+            Math.abs(current.longitude - position.coords.longitude) < 0.01
+              ? current
+              : { latitude: position.coords.latitude, longitude: position.coords.longitude }
+          )
+        })
+        // A refused or unavailable fix is not an error worth surfacing: it just
+        // means the city stays where it was.
+        .catch(() => {})
+    })
+    return () => sub.remove()
+  }, [])
 
   /*
    * Favourites, fetched by user rather than read out of the browse list.
@@ -1349,10 +1406,16 @@ export default function Events() {
     }
   }, [user?.id, events])
 
+  /**
+   * Every path a user can take to a city, and all of them count as choosing.
+   *
+   * The picker, the "you're in X, switch?" banner, and "use my current
+   * location" all land here. Once chosen, the app stops moving them.
+   */
   const chooseCity = useCallback((city: string) => {
-    setSelectedCity(city)
+    setSelection({ city, source: 'chosen' })
     setCityPickerOpen(false)
-    void storeCity(city)
+    void storeCity(city, 'chosen')
   }, [])
 
   const switchSuggestion = useMemo(
@@ -1361,6 +1424,17 @@ export default function Events() {
   )
 
   const browsingHere = isBrowsingHere(selectedCity, deviceCity)
+
+  /**
+   * The selected city is somewhere we have no events at all.
+   *
+   * `cityOptions` is exactly the set of cities with something on, so a
+   * selection outside it means we have not launched there — a different
+   * message from "quiet week", and one the user can only reach deliberately,
+   * via "use my current location". Guarded on the list having loaded, so a slow
+   * request does not flash "coming soon" at someone in Bengaluru.
+   */
+  const notLiveHere = cityOptions.length > 0 && !isServedCity(selectedCity, cityOptions)
 
   const fetchEvents = async (options?: { silent?: boolean; force?: boolean }) => {
     try {
@@ -2335,15 +2409,38 @@ export default function Events() {
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       <View style={styles.emptyGlyph}>
-                        <Ionicons name="calendar-outline" size={36} color={APP_COLORS.textTertiary} />
+                        <Ionicons
+                          name={notLiveHere ? 'rocket-outline' : 'calendar-outline'}
+                          size={36}
+                          color={APP_COLORS.textTertiary}
+                        />
                       </View>
+                      {/*
+                        Two different empties, and conflating them is a lie.
+
+                        A city on the list with nothing this week is a quiet
+                        week. A city *not* on the list is somewhere we have not
+                        launched — the user did nothing wrong and refreshing
+                        will never help, so saying "nobody has published
+                        anything yet" would read as the app being broken.
+
+                        Someone reaching this by choosing their own city is
+                        telling us where to go next, which is worth saying back
+                        to them rather than treating as a dead end.
+                      */}
                       <Text style={styles.emptyTitle}>
-                        {selectedCity ? `Nothing on in ${selectedCity}` : 'No events yet'}
+                        {!selectedCity
+                          ? 'No events yet'
+                          : notLiveHere
+                            ? `Coming soon to ${selectedCity}`
+                            : `Nothing on in ${selectedCity}`}
                       </Text>
                       <Text style={styles.emptySub}>
-                        {selectedCity
-                          ? 'Nobody has published anything here yet. Try another city.'
-                          : 'There are no published events to show right now.'}
+                        {!selectedCity
+                          ? 'There are no published events to show right now.'
+                          : notLiveHere
+                            ? "We're not live here yet — you're early. Browse another city in the meantime, and we'll be here soon."
+                            : 'Nothing is on here at the moment. Try another city, or check back.'}
                       </Text>
                       {cityOptions.length > 0 && (
                         <ScalePress
@@ -2483,9 +2580,44 @@ export default function Events() {
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
             </Text>
+
+            {/*
+              Getting back to where you actually are.
+
+              This row is **not** conditional on your city having events, and
+              that is the entire point. The list below only ever contains cities
+              with something on, so without this a user standing somewhere we
+              have not launched yet has no way to say so: absent from the list,
+              absent from the switch banner, and stuck in whichever city the
+              busiest-city fallback picked for them. Found on a device in
+              Germany, sitting in Bengaluru with no route home.
+
+              Choosing an empty city is allowed and useful. It gets an honest
+              "we're not here yet" instead of a blank page, and it is the
+              clearest signal we have about where to launch next.
+            */}
+            {deviceCity && !sameCity(deviceCity, selectedCity) ? (
+              <TouchableOpacity
+                style={[styles.cityPickerRow, styles.cityPickerRowLocate]}
+                onPress={() => chooseCity(deviceCity)}
+                accessibilityRole="button"
+                accessibilityLabel={`Use my current location, ${deviceCity}`}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Ionicons name="navigate-outline" size={17} color={APP_COLORS.accent} />
+                  <View>
+                    <Text style={styles.cityPickerCity}>Use my current location</Text>
+                    <Text style={styles.cityPickerCount}>{deviceCity}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
             {cityOptions.length === 0 ? (
               <Text style={styles.cityPickerEmpty}>
-                No cities have published events yet.
+                {deviceCity
+                  ? 'No cities have published events yet.'
+                  : 'No cities have published events yet. Turn on location to browse where you are.'}
               </Text>
             ) : (
               <FlatList
@@ -2493,15 +2625,24 @@ export default function Events() {
                 keyExtractor={(item) => item.city}
                 renderItem={({ item }) => {
                   const active = sameCity(item.city, selectedCity)
+                  const here = sameCity(item.city, deviceCity)
                   return (
                     <TouchableOpacity
                       style={[styles.cityPickerRow, active && styles.cityPickerRowActive]}
                       onPress={() => chooseCity(item.city)}
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
-                      accessibilityLabel={`${item.city}, ${item.eventCount} event${item.eventCount === 1 ? '' : 's'}`}
+                      accessibilityLabel={
+                        `${item.city}${here ? ', your current location' : ''}, ` +
+                        `${item.eventCount} event${item.eventCount === 1 ? '' : 's'}`
+                      }
                     >
-                      <Text style={styles.cityPickerCity}>{item.city}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.cityPickerCity}>{item.city}</Text>
+                        {here ? (
+                          <Ionicons name="navigate" size={13} color={APP_COLORS.accent} />
+                        ) : null}
+                      </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
                     </TouchableOpacity>
                   )
@@ -3153,6 +3294,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  cityPickerRowLocate: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderStyle: 'dashed',
+    marginBottom: 14,
   },
   cityPickerRowActive: {
     backgroundColor: 'rgba(255,255,255,0.14)',

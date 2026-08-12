@@ -105,7 +105,7 @@ export default function NearbyEventsScreen() {
        * just looking at.
        */
       const result = await fetchEventsApi({
-        city: (await readStoredCity()) ?? undefined,
+        city: (await readStoredCity())?.city,
         lat: coords.latitude,
         lon: coords.longitude,
         limit: 50,
