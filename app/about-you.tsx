@@ -1,4 +1,4 @@
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
@@ -90,6 +90,25 @@ const DATING_MIN_AGE = 18
 
 export default function AboutYou() {
   const { user } = useAuth()
+
+  /*
+   * The same screen, twice: once as the signup step, once as the only way back.
+   *
+   * These five fields — intent, work field, gender, orientation, interested_in
+   * — decide everything matching does, and until now they were writable here
+   * and nowhere else, on a screen reachable exactly once. Somebody who picked
+   * "networking" at signup and later wanted dating had no path at all, which
+   * made the subtitle below ("You can change any of it later") false.
+   *
+   * Reached from Settings as `/about-you?edit=1`. A separate screen was the
+   * obvious alternative and the wrong one: every rule here is conditional —
+   * dating needs a gender AND an orientation, `interested_in` is asked only
+   * when the pair is ambiguous, `just_here` excludes the rest — and a second
+   * copy of that is a second copy that drifts. The two modes differ only in
+   * their wording and where they go afterwards.
+   */
+  const { edit } = useLocalSearchParams<{ edit?: string }>()
+  const isEdit = edit === '1'
 
   const [intents, setIntents] = useState<Intent[]>([])
   const [workField, setWorkField] = useState<string | null>(null)
@@ -264,6 +283,13 @@ export default function AboutYou() {
 
       if (!result.success) throw new Error(result.error || 'Could not save')
 
+      if (isEdit) {
+        // Back to Settings, not onward into the app. Nothing to clear either:
+        // this account finished signing up a long time ago.
+        router.back()
+        return
+      }
+
       clearNewAccountFlag()
       router.replace('/(tabs)/events')
     } catch (e) {
@@ -297,9 +323,11 @@ export default function AboutYou() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>A bit about you</Text>
+          <Text style={styles.title}>{isEdit ? 'You and matching' : 'A bit about you'}</Text>
           <Text style={styles.subtitle}>
-            This is what matching uses. You can change any of it later.
+            {isEdit
+              ? 'What matching uses. Changing it affects who you see from now on, not rooms you have already been in.'
+              : 'This is what matching uses. You can change any of it later.'}
           </Text>
 
           <Text style={styles.section}>What should we call you?</Text>
@@ -460,12 +488,21 @@ export default function AboutYou() {
             style={[styles.primary, saving && styles.primaryBusy]}
             accessibilityRole="button"
           >
-            <Text style={styles.primaryText}>{saving ? 'Saving…' : 'Continue'}</Text>
+            <Text style={styles.primaryText}>
+              {saving ? 'Saving…' : isEdit ? 'Save' : 'Continue'}
+            </Text>
           </Pressable>
 
-          <Pressable onPress={skip} disabled={saving} accessibilityRole="button">
-            <Text style={styles.skip}>Skip for now</Text>
-          </Pressable>
+          {/*
+            No skip when editing. "Skip for now" means "ask me later" during
+            signup; on a settings screen it would read as "discard", which is
+            what Back already does and says more clearly.
+          */}
+          {!isEdit ? (
+            <Pressable onPress={skip} disabled={saving} accessibilityRole="button">
+              <Text style={styles.skip}>Skip for now</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
