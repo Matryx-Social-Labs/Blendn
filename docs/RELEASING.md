@@ -609,20 +609,89 @@ npx eas-cli build:version:set --platform ios       # above the highest in ASC
 Round up rather than picking the exact next number. Version codes are free and a
 gap costs nothing; a collision costs a build.
 
-## Testers
+## Getting builds to testers
 
-**Internal** — up to 100, added by Apple ID in App Store Connect → TestFlight.
-Builds arrive in minutes with **no review**. This is what you want for a live
-testing round.
+Both stores have the same three-rung ladder — a small trusted group with no
+review, a larger invited group behind a review, and a public one. The names
+differ and the limits differ; the shape does not.
 
-**External** — up to 10,000, but the first build needs a Beta App Review (~24h)
-and a filled-in Test Information section.
+```
+            fast, private, no review        invited, reviewed        public
+  iOS       Internal (100)             →    External (10,000)   →    App Store
+  Android   Internal (100)             →    Closed              →    Open / Production
+```
 
-Export compliance is already handled: `ITSAppUsesNonExemptEncryption: false` is
+**Start on the left and stay there** until the app is worth a stranger's time.
+The rungs exist so that the people who will forgive a broken build see it first.
+
+### iOS — TestFlight
+
+**Internal testers — up to 100, no review, minutes.** This is the round to run
+now.
+
+1. App Store Connect → **Users and Access** → add each person by Apple ID email.
+   They must exist here first; TestFlight draws from this list.
+2. **TestFlight → Internal Testing** → create a group → add them → attach the
+   build.
+3. They install **TestFlight** from the App Store and accept the invite.
+
+Each tester can use up to 30 devices, and **builds expire after 90 days**, so a
+round that runs long needs a fresh build rather than a nudge.
+
+**External testers — up to 10,000, behind a Beta App Review.** The first build of
+each version waits ~24h, and **Test Information is mandatory**: what to test, a
+feedback email, a marketing URL and a privacy policy URL. A public link can be
+generated once approved, which is how you invite people whose Apple ID you do
+not know.
+
+Export compliance is already handled — `ITSAppUsesNonExemptEncryption: false` is
 in the Info.plist, so there is no per-build encryption questionnaire.
 
-Give testers two logins: a seeded attendee for the app, and the demo organiser
-for `staging-dashboard.blendn.app` — see `blendn-admin` `npm run seed:room`.
+### Android — Play Console
+
+**Internal testing — up to 100, no review, minutes.** The TestFlight-internal
+equivalent, and where `submit.staging` already points (`track: internal`).
+
+Play Console → **Testing → Internal testing** → **Testers** → create an email
+list, or point it at a **Google Group**. A group is worth the two minutes: you
+add and remove people in Google Groups afterwards without touching Play Console
+at all.
+
+Testers then use the **opt-in URL** on that page. Nothing installs until they
+click it — a build sitting on the track is invisible to someone who never opted
+in, which is the single most common "it didn't work" on Android.
+
+**Closed testing** is the next rung, and on Android it is more than a
+convenience:
+
+> **Check whether your Play account is a personal or an organisation account.**
+> Personal accounts created after 13 November 2023 must run a **closed test with
+> at least 12 testers, opted in continuously for 14 days**, before they can
+> apply for production access. Organisation accounts are not subject to it.
+>
+> This is a two-week wall or nothing at all, depending on an account setting, so
+> it belongs in the plan before the launch date does. Matryx Social Labs is a
+> company, so we expect to be exempt — **verify rather than assume**.
+
+**Open testing** is public and requires production access first.
+
+### What to give a tester
+
+Two logins, because the product has two faces:
+
+| | |
+|---|---|
+| The app | a seeded attendee — `roomseed-<handle>@blendn.invalid` |
+| The dashboard | `roomseed-organiser@blendn.invalid` at `staging-dashboard.blendn.app` |
+
+Both come from `blendn-admin` `npm run seed:room`, and the password is whatever
+`SEED_ROOM_PASSWORD` was set to on that run. The organiser account is a verified
+organisation owning the seeded event, so the dashboard is **editable**, not just
+visible.
+
+Point them at `docs/TESTING_CHECKLIST.md` rather than asking "does it work". It
+names what to do, what correct looks like, **and what the bug looked like** — so
+a failure is recognisable instead of a judgement call.
 
 ## Promoting a build to the App Store
 

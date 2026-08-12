@@ -29,6 +29,19 @@ re-run that script to set a fresh one — it re-asserts passwords by design.
 3. **The bug:** the spinner stays forever, and every other screen stops loading
    too (six hung requests deadlocked the whole queue).
 
+### A3. Realtime comes back on its own — ✅ **VERIFIED on device, 2026-08-12**
+
+> Confirmed on a TestFlight build: left foregrounded past the 15-minute access
+> token, and realtime returned **without a Retry tap** — the offline banner
+> cleared by itself after about a second.
+>
+> That is the whole fix, and it is the one that could not be proved any other
+> way. Making socket.io's `auth` function-valued changes nothing on its own:
+> `TokenStorage.getAccessToken()` is a bare SecureStore read with no expiry
+> awareness, so a callback that merely re-reads hands back *the same expired
+> token* and the bug survives looking fixed. The banner clearing on its own is
+> the observable proof that the callback refreshed first.
+
 ### A3. Realtime comes back on its own — the important one
 1. Sign in, open the app, leave it **foregrounded and idle for 20+ minutes**
    (longer than the 15-minute access token).
