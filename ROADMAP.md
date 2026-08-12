@@ -123,7 +123,9 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | Device pass against `docs/TESTING_CHECKLIST.md` | **Next** — six months of unverified work |
 | **Xcode 26 image pin** | **Done** #79 — SDK 53 / RN 0.79.6 compiles under Xcode 26.0, confirmed |
 | App icon rebuilt — opaque, centred, on the brand gradient, both platforms | **Done** 2026-08-12 |
-| Maps API key restriction | **Blocked** — needs billing, which needs Google 2FA |
+| Maps API key — created, restricted to Maps Static API, set in EAS | **Done** 2026-08-12 |
+| Maps key — app restriction (two keys + request headers) | **Open** — see RELEASING.md; no quota cap exists, so this is the only real ceiling |
+| Maps proxy through `blendn-admin` | **Open** — Google's own recommendation, and worth more now |
 | ~~Sign in with Apple~~ | **Already built** — see correction below |
 
 **Nothing left here is code.** The repo half shipped in #72–#74.
