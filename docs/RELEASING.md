@@ -546,6 +546,43 @@ hand.** That was the right call before this pipeline existed; free-tier EAS
 queues are slow and it is faster to do it yourself than to watch one. It is the
 wrong call now, and the reason is specific rather than a matter of taste.
 
+### ⚠️ Register a new device on the web first, not in Xcode
+
+**The first `expo run:ios --device` on any new phone fails**, and the error names
+signing rather than the actual problem:
+
+```
+error: No profiles for 'com.matryxsociallabs.blendn' were found: Xcode couldn't
+find any iOS App Development provisioning profiles matching ... Automatic
+signing is disabled and unable to generate a profile.
+```
+
+Two separate things are missing, and only the second one is obvious:
+
+1. **The device is not registered to the team.** EAS creates an *App Store
+   distribution* profile; running on a connected phone needs a *Development*
+   profile, which cannot exist until the device's UDID is on the team.
+2. **`expo run:ios` does not pass `-allowProvisioningUpdates`**, so xcodebuild is
+   not permitted to create one even when everything else is right.
+
+Opening the project in Xcode gets further and then stops at:
+
+> *Device X is not registered to your team. Devices must be registered in order
+> to run your code, but you do not have permission to register them.*
+
+**Register it on developer.apple.com instead.** *Certificates, Identifiers &
+Profiles → Devices → +*, with the UDID that `expo run:ios --device` printed
+(`› Using --device 00008110-…`). Then **Try Again** in Xcode's Signing &
+Capabilities and it mints the profile itself.
+
+**Signing out of Xcode and back in does not fix it** — tried, 2026-08-12.
+Registering a device needs a right that reading the team and creating profiles
+does not, so an account can be a full App Store Connect Admin, see the Devices
+list on the portal, add a device there by hand, and still have Xcode refuse to
+do it on their behalf. Go around it rather than at it.
+
+Do this once per tester phone. There are 100 development device slots a year.
+
 ### Building locally still works, and nothing here changed that
 
 ```bash
