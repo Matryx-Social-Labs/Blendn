@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
-import { flattenToLeaves, type Category, type CategoryNode } from '../lib/categories'
+import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
 import { Logger } from '../lib/logger'
 
 /**
@@ -35,7 +35,17 @@ import { Logger } from '../lib/logger'
  * before anyone styles it. See `docs/PLACEHOLDER_SCREENS.md`.
  */
 
-/** The server rejects more than this per call, and a card cannot show more. */
+/**
+ * Ten, and the server enforces it too — as of the Stage 2 change.
+ *
+ * This comment used to claim the server rejected more than this per call. It
+ * did not: there was no cap anywhere in `POST /profiles/:id/interests`, and
+ * this constant was the only thing holding the line. It is real now
+ * (`lib/constants.ts` in blendn-admin), which matters because ranking sums IDF
+ * weights over shared interests — and IDF damps a category *many people* hold,
+ * not one person holding *many categories*. Ticking all 67 would have put you
+ * top of every list in the room.
+ */
 export const MAX_INTERESTS = 10
 
 export function InterestPicker({
@@ -57,7 +67,7 @@ export function InterestPicker({
    */
   onLoadStateChange?: (state: { loading: boolean; available: number }) => void
 }) {
-  const [categories, setCategories] = useState<Category[]>([])
+  const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
@@ -68,7 +78,7 @@ export function InterestPicker({
       .then((res) => {
         if (cancelled) return
         if (res.success && Array.isArray(res.data)) {
-          setCategories(flattenToLeaves(res.data as unknown as CategoryNode[]))
+          setGroups(toPickerTree(res.data as unknown as CategoryNode[]))
         } else {
           setFailed(true)
         }
@@ -85,12 +95,14 @@ export function InterestPicker({
     }
   }, [])
 
+  const available = useMemo(() => pickableItems(groups).length, [groups])
+
   useEffect(() => {
-    onLoadStateChange?.({ loading, available: categories.length })
+    onLoadStateChange?.({ loading, available })
     // `onLoadStateChange` is intentionally not a dependency: callers pass an
     // inline arrow, and including it would re-fire on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, categories.length])
+  }, [loading, available])
 
   const toggle = (id: string) => {
     if (selected.includes(id)) {
@@ -114,7 +126,7 @@ export function InterestPicker({
 
       {loading ? (
         <Text style={styles.notice}>Loading interests…</Text>
-      ) : failed || categories.length === 0 ? (
+      ) : failed || available === 0 ? (
         // An honest message beats an empty grid that reads as "the app has
         // nothing to offer". The caller lets them continue regardless.
         <Text style={styles.notice}>
@@ -122,30 +134,54 @@ export function InterestPicker({
         </Text>
       ) : null}
 
-      <View style={styles.grid}>
-        {categories.map((category) => {
-          const isSelected = selected.includes(category.id)
-          return (
-            <TouchableOpacity
-              key={category.id}
-              style={[styles.chip, isSelected ? styles.chipSelected : styles.chipIdle]}
-              onPress={() => toggle(category.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={category.name}
-            >
-              <Text style={[styles.chipText, isSelected ? styles.chipTextSelected : null]}>
-                {category.icon ? `${category.icon} ${category.name}` : category.name}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </View>
+      {/*
+        Grouped, not flat. The heading is a place to look, not a thing to tap —
+        `accessibilityRole="header"` says so to a screen reader, which would
+        otherwise read thirteen unlabelled section titles as more options.
+      */}
+      {groups.map((group) => (
+        <View key={group.id} style={styles.group}>
+          <Text style={styles.groupHeading} accessibilityRole="header">
+            {group.name}
+          </Text>
+          <View style={styles.grid}>
+            {group.items.map((category) => {
+              const isSelected = selected.includes(category.id)
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[styles.chip, isSelected ? styles.chipSelected : styles.chipIdle]}
+                  onPress={() => toggle(category.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  // The group name is in the label because "Workshops" appears
+                  // under both Arts & Culture and Business, and a screen reader
+                  // moving chip to chip has no other way to tell them apart.
+                  accessibilityLabel={`${category.name}, in ${group.name}`}
+                >
+                  <Text style={[styles.chipText, isSelected ? styles.chipTextSelected : null]}>
+                    {category.icon ? `${category.icon} ${category.name}` : category.name}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+      ))}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  group: { marginBottom: 18 },
+  groupHeading: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
   counter: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
