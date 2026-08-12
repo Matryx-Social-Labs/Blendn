@@ -111,20 +111,35 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | Android upload keystore — generated, on EAS | **Done** 2026-08-12 |
 | **Upload key reset** — the old key is lost, Google must swap it | **Submitted** 2026-08-12, pending (48–72h) |
 | Google Sign-In on Play builds — OAuth client had only the *debug* SHA-1 | **Fixed** 2026-08-12 |
-| **iOS distribution certificate** | **Blocked** — Apple 2FA is on a colleague's phone in another timezone |
-| Maps API key restriction | **Blocked** — needs billing, which needs the same 2FA |
-| `build:version:set` on both platforms, before the first build | **Not started** |
-| Demo organiser + org + membership row in `seed:room` | **Not started** (`blendn-admin`) |
-| Sign in with Apple | **Not started** — Guideline 4.8 rejection risk |
+| iOS distribution certificate + provisioning profile | **Done** 2026-08-12 (expire 12 Aug 2027) |
+| Demo organiser + org + membership row in `seed:room` | **Done** — `blendn-admin` #206 |
+| `build:version:set` on both platforms, before the first build | **Next** — costs a whole build to skip |
+| **First iOS build** on `staging`, by hand, to prove the app opens | **Next** |
+| Merge to `stage` and confirm a build starts unattended | **Next** — the actual acceptance test |
+| Maps API key restriction | **Blocked** — needs billing, which needs Google 2FA |
+| Sign in with Apple | **Not started** — Guideline 4.8 rejection risk, sharpened below |
 
-**Nothing here is code any more.** Every remaining item needs a person with an
-account: Google support, Apple 2FA, or a card. The repo half shipped in #72.
+**Nothing left here is code.** The repo half shipped in #72–#74.
 
-**Two things to check before the first build**, both of which cost a full build
-to learn otherwise: the version counters start at zero on a new EAS project
-while both stores remember (see RELEASING.md), and `eas credentials` may accept
-the already-uploaded ASC API key for iOS credential management — if it does, the
-2FA block disappears.
+**`build:version:set` is the one that will bite.** A new EAS project starts its
+build-number counter at zero while both stores remember everything the old
+project uploaded, so the first automated build is rejected *at submit* — after
+paying the full queue wait and build time. Play is at versionCode 3; ASC has six
+months of TestFlight builds.
+
+**Sign in with Apple got slightly worse.** Setting up iOS credentials synced
+capabilities from `app.json`, which does not declare `usesAppleSignIn` — so EAS
+**disabled** the capability on the App ID. No effect on TestFlight (internal
+testing has no review), but the app now offers Google Sign-In and explicitly
+declares no Apple equivalent, which is the most common Guideline 4.8 rejection
+for this category. The server half exists
+(`blendn-admin/app/api/mobile/auth/apple/route.ts`); the app side is a
+dependency, a button, `usesAppleSignIn: true`, and a `prebuild` re-run.
+
+**Google Sign-In was broken on every Play build** until 2026-08-12 — the only
+Android OAuth client carried the *debug* SHA-1, so it worked on every machine
+anyone would debug it on and failed on everything installed from the store. Two
+clients now, one per certificate. See RELEASING.md.
 
 ### Previously in Now — done
 

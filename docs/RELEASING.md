@@ -365,6 +365,77 @@ build-setting interpolation, resolves against nothing on EAS, and would have
 shipped a build where Google Sign-In failed with an error that reads like a code
 bug.
 
+## Building locally — encouraged. Uploading by hand — no.
+
+**For anyone who has been building in Xcode or Android Studio and uploading by
+hand.** That was the right call before this pipeline existed; free-tier EAS
+queues are slow and it is faster to do it yourself than to watch one. It is the
+wrong call now, and the reason is specific rather than a matter of taste.
+
+### Building locally still works, and nothing here changed that
+
+```bash
+npx eas-cli env:pull --environment preview      # staging  → .env.local
+npx eas-cli env:pull --environment production   # production
+npx expo run:ios      # or: open ios/blendn.xcworkspace
+npx expo run:android
+```
+
+`env:pull` is the part people skip. The eight `EXPO_PUBLIC_*` variables are
+gitignored and **`lib/apiClient.ts` throws at module scope without
+`EXPO_PUBLIC_API_BASE_URL`** — no error screen, no degraded mode, the app dies
+before the first frame. Without EAS org access, ask for `.env.example` filled
+in; every value in it is public by construction, since they are compiled into
+the bundle and readable from any installed build.
+
+**Do not run `expo prebuild`.** `ios/` and `android/` are committed and carry
+hand-fixes for real build failures (see the section above). Prebuild regenerates
+over them.
+
+### Uploading by hand breaks the pipeline — not your build, the pipeline
+
+`appVersionSource: "remote"` means **EAS holds the build number** and
+`autoIncrement` bumps *its own* counter. A manual upload raises the number the
+store has seen without EAS knowing. The next automated build then picks a number
+the store already has and is **rejected at submit — after the full build has
+run**, which on the free tier is a queue slot plus fifteen minutes to learn
+nothing.
+
+This is the same failure that got `.github/workflows/deploy-ios.yml` deleted.
+Two systems on one app record is worse than either alone.
+
+| | |
+|---|---|
+| Build locally to debug | **Yes.** Nothing conflicts |
+| Upload to TestFlight or Play by hand | **No.** Desynchronises the counter |
+| Had to anyway | Run `npx eas-cli build:version:set --platform ios` (or `android`) afterwards to resync — and knowing to do this is the fragile part |
+
+### What a laptop build takes with it
+
+A build made on one machine carries whatever that machine had uncommitted, and
+this repo has already paid for that twice:
+
+- `android/app/build.gradle` signs `release` with `signingConfigs.debug`, which
+  Play rejects. So the 15 Feb release came from local changes that never reached
+  the repo.
+- The Android upload key went the same way — generated on one machine, never
+  backed up, and eventually unrecoverable. It cost a reset request to Google.
+
+**Before stopping local uploads, run `git status` and `git diff` and send
+whatever is there.** Not to review it — to find out what has been keeping builds
+working that nobody else has.
+
+### What changed on the Apple account, and what it does to you
+
+Setting up EAS credentials touched shared Apple state. None of it breaks a local
+build:
+
+| | Effect on a local builder |
+|---|---|
+| A second Apple Distribution certificate | None — additive. Yours stays in your Keychain and stays valid |
+| A new provisioning profile | None — profiles coexist, and Xcode automatic signing manages its own |
+| Sign In with Apple **disabled** on the App ID | None today — the app does not use it. It is a Guideline 4.8 risk for App Store review, tracked separately |
+
 ## The version counters start from zero, and the stores do not
 
 `appVersionSource: "remote"` means EAS keeps the build number, and
