@@ -788,11 +788,30 @@ export default function Events() {
     }
   }, [checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
 
-  const onRefresh = useCallback(async () => {
+  /*
+   * NOT memoised, and that is the fix.
+   *
+   * This was `useCallback(..., [])`. `fetchEvents` is a plain arrow function
+   * redefined on every render, so an empty dependency array froze the copy
+   * created on the FIRST render — the one whose closure captured
+   * `userLocation` while it was still `null`, before the GPS fix arrived.
+   *
+   * The result was two refresh paths that disagreed forever. Pull-to-refresh
+   * ran the stale copy, sent no `lat`/`lon`, and the server applied no bounding
+   * box at all — so it returned **every event on the platform**, while the
+   * Refresh button ran the live copy and correctly returned the ones nearby.
+   * A device in Germany saw a Bengaluru event by pulling and nothing by
+   * tapping, which reads as a broken button rather than a leaked query.
+   *
+   * A `RefreshControl` handler is called once per gesture, so there is nothing
+   * to memoise for. Re-creating it per render is the cheap, obviously-correct
+   * option, and it cannot go stale again.
+   */
+  const onRefresh = async () => {
     setRefreshing(true)
     await fetchEvents({ silent: true, force: true })
     setRefreshing(false)
-  }, [])
+  }
 
   const requestLocationIfNeeded = useCallback((force = false) => {
     if (userLocation) return
