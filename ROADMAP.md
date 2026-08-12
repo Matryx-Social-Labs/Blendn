@@ -95,6 +95,36 @@ awareness, so the callback re-serves the same expired token. It has to call
 inside `MatchScreen.tsx` — same reason `lib/reveal.ts` and `lib/geo.ts` were
 extracted in #62/#67.
 
+**Stage 7 — builds that ship themselves.** `stage` → TestFlight and Play
+internal against staging; `prod` → both stores against production, waiting for a
+human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
+
+| What | State |
+|---|---|
+| `eas.json` profiles, two workflow YAMLs, `deploy-ios.yml` deleted | **Done** (#72) |
+| `Info.plist` Google client id made literal — `$(VAR)` resolves to nothing on EAS | **Done** (#72) |
+| `.env.example` — 8 vars, rebuilt by grepping source | **Done** (#72) |
+| App Store Connect API key uploaded to EAS | **Done** 2026-08-11 |
+| All 8 env vars set in `preview` + `production`, verified | **Done** 2026-08-11 |
+| GitHub ↔ EAS connected (so no `EXPO_TOKEN` anywhere) | **Done** 2026-08-11 |
+| Play service account: key, API enabled, invited, uploaded to EAS | **Done** 2026-08-12 |
+| Android upload keystore — generated, on EAS | **Done** 2026-08-12 |
+| **Upload key reset** — the old key is lost, Google must swap it | **Waiting on Google** (~1–2 days) |
+| **iOS distribution certificate** | **Blocked** — Apple 2FA is on a colleague's phone in another timezone |
+| Maps API key restriction | **Blocked** — needs billing, which needs the same 2FA |
+| `build:version:set` on both platforms, before the first build | **Not started** |
+| Demo organiser + org + membership row in `seed:room` | **Not started** (`blendn-admin`) |
+| Sign in with Apple | **Not started** — Guideline 4.8 rejection risk |
+
+**Nothing here is code any more.** Every remaining item needs a person with an
+account: Google support, Apple 2FA, or a card. The repo half shipped in #72.
+
+**Two things to check before the first build**, both of which cost a full build
+to learn otherwise: the version counters start at zero on a new EAS project
+while both stores remember (see RELEASING.md), and `eas credentials` may accept
+the already-uploaded ASC API key for iOS credential management — if it does, the
+2FA block disappears.
+
 ### Previously in Now — done
 
 **After signup: retire onboarding, ask once, gate at the point of use.** The

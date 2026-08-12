@@ -32,6 +32,31 @@ That file also triggered on `v*.*.*` tags with `--profile production`, so a tag
 cut from `stage` would have pushed a staging build at the App Store record. Two
 systems on one app is worse than either alone.
 
+## How long a build actually takes, on the plan we are on
+
+**We are on the EAS free tier**, which is 15 iOS and 15 Android builds a month,
+one concurrency, and a **low-priority queue that can wait 90+ minutes at peak**.
+The build itself is ~15 minutes; the queue is the variable.
+
+That is worth stating plainly because it is why this pipeline exists at all.
+Before it, iOS builds were made **locally in Xcode and uploaded by hand**,
+precisely because somebody was sitting there watching the EAS queue and it was
+faster to do it themselves.
+
+**The queue stops mattering once nobody is waiting on it.** A merge that lands
+in TestFlight 90 minutes later, unattended, beats a 20-minute build that costs a
+person their afternoon. Wall-clock is cheap when it is not attached to a human;
+attention is not.
+
+Upgrade to **Starter ($19/mo — high-priority queue, $45 of build credit)** when
+the wait or the 15-build cap actually bites, and not before. Two builds per
+merge (iOS + Android) means the cap is roughly seven merges a month to `stage`.
+That is the number to watch, more than the queue.
+
+> **Do not go back to hand-built Xcode uploads.** It is how the Android upload
+> key was lost (below), and a build made on a laptop carries whatever that laptop
+> had uncommitted.
+
 ## What decides which API a build talks to
 
 The `environment` key on the build profile in `eas.json`, and nothing else.
@@ -182,16 +207,49 @@ service.
 **This is recoverable.** Play App Signing has been mandatory for every app
 created since August 2021, so Google holds the *app signing key* — the one that
 can never be replaced — and we only need an *upload key*, which is just proof of
-identity. Two paths:
+identity.
 
-1. **Find the original keystore** (whoever ran the 15 Feb build) and import it:
-   `npx eas-cli credentials --platform android`.
-2. **Reset it.** Generate a fresh keystore in EAS, then Play Console →
-   Protected with Play → App signing → *Request upload key reset*, supplying the
-   new certificate. Google turns these round in a day or two.
+**Resolved, 2026-08-12: the original key is gone, so it was reset.**
 
-Either way, **back up the keystore once it is settled** — not on one laptop and
-not in one Expo account. That is how this situation arose.
+The person who made the 15 Feb build had stopped using EAS entirely — free-tier
+queues were slow, so iOS went out through Xcode by hand — and no longer knows
+where the keystore is. There was nothing to import.
+
+What was done instead, and what to repeat if it ever happens again:
+
+```bash
+KT="/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool"
+
+# 1. A fresh upload key. -validity 10000 matters: Google requires the key
+#    stay valid past October 2033, and the default is far shorter.
+"$KT" -genkeypair -v -keystore upload-keystore.jks -alias upload \
+  -keyalg RSA -keysize 2048 -validity 10000
+
+# 2. The certificate Google needs, in PEM.
+"$KT" -export -rfc -keystore upload-keystore.jks -alias upload \
+  -file upload_certificate.pem
+
+# 3. Hand the keystore to EAS, so it lives in a service and not on a laptop.
+npx eas-cli credentials --platform android
+#   → production → Keystore → Set up a new keystore
+#   → Generate a new Android Keystore? NO → path to upload-keystore.jks
+#   → Key alias: upload   (not the CLI's "EAS Android" placeholder)
+#   → Key password: the same one — PKCS#12 has no separate key password
+```
+
+Then **Play Console → Help → Contact support → upload key reset**, attaching the
+PEM. Only the **Play account owner** can submit it; Google turns it round in a
+day or two. Resetting the upload key does not touch the app signing key, so
+nobody who already installed release 3 is affected, and Google Sign-In keeps
+working — it is keyed to the *app signing* certificate Google holds, not this
+one.
+
+Android Studio ships the JDK, so `keytool` needs no separate install. The path
+above is the bundled one; there is no `java` on the PATH of this machine.
+
+**Back up the keystore and its password to a password manager**, then delete the
+local `.jks` and `.pem`. EAS holds it, but a keystore existing in exactly one
+place is what caused all of this.
 
 ### Google Play service account
 
