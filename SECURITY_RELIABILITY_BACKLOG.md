@@ -8,6 +8,13 @@ Scope: `blendn/` findings from an end-to-end flow audit (auth guard, onboarding 
 
 ### High priority
 
+- [ ] **A live Supabase anon key is in this repository's git history, and the repository is public**
+  - **Found**: 2026-08-12, while clearing pre-migration docs
+  - **Where**: was in `docs/BEFORE-YOU-BUILD.md` and `docs/FIX-SIGNIN.md`, deleted in #77. Project ref `rycftadewrklmsswzviy`
+  - **Issue**: deleting the files removed the key from `HEAD` and **not from history**. Anyone can read it out of an old commit, and this repository has been public. The app has had no Supabase dependency for months, so nothing here uses it — the exposure is whatever that Supabase project still holds. An anon key is designed to be client-visible and is only as safe as the row-level security behind it; the question is whether RLS was ever configured on a project nobody has looked at since February.
+  - **Fix**: check whether the project still exists. If it does, either delete it or rotate the anon key and audit its RLS policies. **A commit cannot resolve this** — history rewriting would break every clone and still would not un-publish what was already fetched.
+  - **Why not P0**: no current code path uses it, and the data is from a stack this product left behind. It stays High rather than Critical because "we do not know what is in that project" is itself the finding.
+
 - [ ] **Silent session death on refresh-token failure**
   - **File**: `lib/useAuth.ts:203-216`, `lib/apiClient.ts:777-827,1013-1015`
   - **Issue**: The 10-minute background `refreshSession()` call swallows failures — if the refresh token is actually invalid/revoked, it just returns `false` without clearing tokens or calling `markSessionExpired()`. `globalAuthState.user` stays populated; the UI keeps rendering as authenticated with a dead token until the user happens to trigger a real API call that 401s. No retry/backoff, no user-facing signal.
