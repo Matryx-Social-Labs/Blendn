@@ -22,6 +22,8 @@ import { useAuth } from '../lib/useAuth';
 import { APP_COLORS } from '../lib/theme';
 import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
+import { useFonts } from 'expo-font';
+import { EMBER_FONT_MODULES } from '../lib/fonts';
 
 initSentry();
 
@@ -67,7 +69,22 @@ function RootLayout() {
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
   const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
-  const [assetsReady, setAssetsReady] = useState(false);
+  const [imagesReady, setImagesReady] = useState(false);
+
+  /*
+   * Fonts, loaded here and nowhere else.
+   *
+   * Weight comes from the family name, not from `fontWeight` — a custom font
+   * on Android ignores `fontWeight` and silently renders regular, so
+   * `Manrope_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
+   * Android from identical code. Every weight `EMBER_TYPE` names is loaded.
+   *
+   * `useFonts` returns `[loaded, error]`, and a font that fails to load is not
+   * a reason to hold the app behind the splash forever — the system font is a
+   * bad but working fallback, so a failure counts as done below.
+   */
+  const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
+  const assetsReady = imagesReady && (fontsLoaded || !!fontError);
   const [showIntro, setShowIntro] = useState(true);
 
   /*
@@ -79,11 +96,16 @@ function RootLayout() {
   useEffect(() => {
     Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET])
       .catch(() => {})
-      .finally(() => setAssetsReady(true));
+      .finally(() => setImagesReady(true));
   }, []);
 
   /*
-   * Hide on assets, deliberately NOT on `loading`.
+   * Hide on assets — images *and* fonts — deliberately NOT on `loading`.
+   *
+   * Fonts join the gate rather than loading in the background because the
+   * alternative is visible: the first screen paints in the system font and
+   * reflows to Plus Jakarta Sans a beat later, and at 56pt with -2.8 tracking
+   * that reflow moves the headline by most of a line.
    *
    * Auth resolution is a network round trip. Gating the splash on it means a
    * user on bad wifi stares at a frozen splash for as long as the request
