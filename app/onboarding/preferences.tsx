@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { View } from 'react-native'
 
 import {
   EmberChip,
@@ -148,15 +149,38 @@ export default function PreferencesScreen() {
          * around it), not a caption. Raised in docs/ONBOARDING.md.
          */
         caption="Pick the one that fits best. Tap again to clear it."
+        /*
+         * Always rendered, hidden until there is an orientation to show.
+         *
+         * Mounting it conditionally changed the heading row's height the moment
+         * somebody tapped a chip, which pushed the heading and everything below
+         * it down the page — at the exact moment they were looking at what they
+         * had just tapped.
+         *
+         * A reserved height was the first attempt and was still slightly out,
+         * because `transform: scale` on the switch is *visual only*: it still
+         * occupies its full unscaled height in layout, so the pill is taller
+         * than it looks and any floor is a guess at platform switch metrics.
+         *
+         * Rendering it always and hiding it makes the two states the same
+         * layout by construction, with no number to get wrong.
+         */
         right={
-          orientation ? (
+          <View
+            style={{ opacity: orientation ? 1 : 0 }}
+            pointerEvents={orientation ? 'auto' : 'none'}
+            // Hidden from screen readers too — an invisible control that is
+            // still announced is worse than one that shifts the layout.
+            accessibilityElementsHidden={!orientation}
+            importantForAccessibility={orientation ? 'auto' : 'no-hide-descendants'}
+          >
             <EmberInlineToggle
               label="Show on profile"
               hint="Only people you match or talk with will see it. Never a room."
               value={showOrientation}
               onValueChange={setShowOrientation}
             />
-          ) : undefined
+          </View>
         }
       >
         <EmberChipRow>
