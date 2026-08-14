@@ -377,6 +377,7 @@ export interface EventApiItem {
   visibility: string
   venueName: string | null
   venue_name?: string | null
+  venueId?: string | null
   address: string | null
   city: string | null
   state: string | null
@@ -490,6 +491,50 @@ export interface CheckinAttendee {
     image: string | null
   }
   [key: string]: unknown
+}
+
+export interface VenueCrowdBucket {
+  label: string
+  count: number
+  percentage: number
+}
+
+export interface VenueReviewUser {
+  id: string
+  name: string | null
+  image: string | null
+}
+
+export interface VenueReview {
+  id: string
+  rating: number | null
+  review: string
+  createdAt: string
+  user: VenueReviewUser
+}
+
+export interface VenueDetail {
+  id: string
+  name: string
+  description: string | null
+  address: string | null
+  city: string | null
+  coverImageUrl: string | null
+  activeCount: number
+  crowdComposition: VenueCrowdBucket[]
+  reviewCount: number
+  averageRating: number | null
+  recentReviews: VenueReview[]
+}
+
+export interface VenueEventItem {
+  id: string
+  slug: string
+  title: string
+  coverImageUrl: string | null
+  startTime: string
+  endTime: string
+  activeCount: number
 }
 
 export interface UserProfileData {
@@ -1103,6 +1148,46 @@ class ApiClientClass {
       return this.queuedRequest(endpoint)
     }
     return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
+  }
+
+  async getVenue(venueId: string, options?: { force?: boolean }): Promise<ApiResponse<VenueDetail>> {
+    const endpoint = `/api/mobile/venues/${venueId}`
+    if (options?.force) {
+      return this.queuedRequest(endpoint)
+    }
+    return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
+  }
+
+  async getVenueEvents(venueId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ events: VenueEventItem[]; pagination: CheckinPagination }>> {
+    const page = options?.page ?? 1
+    const limit = options?.limit ?? 20
+    const endpoint = `/api/mobile/venues/${venueId}/events?page=${page}&limit=${limit}`
+    if (options?.force || page > 1) {
+      return this.queuedRequest(endpoint)
+    }
+    return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
+  }
+
+  async getVenueReviews(venueId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ reviews: VenueReview[]; pagination: CheckinPagination }>> {
+    const page = options?.page ?? 1
+    const limit = options?.limit ?? 20
+    const endpoint = `/api/mobile/venues/${venueId}/reviews?page=${page}&limit=${limit}`
+    if (options?.force || page > 1) {
+      return this.queuedRequest(endpoint)
+    }
+    return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
+  }
+
+  async submitVenueReview(venueId: string, data: { rating?: number; review: string }): Promise<ApiResponse<VenueReview>> {
+    return this.queuedRequest<VenueReview>(
+      `/api/mobile/venues/${venueId}/reviews`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      true,
+      2
+    )
   }
 
   async toggleFavorite(eventId: string): Promise<ApiResponse<{ favorited: boolean }>> {

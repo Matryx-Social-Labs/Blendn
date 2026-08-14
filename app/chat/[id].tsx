@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { LinearGradient } from 'expo-linear-gradient'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -21,13 +22,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import OptimizedImage from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
+import GlassSurface from '../../components/ui/GlassSurface'
 import queryCache from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
-import { APP_COLORS } from '../../lib/theme'
+import { APP_COLORS, APP_CTA, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -90,52 +92,55 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
   onBack: () => void
 }) {
   return (
-    <View style={headerStyles.container}>
-      <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="chevron-back" size={24} color="#fff" />
-      </Pressable>
+    <GlassSurface intensity={20} tint="rgba(15,14,14,0.8)" borderRadius={0} bordered={false} style={headerStyles.glassWrap}>
+      <View style={headerStyles.container}>
+        <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
 
-      <View style={headerStyles.avatarWrap}>
-        {imageUrl ? (
-          <OptimizedImage source={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
-        ) : (
-          <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
-            <Ionicons name="people" size={18} color="#fff" />
-          </View>
-        )}
-      </View>
+        <View style={headerStyles.avatarWrap}>
+          {imageUrl ? (
+            <OptimizedImage source={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+          ) : (
+            <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
+              <Ionicons name="people" size={18} color="#fff" />
+            </View>
+          )}
+        </View>
 
-      <View style={headerStyles.titleArea}>
-        <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
-        {typingCount > 0 ? (
-          <Text style={headerStyles.typing}>{typingCount === 1 ? 'someone is typing…' : `${typingCount} people typing…`}</Text>
-        ) : subtitle ? (
-          <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
-        ) : null}
+        <View style={headerStyles.titleArea}>
+          <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+          {typingCount > 0 ? (
+            <Text style={headerStyles.typing}>{typingCount === 1 ? 'someone is typing…' : `${typingCount} people typing…`}</Text>
+          ) : subtitle ? (
+            <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
+          ) : null}
+        </View>
       </View>
-    </View>
+    </GlassSurface>
   )
 }
 
 const headerStyles = StyleSheet.create({
+  glassWrap: {
+    paddingTop: 0,
+  },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
     paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-    gap: 8,
+    gap: APP_SPACING.sm,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: {},
-  avatar: { width: 38, height: 38, borderRadius: 19 },
-  avatarGroupFallback: { backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 40, height: 40, borderRadius: 20 },
+  avatarGroupFallback: { backgroundColor: APP_COLORS.backgroundCard, alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
-  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  name: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  typing: { fontSize: 12, color: APP_COLORS.accent, marginTop: 1 },
+  subtitle: { fontSize: 12, color: APP_COLORS.textSecondary, marginTop: 1 },
 })
 
 export default function GroupChat() {
@@ -479,12 +484,26 @@ export default function GroupChat() {
             </View>
           )}
 
-          <View style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble]}>
-            <Text style={styles.bubbleText}>{item.message_text}</Text>
-            <View style={styles.bubbleMeta}>
-              <Text style={styles.bubbleTime}>{formatTime(item.created_at)}{item.is_edited ? ' · edited' : ''}</Text>
+          {isMe ? (
+            <LinearGradient
+              colors={APP_CTA.primary.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.bubble, styles.myBubble]}
+            >
+              <Text style={[styles.bubbleText, styles.myBubbleText]}>{item.message_text}</Text>
+              <View style={styles.bubbleMeta}>
+                <Text style={[styles.bubbleTime, styles.myBubbleTime]}>{formatTime(item.created_at)}{item.is_edited ? ' · edited' : ''}</Text>
+              </View>
+            </LinearGradient>
+          ) : (
+            <View style={[styles.bubble, styles.otherBubble]}>
+              <Text style={styles.bubbleText}>{item.message_text}</Text>
+              <View style={styles.bubbleMeta}>
+                <Text style={styles.bubbleTime}>{formatTime(item.created_at)}{item.is_edited ? ' · edited' : ''}</Text>
+              </View>
             </View>
-          </View>
+          )}
 
           {item.reactions && Object.keys(item.reactions).length > 0 && (
             <View style={[styles.reactionsRow, isMe ? styles.reactionsRowMe : styles.reactionsRowOther]}>
@@ -594,7 +613,7 @@ export default function GroupChat() {
         )}
 
         {/* Input bar */}
-        <View style={styles.inputRow}>
+        <GlassSurface intensity={20} tint="rgba(27,25,25,0.9)" borderRadius={0} bordered={false} style={styles.inputRow}>
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -611,7 +630,7 @@ export default function GroupChat() {
               }
             }}
             placeholder="Message"
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholderTextColor="rgba(174,170,170,0.5)"
             multiline
             maxLength={1000}
             onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
@@ -622,12 +641,22 @@ export default function GroupChat() {
             disabled={!newMessage.trim() || sending}
             pressedScale={0.94}
           >
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="send" size={18} color="#fff" />
-            }
+            {(!newMessage.trim() || sending) ? (
+              sending
+                ? <ActivityIndicator size="small" color={APP_COLORS.textSecondary} />
+                : <Ionicons name="send" size={18} color={APP_COLORS.textSecondary} />
+            ) : (
+              <LinearGradient
+                colors={APP_CTA.primary.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.sendBtnGradient}
+              >
+                <Ionicons name="send" size={18} color={APP_COLORS.onAccent} />
+              </LinearGradient>
+            )}
           </ScalePress>
-        </View>
+        </GlassSurface>
       </KeyboardAvoidingView>
 
       {/* Message menu */}
@@ -725,14 +754,26 @@ const styles = StyleSheet.create({
   replyPreviewText: { fontSize: 12, color: 'rgba(255,255,255,0.6)', flex: 1, fontStyle: 'italic' },
 
   bubble: {
-    borderRadius: 18,
-    paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6,
+    paddingHorizontal: APP_SPACING.md, paddingTop: APP_SPACING.sm, paddingBottom: APP_SPACING.xs,
   },
-  myBubble: { backgroundColor: '#005C4B', borderBottomRightRadius: 4 },
-  otherBubble: { backgroundColor: '#1F2937', borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: 15, lineHeight: 21, color: '#FFFFFF' },
+  myBubble: {
+    borderTopLeftRadius: APP_RADIUS['2xl'],
+    borderTopRightRadius: APP_RADIUS['2xl'],
+    borderBottomLeftRadius: APP_RADIUS['2xl'],
+    borderBottomRightRadius: 0,
+  },
+  otherBubble: {
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderTopLeftRadius: APP_RADIUS['2xl'],
+    borderTopRightRadius: APP_RADIUS['2xl'],
+    borderBottomRightRadius: APP_RADIUS['2xl'],
+    borderBottomLeftRadius: 0,
+  },
+  bubbleText: { fontSize: 15, lineHeight: 21, color: APP_COLORS.textPrimary },
+  myBubbleText: { color: APP_CTA.primary.text },
   bubbleMeta: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 3 },
-  bubbleTime: { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
+  bubbleTime: { fontSize: 11, color: APP_COLORS.textSecondary },
+  myBubbleTime: { color: 'rgba(91,22,0,0.7)' },
 
   reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 },
   reactionsRowMe: { justifyContent: 'flex-end' },
@@ -748,8 +789,9 @@ const styles = StyleSheet.create({
   // Day separator
   daySep: { alignItems: 'center', marginVertical: 12 },
   daySepText: {
-    fontSize: 12, color: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10,
+    fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase',
+    color: APP_COLORS.textSecondary,
+    backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 16, paddingVertical: 4, borderRadius: APP_RADIUS.pill,
   },
 
   // Typing
@@ -770,25 +812,27 @@ const styles = StyleSheet.create({
   replyBarMessage: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
   replyBarClose: { padding: 4 },
 
-  // Input bar
+  // Input bar — blurred "Liquid Glass" footer with pill composer + gradient send button
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: '#111214', gap: 8,
+    paddingHorizontal: APP_SPACING.md, paddingVertical: APP_SPACING.sm,
+    gap: APP_SPACING.sm,
   },
   input: {
     flex: 1, minHeight: 44, maxHeight: 120,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
-    paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 15, color: '#FFFFFF',
+    borderRadius: APP_RADIUS.pill,
+    backgroundColor: APP_COLORS.backgroundInput,
+    paddingHorizontal: APP_SPACING.md, paddingVertical: 10,
+    fontSize: 15, color: APP_COLORS.textPrimary,
   },
   sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: APP_COLORS.accent, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, borderRadius: APP_RADIUS.pill,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  sendBtnDisabled: { backgroundColor: '#2C2C2E' },
+  sendBtnGradient: {
+    width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center',
+  },
+  sendBtnDisabled: { backgroundColor: APP_COLORS.backgroundInput },
 
   // Scroll to bottom
   scrollToBottomBtn: {

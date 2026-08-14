@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
@@ -8,26 +9,27 @@ import {
   Easing,
   FlatList,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-// Removed AppHeader in favor of custom header matching Figma design
-import ActionTray from '../../components/ActionTray'
 import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
+import { useToast } from '../../components/Toast'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
+import Avatar from '../../components/ui/Avatar'
+import GlassSurface from '../../components/ui/GlassSurface'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import queryCache from '../../lib/queryCache'
-import { APP_COLORS } from '../../lib/theme'
-import { useMinimumVisible } from '../../lib/useMinimumVisible'
+import { APP_COLORS, APP_FONTS, APP_RADIUS } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
@@ -59,16 +61,27 @@ interface PersonalChat {
 
 interface MessageRequest {
   request_id: string
+  sender_id?: string | null
   sender_name?: string | null
+  sender_avatar?: string | null
   initial_message?: string | null
 }
 
-type ChatTabType = 'group' | 'personal'
+type UnifiedChatItem =
+  | { type: 'personal'; id: string; data: PersonalChat }
+  | { type: 'group'; id: string; data: GroupChat }
+
+interface PinnedRef {
+  id: string
+  type: 'group' | 'personal'
+}
 
 const GROUP_CHAT_CACHE_TTL = 60 * 1000
 const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
 const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
 const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
+const PINNED_KEY = 'pinned_chats'
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 }
 
 const getInitials = (name: string) => {
   if (!name) return '?'
@@ -131,80 +144,24 @@ const displayPreview = (text?: string, fallback: string = 'Start chatting'): str
 export default function Chat() {
   const insets = useSafeAreaInsets()
   const { user, loading: authLoading } = useAuth()
-  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ChatTabType>('personal')
+  const { showToast } = useToast()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [pinnedRefs, setPinnedRefs] = useState<PinnedRef[]>([])
   const { setScrollProgress } = useGradientOverlay()
   const requestAnimRefs = useRef<Record<string, Animated.Value>>({})
   const latestLoadIdRef = useRef(0)
   const isLoadingRef = useRef(false)
-  const lastFetchRef = useRef({ group: 0, personal: 0, requests: 0 })
-  const skipInitialTabEffectRef = useRef(true)
+  const lastFetchRef = useRef({ list: 0, requests: 0 })
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
-  const { width, height } = useWindowDimensions()
-  // Responsive sizing based on screen width (baseline ~390)
-  const {
-    avatarSize,
-    unreadSize,
-    rowPaddingV,
-    emptyPadV,
-  } = useMemo(() => {
-    const scale = Math.max(0.9, Math.min(width / 390, 1.2))
-    const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max)
-    const avatar = clamp(56 * scale, 48, 64)
-    const unread = clamp(22 * scale, 18, 26)
-    const rowPad = clamp(12 * scale, 10, 16)
-    const emptyPad = clamp(height * 0.12, 40, 100)
-    return {
-      avatarSize: avatar,
-      unreadSize: unread,
-      rowPaddingV: rowPad,
-      emptyPadV: emptyPad,
-    }
-  }, [width, height])
+  const searchInputRef = useRef<TextInput>(null)
 
-  const dynamicStyles = useMemo(() => ({
-    avatar: {
-      width: avatarSize,
-      height: avatarSize,
-      borderRadius: avatarSize / 2,
-    },
-    unreadDot: {
-      minWidth: unreadSize,
-      height: unreadSize,
-      borderRadius: unreadSize / 2,
-    },
-    avatarSpacing: {
-      // Ensure text starts ~71px from left per Figma (text offset - avatar width)
-      marginRight: Math.max(12, 71 - avatarSize),
-    },
-    personalItem: {
-      paddingVertical: rowPaddingV,
-    },
-    chatItem: {
-      paddingVertical: rowPaddingV + 2,
-    },
-    segmentItem: {
-      height: 44,
-      justifyContent: 'center' as const,
-    },
-    emptyContainer: {
-      paddingVertical: emptyPadV,
-    },
-  }), [avatarSize, unreadSize, rowPaddingV, emptyPadV])
-  const personalItemHeight = useMemo(
-    () => Math.round(avatarSize + rowPaddingV * 2 + 14),
-    [avatarSize, rowPaddingV]
-  )
-  const groupItemHeight = useMemo(
-    () => Math.round(avatarSize + (rowPaddingV + 2) * 2 + 14),
-    [avatarSize, rowPaddingV]
-  )
+  const comingSoon = useCallback(() => showToast('Coming soon', 'info'), [showToast])
 
   // Memoized callbacks to prevent re-creation
   const handleGroupChatPress = useCallback((chat: GroupChat) => {
@@ -240,61 +197,52 @@ export default function Chat() {
   }, [])
 
   const handleMarkAllRead = useCallback(async () => {
-    if (activeTab === 'personal' && personalChats.length > 0) {
+    if (personalChats.length > 0) {
       await Promise.all(personalChats.map((c) => setConversationLastRead(c.conversation_id)))
       setPersonalChats((prev) => prev.map((c) => ({ ...c, unread_count: 0 })))
     }
-  }, [activeTab, personalChats])
+  }, [personalChats])
 
   const hasUnread = useMemo(
-    () => activeTab === 'personal' && personalChats.some((c) => c.unread_count > 0),
-    [activeTab, personalChats]
+    () => personalChats.some((c) => c.unread_count > 0),
+    [personalChats]
   )
 
-  // Hydrate on tab switch (cache-first, avoid refetch if cached)
-  useEffect(() => {
-    if (!authLoading && user) {
-      if (skipInitialTabEffectRef.current) {
-        skipInitialTabEffectRef.current = false
-        return
-      }
-      loadChats(false, false)
-    }
-  }, [activeTab, user, authLoading])
-
-  // Load current user's avatar for header
+  // Load pinned conversation refs (local-only feature, no backend concept exists).
   useEffect(() => {
     let mounted = true
     const run = async () => {
+      if (!user?.id) {
+        if (mounted) setPinnedRefs([])
+        return
+      }
       try {
-        if (!user?.id) {
-          if (mounted) setMyAvatarUrl(null)
-          return
-        }
-
-        // Avoid extra fetches when the user object changes but the id is the same.
-        if (myAvatarUrl) return
-
-        const result = await apiClient.getProfile(user.id)
-        if (mounted) {
-          if (!result.success || !result.data) {
-            Logger.warn('chat', 'header avatar fetch failed', { error: result.error })
-            setMyAvatarUrl(null)
-          } else {
-            const profile = result.data.profile || {}
-            const primary = Array.isArray(profile.profile_photos) && profile.profile_photos.length > 0
-              ? profile.profile_photos[0]
-              : (Array.isArray(profile.photos) && profile.photos.length > 0 ? profile.photos[0] : result.data.image || null)
-            setMyAvatarUrl(primary || null)
-          }
-        }
+        const raw = await AsyncStorage.getItem(`${PINNED_KEY}_${user.id}`)
+        if (mounted) setPinnedRefs(raw ? JSON.parse(raw) : [])
       } catch (e) {
-        if (mounted) setMyAvatarUrl(null)
+        Logger.warn('chat', 'Failed to load pinned chats', { error: e })
+        if (mounted) setPinnedRefs([])
       }
     }
     run()
     return () => { mounted = false }
-  }, [user?.id, myAvatarUrl])
+  }, [user?.id])
+
+  const togglePin = useCallback((id: string, type: 'group' | 'personal', name: string) => {
+    if (!user?.id) return
+    setPinnedRefs((prev) => {
+      const exists = prev.some((p) => p.id === id && p.type === type)
+      const next = exists ? prev.filter((p) => !(p.id === id && p.type === type)) : [...prev, { id, type }]
+      AsyncStorage.setItem(`${PINNED_KEY}_${user.id}`, JSON.stringify(next)).catch((e) => {
+        Logger.warn('chat', 'Failed to persist pinned chats', { error: e })
+      })
+      showToast(exists ? `Unpinned ${name}` : `Pinned ${name}`, 'success')
+      return next
+    })
+  }, [user?.id, showToast])
+
+  // Load current user's avatar for header — no longer used (header no longer shows an avatar
+  // per Figma's Banter design), avatar fetch removed.
 
   // Real-time private message updates via Socket.io
   useEffect(() => {
@@ -305,17 +253,14 @@ export default function Chat() {
     const handleNewMessage: PrivateMessageCallback = (data) => {
       Logger.debug('chat', 'New message received', { conversationId: data.conversationId })
 
-      // Update the conversation in the personal chats list
       setPersonalChats(prev => {
         const idx = prev.findIndex(c => c.conversation_id === data.conversationId)
 
         if (idx === -1) {
-          // New conversation - reload the list to get full details
           loadPersonalChats(undefined, undefined, true)
           return prev
         }
 
-        // Update existing conversation
         const updated = [...prev]
         const isFromMe = data.message.senderId === user.id
         const nextPreview = previewFromMessage(data.message) || '[Message]'
@@ -323,11 +268,9 @@ export default function Chat() {
           ...updated[idx],
           last_message: nextPreview,
           last_message_time: data.message.createdAt,
-          // Only increment unread if message is from other user
           unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
         }
 
-        // Move updated conversation to top
         const [item] = updated.splice(idx, 1)
         return [item, ...updated]
       })
@@ -342,7 +285,6 @@ export default function Chat() {
   }, [user])
 
   // Real-time group chat updates — subscribe to loaded group chat rooms.
-  // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
   useEffect(() => {
     if (!user) return
 
@@ -361,7 +303,6 @@ export default function Chat() {
           last_sender_name: data.message.userName,
         }
 
-        // Move updated group chat to top
         const [item] = updated.splice(idx, 1)
         return [item, ...updated]
       })
@@ -370,7 +311,6 @@ export default function Chat() {
     const newIds = new Set(groupChats.map(c => c.chat_room_id))
     const oldIds = new Set(groupChatUnsubsRef.current.keys())
 
-    // Unsubscribe rooms that are no longer in the list
     for (const id of oldIds) {
       if (!newIds.has(id)) {
         groupChatUnsubsRef.current.get(id)?.()
@@ -378,7 +318,6 @@ export default function Chat() {
       }
     }
 
-    // Subscribe to newly added rooms only
     for (const id of newIds) {
       if (!oldIds.has(id)) {
         groupChatUnsubsRef.current.set(id, subscribeToChatMessage(id, handleGroupMessage))
@@ -386,7 +325,6 @@ export default function Chat() {
     }
   }, [user, groupChats])
 
-  // Cleanup all group chat subscriptions on unmount
   useEffect(() => {
     return () => {
       groupChatUnsubsRef.current.forEach(unsub => unsub())
@@ -394,8 +332,6 @@ export default function Chat() {
     }
   }, [])
 
-  // Instant local updates from chat screens — fires the moment a message is sent,
-  // so the list is already up-to-date before the user finishes swiping back.
   useEffect(() => {
     const unsub = subscribeChatListUpdates((update) => {
       if (update.type === 'personal' && update.conversationId) {
@@ -410,7 +346,6 @@ export default function Chat() {
             last_message_time: update.lastMessageTime,
           }
 
-          // Move to top
           const [item] = updated.splice(idx, 1)
           return [item, ...updated]
         })
@@ -427,7 +362,6 @@ export default function Chat() {
             last_sender_name: update.senderName,
           }
 
-          // Move to top
           const [item] = updated.splice(idx, 1)
           return [item, ...updated]
         })
@@ -446,71 +380,55 @@ export default function Chat() {
     const personalCacheKey = `personal_chats_${userId}`
     const requestsCacheKey = `message_requests_${userId}`
 
-    const cachedGroupChats = !force && activeTab === 'group'
-      ? queryCache.get<GroupChat[]>(groupCacheKey)
-      : null
-    const cachedPersonalChats = !force && activeTab === 'personal'
-      ? queryCache.get<PersonalChat[]>(personalCacheKey)
-      : null
-    const shouldHydrateRequests = activeTab === 'personal'
-    const cachedRequests = !force && shouldHydrateRequests
+    const cachedGroupChats = !force ? queryCache.get<GroupChat[]>(groupCacheKey) : null
+    const cachedPersonalChats = !force ? queryCache.get<PersonalChat[]>(personalCacheKey) : null
+    const cachedRequests = !force
       ? queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
       : null
 
-    if (cachedGroupChats && activeTab === 'group') setGroupChats(cachedGroupChats)
-    if (cachedPersonalChats && activeTab === 'personal') setPersonalChats(cachedPersonalChats)
-    if (cachedRequests) {
-      setIncomingRequests(cachedRequests.incoming)
-    }
+    if (cachedGroupChats) setGroupChats(cachedGroupChats)
+    if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
+    if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
 
-    const hasCachedList = activeTab === 'group' ? !!cachedGroupChats : !!cachedPersonalChats
+    const hasCachedList = !!cachedGroupChats || !!cachedPersonalChats
     const hasCachedRequests = !!cachedRequests
     if (!force && (hasCachedList || hasCachedRequests)) {
       setLoading(false)
     }
 
     const now = Date.now()
-    // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
-    // and navigated back) so stale data is never shown after a known change.
     const chatDirty = hasDirtyDomain(['chat'])
     const shouldFetchList = force
       || !hasCachedList
       || chatDirty
-      || (refreshEvenIfCached && now - lastFetchRef.current[activeTab] > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
-    const shouldFetchRequests = shouldHydrateRequests && (force
+      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+    const shouldFetchRequests = force
       || !hasCachedRequests
-      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS))
+      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
 
     if (!shouldFetchList && !shouldFetchRequests) return
 
     const loadId = ++latestLoadIdRef.current
     try {
       isLoadingRef.current = true
-      const hasRenderedData = activeTab === 'group'
-        ? (groupChats.length > 0 || hasCachedList)
-        : (personalChats.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests)
+      const hasRenderedData = groupChats.length > 0 || personalChats.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
       if (!hasRenderedData && (force || (!hasCachedList && shouldFetchList))) {
         setLoading(true)
       }
-      Logger.debug('chat', `Loading chats for tab: ${activeTab}`)
-      
+      Logger.debug('chat', 'Loading chats')
+
       if (shouldFetchList) {
-        // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
-        // internal SWR response cache so we don't get stale data from it either.
         const bypassApiCache = force || !hasCachedList
-        if (activeTab === 'group') {
-          await loadGroupChats(loadId, groupCacheKey, bypassApiCache)
-          lastFetchRef.current.group = now
-        } else {
-          await loadPersonalChats(loadId, personalCacheKey, bypassApiCache)
-          lastFetchRef.current.personal = now
-        }
+        await Promise.all([
+          loadGroupChats(loadId, groupCacheKey, bypassApiCache),
+          loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
+        ])
+        lastFetchRef.current.list = now
       }
       if (shouldFetchRequests) {
         await loadMessageRequests(loadId, requestsCacheKey, force)
         lastFetchRef.current.requests = now
       }
-      
     } catch (error) {
       Logger.error('chat', 'Error loading chats', { error })
     } finally {
@@ -519,7 +437,6 @@ export default function Chat() {
         isLoadingRef.current = false
       }
       Logger.info('chat', 'loadChats timing', {
-        tab: activeTab,
         force,
         refreshEvenIfCached,
         durationMs: Date.now() - perfStart,
@@ -529,9 +446,15 @@ export default function Chat() {
     }
   }
 
+  useEffect(() => {
+    if (!authLoading && user) {
+      loadChats(false, false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading])
+
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
-    // Background sync should not force blocking skeleton UI.
     onSync: () => loadChats(false, true),
     domains: ['chat'],
     connectedIntervalMs: 20000,
@@ -555,7 +478,9 @@ export default function Chat() {
       if (result.success && result.data?.requests) {
         const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
           request_id: r.id,
+          sender_id: r.senderId || r.sender?.id || null,
           sender_name: r.sender?.name || null,
+          sender_avatar: r.sender?.avatar || null,
           initial_message: r.message || null,
         }))
         setIncomingRequests(requests)
@@ -569,7 +494,6 @@ export default function Chat() {
           queryCache.set(cacheKey, { incoming: [], outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
         }
       }
-      // Note: outgoing requests would need a separate API call if needed
     } catch (e) {
       Logger.error('chat', 'loadMessageRequests failed', { error: e })
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
@@ -582,7 +506,6 @@ export default function Chat() {
     try {
       Logger.debug('chat', 'Fetching group chats...')
 
-      // Use API to get chat groups
       const result = await apiClient.getChatGroups({ force })
 
       if (!result.success || !result.data) {
@@ -591,7 +514,6 @@ export default function Chat() {
         return
       }
 
-      // Normalize API response shape (array vs wrapped payload)
       const rooms = Array.isArray(result.data)
         ? result.data
         : (result.data as any).groups || (result.data as any).rooms || (result.data as any).data || []
@@ -602,7 +524,6 @@ export default function Chat() {
         return
       }
 
-      // Transform API response to GroupChat interface
       const groupChatData: GroupChat[] = rooms
         .map((room: any) => {
           const preview = previewFromConversation(room)
@@ -729,8 +650,13 @@ export default function Chat() {
       Logger.info('chat', `Message request ${action}ed`, { requestId, conversationId: result.data?.conversationId })
       if (action === 'accept' && result.data?.conversationId) {
         router.push({
-          pathname: '/private-chat/[conversationId]',
-          params: { conversationId: result.data.conversationId } as any,
+          pathname: '/connection-success',
+          params: {
+            conversationId: result.data.conversationId,
+            otherUserId: request.sender_id || '',
+            otherUserName: request.sender_name || 'them',
+            otherUserAvatar: request.sender_avatar || '',
+          } as any,
         })
       }
 
@@ -748,131 +674,122 @@ export default function Chat() {
     }
   }, [animateRequestRemoval, loadChats, requestPending])
 
-  
+  // Merge group + personal chats into one recency-sorted list, matching Figma's unified inbox
+  // (the old implementation split these into two tabs — see FIGMA_REDESIGN_BACKLOG.md).
+  const unifiedItems = useMemo<UnifiedChatItem[]>(() => {
+    const personal: UnifiedChatItem[] = personalChats.map((c) => ({ type: 'personal', id: c.conversation_id, data: c }))
+    const group: UnifiedChatItem[] = groupChats.map((c) => ({ type: 'group', id: c.chat_room_id, data: c }))
+    const merged = [...personal, ...group]
+    merged.sort((a, b) => {
+      const at = a.data.last_message_time ? new Date(a.data.last_message_time).getTime() : 0
+      const bt = b.data.last_message_time ? new Date(b.data.last_message_time).getTime() : 0
+      return bt - at
+    })
+    return merged
+  }, [personalChats, groupChats])
 
-  const GroupChatRow = useMemo(() => {
-    const Row = React.memo(function GroupChatRowItem({ item }: { item: GroupChat }) {
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return unifiedItems
+    return unifiedItems.filter((item) => {
+      const name = item.type === 'personal' ? item.data.other_user_name : item.data.event_title
+      return name.toLowerCase().includes(q)
+    })
+  }, [unifiedItems, searchQuery])
+
+  const pinnedItems = useMemo(() => {
+    return pinnedRefs
+      .map((ref) => unifiedItems.find((i) => i.id === ref.id && i.type === ref.type))
+      .filter((i): i is UnifiedChatItem => !!i)
+  }, [pinnedRefs, unifiedItems])
+
+  const itemName = useCallback((item: UnifiedChatItem) => (
+    item.type === 'personal' ? item.data.other_user_name : item.data.event_title
+  ), [])
+
+  const handleItemPress = useCallback((item: UnifiedChatItem) => {
+    if (item.type === 'personal') handlePersonalChatPress(item.data)
+    else handleGroupChatPress(item.data)
+  }, [handlePersonalChatPress, handleGroupChatPress])
+
+  const ChatRow = useMemo(() => {
+    const Row = React.memo(function ChatRowItem({ item }: { item: UnifiedChatItem }) {
+      const isPersonal = item.type === 'personal'
+      const name = itemName(item)
+      const preview = isPersonal
+        ? displayPreview(item.data.last_message)
+        : displayPreview(item.data.last_message, 'No messages yet')
+      const time = item.data.last_message_time
+      const unread = isPersonal && item.data.unread_count > 0
+      const avatarSource = isPersonal ? item.data.other_user_avatar : item.data.event_image
+
       return (
         <TouchableOpacity
-          style={[styles.personalItem, dynamicStyles.personalItem]}
-          onPress={() => handleGroupChatPress(item)}
+          style={styles.row}
+          onPress={() => handleItemPress(item)}
+          onLongPress={() => togglePin(item.id, item.type, name)}
+          delayLongPress={350}
           accessibilityRole="button"
-          accessibilityLabel={`Open event room ${item.event_title}. ${displayPreview(item.last_message, 'No messages yet')}`}
+          accessibilityLabel={`Open ${isPersonal ? 'chat with' : 'event room'} ${name}. ${preview}`}
         >
-          <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
-            {item.event_image ? (
-              <OptimizedImage source={item.event_image} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
-            ) : (
-              <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitials}>{(item.event_title || 'E').slice(0,1)}</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.personalContent}>
-            <View style={styles.personalHeader}>
-              <Text style={styles.personalName} numberOfLines={1}>{item.event_title}</Text>
-              <Text style={styles.personalTime}>
-                {item.last_message_time ? formatRelativeTime(item.last_message_time) : ''}
+          {avatarSource ? (
+            <Avatar source={avatarSource} size={56} statusDot={unread} statusColor={APP_COLORS.accent} />
+          ) : (
+            <View style={styles.rowFallbackAvatar}>
+              {isPersonal ? (
+                <Text style={styles.avatarInitials}>{getInitials(name)}</Text>
+              ) : (
+                <Ionicons name="people" size={22} color={APP_COLORS.textSecondary} />
+              )}
+              {unread && <View style={styles.fallbackUnreadDot} />}
+            </View>
+          )}
+          <View style={styles.rowContent}>
+            <View style={styles.rowHeader}>
+              <Text style={[styles.rowName, unread && styles.rowNameUnread]} numberOfLines={1}>{name}</Text>
+              <Text style={[styles.rowTime, unread && styles.rowTimeUnread]}>
+                {time ? formatRelativeTime(time) : ''}
               </Text>
             </View>
-            <View style={styles.personalFooter}>
-              <Text style={styles.personalPreview} numberOfLines={1}>
-                {displayPreview(item.last_message, 'No messages yet')}
-              </Text>
-            </View>
+            <Text style={[styles.rowPreview, unread && styles.rowPreviewUnread]} numberOfLines={1}>{preview}</Text>
           </View>
         </TouchableOpacity>
       )
     })
-    Row.displayName = 'GroupChatRow'
+    Row.displayName = 'ChatRow'
     return Row
-  }, [dynamicStyles, handleGroupChatPress])
+  }, [handleItemPress, itemName, togglePin])
 
-  const renderGroupChatItem = useCallback(({ item, index }: { item: GroupChat; index: number }) => (
+  const renderChatItem = useCallback(({ item, index }: { item: UnifiedChatItem; index: number }) => (
     <FadeInUp delay={Math.min(index * 22, 150)} distance={8}>
-      <GroupChatRow item={item} />
+      <ChatRow item={item} />
     </FadeInUp>
-  ), [GroupChatRow])
-
-  const PersonalChatRow = useMemo(() => {
-    const Row = React.memo(function PersonalChatRowItem({ item }: { item: PersonalChat }) {
-      const unreadText = item.unread_count > 99 ? '99+' : String(item.unread_count)
-      return (
-        <TouchableOpacity
-          style={[styles.personalItem, dynamicStyles.personalItem]}
-          onPress={() => handlePersonalChatPress(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`Open chat with ${item.other_user_name}. ${displayPreview(item.last_message)}`}
-        >
-          <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
-            {item.other_user_avatar ? (
-              <OptimizedImage source={item.other_user_avatar} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
-            ) : (
-              <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.personalContent}>
-            <View style={styles.personalHeader}>
-              <Text style={styles.personalName} numberOfLines={1}>{item.other_user_name}</Text>
-              <View style={styles.personalHeaderRight}>
-                <Text style={styles.personalTime}>
-                  {item.last_message_time ? formatRelativeTime(item.last_message_time) : ''}
-                </Text>
-                {item.unread_count > 0 && (
-                  <View style={[styles.unreadDot, dynamicStyles.unreadDot]}>
-                    <Text style={styles.unreadDotText}>{unreadText}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            <View style={styles.personalFooter}>
-              <Text style={styles.personalPreview} numberOfLines={1}>
-                {displayPreview(item.last_message)}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )
-    })
-    Row.displayName = 'PersonalChatRow'
-    return Row
-  }, [dynamicStyles, handlePersonalChatPress])
-
-  const renderPersonalChatItem = useCallback(({ item, index }: { item: PersonalChat; index: number }) => (
-    <FadeInUp delay={Math.min(index * 22, 150)} distance={8}>
-      <PersonalChatRow item={item} />
-    </FadeInUp>
-  ), [PersonalChatRow])
+  ), [ChatRow])
 
   const renderEmptyState = useCallback(() => (
     <FadeInUp delay={80} distance={10}>
-      <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
+      <View style={styles.emptyContainer}>
         <View style={styles.emptyGlyph}>
-          <Ionicons
-            name={activeTab === 'group' ? 'chatbubbles-outline' : 'people-outline'}
-            size={36}
-            color={APP_COLORS.textTertiary}
-          />
+          <Ionicons name="chatbubbles-outline" size={36} color={APP_COLORS.textTertiary} />
         </View>
         <Text style={styles.emptyTitle}>
-          {activeTab === 'group' ? 'No Group Chats' : 'No Personal Chats'}
+          {searchQuery ? 'No matches' : 'No conversations yet'}
         </Text>
         <Text style={styles.emptySubtitle}>
-          {activeTab === 'group'
-            ? 'Check into events to join group chats'
-            : 'Start conversations with other users'
-          }
+          {searchQuery
+            ? 'Try a different search'
+            : 'Check into events or start chatting with people you meet'}
         </Text>
-        <ScalePress
-          style={styles.emptyCta}
-          onPress={() => router.push(activeTab === 'group' ? '/(tabs)/events' as any : '/(tabs)/match' as any)}
-          accessibilityRole="button"
-          accessibilityLabel={activeTab === 'group' ? 'Browse events' : 'Discover people'}
-        >
-          <Text style={styles.emptyCtaText}>{activeTab === 'group' ? 'Browse Events' : 'Discover People'}</Text>
-        </ScalePress>
+        {!searchQuery && (
+          <ScalePress
+            style={styles.emptyCta}
+            onPress={() => router.push('/(tabs)/match' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Discover people"
+          >
+            <Text style={styles.emptyCtaText}>Discover People</Text>
+          </ScalePress>
+        )}
         {incomingRequests.length > 0 && (
           <View style={{ marginTop: 16 }}>
             <Text style={{ textAlign: 'center', color: '#E5E7EB', fontWeight: '600' }}>
@@ -882,28 +799,10 @@ export default function Chat() {
         )}
       </View>
     </FadeInUp>
-  ), [activeTab, dynamicStyles.emptyContainer, incomingRequests.length])
+  ), [incomingRequests.length, searchQuery])
 
   const isLoading = authLoading || loading
-  const showLoadingSkeleton = useMinimumVisible(isLoading, 700)
-  const getGroupKey = useCallback((item: GroupChat) => item.chat_room_id, [])
-  const getPersonalKey = useCallback((item: PersonalChat) => item.conversation_id, [])
-  const getGroupItemLayout = useCallback(
-    (_: ArrayLike<GroupChat> | null | undefined, index: number) => ({
-      length: groupItemHeight,
-      offset: groupItemHeight * index,
-      index,
-    }),
-    [groupItemHeight]
-  )
-  const getPersonalItemLayout = useCallback(
-    (_: ArrayLike<PersonalChat> | null | undefined, index: number) => ({
-      length: personalItemHeight,
-      offset: personalItemHeight * index,
-      index,
-    }),
-    [personalItemHeight]
-  )
+  const getItemKey = useCallback((item: UnifiedChatItem) => `${item.type}-${item.id}`, [])
   const handleListScroll = useCallback(
     (e: any) => {
       setScrollProgress(e.nativeEvent.contentOffset.y, 240)
@@ -911,215 +810,249 @@ export default function Chat() {
     [setScrollProgress]
   )
 
+  const fabBottom = 44 + Math.max(insets.bottom, 6) + 16
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
-      {/* Header gradient + stories */}
-      <View style={[styles.headerGradient, { paddingTop: insets.top }]}>
-        <LinearGradient
-          colors={['#111214', APP_COLORS.backgroundBase]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        {/* Custom header row to mirror Figma (title only, no avatar) */}
-        <View style={styles.headerRow}>
+
+      <GlassSurface intensity={20} tint="rgba(15,14,14,0.8)" borderRadius={0} bordered={false}>
+        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
           <View style={styles.headerLeft}>
+            <TouchableOpacity
+              onPress={comingSoon}
+              hitSlop={HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+            >
+              <Ionicons name="menu" size={22} color={APP_COLORS.textPrimary} />
+            </TouchableOpacity>
             <Text style={styles.headerTitle}>The Banter</Text>
           </View>
           <View style={styles.headerActions}>
-            {hasUnread && (
-              <TouchableOpacity
-                onPress={handleMarkAllRead}
-                style={styles.headerActionBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Mark all conversations as read"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="checkmark-done-outline" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.headerRight} onPress={() => router.push('/edit-profile')}
-              accessibilityRole="button" accessibilityLabel="Edit profile">
-              <Ionicons name="pencil" size={20} color="#FFFFFF" />
+            <TouchableOpacity
+              onPress={() => searchInputRef.current?.focus()}
+              hitSlop={HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="Search conversations"
+            >
+              <Ionicons name="search" size={20} color={APP_COLORS.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={comingSoon}
+              hitSlop={HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              style={styles.bellBtn}
+            >
+              <Ionicons name="notifications-outline" size={20} color={APP_COLORS.textPrimary} />
+              <View style={styles.bellDot} />
             </TouchableOpacity>
           </View>
         </View>
-
-      </View>
+      </GlassSurface>
 
       <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
 
-      {/* Segmented control */}
-      <View style={styles.segmentContainer}>
-        <View style={styles.segmentPill}>
-          {/* Gradient background (cheaper than blur) */}
-          <LinearGradient
-            colors={[APP_COLORS.backgroundElevated, APP_COLORS.backgroundCard]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.segmentGradient}
-          />
-          {/* borderless glass */}
-          <TouchableOpacity
-            onPress={() => setActiveTab('personal')}
-          style={[styles.segmentItem, dynamicStyles.segmentItem, activeTab === 'personal' && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentText, activeTab === 'personal' && styles.segmentTextActive]}>Recent Chats</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('group')}
-          style={[styles.segmentItem, dynamicStyles.segmentItem, activeTab === 'group' && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentText, activeTab === 'group' && styles.segmentTextActive]}>Event Rooms</Text>
-          </TouchableOpacity>
+      {isLoading ? (
+        <View style={styles.listContainer}>
+          {[...Array(8)].map((_, i) => (
+            <View key={`sk-${i}`} style={styles.row}>
+              <SkeletonCircle width={56} />
+              <View style={styles.rowContent}>
+                <View style={styles.rowHeader}>
+                  <SkeletonLine width={'50%'} />
+                  <SkeletonLine width={36} />
+                </View>
+                <SkeletonLine width={'75%'} style={{ marginTop: 8 }} />
+              </View>
+            </View>
+          ))}
         </View>
-      </View>
-
-      {/* Chat List */}
-      {activeTab === 'group' ? (
-        showLoadingSkeleton ? (
-          <View style={[styles.listContainer]}>
-            {[...Array(8)].map((_, i) => (
-              <View key={`sk-g-${i}`} style={styles.chatItem}>
-                <View style={styles.chatHeader}>
-                  <SkeletonLine width={'60%'} />
-                  <SkeletonLine width={40} />
-                </View>
-                <SkeletonLine width={'40%'} style={{ marginBottom: 10 }} />
-                <SkeletonLine width={'80%'} />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <FadeInUp delay={40} distance={6}>
-            <FlatList
-              data={groupChats}
-              renderItem={renderGroupChatItem}
-              keyExtractor={getGroupKey}
-              initialNumToRender={6}
-              maxToRenderPerBatch={6}
-              updateCellsBatchingPeriod={50}
-              windowSize={8}
-              getItemLayout={getGroupItemLayout}
-              removeClippedSubviews
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              ListEmptyComponent={renderEmptyState}
-              contentContainerStyle={[
-                styles.listContainer,
-                groupChats.length === 0 && styles.emptyListContainer
-              ]}
-              onScroll={handleListScroll}
-              scrollEventThrottle={16}
-            />
-          </FadeInUp>
-        )
       ) : (
-        showLoadingSkeleton ? (
-          <View style={[styles.listContainer]}>
-            {[...Array(10)].map((_, i) => (
-              <View key={`sk-p-${i}`} style={styles.personalItem}>
-                <View style={styles.avatarContainer}>
-                  <SkeletonCircle width={56} />
-                </View>
-                <View style={styles.personalContent}>
-                  <View style={styles.personalHeader}>
-                    <SkeletonLine width={'40%'} />
-                    <SkeletonLine width={40} />
-                  </View>
-                  <View style={styles.personalFooter}>
-                    <SkeletonLine width={'70%'} />
-                  </View>
-                </View>
+        <FlatList
+          data={filteredItems}
+          renderItem={renderChatItem}
+          keyExtractor={getItemKey}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={8}
+          removeClippedSubviews
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={
+            <>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={18} color={APP_COLORS.textTertiary} />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="Search conversations..."
+                  placeholderTextColor="rgba(174,170,170,0.5)"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                />
               </View>
-            ))}
-          </View>
-        ) : (
-          <>
-            {incomingRequests.length > 0 && (
-              <View style={styles.requestsContainer}>
-                <Text style={styles.requestsTitle}>Requests</Text>
-                {incomingRequests.map((r) => {
-                  const requestAnim = getRequestAnimValue(r.request_id)
-                  const isPending = !!requestPending[r.request_id]
-                  return (
-                  <Animated.View
-                    key={r.request_id}
-                    style={[
-                      styles.requestItem,
-                      {
-                        opacity: requestAnim,
-                        transform: [
-                          {
-                            scale: requestAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0.94, 1],
-                            }),
-                          },
-                          {
-                            translateY: requestAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [-10, 0],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
+
+              {pinnedItems.length > 0 && (
+                <View style={styles.pinnedSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>Pinned</Text>
+                    <Ionicons name="pin" size={14} color={APP_COLORS.textSecondary} />
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.pinnedRow}
                   >
-                    <Text style={styles.requestSender}>{r.sender_name || 'User'}</Text>
-                    {!!r.initial_message && (
-                      <Text style={styles.requestMessage} numberOfLines={1}>{r.initial_message}</Text>
-                    )}
-                    <View style={styles.requestActions}>
-                      <ScalePress
-                        style={[styles.reqBtn, styles.reject, isPending && styles.reqBtnDisabled]}
-                        onPress={() => respondToRequest(r, 'decline')}
-                        disabled={isPending}
-                        pressedScale={0.97}
-                      >
-                        <Text style={styles.reqBtnText}>Reject</Text>
-                      </ScalePress>
-                      <ScalePress
-                        style={[styles.reqBtn, styles.reqBtnSpacing, styles.accept, isPending && styles.reqBtnDisabled]}
-                        onPress={() => respondToRequest(r, 'accept')}
-                        disabled={isPending}
-                        pressedScale={0.97}
-                      >
-                        <Text style={styles.reqBtnText}>Accept</Text>
-                      </ScalePress>
-                    </View>
-                  </Animated.View>
-                )})}
+                    {pinnedItems.map((item) => {
+                      const name = itemName(item)
+                      return (
+                        <TouchableOpacity
+                          key={`${item.type}-${item.id}`}
+                          style={styles.pinnedItem}
+                          onPress={() => handleItemPress(item)}
+                          onLongPress={() => togglePin(item.id, item.type, name)}
+                          delayLongPress={350}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${name}, pinned. Long press to unpin.`}
+                        >
+                          {item.type === 'personal' ? (
+                            item.data.other_user_avatar ? (
+                              <Avatar source={item.data.other_user_avatar} size={64} ringColor={APP_COLORS.accent} ringWidth={2} />
+                            ) : (
+                              <View style={[styles.pinnedFallbackAvatar, { borderColor: APP_COLORS.accent }]}>
+                                <Text style={styles.avatarInitials}>{getInitials(name)}</Text>
+                              </View>
+                            )
+                          ) : (
+                            <View style={styles.pinnedGroupWrap}>
+                              {item.data.event_image ? (
+                                <OptimizedImage
+                                  source={item.data.event_image}
+                                  style={styles.pinnedGroupImage as any}
+                                  width={64}
+                                  height={64}
+                                  quality={60}
+                                />
+                              ) : (
+                                <LinearGradient
+                                  colors={APP_COLORS.accentGradient}
+                                  start={{ x: 0, y: 0 }}
+                                  end={{ x: 1, y: 1 }}
+                                  style={styles.pinnedGroupImage}
+                                >
+                                  <Ionicons name="people" size={24} color={APP_COLORS.onAccent} />
+                                </LinearGradient>
+                              )}
+                              <View style={styles.eventBadge}>
+                                <Text style={styles.eventBadgeText}>EVENT</Text>
+                              </View>
+                            </View>
+                          )}
+                          <Text style={styles.pinnedName} numberOfLines={1}>{name}</Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Recent</Text>
+                {hasUnread && (
+                  <TouchableOpacity onPress={handleMarkAllRead} accessibilityRole="button" accessibilityLabel="Mark all conversations as read">
+                    <Text style={styles.markAllReadText}>Mark all read</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
-            <FadeInUp delay={40} distance={6}>
-              <FlatList
-                data={personalChats}
-                renderItem={renderPersonalChatItem}
-                keyExtractor={getPersonalKey}
-                initialNumToRender={6}
-                maxToRenderPerBatch={4}
-                updateCellsBatchingPeriod={50}
-                windowSize={6}
-                getItemLayout={getPersonalItemLayout}
-                removeClippedSubviews
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                ListEmptyComponent={renderEmptyState}
-                contentContainerStyle={[
-                  styles.listContainer,
-                  personalChats.length === 0 && styles.emptyListContainer
-                ]}
-                onScroll={handleListScroll}
-                scrollEventThrottle={32}
-              />
-            </FadeInUp>
-          </>
-        )
+
+              {incomingRequests.length > 0 && (
+                <View style={styles.requestsContainer}>
+                  <Text style={styles.requestsTitle}>Requests</Text>
+                  {incomingRequests.map((r) => {
+                    const requestAnim = getRequestAnimValue(r.request_id)
+                    const isPending = !!requestPending[r.request_id]
+                    return (
+                      <Animated.View
+                        key={r.request_id}
+                        style={[
+                          styles.requestItem,
+                          {
+                            opacity: requestAnim,
+                            transform: [
+                              {
+                                scale: requestAnim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0.94, 1],
+                                }),
+                              },
+                              {
+                                translateY: requestAnim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [-10, 0],
+                                }),
+                              },
+                            ],
+                          },
+                        ]}
+                      >
+                        <Text style={styles.requestSender}>{r.sender_name || 'User'}</Text>
+                        {!!r.initial_message && (
+                          <Text style={styles.requestMessage} numberOfLines={1}>{r.initial_message}</Text>
+                        )}
+                        <View style={styles.requestActions}>
+                          <ScalePress
+                            style={[styles.reqBtn, styles.reject, isPending && styles.reqBtnDisabled]}
+                            onPress={() => respondToRequest(r, 'decline')}
+                            disabled={isPending}
+                            pressedScale={0.97}
+                          >
+                            <Text style={styles.reqBtnText}>Reject</Text>
+                          </ScalePress>
+                          <ScalePress
+                            style={[styles.reqBtn, styles.reqBtnSpacing, styles.accept, isPending && styles.reqBtnDisabled]}
+                            onPress={() => respondToRequest(r, 'accept')}
+                            disabled={isPending}
+                            pressedScale={0.97}
+                          >
+                            <Text style={styles.reqBtnText}>Accept</Text>
+                          </ScalePress>
+                        </View>
+                      </Animated.View>
+                    )
+                  })}
+                </View>
+              )}
+            </>
+          }
+          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={[
+            styles.listContainer,
+            filteredItems.length === 0 && styles.emptyListContainer,
+          ]}
+          onScroll={handleListScroll}
+          scrollEventThrottle={16}
+        />
       )}
+
+      <TouchableOpacity
+        style={[styles.fab, { bottom: fabBottom }]}
+        onPress={comingSoon}
+        accessibilityRole="button"
+        accessibilityLabel="New message"
+      >
+        <LinearGradient
+          colors={APP_COLORS.accentGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <Ionicons name="chatbubble-ellipses" size={22} color={APP_COLORS.onAccent} />
+        </LinearGradient>
+      </TouchableOpacity>
     </SafeAreaView>
   )
 }
@@ -1129,192 +1062,215 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: APP_COLORS.backgroundBase,
   },
-  headerGradient: {
-  },
-  
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundBase,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  segmentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
   socketBanner: {
     marginTop: 8,
     marginHorizontal: 16,
   },
-  segmentPill: {
+  headerRow: {
     flexDirection: 'row',
-    borderRadius: 26,
-    overflow: 'hidden',
-    height: 52,
-    position: 'relative',
-    paddingHorizontal: 6,
-    paddingVertical: 0,
     alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
-  segmentGradient: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 26,
-  },
-  // no stroke for borderless look
-  segmentItem: {
-    flex: 1,
+  headerLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 22,
+    gap: 16,
   },
-  segmentActive: {
-    backgroundColor: 'rgba(10,132,255,0.18)',
-    borderRadius: 22,
-  },
-  segmentText: {
-    fontSize: 14,
+  headerTitle: {
+    fontFamily: APP_FONTS.heading,
+    color: APP_COLORS.accent,
+    fontSize: 16,
     fontWeight: '700',
-    color: APP_COLORS.textSecondary,
+    letterSpacing: -0.8,
   },
-  segmentTextActive: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  bellBtn: {
+    position: 'relative',
+  },
+  bellDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: APP_COLORS.accentSecondary,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderRadius: APP_RADIUS.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 24,
+  },
+  searchInput: {
+    flex: 1,
+    color: APP_COLORS.textPrimary,
+    fontSize: 16,
+    fontFamily: APP_FONTS.body,
+    padding: 0,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontFamily: APP_FONTS.heading,
+    fontSize: 16,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
+    letterSpacing: -0.4,
+  },
+  markAllReadText: {
+    fontFamily: APP_FONTS.bodyBold,
+    fontSize: 16,
+    fontWeight: '700',
+    color: APP_COLORS.accent,
+  },
+  pinnedSection: {
+    marginBottom: 8,
+  },
+  pinnedRow: {
+    gap: 24,
+    paddingBottom: 8,
+  },
+  pinnedItem: {
+    alignItems: 'center',
+    gap: 8,
+    width: 72,
+  },
+  pinnedFallbackAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    backgroundColor: APP_COLORS.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinnedGroupWrap: {
+    width: 64,
+    height: 64,
+  },
+  pinnedGroupImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  eventBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: APP_COLORS.highlight,
+    borderRadius: APP_RADIUS.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  eventBadgeText: {
+    fontFamily: APP_FONTS.bodyBold,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#570066',
+  },
+  pinnedName: {
+    fontFamily: APP_FONTS.bodyMedium,
+    fontSize: 14,
+    fontWeight: '500',
     color: APP_COLORS.textPrimary,
   },
   listContainer: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 140,
   },
   emptyListContainer: {
     flex: 1,
   },
-  personalItem: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 14,
+    gap: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: APP_COLORS.separator,
   },
-  chatItem: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 16,
-  },
-  avatar: {
+  rowFallbackAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: APP_COLORS.backgroundCard,
-  },
-  avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  fallbackUnreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: APP_COLORS.accent,
+    borderWidth: 2,
+    borderColor: APP_COLORS.backgroundBase,
   },
   avatarInitials: {
     fontSize: 18,
     fontWeight: '700',
     color: APP_COLORS.textPrimary,
   },
-  onlineDot: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#2AD866',
-    borderWidth: 2,
-    borderColor: '#0E0E0E',
-  },
-  personalContent: {
+  rowContent: {
     flex: 1,
   },
-  personalHeader: {
+  rowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  personalHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  personalName: {
-    fontSize: 20,
+  rowName: {
+    fontFamily: APP_FONTS.bodyBold,
+    fontSize: 16,
     fontWeight: '700',
     color: APP_COLORS.textPrimary,
     flex: 1,
     marginRight: 8,
   },
-  personalTime: {
-    fontSize: 12,
+  rowNameUnread: {
+    color: APP_COLORS.textPrimary,
+  },
+  rowTime: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 11,
     color: APP_COLORS.textTertiary,
   },
-  personalFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  rowTimeUnread: {
+    color: APP_COLORS.accent,
+    fontFamily: APP_FONTS.bodyBold,
+    fontWeight: '700',
+  },
+  rowPreview: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 16,
+    color: APP_COLORS.textSecondary,
     marginTop: 2,
   },
-  personalPreview: {
-    fontSize: 12,
-    color: APP_COLORS.textSecondary,
-    flex: 1,
-    marginRight: 8,
-  },
-  unreadDot: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
-    backgroundColor: APP_COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  unreadDotText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  chatTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  rowPreviewUnread: {
     color: APP_COLORS.textPrimary,
-    flex: 1,
-  },
-  participantCount: {
-    fontSize: 14,
-    color: APP_COLORS.textSecondary,
-  },
-  unreadBadge: {
-    backgroundColor: APP_COLORS.accent,
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  unreadCount: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontFamily: APP_FONTS.bodySemiBold,
+    fontWeight: '600',
   },
   requestItem: {
     backgroundColor: APP_COLORS.backgroundElevated,
@@ -1339,8 +1295,7 @@ const styles = StyleSheet.create({
   },
   reqBtnSpacing: { marginLeft: 10 },
   requestsContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    marginBottom: 16,
   },
   requestsTitle: {
     fontWeight: '700',
@@ -1358,29 +1313,6 @@ const styles = StyleSheet.create({
   accept: { backgroundColor: APP_COLORS.success },
   reject: { backgroundColor: APP_COLORS.destructive },
   reqBtnText: { color: '#fff', fontWeight: '700' },
-  chatVenue: {
-    fontSize: 14,
-    color: APP_COLORS.textSecondary,
-    marginBottom: 8,
-  },
-  lastMessageContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  lastMessage: {
-    fontSize: 14,
-    color: APP_COLORS.textSecondary,
-    flex: 1,
-    marginRight: 8,
-  },
-  lastMessageTime: {
-    fontSize: 12,
-    color: APP_COLORS.textTertiary,
-    minWidth: 44,
-    textAlign: 'right',
-    marginLeft: 8,
-  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1426,40 +1358,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  // Header styles (Figma: small avatar + title on gradient)
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 12,
+  fab: {
+    position: 'absolute',
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    marginLeft: 0,
-    fontSize: 24,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  headerActionBtn: {
-    width: 40,
-    height: 40,
+  fabGradient: {
+    flex: 1,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerRight: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-}) 
+})

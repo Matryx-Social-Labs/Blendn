@@ -2,8 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef } from 'react';
 import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import {
+    useFonts,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+} from '@expo-google-fonts/manrope';
+import {
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import '../lib/globalText';
 import { GradientOverlayProvider } from '../lib/gradientOverlay';
@@ -22,6 +35,7 @@ import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
 
 initSentry();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const ONBOARDED_CACHE_KEY = 'user_onboarded_status';
 const LOGO_ASSET = require('../assets/logo/logo2.webp');
@@ -50,9 +64,25 @@ function RootLayout() {
   const isNavigatingRef = useRef<boolean>(false);
   const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
 
+  const [fontsLoaded] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
   useEffect(() => {
     Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET]).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
 
   const replaceIfNeeded = (target: string) => {
     if (isNavigatingRef.current) return;
@@ -209,6 +239,10 @@ function RootLayout() {
     };
   }, []);
 
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
@@ -302,6 +336,13 @@ function RootLayout() {
       />
       <Stack.Screen
         name="user/[id]"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+        }}
+      />
+      <Stack.Screen
+        name="venue/[id]"
         options={{
           headerShown: false,
           animation: routeTransition,

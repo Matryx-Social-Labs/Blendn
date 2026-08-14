@@ -1,23 +1,34 @@
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useState } from 'react'
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { useAuth } from '../../lib/useAuth'
+import { ScrollView, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { useAuth } from '../../lib/useAuth'
+import OnboardingHeader from '../../components/OnboardingHeader'
 import { useToast } from '../../components/Toast'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 
-const LOOKING_FOR = ['Dating', 'Friendship', 'Networking', 'Mentorship', 'Collaboration']
+const CTA_GRADIENT: [string, string, string] = [APP_COLORS.accent, APP_COLORS.accentSecondary, APP_COLORS.highlight]
+
+const LOOKING_FOR: { value: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'Dating', icon: 'heart' },
+  { value: 'Friendship', icon: 'people' },
+  { value: 'Networking', icon: 'briefcase' },
+  { value: 'Travel', icon: 'airplane' },
+  { value: 'Open', icon: 'infinite' },
+]
 
 export default function PreferencesStep() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const [selected, setSelected] = useState<string[]>([])
-  const [industry, setIndustry] = useState('')
-  const [jobTitle, setJobTitle] = useState('')
-  const [company, setCompany] = useState('')
   const [saving, setSaving] = useState(false)
 
   const toggle = (v: string) => setSelected(prev => (prev.includes(v) ? prev.filter(i => i !== v) : [...prev, v]))
+
+  const goNext = () => router.push('./professional-info' as any)
 
   const onContinue = async () => {
     if (!user) {
@@ -26,8 +37,9 @@ export default function PreferencesStep() {
     }
     setSaving(true)
     try {
-      // Preferences are stored locally, just proceed
-      router.push('./photos' as any)
+      const result = await apiClient.updateProfile(user.id, { looking_for: selected })
+      if (!result.success) throw new Error(result.error || 'Failed to save')
+      goNext()
     } catch (e) {
       Logger.error('profile', 'Onboarding preferences step error', { error: e })
       showToast('Failed to save your preferences', 'error')
@@ -38,56 +50,134 @@ export default function PreferencesStep() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OnboardingHeader currentStep={4} totalSteps={9} onBack={() => router.back()} onSkip={goNext} />
+
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Your preferences</Text>
-        <OnboardingProgressBar currentStep={5} totalSteps={8} />
-        <Text style={styles.subtitle}>Help us tailor your experience</Text>
+        <Text style={styles.subtitle}>Be your authentic self. Help us curate the right connections for your journey.</Text>
 
-        <Text style={styles.sectionTitle}>What are you looking for?</Text>
+        <Text style={styles.sectionTitle}>Looking For</Text>
+        <Text style={styles.sectionSubtitle}>What brings you to Blend&apos;n today?</Text>
         <View style={styles.grid}>
-          {LOOKING_FOR.map((v, idx) => {
-            const isSel = selected.includes(v)
+          {LOOKING_FOR.map(({ value, icon }) => {
+            const isSel = selected.includes(value)
             return (
-              <TouchableOpacity key={idx} style={[styles.chip, isSel && styles.chipSelected]} onPress={() => toggle(v)}>
-                <Text style={[styles.chipText, isSel && styles.chipTextSelected]}>{v}</Text>
+              <TouchableOpacity
+                key={value}
+                style={[styles.card, isSel && styles.cardSelected]}
+                onPress={() => toggle(value)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.cardIconWrap, isSel && styles.cardIconWrapSelected]}>
+                  <Ionicons name={icon} size={20} color={isSel ? APP_COLORS.onAccent : APP_COLORS.textSecondary} />
+                </View>
+                <Text style={[styles.cardText, isSel && styles.cardTextSelected]}>{value}</Text>
               </TouchableOpacity>
             )
           })}
         </View>
 
-        <Text style={styles.sectionTitle}>Professional details (optional)</Text>
-        <TextInput style={styles.input} placeholder="Industry" value={industry} onChangeText={setIndustry} />
-        <TextInput style={styles.input} placeholder="Job title" value={jobTitle} onChangeText={setJobTitle} />
-        <TextInput style={styles.input} placeholder="Company" value={company} onChangeText={setCompany} />
-
-        <TouchableOpacity style={[styles.primary, saving && styles.disabled]} onPress={onContinue} disabled={saving}>
-          <Text style={styles.primaryText}>Continue</Text>
+        <TouchableOpacity onPress={onContinue} disabled={saving} activeOpacity={0.9} style={styles.ctaWrap}>
+          <LinearGradient colors={CTA_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary}>
+            <Text style={styles.primaryText}>Continue</Text>
+          </LinearGradient>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skip} onPress={() => router.push('./photos' as any)}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        <Text style={styles.disclaimer}>Your preferences are used to improve your experience. You can change them anytime in settings.</Text>
       </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
-  content: { padding: 24 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 6, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#fff', marginBottom: 18, textAlign: 'center' },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginTop: 8, marginBottom: 10 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  chip: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#f0f0f0', marginBottom: 12, minWidth: '48%', alignItems: 'center' },
-  chipSelected: { backgroundColor: '#FF6B6B' },
-  chipText: { color: '#333', fontSize: 14, fontWeight: '600' },
-  chipTextSelected: { color: '#fff' },
-  input: { borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 12 },
-  primary: { backgroundColor: '#FF6B6B', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12 },
-  primaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  skip: { padding: 12, alignItems: 'center' },
-  skipText: { color: '#fff', fontSize: 16 },
-  disabled: { opacity: 0.6 },
+  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
+  content: { paddingHorizontal: APP_SPACING.xl, paddingBottom: APP_SPACING['3xl'] },
+  title: {
+    fontFamily: APP_FONTS.headingExtraBold,
+    fontSize: 28,
+    fontWeight: '800',
+    color: APP_COLORS.textPrimary,
+    marginBottom: APP_SPACING.xs,
+  },
+  subtitle: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 16,
+    color: APP_COLORS.textSecondary,
+    lineHeight: 22,
+    marginBottom: APP_SPACING['2xl'],
+  },
+  sectionTitle: {
+    fontFamily: APP_FONTS.heading,
+    fontSize: 18,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
+    marginBottom: APP_SPACING.xxs,
+  },
+  sectionSubtitle: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 14,
+    color: APP_COLORS.textSecondary,
+    marginBottom: APP_SPACING.md,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: APP_SPACING.md,
+    marginBottom: APP_SPACING['2xl'],
+  },
+  card: {
+    width: '47%',
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: APP_COLORS.separator,
+    borderRadius: APP_RADIUS['2xl'],
+    padding: APP_SPACING.lg,
+    gap: APP_SPACING.sm,
+  },
+  cardSelected: {
+    borderColor: APP_COLORS.accent,
+    backgroundColor: 'rgba(255,144,109,0.1)',
+  },
+  cardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: APP_COLORS.backgroundInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardIconWrapSelected: {
+    backgroundColor: APP_COLORS.accent,
+  },
+  cardText: {
+    fontFamily: APP_FONTS.bodySemiBold,
+    fontSize: 15,
+    fontWeight: '600',
+    color: APP_COLORS.textPrimary,
+  },
+  cardTextSelected: {
+    color: APP_COLORS.accent,
+  },
+  ctaWrap: {
+    marginTop: APP_SPACING.sm,
+  },
+  primary: {
+    minHeight: 56,
+    borderRadius: APP_RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryText: {
+    fontFamily: APP_FONTS.bodyBold,
+    color: APP_COLORS.onAccent,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  disclaimer: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 12,
+    color: APP_COLORS.textTertiary,
+    textAlign: 'center',
+    marginTop: APP_SPACING.md,
+    lineHeight: 16,
+  },
 })
-
-

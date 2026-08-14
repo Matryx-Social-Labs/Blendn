@@ -1,13 +1,15 @@
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React from 'react'
-import {
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native'
-import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
+
+const FEATURES = [
+  { icon: 'sparkles-outline' as const, text: 'Find events near you' },
+  { icon: 'people-outline' as const, text: 'Meet people with similar interests' },
+  { icon: 'chatbubbles-outline' as const, text: 'Chat and make connections' },
+]
 
 export default function Welcome() {
   const handleContinue = () => {
@@ -18,31 +20,33 @@ export default function Welcome() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.heroSection}>
-          <Text style={styles.title}>Welcome to Blendn! 💕</Text>
+          <Text style={styles.title}>Welcome to Blend&apos;n</Text>
           <Text style={styles.subtitle}>
             Connect with people at events you both love
           </Text>
-          
+
           <View style={styles.featuresContainer}>
-            <View style={styles.feature}>
-              <Text style={styles.featureIcon}>🎉</Text>
-              <Text style={styles.featureText}>Find events near you</Text>
-            </View>
-            <View style={styles.feature}>
-              <Text style={styles.featureIcon}>👋</Text>
-              <Text style={styles.featureText}>Meet people with similar interests</Text>
-            </View>
-            <View style={styles.feature}>
-              <Text style={styles.featureIcon}>💬</Text>
-              <Text style={styles.featureText}>Chat and make connections</Text>
-            </View>
+            {FEATURES.map((feature) => (
+              <View key={feature.text} style={styles.feature}>
+                <View style={styles.featureIconWrap}>
+                  <Ionicons name={feature.icon} size={20} color={APP_COLORS.accent} />
+                </View>
+                <Text style={styles.featureText}>{feature.text}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
         <View style={styles.bottomSection}>
-          <OnboardingProgressBar currentStep={1} totalSteps={8} />
-          <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>Let&apos;s Get Started</Text>
+          <TouchableOpacity onPress={handleContinue} activeOpacity={0.9}>
+            <LinearGradient
+              colors={APP_COLORS.accentGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.continueButton}
+            >
+              <Text style={styles.continueButtonText}>Let&apos;s Get Started</Text>
+            </LinearGradient>
           </TouchableOpacity>
           <Text style={styles.privacyText}>
             We&apos;ll help you create an amazing profile in just a few steps
@@ -56,11 +60,11 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: APP_SPACING.xl,
     justifyContent: 'space-between',
   },
   heroSection: {
@@ -69,71 +73,66 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
+    fontFamily: APP_FONTS.headingExtraBold,
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 16,
-    color: '#fff',
+    marginBottom: APP_SPACING.md,
+    color: APP_COLORS.textPrimary,
   },
   subtitle: {
+    fontFamily: APP_FONTS.body,
     fontSize: 18,
     textAlign: 'center',
-    marginBottom: 48,
-    color: '#fff',
+    marginBottom: APP_SPACING['3xl'],
+    color: APP_COLORS.textSecondary,
     lineHeight: 24,
   },
   featuresContainer: {
     width: '100%',
-    maxWidth: 280,
+    maxWidth: 300,
+    gap: APP_SPACING.lg,
   },
   feature: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    gap: APP_SPACING.md,
   },
-  featureIcon: {
-    fontSize: 24,
-    marginRight: 16,
+  featureIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: APP_RADIUS.lg,
+    backgroundColor: APP_COLORS.backgroundElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   featureText: {
+    fontFamily: APP_FONTS.bodyMedium,
     fontSize: 16,
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     flex: 1,
   },
   bottomSection: {
-    paddingBottom: 32,
-  },
-  progressText: {
-    fontSize: 14,
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 16,
+    paddingBottom: APP_SPACING['2xl'],
+    gap: APP_SPACING.md,
   },
   continueButton: {
-    backgroundColor: '#FF6B6B',
-    padding: 16,
-    borderRadius: 12,
+    minHeight: 56,
+    borderRadius: APP_RADIUS.pill,
     alignItems: 'center',
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
+    justifyContent: 'center',
   },
   continueButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontFamily: APP_FONTS.bodyBold,
+    color: APP_COLORS.onAccent,
+    fontSize: 17,
+    fontWeight: '700',
   },
   privacyText: {
+    fontFamily: APP_FONTS.body,
     fontSize: 12,
     textAlign: 'center',
-    color: '#fff',
+    color: APP_COLORS.textTertiary,
     lineHeight: 16,
   },
-}) 
+})

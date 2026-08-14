@@ -2,6 +2,7 @@ import React, { ComponentType, lazy, memo, Suspense } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Logger } from '../lib/logger'
 import { ErrorBoundary } from './ErrorBoundary'
+import { APP_COLORS } from '../lib/theme'
 
 interface LazyLoadProps {
   fallback?: React.ReactNode
@@ -17,7 +18,7 @@ interface LazyWrapperProps extends LazyLoadProps {
 // Default loading component
 const DefaultFallback = memo(() => (
   <View style={styles.loadingContainer}>
-    <ActivityIndicator size="large" color="#007AFF" />
+    <ActivityIndicator size="large" color={APP_COLORS.accent} />
     <Text style={styles.loadingText}>Loading...</Text>
   </View>
 ))
@@ -150,32 +151,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: APP_COLORS.backgroundBase,
     padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: APP_COLORS.backgroundBase,
     padding: 20,
   },
   errorTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#d32f2f',
+    color: APP_COLORS.destructive,
     marginBottom: 8,
     textAlign: 'center',
   },
   errorMessage: {
     fontSize: 14,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },

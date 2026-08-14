@@ -1,47 +1,25 @@
+import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useState } from 'react'
-import {
-    Alert,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native'
-import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import OnboardingHeader from '../../components/OnboardingHeader'
 import PhotoManager from '../../components/PhotoManager'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { useAuth } from '../../lib/useAuth'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 
 export default function Photos() {
   const { user, loading: authLoading } = useAuth()
   const [photos, setPhotos] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
 
-  const handlePhotosChange = (newPhotos: string[]) => {
-    setPhotos(newPhotos)
-  }
-
-  const handleContinue = async () => {
-    // Photos are saved by PhotoManager component directly
-    // Just navigate to next step
-    router.push('./location' as any)
-  }
-
-  const handleSkip = () => {
-    // Proceed without photos -> go to location step
-    router.push('./location' as any)
-  }
-
-  const handleBack = () => {
-    router.back()
-  }
+  const goNext = () => router.push('./complete' as any)
 
   const renderPhotoSection = () => {
     if (authLoading || !user) {
       return (
         <View>
-          <SkeletonBlock width={'100%'} height={160} borderRadius={12} style={styles.photoManager} />
+          <SkeletonBlock width={'100%'} height={220} borderRadius={APP_RADIUS['2xl']} style={styles.photoManager} />
           <SkeletonLine width={'60%'} />
         </View>
       )
@@ -52,7 +30,7 @@ export default function Photos() {
         userId={user.id}
         maxPhotos={6}
         editable={true}
-        onPhotosChange={handlePhotosChange}
+        onPhotosChange={setPhotos}
         style={styles.photoManager}
       />
     )
@@ -60,52 +38,40 @@ export default function Photos() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <OnboardingProgressBar currentStep={6} totalSteps={8} />
+      <OnboardingHeader currentStep={8} totalSteps={9} onBack={() => router.back()} onSkip={goNext} />
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>
+          Upload your <Text style={styles.titleAccent}>identity</Text>
+        </Text>
+        <Text style={styles.subtitle}>
+          Authenticity is what makes a great profile — share high-quality moments that capture the
+          real you.
+        </Text>
+
+        <View style={styles.photosSection}>
+          {renderPhotoSection()}
         </View>
 
-        <View style={styles.mainContent}>
-          <Text style={styles.title}>Show your best self! 📸</Text>
-          <Text style={styles.subtitle}>
-            Add some photos to help others get to know you better
-          </Text>
-
-          <View style={styles.photosSection}>
-            {renderPhotoSection()}
-          </View>
-
-          <Text style={styles.photoTip}>
-            💡 Tip: Photos with your face clearly visible get more matches!
-          </Text>
-          
-          {photos.length > 0 && (
-            <Text style={styles.photoCount}>
-              {photos.length} photo{photos.length !== 1 ? 's' : ''} added
-            </Text>
-          )}
+        <View style={styles.helperRow}>
+          <Ionicons name="information-circle-outline" size={16} color={APP_COLORS.textTertiary} />
+          <Text style={styles.helperText}>We support JPG and PNG up to 20MB. Max 6 photos.</Text>
         </View>
+      </ScrollView>
 
-        <View style={styles.bottomSection}>
-          <TouchableOpacity 
-            style={[styles.continueButton, loading && styles.disabledButton]} 
-            onPress={handleContinue}
-            disabled={loading}
+      <View style={styles.bottomSection}>
+        <TouchableOpacity onPress={goNext} activeOpacity={0.9}>
+          <LinearGradient
+            colors={APP_COLORS.accentGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.continueButton}
           >
             <Text style={styles.continueButtonText}>
-              {photos.length > 0 ? 'Continue' : 'Continue without photos'}
+              {photos.length > 0 ? 'Finalize Identity' : 'Continue without photos'}
             </Text>
-          </TouchableOpacity>
-          
-          {photos.length === 0 && !loading && (
-            <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-              <Text style={styles.skipButtonText}>Skip for now</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   )
@@ -114,169 +80,64 @@ export default function Photos() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: APP_COLORS.backgroundBase,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backButtonText: {
-    fontSize: 20,
-    color: '#fff',
-  },
-  progressText: {
-    fontSize: 14,
-    color: '#fff',
-  },
-  mainContent: {
-    flex: 1,
-    alignItems: 'center',
+    paddingHorizontal: APP_SPACING.xl,
   },
   title: {
+    fontFamily: APP_FONTS.headingExtraBold,
     fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#fff',
-    textAlign: 'center',
+    fontWeight: '800',
+    marginBottom: APP_SPACING.xs,
+    color: APP_COLORS.textPrimary,
+  },
+  titleAccent: {
+    color: APP_COLORS.accent,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    marginBottom: 40,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  photosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-    maxWidth: 300,
-    marginBottom: 32,
-  },
-  photoSlot: {
-    width: '30%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  emptyPhotoSlot: {
-    backgroundColor: '#f0f0f0',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#ccc',
-  },
-  filledPhotoSlot: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  photoImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 11,
-  },
-  uploadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadingText: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    marginTop: 4,
-  },
-  removeOverlay: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeIcon: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  plusIcon: {
-    fontSize: 24,
-    color: '#999',
-  },
-  photoTip: {
-    fontSize: 14,
-    color: '#fff',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  photoCount: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    fontWeight: '600',
-  },
-  bottomSection: {
-    paddingBottom: 32,
-  },
-  continueButton: {
-    backgroundColor: '#FF6B6B',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  continueButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  skipButton: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    fontFamily: APP_FONTS.body,
+    fontSize: 15,
+    color: APP_COLORS.textSecondary,
+    marginBottom: APP_SPACING.xl,
+    lineHeight: 21,
   },
   photosSection: {
-    width: '100%',
-    maxWidth: 350,
-    marginBottom: 32,
+    marginBottom: APP_SPACING.lg,
   },
   photoManager: {
-    marginVertical: 8,
+    marginVertical: 0,
   },
-  loadingContainer: {
+  helperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: APP_SPACING.xs,
+    paddingTop: APP_SPACING.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: APP_COLORS.separator,
+    marginBottom: APP_SPACING.xl,
+  },
+  helperText: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 12,
+    color: APP_COLORS.textTertiary,
+    flex: 1,
+  },
+  bottomSection: {
+    paddingHorizontal: APP_SPACING.xl,
+    paddingBottom: APP_SPACING['2xl'],
+  },
+  continueButton: {
+    minHeight: 56,
+    borderRadius: APP_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
   },
-  loadingText: {
+  continueButtonText: {
+    fontFamily: APP_FONTS.bodyBold,
+    color: APP_COLORS.onAccent,
     fontSize: 16,
-    color: '#fff',
+    fontWeight: '700',
   },
-}) 
+})

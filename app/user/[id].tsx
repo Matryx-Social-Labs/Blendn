@@ -10,24 +10,24 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../../components/AppHeader'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import GlassSurface from '../../components/ui/GlassSurface'
 import OptimizedImage from '../../components/OptimizedImage'
+import SendRequestModal from '../../components/SendRequestModal'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { useToast } from '../../components/Toast'
 import Typography from '../../components/Typography'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { APP_COLORS } from '../../lib/theme'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
-const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
-const INTERSTITIAL_HEIGHT = Math.round(WINDOW_WIDTH * 1.15)
-const CARD_BORDER_RADIUS = 16
-const PHOTO_BORDER_RADIUS = 20
+const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.92)
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 }
 
 interface UserProfileView {
   user_id: string
@@ -49,12 +49,20 @@ interface UserProfileView {
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
 
+// Figma highlights one interest pill with the accent gradient among otherwise-glass pills —
+// pick a stable, deterministic index rather than always the first for a bit of visual variety.
+function pickHighlightIndex(count: number): number {
+  if (count === 0) return -1
+  return Math.min(2, count - 1)
+}
+
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -182,33 +190,39 @@ export default function UserProfile() {
     load()
   }, [load])
 
-  const handleConnect = async () => {
+  const [sendRequestModalVisible, setSendRequestModalVisible] = useState(false)
+
+  const handleConnect = () => {
     if (!authUser || !profile) return
     if (ctaMode === 'self') return
-    setActionLoading(true)
+
+    if (ctaMode === 'message') {
+      if (conversationId) {
+        router.push({
+          pathname: '/private-chat/[conversationId]',
+          params: {
+            conversationId,
+            otherUserName: profile.name || 'User',
+            otherUserId: profile.user_id,
+          } as any,
+        })
+      }
+      return
+    }
+
+    if (ctaMode === 'requested') return
+
+    setSendRequestModalVisible(true)
+  }
+
+  const submitConnectRequest = async (note: string) => {
+    if (!profile) return
     try {
-      if (ctaMode === 'message') {
-        if (conversationId) {
-          router.push({
-            pathname: '/private-chat/[conversationId]',
-            params: {
-              conversationId,
-              otherUserName: profile.name || 'User',
-              otherUserId: profile.user_id,
-            } as any,
-          })
-        }
-        return
-      }
-
-      if (ctaMode === 'requested') {
-        return
-      }
-
-      const result = await apiClient.createMessageRequest(profile.user_id)
+      const result = await apiClient.createMessageRequest(profile.user_id, note || undefined)
       if (result.success) {
         setCtaMode('requested')
         setCtaMessage(`Request sent to ${profile.name || 'this user'}.`)
+        setSendRequestModalVisible(false)
       } else {
         const err = String(result.error || '').toLowerCase()
         if (err.includes('already have') || err.includes('conversation already exists')) {
@@ -217,14 +231,14 @@ export default function UserProfile() {
           setCtaMode('requested')
           setCtaMessage('Request pending. You can chat after acceptance.')
         } else {
-          setCtaMessage(result.error || 'Failed to send connection request.')
+          showToast(result.error || 'Failed to send connection request.', 'error')
+          return
         }
+        setSendRequestModalVisible(false)
       }
     } catch (e) {
       Logger.error('profile', 'Connect request error', { error: e })
-      setCtaMessage('Something went wrong. Try again.')
-    } finally {
-      setActionLoading(false)
+      showToast('Something went wrong. Try again.', 'error')
     }
   }
 
@@ -233,21 +247,18 @@ export default function UserProfile() {
     showUserSafetyActions(profile.name || 'User', profile.user_id)
   }
 
+  // No "Appreciate"/like-a-profile endpoint exists in the API — stub, consistent with other
+  // undefined-behavior CTAs elsewhere in the redesign (hamburger/bell/FAB stubs).
+  const handleAppreciate = useCallback(() => showToast('Coming soon', 'info'), [showToast])
+
   const isLoading = loading
   const ctaLabel = useMemo(() => {
-    if (actionLoading) return 'Working...'
     if (ctaMode === 'self') return 'You'
     if (ctaMode === 'requested') return 'Requested'
     if (ctaMode === 'message') return 'Message'
     return 'Connect'
-  }, [ctaMode, actionLoading])
-  const ctaDisabled = actionLoading || ctaMode === 'self' || ctaMode === 'requested'
-  const ctaButtonStyle = [
-    styles.connectCta,
-    ctaMode === 'message' && styles.connectCtaMessage,
-    ctaMode === 'requested' && styles.connectCtaRequested,
-    ctaDisabled && styles.connectCtaDisabled,
-  ]
+  }, [ctaMode])
+  const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
 
   if (!loading && !profile) {
     return (
@@ -261,14 +272,15 @@ export default function UserProfile() {
     ? profile.photos.filter((url): url is string => !!url && url.trim() !== '')
     : []
 
-  // Split photos: hero = first, interstitials = [1] and [2], gallery = [3+]
   const heroPhoto = photoList[0] || null
-  const interstitialPhoto1 = photoList[1] || null
-  const interstitialPhoto2 = photoList[2] || null
-  const galleryPhotos = photoList.slice(3)
+  // Every photo beyond the hero goes into the Gallery grid — Figma shows extra photos as a
+  // compact grid section, not full-bleed interstitials, so fold them in here instead.
+  const galleryPhotos = photoList.slice(1)
 
-  const hasDetails = !!(profile?.age || profile?.occupation || profile?.education || profile?.location)
+  const hasOccupation = !!profile?.occupation
+  const hasEducation = !!profile?.education
   const hasStats = !!(profile?.stats && (profile.stats.eventsAttended > 0 || profile.stats.eventsFavorited > 0 || profile.stats.eventsOrganized > 0))
+  const highlightInterestIdx = pickHighlightIndex(profile?.interests?.length || 0)
 
   const getOptimized = (uri: string, w: number, h: number) => {
     const optimized = getOptimizedImageUrl(uri, { width: w, height: h, resize: 'cover', quality: 70 })
@@ -277,43 +289,30 @@ export default function UserProfile() {
 
   const renderSkeleton = () => (
     <>
-      {/* Hero skeleton */}
       <SkeletonBlock width={WINDOW_WIDTH} height={HERO_HEIGHT} borderRadius={0} />
-      {/* Card skeletons */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'60%'} style={{ marginBottom: 12 }} />
-          <SkeletonLine width={'40%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'50%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'35%'} />
+      <View style={styles.sectionContainer}>
+        <SkeletonLine width={'20%'} style={{ marginBottom: 12 }} />
+        <SkeletonLine width={'90%'} style={{ marginBottom: 6 }} />
+        <SkeletonLine width={'70%'} />
+      </View>
+      <View style={styles.sectionContainer}>
+        <SkeletonLine width={'25%'} style={{ marginBottom: 12 }} />
+        <View style={styles.interestsWrap}>
+          {[...Array(4)].map((_, i) => (
+            <SkeletonBlock key={`skt_${i}`} width={90} height={44} borderRadius={22} style={{ marginRight: 8, marginBottom: 8 }} />
+          ))}
         </View>
       </View>
-      <View style={styles.cardContainer}>
-        <SkeletonBlock width={WINDOW_WIDTH - 32} height={INTERSTITIAL_HEIGHT * 0.5} borderRadius={PHOTO_BORDER_RADIUS} />
-      </View>
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'25%'} style={{ marginBottom: 10 }} />
-          <SkeletonLine width={'90%'} style={{ marginBottom: 6 }} />
-          <SkeletonLine width={'70%'} />
-        </View>
-      </View>
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
-          <View style={styles.tagsRow}>
-            {[...Array(4)].map((_, i) => (
-              <SkeletonBlock key={`skt_${i}`} width={78} height={32} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
-            ))}
-          </View>
-        </View>
+      <View style={styles.sectionContainer}>
+        <SkeletonBlock width="100%" height={152} borderRadius={APP_RADIUS['2xl']} style={{ marginBottom: 12 }} />
+        <SkeletonBlock width="100%" height={152} borderRadius={APP_RADIUS['2xl']} />
       </View>
     </>
   )
 
   const renderContent = () => (
     <>
-      {/* Hero Photo */}
+      {/* Hero */}
       <View style={styles.heroContainer}>
         {heroPhoto ? (
           <OptimizedImage
@@ -325,32 +324,30 @@ export default function UserProfile() {
             quality={70}
           />
         ) : (
-          <View style={styles.heroPlaceholder}>
-            <OptimizedImage
-              source={placeholderImg as any}
-              style={styles.heroImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH}
-              height={HERO_HEIGHT}
-              quality={60}
-            />
-          </View>
+          <OptimizedImage
+            source={placeholderImg as any}
+            style={styles.heroImage as any}
+            contentFit="cover"
+            width={WINDOW_WIDTH}
+            height={HERO_HEIGHT}
+            quality={60}
+          />
         )}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)']}
-          locations={[0.4, 0.75, 1]}
+          colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.85)', APP_COLORS.backgroundBase]}
+          locations={[0.35, 0.8, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.heroGradient}
         />
         <View style={styles.heroOverlay}>
-          <Typography variant="h1" style={styles.heroName}>
+          <Typography variant="display" style={styles.heroName}>
             {profile?.name}{profile?.age ? `, ${profile.age}` : ''}
           </Typography>
           {!!profile?.location && (
             <View style={styles.heroLocationRow}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+              <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} />
               <Typography variant="body2" style={styles.heroLocationText}>
                 {profile.location}
               </Typography>
@@ -359,148 +356,112 @@ export default function UserProfile() {
         </View>
       </View>
 
-      {/* Details Card */}
-      {hasDetails && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Details</Typography>
-            <View style={styles.detailsList}>
-              {!!profile?.age && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.age} years old</Typography>
-                </View>
-              )}
-              {!!profile?.occupation && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="briefcase-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.occupation}</Typography>
-                </View>
-              )}
-              {!!profile?.education && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="school-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.education}</Typography>
-                </View>
-              )}
-              {!!profile?.location && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.location}</Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Interstitial Photo 2 */}
-      {interstitialPhoto1 && (
-        <View style={styles.interstitialContainer}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto1, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* About Card */}
+      {/* Bio */}
       {!!profile?.bio && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>About</Typography>
-            <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-          </View>
+        <View style={styles.sectionContainer}>
+          <Typography variant="h4" style={styles.sectionTitle}>Bio</Typography>
+          <Typography variant="body2" style={styles.bioText}>{profile.bio}</Typography>
         </View>
       )}
 
-      {/* Interstitial Photo 3 */}
-      {interstitialPhoto2 && (
-        <View style={styles.interstitialContainer}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto2, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* Interests Card */}
+      {/* Interests */}
       {profile?.interests && profile.interests.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Interests</Typography>
-            <View style={styles.tagsRow}>
-              {profile.interests.map((interest, idx) => (
-                <View key={`${interest}-${idx}`} style={styles.tag}>
-                  <Typography variant="caption" style={styles.tagText}>{interest}</Typography>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Gallery — photos 4+ in 2-column grid */}
-      {galleryPhotos.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>More Photos</Typography>
-            <View style={styles.galleryGrid}>
-              {galleryPhotos.map((uri, idx) => {
-                const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
+        <View style={styles.sectionContainer}>
+          <Typography variant="h4" style={styles.sectionTitle}>Interests</Typography>
+          <View style={styles.interestsWrap}>
+            {profile.interests.map((interest, idx) => {
+              const isHighlight = idx === highlightInterestIdx
+              if (isHighlight) {
                 return (
-                  <View key={`gal_${idx}`} style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
-                    <OptimizedImage
-                      source={getOptimized(uri, itemSize, itemSize) as any}
-                      style={styles.galleryImage as any}
-                      contentFit="cover"
-                      width={itemSize}
-                      height={itemSize}
-                      quality={60}
-                    />
-                  </View>
+                  <LinearGradient
+                    key={`${interest}-${idx}`}
+                    colors={APP_COLORS.accentGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.interestPillHighlight}
+                  >
+                    <Typography variant="body2" style={styles.interestPillHighlightText}>{interest}</Typography>
+                  </LinearGradient>
                 )
-              })}
-            </View>
+              }
+              return (
+                <View key={`${interest}-${idx}`} style={styles.interestPill}>
+                  <Typography variant="body2" style={styles.interestPillText}>{interest}</Typography>
+                </View>
+              )
+            })}
           </View>
         </View>
       )}
 
-      {/* Stats Card */}
+      {/* Occupation & Education */}
+      {(hasOccupation || hasEducation) && (
+        <View style={styles.sectionContainer}>
+          {hasOccupation && (
+            <View style={styles.bentoCard}>
+              <Typography variant="tiny" style={styles.bentoLabel}>OCCUPATION</Typography>
+              <Typography variant="h4" style={styles.bentoTitle}>{profile!.occupation}</Typography>
+            </View>
+          )}
+          {hasEducation && (
+            <View style={[styles.bentoBordered, hasOccupation && { marginTop: APP_SPACING.xl }]}>
+              <Typography variant="tiny" style={styles.bentoLabel}>EDUCATION</Typography>
+              <Typography variant="h4" style={styles.bentoTitle}>{profile!.education}</Typography>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Gallery */}
+      {galleryPhotos.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <View style={styles.galleryHeader}>
+            <Typography variant="h4" style={styles.sectionTitle}>Gallery</Typography>
+            <Typography variant="caption" style={styles.galleryCount}>
+              {galleryPhotos.length} {galleryPhotos.length === 1 ? 'Photo' : 'Photos'}
+            </Typography>
+          </View>
+          <View style={styles.galleryGrid}>
+            {galleryPhotos.map((uri, idx) => {
+              const itemSize = Math.floor((WINDOW_WIDTH - APP_SPACING.xl * 2 - APP_SPACING.md) / 2)
+              return (
+                <View key={`gal_${idx}`} style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
+                  <OptimizedImage
+                    source={getOptimized(uri, itemSize, itemSize) as any}
+                    style={styles.galleryImage as any}
+                    contentFit="cover"
+                    width={itemSize}
+                    height={itemSize}
+                    quality={60}
+                  />
+                </View>
+              )
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Activity — real data, not in Figma's mock but valuable, so kept (same precedent as
+          message requests on the chat list / segmented-tab data on other redesigned screens). */}
       {hasStats && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Activity</Typography>
+        <View style={styles.sectionContainer}>
+          <View style={styles.bentoCard}>
+            <Typography variant="tiny" style={styles.bentoLabel}>ACTIVITY</Typography>
             <View style={styles.statsRow}>
               {(profile?.stats?.eventsAttended ?? 0) > 0 && (
                 <View style={styles.statItem}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={APP_COLORS.accent} />
                   <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsAttended}</Typography>
                   <Typography variant="caption" style={styles.statLabel}>Attended</Typography>
                 </View>
               )}
               {(profile?.stats?.eventsFavorited ?? 0) > 0 && (
                 <View style={styles.statItem}>
-                  <Ionicons name="heart-outline" size={20} color={APP_COLORS.accent} />
                   <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsFavorited}</Typography>
                   <Typography variant="caption" style={styles.statLabel}>Favorited</Typography>
                 </View>
               )}
               {(profile?.stats?.eventsOrganized ?? 0) > 0 && (
                 <View style={styles.statItem}>
-                  <Ionicons name="megaphone-outline" size={20} color={APP_COLORS.accent} />
                   <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsOrganized}</Typography>
                   <Typography variant="caption" style={styles.statLabel}>Organized</Typography>
                 </View>
@@ -510,43 +471,84 @@ export default function UserProfile() {
         </View>
       )}
 
-      {/* Bottom spacer for CTA clearance */}
-      <View style={{ height: 100 }} />
+      <View style={{ height: 140 }} />
     </>
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader
-        title="Profile"
-        onBack={() => router.back()}
-        rightIconButton={{ name: 'ellipsis-vertical', onPress: openSafety, accessibilityLabel: 'More options' }}
-        containerStyle={{ backgroundColor: 'transparent' }}
-      />
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <GlassSurface intensity={20} tint="rgba(15,14,14,0.8)" borderRadius={0} bordered={false} style={styles.headerWrap}>
+        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]} accessibilityRole="header">
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => router.back()} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="Go back">
+              <Ionicons name="chevron-back" size={20} color={APP_COLORS.textPrimary} />
+            </TouchableOpacity>
+            <Typography variant="h4" style={styles.headerWordmark}>Blend&apos;n</Typography>
+          </View>
+          <TouchableOpacity onPress={openSafety} hitSlop={HIT_SLOP} accessibilityRole="button" accessibilityLabel="More options">
+            <Ionicons name="ellipsis-vertical" size={20} color={APP_COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      </GlassSurface>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {isLoading ? renderSkeleton() : renderContent()}
       </ScrollView>
 
       {!isLoading && (
-        <View style={styles.ctaBar} pointerEvents="box-none">
-          <TouchableOpacity
-            activeOpacity={0.92}
-            style={ctaButtonStyle}
-            disabled={ctaDisabled}
-            onPress={handleConnect}
-            accessibilityRole="button"
-            accessibilityLabel={ctaMode === 'message' ? 'Open chat' : 'Send connection request'}
-          >
-            <Typography variant="button" style={styles.connectCtaText}>
-              {ctaLabel}
-            </Typography>
-          </TouchableOpacity>
+        <View style={[styles.ctaBar, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
+          <GlassSurface intensity={10} tint="rgba(45,44,44,0.4)" borderRadius={APP_RADIUS.pill} style={styles.ctaGlass}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={ctaDisabled}
+              onPress={handleConnect}
+              accessibilityRole="button"
+              accessibilityLabel={ctaMode === 'message' ? 'Open chat' : 'Send connection request'}
+              style={[styles.ctaPrimaryWrap, ctaDisabled && styles.ctaDisabled]}
+            >
+              <LinearGradient
+                colors={ctaMode === 'requested' ? [APP_COLORS.backgroundInput, APP_COLORS.backgroundInput] : APP_COLORS.accentGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaPrimary}
+              >
+                <Ionicons
+                  name={ctaMode === 'message' ? 'chatbubble-ellipses' : 'person-add'}
+                  size={16}
+                  color={ctaMode === 'requested' ? APP_COLORS.textPrimary : APP_COLORS.onAccent}
+                />
+                <Typography
+                  variant="h4"
+                  style={{ color: ctaMode === 'requested' ? APP_COLORS.textPrimary : APP_COLORS.onAccent }}
+                >
+                  {ctaLabel}
+                </Typography>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleAppreciate}
+              accessibilityRole="button"
+              accessibilityLabel="Appreciate this profile"
+              style={styles.ctaSecondary}
+            >
+              <Ionicons name="heart-outline" size={18} color={APP_COLORS.textPrimary} />
+              <Typography variant="h4" style={styles.ctaSecondaryText}>Appreciate</Typography>
+            </TouchableOpacity>
+          </GlassSurface>
           {!!ctaMessage && (
             <Typography variant="caption" style={styles.ctaHintText}>{ctaMessage}</Typography>
           )}
         </View>
       )}
+
+      <SendRequestModal
+        visible={sendRequestModalVisible}
+        recipientName={profile?.name || 'this user'}
+        recipientAvatar={photoList[0]}
+        onClose={() => setSendRequestModalVisible(false)}
+        onSend={submitConnectRequest}
+      />
     </SafeAreaView>
   )
 }
@@ -555,6 +557,34 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { marginTop: 8, color: APP_COLORS.textSecondary },
+
+  // Header
+  headerWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 5,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerWordmark: {
+    fontFamily: APP_FONTS.heading,
+    color: APP_COLORS.accent,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+  },
 
   // Hero
   heroContainer: {
@@ -566,129 +596,114 @@ const styles = StyleSheet.create({
     width: WINDOW_WIDTH,
     height: HERO_HEIGHT,
   },
-  heroPlaceholder: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
   heroGradient: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: HERO_HEIGHT * 0.5,
+    height: HERO_HEIGHT * 0.55,
   },
   heroOverlay: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
+    left: APP_SPACING.xl,
+    right: APP_SPACING.xl,
+    bottom: APP_SPACING.lg,
+    gap: APP_SPACING.xs,
   },
   heroName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    fontSize: 40,
+    lineHeight: 44,
+    letterSpacing: -1.6,
+    fontWeight: '700',
+    fontFamily: APP_FONTS.heading,
+    color: APP_COLORS.textPrimary,
   },
   heroLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 6,
   },
   heroLocationText: {
-    color: 'rgba(255,255,255,0.85)',
-    marginLeft: 4,
-    fontSize: 14,
-  },
-
-  // Cards
-  cardContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  card: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: CARD_BORDER_RADIUS,
-    padding: 16,
-  },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
     color: APP_COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
   },
 
-  // Details
-  detailsList: {
-    gap: 10,
+  // Sections
+  sectionContainer: {
+    paddingHorizontal: APP_SPACING.xl,
+    paddingTop: APP_SPACING['2xl'],
   },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  detailIcon: {
-    marginRight: 10,
-    width: 20,
-  },
-  detailText: {
+  sectionTitle: {
     color: APP_COLORS.textPrimary,
-    fontSize: 15,
+    marginBottom: APP_SPACING.md,
+    letterSpacing: -0.4,
+  },
+  bioText: {
+    color: APP_COLORS.textSecondary,
+    lineHeight: 26,
   },
 
-  // Interstitial photos
-  interstitialContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  interstitialWrapper: {
-    borderRadius: PHOTO_BORDER_RADIUS,
-    overflow: 'hidden',
-  },
-  interstitialImage: {
-    width: WINDOW_WIDTH - 32,
-    height: INTERSTITIAL_HEIGHT,
-  },
-
-  // About
-  aboutText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-  // Tags / Interests
-  tagsRow: {
+  // Interests
+  interestsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: APP_SPACING.sm,
   },
-  tag: {
-    backgroundColor: APP_COLORS.backgroundBase,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    marginRight: 8,
-    marginBottom: 8,
+  interestPill: {
+    backgroundColor: 'rgba(45,44,44,0.4)',
+    borderRadius: APP_RADIUS.pill,
+    paddingHorizontal: APP_SPACING.lg,
+    paddingVertical: APP_SPACING.sm,
   },
-  tagText: {
+  interestPillText: {
     color: APP_COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
+  },
+  interestPillHighlight: {
+    borderRadius: APP_RADIUS.pill,
+    paddingHorizontal: APP_SPACING.lg,
+    paddingVertical: APP_SPACING.sm,
+  },
+  interestPillHighlightText: {
+    color: APP_COLORS.onAccent,
+    fontWeight: '700',
+  },
+
+  // Occupation / Education bento
+  bentoCard: {
+    backgroundColor: APP_COLORS.backgroundElevated,
+    borderRadius: APP_RADIUS['2xl'],
+    padding: APP_SPACING['2xl'],
+    gap: APP_SPACING.sm,
+  },
+  bentoBordered: {
+    borderLeftWidth: 1,
+    borderLeftColor: APP_COLORS.separator,
+    paddingLeft: APP_SPACING.xl,
+    gap: APP_SPACING.sm,
+  },
+  bentoLabel: {
+    color: APP_COLORS.accent,
+  },
+  bentoTitle: {
+    color: APP_COLORS.textPrimary,
   },
 
   // Gallery
+  galleryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: APP_SPACING.lg,
+  },
+  galleryCount: {
+    color: APP_COLORS.textSecondary,
+  },
   galleryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: APP_SPACING.md,
   },
   galleryItem: {
-    borderRadius: 12,
+    borderRadius: APP_RADIUS['2xl'],
     overflow: 'hidden',
     backgroundColor: APP_COLORS.backgroundCard,
   },
@@ -707,41 +722,54 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
     color: APP_COLORS.textPrimary,
   },
   statLabel: {
-    fontSize: 12,
     color: APP_COLORS.textSecondary,
   },
 
-  // CTA bar (preserved from original)
-  ctaBar: { position: 'absolute', left: 0, right: 0, bottom: 24, paddingHorizontal: 16 },
-  connectCta: {
-    minHeight: 52,
-    borderRadius: 16,
+  // Floating CTA bar
+  ctaBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.accent,
   },
-  connectCtaMessage: {
-    backgroundColor: APP_COLORS.success,
+  ctaGlass: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: APP_SPACING.xs,
+    gap: APP_SPACING.sm,
   },
-  connectCtaRequested: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+  ctaPrimaryWrap: {
+    borderRadius: APP_RADIUS.pill,
+    overflow: 'hidden',
   },
-  connectCtaDisabled: {
-    opacity: 0.55,
+  ctaDisabled: {
+    opacity: 0.6,
   },
-  connectCtaText: {
+  ctaPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: APP_SPACING.xs,
+    paddingHorizontal: APP_SPACING.xl,
+    paddingVertical: APP_SPACING.md,
+    borderRadius: APP_RADIUS.pill,
+  },
+  ctaSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: APP_SPACING.xs,
+    paddingHorizontal: APP_SPACING.xl,
+    paddingVertical: APP_SPACING.md,
+    borderRadius: APP_RADIUS.pill,
+    backgroundColor: 'rgba(45,44,44,0.8)',
+  },
+  ctaSecondaryText: {
     color: APP_COLORS.textPrimary,
-    fontWeight: '700',
   },
   ctaHintText: {
-    marginTop: 8,
+    marginTop: APP_SPACING.sm,
     textAlign: 'center',
     color: APP_COLORS.textSecondary,
   },

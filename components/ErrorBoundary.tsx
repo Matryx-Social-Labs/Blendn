@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Logger } from '../lib/logger'
+import { APP_COLORS, APP_RADIUS } from '../lib/theme'
 
 interface Props {
   children: ReactNode
@@ -88,7 +89,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <View style={styles.container}>
-          <Ionicons name="warning-outline" size={48} color="#FF6B6B" />
+          <Ionicons name="warning-outline" size={48} color={APP_COLORS.destructive} />
           <Text style={styles.title}>Oops! Something went wrong</Text>
           <Text style={styles.subtitle}>
             We encountered an unexpected error. Don&apos;t worry, your data is safe.
@@ -142,32 +143,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#fff'
+    backgroundColor: APP_COLORS.backgroundBase
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: APP_COLORS.textPrimary,
     marginTop: 16,
     marginBottom: 8,
     textAlign: 'center'
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32
   },
   retryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: APP_RADIUS.pill,
     marginBottom: 16
   },
   retryButtonText: {
-    color: '#fff',
+    color: APP_COLORS.onAccent,
     fontSize: 16,
     fontWeight: '600'
   },
@@ -176,7 +177,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   detailsButtonText: {
-    color: '#007AFF',
+    color: APP_COLORS.accent,
     fontSize: 14
   }
 })

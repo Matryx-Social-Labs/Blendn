@@ -1,26 +1,27 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
-import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Animated,
-  Dimensions,
   FlatList,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import OptimizedImage from '../OptimizedImage'
+import { LinearGradient } from 'expo-linear-gradient'
+import GlassTopBar from '../GlassTopBar'
+import GradientButton from '../ui/GradientButton'
+import GridProfileCard, { GridAttendee } from '../GridProfileCard'
+import ScalePress from '../motion/ScalePress'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
+import { useToast } from '../Toast'
+import { SegmentedControl } from '../AppHeader'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -33,199 +34,12 @@ import {
   EventCheckOutCallback
 } from '../../lib/socketClient'
 import { useLiveSync } from '../../lib/useLiveSync'
-import { APP_COLORS } from '../../lib/theme'
-const placeholderImg = require('../../assets/images/icon.png')
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 
-const { width } = Dimensions.get('window')
-
-// Memoized card components to prevent re-renders
-const SimilarCard = memo(({
-  attendee,
-  onOpenProfile,
-  onSafetyPress,
-  reasonLabel,
-}: {
-  attendee: AttendeeProfile
-  onOpenProfile: () => void
-  onSafetyPress: () => void
-  reasonLabel?: string
-}) => {
-  const rawUrl = attendee.profile_photos?.[0] || ''
-
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return ''
-    const diffMs = Date.now() - new Date(iso).getTime()
-    const minutes = Math.max(0, Math.floor(diffMs / 60000))
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes} mins ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  return (
-    <View style={styles.similarCardWrap}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.similarCard}
-        onPress={onOpenProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
-      >
-        {rawUrl ? (
-          <OptimizedImage
-            source={rawUrl as any}
-            style={styles.similarImage as any}
-            contentFit="cover"
-            width={SIMILAR_CARD_WIDTH}
-            height={SIMILAR_CARD_HEIGHT}
-            quality={70}
-          />
-        ) : (
-          <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
-        )}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)']}
-          style={styles.similarGradient}
-        />
-        <View style={styles.similarInfo}>
-          <Text style={styles.similarName} numberOfLines={1}>
-            {getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}
-          </Text>
-          {!!reasonLabel && (
-            <View style={styles.reasonPill}>
-              <Text style={styles.reasonPillText} numberOfLines={1}>{reasonLabel}</Text>
-            </View>
-          )}
-          <View style={styles.timeChip}>
-            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.cardSafety}
-          onPress={onSafetyPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
-        >
-          <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFF" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </View>
-  )
-})
-
-SimilarCard.displayName = 'SimilarCard'
-
-const StartupItem = memo(({
-  attendee,
-  onOpenProfile,
-  onSafetyPress,
-  isRightColumn,
-  statusLabel,
-}: {
-  attendee: AttendeeProfile
-  onOpenProfile: () => void
-  onSafetyPress: () => void
-  isRightColumn?: boolean
-  statusLabel?: string
-}) => {
-  const rawUrl = attendee.profile_photos?.[0] || ''
-  const cardWidth = GRID_ITEM_WIDTH
-  const cardHeight = GRID_ITEM_HEIGHT
-
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return ''
-    const diffMs = Date.now() - new Date(iso).getTime()
-    const minutes = Math.max(0, Math.floor(diffMs / 60000))
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes} mins ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  return (
-    <View
-      style={[
-        styles.gridItem,
-        { width: cardWidth, height: cardHeight, marginRight: isRightColumn ? 0 : GRID_GAP },
-      ]}
-    >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.gridTouch}
-        onPress={onOpenProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
-      >
-        {rawUrl ? (
-          <OptimizedImage
-            source={rawUrl as any}
-            style={styles.gridImage as any}
-            contentFit="cover"
-            width={cardWidth}
-            height={cardHeight}
-            quality={60}
-          />
-        ) : (
-          <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
-        )}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
-        <View style={styles.gridInfo}>
-          <Text style={styles.gridName} numberOfLines={1}>{getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}</Text>
-          {!!statusLabel && (
-            <View style={styles.gridStatusPill}>
-              <Text style={styles.gridStatusPillText} numberOfLines={1}>{statusLabel}</Text>
-            </View>
-          )}
-          <View style={[styles.timeChip, styles.timeChipCompact]}>
-            <Text style={styles.timeChipText}>{formatTimeAgo(attendee.last_seen)}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.gridSafety}
-          onPress={onSafetyPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
-        >
-          <Ionicons name="ellipsis-horizontal" size={14} color="#FFFFFF" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </View>
-  )
-})
-
-StartupItem.displayName = 'StartupItem'
-// Figma base frame width for iPhone 16
-const BASE_FRAME_WIDTH = 393
-
-// Similar Interests cards are 163x260 at 393 width
-const SIMILAR_CARD_WIDTH = Math.round(width * (163 / BASE_FRAME_WIDTH))
-const SIMILAR_CARD_HEIGHT = Math.round(SIMILAR_CARD_WIDTH * (260 / 163))
-
-// Content spacing + grid sizing (2 columns)
 const CONTENT_SIDE_PADDING = 18
-const GRID_GAP = 12
-const gridContentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
-const GRID_ITEM_WIDTH = Math.floor((gridContentWidth - GRID_GAP) / 2)
-const GRID_ITEM_HEIGHT = 160
+const FILTER_TAG_LIMIT = 4
 
-interface AttendeeProfile {
-  user_id: string
-  name?: string
-  age?: number
-  bio?: string
-  interests?: string[]
-  profile_photos?: string[]
-  last_seen?: string
-}
-
-interface RecommendedEntry {
-  attendee: AttendeeProfile
-  reasonLabel: string
-}
+type AttendeeProfile = GridAttendee
 
 type EventRoomStatus = 'idle' | 'checking' | 'available' | 'unavailable'
 
@@ -241,14 +55,12 @@ const extractEventIdFromCheckin = (checkin: any): string | null => {
   return normalized.length > 0 ? normalized : null
 }
 
-const getDisplayName = (name?: string) => {
-  const normalized = String(name || '').trim()
-  return normalized.length > 0 ? normalized : 'Guest'
-}
-
 export default function Match() {
   const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
+  const { showToast } = useToast()
+  const comingSoon = useCallback(() => showToast('Coming soon', 'info'), [showToast])
+
   const [loading, setLoading] = useState(true)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
@@ -259,11 +71,6 @@ export default function Match() {
   const currentEventIdRef = useRef<string | null>(null)
   const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
-  const [similarIndex, setSimilarIndex] = useState(0)
-  const lastSimilarIndex = useRef(0)
-  const contentOpacity = useRef(new Animated.Value(0)).current
-  const contentTranslate = useRef(new Animated.Value(8)).current
-  const similarScrollX = useRef(new Animated.Value(0)).current
   const attendeeLoadIdRef = useRef(0)
   const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -273,55 +80,7 @@ export default function Match() {
   const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
   const [eventRoomId, setEventRoomId] = useState<string | null>(null)
   const [currentUserInterests, setCurrentUserInterests] = useState<string[]>([])
-  const getSimilarItemLayout = useCallback(
-    (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
-      length: SIMILAR_CARD_WIDTH + 16,
-      offset: (SIMILAR_CARD_WIDTH + 16) * index,
-      index,
-    }),
-    []
-  )
-
-  useEffect(() => {
-    if (loading) {
-      contentOpacity.setValue(0)
-      contentTranslate.setValue(8)
-      return
-    }
-
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentTranslate, {
-        toValue: 0,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [loading, contentOpacity, contentTranslate])
-
-  const getLiftStyle = useCallback(
-    (index: number) => {
-      const cardSpan = SIMILAR_CARD_WIDTH + 16
-      const inputRange = [(index - 1) * cardSpan, index * cardSpan, (index + 1) * cardSpan]
-      const scale = similarScrollX.interpolate({
-        inputRange,
-        outputRange: [0.98, 1, 0.98],
-        extrapolate: 'clamp',
-      })
-      const translateY = similarScrollX.interpolate({
-        inputRange,
-        outputRange: [2, 0, 2],
-        extrapolate: 'clamp',
-      })
-
-      return { transform: [{ translateY }, { scale }] }
-    },
-    [similarScrollX]
-  )
+  const [selectedFilterTag, setSelectedFilterTag] = useState<string | null>(null)
 
   useEffect(() => {
     eventInfoRef.current = eventInfo
@@ -329,6 +88,7 @@ export default function Match() {
 
   useEffect(() => {
     setNewJoinsCount(0)
+    setSelectedFilterTag(null)
   }, [eventInfo?.id])
 
   useEffect(() => {
@@ -483,6 +243,7 @@ export default function Match() {
             age: c.age || c.user?.profile?.age,
             bio: c.user?.profile?.bio,
             interests: c.user?.profile?.interests,
+            occupation: c.user?.profile?.occupation || c.user?.occupation,
             profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
             last_seen: c.checkInTime || c.check_in_time,
           }))
@@ -545,6 +306,7 @@ export default function Match() {
         age: c.age || c.user?.profile?.age,
         bio: c.user?.profile?.bio,
         interests: c.user?.profile?.interests,
+        occupation: c.user?.profile?.occupation || c.user?.occupation,
         profile_photos: c.user?.profile?.photos || (c.image ? [c.image] : undefined) || (c.user?.image ? [c.user.image] : undefined),
         last_seen: c.checkInTime || c.check_in_time,
       }))
@@ -709,144 +471,109 @@ export default function Match() {
     [removeAttendeeFromFeed]
   )
 
-  const onHeaderRefreshPress = useCallback(async () => {
-    if (!authUser) return
-    void Haptics.selectionAsync()
-    await loadActiveEventAndAttendees(authUser.id, true)
-  }, [authUser, loadActiveEventAndAttendees])
+  const handleSegmentChange = useCallback(
+    (index: number) => {
+      if (index === 1) {
+        openEventRoom()
+      }
+    },
+    [openEventRoom]
+  )
 
-  const recommendedEntries = useMemo(() => {
-    const sharedCount = (attendee: AttendeeProfile): number => {
-      const attendeeInterests = Array.isArray(attendee.interests)
-        ? attendee.interests.map((i) => String(i).toLowerCase())
-        : []
-      return attendeeInterests.filter((i) => currentUserInterests.includes(i)).length
-    }
+  // Intersection of an attendee's interests with the current user's, preserving original casing.
+  const sharedInterestsFor = useCallback(
+    (attendee: AttendeeProfile): string[] => {
+      const attendeeInterests = Array.isArray(attendee.interests) ? attendee.interests : []
+      const seen = new Set<string>()
+      const result: string[] = []
+      for (const interest of attendeeInterests) {
+        const lower = String(interest).toLowerCase()
+        if (currentUserInterests.includes(lower) && !seen.has(lower)) {
+          seen.add(lower)
+          result.push(String(interest))
+        }
+      }
+      return result
+    },
+    [currentUserInterests]
+  )
 
+  // Single score-sorted list — replaces the old separate "Recommended"/"Also Here" split.
+  // Top-scored attendee gets the FEATURED tag.
+  const scoredAttendees = useMemo(() => {
     const score = (attendee: AttendeeProfile): number => {
       let points = 0
-      const shared = sharedCount(attendee)
-      points += shared * 12
+      points += sharedInterestsFor(attendee).length * 12
       if (attendee.bio && attendee.bio.trim().length > 0) points += 6
       if (attendee.profile_photos && attendee.profile_photos.length > 0) points += 8
       points += Math.max(0, 30 - Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60 * 30)))
       return points
     }
 
-    return attendees
-      .slice()
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, 5)
-      .map((attendee): RecommendedEntry => {
-        const shared = sharedCount(attendee)
-        const recentMinutes = Math.floor((Date.now() - parseTimestamp(attendee.last_seen)) / (1000 * 60))
-        const reasonLabel = shared > 0
-          ? `${shared} shared interest${shared > 1 ? 's' : ''}`
-          : (recentMinutes <= 30 ? 'Active now' : 'Popular nearby')
-        return { attendee, reasonLabel }
-      })
-  }, [attendees, currentUserInterests])
+    return attendees.slice().sort((a, b) => score(b) - score(a))
+  }, [attendees, sharedInterestsFor])
 
-  const recommendedIds = useMemo(
-    () => new Set(recommendedEntries.map((entry) => entry.attendee.user_id)),
-    [recommendedEntries]
-  )
+  const featuredUserId = scoredAttendees[0]?.user_id
 
-  const alsoHereAttendees = useMemo(
-    () => attendees.filter((a) => !recommendedIds.has(a.user_id)).slice(0, 12),
-    [attendees, recommendedIds]
-  )
+  // Filter chip tags — top interest tags among current attendees (no schema/backend field needed).
+  const filterTags = useMemo(() => {
+    const freq = new Map<string, number>()
+    for (const attendee of attendees) {
+      for (const interest of attendee.interests || []) {
+        const key = String(interest).trim()
+        if (!key) continue
+        freq.set(key, (freq.get(key) || 0) + 1)
+      }
+    }
+    return Array.from(freq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, FILTER_TAG_LIMIT)
+      .map(([tag]) => tag)
+  }, [attendees])
 
-  const recommendedKeyExtractor = useCallback((entry: RecommendedEntry) => `similar_${entry.attendee.user_id}`, [])
-  const alsoHereKeyExtractor = useCallback((attendee: AttendeeProfile) => `grid_${attendee.user_id}`, [])
+  const displayedAttendees = useMemo(() => {
+    if (!selectedFilterTag) return scoredAttendees
+    return scoredAttendees.filter((attendee) =>
+      (attendee.interests || []).some((i) => String(i).toLowerCase() === selectedFilterTag.toLowerCase())
+    )
+  }, [scoredAttendees, selectedFilterTag])
 
-  const renderRecommendedItem = useCallback(
-    ({ item, index }: { item: RecommendedEntry; index: number }) => (
-      <Animated.View style={getLiftStyle(index)}>
-        <SimilarCard
-          attendee={item.attendee}
-          reasonLabel={item.reasonLabel}
-          onSafetyPress={() => onSafetyPress(item.attendee.name || 'User', item.attendee.user_id)}
-          onOpenProfile={() => openUserProfile(item.attendee.user_id)}
-        />
-      </Animated.View>
-    ),
-    [getLiftStyle, onSafetyPress, openUserProfile]
-  )
+  const keyExtractor = useCallback((attendee: AttendeeProfile) => `grid_${attendee.user_id}`, [])
 
-  const renderAlsoHereItem = useCallback(
-    ({ item: attendee, index }: { item: AttendeeProfile; index: number }) => (
-      <StartupItem
-        attendee={attendee}
-        statusLabel="Here now"
-        onSafetyPress={() => onSafetyPress(attendee.name || 'User', attendee.user_id)}
-        onOpenProfile={() => openUserProfile(attendee.user_id)}
-        isRightColumn={(index + 1) % 2 === 0}
+  const renderItem = useCallback(
+    ({ item }: { item: AttendeeProfile }) => (
+      <GridProfileCard
+        attendee={item}
+        featured={item.user_id === featuredUserId}
+        sharedInterestNames={sharedInterestsFor(item)}
+        onOpenProfile={() => openUserProfile(item.user_id)}
+        onSafetyPress={() => onSafetyPress(item.name || 'User', item.user_id)}
       />
     ),
-    [onSafetyPress, openUserProfile]
+    [featuredUserId, sharedInterestsFor, openUserProfile, onSafetyPress]
   )
 
-  const renderEmptyState = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
-      <Text style={styles.emptyText}>
-        Check in to an event to unlock recommendations and nearby attendees.
-      </Text>
-      <TouchableOpacity 
-        style={styles.eventsButton}
-        onPress={onBrowseEvents}
-      >
-        <Text style={styles.eventsButtonText}>Browse Events</Text>
-      </TouchableOpacity>
-    </View>
-  ), [onBrowseEvents])
+  const onEndReached = useCallback(() => {
+    if (attendeesHasMore && !loadingMoreAttendees) {
+      loadMoreAttendees()
+    }
+  }, [attendeesHasMore, loadingMoreAttendees, loadMoreAttendees])
 
-  const isLoading = loading
-
-  return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollBody}
-        onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onPullToRefresh}
-            tintColor="#FFFFFF"
-            progressBackgroundColor={APP_COLORS.backgroundElevated}
-          />
-        }
-      >
-        <View style={[styles.headerGradient, { paddingTop: insets.top }]}>
-          <LinearGradient
-            colors={['#111214', APP_COLORS.backgroundBase]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.headerTitleText}>Blend&apos;n Match</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.headerRight}
-              onPress={onHeaderRefreshPress}
-              accessibilityRole="button"
-              accessibilityLabel="Refresh"
-            >
-              <Ionicons name="refresh" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+  const listHeader = useCallback(
+    () => (
+      <>
+        <View style={styles.headingSection}>
+          <Text style={styles.gridHeading}>The Grid</Text>
+          {!!eventInfo && (
+            <Text style={styles.gridSubheading}>
+              {attendeesTotalCount || attendees.length} Curated Minds at{' '}
+              <Text style={styles.gridSubheadingAccent}>{eventInfo.title || 'this event'}</Text>
+            </Text>
+          )}
         </View>
 
         <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
+
         {newJoinsCount > 0 && !!eventInfo && (
           <View style={styles.newJoinsPill}>
             <View style={styles.newJoinsDot} />
@@ -857,217 +584,182 @@ export default function Match() {
         )}
 
         {!!eventInfo && (
-          <View style={styles.liveRow}>
-            <View style={styles.liveTextWrap}>
-              <View style={styles.liveLabelRow}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveLabel}>Live at</Text>
-              </View>
-              <Text style={styles.liveTitle} numberOfLines={1}>
-                {eventInfo.title || 'Current Event'}
-              </Text>
-              <View style={styles.liveMetaRow}>
-                <View style={styles.liveCountPill}>
-                  <Text style={styles.liveCountText}>
-                    {attendees.length} {attendees.length === 1 ? 'person' : 'people'} here
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
+              <ScalePress onPress={() => setSelectedFilterTag(null)} haptic={false}>
+                <View style={[styles.filterChip, selectedFilterTag === null && styles.filterChipActive]}>
+                  <Text style={[styles.filterChipText, selectedFilterTag === null && styles.filterChipTextActive]}>
+                    All Attendees
                   </Text>
                 </View>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[styles.chatButton, (openRoomPending || eventRoomStatus !== 'available') && styles.chatButtonDisabled]}
-              onPress={openEventRoom}
-              activeOpacity={0.9}
-              disabled={openRoomPending || eventRoomStatus !== 'available'}
-            >
-              <Text style={styles.chatButtonText}>
-                {openRoomPending
-                  ? 'Opening...'
-                  : eventRoomStatus === 'checking'
-                    ? 'Loading Room...'
-                    : eventRoomStatus === 'available'
-                      ? 'Event Room'
-                      : 'Room Unavailable'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {isLoading ? (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Recommended</Text>
-              <View style={styles.sectionCountPill}>
-                <Text style={styles.sectionCountText}>0</Text>
-              </View>
-            </View>
-            <View style={styles.sectionDivider} />
-            <View style={styles.similarList}>
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={[...Array(5)].map((_, i) => i)}
-                keyExtractor={(item) => `sk-sim-${item}`}
-                getItemLayout={getSimilarItemLayout}
-                renderItem={() => (
-                  <SkeletonBlock width={SIMILAR_CARD_WIDTH} height={SIMILAR_CARD_HEIGHT} borderRadius={24} style={{ marginRight: 16 }} />
-                )}
-              />
-            </View>
-            <View style={styles.dotsRow}>
-              <View style={styles.dotLong} />
-              <View style={styles.dotSmall} />
-              <View style={styles.dotSmall} />
-            </View>
-
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Also Here</Text>
-              <View style={styles.sectionCountPill}>
-                <Text style={styles.sectionCountText}>0</Text>
-              </View>
-            </View>
-            <View style={styles.sectionDivider} />
-            <View style={styles.gridWrap}>
-              {[...Array(8)].map((_, i) => (
-                <SkeletonBlock
-                  key={`sk-g-${i}`}
-                  width={GRID_ITEM_WIDTH}
-                  height={GRID_ITEM_HEIGHT}
-                  borderRadius={24}
-                  style={{ marginRight: (i % 2 === 0 ? GRID_GAP : 0), marginBottom: GRID_GAP }}
-                />
-              ))}
-            </View>
-          </>
-        ) : (
-          <Animated.View
-            style={[
-              styles.contentReveal,
-              { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] },
-            ]}
-          >
-            {!eventInfo ? (
-              renderEmptyState()
-            ) : attendees.length === 0 ? (
-        <View style={styles.noMoreContainer}>
-            <View style={styles.emptyGlyph}>
-              <Ionicons name="time-outline" size={36} color={APP_COLORS.textTertiary} />
-            </View>
-            <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
-            <Text style={styles.noMoreText}>No other active attendees yet. We&apos;ll refresh this automatically.</Text>
-            <TouchableOpacity
-              style={[styles.eventsButton, (openRoomPending || eventRoomStatus !== 'available') && styles.eventsButtonDisabled]}
-              onPress={openEventRoom}
-              disabled={openRoomPending || eventRoomStatus !== 'available'}
-            >
-              <Text style={styles.eventsButtonText}>
-                {openRoomPending
-                  ? 'Opening...'
-                  : eventRoomStatus === 'checking'
-                    ? 'Loading Room...'
-                    : eventRoomStatus === 'available'
-                      ? 'Open Event Room'
-                      : 'Room Unavailable'}
-              </Text>
-            </TouchableOpacity>
-            {eventRoomStatus !== 'available' && (
-              <TouchableOpacity
-                style={styles.secondaryGhostButton}
-                onPress={onBrowseEvents}
-              >
-                <Text style={styles.secondaryGhostText}>Browse Events</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-            ) : (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Recommended</Text>
-                  <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{recommendedEntries.length}</Text>
-                  </View>
-                </View>
-                <View style={styles.sectionDivider} />
-                <Animated.FlatList
-                  data={recommendedEntries}
-                  keyExtractor={recommendedKeyExtractor}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.similarList}
-                  snapToInterval={SIMILAR_CARD_WIDTH + 16}
-                  decelerationRate="fast"
-                  getItemLayout={getSimilarItemLayout}
-                  removeClippedSubviews
-                  initialNumToRender={3}
-                  maxToRenderPerBatch={4}
-                  windowSize={5}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: similarScrollX } } }],
-                    {
-                      useNativeDriver: true,
-                      listener: (e) => {
-                        const x = e.nativeEvent.contentOffset.x || 0
-                        const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
-                        if (idx !== lastSimilarIndex.current) {
-                          lastSimilarIndex.current = idx
-                          setSimilarIndex(Math.max(0, idx))
-                        }
-                      },
-                    }
-                  )}
-                  scrollEventThrottle={16}
-                  renderItem={renderRecommendedItem}
-                />
-                <View style={styles.dotsRow}>
-                  <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
-                  <View style={[styles.dotSmall, (similarIndex % 3) === 1 && styles.dotActive]} />
-                  <View style={[styles.dotSmall, (similarIndex % 3) === 2 && styles.dotActive]} />
-                </View>
-
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Also Here</Text>
-                  <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>
-                      {attendeesTotalCount > attendees.length ? `${attendees.length}/${attendeesTotalCount}` : alsoHereAttendees.length}
+              </ScalePress>
+              {filterTags.map((tag) => (
+                <ScalePress key={tag} onPress={() => setSelectedFilterTag(tag)} haptic={false} style={styles.chipSpacing}>
+                  <View style={[styles.filterChip, selectedFilterTag === tag && styles.filterChipActive]}>
+                    <Text style={[styles.filterChipText, selectedFilterTag === tag && styles.filterChipTextActive]}>
+                      {tag}
                     </Text>
                   </View>
-                </View>
-                <View style={styles.sectionDivider} />
-                <FlatList
-                  data={alsoHereAttendees}
-                  keyExtractor={alsoHereKeyExtractor}
-                  numColumns={2}
-                  scrollEnabled={false}
-                  removeClippedSubviews
-                  windowSize={5}
-                  initialNumToRender={8}
-                  maxToRenderPerBatch={6}
-                  contentContainerStyle={styles.gridListContent}
-                  columnWrapperStyle={styles.gridColumn}
-                  renderItem={renderAlsoHereItem}
-                />
-                {attendeesHasMore && (
-                  <TouchableOpacity
-                    style={styles.loadMoreButton}
-                    onPress={loadMoreAttendees}
-                    disabled={loadingMoreAttendees}
-                    accessibilityRole="button"
-                    accessibilityLabel="Load more attendees"
-                  >
-                    {loadingMoreAttendees ? (
-                      <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
-                    ) : (
-                      <Text style={styles.loadMoreText}>
-                        Load More ({attendeesTotalCount - attendees.length} remaining)
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-          </Animated.View>
+                </ScalePress>
+              ))}
+            </ScrollView>
+
+            <View style={styles.segmented}>
+              <SegmentedControl
+                options={['Grid', 'Join Chat']}
+                selectedIndex={0}
+                onSelectionChange={handleSegmentChange}
+              />
+            </View>
+          </>
         )}
-      </ScrollView>
+      </>
+    ),
+    [eventInfo, attendees.length, attendeesTotalCount, socketStatus, newJoinsCount, selectedFilterTag, filterTags, handleSegmentChange]
+  )
+
+  const listEmpty = useCallback(() => {
+    if (!eventInfo) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyGlyph}>
+            <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
+          </View>
+          <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
+          <Text style={styles.emptyText}>
+            Check in to an event to unlock recommendations and nearby attendees.
+          </Text>
+          <ScalePress style={styles.eventsButton} onPress={onBrowseEvents}>
+            <Text style={styles.eventsButtonText}>Browse Events</Text>
+          </ScalePress>
+        </View>
+      )
+    }
+    return (
+      <View style={styles.noMoreContainer}>
+        <View style={styles.emptyGlyph}>
+          <Ionicons name="time-outline" size={36} color={APP_COLORS.textTertiary} />
+        </View>
+        <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
+        <Text style={styles.noMoreText}>No other active attendees yet. We&apos;ll refresh this automatically.</Text>
+        <ScalePress
+          style={[styles.eventsButton, (openRoomPending || eventRoomStatus !== 'available') && styles.eventsButtonDisabled]}
+          onPress={openEventRoom}
+        >
+          <Text style={styles.eventsButtonText}>
+            {openRoomPending
+              ? 'Opening...'
+              : eventRoomStatus === 'checking'
+                ? 'Loading Room...'
+                : eventRoomStatus === 'available'
+                  ? 'Open Event Room'
+                  : 'Room Unavailable'}
+          </Text>
+        </ScalePress>
+        {eventRoomStatus !== 'available' && (
+          <ScalePress style={styles.secondaryGhostButton} onPress={onBrowseEvents}>
+            <Text style={styles.secondaryGhostText}>Browse Events</Text>
+          </ScalePress>
+        )}
+      </View>
+    )
+  }, [eventInfo, onBrowseEvents, openRoomPending, eventRoomStatus, openEventRoom])
+
+  const listFooter = useCallback(() => {
+    if (!eventInfo || displayedAttendees.length === 0) return null
+    return (
+      <>
+        {loadingMoreAttendees && (
+          <View style={styles.loadingMoreRow}>
+            <ActivityIndicator size="small" color={APP_COLORS.textSecondary} />
+          </View>
+        )}
+        {!attendeesHasMore && (
+          <View style={styles.expandCard}>
+            <View style={styles.expandGlyph}>
+              <Ionicons name="link-outline" size={28} color={APP_COLORS.textTertiary} />
+            </View>
+            <Text style={styles.expandTitle}>Expand Your Circle</Text>
+            <Text style={styles.expandSubtitle}>
+              Unlock more profiles by connecting your LinkedIn or X account.
+            </Text>
+            <GradientButton
+              label="Connect Socials"
+              onPress={comingSoon}
+              variant="secondary"
+              fullWidth
+              style={styles.expandButton}
+            />
+          </View>
+        )}
+      </>
+    )
+  }, [eventInfo, displayedAttendees.length, loadingMoreAttendees, attendeesHasMore, comingSoon])
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
+      <GlassTopBar onMenuPress={comingSoon} onBellPress={comingSoon} wordmarkSize={24} />
+
+      {loading ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+          <View style={styles.headingSection}>
+            <Text style={styles.gridHeading}>The Grid</Text>
+          </View>
+          {[...Array(3)].map((_, i) => (
+            <SkeletonBlock
+              key={`sk-card-${i}`}
+              width="100%"
+              height={420}
+              borderRadius={APP_RADIUS['2xl']}
+              style={styles.skeletonCard}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={displayedAttendees}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={listEmpty}
+          ListFooterComponent={listFooter}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.4}
+          contentContainerStyle={styles.listBody}
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onPullToRefresh}
+              tintColor="#FFFFFF"
+              progressBackgroundColor={APP_COLORS.backgroundElevated}
+            />
+          }
+        />
+      )}
+
+      <ScalePress
+        style={[styles.fab, { bottom: insets.bottom + 136 }]}
+        onPress={comingSoon}
+        accessibilityRole="button"
+        accessibilityLabel="Quick action"
+      >
+        <LinearGradient
+          colors={APP_COLORS.accentGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <Ionicons name="options-outline" size={22} color={APP_COLORS.onAccent} />
+        </LinearGradient>
+      </ScalePress>
     </SafeAreaView>
   )
 }
@@ -1077,57 +769,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: APP_COLORS.backgroundBase,
   },
-  headerGradient: {
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 14,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitleText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-    letterSpacing: 0.1,
-  },
-  headerRight: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
   scrollBody: {
+    paddingHorizontal: CONTENT_SIDE_PADDING,
     paddingBottom: 40,
   },
-  contentReveal: {
-    paddingBottom: 4,
+  listBody: {
+    paddingHorizontal: CONTENT_SIDE_PADDING,
+    paddingBottom: 140,
   },
-  liveRow: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  skeletonCard: {
+    marginBottom: APP_SPACING.lg,
+  },
+  headingSection: {
+    paddingTop: APP_SPACING.lg,
+    paddingBottom: APP_SPACING.sm,
+    gap: APP_SPACING.xxs,
+  },
+  gridHeading: {
+    fontFamily: APP_FONTS.headingExtraBold,
+    fontSize: 36,
+    lineHeight: 40,
+    letterSpacing: -1.8,
+    color: APP_COLORS.textPrimary,
+  },
+  gridSubheading: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 18,
+    lineHeight: 28,
+    color: APP_COLORS.textSecondary,
+  },
+  gridSubheadingAccent: {
+    color: APP_COLORS.accentSecondary,
+    fontFamily: APP_FONTS.bodySemiBold,
   },
   socketBanner: {
-    marginHorizontal: 18,
-    marginTop: 10,
+    marginTop: APP_SPACING.xs,
   },
   newJoinsPill: {
-    marginHorizontal: 18,
-    marginTop: 10,
+    marginTop: APP_SPACING.xs,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1143,319 +822,104 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     marginRight: 6,
-    backgroundColor: '#34C759',
+    backgroundColor: APP_COLORS.success,
   },
   newJoinsText: {
     color: APP_COLORS.textPrimary,
     fontSize: 12,
     fontWeight: '700',
   },
-  liveTextWrap: {
-    flex: 1,
-    paddingRight: 12,
+  chipsRow: {
+    gap: APP_SPACING.xs,
+    paddingVertical: APP_SPACING.sm,
   },
-  liveLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
+  chipSpacing: {
+    marginLeft: APP_SPACING.xs,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#34C759',
+  filterChip: {
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderRadius: APP_RADIUS.pill,
+    paddingHorizontal: APP_SPACING.lg,
+    paddingVertical: APP_SPACING.xs,
   },
-  liveLabel: {
-    color: APP_COLORS.textTertiary,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  liveTitle: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  liveMetaRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  liveCountPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: APP_COLORS.backgroundElevated,
+  filterChipActive: {
+    backgroundColor: 'rgba(255,144,109,0.1)',
     borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(255,144,109,0.2)',
   },
-  liveCountText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  chatButtonText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  chatButtonDisabled: {
-    opacity: 0.55,
-  },
-  sectionTitle: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 16,
-    marginBottom: 9,
-    letterSpacing: 0.1,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-  },
-  sectionCountPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  sectionCountText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  sectionDivider: {
-    height: 1,
-    marginHorizontal: 18,
-    backgroundColor: APP_COLORS.separator,
-    marginBottom: 6,
-  },
-  similarList: {
-    paddingHorizontal: 18,
-    paddingBottom: 8,
-  },
-  similarCardWrap: {
-    width: SIMILAR_CARD_WIDTH,
-    height: SIMILAR_CARD_HEIGHT,
-    marginRight: 16,
-  },
-  similarCard: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  similarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  similarGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
-  },
-  similarInfo: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 12,
-  },
-  reasonPill: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginBottom: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: 'rgba(10,132,255,0.2)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  reasonPillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  similarName: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  timeChip: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(28,28,30,0.74)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  timeChipCompact: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  timeChipText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  cardSafety: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.72)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  dotLong: {
-    width: Math.round(width * (60 / BASE_FRAME_WIDTH)),
-    height: 6,
-    borderRadius: 11,
-    backgroundColor: 'rgba(235,235,245,0.34)',
-    marginHorizontal: 7,
-  },
-  dotSmall: {
-    width: Math.round(width * (7 / BASE_FRAME_WIDTH)),
-    height: 6,
-    borderRadius: 9,
-    backgroundColor: 'rgba(235,235,245,0.34)',
-    marginHorizontal: 7,
-  },
-  dotActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  gridWrap: {
-    paddingHorizontal: CONTENT_SIDE_PADDING,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  gridListContent: {
-    paddingHorizontal: CONTENT_SIDE_PADDING,
-  },
-  gridColumn: {
-    justifyContent: 'space-between',
-  },
-  loadMoreButton: {
-    marginHorizontal: CONTENT_SIDE_PADDING,
-    marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-  },
-  loadMoreText: {
+  filterChipText: {
+    fontFamily: APP_FONTS.bodyMedium,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: APP_COLORS.textSecondary,
   },
-  gridItem: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: GRID_GAP,
-    backgroundColor: APP_COLORS.backgroundElevated,
+  filterChipTextActive: {
+    fontFamily: APP_FONTS.bodySemiBold,
+    fontWeight: '600',
+    color: APP_COLORS.accent,
+  },
+  segmented: {
+    marginBottom: APP_SPACING.md,
+  },
+  loadingMoreRow: {
+    paddingVertical: APP_SPACING.lg,
+    alignItems: 'center',
+  },
+  expandCard: {
+    marginTop: APP_SPACING.sm,
+    padding: APP_SPACING.lg,
+    borderRadius: APP_RADIUS['2xl'],
     borderWidth: 1,
+    borderStyle: 'dashed',
     borderColor: APP_COLORS.separator,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 4 },
+    alignItems: 'center',
+    gap: APP_SPACING.xs,
   },
-  gridTouch: {
-    flex: 1,
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gridGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
-  },
-  gridInfo: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    bottom: 8,
-  },
-  gridStatusPill: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginBottom: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(10,132,255,0.22)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.24)',
-  },
-  gridStatusPillText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  gridName: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  gridSafety: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  expandGlyph: {
+    width: 56,
+    height: 56,
+    borderRadius: APP_RADIUS.xl,
+    backgroundColor: APP_COLORS.backgroundElevated,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.72)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    marginBottom: APP_SPACING.xs,
+  },
+  expandTitle: {
+    fontFamily: APP_FONTS.heading,
+    fontSize: 18,
+    fontWeight: '700',
+    color: APP_COLORS.textPrimary,
+  },
+  expandSubtitle: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 13,
+    color: APP_COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  expandButton: {
+    marginTop: APP_SPACING.sm,
+    width: '100%',
+    backgroundColor: APP_COLORS.backgroundInput,
+  },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    zIndex: 4,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  fabGradient: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   noMoreContainer: {
     alignItems: 'center',
@@ -1477,10 +941,10 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   emptyContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+    paddingTop: 60,
   },
   emptyGlyph: {
     width: 84,
@@ -1538,4 +1002,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-}) 
+})

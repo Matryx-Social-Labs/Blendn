@@ -21,11 +21,13 @@ export default function OnboardingLayout() {
       >
         <Stack.Screen name="welcome" />
         <Stack.Screen name="basic-info" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="location" />
+        <Stack.Screen name="preferences" />
+        <Stack.Screen name="professional-info" />
         <Stack.Screen name="interests" />
         <Stack.Screen name="goals" />
-        <Stack.Screen name="preferences" />
         <Stack.Screen name="photos" />
-        <Stack.Screen name="location" />
         <Stack.Screen name="complete" />
       </Stack>
     </View>

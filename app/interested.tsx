@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { formatEventDateTime } from '../lib/time'
+import { APP_COLORS } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
 
 interface EventRow {
@@ -164,7 +165,7 @@ export default function InterestedScreen() {
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)}>
-          <Ionicons name="navigate" size={16} color="#007AFF" />
+          <Ionicons name="navigate" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Open in Maps</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)}>

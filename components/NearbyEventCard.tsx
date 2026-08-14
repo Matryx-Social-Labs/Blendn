@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native'
-import { APP_COLORS } from '../lib/theme'
+import { APP_COLORS, APP_FONTS } from '../lib/theme'
 
 type NearbyEvent = {
   id: string
@@ -30,7 +30,7 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
 
   // Scale constants from Figma using width as base
   const scale = width / 363
-  const radiusImage = 23 * scale
+  const radiusImage = 32 * scale
 
   return (
     <Pressable
@@ -70,6 +70,7 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
               numberOfLines={2}
               style={{
                 color: APP_COLORS.textPrimary,
+                fontFamily: APP_FONTS.heading,
                 fontSize: 20,
                 lineHeight: 26,
                 fontWeight: '700',

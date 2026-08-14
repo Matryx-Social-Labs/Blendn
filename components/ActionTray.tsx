@@ -1,16 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react'
-import {
-  ActivityIndicator,
-  Animated,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native'
-import { APP_COLORS, APP_CTA, APP_RADIUS, APP_SIZE, APP_SPACING } from '../lib/theme'
+import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { APP_COLORS, APP_RADIUS, APP_SPACING } from '../lib/theme'
 import { TRAY_SPECS, type TraySize } from '../lib/uxStandards'
+import GradientButton from './ui/GradientButton'
 
 export type ActionTrayButton = {
   label: string
@@ -28,29 +20,6 @@ type ActionTrayProps = {
   onClose: () => void
   size?: TraySize
   dismissible?: boolean
-}
-
-const getButtonStyle = (variant: ActionTrayButton['variant'], disabled?: boolean) => {
-  const resolved = variant || 'secondary'
-  if (resolved === 'primary') {
-    return {
-      backgroundColor: disabled ? APP_CTA.primary.disabled : APP_CTA.primary.background,
-      borderColor: 'transparent',
-      textColor: APP_CTA.primary.text,
-    }
-  }
-  if (resolved === 'destructive') {
-    return {
-      backgroundColor: disabled ? APP_CTA.destructive.disabled : APP_CTA.destructive.background,
-      borderColor: 'transparent',
-      textColor: APP_CTA.destructive.text,
-    }
-  }
-  return {
-    backgroundColor: disabled ? APP_CTA.secondary.disabled : APP_CTA.secondary.background,
-    borderColor: APP_CTA.secondary.border,
-    textColor: APP_CTA.secondary.text,
-  }
 }
 
 export default function ActionTray({
@@ -120,32 +89,17 @@ export default function ActionTray({
           <View style={styles.buttonsWrap}>
             {buttonRows.map((row, rowIndex) => (
               <View style={styles.buttonRow} key={`row-${rowIndex}`}>
-                {row.map((button, buttonIndex) => {
-                  const style = getButtonStyle(button.variant, button.disabled || button.loading)
-                  const isDisabled = !!button.disabled || !!button.loading
-                  return (
-                    <TouchableOpacity
-                      key={`${button.label}-${buttonIndex}`}
-                      onPress={button.onPress}
-                      disabled={isDisabled}
-                      activeOpacity={0.86}
-                      style={[
-                        styles.button,
-                        {
-                          backgroundColor: style.backgroundColor,
-                          borderColor: style.borderColor,
-                        },
-                        isDisabled && styles.buttonDisabled,
-                      ]}
-                    >
-                      {button.loading ? (
-                        <ActivityIndicator size="small" color={style.textColor} />
-                      ) : (
-                        <Text style={[styles.buttonText, { color: style.textColor }]}>{button.label}</Text>
-                      )}
-                    </TouchableOpacity>
-                  )
-                })}
+                {row.map((button, buttonIndex) => (
+                  <GradientButton
+                    key={`${button.label}-${buttonIndex}`}
+                    label={button.label}
+                    onPress={button.onPress}
+                    variant={button.variant || 'secondary'}
+                    loading={button.loading}
+                    disabled={button.disabled}
+                    style={styles.button}
+                  />
+                ))}
               </View>
             ))}
           </View>
@@ -200,19 +154,6 @@ const styles = StyleSheet.create({
     gap: APP_SPACING.xs,
   },
   button: {
-    minHeight: APP_SIZE.touchTarget,
     flex: 1,
-    borderRadius: APP_RADIUS.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: APP_SPACING.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    fontSize: 15,
-    fontWeight: '700',
   },
 })

@@ -4,7 +4,7 @@ import React, { memo, useEffect, useMemo, useRef } from 'react'
 import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
 import Reanimated from 'react-native-reanimated'
 import { formatEventDateTime } from '../lib/time'
-import { APP_COLORS } from '../lib/theme'
+import { APP_COLORS, APP_FONTS, APP_RADIUS } from '../lib/theme'
 import OptimizedImage from './OptimizedImage'
 import Typography from './Typography'
 
@@ -230,7 +230,7 @@ EventCard.displayName = 'EventCard'
 const styles = StyleSheet.create({
   eventCard: {
     backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 24,
+    borderRadius: APP_RADIUS['2xl'],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
     marginHorizontal: 16,
@@ -245,13 +245,14 @@ const styles = StyleSheet.create({
   eventImage: {
     width: '100%',
     height: 200,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: APP_RADIUS['2xl'],
+    borderTopRightRadius: APP_RADIUS['2xl'],
   },
   eventContent: {
     padding: 16,
   },
   eventTitle: {
+    fontFamily: APP_FONTS.heading,
     fontSize: 20,
     lineHeight: 26,
     fontWeight: '700',
@@ -341,29 +342,29 @@ const styles = StyleSheet.create({
     backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: APP_RADIUS.pill,
   },
   checkinButtonText: {
-    color: APP_COLORS.textPrimary,
+    color: APP_COLORS.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },
   interestButton: {
-    backgroundColor: 'rgba(10,132,255,0.15)',
+    backgroundColor: 'rgba(255,144,109,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: APP_RADIUS.pill,
   },
   interestButtonActive: {
-    backgroundColor: 'rgba(10,132,255,0.26)',
+    backgroundColor: 'rgba(255,144,109,0.26)',
   },
   interestButtonText: {
-    color: '#FF7BA2',
+    color: APP_COLORS.accent,
     fontSize: 14,
     fontWeight: '600',
   },
   interestButtonTextActive: {
-    color: '#FF8FB3',
+    color: APP_COLORS.accentSecondary,
   },
   secondaryRow: {
     marginTop: 8,

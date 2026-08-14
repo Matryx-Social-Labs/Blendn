@@ -1,14 +1,23 @@
 // Shared visual tokens for Blendn's UI foundation.
+// Sourced from Figma (Zi2KcUzhEcLRdqyit22LdQ) — dark, warm "atmospheric" theme.
 export const APP_COLORS = {
-  backgroundBase: '#000000',
-  backgroundElevated: '#1C1C1E',
-  backgroundCard: '#2C2C2E',
-  separator: 'rgba(255,255,255,0.14)',
+  backgroundBase: '#0F0E0E',
+  backgroundElevated: '#141313',
+  backgroundCard: '#211F1F',
+  backgroundInput: '#272525',
+  separator: 'rgba(174,170,170,0.16)',
   textPrimary: '#FFFFFF',
-  textSecondary: '#EBEBF599',
-  textTertiary: '#EBEBF54D',
-  accent: '#0A84FF',
-  accentPressed: '#0060DF',
+  textSecondary: '#AEAAAA',
+  textTertiary: '#787574',
+  // Coral → pink accent, used as a 135deg gradient on primary CTAs/badges/active states.
+  accent: '#FF906D',
+  accentSecondary: '#FF6D8D',
+  accentGradient: ['#FF906D', '#FF6D8D'] as [string, string],
+  accentPressed: '#E8785A',
+  // Dark text/icon color used on top of the coral/pink gradient for contrast.
+  onAccent: '#5B1600',
+  // Secondary highlight used on event meta tags (date/location pills).
+  highlight: '#F79EFF',
   destructive: '#FF3B30',
   success: '#34C759',
 } as const
@@ -31,7 +40,20 @@ export const APP_RADIUS = {
   md: 16,
   lg: 20,
   xl: 24,
+  '2xl': 32,
+  '3xl': 48,
   pill: 999,
+} as const
+
+// Google Fonts family names, loaded via @expo-google-fonts in app/_layout.tsx.
+export const APP_FONTS = {
+  heading: 'PlusJakartaSans_700Bold',
+  headingExtraBold: 'PlusJakartaSans_800ExtraBold',
+  body: 'Manrope_400Regular',
+  bodyMedium: 'Manrope_500Medium',
+  bodySemiBold: 'Manrope_600SemiBold',
+  bodyBold: 'Manrope_700Bold',
+  bodyExtraBold: 'Manrope_800ExtraBold',
 } as const
 
 export const APP_SIZE = {
@@ -80,18 +102,19 @@ export const APP_MOTION = {
 } as const
 
 export const APP_CTA = {
+  // Primary CTAs render as a 135deg gradient pill (see expo-linear-gradient usage in
+  // ActionTray.tsx / shared button components) rather than a flat background.
   primary: {
-    background: APP_COLORS.accent,
-    text: APP_COLORS.textPrimary,
-    pressed: APP_COLORS.accentPressed,
-    disabled: 'rgba(10,132,255,0.4)',
+    gradient: APP_COLORS.accentGradient,
+    text: APP_COLORS.onAccent,
+    disabledGradient: ['rgba(255,144,109,0.4)', 'rgba(255,109,141,0.4)'] as [string, string],
   },
   secondary: {
-    background: APP_COLORS.backgroundElevated,
+    background: APP_COLORS.backgroundCard,
     text: APP_COLORS.textPrimary,
     border: APP_COLORS.separator,
-    pressed: APP_COLORS.backgroundCard,
-    disabled: 'rgba(255,255,255,0.08)',
+    pressed: APP_COLORS.backgroundInput,
+    disabled: 'rgba(255,255,255,0.06)',
   },
   destructive: {
     background: APP_COLORS.destructive,

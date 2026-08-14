@@ -54,6 +54,7 @@ interface EventDetail {
   short_description: string
   city: string
   venue_name: string
+  venue_id?: string | null
   address: string
   start_time: string
   end_time: string
@@ -277,6 +278,7 @@ export default function EventDetail() {
           short_description: d.shortDescription || d.short_description || '',
           city: d.city || '',
           venue_name: d.venueName || d.venue_name || '',
+          venue_id: d.venueId || d.venue_id || null,
           address: d.address || '',
           start_time: d.startTime || d.start_time || '',
           end_time: d.endTime || d.end_time || '',
@@ -551,6 +553,7 @@ export default function EventDetail() {
           short_description: d.shortDescription || d.short_description || '',
           city: d.city || '',
           venue_name: d.venueName || d.venue_name || '',
+          venue_id: d.venueId || null,
           address: d.address || '',
           start_time: d.startTime || d.start_time || '',
           end_time: d.endTime || d.end_time || '',
@@ -1412,10 +1415,16 @@ export default function EventDetail() {
                     {event ? formatHeroDate(event.start_time) : ''}
                   </Reanimated.Text>
                 </View>
-                <View style={styles.heroMetaRow}>
+                <TouchableOpacity
+                  style={styles.heroMetaRow}
+                  disabled={!event?.venue_id}
+                  onPress={() => event?.venue_id && router.push({ pathname: '/venue/[id]', params: { id: event.venue_id } as any })}
+                  accessibilityRole={event?.venue_id ? 'button' : undefined}
+                  accessibilityLabel={event?.venue_id ? `View ${event.venue_name} venue page` : undefined}
+                >
                   <Ionicons name="location-outline" size={13} color="#FFFFFF" />
-                  <Text style={styles.heroMetaText} numberOfLines={1}>{event?.venue_name || 'Location TBA'}</Text>
-                </View>
+                  <Text style={[styles.heroMetaText, !!event?.venue_id && styles.heroMetaTextLink]} numberOfLines={1}>{event?.venue_name || 'Location TBA'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -1907,6 +1916,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginLeft: 6,
     flexShrink: 1,
+  },
+  heroMetaTextLink: {
+    textDecorationLine: 'underline',
   },
   content: {
     flex: 1,

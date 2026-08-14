@@ -1,10 +1,13 @@
 import { router } from 'expo-router'
 import React, { useState } from 'react'
+import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useAuth } from '../../lib/useAuth'
+import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import OnboardingProgressBar from '../../components/OnboardingProgressBar'
+import OnboardingHeader from '../../components/OnboardingHeader'
 import { useToast } from '../../components/Toast'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 
 const GOALS = [
   'Make new friends',
@@ -25,19 +28,18 @@ export default function GoalsStep() {
     setSelected(prev => (prev.includes(g) ? prev.filter(i => i !== g) : [...prev, g]))
   }
 
+  const goNext = () => router.push('./photos' as any)
+
   const onContinue = async () => {
-    if (selected.length === 0) {
-      showToast('Pick at least one goal to personalize your experience.', 'info')
-      return
-    }
     if (!user) {
       showToast('Please sign in to continue', 'error')
       return
     }
     setSaving(true)
     try {
-      // Goals are stored locally for now, will be synced when profile is complete
-      router.push('./preferences' as any)
+      const result = await apiClient.updateProfile(user.id, { goals: selected })
+      if (!result.success) throw new Error(result.error || 'Failed to save')
+      goNext()
     } catch (e) {
       Logger.error('profile', 'Onboarding goals step error', { error: e })
       showToast('Failed to save your goals', 'error')
@@ -48,26 +50,33 @@ export default function GoalsStep() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OnboardingHeader currentStep={7} totalSteps={9} onBack={() => router.back()} onSkip={goNext} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>What brings you here?</Text>
-        <OnboardingProgressBar currentStep={4} totalSteps={8} />
         <Text style={styles.subtitle}>Select all that apply</Text>
         <View style={styles.grid}>
-          {GOALS.map((g, idx) => {
+          {GOALS.map((g) => {
             const isSelected = selected.includes(g)
             return (
-              <TouchableOpacity key={idx} style={[styles.chip, isSelected && styles.chipSelected]} onPress={() => toggle(g)}>
-                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{g}</Text>
+              <TouchableOpacity key={g} style={styles.chipWrap} onPress={() => toggle(g)} activeOpacity={0.85}>
+                {isSelected ? (
+                  <LinearGradient colors={APP_COLORS.accentGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.chip}>
+                    <Text style={styles.chipTextSelected}>{g}</Text>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.chip, styles.chipUnselected]}>
+                    <Text style={styles.chipText}>{g}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             )
           })}
         </View>
 
-        <TouchableOpacity style={[styles.primary, saving && styles.disabled]} onPress={onContinue} disabled={saving}>
-          <Text style={styles.primaryText}>Continue</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.skip} onPress={() => router.push('./preferences' as any)}>
-          <Text style={styles.skipText}>Skip for now</Text>
+        <TouchableOpacity onPress={onContinue} disabled={saving} activeOpacity={0.9} style={styles.ctaWrap}>
+          <LinearGradient colors={APP_COLORS.accentGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary}>
+            <Text style={styles.primaryText}>Continue</Text>
+          </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -75,28 +84,68 @@ export default function GoalsStep() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
-  content: { padding: 24 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 6, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#fff', marginBottom: 18, textAlign: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
+  content: { paddingHorizontal: APP_SPACING.xl, paddingBottom: APP_SPACING['3xl'] },
+  title: {
+    fontFamily: APP_FONTS.headingExtraBold,
+    fontSize: 28,
+    fontWeight: '800',
+    color: APP_COLORS.textPrimary,
+    marginBottom: APP_SPACING.xs,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontFamily: APP_FONTS.body,
+    fontSize: 16,
+    color: APP_COLORS.textSecondary,
+    marginBottom: APP_SPACING.xl,
+    textAlign: 'center',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: APP_SPACING.sm,
+  },
+  chipWrap: {
+    width: '48%',
+  },
   chip: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginBottom: 12,
-    minWidth: '48%',
+    paddingVertical: APP_SPACING.md,
+    paddingHorizontal: APP_SPACING.md,
+    borderRadius: APP_RADIUS.xl,
     alignItems: 'center',
   },
-  chipSelected: { backgroundColor: '#FF6B6B' },
-  chipText: { color: '#333', fontSize: 14, fontWeight: '600' },
-  chipTextSelected: { color: '#fff' },
-  primary: { backgroundColor: '#FF6B6B', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12 },
-  primaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  skip: { padding: 12, alignItems: 'center' },
-  skipText: { color: '#fff', fontSize: 16 },
-  disabled: { opacity: 0.6 },
+  chipUnselected: {
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  chipText: {
+    fontFamily: APP_FONTS.bodySemiBold,
+    color: APP_COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  chipTextSelected: {
+    fontFamily: APP_FONTS.bodyBold,
+    color: APP_COLORS.onAccent,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  ctaWrap: {
+    marginTop: APP_SPACING.xl,
+  },
+  primary: {
+    minHeight: 56,
+    borderRadius: APP_RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryText: {
+    fontFamily: APP_FONTS.bodyBold,
+    color: APP_COLORS.onAccent,
+    fontSize: 16,
+    fontWeight: '700',
+  },
 })
-
-

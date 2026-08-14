@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react'
 import { Animated, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { APP_COLORS, APP_RADIUS, APP_SPACING } from '../lib/theme'
+import { APP_COLORS, APP_FONTS, APP_RADIUS, APP_SPACING } from '../lib/theme'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
@@ -35,8 +35,8 @@ const VARIANT_CONFIG: Record<ToastVariant, { icon: string; bg: string; border: s
   },
   info: {
     icon: 'information-circle',
-    bg: 'rgba(10,132,255,0.15)',
-    border: 'rgba(10,132,255,0.4)',
+    bg: 'rgba(255,144,109,0.15)',
+    border: 'rgba(255,144,109,0.4)',
   },
 }
 
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: APP_SPACING.sm,
     paddingHorizontal: APP_SPACING.md,
-    borderRadius: APP_RADIUS.md,
+    borderRadius: APP_RADIUS.lg,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
   message: {
     flex: 1,
     color: APP_COLORS.textPrimary,
+    fontFamily: APP_FONTS.bodyMedium,
     fontSize: 14,
-    fontWeight: '500',
     lineHeight: 20,
   },
 })

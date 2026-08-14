@@ -4,23 +4,29 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { AppHeader } from '../../components/AppHeader'
 import OptimizedImage from '../../components/OptimizedImage'
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
+import GradientButton from '../../components/ui/GradientButton'
+import Pill from '../../components/ui/Pill'
+import SectionHeader from '../../components/ui/SectionHeader'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
-import { APP_COLORS } from '../../lib/theme'
+import { APP_COLORS, APP_RADIUS, APP_SPACING } from '../../lib/theme'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
-const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
+const HERO_WIDTH = WINDOW_WIDTH - APP_SPACING.xl
+const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.05)
 const INTERSTITIAL_HEIGHT = Math.round(WINDOW_WIDTH * 1.15)
-const CARD_BORDER_RADIUS = 16
-const PHOTO_BORDER_RADIUS = 20
+const CARD_BORDER_RADIUS = APP_RADIUS['2xl']
+const PHOTO_BORDER_RADIUS = APP_RADIUS.xl
+const AVATAR_SIZE = 96
 const PROFILE_CACHE_TTL = 2 * 60 * 1000
 
 interface UserProfileViewModel {
@@ -35,6 +41,10 @@ interface UserProfileViewModel {
   photos?: string[]
   goals?: string[]
   looking_for?: string[]
+  // TODO(figma-redesign): mocked until a real "pro"/verified backend field exists — see
+  // docs/FIGMA_REDESIGN_BACKLOG.md ("Profile PRO / verified badge"). Always undefined from
+  // the API today, so the badge simply never renders — no fabricated data reaches real users.
+  isPro?: boolean
   stats?: {
     eventsAttended: number
     eventsFavorited: number
@@ -68,7 +78,7 @@ export default function Profile() {
   const interstitialPhoto2 = photoList[2] || null
   const galleryPhotos = photoList.slice(3)
 
-  const hasDetails = !!(profile?.age || profile?.occupation || profile?.education || profile?.location)
+  const hasAbout = !!(profile?.bio || profile?.occupation || profile?.education)
   const hasStats = !!(profile?.stats && (profile.stats.eventsAttended > 0 || profile.stats.eventsFavorited > 0 || profile.stats.eventsOrganized > 0))
 
   // Profile completion: check if bio, interests, or photos are incomplete
@@ -136,6 +146,8 @@ export default function Profile() {
         photos,
         goals: data.goals,
         looking_for: data.looking_for,
+        // Not on UserProfileData yet — see the isPro TODO above.
+        isPro: (data as { isPro?: boolean }).isPro,
         stats: data.stats,
         memberSince: data.memberSince,
       }
@@ -161,24 +173,8 @@ export default function Profile() {
   const renderSkeleton = () => (
     <>
       {/* Hero skeleton */}
-      <SkeletonBlock width={WINDOW_WIDTH} height={HERO_HEIGHT} borderRadius={0} />
-      {/* Quick actions skeleton */}
-      <View style={styles.quickActionsRow}>
-        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
-        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
-      </View>
-      {/* Details card skeleton */}
       <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'60%'} style={{ marginBottom: 12 }} />
-          <SkeletonLine width={'40%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'50%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'35%'} />
-        </View>
-      </View>
-      {/* Interstitial skeleton */}
-      <View style={styles.cardContainer}>
-        <SkeletonBlock width={WINDOW_WIDTH - 32} height={INTERSTITIAL_HEIGHT * 0.5} borderRadius={PHOTO_BORDER_RADIUS} />
+        <SkeletonBlock width={HERO_WIDTH} height={HERO_HEIGHT} borderRadius={APP_RADIUS['2xl']} />
       </View>
       {/* About card skeleton */}
       <View style={styles.cardContainer}>
@@ -219,18 +215,18 @@ export default function Profile() {
 
   const renderContent = () => (
     <>
-      {/* Hero Photo */}
+      {/* Hero: editorial portfolio photo + avatar with gradient ring, overlapping bottom-left */}
       <View style={styles.heroContainer}>
         {heroPhoto ? (
           <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(0)}>
-          <OptimizedImage
-            source={getOptimized(heroPhoto, WINDOW_WIDTH, HERO_HEIGHT) as any}
-            style={styles.heroImage as any}
-            contentFit="cover"
-            width={WINDOW_WIDTH}
-            height={HERO_HEIGHT}
-            quality={70}
-          />
+            <OptimizedImage
+              source={getOptimized(heroPhoto, HERO_WIDTH, HERO_HEIGHT) as any}
+              style={styles.heroImage as any}
+              contentFit="cover"
+              width={HERO_WIDTH}
+              height={HERO_HEIGHT}
+              quality={70}
+            />
           </TouchableOpacity>
         ) : (
           <View style={styles.heroPlaceholder}>
@@ -238,7 +234,7 @@ export default function Profile() {
               source={placeholderImg as any}
               style={styles.heroImage as any}
               contentFit="cover"
-              width={WINDOW_WIDTH}
+              width={HERO_WIDTH}
               height={HERO_HEIGHT}
               quality={60}
             />
@@ -258,19 +254,48 @@ export default function Profile() {
         )}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)']}
-          locations={[0.4, 0.75, 1]}
+          colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.7)', 'rgba(15,14,14,0.95)']}
+          locations={[0.35, 0.75, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.heroGradient}
         />
+        <TouchableOpacity
+          onPress={() => router.push('/edit-profile')}
+          style={styles.heroEditBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+        >
+          <Ionicons name="create-outline" size={18} color={APP_COLORS.textPrimary} />
+        </TouchableOpacity>
+
         <View style={styles.heroOverlay}>
-          <Typography variant="h1" style={styles.heroName}>
+          <View style={styles.avatarWrap}>
+            <LinearGradient colors={APP_COLORS.accentGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarRing}>
+              <View style={styles.avatarInner}>
+                <OptimizedImage
+                  source={(heroPhoto || placeholderImg) as any}
+                  style={styles.avatarImage as any}
+                  contentFit="cover"
+                  width={AVATAR_SIZE}
+                  height={AVATAR_SIZE}
+                  quality={70}
+                />
+              </View>
+            </LinearGradient>
+            {!!profile?.isPro && (
+              <LinearGradient colors={APP_COLORS.accentGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.proBadge}>
+                <Typography variant="caption" style={styles.proBadgeText}>PRO</Typography>
+              </LinearGradient>
+            )}
+          </View>
+
+          <Typography variant="h2" style={styles.heroName}>
             {profile?.name || 'New User'}{profile?.age ? `, ${profile.age}` : ''}
           </Typography>
           {!!profile?.location && (
             <View style={styles.heroLocationRow}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+              <Ionicons name="location-outline" size={14} color={APP_COLORS.textSecondary} />
               <Typography variant="body2" style={styles.heroLocationText}>
                 {profile.location}
               </Typography>
@@ -279,59 +304,30 @@ export default function Profile() {
         </View>
       </View>
 
-      {/* Quick Actions Row */}
-      <View style={styles.quickActionsRow}>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => router.push('/edit-profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
-        >
-          <Ionicons name="create-outline" size={18} color={APP_COLORS.textPrimary} />
-          <Typography variant="button" style={styles.quickActionText}>Edit Profile</Typography>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => router.push('/settings')}
-          accessibilityRole="button"
-          accessibilityLabel="Open settings"
-        >
-          <Ionicons name="settings-outline" size={18} color={APP_COLORS.textPrimary} />
-          <Typography variant="button" style={styles.quickActionText}>Settings</Typography>
-        </TouchableOpacity>
-      </View>
-
-      {/* Details Card */}
-      {hasDetails && (
+      {/* About: bio + occupation/education */}
+      {hasAbout && (
         <View style={styles.cardContainer}>
           <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Details</Typography>
-            <View style={styles.detailsList}>
-              {!!profile?.age && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.age} years old</Typography>
-                </View>
-              )}
-              {!!profile?.occupation && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="briefcase-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.occupation}</Typography>
-                </View>
-              )}
-              {!!profile?.education && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="school-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.education}</Typography>
-                </View>
-              )}
-              {!!profile?.location && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.location}</Typography>
-                </View>
-              )}
-            </View>
+            <SectionHeader icon="information-circle-outline" title="About" style={styles.cardHeader} />
+            {!!profile?.bio && (
+              <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
+            )}
+            {(!!profile?.occupation || !!profile?.education) && (
+              <View style={styles.aboutGrid}>
+                {!!profile?.occupation && (
+                  <View style={styles.aboutGridItem}>
+                    <Typography variant="tiny" style={styles.aboutGridLabel}>Occupation</Typography>
+                    <Typography variant="body2" style={styles.aboutGridValue}>{profile.occupation}</Typography>
+                  </View>
+                )}
+                {!!profile?.education && (
+                  <View style={styles.aboutGridItem}>
+                    <Typography variant="tiny" style={styles.aboutGridLabel}>Education</Typography>
+                    <Typography variant="body2" style={styles.aboutGridValue}>{profile.education}</Typography>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
       )}
@@ -354,16 +350,6 @@ export default function Profile() {
         </View>
       )}
 
-      {/* About Card */}
-      {!!profile?.bio && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>About</Typography>
-            <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-          </View>
-        </View>
-      )}
-
       {/* Interstitial Photo 2 */}
       {interstitialPhoto2 && (
         <View style={styles.interstitialContainer}>
@@ -382,27 +368,28 @@ export default function Profile() {
         </View>
       )}
 
-      {/* Interests Card */}
+      {/* Interests */}
       {profile?.interests && profile.interests.length > 0 && (
         <View style={styles.cardContainer}>
           <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Interests</Typography>
+            <SectionHeader icon="sparkles-outline" title="Interests" style={styles.cardHeader} />
             <View style={styles.tagsRow}>
               {profile.interests.map((interest, idx) => (
-                <View key={`${interest}-${idx}`} style={styles.tag}>
-                  <Typography variant="caption" style={styles.tagText}>{interest}</Typography>
-                </View>
+                <Pill key={`${interest}-${idx}`} label={interest} variant={idx === 0 ? 'gradient' : 'glass'} style={styles.tagPill} />
               ))}
             </View>
           </View>
         </View>
       )}
 
-      {/* Stats Card */}
+      {/* Circle Presence: real activity stats, restyled to the bento aesthetic.
+          TODO(figma-redesign): Figma shows individual attended-event cards (image, date,
+          venue) rather than counts — that needs a "my attended events" list endpoint that
+          doesn't exist yet. See docs/FIGMA_REDESIGN_BACKLOG.md ("Attended events history"). */}
       {hasStats && (
         <View style={styles.cardContainer}>
           <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Activity</Typography>
+            <SectionHeader icon="people-outline" title="Circle Presence" style={styles.cardHeader} />
             <View style={styles.statsRow}>
               {(profile?.stats?.eventsAttended ?? 0) > 0 && (
                 <View style={styles.statItem}>
@@ -426,6 +413,7 @@ export default function Profile() {
                 </View>
               )}
             </View>
+            <Typography variant="caption" style={styles.circlePresenceNote}>Full event gallery — coming soon</Typography>
           </View>
         </View>
       )}
@@ -444,7 +432,7 @@ export default function Profile() {
       {galleryPhotos.length > 0 && (
         <View style={styles.cardContainer}>
           <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>More Photos</Typography>
+            <SectionHeader icon="images-outline" title="More Photos" style={styles.cardHeader} />
             <View style={styles.galleryGrid}>
               {galleryPhotos.map((uri, idx) => {
                 const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
@@ -491,6 +479,12 @@ export default function Profile() {
         </View>
       )}
 
+      {/* Expand Your Circle CTA */}
+      <View style={styles.ctaContainer}>
+        <Typography variant="h2" style={styles.ctaHeading}>Expand Your Circle</Typography>
+        <GradientButton label="Edit Profile" onPress={() => router.push('/edit-profile')} style={styles.ctaButton} />
+      </View>
+
       {/* Bottom spacer */}
       <View style={{ height: 40 }} />
 
@@ -503,9 +497,18 @@ export default function Profile() {
     </>
   )
 
+  const header = (
+    <AppHeader
+      title="Blend'n"
+      variant="glass"
+      rightIconButton={{ name: 'settings-outline', onPress: () => router.push('/settings'), accessibilityLabel: 'Open settings' }}
+    />
+  )
+
   if (authLoading || loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        {header}
         <ScrollView showsVerticalScrollIndicator={false}>
           {renderSkeleton()}
         </ScrollView>
@@ -526,6 +529,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {header}
       <ScrollView showsVerticalScrollIndicator={false}>
         {renderContent()}
       </ScrollView>
@@ -546,18 +550,22 @@ const styles = StyleSheet.create({
   retryButton: { backgroundColor: APP_COLORS.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   retryButtonText: { color: '#000', fontWeight: '600', fontSize: 16 },
 
-  // Hero
+  // Hero — inset rounded editorial photo with overlapping avatar
   heroContainer: {
-    width: WINDOW_WIDTH,
+    width: HERO_WIDTH,
     height: HERO_HEIGHT,
+    marginHorizontal: APP_SPACING.md,
+    marginTop: APP_SPACING.sm,
+    borderRadius: APP_RADIUS['2xl'],
+    overflow: 'hidden',
     position: 'relative',
   },
   heroImage: {
-    width: WINDOW_WIDTH,
+    width: HERO_WIDTH,
     height: HERO_HEIGHT,
   },
   heroPlaceholder: {
-    width: WINDOW_WIDTH,
+    width: HERO_WIDTH,
     height: HERO_HEIGHT,
     backgroundColor: APP_COLORS.backgroundCard,
   },
@@ -577,54 +585,74 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: HERO_HEIGHT * 0.5,
+    height: HERO_HEIGHT * 0.65,
+  },
+  heroEditBtn: {
+    position: 'absolute',
+    top: APP_SPACING.md,
+    right: APP_SPACING.md,
+    width: 36,
+    height: 36,
+    borderRadius: APP_RADIUS.pill,
+    backgroundColor: 'rgba(15,14,14,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroOverlay: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
+    left: APP_SPACING.md,
+    right: APP_SPACING.md,
+    bottom: APP_SPACING.lg,
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: APP_SPACING.sm,
+    width: AVATAR_SIZE + 8,
+  },
+  avatarRing: {
+    width: AVATAR_SIZE + 8,
+    height: AVATAR_SIZE + 8,
+    borderRadius: (AVATAR_SIZE + 8) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+  },
+  avatarInner: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 3,
+    borderColor: APP_COLORS.backgroundBase,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  proBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    paddingHorizontal: APP_SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: APP_RADIUS.pill,
+  },
+  proBadgeText: {
+    color: APP_COLORS.onAccent,
+    fontWeight: '700',
+    fontSize: 12,
   },
   heroName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    color: APP_COLORS.textPrimary,
   },
   heroLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    gap: 4,
   },
   heroLocationText: {
-    color: 'rgba(255,255,255,0.85)',
-    marginLeft: 4,
-    fontSize: 14,
-  },
-
-  // Quick Actions
-  quickActionsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginTop: 12,
-    gap: 12,
-  },
-  quickActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  quickActionText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
+    color: APP_COLORS.textSecondary,
   },
 
   // Cards
@@ -635,32 +663,28 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: APP_COLORS.backgroundElevated,
     borderRadius: CARD_BORDER_RADIUS,
-    padding: 16,
+    padding: 20,
   },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: APP_COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
+  cardHeader: {
+    marginBottom: APP_SPACING.md,
   },
 
-  // Details
-  detailsList: {
-    gap: 10,
-  },
-  detailRow: {
+  // About
+  aboutGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: APP_SPACING.lg,
+    marginTop: APP_SPACING.md,
   },
-  detailIcon: {
-    marginRight: 10,
-    width: 20,
+  aboutGridItem: {
+    minWidth: '40%',
+    gap: 4,
   },
-  detailText: {
+  aboutGridLabel: {
+    color: APP_COLORS.accent,
+  },
+  aboutGridValue: {
     color: APP_COLORS.textPrimary,
-    fontSize: 15,
   },
 
   // Interstitial photos
@@ -688,22 +712,9 @@ const styles = StyleSheet.create({
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: APP_SPACING.xs,
   },
-  tag: {
-    backgroundColor: APP_COLORS.backgroundBase,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  tagText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  tagPill: {},
 
   // Stats
   statsRow: {
@@ -722,6 +733,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: APP_COLORS.textSecondary,
+  },
+  circlePresenceNote: {
+    color: APP_COLORS.textTertiary,
+    textAlign: 'center',
+    marginTop: APP_SPACING.md,
   },
 
   // Member since
@@ -786,5 +802,24 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '700',
     fontSize: 14,
+  },
+
+  // Expand Your Circle CTA
+  ctaContainer: {
+    marginHorizontal: APP_SPACING.md,
+    marginTop: APP_SPACING.xl,
+    borderRadius: APP_RADIUS['3xl'],
+    backgroundColor: '#000000',
+    paddingVertical: APP_SPACING['3xl'],
+    paddingHorizontal: APP_SPACING.lg,
+    alignItems: 'center',
+    gap: APP_SPACING.lg,
+  },
+  ctaHeading: {
+    color: APP_COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  ctaButton: {
+    paddingHorizontal: APP_SPACING['2xl'],
   },
 })

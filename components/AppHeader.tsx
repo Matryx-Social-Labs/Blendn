@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
 import Typography from './Typography'
+import GlassSurface from './ui/GlassSurface'
+import { APP_COLORS, APP_RADIUS } from '../lib/theme'
 
 interface ChatHeaderProps {
   groupName: string
@@ -82,7 +84,7 @@ function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHea
   )
 }
 
-type HeaderVariant = 'light' | 'darkTransparent'
+type HeaderVariant = 'light' | 'darkTransparent' | 'glass'
 
 interface RightIconButton {
   name: keyof typeof Ionicons.glyphMap
@@ -122,23 +124,24 @@ export function AppHeader(props: AppHeaderProps) {
     containerStyle,
   } = props
 
-  const isDark = variant === 'darkTransparent'
-  const iconColor = isDark ? '#FFFFFF' : '#333333'
-  const titleColor = isDark ? '#FFFFFF' : '#333333'
-  const subtitleColor = isDark ? '#E6E6E6' : '#666666'
+  const isDark = variant === 'darkTransparent' || variant === 'glass'
+  const isGlass = variant === 'glass'
+  const iconColor = isDark ? APP_COLORS.textPrimary : '#333333'
+  const titleColor = isDark ? APP_COLORS.textPrimary : '#333333'
+  const subtitleColor = isDark ? APP_COLORS.textSecondary : '#666666'
 
-  return (
+  const headerContent = (
     <View style={[
       {
         paddingHorizontal: 14,
         paddingTop: 8,
         paddingBottom: 12,
-        // Let background gradient from root show through on darkTransparent
-        backgroundColor: isDark ? 'transparent' : '#FFFFFF',
+        // Let background gradient from root show through on darkTransparent; glass supplies its own tint via GlassSurface.
+        backgroundColor: isGlass ? 'transparent' : isDark ? 'transparent' : '#FFFFFF',
         shadowOpacity: 0,
         elevation: 0,
         borderBottomWidth: showBottomBorder && !isDark ? StyleSheet.hairlineWidth : 0,
-        borderBottomColor: '#f0f0f0',
+        borderBottomColor: isDark ? APP_COLORS.separator : '#f0f0f0',
       },
       containerStyle,
     ]}>
@@ -158,7 +161,7 @@ export function AppHeader(props: AppHeaderProps) {
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
           <Typography
-            variant="h2"
+            variant="h4"
             style={[styles.title, { color: titleColor }]}
             numberOfLines={1}
           >
@@ -201,6 +204,16 @@ export function AppHeader(props: AppHeaderProps) {
       </View>
     </View>
   )
+
+  if (isGlass) {
+    return (
+      <GlassSurface intensity={20} tint="rgba(15,14,14,0.8)" borderRadius={0} bordered={false}>
+        {headerContent}
+      </GlassSurface>
+    )
+  }
+
+  return headerContent
 }
 
 const styles = StyleSheet.create({
@@ -212,32 +225,38 @@ const styles = StyleSheet.create({
   },
   segmentedPill: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.20)',
-    overflow: 'hidden',
+    backgroundColor: APP_COLORS.backgroundCard,
+    borderRadius: APP_RADIUS.pill,
+    padding: 6,
+    alignSelf: 'flex-start',
   },
   segmentedItem: {
-    flex: 1,
-    paddingVertical: 10,
+    paddingHorizontal: 32,
+    paddingVertical: 8,
+    borderRadius: APP_RADIUS.pill,
     alignItems: 'center',
   },
   segmentedItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: APP_COLORS.backgroundInput,
+    shadowColor: '#000000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   segmentedText: {
     fontSize: 14,
+    lineHeight: 20,
     fontWeight: '700',
-    color: '#CFCFCF',
+    color: APP_COLORS.textSecondary,
   },
   segmentedTextActive: {
-    color: '#FFFFFF',
+    color: APP_COLORS.accent,
   },
 
   // ChatHeader styles
   chatHeaderContainer: {
-    backgroundColor: '#000000',
+    backgroundColor: APP_COLORS.backgroundBase,
     paddingBottom: 0,
     paddingHorizontal: 0,
   },
@@ -257,14 +276,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chatHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     textAlign: 'center',
   },
   chatHeaderSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
   },
   settingsButton: {
@@ -296,25 +312,20 @@ const styles = StyleSheet.create({
   centerTitle: {
     alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
+  title: {},
   titleShadow: {
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   subtitle: {
-    fontSize: 12,
     marginTop: 2,
-    fontWeight: '500',
   },
   ctaBtn: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: APP_RADIUS.pill,
     minWidth: 60,
     alignItems: 'center',
   },
@@ -322,9 +333,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   ctaText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+    color: APP_COLORS.onAccent,
   },
   pressed: {
     opacity: 0.6,
