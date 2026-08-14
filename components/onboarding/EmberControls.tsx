@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { forwardRef, ReactNode } from 'react'
 import {
@@ -335,6 +336,46 @@ export function EmberInlineToggle({
   )
 }
 
+/**
+ * A section as a card, with an icon badge — the treatment Your Journey uses.
+ *
+ * Distinct from `EmberSection`, which is a heading over open content. This one
+ * encloses its fields in a surface, and the enclosure is the point: that screen
+ * asks three unrelated questions (where you are, what you do, where you
+ * studied) and without a boundary they read as one long form. The card is what
+ * makes them three things.
+ *
+ * The badge is a circle in the accent colour at low alpha rather than a solid
+ * fill, so three of them stacked do not turn the screen into a row of traffic
+ * lights.
+ */
+export function EmberCardSection({
+  icon,
+  title,
+  caption,
+  children,
+}: {
+  icon: keyof typeof Ionicons.glyphMap
+  title: string
+  caption?: string
+  children: ReactNode
+}) {
+  return (
+    <View style={styles.cardSection}>
+      <View style={styles.cardHead}>
+        <View style={styles.cardBadge}>
+          <Ionicons name={icon} size={18} color={EMBER.accent} />
+        </View>
+        <View style={styles.cardHeadText}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          {caption ? <Text style={styles.cardCaption}>{caption}</Text> : null}
+        </View>
+      </View>
+      <View style={styles.cardBody}>{children}</View>
+    </View>
+  )
+}
+
 /** A label over an arbitrary control — chips, a grid, a toggle row. */
 export function EmberFieldGroup({
   label,
@@ -453,6 +494,33 @@ const styles = StyleSheet.create({
   // 12 between the heading block and the caption, 24 before the content —
   // so the caption reads as belonging to the heading rather than floating
   // between two things.
+  cardSection: {
+    backgroundColor: EMBER.surfaceMedia,
+    borderRadius: EMBER_RADIUS.card,
+    borderWidth: 1,
+    borderColor: 'rgba(73,71,71,0.2)',
+    padding: 20,
+    gap: 20,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  cardBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: 'rgba(255,144,109,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardHeadText: { flex: 1, gap: 2 },
+  cardTitle: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 18,
+    lineHeight: 26,
+    color: EMBER.textPrimary,
+  },
+  cardCaption: { ...EMBER_TYPE.helper, fontSize: 13, lineHeight: 18 },
+  cardBody: { gap: 16 },
+
   section: { gap: 12 },
   sectionHead: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import {
+  EmberCardSection,
   EmberChip,
   EmberChipRow,
   EmberField,
@@ -69,7 +70,7 @@ export default function JourneyScreen() {
       step="journey"
       title="Your "
       titleAccent="journey"
-      subtitle="Fill in your professional and educational milestones to craft your unique narrative."
+      subtitle="Almost there. Fill in your professional and educational milestones."
       ctaLabel="Continue Exploration"
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
@@ -77,54 +78,78 @@ export default function JourneyScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      <EmberField
-        label="Current base"
-        placeholder="Search city"
-        helper="Where you are making your impact."
-        value={location}
-        onChangeText={setLocation}
-        autoCapitalize="words"
-        maxLength={200}
-      />
+      {/*
+        Three cards, not seven stacked fields.
+        
+        The screen asks three unrelated questions — where you are, what you do,
+        where you studied — and without a boundary between them they read as one
+        long form. Enclosing each is what makes them three things, which is what
+        the frame does and what "just casual boxes" was describing.
+      */}
+      <EmberCardSection
+        icon="location-outline"
+        title="Current Base"
+        caption="Where you are making your impact"
+      >
+        <EmberField
+          label="City"
+          placeholder="Search city"
+          value={location}
+          onChangeText={setLocation}
+          autoCapitalize="words"
+          maxLength={200}
+        />
+      </EmberCardSection>
 
-      <EmberField
-        label="Occupation"
-        placeholder="Job title (e.g. Creative Director)"
-        value={occupation}
-        onChangeText={setOccupation}
-        autoCapitalize="sentences"
-        maxLength={100}
-      />
+      <EmberCardSection
+        icon="briefcase-outline"
+        title="Occupation"
+        caption="Your professional identity and role"
+      >
+        <EmberField
+          label="Job title"
+          placeholder="e.g. Creative Director"
+          value={occupation}
+          onChangeText={setOccupation}
+          autoCapitalize="sentences"
+          maxLength={100}
+        />
 
-      {/* Rendered only once the server has answered — an empty chip row with a
-          label above it reads as a section that failed to load. */}
-      {fields.length > 0 ? (
-        <EmberFieldGroup
-          label="Field of work"
-          helper="The only part of this shown in a room. Your job title and employer are not."
-        >
-          <EmberChipRow>
-            {fields.map((field) => (
-              <EmberChip
-                key={field.slug}
-                label={field.label}
-                selected={workField === field.slug}
-                onPress={() => setWorkField(workField === field.slug ? undefined : field.slug)}
-              />
-            ))}
-          </EmberChipRow>
-        </EmberFieldGroup>
-      ) : null}
+        {/* Only once the server has answered — an empty chip row under a label
+            reads as a section that failed to load. */}
+        {fields.length > 0 ? (
+          <EmberFieldGroup
+            label="Field of work"
+            helper="The only part of this shown in a room. Your job title and employer are not."
+          >
+            <EmberChipRow>
+              {fields.map((field) => (
+                <EmberChip
+                  key={field.slug}
+                  label={field.label}
+                  selected={workField === field.slug}
+                  onPress={() => setWorkField(workField === field.slug ? undefined : field.slug)}
+                />
+              ))}
+            </EmberChipRow>
+          </EmberFieldGroup>
+        ) : null}
+      </EmberCardSection>
 
-      <EmberField
-        label="Education"
-        placeholder="School / University name"
-        helper="The foundation of your knowledge."
-        value={education}
-        onChangeText={setEducation}
-        autoCapitalize="words"
-        maxLength={100}
-      />
+      <EmberCardSection
+        icon="school-outline"
+        title="Education"
+        caption="The foundation of your knowledge"
+      >
+        <EmberField
+          label="School / University"
+          placeholder="Where you studied"
+          value={education}
+          onChangeText={setEducation}
+          autoCapitalize="words"
+          maxLength={100}
+        />
+      </EmberCardSection>
     </OnboardingScreen>
   )
 }
