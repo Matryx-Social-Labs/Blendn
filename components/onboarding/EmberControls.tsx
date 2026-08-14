@@ -387,7 +387,26 @@ const styles = StyleSheet.create({
   // so the caption reads as belonging to the heading rather than floating
   // between two things.
   section: { gap: 12 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    /*
+     * Reserved, so the row does not grow when the control appears.
+     *
+     * The toggle is conditional — it only shows once an orientation is picked —
+     * and its pill is taller than the heading's 28pt line box. Without a floor,
+     * picking a chip made the row grow by the difference and shoved the
+     * heading, the caption and every section below it down the screen. The
+     * content did not change; the container did, at the exact moment somebody
+     * was looking at what they had just tapped.
+     *
+     * 40 clears the pill (12 of padding around a switch scaled to 0.8) and the
+     * title centres inside it either way, so the two states are the same height.
+     */
+    minHeight: 40,
+  },
   sectionTitle: {
     flex: 1,
     fontFamily: EMBER_FONTS.displayBold,
