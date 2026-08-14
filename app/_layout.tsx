@@ -26,7 +26,7 @@ import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
-import { ONBOARDING_IMAGES } from '../lib/onboardingAssets';
+import { ONBOARDING_IMAGES, prefetchOnboardingImages } from '../lib/onboardingAssets';
 
 initSentry();
 
@@ -110,6 +110,10 @@ function RootLayout() {
      * does.
      */
     Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET, ...ONBOARDING_IMAGES])
+      // ...then warm `expo-image`'s cache with the same files, because that is
+      // the one the onboarding screens actually read from. Downloading is not
+      // decoding, and the two libraries do not share a cache.
+      .then(prefetchOnboardingImages)
       .catch(() => {})
       .finally(() => setImagesReady(true));
   }, []);

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Image, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image'
 
 import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
@@ -49,7 +50,7 @@ const YOU_ART = require('../../assets/onboarding/you.jpg')
 export function NotificationIllustration() {
   return (
     <View style={styles.card}>
-      <Image source={NOTIFICATION_ART} style={styles.art} resizeMode="cover" />
+      <Image source={NOTIFICATION_ART} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
       {/* Bottom-to-top scrim so the card reads against a bright patch of art. */}
       <LinearGradient
         colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.75)']}
@@ -94,7 +95,7 @@ export function LocationIllustration() {
         The map sits at 40% opacity in the frame, which is what stops it
         competing with the pins on top of it.
       */}
-      <Image source={LOCATION_ART} style={[styles.art, styles.mapDim]} resizeMode="cover" />
+      <Image source={LOCATION_ART} style={[styles.art, styles.mapDim]} contentFit="cover" transition={180} cachePolicy="memory-disk" />
 
       {/* Everything below is positioned inside a box inset 32px from the card,
           because that is the frame the design measures its pins against. */}
@@ -110,13 +111,13 @@ export function LocationIllustration() {
               { left: person.left, top: person.top, width: person.size, height: person.size },
             ]}
           >
-            <Image source={person.art} style={styles.nearbyPhoto} resizeMode="cover" />
+            <Image source={person.art} style={styles.nearbyPhoto} contentFit="cover" transition={180} cachePolicy="memory-disk" />
           </View>
         ))}
 
         <View style={styles.youWrap}>
           <View style={styles.you}>
-            <Image source={YOU_ART} style={styles.youPhoto} resizeMode="cover" />
+            <Image source={YOU_ART} style={styles.youPhoto} contentFit="cover" transition={180} cachePolicy="memory-disk" />
           </View>
           <View style={styles.youTag}>
             <Text style={styles.youTagText}>YOU</Text>

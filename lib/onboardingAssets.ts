@@ -1,3 +1,6 @@
+import { Asset } from 'expo-asset'
+import { Image } from 'expo-image'
+
 /*
  * Every image the onboarding screens render, in one list.
  *
@@ -24,6 +27,19 @@
  * reads them from the bundle. Both get faster from this; dev gets much faster.
  */
 
+/*
+ * ...and warming them has to use the same cache the screens read from.
+ *
+ * `Asset.loadAsync` downloads into **Expo's** asset cache. React Native's
+ * `<Image>` keeps its own, so a prefetched file was fetched again by the
+ * component that actually drew it — which is why the globe and the "you" pin
+ * still arrived a beat late despite being preloaded.
+ *
+ * The screens use `expo-image` now, which reads the cache `Image.prefetch`
+ * writes to, so `prefetchOnboardingImages` below is the warm-up that matches.
+ * `Asset.loadAsync` stays for the splash gate: it is what makes the promise
+ * resolve only once the bytes are on disk.
+ */
 export const ONBOARDING_IMAGES = [
   require('../assets/onboarding/notifications.jpg'),
   require('../assets/onboarding/location-map.jpg'),
@@ -37,3 +53,20 @@ export const ONBOARDING_IMAGES = [
   require('../assets/onboarding/looking-travel.jpg'),
   require('../assets/onboarding/looking-open.jpg'),
 ]
+
+/**
+ * Warm `expo-image`'s own cache, which is the one the screens read.
+ *
+ * Fire-and-forget: a failure here costs a fade-in on one screen, and blocking
+ * startup on decorative artwork would be the worse trade.
+ */
+export async function prefetchOnboardingImages(): Promise<void> {
+  try {
+    await Image.prefetch(
+      ONBOARDING_IMAGES.map((m) => Asset.fromModule(m).uri).filter(Boolean),
+      { cachePolicy: 'memory-disk' }
+    )
+  } catch {
+    // Decorative. Nothing here is worth failing a launch over.
+  }
+}
