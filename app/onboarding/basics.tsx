@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 
 import {
   EmberChip,
@@ -51,6 +51,17 @@ export default function BasicsScreen() {
   const [name, setName] = useState('')
   const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
+
+  /*
+   * Three boxes, and the keyboard should walk between them.
+   *
+   * Typing `1` `7` into DD and then having to *aim* at MM is the kind of
+   * friction that reads as the app being slow rather than as one extra tap.
+   * Advancing on a full box is what every date field and every OTP field does,
+   * so it is also what people already expect.
+   */
+  const monthRef = useRef<TextInput>(null)
+  const yearRef = useRef<TextInput>(null)
 
   // Prefilled once storage has answered, not on every render — otherwise a
   // rehydrate landing mid-edit would overwrite what is being typed.
@@ -112,7 +123,13 @@ export default function BasicsScreen() {
               label="Day of birth"
               placeholder="DD"
               value={dob.day}
-              onChangeText={(day) => setDob({ ...dob, day: digits(day, 2) })}
+              onChangeText={(value) => {
+                const day = digits(value, 2)
+                setDob({ ...dob, day })
+                // Two digits, or a leading digit that cannot start a valid day
+                // (`4`–`9` means April..., not the 4th of a two-digit day).
+                if (day.length === 2 || Number(day) > 3) monthRef.current?.focus()
+              }}
               keyboardType="number-pad"
               maxLength={2}
             />
@@ -122,8 +139,13 @@ export default function BasicsScreen() {
               compact
               label="Month of birth"
               placeholder="MM"
+              ref={monthRef}
               value={dob.month}
-              onChangeText={(month) => setDob({ ...dob, month: digits(month, 2) })}
+              onChangeText={(value) => {
+                const month = digits(value, 2)
+                setDob({ ...dob, month })
+                if (month.length === 2 || Number(month) > 1) yearRef.current?.focus()
+              }}
               keyboardType="number-pad"
               maxLength={2}
             />
@@ -133,6 +155,7 @@ export default function BasicsScreen() {
               compact
               label="Year of birth"
               placeholder="YYYY"
+              ref={yearRef}
               value={dob.year}
               onChangeText={(year) => setDob({ ...dob, year: digits(year, 4) })}
               keyboardType="number-pad"

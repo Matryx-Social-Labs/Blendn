@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet } from 'react-native'
 
 import {
   EmberChip,
@@ -11,7 +11,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
 import { previousStep } from '../../lib/onboarding'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER_RADIUS } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -70,6 +70,25 @@ export default function DetailsScreen() {
       onSecondary={() => void skip()}
       onBack={() => goTo(previousStep('details')!)}
     >
+      {/*
+        Before the interest chips, not after.
+        
+        The chips are a long, scrolling wall of choices; a text field below them
+        is a field most people never reach. This is also the more personal
+        question, and asking it first means it gets answered while attention is
+        still fresh.
+      */}
+      <EmberField
+        label="About me"
+        placeholder="Ask me about… surprise experiences, the best hidden coffee in the city, or the recent obsession with blockchain architecture."
+        helper={`${bio.length}/${BIO_LIMIT}`}
+        value={bio}
+        onChangeText={(text) => setBio(text.slice(0, BIO_LIMIT))}
+        multiline
+        maxLength={BIO_LIMIT}
+        style={styles.bio}
+      />
+
       {groups.map((group) => (
         <EmberFieldGroup key={group.id} label={group.name}>
           <EmberChipRow>
@@ -85,27 +104,7 @@ export default function DetailsScreen() {
         </EmberFieldGroup>
       ))}
 
-      <EmberFieldGroup label="About me">
-        <EmberField
-          label="About me"
-          placeholder="Ask me about… surprise experiences, the best hidden coffee in the city, or the recent obsession with blockchain architecture."
-          value={bio}
-          onChangeText={(text) => setBio(text.slice(0, BIO_LIMIT))}
-          multiline
-          maxLength={BIO_LIMIT}
-          style={styles.bio}
-        />
-        {/*
-         * A live count rather than a silent truncation at the limit. The field
-         * caps at 500 to match the API, and someone typing past it with no
-         * indication would think the keyboard had stopped working.
-         */}
-        <View style={styles.counterRow}>
-          <Text style={styles.counter}>
-            {bio.length}/{BIO_LIMIT}
-          </Text>
-        </View>
-      </EmberFieldGroup>
+
     </OnboardingScreen>
   )
 }
@@ -118,6 +117,4 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     textAlignVertical: 'top',
   },
-  counterRow: { alignItems: 'flex-end' },
-  counter: { ...EMBER_TYPE.helper, color: EMBER.textTertiary },
 })

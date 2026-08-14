@@ -28,8 +28,16 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * either an unmoderated video on a profile or a rejection after the upload
  * finished. In `docs/ONBOARDING.md`.
  *
- * The first photo is the primary one: the server mirrors `photos[0]` onto
- * `User.image`, which is what DMs and conversation lists render.
+ * ## Choosing which one is the primary
+ *
+ * `photos[0]` is not just the first one you happened to add — the server
+ * mirrors it onto `User.image`, and that is the single image DMs, conversation
+ * lists and the reveal all render. So it needs to be a choice, not an accident
+ * of upload order.
+ *
+ * Tapping a photo promotes it to the front rather than opening a menu. One tap,
+ * no modal, and the layout says which one won because the primary slot is the
+ * big one. Removing moved to a corner button, since tap now means promote.
  */
 
 const SLOTS = 6
@@ -59,6 +67,10 @@ export default function MediaScreen() {
   const remove = (index: number) =>
     setPhotos((current) => current.filter((_, i) => i !== index))
 
+  /** Move a photo to the front. `photos[0]` is what everyone else sees. */
+  const makePrimary = (index: number) =>
+    setPhotos((current) => [current[index], ...current.filter((_, i) => i !== index)])
+
   return (
     <OnboardingScreen
       step="media"
@@ -72,46 +84,79 @@ export default function MediaScreen() {
       onSecondary={() => void skip()}
       onBack={() => goTo(previousStep('media')!)}
     >
+      {/*
+        Only as many slots as are useful: every photo so far, plus one empty
+        one to add the next. Six empty dashed squares made the screen twice as
+        tall as it needed to be and most of that height was nothing.
+      */}
       <View style={styles.grid}>
-        {Array.from({ length: SLOTS }, (_, index) => {
-          const url = photos[index]
-          const busy = uploadingSlot === index
-          // The first slot is twice as tall: it is the primary photo, mirrored
-          // onto `User.image` and shown in DMs, so it earns the emphasis.
-          const wide = index === 0
+        {photos.map((url, index) => {
+          const primary = index === 0
 
           return (
             <Pressable
-              key={index}
-              onPress={() => (url ? remove(index) : void add(index))}
-              disabled={uploadingSlot !== null}
+              key={url}
+              onPress={() => (primary ? undefined : makePrimary(index))}
+              disabled={uploadingSlot !== null || primary}
               accessibilityRole="button"
               accessibilityLabel={
-                url
-                  ? `Remove photo ${index + 1}`
-                  : `Add ${index === 0 ? 'your main photo' : `photo ${index + 1}`}`
+                primary ? 'Your main photo' : `Make photo ${index + 1} your main photo`
               }
-              style={[styles.slot, wide && styles.slotWide, !url && styles.slotEmpty]}
+              style={[styles.slot, primary && styles.slotPrimary]}
             >
-              {url ? (
-                <>
-                  <Image source={{ uri: url }} style={styles.photo} resizeMode="cover" />
-                  <View style={styles.removeBadge}>
-                    <Ionicons name="close" size={14} color={EMBER.onGradientChip} />
-                  </View>
-                </>
-              ) : busy ? (
-                <ActivityIndicator color={EMBER.accent} />
-              ) : (
-                <Ionicons name="add" size={24} color={EMBER.accent} />
-              )}
+              <Image source={{ uri: url }} style={styles.photo} resizeMode="cover" />
+
+              {primary ? (
+                <View style={styles.primaryTag}>
+                  <Text style={styles.primaryTagText}>MAIN</Text>
+                </View>
+              ) : null}
+
+              {/*
+                Remove is its own hit target now that tapping the photo means
+                "make this the main one". A single tap cannot mean both.
+              */}
+              <Pressable
+                onPress={() => remove(index)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove photo ${index + 1}`}
+                style={styles.removeBadge}
+              >
+                <Ionicons name="close" size={14} color={EMBER.onGradientChip} />
+              </Pressable>
             </Pressable>
           )
         })}
+
+        {photos.length < SLOTS ? (
+          <Pressable
+            onPress={() => void add(photos.length)}
+            disabled={uploadingSlot !== null}
+            accessibilityRole="button"
+            accessibilityLabel={photos.length === 0 ? 'Add your main photo' : 'Add a photo'}
+            style={[styles.slot, photos.length === 0 && styles.slotPrimary, styles.slotEmpty]}
+          >
+            {uploadingSlot !== null ? (
+              <ActivityIndicator color={EMBER.accent} />
+            ) : (
+              // Centred by the slot's own alignment rather than positioned, so
+              // it stays in the middle whatever size the slot is.
+              <View style={styles.addInner}>
+                <Ionicons name="add" size={28} color={EMBER.accent} />
+                <Text style={styles.addLabel}>
+                  {photos.length === 0 ? 'Add your main photo' : 'Add another'}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        ) : null}
       </View>
 
       <Text style={styles.note}>
-        JPG and PNG, up to 6 photos. Your first photo is the one people see first.
+        {photos.length > 1
+          ? 'Tap any photo to make it your main one. JPG and PNG, up to 6.'
+          : 'JPG and PNG, up to 6 photos. Your main photo is the one people see first.'}
       </Text>
     </OnboardingScreen>
   )
@@ -128,7 +173,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  slotWide: { width: '100%', aspectRatio: 1.3 },
+  slotPrimary: { width: '100%', aspectRatio: 1.3 },
   slotEmpty: {
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -136,6 +181,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   photo: { width: '100%', height: '100%' },
+  addInner: { alignItems: 'center', gap: 8 },
+  addLabel: { ...EMBER_TYPE.helper, color: EMBER.accent },
+  primaryTag: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
+  },
+  primaryTagText: { ...EMBER_TYPE.helper, color: EMBER.onGradientChip, fontSize: 10 },
   removeBadge: {
     position: 'absolute',
     top: 12,

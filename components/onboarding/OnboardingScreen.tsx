@@ -84,8 +84,18 @@ export function OnboardingScreen({
        * whole screen and would otherwise eat every tap on the form beneath.
        */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <View style={[styles.blob, styles.blobWarm]} />
-        <View style={[styles.blob, styles.blobCool]} />
+        <LinearGradient
+          colors={[EMBER_ATMOSPHERE.warm.color, 'rgba(255,144,109,0)']}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.blob, styles.blobWarm]}
+        />
+        <LinearGradient
+          colors={[EMBER_ATMOSPHERE.cool.color, 'rgba(255,109,141,0)']}
+          start={{ x: 0.7, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={[styles.blob, styles.blobCool]}
+        />
       </View>
 
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -172,26 +182,27 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   /*
-   * React Native has no blur on a plain View, and `expo-blur` blurs what is
-   * *behind* a view rather than the view itself — which is the wrong tool for a
-   * soft-edged shape. A large, heavily-rounded, very low-opacity block reads
-   * the same at 5% alpha, and costs nothing.
+   * The atmospheric glow, as a gradient that fades to transparent.
+   *
+   * The first version used a flat `backgroundColor` on a rounded view, which
+   * was wrong in a way that shows: even at 5% alpha a solid fill has an *edge*,
+   * so it reads as a colour block sitting on the page rather than as light
+   * bleeding into it. The design's version has no edge anywhere.
+   *
+   * `expo-blur` is the wrong tool — it blurs what is *behind* a view, not the
+   * view itself. `react-native-svg` would give a true radial gradient and is
+   * not installed; a linear gradient running to a fully transparent stop gets
+   * close enough on a shape this large and this faint, and adds no dependency.
+   *
+   * The two run at opposing angles so the corners they fade toward are
+   * different, which stops the pair reading as one diagonal wash.
    */
   blob: { position: 'absolute', borderRadius: 9999 },
-  blobWarm: {
-    backgroundColor: EMBER_ATMOSPHERE.warm.color,
-    width: 220,
-    height: 460,
-    left: -80,
-    top: -120,
-  },
-  blobCool: {
-    backgroundColor: EMBER_ATMOSPHERE.cool.color,
-    width: 180,
-    height: 340,
-    right: -60,
-    top: 210,
-  },
+  // Larger and further off-screen than the solid version, because a gradient
+  // that fades needs room to fade in — clipping it at the edge reinstates the
+  // hard line this change exists to remove.
+  blobWarm: { width: 320, height: 560, left: -140, top: -180 },
+  blobCool: { width: 280, height: 460, right: -120, top: 180 },
 
   header: {
     flexDirection: 'row',
