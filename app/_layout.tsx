@@ -26,6 +26,7 @@ import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
+import { ONBOARDING_IMAGES } from '../lib/onboardingAssets';
 
 initSentry();
 
@@ -96,7 +97,19 @@ function RootLayout() {
    * before it.
    */
   useEffect(() => {
-    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET])
+    /*
+     * The onboarding artwork joins the splash preload rather than loading when
+     * its screen mounts.
+     *
+     * A new account reaches those screens seconds after this runs, so warming
+     * them here costs nothing anybody waits for and removes the pop-in that a
+     * first-time user would otherwise see on three separate screens.
+     *
+     * They are appended rather than gating separately: the splash already waits
+     * on this promise, and 388 KB of local images resolves long before auth
+     * does.
+     */
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET, ...ONBOARDING_IMAGES])
       .catch(() => {})
       .finally(() => setImagesReady(true));
   }, []);

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS } from '../../lib/theme'
 
@@ -21,12 +21,29 @@ import { EMBER, EMBER_RADIUS } from '../../lib/theme'
  * imports.
  */
 
+/*
+ * The card size, computed rather than declared as a percentage.
+ *
+ * These were `width: '48%'` with `aspectRatio: 1`, and they rendered as five
+ * thin lines. Every child of a card is absolutely positioned — the image, the
+ * scrim, the label — so the card has no in-flow content to derive a height
+ * from, and `aspectRatio` against a percentage width did not supply one. The
+ * result collapsed to the border and nothing else.
+ *
+ * Real numbers have no such failure mode: 24pt of screen padding each side, a
+ * 16pt gap, split in two. It is also what `app/(tabs)/events.tsx` already does
+ * for its carousel, for the same reason.
+ */
+const SCREEN_PADDING = 24
+const GRID_GAP = 16
+const CARD = Math.floor((Dimensions.get('window').width - SCREEN_PADDING * 2 - GRID_GAP) / 2)
+
 export const LOOKING_FOR_OPTIONS = [
-  { value: 'Dating', icon: 'heart' as const, art: require('../../assets/onboarding/looking-dating.png') },
-  { value: 'Friendship', icon: 'people' as const, art: require('../../assets/onboarding/looking-friendship.png') },
-  { value: 'Networking', icon: 'briefcase' as const, art: require('../../assets/onboarding/looking-networking.png') },
-  { value: 'Travel', icon: 'compass' as const, art: require('../../assets/onboarding/looking-travel.png') },
-  { value: 'Open', icon: 'infinite' as const, art: require('../../assets/onboarding/looking-open.png') },
+  { value: 'Dating', icon: 'heart' as const, art: require('../../assets/onboarding/looking-dating.jpg') },
+  { value: 'Friendship', icon: 'people' as const, art: require('../../assets/onboarding/looking-friendship.jpg') },
+  { value: 'Networking', icon: 'briefcase' as const, art: require('../../assets/onboarding/looking-networking.jpg') },
+  { value: 'Travel', icon: 'compass' as const, art: require('../../assets/onboarding/looking-travel.jpg') },
+  { value: 'Open', icon: 'infinite' as const, art: require('../../assets/onboarding/looking-open.jpg') },
 ]
 
 export function LookingForCards({
@@ -76,12 +93,10 @@ export function LookingForCards({
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   card: {
-    // Two across with a 16px gap. `48%` leaves the gap room without needing to
-    // know the screen width.
-    width: '48%',
-    aspectRatio: 1,
+    width: CARD,
+    height: CARD,
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
     backgroundColor: 'rgba(39,37,37,0.4)',
