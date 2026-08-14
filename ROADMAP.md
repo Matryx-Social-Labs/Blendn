@@ -401,6 +401,34 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **Onboarding, eight screens** — `app/onboarding/*` against the Figma
+  *🕓 Updates* canvas, on the Ember tokens. Per-step save, resume on quit, and
+  the first writer `profiles.onboarded` has ever had.
+
+  Phone and OTP were not built: there is no phone auth on the server, so those
+  two frames would collect a number nothing can verify.
+
+  State lives in AsyncStorage keyed per user id rather than in a provider —
+  expo-router gives each step its own mount, so there is no React parent that
+  survives navigation, and storage is what carries an answer from step three to
+  step seven *and* across a force-quit. Routing reads it with no network call:
+  a record exists only while a flow is unfinished, so an established account
+  costs one local miss.
+
+  Two saves per step and they differ on purpose: the whole draft locally, only
+  that step's fields to the server. Sending everything each time would mean
+  going back to fix a typo in your name re-sends an empty `bio`, and the API
+  reads a present key as "set this" — a correction on step one wiping an answer
+  from step six.
+
+  Eight places the frames ask for something the product does not have — the
+  orientation "show on profile" toggle, Travel/Open as intents, "Other" versus
+  `prefer_not_to_say`, employment type, class year, invented interest labels,
+  MP4 upload, and four contradictory progress schemes — are each mapped
+  honestly or left out, and every one is written down in `docs/ONBOARDING.md`
+  with the decision it needs.
+
+
 - **The Liquid Ember token layer** — `EMBER`, `EMBER_TYPE`, `EMBER_GRADIENT`,
   `EMBER_GLOW`, `EMBER_ATMOSPHERE`, `EMBER_RADIUS` in `lib/theme.ts`, plus
   Plus Jakarta Sans and Manrope loaded through `lib/fonts.ts`. Measured off the

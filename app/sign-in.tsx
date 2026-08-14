@@ -151,8 +151,9 @@ export default function SignIn() {
         setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
         return
       }
-      // Both cases: the root layout's routing effect takes it from here. A
-      // new account lands on about-you, a returning one on the events tab.
+      // Both cases: the root layout's routing effect takes it from here. A new
+      // account starts onboarding, a returning one resumes wherever it stopped
+      // or goes to the events tab.
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')
