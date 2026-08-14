@@ -272,6 +272,28 @@ export function stepPayload(
 }
 
 /**
+ * Is this person anonymous in rooms?
+ *
+ * **The answer is yes unless they have explicitly said otherwise.** Anonymity
+ * is the product, not a setting on it: the pseudonymous room is the reason
+ * `maySeeIdentity` exists, the reason the roster returns "Attendee", and the
+ * reason a check-in row is created `revealed: false` no matter what the profile
+ * says. A default that leaned the other way would quietly undo all three.
+ *
+ * This is a function rather than a `useState(true)` in the screen for one
+ * reason: a literal in a component is a thing any future edit can flip, and
+ * nothing would fail. Here it is one line with a test on it, so flipping it
+ * breaks the build instead of breaking somebody's anonymity.
+ *
+ * The stored column is `reveal_by_default`, so the two are inverses. Absent
+ * means anonymous — `undefined` is a person who has not answered, and the
+ * safe reading of silence is the private one.
+ */
+export function anonymousByDefault(draft: Pick<OnboardingDraft, 'reveal_by_default'>): boolean {
+  return !(draft.reveal_by_default ?? false)
+}
+
+/**
  * Whether to record consent to show an orientation.
  *
  * `false` whenever there is no orientation, regardless of what the switch says.

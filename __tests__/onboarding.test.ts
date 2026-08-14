@@ -13,6 +13,7 @@ import {
   ONBOARDING_ROUTES,
   ONBOARDING_STEPS,
   advance,
+  anonymousByDefault,
   canContinue,
   isCompleteDateOfBirth,
   isSkippable,
@@ -280,5 +281,45 @@ describe('orientationConsent', () => {
      */
     expect(orientationConsent(undefined, true)).toBe(false)
     expect(orientationConsent('', true)).toBe(false)
+  })
+})
+
+/*
+ * Anonymity is the product, not a setting on it.
+ *
+ * The pseudonymous room is why `maySeeIdentity` exists, why the roster returns
+ * "Attendee", and why a check-in row is created `revealed: false` whatever the
+ * profile says. A default leaning the other way undoes all three at once, and
+ * it would do it silently — nobody's screen breaks, people are just visible who
+ * did not ask to be.
+ *
+ * These exist because the default used to live as `useState(true)` inside a
+ * component, where any edit could flip it and nothing would fail.
+ */
+describe('anonymousByDefault', () => {
+  it('is anonymous for a brand-new account', () => {
+    expect(anonymousByDefault({})).toBe(true)
+  })
+
+  it('is anonymous when the field is explicitly absent', () => {
+    // `undefined` is somebody who has not answered, and the safe reading of
+    // silence is the private one.
+    expect(anonymousByDefault({ reveal_by_default: undefined })).toBe(true)
+  })
+
+  it('is anonymous when the stored answer is not to reveal', () => {
+    expect(anonymousByDefault({ reveal_by_default: false })).toBe(true)
+  })
+
+  it('is the only case that is not anonymous: an explicit yes', () => {
+    expect(anonymousByDefault({ reveal_by_default: true })).toBe(false)
+  })
+
+  it('round-trips against what the screen writes back', () => {
+    // The screen stores `reveal_by_default: !anonymous`. If these two ever
+    // disagree, a person who chose one thing is saved as the other.
+    for (const anonymous of [true, false]) {
+      expect(anonymousByDefault({ reveal_by_default: !anonymous })).toBe(anonymous)
+    }
   })
 })
