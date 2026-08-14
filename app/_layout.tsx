@@ -18,6 +18,8 @@ import {
 } from '../lib/notifications';
 import { apiClient } from '../lib/apiClient';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
+import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
+import { readOnboarding } from '../lib/onboardingStorage';
 import { useAuth } from '../lib/useAuth';
 import { APP_COLORS } from '../lib/theme';
 import queryCache from '../lib/queryCache';
@@ -199,7 +201,7 @@ function RootLayout() {
       }
 
       /*
-       * There is no onboarding gate any more.
+       * The onboarding gate is back, and it is the resume rule this time.
        *
        * This used to read `profiles.onboarded` — from an AsyncStorage cache,
        * then from the API — and send anyone false to `/onboarding/welcome`.
@@ -217,6 +219,28 @@ function RootLayout() {
        * (`dashboard/actions.ts`, `users/actions.ts`). It stops meaning "has
        * finished onboarding" and starts meaning "existed before 2026-08-10",
        * which is noted in the API roadmap rather than backfilled.
+       *
+       * ---
+       *
+       * That was true until the flow came back. The reason the old gate was a
+       * problem is preserved above and still applies: it pointed at screens
+       * that did not exist, and it paid for a `getProfile` on every cold start.
+       *
+       * What is different now:
+       *
+       *  - The screens exist, all eight of them, and `resumeStep` cannot name
+       *    a route that does not — `ONBOARDING_ROUTES` is exhaustive over the
+       *    step union, and a stored step this build does not recognise parses
+       *    back to the first one rather than to a dead route.
+       *  - There is **no network call on the launch path**. The gate reads
+       *    AsyncStorage, which is where each step already writes its progress.
+       *    A record exists only while a flow is unfinished; finishing deletes
+       *    it, so the steady state for every established account is one miss on
+       *    a local read.
+       *  - `isNewAccount` alone was never enough. It is session-scoped — false
+       *    on the next launch — so someone who quit on step five came back to
+       *    the events tab with a half-filled profile and no way back in. That
+       *    is the bug the stored record exists to close.
        */
 
       /*
@@ -249,8 +273,17 @@ function RootLayout() {
          * Routing has one owner. The screens now record *what happened*
          * (`isNewAccount`) and this decides where that leads.
          */
-        const target = isNewAccount ? '/about-you' : '/(tabs)/events';
-        replaceIfNeeded(target);
+        const stored = user?.id ? await readOnboarding(user.id) : null;
+        const resume = resumeStep({
+          // Only what this device knows. Reading `profiles.onboarded` would be
+          // the network call the note above says this path no longer makes —
+          // and a finished flow deletes its local record, so its absence
+          // already means "nothing to resume".
+          finishedOnServer: false,
+          stored: stored?.progress ?? null,
+          isNewAccount,
+        });
+        replaceIfNeeded(resume ? ONBOARDING_ROUTES[resume] : '/(tabs)/events');
       } else {
         // Clear last target if user navigated to a normal screen
         lastRedirectRef.current = null;
@@ -365,6 +398,20 @@ function RootLayout() {
            * on the events tab. What this prevents is swiping back to the signup
            * form of an account that now exists, which would offer to create it
            * again and fail with "that email is already registered".
+           */
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="onboarding"
+        options={{
+          headerShown: false,
+          animation: routeTransition,
+          /*
+           * No swipe back out of the flow. Its own stack handles moving between
+           * steps; a gesture at this level would drop someone out of onboarding
+           * entirely onto the signup form of an account that now exists, which
+           * offers to create it again and fails with "already registered".
            */
           gestureEnabled: false,
         }}
