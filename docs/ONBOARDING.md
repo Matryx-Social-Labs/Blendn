@@ -134,7 +134,27 @@ profile", and `EmberToggle` requires its helper text rather than accepting it as
 optional. A privacy switch whose blast radius is not on the screen is one people
 mis-set, and the cost of mis-setting this one is not symmetrical.
 
-### 2. "Looking for" does not reach matching
+### 2. Orientation: the frame says "select all", the column holds one
+
+Frame `1141:4192` captions the Orientation chips *"Select all that apply to
+you"*. Two things make that impossible as drawn:
+
+- `profiles.orientation` is a single `String?`
+- `deriveInterestedIn` reads exactly one value from it
+
+So the screen is single-select and the caption now says so — *"Pick the one that
+fits best."* Shipping the frame's wording over a single-select control would be
+worse than either option, because it tells someone to do something the screen
+then refuses.
+
+**Whether it should be multi-select is a real question.** People do hold more
+than one label, and "queer" plus "bisexual" is a common pair. But it is an API
+change — `orientation` becomes `orientations[]`, and `deriveInterestedIn` has to
+decide what a set of labels implies about who to match — not a caption change.
+
+**Decision needed:** single label, or multiple?
+
+### 3. "Looking for" does not reach matching
 
 The frame offers **Dating, Friendship, Networking, Travel, Open**. The intent
 enum the matcher reads is `dating | networking | friendship | just_here` —

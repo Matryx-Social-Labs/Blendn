@@ -131,7 +131,23 @@ export default function PreferencesScreen() {
     >
       <EmberSection
         title="Orientation"
-        caption="Select all that apply to you"
+        /*
+         * The frame says "Select all that apply to you" and that caption is
+         * wrong here, twice over.
+         *
+         * The control is single-select — tapping a chip replaces the choice —
+         * and `profiles.orientation` is a single `String?` that
+         * `deriveInterestedIn` reads one value from. So the frame's caption
+         * described a control nobody had built and a column that cannot hold
+         * the answer, and copying it onto a single-select was worse than
+         * either: a caption that tells you to do something the screen refuses.
+         *
+         * Whether orientation *should* be multi-select is a real question —
+         * people do hold more than one label — but it is an API change
+         * (`orientation` to `orientations[]`, and `deriveInterestedIn` reworked
+         * around it), not a caption. Raised in docs/ONBOARDING.md.
+         */
+        caption="Pick the one that fits best. Tap again to clear it."
         right={
           orientation ? (
             <EmberInlineToggle
