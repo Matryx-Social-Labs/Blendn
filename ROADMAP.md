@@ -323,6 +323,28 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 
 ## Next
 
+### Wire the presence monitor into the room
+
+`lib/presence.ts` holds the policy and 15 tests hold it to it. Nothing calls it
+yet — the sampling loop belongs in the room screen, which is The Grid, and that
+screen does not exist. The same is true of `RoomVisibilityBanner`.
+
+Both land with The Grid rather than being bolted onto the events tab first,
+because the room is where a checked-in person actually sits.
+
+What is left to wire, and only this:
+
+- sample location on a timer while checked in and in the foreground
+- feed the samples to `presenceAction`
+- `'ask'` shows `PRESENCE_COPY.ask`; a "stay" answer stamps `saidStillHereAt`
+- `'checkOut'` calls the existing check-out endpoint and shows
+  `PRESENCE_COPY.autoCheckedOut` — never silently
+
+The check-in-time permission gate was **already built**: `events.tsx:478` blocks
+check-in without a location and `getCurrentLocationQuietly` requests permission
+and offers Settings when it is refused. Nothing to add there.
+
+
 Ordered by what is broken for a real user today, not by what is interesting.
 
 ### 1. Smaller, confirmed

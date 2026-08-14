@@ -85,14 +85,28 @@ export default function BasicsScreen() {
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
     >
+      {/*
+        Full name, first name displayed.
+        
+        `User.name` is one field and holds whatever signup wrote, so collecting
+        the whole thing costs nothing and the room is protected by the pseudonym
+        regardless — a full name is only ever seen by someone who has matched,
+        opened a conversation, or been revealed to.
+        
+        It also matters at exactly the moment it is seen. "Julian" is thin for
+        someone deciding whether to trust a stranger they are about to meet;
+        the reveal is supposed to be a real identity, and half of one is a
+        strange thing to reveal.
+      */}
       <EmberField
-        label="First name"
-        placeholder="e.g. Julian"
+        label="Your name"
+        placeholder="e.g. Julian Ember"
+        helper="Only your first name shows in an event room. Your full name is for people you match or talk with."
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
-        autoComplete="given-name"
-        textContentType="givenName"
+        autoComplete="name"
+        textContentType="name"
         returnKeyType="next"
         maxLength={100}
       />
