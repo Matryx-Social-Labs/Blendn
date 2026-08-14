@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ReactNode } from 'react'
 import {
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -77,9 +76,6 @@ export function OnboardingScreen({
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
-  // The cool smear is positioned from the right edge, so the SVG needs a real
-  // width to place it — percentages cannot express "15.6px off the right".
-  const { width } = Dimensions.get('window')
   const percent = progressPercent(step)
 
   return (
@@ -88,7 +84,7 @@ export function OnboardingScreen({
        * The two blurred blobs. `pointerEvents="none"` because they cover the
        * whole screen and would otherwise eat every tap on the form beneath.
        */}
-      <AtmosphericBackground width={width} />
+      <AtmosphericBackground />
 
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         {/*

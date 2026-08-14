@@ -1,90 +1,108 @@
 import { StyleSheet, View } from 'react-native'
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg'
 
 import { EMBER } from '../../lib/theme'
 
 /**
  * The two blurred smears behind every onboarding screen.
  *
- * ## Why this is SVG and not a styled View
- *
  * The design is two heavily-blurred rounded rectangles:
  *
  *     warm  156 × 444.8  at left -42.9,  top -122.31,  blur 60px, #FF906D @ 5%
  *     cool  117 × 333.59 at right -15.6, top  211.27,  blur 50px, #FF6D8D @ 5%
  *
- * Two earlier attempts got this wrong in instructive ways. A flat
- * `backgroundColor` on a rounded View has a hard *edge* even at 5% alpha, so it
- * reads as a shape on the page. A `LinearGradient` fading to transparent fixed
- * the edge in one direction and left it in the other three — a blurred ellipse
- * fades outward on every axis, and a linear gradient cannot.
+ * ## Four attempts, and why this one
  *
- * A radial gradient is the primitive that actually matches, which is what
- * `react-native-svg` is here for. `expo-blur` is not an option: it blurs what is
- * *behind* a view, not the view itself.
+ * A flat `backgroundColor` on a rounded View has a hard *edge* even at 5%
+ * alpha, so it reads as a shape sitting on the page. A `LinearGradient` fading
+ * to transparent removed the edge in one direction and left it in the other
+ * three — a blurred ellipse fades outward on every axis and a linear gradient
+ * cannot express that.
  *
- * ## The blur-to-gradient conversion
+ * `react-native-svg` gives a true radial gradient and was the third attempt. It
+ * is also a **native module**, so it renders as "Unimplemented component" in any
+ * dev client built before it was installed — which is every build in existence
+ * at the moment somebody pulls this branch. Correct output, unusable delivery.
  *
- * A Gaussian blur of radius `b` spreads a shape's visible extent by roughly `b`
- * in every direction, with the original edge landing near the half-intensity
- * point. So each ellipse is drawn at `size/2 + blur` and the colour stop that
- * corresponds to the original edge sits partway out, fading to fully
- * transparent at the rim.
+ * So: concentric ellipses at decreasing opacity, in plain Views. This
+ * approximates a radial falloff by stacking, and at 5% peak alpha the steps are
+ * far below the threshold where banding is visible — the whole effect spans
+ * five hundredths of full opacity, and eight layers divide that into slices no
+ * screen can resolve as edges.
  *
- * Rendered once per screen behind everything, non-interactive. Exact values
- * live here rather than in `theme.ts` because they are positions in a specific
- * composition, not tokens anything else reuses.
+ * No dependency, no rebuild, and it works in the build you already have.
+ * `expo-blur` remains the wrong tool throughout: it blurs what is *behind* a
+ * view, not the view itself.
  */
 
-/** Warm smear, top-left, bleeding off both edges. */
-const WARM = {
-  cx: -42.9 + 156 / 2,
-  cy: -122.31 + 444.8 / 2,
-  rx: 156 / 2 + 60,
-  ry: 444.8 / 2 + 60,
-  color: EMBER.gradientFrom,
+/** How many shells. More is smoother and costs more views; eight is invisible. */
+const LAYERS = 8
+
+/**
+ * Each shell's geometry and alpha.
+ *
+ * A Gaussian blur of radius `b` spreads a shape's visible extent by roughly `b`
+ * in every direction, with the original edge near the half-intensity point — so
+ * the outermost shell is `size + 2b` and the alpha ramps toward the middle
+ * rather than the rim.
+ *
+ * Alpha per shell is `peak / LAYERS` so the *stack* sums to the design's 5%
+ * at the core: eight overlapping shells at 0.625% each. Painting every shell at
+ * the full 5% would give a solid centre with a stepped edge, which is the
+ * problem this exists to solve.
+ */
+function shells(size: { width: number; height: number }, blur: number, color: string) {
+  return Array.from({ length: LAYERS }, (_, i) => {
+    // 1 at the outside, shrinking inward.
+    const t = 1 - i / LAYERS
+    const w = size.width + 2 * blur * t
+    const h = size.height + 2 * blur * t
+    return {
+      key: `${color}-${i}`,
+      style: {
+        position: 'absolute' as const,
+        width: w,
+        height: h,
+        borderRadius: 9999,
+        backgroundColor: color,
+        opacity: 0.05 / LAYERS,
+        // Each shell is centred on the same point, so growing it has to pull
+        // the offset back by half the growth or the stack drifts up-left.
+        left: -(w - size.width) / 2,
+        top: -(h - size.height) / 2,
+      },
+    }
+  })
 }
 
-/** Cool smear, right side, lower down. Positioned from the right edge. */
-const COOL = {
-  rightInset: -15.6 + 117 / 2,
-  cy: 211.27 + 333.59 / 2,
-  rx: 117 / 2 + 50,
-  ry: 333.59 / 2 + 50,
-  color: EMBER.gradientTo,
-}
+/*
+ * `width`/`height`, spelled the way a style expects.
+ *
+ * These were `{ w, h }` and spread straight into a style object, which is not
+ * a type error — React Native ignores keys it does not know — so both
+ * containers silently collapsed to zero size. The left smear still looked
+ * roughly right because it is anchored by `left` and grows rightward from
+ * there; the right one is anchored by `right`, so a zero-width container put
+ * its whole stack off the edge of the screen. That is the reported symptom, and
+ * it is why the two looked differently broken.
+ */
+const WARM = { width: 156, height: 444.8 }
+const COOL = { width: 117, height: 333.59 }
 
-export function AtmosphericBackground({ width }: { width: number }) {
+export function AtmosphericBackground() {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Svg width="100%" height="100%">
-        <Defs>
-          {/*
-            0.05 at the core is the design's alpha. It holds to 35% of the
-            radius before falling away, which is what keeps the shape readable
-            as a shape rather than dissolving into an even wash.
-          */}
-          <RadialGradient id="warm" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor={WARM.color} stopOpacity={0.05} />
-            <Stop offset="35%" stopColor={WARM.color} stopOpacity={0.038} />
-            <Stop offset="100%" stopColor={WARM.color} stopOpacity={0} />
-          </RadialGradient>
-          <RadialGradient id="cool" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor={COOL.color} stopOpacity={0.05} />
-            <Stop offset="35%" stopColor={COOL.color} stopOpacity={0.038} />
-            <Stop offset="100%" stopColor={COOL.color} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
+      {/* Positioned exactly as the frame has them, bleeding off both edges. */}
+      <View style={{ position: 'absolute', left: -42.9, top: -122.31, ...WARM }}>
+        {shells(WARM, 60, EMBER.gradientFrom).map((s) => (
+          <View key={s.key} style={s.style} />
+        ))}
+      </View>
 
-        <Ellipse cx={WARM.cx} cy={WARM.cy} rx={WARM.rx} ry={WARM.ry} fill="url(#warm)" />
-        <Ellipse
-          cx={width - COOL.rightInset}
-          cy={COOL.cy}
-          rx={COOL.rx}
-          ry={COOL.ry}
-          fill="url(#cool)"
-        />
-      </Svg>
+      <View style={{ position: 'absolute', right: -15.6, top: 211.27, ...COOL }}>
+        {shells(COOL, 50, EMBER.gradientTo).map((s) => (
+          <View key={s.key} style={s.style} />
+        ))}
+      </View>
     </View>
   )
 }
