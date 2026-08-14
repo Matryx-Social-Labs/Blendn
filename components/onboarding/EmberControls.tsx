@@ -151,7 +151,21 @@ export function EmberChip({ label, selected, onPress }: ChipProps) {
   )
 }
 
-/** A row of chips that wraps. Used by four of the eight screens. */
+/**
+ * A row of chips that wraps.
+ *
+ * Spacing is margins with a negative offset on the container, not `gap`.
+ *
+ * `gap` inside a `flexWrap` container measures the trailing gap as part of the
+ * line, so Yoga wraps while there is still room for the next item — which is
+ * exactly the reported symptom: rows breaking early with space to spare, and a
+ * chip that would plainly have fitted pushed to the next line.
+ *
+ * Half the spacing on each chip, and the container pulled back by the same
+ * amount so the row still starts and ends flush with everything above it. It is
+ * the oldest trick in wrapped-layout and it does not depend on how any given
+ * Yoga version accounts for `gap`.
+ */
 export function EmberChipRow({ children }: { children: ReactNode }) {
   return <View style={styles.chipRow}>{children}</View>
 }
@@ -340,6 +354,9 @@ export function EmberFieldGroup({
   )
 }
 
+/** Space between chips. Applied as margin, halved — see `EmberChipRow`. */
+const CHIP_SPACING = 12
+
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
 
@@ -364,7 +381,14 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: { ...EMBER_TYPE.button, color: EMBER.textPrimary },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    // Cancels the per-chip margin at the edges, so the row lines up with the
+    // heading above it rather than sitting 6pt inside it.
+    marginHorizontal: -CHIP_SPACING / 2,
+    marginVertical: -CHIP_SPACING / 2,
+  },
   chip: {
     /*
      * A transparent border on *both* states, so selecting a chip does not
@@ -381,7 +405,16 @@ const styles = StyleSheet.create({
      */
     borderWidth: 1,
     borderColor: 'transparent',
-    paddingHorizontal: 24,
+    margin: CHIP_SPACING / 2,
+    /*
+     * 20, not the frame's 25.
+     *
+     * The frame lays its chips out at fixed positions on a 390pt artboard; a
+     * real screen has to wrap them, and 25 each side puts "Prefer not to say"
+     * at roughly half the usable width on its own. 20 keeps the pill shape and
+     * fits noticeably more per line.
+     */
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
