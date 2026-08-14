@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 
@@ -35,9 +36,15 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * lists and the reveal all render. So it needs to be a choice, not an accident
  * of upload order.
  *
- * Tapping a photo promotes it to the front rather than opening a menu. One tap,
- * no modal, and the layout says which one won because the primary slot is the
- * big one. Removing moved to a corner button, since tap now means promote.
+ * **Tap, not long-press.** A long-press is discoverable by accident or not at
+ * all, and this is something people should find the first time they look at
+ * the screen — so it gets the gesture everyone tries first, and a caption says
+ * so in words rather than relying on anyone guessing.
+ *
+ * The current main photo is unmistakable three ways at once: it is the big
+ * slot, it carries an accent ring, and it is labelled. One of those alone is a
+ * decoration; together they are a state. Removing moved to its own corner
+ * target, because a single tap cannot mean both "choose this" and "delete this".
  */
 
 const SLOTS = 6
@@ -148,15 +155,32 @@ export default function MediaScreen() {
               accessibilityLabel={
                 primary ? 'Your main photo' : `Make photo ${index + 1} your main photo`
               }
-              style={[styles.slot, primary && styles.slotPrimary]}
+              style={[styles.slot, primary && styles.slotPrimary, primary && styles.slotChosen]}
             >
               <Image source={{ uri: url }} style={styles.photo} resizeMode="cover" />
 
               {primary ? (
-                <View style={styles.primaryTag}>
-                  <Text style={styles.primaryTagText}>MAIN</Text>
+                <>
+                  {/* A scrim under the label, so it survives a bright photo. */}
+                  <LinearGradient
+                    colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.85)']}
+                    style={styles.primaryScrim}
+                    pointerEvents="none"
+                  />
+                  <View style={styles.primaryTag}>
+                    <Text style={styles.primaryTagText}>MAIN PHOTO</Text>
+                  </View>
+                </>
+              ) : (
+                /*
+                 * The prompt lives on the photos that are *not* chosen, which
+                 * is where the action is. Putting it on the main one would
+                 * label the thing that has nothing left to do.
+                 */
+                <View style={styles.makeMain}>
+                  <Text style={styles.makeMainText}>Make main</Text>
                 </View>
-              ) : null}
+              )}
 
               {/*
                 Remove is its own hit target now that tapping the photo means
@@ -190,9 +214,9 @@ export default function MediaScreen() {
 
       <Text style={styles.note}>
         {photos.length === 0
-          ? 'Add up to 6 photos. The first one is what people see first.'
+          ? 'Your main photo is the one people see on your profile and in messages. Add up to 6.'
           : photos.length === 1
-            ? 'Add up to 6. JPG and PNG.'
+            ? 'This is your main photo. Add more and you can pick a different one.'
             : 'Tap any photo to make it your main one. JPG and PNG, up to 6.'}
       </Text>
     </OnboardingScreen>
@@ -211,6 +235,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   slotPrimary: { width: '100%', aspectRatio: 1.3 },
+  // The ring is the third signal, after size and the label. Any one of them
+  // alone reads as decoration; together they read as a state.
+  slotChosen: { borderWidth: 2, borderColor: EMBER.accent },
   slotEmpty: {
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -219,6 +246,17 @@ const styles = StyleSheet.create({
   },
   photo: { width: '100%', height: '100%' },
 
+  primaryScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 88 },
+  makeMain: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: 'rgba(15,14,14,0.75)',
+  },
+  makeMainText: { ...EMBER_TYPE.helper, fontSize: 10, color: EMBER.textPrimary },
   primaryTag: {
     position: 'absolute',
     left: 12,
