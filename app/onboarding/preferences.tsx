@@ -183,7 +183,7 @@ export default function PreferencesScreen() {
           </View>
         }
       >
-        <EmberChipRow>
+        <EmberChipRow pack>
           {ORIENTATIONS.map((option) => (
             <EmberChip
               key={option.value}
