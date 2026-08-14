@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS } from '../../lib/theme'
 
@@ -71,7 +72,7 @@ export function LookingForCards({
               fight the label and each other; dimmed they read as texture and
               the word stays the thing you scan.
             */}
-            <Image source={option.art} style={styles.art} resizeMode="cover" />
+            <Image source={option.art} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
             <LinearGradient
               colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.95)']}
               style={StyleSheet.absoluteFill}
