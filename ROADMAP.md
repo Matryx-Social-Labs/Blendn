@@ -401,6 +401,24 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **The Liquid Ember token layer** — `EMBER`, `EMBER_TYPE`, `EMBER_GRADIENT`,
+  `EMBER_GLOW`, `EMBER_ATMOSPHERE`, `EMBER_RADIUS` in `lib/theme.ts`, plus
+  Plus Jakarta Sans and Manrope loaded through `lib/fonts.ts`. Measured off the
+  Figma *🕓 Updates* onboarding frames; documented in `docs/DESIGN_TOKENS.md`
+  for the designer side.
+
+  Additive. `APP_COLORS` still renders twenty-six files and is untouched —
+  repointing its background from `#000` to `#0F0E0E` would restyle the whole
+  app in one commit with nobody having looked at any of it, and the palettes
+  differ in more than shade (Ember's primary action is a gradient with *dark*
+  text on it). Screens migrate one at a time; `APP_COLORS` goes when the last
+  one has.
+
+  `__tests__/fonts.test.ts` pins that every family the type scale names is one
+  the app loads — the silent failure, since an unloaded family renders in the
+  system font without throwing or warning.
+
+
 - **One `Event` type, derived from the API mapping** — `Event` was declared
   three times and hand-built twice more, so TypeScript compared five shapes
   structurally and they had drifted. `lib/api.ts` now exports `eventFromApi`
