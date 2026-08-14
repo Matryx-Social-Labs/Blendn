@@ -32,7 +32,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const BIO_LIMIT = 500
 
 export default function DetailsScreen() {
-  const { draft, loaded, saving, commit, skip, goTo } = useOnboarding('details')
+  const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [interests, setInterests] = useState<string[]>([])
@@ -68,7 +68,7 @@ export default function DetailsScreen() {
       onContinue={() => void commit({ interests, bio: bio.trim() })}
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('details')!)}
+      onBack={goBack}
     >
       {/*
         Before the interest chips, not after.

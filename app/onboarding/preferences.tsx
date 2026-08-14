@@ -71,7 +71,7 @@ const ORIENTATIONS = [
 const LOOKING_FOR = ['Dating', 'Friendship', 'Networking', 'Travel', 'Open']
 
 export default function PreferencesScreen() {
-  const { draft, loaded, saving, commit, skip, goTo } = useOnboarding('preferences')
+  const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('preferences')
 
   const [orientation, setOrientation] = useState<string | undefined>()
   const [showOrientation, setShowOrientation] = useState(false)
@@ -111,7 +111,7 @@ export default function PreferencesScreen() {
       }
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('preferences')!)}
+      onBack={goBack}
     >
       <EmberFieldGroup
         label="Orientation"

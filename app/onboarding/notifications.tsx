@@ -22,7 +22,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wants to connect."
 
 export default function NotificationsScreen() {
-  const { saving, commit, skip, goTo } = useOnboarding('notifications')
+  const { saving, commit, skip, goBack } = useOnboarding('notifications')
   const [asking, setAsking] = useState(false)
 
   const ask = async () => {
@@ -82,7 +82,7 @@ export default function NotificationsScreen() {
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('notifications')!)}
+      onBack={goBack}
     />
   )
 }
