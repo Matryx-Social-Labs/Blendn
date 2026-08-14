@@ -112,7 +112,7 @@ export function useOnboarding(step: OnboardingStep) {
 
       const body = stepPayload(step, merged)
       if (Object.keys(body).length > 0) {
-        const result = await apiClient.updateProfile(userId, body as never)
+        const result = await apiClient.updateProfile(userId, body)
         if (!result.success) {
           // Logged, not surfaced. The draft is safe locally and the final step
           // re-sends everything, so the only cost of this failure is that the
@@ -162,10 +162,7 @@ export function useOnboarding(step: OnboardingStep) {
   const finish = useCallback(async () => {
     if (!userId) return
     setSaving(true)
-    const result = await apiClient.updateProfile(userId, {
-      ...draft,
-      onboarded: true,
-    } as never)
+    const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
     setSaving(false)
 
     if (!result.success) {

@@ -24,6 +24,7 @@ import {
   resumeStep,
   splitDateOfBirth,
   stepPayload,
+  type OnboardingDraft,
   type OnboardingProgress,
 } from '../lib/onboarding'
 
@@ -134,7 +135,7 @@ describe('advance', () => {
 })
 
 describe('stepPayload', () => {
-  const full = {
+  const full: OnboardingDraft = {
     name: 'Julian',
     gender: 'woman',
     dateOfBirth: '1998-04-17',

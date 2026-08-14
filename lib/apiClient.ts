@@ -1436,6 +1436,15 @@ class ApiClientClass {
       name?: string
       phone?: string
       age?: number
+
+      /*
+       * `YYYY-MM-DD`. Supersedes `age`, which was a snapshot taken at signup
+       * that nothing ever rewrote — someone who joined at 17 stayed 17 in the
+       * table and was refused every 18+ event a year later. Write-only: no
+       * response carries it back, not even to its owner.
+       */
+      dateOfBirth?: string
+
       location?: string
       bio?: string
       occupation?: string

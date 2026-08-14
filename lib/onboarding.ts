@@ -184,9 +184,20 @@ export function advance(
  * because two steps write to the same profile: `journey` sets `location` and
  * `basics` sets `name`, and both end up in the same `PUT /profiles/:userId`.
  */
+export type OnboardingGender = 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say'
+
 export interface OnboardingDraft {
   name?: string
-  gender?: string
+  /*
+   * The enum the API validates, not a loose string.
+   *
+   * `apiClient.updateProfile` types this field for a reason its own comment
+   * spells out: the four preference booleans were once sent in twelve
+   * camelCase spellings and matched none of them, because nothing was checking.
+   * A draft typed `string` would have to be cast on the way out, which throws
+   * that check away at exactly the point it is doing its job.
+   */
+  gender?: OnboardingGender
   dateOfBirth?: string
   orientation?: string
   looking_for?: string[]
