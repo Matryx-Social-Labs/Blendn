@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import NearbyEventCard from '../components/NearbyEventCard'
-import { getEvents as fetchEventsApi } from '../lib/api'
+import { getEvents as fetchEventsApi, type BlendnEvent } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
 import { formatDistance, getDistanceKm } from '../lib/geo'
@@ -24,23 +24,14 @@ import { formatTimeRange } from '../lib/time'
 import { useAuth } from '../lib/useAuth'
 import { APP_COLORS } from '../lib/theme'
 
-interface Event {
-  id: string
-  title: string
-  description: string
-  short_description: string
-  venue_name: string
-  address: string
-  start_time: string
-  end_time: string
-  cover_image_url: string | null
-  latitude: number
-  longitude: number
-  check_in_radius: number
-  city?: string
-  display_city?: string
-  category?: string
-}
+/*
+ * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
+ *
+ * This was a hand-written interface duplicated across three files that pass
+ * events to each other. TypeScript compared them structurally, so they drifted
+ * silently until a correction in one broke a call site in another.
+ */
+type Event = BlendnEvent
 
 /*
  * `getDistanceKm` now comes from `lib/geo.ts`.

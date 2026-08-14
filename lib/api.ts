@@ -33,25 +33,26 @@ interface EventsParams {
   interestedPreviewLimit?: number
 }
 
-export async function getEvents(params?: EventsParams, options?: { force?: boolean }) {
-  // API expects page starting from 1, not 0
-  const apiParams = params ? {
-    ...params,
-    page: (params.page || 0) + 1,
-  } : { page: 1 }
-  const result = await apiClient.getEvents(apiParams, { force: !!options?.force })
-  Logger.info('api', 'getEvents raw result', {
-    success: result.success,
-    eventCount: result.data?.events?.length || 0,
-    firstEvent: result.data?.events?.[0] ? {
-      id: result.data.events[0].id,
-      title: result.data.events[0].title,
-      coverImageUrl: result.data.events[0].coverImageUrl,
-    } : null
-  })
-  if (result.success && result.data) {
-    // Transform API response (camelCase) to mobile format (snake_case)
-    const events = result.data.events.map((e) => ({
+/** The server's own event shape, so the mapper below cannot drift from it. */
+type EventPayload = NonNullable<
+  Awaited<ReturnType<typeof apiClient.getEvents>>["data"]
+>["events"][number]
+
+/**
+ * One server event, in the shape the app holds.
+ *
+ * Extracted from `getEvents` because it had been copied: two more sites in
+ * `app/(tabs)/events.tsx` built the same object by hand from the active
+ * check-ins payload, and they disagreed with each other. One kept the
+ * coordinates, the other wrote `latitude: 0, longitude: 0` — the Gulf of
+ * Guinea — and both called `setCheckedInEvents`, so whether a checked-in card
+ * could compute a distance depended on which one had run last.
+ *
+ * Return type is inferred rather than annotated, because `BlendnEvent` is
+ * defined *as* the return type; annotating it here would be circular.
+ */
+export function eventFromApi(e: EventPayload) {
+  return {
       id: e.id,
       title: e.title,
       description: e.description || '',
@@ -80,15 +81,36 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
       category_group: e.categories?.[0]?.parent?.slug || e.categories?.[0]?.slug || '',
       city: e.city,
       check_in_radius: e.checkInRadius || 100,
-      latitude: e.latitude,
-      longitude: e.longitude,
+      latitude: e.latitude ?? null,
+      longitude: e.longitude ?? null,
       distance: e.distance,
       media: Array.isArray(e.media) ? e.media : [],
       is_favorited: e.isFavorited === true,
       favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
       user_checkin: e.userCheckin || null,
       interested_preview: Array.isArray(e.interestedPreview) ? e.interestedPreview : [],
-    }))
+    }
+}
+
+export async function getEvents(params?: EventsParams, options?: { force?: boolean }) {
+  // API expects page starting from 1, not 0
+  const apiParams = params ? {
+    ...params,
+    page: (params.page || 0) + 1,
+  } : { page: 1 }
+  const result = await apiClient.getEvents(apiParams, { force: !!options?.force })
+  Logger.info('api', 'getEvents raw result', {
+    success: result.success,
+    eventCount: result.data?.events?.length || 0,
+    firstEvent: result.data?.events?.[0] ? {
+      id: result.data.events[0].id,
+      title: result.data.events[0].title,
+      coverImageUrl: result.data.events[0].coverImageUrl,
+    } : null
+  })
+  if (result.success && result.data) {
+    // Transform API response (camelCase) to mobile format (snake_case)
+    const events = result.data.events.map(eventFromApi)
     Logger.info('api', 'getEvents transformed', {
       eventCount: events.length,
       firstEvent: events[0] ? {
@@ -109,6 +131,33 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
   }
   Logger.warn('api', 'getEvents failed', { error: result.error })
   return { data: null, error: { message: result.error || 'Failed to fetch events' } }
+}
+
+/**
+ * One event, in the shape the app actually holds.
+ *
+ * Derived from `getEvents` rather than hand-written, because it was
+ * hand-written three times — `app/(tabs)/events.tsx`, `app/nearby-events.tsx`
+ * and `components/EventCard.tsx` each declared their own `Event`, and they are
+ * passed to each other, so TypeScript compared them structurally and they had
+ * already drifted. Correcting a single field in one of them produced
+ * `Type 'Event' is not assignable to type 'Event'` and broke a call site three
+ * files away, which is why the drift was left standing instead of fixed.
+ *
+ * Deriving means the mapping above is the single definition. A field added
+ * there appears here; a field whose nullability changes there becomes a
+ * compile error at whichever consumer was assuming otherwise, which is exactly
+ * where the error belongs.
+ */
+type MappedEvent = ReturnType<typeof eventFromApi>
+
+export interface BlendnEvent extends MappedEvent {
+  /**
+   * The city to print on a card, resolved client-side by `resolveDisplayCity`.
+   * Never sent by the API — `city` is, and it can be a raw coordinate pair on
+   * older rows, which is what that function exists to filter out.
+   */
+  display_city?: string
 }
 
 export async function getEvent(eventId: string, params?: { lat?: number; lon?: number }) {
