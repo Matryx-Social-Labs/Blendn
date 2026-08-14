@@ -7,7 +7,7 @@ import {
   EmberToggle,
 } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { orientationConsent, previousStep } from '../../lib/onboarding'
+import { anonymousByDefault, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -85,17 +85,19 @@ export default function PreferencesScreen() {
    * render site — that version reads as a bug every time somebody looks at it,
    * and the default being safe stops being obvious.
    *
-   * `true` here is the default and the safe one: anonymous unless you say
-   * otherwise.
+   * The default comes from `anonymousByDefault` rather than being written here
+   * as `true`. A literal in a component is a thing any future edit can flip
+   * with nothing failing; the function has a test on it, so flipping it breaks
+   * the build instead of breaking somebody's anonymity.
    */
-  const [anonymous, setAnonymous] = useState(true)
+  const [anonymous, setAnonymous] = useState(() => anonymousByDefault({}))
 
   useEffect(() => {
     if (!loaded) return
     setOrientation(draft.orientation)
     setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
-    setAnonymous(!(draft.reveal_by_default ?? false))
+    setAnonymous(anonymousByDefault(draft))
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (value: string) =>

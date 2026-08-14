@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Alert, Linking } from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { previousStep } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -81,6 +82,8 @@ export default function LocationScreen() {
       secondaryLabel="Maybe later"
       onSecondary={() => void skip()}
       onBack={goBack}
-    />
+    >
+      <LocationIllustration />
+    </OnboardingScreen>
   )
 }
