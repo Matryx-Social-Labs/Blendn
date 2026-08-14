@@ -248,13 +248,21 @@ export function EmberSection({
 }) {
   return (
     <View style={styles.section}>
+      {/*
+        The control sits on the *title* line, and the caption runs full width
+        underneath both.
+        
+        It used to be bottom-aligned against a stacked title-and-caption, which
+        put a pill next to a sentence and left the caption in a narrow column
+        beside it — so a caption of any length wrapped two or three times while
+        half the screen sat empty. Aligning to the heading gives the caption the
+        whole width and puts the control level with the thing it modifies.
+      */}
       <View style={styles.sectionHead}>
-        <View style={styles.sectionHeadText}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
-        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
         {right}
       </View>
+      {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
       {children}
     </View>
   )
@@ -375,16 +383,19 @@ const styles = StyleSheet.create({
   toggleText: { flex: 1, gap: 4 },
   toggleLabel: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
 
-  section: { gap: 24 },
-  sectionHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
-  sectionHeadText: { flex: 1, gap: 4 },
+  // 12 between the heading block and the caption, 24 before the content —
+  // so the caption reads as belonging to the heading rather than floating
+  // between two things.
+  section: { gap: 12 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   sectionTitle: {
+    flex: 1,
     fontFamily: EMBER_FONTS.displayBold,
     fontSize: 20,
     lineHeight: 28,
     color: EMBER.accent,
   },
-  sectionCaption: { ...EMBER_TYPE.helper, fontSize: 14, lineHeight: 20 },
+  sectionCaption: { ...EMBER_TYPE.helper, fontSize: 14, lineHeight: 20, marginBottom: 12 },
 
   inlinePill: {
     flexDirection: 'row',
