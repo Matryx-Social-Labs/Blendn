@@ -87,7 +87,44 @@ export function useOnboarding(step: OnboardingStep) {
     [userId, progress]
   )
 
-  const goTo = useCallback((target: OnboardingStep) => {
+  /*
+   * Three ways to move, and they are not interchangeable.
+   *
+   * Everything used to be `router.replace`, which swaps the screen and keeps no
+   * history. Two things fell out of that and both were reported: every
+   * transition animated as *forward*, so going back looked like going deeper;
+   * and with no history there was nothing for an edge-swipe to pop, so the
+   * gesture every iPhone user reaches for did nothing.
+   */
+
+  /** Forward a step. `push` is what creates the entry that makes back work. */
+  const advanceTo = useCallback((target: OnboardingStep) => {
+    router.push(ONBOARDING_ROUTES[target] as never)
+  }, [])
+
+  /**
+   * Back a step — pop, rather than pushing the previous route.
+   *
+   * Pushing "backwards" would animate forwards and grow the stack every time
+   * someone changed their mind, so eight taps of back-and-forth leaves sixteen
+   * screens behind you. Popping is the only version that both looks right and
+   * stays honest about where you are.
+   *
+   * `canGoBack` guards the first step, where there is nothing underneath and
+   * `back()` would escape the flow.
+   */
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back()
+  }, [])
+
+  /**
+   * Jump to an arbitrary step, with no history.
+   *
+   * Resume on launch, and "edit my details" from the review screen. `replace`
+   * is right here precisely because it leaves no back stack — a back gesture
+   * should not walk into screens this person never visited.
+   */
+  const jumpTo = useCallback((target: OnboardingStep) => {
     router.replace(ONBOARDING_ROUTES[target] as never)
   }, [])
 
@@ -147,9 +184,9 @@ export function useOnboarding(step: OnboardingStep) {
       // Outside the try, deliberately. Moving on is not conditional on the
       // network — that is the entire point of saving the draft first.
       const after = nextStep(step)
-      if (after) goTo(after)
+      if (after) advanceTo(after)
     },
-    [draft, goTo, progress, step, userId]
+    [advanceTo, draft, progress, step, userId]
   )
 
   /**
@@ -168,8 +205,8 @@ export function useOnboarding(step: OnboardingStep) {
     // must never depend on anything that can fail.
     await writeOnboarding(userId, { progress: nextProgress, draft })
     const after = nextStep(step)
-    if (after) goTo(after)
-  }, [draft, goTo, progress, step, userId])
+    if (after) advanceTo(after)
+  }, [advanceTo, draft, progress, step, userId])
 
   /**
    * The last step: write `onboarded` and leave.
@@ -198,5 +235,5 @@ export function useOnboarding(step: OnboardingStep) {
     return true
   }, [draft, userId])
 
-  return { draft, progress, loaded, saving, update, commit, skip, finish, goTo }
+  return { draft, progress, loaded, saving, update, commit, skip, finish, goBack, jumpTo }
 }

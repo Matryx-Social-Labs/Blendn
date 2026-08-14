@@ -44,7 +44,7 @@ const SLOTS = 6
 
 export default function MediaScreen() {
   const { user } = useAuth()
-  const { draft, loaded, saving, commit, skip, goTo } = useOnboarding('media')
+  const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('media')
 
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
@@ -82,7 +82,7 @@ export default function MediaScreen() {
       onContinue={() => void commit({ photos })}
       secondaryLabel="Skip for now"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('media')!)}
+      onBack={goBack}
     >
       {/*
         Only as many slots as are useful: every photo so far, plus one empty

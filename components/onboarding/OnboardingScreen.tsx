@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ReactNode } from 'react'
 import {
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,9 +13,10 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { AtmosphericBackground } from './AtmosphericBackground'
+
 import {
   EMBER,
-  EMBER_ATMOSPHERE,
   EMBER_GLOW,
   EMBER_GRADIENT,
   EMBER_RADIUS,
@@ -75,6 +77,9 @@ export function OnboardingScreen({
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
+  // The cool smear is positioned from the right edge, so the SVG needs a real
+  // width to place it — percentages cannot express "15.6px off the right".
+  const { width } = Dimensions.get('window')
   const percent = progressPercent(step)
 
   return (
@@ -83,20 +88,7 @@ export function OnboardingScreen({
        * The two blurred blobs. `pointerEvents="none"` because they cover the
        * whole screen and would otherwise eat every tap on the form beneath.
        */}
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <LinearGradient
-          colors={[EMBER_ATMOSPHERE.warm.color, 'rgba(255,144,109,0)']}
-          start={{ x: 0.3, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.blob, styles.blobWarm]}
-        />
-        <LinearGradient
-          colors={[EMBER_ATMOSPHERE.cool.color, 'rgba(255,109,141,0)']}
-          start={{ x: 0.7, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[styles.blob, styles.blobCool]}
-        />
-      </View>
+      <AtmosphericBackground width={width} />
 
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         {/*
@@ -141,6 +133,22 @@ export function OnboardingScreen({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          /*
+           * A screen with nothing to scroll must not scroll.
+           *
+           * The two permission screens have no body at all — headline, a
+           * sentence, two buttons — and a ScrollView bounces by default even
+           * when its content fits. That rubber-band on a fixed page reads as
+           * the screen being broken, or as content hiding below the fold that
+           * never arrives.
+           *
+           * `alwaysBounceVertical` off is the general rule: bounce only when
+           * there is genuinely something below. `scrollEnabled` off when there
+           * is no body at all makes those two pages properly immovable rather
+           * than merely still.
+           */
+          alwaysBounceVertical={false}
+          scrollEnabled={!!children}
         >
           <View style={styles.headlineBlock}>
             <Text style={styles.title}>
@@ -181,28 +189,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: EMBER.bg },
   flex: { flex: 1 },
 
-  /*
-   * The atmospheric glow, as a gradient that fades to transparent.
-   *
-   * The first version used a flat `backgroundColor` on a rounded view, which
-   * was wrong in a way that shows: even at 5% alpha a solid fill has an *edge*,
-   * so it reads as a colour block sitting on the page rather than as light
-   * bleeding into it. The design's version has no edge anywhere.
-   *
-   * `expo-blur` is the wrong tool — it blurs what is *behind* a view, not the
-   * view itself. `react-native-svg` would give a true radial gradient and is
-   * not installed; a linear gradient running to a fully transparent stop gets
-   * close enough on a shape this large and this faint, and adds no dependency.
-   *
-   * The two run at opposing angles so the corners they fade toward are
-   * different, which stops the pair reading as one diagonal wash.
-   */
-  blob: { position: 'absolute', borderRadius: 9999 },
-  // Larger and further off-screen than the solid version, because a gradient
-  // that fades needs room to fade in — clipping it at the edge reinstates the
-  // hard line this change exists to remove.
-  blobWarm: { width: 320, height: 560, left: -140, top: -180 },
-  blobCool: { width: 280, height: 460, right: -120, top: 180 },
 
   header: {
     flexDirection: 'row',

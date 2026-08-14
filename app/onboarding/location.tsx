@@ -27,7 +27,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const SETTINGS_HINT = "Blend'n uses location to see who is around you, and check in to events."
 
 export default function LocationScreen() {
-  const { saving, commit, skip, goTo } = useOnboarding('location')
+  const { saving, commit, skip, goBack } = useOnboarding('location')
   const [asking, setAsking] = useState(false)
 
   const ask = async () => {
@@ -80,7 +80,7 @@ export default function LocationScreen() {
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('location')!)}
+      onBack={goBack}
     />
   )
 }

@@ -27,7 +27,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * out for the same reason — a field that saves nowhere is a lie told in a form.
  */
 export default function JourneyScreen() {
-  const { draft, loaded, saving, commit, skip, goTo } = useOnboarding('journey')
+  const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('journey')
 
   const [location, setLocation] = useState('')
   const [occupation, setOccupation] = useState('')
@@ -75,7 +75,7 @@ export default function JourneyScreen() {
       onContinue={() => void commit(patch)}
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
-      onBack={() => goTo(previousStep('journey')!)}
+      onBack={goBack}
     >
       <EmberField
         label="Current base"

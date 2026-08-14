@@ -23,7 +23,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * chance to fix a typo before it is on a card in a room.
  */
 export default function ReadyScreen() {
-  const { draft, saving, finish, goTo } = useOnboarding('ready')
+  const { draft, saving, finish, goBack, jumpTo } = useOnboarding('ready')
   const [failed, setFailed] = useState(false)
 
   const complete = async () => {
@@ -52,8 +52,8 @@ export default function ReadyScreen() {
       ctaBusy={saving}
       onContinue={() => void complete()}
       secondaryLabel="Edit my details"
-      onSecondary={() => goTo('basics')}
-      onBack={() => goTo(previousStep('ready')!)}
+      onSecondary={() => jumpTo('basics')}
+      onBack={goBack}
     >
       <View style={styles.card}>
         {primaryPhoto ? (
