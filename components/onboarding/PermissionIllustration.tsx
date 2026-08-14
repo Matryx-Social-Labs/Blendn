@@ -25,6 +25,26 @@ import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme
 const NOTIFICATION_ART = require('../../assets/onboarding/notifications.png')
 const LOCATION_ART = require('../../assets/onboarding/location-map.png')
 
+/**
+ * The people on the map, exactly as the frame places them.
+ *
+ * Positions are the frame's own percentages, measured inside a box inset 32px
+ * from the card — which is why they are expressed as percentages of that inner
+ * box rather than of the card.
+ *
+ * I left these out on the first pass and changed the footer copy at the same
+ * time, on the reasoning that stock portraits of strangers sit oddly on the
+ * screen asking to find real people nearby. That was a judgement to raise, not
+ * to act on unilaterally, and it was overruled: the frame is the spec.
+ */
+const NEARBY = [
+  { art: require('../../assets/onboarding/nearby-1.jpg'), size: 48, left: '15%', top: '20%' },
+  { art: require('../../assets/onboarding/nearby-2.jpg'), size: 48, left: '62%', top: '53%' },
+  { art: require('../../assets/onboarding/nearby-3.jpg'), size: 40, left: '10%', top: '60%' },
+] as const
+
+const YOU_ART = require('../../assets/onboarding/you.jpg')
+
 /** The moon, with a sample notification laid over it. */
 export function NotificationIllustration() {
   return (
@@ -70,17 +90,38 @@ export function NotificationIllustration() {
 export function LocationIllustration() {
   return (
     <View style={styles.card}>
-      <Image source={LOCATION_ART} style={styles.art} resizeMode="cover" />
+      {/*
+        The map sits at 40% opacity in the frame, which is what stops it
+        competing with the pins on top of it.
+      */}
+      <Image source={LOCATION_ART} style={[styles.art, styles.mapDim]} resizeMode="cover" />
 
-      {/* The pulse rings, centred on the pin. */}
-      <View style={styles.ring} />
-      <View style={[styles.ring, styles.ringOuter]} />
+      {/* Everything below is positioned inside a box inset 32px from the card,
+          because that is the frame the design measures its pins against. */}
+      <View style={styles.pinField}>
+        <View style={styles.ring} />
+        <View style={[styles.ring, styles.ringOuter]} />
 
-      <View style={styles.pin}>
-        <Ionicons name="person" size={22} color={EMBER.onGradientChip} />
-      </View>
-      <View style={styles.pinTag}>
-        <Text style={styles.pinTagText}>YOU</Text>
+        {NEARBY.map((person, i) => (
+          <View
+            key={i}
+            style={[
+              styles.nearby,
+              { left: person.left, top: person.top, width: person.size, height: person.size },
+            ]}
+          >
+            <Image source={person.art} style={styles.nearbyPhoto} resizeMode="cover" />
+          </View>
+        ))}
+
+        <View style={styles.youWrap}>
+          <View style={styles.you}>
+            <Image source={YOU_ART} style={styles.youPhoto} resizeMode="cover" />
+          </View>
+          <View style={styles.youTag}>
+            <Text style={styles.youTagText}>YOU</Text>
+          </View>
+        </View>
       </View>
 
       <LinearGradient
@@ -91,10 +132,10 @@ export function LocationIllustration() {
       <View style={styles.mapFooterText}>
         <View style={styles.zoneRow}>
           <Ionicons name="location" size={12} color={EMBER.accent} />
-          <Text style={styles.zone}>PEOPLE NEARBY</Text>
+          <Text style={styles.zone}>CURRENT ZONE: OLD GOA</Text>
         </View>
         <View style={styles.divider} />
-        <Text style={styles.zoneSub}>Real-time local presence</Text>
+        <Text style={styles.zoneSub}>Real-time local presence active</Text>
       </View>
     </View>
   )
@@ -140,35 +181,69 @@ const styles = StyleSheet.create({
   bubbleWhen: { ...EMBER_TYPE.helper, fontSize: 10 },
   bubbleBody: EMBER_TYPE.helper,
 
-  ring: {
+  mapDim: { opacity: 0.4 },
+  // 32px in from every edge — the frame measures its pin positions against
+  // this box, not against the card.
+  pinField: { position: 'absolute', top: 32, left: 32, right: 32, bottom: 32 },
+
+  nearby: {
     position: 'absolute',
-    width: 170,
-    height: 170,
     borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,144,109,0.25)',
+    backgroundColor: 'rgba(45,44,44,0.8)',
+    padding: 2,
+    overflow: 'hidden',
   },
-  ringOuter: { width: 250, height: 250, borderColor: 'rgba(255,144,109,0.12)' },
-  pin: {
-    width: 60,
-    height: 60,
+  nearbyPhoto: { width: '100%', height: '100%', borderRadius: EMBER_RADIUS.pill },
+
+  // The frame centres this pair at 38.41% / 41.15% of the pin field.
+  youWrap: { position: 'absolute', left: '38%', top: '41%', alignItems: 'center' },
+  you: {
+    width: 64,
+    height: 64,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
+    padding: 4,
+  },
+  youPhoto: {
+    width: '100%',
+    height: '100%',
+    borderRadius: EMBER_RADIUS.pill,
+    borderWidth: 2,
     borderColor: EMBER.bg,
   },
-  pinTag: {
-    position: 'absolute',
-    // Half the pin's height plus a little, so it hangs just below the circle.
-    marginTop: 66,
+  youTag: {
+    marginTop: -8,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
-  pinTagText: { ...EMBER_TYPE.helper, fontSize: 10, color: EMBER.onGradientChip },
+  youTagText: {
+    ...EMBER_TYPE.helper,
+    fontSize: 10,
+    letterSpacing: -0.5,
+    color: EMBER.onGradientChip,
+  },
+
+  ring: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '50%',
+    marginTop: -96,
+    width: 192,
+    height: 192,
+    borderRadius: EMBER_RADIUS.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,144,109,0.2)',
+    opacity: 0.5,
+  },
+  ringOuter: {
+    width: 288,
+    height: 288,
+    marginTop: -144,
+    borderColor: 'rgba(255,144,109,0.1)',
+    opacity: 0.3,
+  },
 
   mapFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 },
   mapFooterText: { position: 'absolute', left: 20, right: 20, bottom: 20, gap: 8 },
