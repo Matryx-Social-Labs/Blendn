@@ -448,6 +448,18 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     margin: CHIP_SPACING / 2,
     /*
+     * A chip may shrink, and may not exceed the row.
+     *
+     * The `gap` fix sorted the wrap arithmetic, but two screens draw their
+     * labels from the server — work fields, and category names like "Classical
+     * and Carnatic" — and a chip wider than the line it is on forces its own
+     * row and leaves the rest of that line empty. `flexShrink` lets an
+     * oversized one give ground instead, and `maxWidth` stops any of them
+     * running past the container in the first place.
+     */
+    flexShrink: 1,
+    maxWidth: '100%',
+    /*
      * 20, not the frame's 25.
      *
      * The frame lays its chips out at fixed positions on a 390pt artboard; a
@@ -499,7 +511,10 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.card,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.2)',
-    padding: 20,
+    // 16 rather than 20: the card already costs the chips inside it 40pt of
+    // width against the open sections elsewhere, and work-field labels are the
+    // longest in the app. Eight points back is a chip per row.
+    padding: 16,
     gap: 20,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
