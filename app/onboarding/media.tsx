@@ -137,26 +137,29 @@ export default function MediaScreen() {
             accessibilityLabel={photos.length === 0 ? 'Add your main photo' : 'Add a photo'}
             style={[styles.slot, photos.length === 0 && styles.slotPrimary, styles.slotEmpty]}
           >
+            {/*
+              The plus, alone, and that is the fix.
+              
+              It used to sit above a caption inside the same centred block — so
+              the *block* was centred and the plus was not, which is exactly
+              what it looked like. Guidance moved to the line under the grid,
+              where it does not have to share a box with the thing it describes.
+            */}
             {uploadingSlot !== null ? (
               <ActivityIndicator color={EMBER.accent} />
             ) : (
-              // Centred by the slot's own alignment rather than positioned, so
-              // it stays in the middle whatever size the slot is.
-              <View style={styles.addInner}>
-                <Ionicons name="add" size={28} color={EMBER.accent} />
-                <Text style={styles.addLabel}>
-                  {photos.length === 0 ? 'Add your main photo' : 'Add another'}
-                </Text>
-              </View>
+              <Ionicons name="add" size={32} color={EMBER.accent} />
             )}
           </Pressable>
         ) : null}
       </View>
 
       <Text style={styles.note}>
-        {photos.length > 1
-          ? 'Tap any photo to make it your main one. JPG and PNG, up to 6.'
-          : 'JPG and PNG, up to 6 photos. Your main photo is the one people see first.'}
+        {photos.length === 0
+          ? 'Add up to 6 photos. The first one is what people see first.'
+          : photos.length === 1
+            ? 'Add up to 6. JPG and PNG.'
+            : 'Tap any photo to make it your main one. JPG and PNG, up to 6.'}
       </Text>
     </OnboardingScreen>
   )
@@ -181,8 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   photo: { width: '100%', height: '100%' },
-  addInner: { alignItems: 'center', gap: 8 },
-  addLabel: { ...EMBER_TYPE.helper, color: EMBER.accent },
+
   primaryTag: {
     position: 'absolute',
     left: 12,
