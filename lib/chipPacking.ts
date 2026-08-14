@@ -10,17 +10,24 @@
  * Filling those gaps means changing the order, which flexbox cannot do. So this
  * does it first, and the row renders the result.
  *
- * ## Why estimating is good enough
+ * ## Widths come from the chips, not from arithmetic
  *
- * Real text measurement means rendering, reading `onLayout`, then reflowing —
- * two passes and a visible jump on every mount. These are short labels in one
- * known font at one known size, so a per-character estimate is within a few
- * points, and being a few points out costs at most one chip on one row.
- * A wrong guess degrades to what flexbox would have done anyway.
+ * Two rounds of estimating from character counts were not close enough. A
+ * per-character average cannot know that "Prefer not to say" is mostly narrow
+ * letters while "Web3 APIs" is mostly wide ones, and being wrong by a few
+ * points is exactly the difference between a chip fitting a row and being held
+ * back from it. Each correction to the coefficient only moved which labels it
+ * was wrong about.
+ *
+ * `EmberChipRow` measures the rendered chips with `onLayout` and passes the
+ * real numbers in. This file just does the ordering.
  */
 
 /**
- * Roughly how wide a chip will be.
+ * Roughly how wide a chip will be. **Unused by the row**, which measures.
+ *
+ * Kept because it is the only way to reason about packing in a test without a
+ * renderer, and the ordering tests are worth more than the function costs.
  *
  * Manrope Medium at 16pt averages a little under half its point size per
  * character across mixed-case English. 7.6 rather than the 8.2 first used: the

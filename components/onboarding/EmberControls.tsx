@@ -1,9 +1,18 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Children, forwardRef, isValidElement, ReactNode } from 'react'
+import {
+  Children,
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  ReactNode,
+  useCallback,
+  useState,
+} from 'react'
 import {
   ActivityIndicator,
   Dimensions,
+  LayoutChangeEvent,
   Pressable,
   StyleSheet,
   Switch,
@@ -13,7 +22,7 @@ import {
   View,
 } from 'react-native'
 
-import { estimateChipWidth, isCatchAll, packChips } from '../../lib/chipPacking'
+import { isCatchAll, packChips } from '../../lib/chipPacking'
 import {
   EMBER,
   EMBER_CONTROL_HEIGHT,
@@ -178,46 +187,73 @@ export function EmberChipRow({
   /**
    * Reorder the chips to fill the rows.
    *
-   * Off by default. Flexbox wraps greedily *in order*, so a long label can push
-   * a short one to the next line and leave a gap behind it — worst on the two
-   * screens whose labels come from the server. Turning this on lets a later
-   * chip come forward to fill that space.
+   * Flexbox wraps greedily *in order*, so a long label pushes a short one to
+   * the next line and leaves the gap behind it. Filling those gaps means
+   * changing the order, which flexbox cannot do.
    *
-   * Opt-in because reordering is visible, and it is only worth the churn where
-   * the labels vary enough to leave real gaps. A fixed short list like the
-   * gender chips gains nothing and would just look unstable.
+   * Opt-in: only worth the churn where labels vary enough to leave real gaps.
    */
   pack?: boolean
-  /**
-   * How much horizontal room the row actually has.
-   *
-   * Defaults to the screen less its page padding, which is right for a row
-   * sitting directly on the page and **wrong inside a card** — that costs
-   * another 32pt, and a packer told it has more room than it does plans a row
-   * that flexbox then breaks somewhere else. Callers inside a container pass
-   * the real number.
-   */
+  /** Room the row actually has. Defaults to the page width less its padding. */
   width?: number
 }) {
   const items = Children.toArray(children)
   const labelOf = (child: ReactNode) =>
     isValidElement(child) ? String((child.props as { label?: unknown }).label ?? '') : ''
 
-  let ordered = items
-  if (pack) {
-    // Catch-alls come out first so packing cannot hoist them, and go back on
-    // the end afterwards. "Prefer not to say" in row one is a worse list than
-    // any gap it would have filled.
-    const catchAlls = items.filter((c) => isCatchAll(labelOf(c)))
-    const rest = items.filter((c) => !isCatchAll(labelOf(c)))
+  /*
+   * Measured, not estimated.
+   *
+   * Two rounds of estimating from character counts were not close enough — a
+   * per-character average cannot know that "Prefer not to say" is mostly narrow
+   * letters while "Web3 APIs" is mostly wide ones, and being wrong by a few
+   * points is the difference between a chip fitting a row and being held back
+   * from it. Every correction to the coefficient just moved which labels it was
+   * wrong about.
+   *
+   * So the chips report their own width on layout and the order is computed
+   * from the real numbers. One extra pass on mount, and the reorder is a single
+   * frame before anyone has read the row — cheaper than a layout that is
+   * visibly wrong for as long as the screen is open.
+   *
+   * Keyed by label so it survives a reorder: the same chip measured under a new
+   * index is the same width, and re-measuring on every shuffle would loop.
+   */
+  const [measured, setMeasured] = useState<Record<string, number>>({})
+
+  const record = useCallback((label: string, w: number) => {
+    if (!label || w <= 0) return
+    setMeasured((current) =>
+      // Ignore a repeat of a width already known. Without this, the reorder
+      // triggers a layout, which records, which reorders.
+      Math.abs((current[label] ?? 0) - w) < 1 ? current : { ...current, [label]: w }
+    )
+  }, [])
+
+  const withMeasurement = items.map((child, i) =>
+    isValidElement(child)
+      ? cloneElement(child as React.ReactElement<{ onLayout?: (e: LayoutChangeEvent) => void }>, {
+          key: (child as { key?: string | null }).key ?? `chip-${i}`,
+          onLayout: (e: LayoutChangeEvent) => record(labelOf(child), e.nativeEvent.layout.width),
+        })
+      : child
+  )
+
+  let ordered = withMeasurement
+  const everyWidthKnown = items.every((c) => measured[labelOf(c)] !== undefined)
+
+  if (pack && everyWidthKnown) {
+    // Catch-alls out first so packing cannot hoist them, back on at the end.
+    // "Prefer not to say" in row one is a worse list than any gap it fills.
+    const isEnd = (c: ReactNode) => isCatchAll(labelOf(c))
     ordered = [
       ...packChips(
-        rest,
-        // The chip's own horizontal padding (20 × 2) plus its margin (12).
-        (child) => estimateChipWidth(labelOf(child), 52),
+        withMeasurement.filter((c) => !isEnd(c)),
+        // The measured pill, plus the margin the row spaces them with.
+        (child) => measured[labelOf(child)] + CHIP_SPACING,
         width ?? Dimensions.get('window').width - 48
       ),
-      ...catchAlls,
+      ...withMeasurement.filter(isEnd),
     ]
   }
 
