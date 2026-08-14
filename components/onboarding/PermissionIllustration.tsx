@@ -22,8 +22,8 @@ import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme
  * first time the notification copy changed.
  */
 
-const NOTIFICATION_ART = require('../../assets/onboarding/notifications.png')
-const LOCATION_ART = require('../../assets/onboarding/location-map.png')
+const NOTIFICATION_ART = require('../../assets/onboarding/notifications.jpg')
+const LOCATION_ART = require('../../assets/onboarding/location-map.jpg')
 
 /**
  * The people on the map, exactly as the frame places them.

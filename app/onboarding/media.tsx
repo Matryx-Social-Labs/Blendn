@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
@@ -48,6 +56,9 @@ import { useOnboarding } from '../../lib/useOnboarding'
  */
 
 const SLOTS = 6
+
+const GRID_GAP = 12
+const SLOT = Math.floor((Dimensions.get('window').width - 24 * 2 - GRID_GAP) / 2)
 
 /**
  * A plus drawn as two rectangles, not as a glyph.
@@ -226,15 +237,18 @@ export default function MediaScreen() {
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   slot: {
-    width: '48%',
-    aspectRatio: 1,
+    // Explicit, for the reason `LookingForCards` explains: a slot holding only
+    // absolutely-positioned children has no intrinsic height, and `aspectRatio`
+    // against a percentage width does not reliably supply one.
+    width: SLOT,
+    height: SLOT,
     borderRadius: EMBER_RADIUS.card,
     backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  slotPrimary: { width: '100%', aspectRatio: 1.3 },
+  slotPrimary: { width: '100%', height: Math.round(SLOT * 1.55) },
   // The ring is the third signal, after size and the label. Any one of them
   // alone reads as decoration; together they read as a state.
   slotChosen: { borderWidth: 2, borderColor: EMBER.accent },
