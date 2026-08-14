@@ -8,7 +8,12 @@ import {
   EmberFieldGroup,
 } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { canContinue, joinDateOfBirth, splitDateOfBirth } from '../../lib/onboarding'
+import {
+  canContinue,
+  joinDateOfBirth,
+  splitDateOfBirth,
+  type OnboardingGender,
+} from '../../lib/onboarding'
 import { EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -33,7 +38,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * field at all, and `deriveInterestedIn` needs one. Recorded in
  * `docs/ONBOARDING.md` as a question for the API, not papered over here.
  */
-const GENDERS: { label: string; value: string }[] = [
+const GENDERS: { label: string; value: OnboardingGender }[] = [
   { label: 'Woman', value: 'woman' },
   { label: 'Man', value: 'man' },
   { label: 'Non-binary', value: 'non_binary' },
@@ -44,7 +49,7 @@ export default function BasicsScreen() {
   const { draft, loaded, saving, commit } = useOnboarding('basics')
 
   const [name, setName] = useState('')
-  const [gender, setGender] = useState<string | undefined>()
+  const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
 
   // Prefilled once storage has answered, not on every render — otherwise a
