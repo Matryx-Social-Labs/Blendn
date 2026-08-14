@@ -14,6 +14,7 @@ import {
 import {
   EMBER,
   EMBER_CONTROL_HEIGHT,
+  EMBER_FONTS,
   EMBER_GLOW,
   EMBER_GRADIENT,
   EMBER_RADIUS,
@@ -222,6 +223,82 @@ export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps
   )
 }
 
+/**
+ * A section heading, in the accent colour, with a caption and an optional
+ * control on the right.
+ *
+ * `EmberFieldGroup` puts a small uppercase grey label over a control, which is
+ * the treatment the form *fields* use. The design gives its sections something
+ * louder: a 20pt accent-coloured title with a sentence under it, and room for
+ * a control on the same line — the "Show on profile" pill sits there rather
+ * than becoming a row of its own underneath.
+ *
+ * Two different jobs, so two components rather than one with a `variant`.
+ */
+export function EmberSection({
+  title,
+  caption,
+  right,
+  children,
+}: {
+  title: string
+  caption?: string
+  right?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <View style={styles.sectionHeadText}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
+        </View>
+        {right}
+      </View>
+      {children}
+    </View>
+  )
+}
+
+/**
+ * A switch that sits inline beside a section heading.
+ *
+ * The design draws it as a dark pill with its label inside, not as a full-width
+ * row — it belongs to the section it modifies, and a row underneath would read
+ * as a separate question.
+ *
+ * `EmberToggle` keeps its required helper text because it is used where the
+ * consequence needs spelling out. This one has no room for that, so it is only
+ * for switches whose section caption already carries the meaning.
+ */
+export function EmberInlineToggle({
+  label,
+  value,
+  onValueChange,
+  hint,
+}: {
+  label: string
+  value: boolean
+  onValueChange: (next: boolean) => void
+  hint: string
+}) {
+  return (
+    <View style={styles.inlinePill}>
+      <Text style={styles.inlineLabel}>{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        accessibilityLabel={label}
+        accessibilityHint={hint}
+        trackColor={{ false: EMBER.surface, true: EMBER.accent }}
+        thumbColor={EMBER.textPrimary}
+        ios_backgroundColor={EMBER.surface}
+        style={styles.inlineSwitch}
+      />
+    </View>
+  )
+}
+
 /** A label over an arbitrary control — chips, a grid, a toggle row. */
 export function EmberFieldGroup({
   label,
@@ -276,7 +353,9 @@ const styles = StyleSheet.create({
     // 24pt of line height, and stated so a shorter label cannot shrink below it.
     minHeight: 48,
   },
-  chipIdle: { backgroundColor: EMBER.surfaceSunken },
+  // `#141313` with a hairline border, per the frame — a shade below the cards
+  // around it, so an unselected chip recedes rather than competing.
+  chipIdle: { backgroundColor: '#141313', borderWidth: 1, borderColor: 'rgba(73,71,71,0.2)' },
   chipLabel: EMBER_TYPE.chip,
   chipLabelSelected: { color: EMBER.onGradientChip },
   chipLabelIdle: { color: EMBER.textPrimary },
@@ -295,6 +374,30 @@ const styles = StyleSheet.create({
   // narrow phone.
   toggleText: { flex: 1, gap: 4 },
   toggleLabel: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
+
+  section: { gap: 24 },
+  sectionHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  sectionHeadText: { flex: 1, gap: 4 },
+  sectionTitle: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 20,
+    lineHeight: 28,
+    color: EMBER.accent,
+  },
+  sectionCaption: { ...EMBER_TYPE.helper, fontSize: 14, lineHeight: 20 },
+
+  inlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: '#141313',
+  },
+  inlineLabel: { ...EMBER_TYPE.helper, fontSize: 12, color: EMBER.textSecondary },
+  // Scaled down: a stock switch beside 12pt text is nearly twice its height.
+  inlineSwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
 
   fieldBlock: { gap: 12 },
   fieldLabel: EMBER_TYPE.fieldLabel,

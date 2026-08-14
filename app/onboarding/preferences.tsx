@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import {
   EmberChip,
   EmberChipRow,
-  EmberFieldGroup,
+  EmberInlineToggle,
+  EmberSection,
   EmberToggle,
 } from '../../components/onboarding/EmberControls'
+import { LookingForCards } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { anonymousByDefault, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -68,7 +70,7 @@ const ORIENTATIONS = [
 
 // "Demisexual" is in the frame and not in the server's list, so it is not
 // offered — a chip that 400s on save is worse than an absent one.
-const LOOKING_FOR = ['Dating', 'Friendship', 'Networking', 'Travel', 'Open']
+// The five live in `LookingForCards` now, beside the artwork each one uses.
 
 export default function PreferencesScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('preferences')
@@ -110,7 +112,7 @@ export default function PreferencesScreen() {
       step="preferences"
       title="Your "
       titleAccent="preferences"
-      subtitle="How you show up, and who sees what."
+      subtitle="Be your authentic self. Help us curate the right connections for your journey."
       ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() =>
@@ -127,9 +129,19 @@ export default function PreferencesScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      <EmberFieldGroup
-        label="Orientation"
-        helper="Used for matching. Hidden unless you say otherwise."
+      <EmberSection
+        title="Orientation"
+        caption="Select all that apply to you"
+        right={
+          orientation ? (
+            <EmberInlineToggle
+              label="Show on profile"
+              hint="Only people you match or talk with will see it. Never a room."
+              value={showOrientation}
+              onValueChange={setShowOrientation}
+            />
+          ) : undefined
+        }
       >
         <EmberChipRow>
           {ORIENTATIONS.map((option) => (
@@ -143,21 +155,7 @@ export default function PreferencesScreen() {
             />
           ))}
         </EmberChipRow>
-      </EmberFieldGroup>
-
-      {/*
-        Rendered only once there is an orientation to show. A switch offering to
-        publish a field nobody has filled in has no meaning, and leaving it
-        visible invites someone to turn it on and assume it did something.
-      */}
-      {orientation ? (
-        <EmberToggle
-          label="Show it on my profile"
-          helper="Only people you match or talk with. Never a room."
-          value={showOrientation}
-          onValueChange={setShowOrientation}
-        />
-      ) : null}
+      </EmberSection>
 
       {/*
         Named "Anonymity" rather than "At an event", and the toggle is phrased
@@ -169,30 +167,18 @@ export default function PreferencesScreen() {
         so a person who met the idea here recognises it there. "Let people see
         who I am" describes the same switch and teaches nothing.
       */}
-      <EmberFieldGroup
-        label="Anonymity"
-        helper="You can change this in any room."
-      >
+      <EmberSection title="Anonymity" caption="You can change this in any room.">
         <EmberToggle
           label="Stay anonymous at events"
           helper="Join rooms under a made-up name. Off, everyone there sees your name and photo."
           value={anonymous}
           onValueChange={setAnonymous}
         />
-      </EmberFieldGroup>
+      </EmberSection>
 
-      <EmberFieldGroup label="Looking for" helper="Select all that apply.">
-        <EmberChipRow>
-          {LOOKING_FOR.map((option) => (
-            <EmberChip
-              key={option}
-              label={option}
-              selected={lookingFor.includes(option)}
-              onPress={() => toggle(option)}
-            />
-          ))}
-        </EmberChipRow>
-      </EmberFieldGroup>
+      <EmberSection title="Looking For" caption="What brings you to Blend'n today?">
+        <LookingForCards selected={lookingFor} onToggle={toggle} />
+      </EmberSection>
     </OnboardingScreen>
   )
 }
