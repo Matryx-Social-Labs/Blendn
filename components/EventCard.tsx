@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import type { BlendnEvent } from '../lib/api'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useEffect, useMemo, useRef } from 'react'
 import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
@@ -8,26 +9,14 @@ import { APP_COLORS } from '../lib/theme'
 import OptimizedImage from './OptimizedImage'
 import Typography from './Typography'
 
-interface Event {
-  id: string
-  title: string
-  description: string
-  short_description: string
-  venue_name: string
-  address: string
-  start_time: string
-  end_time: string
-  timezone?: string
-  price_cents: number
-  max_capacity: number
-  current_capacity: number
-  cover_image_url: string | null
-  category: string
-  city?: string
-  check_in_radius: number
-  latitude: number
-  longitude: number
-}
+/*
+ * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
+ *
+ * This was a hand-written interface duplicated across three files that pass
+ * events to each other. TypeScript compared them structurally, so they drifted
+ * silently until a correction in one broke a call site in another.
+ */
+type Event = BlendnEvent
 
 interface EventCardProps {
   event: Event

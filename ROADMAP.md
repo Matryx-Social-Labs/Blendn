@@ -325,25 +325,7 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 
 Ordered by what is broken for a real user today, not by what is interesting.
 
-### 1. Three `Event` interfaces, structurally compared
-
-Surfaced while adding CI. `Event` is declared three times, independently:
-`app/(tabs)/events.tsx:55`, `app/nearby-events.tsx:25`, `components/EventCard.tsx:11`.
-
-They are passed to each other, so TypeScript compares them structurally and they
-have already drifted. Widening `city` in one of them by a single `| null` -- to
-match what the API actually returns -- immediately produced
-`Type 'Event' is not assignable to type 'Event'. Two different types with the
-same name`, and broke a call site three files away.
-
-That is the root cause of 3 of the 6 remaining baseline type errors. The fix is
-one shared type, and it is a real refactor rather than a patch, so it is its own
-item rather than something to sneak into an unrelated change.
-
-Worth doing before the group work, because group matching will add more shapes
-that flow through the same components.
-
-### 2. Smaller, confirmed
+### 1. Smaller, confirmed
 
 | | Where | |
 |---|---|---|
@@ -418,6 +400,25 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+- **One `Event` type, derived from the API mapping** — `Event` was declared
+  three times and hand-built twice more, so TypeScript compared five shapes
+  structurally and they had drifted. `lib/api.ts` now exports `eventFromApi`
+  and `BlendnEvent`, and every consumer takes them.
+
+  Two of the hand-built copies constructed the *same* `checkedInEvents` list
+  from the active check-ins payload with different fidelity — one carried the
+  coordinates through, the other wrote `latitude: 0, longitude: 0`, which is a
+  real point in the Gulf of Guinea rather than a missing one. Both called
+  `setCheckedInEvents`, so a checked-in card's distance depended on which had
+  run last. Absent coordinates are now `null`, which the `if (!event.latitude)`
+  guards downstream already handle.
+
+  **The typechecker is green for the first time** — 6 baseline errors to 0. The
+  other three were an over-typed `getItemLayout` shared by three lists with
+  identical geometry, and an `Animated.event` listener with an inferred
+  `unknown` parameter.
+
 
 ### 2026-08-10 — anonymity you can see
 

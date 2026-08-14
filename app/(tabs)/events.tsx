@@ -28,7 +28,7 @@ import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
-import { getEvents as fetchEventsApi } from '../../lib/api'
+import { eventFromApi, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   awayNotice,
   cityOnResume,
@@ -69,42 +69,14 @@ import { APP_COLORS } from '../../lib/theme'
  * bug existed because two call sites disagreed about the unit, and the fix
  * should remove the opportunity rather than patch both.
  */
-interface Event {
-  id: string
-  title: string
-  description: string
-  short_description: string
-  venue_name: string
-  address: string
-  start_time: string
-  end_time: string
-  timezone?: string
-  price_cents: number
-  max_capacity: number
-  current_capacity: number
-  cover_image_url: string | null
-  category: string
-  /** Parent category slug — the family, not the leaf. See `lib/api.ts`. */
-  category_group?: string
-  /*
-   * Deliberately *not* widened to `string | null`, even though the server's is.
-   *
-   * There are three `Event` interfaces in this app (see `ROADMAP.md` — "Three
-   * `Event` interfaces, structurally compared"). Widening this one alone makes
-   * it diverge from the others and produces a `Type 'Event' is not assignable
-   * to type 'Event'` error that says nothing useful. The nullability belongs in
-   * the shared type, when there is one.
-   */
-  city?: string
-  check_in_radius: number
-  latitude: number
-  longitude: number
-  is_favorited?: boolean
-  favorite_count?: number
-  user_checkin?: { status: string; checkInId?: string; checkInTime?: string | null } | null
-  interested_preview?: string[]
-  display_city?: string
-}
+/*
+ * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
+ *
+ * This was a hand-written interface duplicated across three files that pass
+ * events to each other. TypeScript compared them structurally, so they drifted
+ * silently until a correction in one broke a call site in another.
+ */
+type Event = BlendnEvent
 
 type EventsTrayState = {
   visible: boolean
@@ -1033,25 +1005,7 @@ export default function Events() {
         // Transform check-in data to Event format
         const activeEvents: Event[] = result.data.checkIns
           .filter((c: any) => c.event)
-          .map((c: any) => ({
-            id: c.event.id,
-            title: c.event.title,
-            description: c.event.description || '',
-            short_description: c.event.shortDescription || '',
-            venue_name: c.event.venueName || '',
-            address: c.event.address || '',
-            start_time: c.event.startTime,
-            end_time: c.event.endTime,
-            price_cents: c.event.priceCents || 0,
-            max_capacity: c.event.maxCapacity || 0,
-            current_capacity: c.event.currentCapacity || 0,
-            cover_image_url: c.event.coverImageUrl || null,
-            category: c.event.category || '',
-            city: c.event.city,
-            check_in_radius: c.event.checkInRadius || 100,
-            latitude: c.event.latitude,
-            longitude: c.event.longitude,
-          }))
+          .map((c: any) => eventFromApi(c.event))
           .map(normalizeEvent)
         setCheckedInEvents(activeEvents)
         Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
@@ -1535,25 +1489,7 @@ export default function Events() {
       if (meta?.activeCheckins?.length) {
         const activeEvents: Event[] = meta.activeCheckins
           .filter((c: any) => c.event)
-          .map((c: any) => ({
-            id: c.event.id,
-            title: c.event.title,
-            description: '',
-            short_description: '',
-            venue_name: c.event.venueName || '',
-            address: c.event.address || '',
-            start_time: c.event.startTime,
-            end_time: c.event.endTime,
-            price_cents: 0,
-            max_capacity: 0,
-            current_capacity: 0,
-            cover_image_url: c.event.coverImageUrl || null,
-            category: '',
-            city: c.event.city,
-            check_in_radius: 0,
-            latitude: 0,
-            longitude: 0,
-          }))
+          .map((c: any) => eventFromApi(c.event))
           .map(normalizeEvent)
         setCheckedInEvents(activeEvents)
       } else {

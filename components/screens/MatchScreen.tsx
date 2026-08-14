@@ -15,7 +15,9 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../OptimizedImage'
@@ -339,7 +341,13 @@ export default function Match() {
   const [myRevealed, setMyRevealed] = useState(false)
   const [myName, setMyName] = useState<string | null>(null)
   const getSimilarItemLayout = useCallback(
-    (_: ArrayLike<AttendeeProfile> | null | undefined, index: number) => ({
+    /*
+     * `unknown` because this reads nothing but `index` — every row is the same
+     * fixed width. Naming one row type made the helper unusable on the other
+     * two lists that have identical geometry: the skeleton list of numbers and
+     * the recommended list. Three call sites, one measurement, no data.
+     */
+    (_: ArrayLike<unknown> | null | undefined, index: number) => ({
       length: SIMILAR_CARD_WIDTH + 16,
       offset: (SIMILAR_CARD_WIDTH + 16) * index,
       index,
@@ -1208,7 +1216,10 @@ export default function Match() {
                     [{ nativeEvent: { contentOffset: { x: similarScrollX } } }],
                     {
                       useNativeDriver: true,
-                      listener: (e) => {
+                      // Typed explicitly: `Animated.event` widens its listener
+                      // parameter to `unknown`, so the offset read below is an
+                      // error without it.
+                      listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
                         const x = e.nativeEvent.contentOffset.x || 0
                         const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
                         if (idx !== lastSimilarIndex.current) {
