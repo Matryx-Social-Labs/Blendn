@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient'
-import { ReactNode } from 'react'
+import { forwardRef, ReactNode } from 'react'
 import {
   ActivityIndicator,
   Pressable,
@@ -159,11 +159,15 @@ interface FieldProps extends TextInputProps {
  * needs to check what they are filling in, and is unreachable to a screen
  * reader once the field has a value.
  */
-export function EmberField({ label, helper, compact, style, ...input }: FieldProps) {
+export const EmberField = forwardRef<TextInput, FieldProps>(function EmberField(
+  { label, helper, compact, style, ...input },
+  ref
+) {
   return (
     <View style={compact ? undefined : styles.fieldBlock}>
       {compact ? null : <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text>}
       <TextInput
+        ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={EMBER.textPlaceholder}
         style={[styles.input, compact ? styles.inputCompact : null, style]}
@@ -172,7 +176,7 @@ export function EmberField({ label, helper, compact, style, ...input }: FieldPro
       {helper ? <Text style={styles.helper}>{helper}</Text> : null}
     </View>
   )
-}
+})
 
 interface ToggleProps {
   label: string

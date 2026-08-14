@@ -1,5 +1,6 @@
 import * as Location from 'expo-location'
 import { useState } from 'react'
+import { Alert, Linking } from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { previousStep } from '../../lib/onboarding'
@@ -23,6 +24,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * the sharing preference follows it because the design has one control, and
  * both are editable in Settings afterwards.
  */
+const SETTINGS_HINT = "Blend'n uses location to see who is around you, and check in to events."
+
 export default function LocationScreen() {
   const { saving, commit, skip, goTo } = useOnboarding('location')
   const [asking, setAsking] = useState(false)
@@ -30,16 +33,40 @@ export default function LocationScreen() {
   const ask = async () => {
     setAsking(true)
     let granted = false
+    let canAskAgain = true
     try {
       const existing = await Location.getForegroundPermissionsAsync()
+      canAskAgain = existing.canAskAgain
       granted =
         existing.granted ||
         (existing.canAskAgain &&
           (await Location.requestForegroundPermissionsAsync()).status === 'granted')
     } catch {
       granted = false
+      canAskAgain = false
     }
     setAsking(false)
+
+    /*
+     * The OS asks once per install, not once per account.
+     *
+     * Deleting an account and signing up again does not reset it — so someone
+     * who declined months ago taps this button and *nothing happens*, which
+     * reads as a broken button rather than as a decision they already made.
+     * `canAskAgain` is false in exactly that case, and Settings is the only
+     * way back.
+     */
+    if (!granted && !canAskAgain) {
+      Alert.alert(
+        'Turn this on in Settings',
+        `${SETTINGS_HINT}\n\nYour phone only asks once, and it was answered before. You can change it in Settings at any time.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ]
+      )
+    }
+
     await commit({ share_location: granted })
   }
 
