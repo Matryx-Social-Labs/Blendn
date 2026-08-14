@@ -42,7 +42,15 @@ import {
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres } from '../../lib/geo'
-import { revealPromptText } from '../../lib/reveal'
+import { revealPromptText, revealReadiness } from '../../lib/reveal'
+import {
+  PUBLIC_CHECKIN_WARNING,
+  shouldWarnBeforePublicCheckIn,
+} from '../../lib/roomVisibility'
+import {
+  hasSeenPublicCheckInWarning,
+  markPublicCheckInWarningSeen,
+} from '../../lib/roomVisibilityStorage'
 import { apiClient, ProfileCache } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
@@ -550,14 +558,37 @@ export default function Events() {
        * they are named before answering. Dismissing writes nothing, because the
        * row is already false — and so does killing the app mid-prompt, which is
        * the right way for this to fail.
+       *
+       * **The first one explains; the rest just ask.** Someone who set this in
+       * onboarding has agreed to a sentence on a settings screen, which is not
+       * the same as picturing their name and face in a room full of strangers.
+       * The first prompt spells out what becomes visible and to whom; after
+       * that the banner carries it, continuously, which is the better teacher
+       * anyway. `shouldWarnBeforePublicCheckIn` holds the three conditions.
        */
       if (result.data?.revealSuggestion) {
+        const firstTime =
+          !!user?.id &&
+          shouldWarnBeforePublicCheckIn({
+            revealByDefault: true,
+            hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
+            // Nothing to reveal means nothing to warn about — the same check
+            // the reveal switch makes before it offers itself.
+            // `User.image` is a mirror of `photos[0]`, written only by the
+            // profile PUT — so it is the same photo a reveal would show.
+            canReveal: revealReadiness({
+              name: userFirstName,
+              photos: user?.image ? [user.image] : [],
+            }).ok,
+          })
+        if (firstTime && user?.id) await markPublicCheckInWarningSeen(user.id)
+
         showTray({
-          title: 'Show your name here?',
-          message: revealPromptText(userFirstName),
+          title: firstTime ? PUBLIC_CHECKIN_WARNING.title : 'Show your name here?',
+          message: firstTime ? PUBLIC_CHECKIN_WARNING.body : revealPromptText(userFirstName),
           buttons: [
             {
-              label: 'Yes, show my name',
+              label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
               variant: 'primary',
               onPress: () => {
                 closeTray()
@@ -568,7 +599,7 @@ export default function Events() {
             },
             // Deliberately not "No" — nothing is being refused. Staying
             // anonymous is the state they are already in.
-            { label: 'Stay anonymous', onPress: closeTray },
+            { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeTray },
           ],
         })
         return

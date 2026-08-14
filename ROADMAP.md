@@ -401,6 +401,27 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **How you enter a room is a setting, with two safeguards** — the onboarding
+  question, a first-time warning, and a banner that runs for as long as you are
+  in the room. `lib/roomVisibility.ts` + `components/RoomVisibilityBanner.tsx`.
+
+  `reveal_by_default` was deliberately unwritable, on the reasoning that being
+  named has to be an act in the room rather than a setting flipped once. The
+  reasoning held; the enforcement was in the wrong place — it made someone
+  happy to be seen re-answer at every door, and told someone who wanted to stay
+  anonymous nothing about which state they were in.
+
+  It now lives in three places instead: the server still creates every check-in
+  `revealed: false` so being named is always a tap; the first public check-in
+  explains what becomes visible and to whom; and the banner states the current
+  answer continuously, which is what makes "flipped it once and forgot"
+  impossible rather than merely discouraged.
+
+  The warning fires on three conditions and all of them matter — one that fires
+  on the safe path teaches people to dismiss dialogs, and one that fires when
+  there is no name and no photo warns about an exposure that cannot happen.
+
+
 - **Orientation can be shown, to people who already know who you are** — the
   switch the Figma frame asks for, built with the exposure narrower than the
   label implies. Two gates on the server: `show_orientation` (defaults false,

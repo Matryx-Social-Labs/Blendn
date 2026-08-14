@@ -1476,6 +1476,11 @@ class ApiClientClass {
        * first of the two.
        */
       show_orientation?: boolean
+      /*
+       * How you enter rooms. A suggestion the room re-asks by way of a tap —
+       * the server creates every check-in `revealed: false` regardless.
+       */
+      reveal_by_default?: boolean
       interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
       /** A slug from `getWorkFields()`, never free text. */
       work_field?: string | null
