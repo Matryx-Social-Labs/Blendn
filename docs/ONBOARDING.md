@@ -152,7 +152,11 @@ than one label, and "queer" plus "bisexual" is a common pair. But it is an API
 change — `orientation` becomes `orientations[]`, and `deriveInterestedIn` has to
 decide what a set of labels implies about who to match — not a caption change.
 
-**Decision needed:** single label, or multiple?
+**Decided: multiple**, capped at three, with "Prefer not to say" exclusive and
+`interested_in` derived from the union. The reasoning and the build order are in
+`ROADMAP.md` — it is an API change (schema, `deriveInterestedIn`, validation,
+scrub) before it is a screen change, and the caption goes back to the frame's
+"Select all that apply to you" only once the control can honour it.
 
 ### 3. "Looking for" does not reach matching
 

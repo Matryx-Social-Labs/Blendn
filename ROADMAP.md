@@ -323,6 +323,55 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 
 ## Next
 
+### Orientation becomes multi-select
+
+**Decided: yes.** People hold more than one label — "queer" and "bisexual"
+together, or "asexual" alongside a romantic orientation — and a single-choice
+control makes somebody pick which part of themselves to leave out, on the screen
+that asks them to be authentic. Multi-select does not force anyone to choose
+several; it stops the UI denying that they might.
+
+Two constraints make it work:
+
+- **"Prefer not to say" is exclusive.** It is a refusal, not a label, so it
+  cannot sit beside "bisexual". `intentsAreCoherent` already enforces exactly
+  this for `just_here`, so the rule has a shape to copy rather than invent.
+- **`interested_in` derives from the union, not the intersection.** Somebody who
+  is bisexual *and* queer is open to the union of what those imply. Taking the
+  intersection would quietly narrow their pool, which is the opposite of what
+  picking two labels means.
+
+Capped at three. Past that it stops describing a person and starts adding noise
+to the matcher.
+
+**This is an API change, not a caption.** In order:
+
+1. `profiles.orientation String?` becomes `orientations String[]`, with a
+   migration that carries every existing single value into a one-element array.
+2. `deriveInterestedIn` takes a set and unions the results. Its tests grow the
+   combination cases — the ambiguous pairs are where it will be wrong.
+3. `updateProfileSchema` validates the array: max 3, every value in the enum,
+   and the exclusivity rule.
+4. The account-deletion scrub clears it, like every other special-category field.
+5. Only then the screen: chips become multi-select and the caption goes back to
+   the frame's "Select all that apply to you", which will finally be true.
+
+Worth doing in that order because steps 1–4 are safe on their own — the column
+accepts more, nothing sends more yet — and step 5 is the one that changes what
+people see.
+
+### Decided: friendship does not reveal identity
+
+A friend sees what a match sees. Revealing stays an act taken in a room.
+
+The alternative makes the friend graph a second path around `maySeeIdentity`,
+and a back door in an anonymity model is not a feature of it. Anything that
+wants to show a friend's real name has to go through the same gate everything
+else does.
+
+This unblocks The Grid.
+
+
 ### Wire the presence monitor into the room
 
 `lib/presence.ts` holds the policy and 15 tests hold it to it. Nothing calls it
