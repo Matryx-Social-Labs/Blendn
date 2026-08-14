@@ -42,6 +42,34 @@ import { useOnboarding } from '../../lib/useOnboarding'
 
 const SLOTS = 6
 
+/**
+ * A plus drawn as two rectangles, not as a glyph.
+ *
+ * This has now been "centred" twice and been wrong twice, for two different
+ * reasons. First it shared a centred block with a caption, so the block was
+ * centred and the plus rode above it. Then it was alone and still off, because
+ * an icon font centres by *font metrics* — the glyph sits inside a line box
+ * with ascender and descender space, `includeFontPadding` adds more on Android,
+ * and none of that is symmetrical around the mark you actually see.
+ *
+ * Two rectangles have no metrics to argue with. The parent centres a
+ * fixed-size square, and the bars are centred inside it by construction, so
+ * this is exact on every platform and cannot drift when the icon set changes.
+ */
+function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number }) {
+  const bar = {
+    position: 'absolute' as const,
+    backgroundColor: EMBER.accent,
+    borderRadius: thickness,
+  }
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={[bar, { width: size, height: thickness }]} />
+      <View style={[bar, { width: thickness, height: size }]} />
+    </View>
+  )
+}
+
 export default function MediaScreen() {
   const { user } = useAuth()
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('media')
@@ -137,19 +165,7 @@ export default function MediaScreen() {
             accessibilityLabel={photos.length === 0 ? 'Add your main photo' : 'Add a photo'}
             style={[styles.slot, photos.length === 0 && styles.slotPrimary, styles.slotEmpty]}
           >
-            {/*
-              The plus, alone, and that is the fix.
-              
-              It used to sit above a caption inside the same centred block — so
-              the *block* was centred and the plus was not, which is exactly
-              what it looked like. Guidance moved to the line under the grid,
-              where it does not have to share a box with the thing it describes.
-            */}
-            {uploadingSlot !== null ? (
-              <ActivityIndicator color={EMBER.accent} />
-            ) : (
-              <Ionicons name="add" size={32} color={EMBER.accent} />
-            )}
+            {uploadingSlot !== null ? <ActivityIndicator color={EMBER.accent} /> : <Plus />}
           </Pressable>
         ) : null}
       </View>
