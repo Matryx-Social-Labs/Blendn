@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { forwardRef, ReactNode } from 'react'
+import { Children, forwardRef, isValidElement, ReactNode } from 'react'
 import {
   ActivityIndicator,
+  Dimensions,
   Pressable,
   StyleSheet,
   Switch,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native'
 
+import { estimateChipWidth, packChips } from '../../lib/chipPacking'
 import {
   EMBER,
   EMBER_CONTROL_HEIGHT,
@@ -167,8 +169,44 @@ export function EmberChip({ label, selected, onPress }: ChipProps) {
  * the oldest trick in wrapped-layout and it does not depend on how any given
  * Yoga version accounts for `gap`.
  */
-export function EmberChipRow({ children }: { children: ReactNode }) {
-  return <View style={styles.chipRow}>{children}</View>
+export function EmberChipRow({
+  children,
+  pack,
+}: {
+  children: ReactNode
+  /**
+   * Reorder the chips to fill the rows.
+   *
+   * Off by default. Flexbox wraps greedily *in order*, so a long label can push
+   * a short one to the next line and leave a gap behind it — worst on the two
+   * screens whose labels come from the server. Turning this on lets a later
+   * chip come forward to fill that space.
+   *
+   * Opt-in because reordering is visible, and it is only worth the churn where
+   * the labels vary enough to leave real gaps. A fixed short list like the
+   * gender chips gains nothing and would just look unstable.
+   */
+  pack?: boolean
+}) {
+  const items = Children.toArray(children)
+  const ordered = pack
+    ? packChips(
+        items,
+        (child) => {
+          const label = isValidElement(child)
+            ? String((child.props as { label?: unknown }).label ?? '')
+            : ''
+          // The chip's own horizontal padding (20 × 2) plus its margin (12).
+          return estimateChipWidth(label, 52)
+        },
+        // Screen width less the 24pt page padding on each side. Close enough:
+        // a card narrows it further, and being a little pessimistic only ever
+        // packs one chip fewer, never overflows.
+        Dimensions.get('window').width - 48
+      )
+    : items
+
+  return <View style={styles.chipRow}>{ordered}</View>
 }
 
 /* -------------------------------------------------------------------------- */

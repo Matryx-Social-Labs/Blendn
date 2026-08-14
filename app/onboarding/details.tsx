@@ -91,7 +91,7 @@ export default function DetailsScreen() {
 
       {groups.map((group) => (
         <EmberFieldGroup key={group.id} label={group.name}>
-          <EmberChipRow>
+          <EmberChipRow pack>
             {group.items.map((item) => (
               <EmberChip
                 key={item.id}
