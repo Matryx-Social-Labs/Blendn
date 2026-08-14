@@ -1469,6 +1469,13 @@ class ApiClientClass {
       intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
       gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
       orientation?: string | null
+      /*
+       * Show `orientation` to people who already passed the identity gate —
+       * matches, open conversations, rooms you revealed yourself in. Never to
+       * every caller: the server gates it twice, and this flag is only the
+       * first of the two.
+       */
+      show_orientation?: boolean
       interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
       /** A slug from `getWorkFields()`, never free text. */
       work_field?: string | null

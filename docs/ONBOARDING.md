@@ -90,22 +90,49 @@ Every one of these is a place the design asks for something the product does not
 have. None of them are silently ignored — each is either mapped honestly or left
 out, and listed here.
 
-### 1. Orientation's "Show on profile" toggle is not built
+### 1. The orientation switch is built, and narrower than its label
 
-The frame puts a switch beside Orientation offering to display it publicly.
+Frame `1141:4192` puts a switch beside Orientation offering to display it.
+**Built** — with the exposure narrower than "show on profile" implies, and the
+difference is the point.
 
-**Orientation has never been visible to anyone but its owner.**
-`GET /profiles/:userId` withholds it by an allow-list written specifically
-because a deny-list once leaked exactly this field, along with `gender`, to any
-authenticated caller for any user id.
+Turning it on shows orientation to people who **can already see who you are**:
+a mutual match, an open conversation, a room you revealed yourself in. Not to
+every caller. Two gates on the server, and both must pass:
 
-Building the toggle means either creating an exposure the product decided
-against, or shipping a switch that does nothing — and a privacy control that
-lies is worse than no control at all. The screen says *"Used to find compatible
-matches. Never shown on your profile."* instead.
+| Gate | Question | Default |
+|---|---|---|
+| `show_orientation` | may this be shown at all? | **false** |
+| `maySeeIdentity` | shown to *whom*? | matches, conversations, revealed |
 
-**Question for design:** was public orientation intended, or is the toggle
-carried over from a template?
+**Why not the switch as drawn.** A single public switch puts orientation in
+front of any caller holding a token. This API withholds someone's real name and
+photograph from anyone who has not matched, opened a conversation, or been
+revealed to — so a field more sensitive than a name cannot be less protected
+than one. The allow-list it sits in exists *because a deny-list once shipped
+`orientation` and `gender` to any authenticated caller*.
+
+**Why not leave it alone either.** Doing nothing looked like the safe option
+and was not. Orientation was already collected and already fed
+`deriveInterestedIn`, and was shown to nobody — so the algorithm knew and no
+human could, which leaves someone no way to signal a thing the dating feature
+exists to act on, and no visible control over a field the product was already
+using.
+
+**Two rules follow:**
+
+- The switch appears **only once an orientation is chosen**. One offering to
+  publish an unfilled field means nothing, and invites someone to turn it on
+  and assume it did something.
+- **Clearing the orientation clears the consent** — `orientationConsent` in
+  `lib/onboarding.ts`, tested. A stored `true` would outlive the thing it was
+  consent for, so answering the question again months later would republish it
+  to everyone who had matched in the meantime, with no second decision.
+
+The label on screen says who can see it rather than repeating "Show on
+profile", and `EmberToggle` requires its helper text rather than accepting it as
+optional. A privacy switch whose blast radius is not on the screen is one people
+mis-set, and the cost of mis-setting this one is not symmetrical.
 
 ### 2. "Looking for" does not reach matching
 

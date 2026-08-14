@@ -18,6 +18,7 @@ import {
   isSkippable,
   joinDateOfBirth,
   nextStep,
+  orientationConsent,
   parseStoredOnboarding,
   previousStep,
   progressPercent,
@@ -257,5 +258,27 @@ describe('parsing what is on disk', () => {
       draft: {},
     })
     expect(parseStoredOnboarding(mixed)?.progress.completed).toEqual(['basics', 'notifications'])
+  })
+})
+
+describe('orientationConsent', () => {
+  it('records consent when there is an orientation and the switch is on', () => {
+    expect(orientationConsent('bisexual', true)).toBe(true)
+  })
+
+  it('records none when the switch is off', () => {
+    expect(orientationConsent('bisexual', false)).toBe(false)
+  })
+
+  it('drops consent when the orientation is cleared', () => {
+    /*
+     * Pick an orientation, turn the switch on, then go back and clear the
+     * orientation. A stored `true` would outlive the thing it was consent for —
+     * so answering the question again months later would republish it to
+     * everyone who had matched in the meantime, without a second decision from
+     * the person.
+     */
+    expect(orientationConsent(undefined, true)).toBe(false)
+    expect(orientationConsent('', true)).toBe(false)
   })
 })

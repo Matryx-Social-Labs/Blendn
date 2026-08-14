@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TextInputProps,
@@ -173,6 +174,50 @@ export function EmberField({ label, helper, compact, style, ...input }: FieldPro
   )
 }
 
+interface ToggleProps {
+  label: string
+  /** What turning it on actually does. Not decoration — see below. */
+  helper: string
+  value: boolean
+  onValueChange: (next: boolean) => void
+}
+
+/**
+ * A switch with its consequence spelled out beside it.
+ *
+ * `helper` is required rather than optional, which is the only opinionated
+ * thing here. The one place this is used controls whether sexual orientation
+ * is shown to anyone, and "Show on profile" — the label the design gives it —
+ * does not say *to whom*. A privacy switch whose blast radius is not on the
+ * screen is a switch people mis-set, and the cost of mis-setting this one is
+ * not symmetrical.
+ *
+ * `Switch` from react-native, not a hand-rolled `Pressable`: the platform one
+ * already announces its state to a screen reader, honours reduce-motion, and
+ * has the right hit target. `trackColor` is as far as the tint goes, because
+ * the gradient cannot be applied to it and a fake switch that looked right
+ * would behave worse.
+ */
+export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps) {
+  return (
+    <View style={styles.toggleRow}>
+      <View style={styles.toggleText}>
+        <Text style={styles.toggleLabel}>{label}</Text>
+        <Text style={styles.helper}>{helper}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        accessibilityLabel={label}
+        accessibilityHint={helper}
+        trackColor={{ false: EMBER.surfaceSunken, true: EMBER.gradientFrom }}
+        thumbColor={EMBER.textPrimary}
+        ios_backgroundColor={EMBER.surfaceSunken}
+      />
+    </View>
+  )
+}
+
 /** A label over an arbitrary control — chips, a grid, a toggle row. */
 export function EmberFieldGroup({
   label,
@@ -231,6 +276,21 @@ const styles = StyleSheet.create({
   chipLabel: EMBER_TYPE.chip,
   chipLabelSelected: { color: EMBER.onGradientChip },
   chipLabelIdle: { color: EMBER.textPrimary },
+
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.card,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  // `flex: 1` so a two-line helper wraps instead of squeezing the switch off
+  // the right edge, which is what a row of three fixed children does on a
+  // narrow phone.
+  toggleText: { flex: 1, gap: 4 },
+  toggleLabel: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
 
   fieldBlock: { gap: 12 },
   fieldLabel: EMBER_TYPE.fieldLabel,

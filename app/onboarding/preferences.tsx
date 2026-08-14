@@ -4,24 +4,35 @@ import {
   EmberChip,
   EmberChipRow,
   EmberFieldGroup,
+  EmberToggle,
 } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { previousStep } from '../../lib/onboarding'
+import { orientationConsent, previousStep } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
  * Step four — orientation, and what you are here for.
  *
- * ## Two deliberate departures from the frames
+ * ## The orientation switch, and what it actually does
  *
- * **The "Show on profile" toggle is not built.** The frame puts a switch beside
- * Orientation offering to display it. Orientation is a *matching input* and has
- * never been shown to anyone: `GET /profiles/:userId` withholds it from every
- * caller who is not its owner, by an allow-list written specifically because a
- * deny-list once leaked exactly this field along with `gender`. Shipping the
- * toggle would mean either building an exposure the product decided against, or
- * shipping a switch that does nothing — and a privacy control that lies is
- * worse than no control. Raised in `docs/ONBOARDING.md`.
+ * The frame offers a "Show on profile" switch beside Orientation. It is built,
+ * and it does something narrower than that label implies.
+ *
+ * Turning it on shows your orientation to people who **can already see who you
+ * are** — a mutual match, an open conversation, a room you revealed yourself
+ * in. Not to every caller. The server gates it twice and this flag is only the
+ * first gate; the second is `maySeeIdentity`, the same one that decides who
+ * sees your real name and face.
+ *
+ * That ordering is the reason. This app withholds someone's name and
+ * photograph from anyone who has not earned them, so a field more sensitive
+ * than a name cannot be less protected than one. The label here says so rather
+ * than saying "Show on profile", because a privacy switch whose blast radius is
+ * not on the screen is one people mis-set.
+ *
+ * Default off, and it stays off unless somebody turns it on.
+ *
+ * ## One deliberate departure from the frames
  *
  * **"Looking for" writes `looking_for`, not `intent_default`.** The frame's
  * cards are Dating, Friendship, Networking, Travel and Open. The intent enum
@@ -50,11 +61,13 @@ export default function PreferencesScreen() {
   const { draft, loaded, saving, commit, skip, goTo } = useOnboarding('preferences')
 
   const [orientation, setOrientation] = useState<string | undefined>()
+  const [showOrientation, setShowOrientation] = useState(false)
   const [lookingFor, setLookingFor] = useState<string[]>([])
 
   useEffect(() => {
     if (!loaded) return
     setOrientation(draft.orientation)
+    setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -71,14 +84,22 @@ export default function PreferencesScreen() {
       subtitle="Your authentic self. Help us curate the right connections for your journey."
       ctaLabel="Continue"
       ctaBusy={saving}
-      onContinue={() => void commit({ orientation, looking_for: lookingFor })}
+      onContinue={() =>
+        void commit({
+          orientation,
+          // Clearing the orientation clears the consent with it — see
+          // `orientationConsent` for why that is not just tidiness.
+          show_orientation: orientationConsent(orientation, showOrientation),
+          looking_for: lookingFor,
+        })
+      }
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={() => goTo(previousStep('preferences')!)}
     >
       <EmberFieldGroup
         label="Orientation"
-        helper="Used to find compatible matches. Never shown on your profile."
+        helper="Used to find compatible matches. Hidden unless you choose otherwise below."
       >
         <EmberChipRow>
           {ORIENTATIONS.map((option) => (
@@ -93,6 +114,20 @@ export default function PreferencesScreen() {
           ))}
         </EmberChipRow>
       </EmberFieldGroup>
+
+      {/*
+        Rendered only once there is an orientation to show. A switch offering to
+        publish a field nobody has filled in has no meaning, and leaving it
+        visible invites someone to turn it on and assume it did something.
+      */}
+      {orientation ? (
+        <EmberToggle
+          label="Show it on my profile"
+          helper="Only people you've matched with or are talking to will see it. Never anyone else, and never in an event room."
+          value={showOrientation}
+          onValueChange={setShowOrientation}
+        />
+      ) : null}
 
       <EmberFieldGroup label="Looking for" helper="Select all that apply.">
         <EmberChipRow>
