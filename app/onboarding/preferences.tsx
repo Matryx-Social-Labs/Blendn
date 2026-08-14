@@ -32,6 +32,19 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * Default off, and it stays off unless somebody turns it on.
  *
+ * ## How you enter a room
+ *
+ * The last block on this screen, and the one with the sharpest consequence.
+ *
+ * It is a *suggestion*, not a setting that acts at a distance: the server
+ * creates every check-in row `revealed: false` whatever this says, so being
+ * named in a room is always a tap taken in that room. What this changes is
+ * whether the tap is offered when you walk in.
+ *
+ * Anonymous is the default and stays the default. The two safeguards that make
+ * the named option safe to offer at all — a warning the first time, and a
+ * banner for as long as you are inside — live in `lib/roomVisibility.ts`.
+ *
  * ## One deliberate departure from the frames
  *
  * **"Looking for" writes `looking_for`, not `intent_default`.** The frame's
@@ -63,12 +76,14 @@ export default function PreferencesScreen() {
   const [orientation, setOrientation] = useState<string | undefined>()
   const [showOrientation, setShowOrientation] = useState(false)
   const [lookingFor, setLookingFor] = useState<string[]>([])
+  const [revealByDefault, setRevealByDefault] = useState(false)
 
   useEffect(() => {
     if (!loaded) return
     setOrientation(draft.orientation)
     setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
+    setRevealByDefault(draft.reveal_by_default ?? false)
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (value: string) =>
@@ -91,6 +106,7 @@ export default function PreferencesScreen() {
           // `orientationConsent` for why that is not just tidiness.
           show_orientation: orientationConsent(orientation, showOrientation),
           looking_for: lookingFor,
+          reveal_by_default: revealByDefault,
         })
       }
       secondaryLabel="Skip"
@@ -128,6 +144,18 @@ export default function PreferencesScreen() {
           onValueChange={setShowOrientation}
         />
       ) : null}
+
+      <EmberFieldGroup
+        label="At an event"
+        helper="You can change this in the room, every time. Anonymous is the default."
+      >
+        <EmberToggle
+          label="Let people see who I am"
+          helper="Your name and first photo, to everyone in that room. Off means you appear under a made-up name instead."
+          value={revealByDefault}
+          onValueChange={setRevealByDefault}
+        />
+      </EmberFieldGroup>
 
       <EmberFieldGroup label="Looking for" helper="Select all that apply.">
         <EmberChipRow>

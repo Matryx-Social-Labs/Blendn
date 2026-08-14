@@ -209,6 +209,14 @@ export interface OnboardingDraft {
    * it, not a decision about who to.
    */
   show_orientation?: boolean
+  /*
+   * How you would like to enter rooms: named, or as a pseudonym.
+   *
+   * A *suggestion*, not a setting that acts at a distance — the server creates
+   * every check-in row `revealed: false` whatever this says, so being named is
+   * a tap in the room. What this changes is whether that tap is offered.
+   */
+  reveal_by_default?: boolean
   looking_for?: string[]
   location?: string
   occupation?: string
@@ -233,7 +241,7 @@ const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = 
   basics: ['name', 'gender', 'dateOfBirth'],
   notifications: ['push_enabled'],
   location: ['share_location'],
-  preferences: ['orientation', 'show_orientation', 'looking_for'],
+  preferences: ['orientation', 'show_orientation', 'looking_for', 'reveal_by_default'],
   journey: ['location', 'occupation', 'education', 'work_field'],
   details: ['interests', 'bio'],
   media: ['photos'],
