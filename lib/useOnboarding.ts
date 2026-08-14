@@ -110,21 +110,42 @@ export function useOnboarding(step: OnboardingStep) {
       setProgress(nextProgress)
       await writeOnboarding(userId, { progress: nextProgress, draft: merged })
 
-      const body = stepPayload(step, merged)
-      if (Object.keys(body).length > 0) {
-        const result = await apiClient.updateProfile(userId, body)
-        if (!result.success) {
-          // Logged, not surfaced. The draft is safe locally and the final step
-          // re-sends everything, so the only cost of this failure is that the
-          // dashboard sees the profile a few minutes later than it might have.
-          Logger.warn('auth', 'Onboarding step did not save to the server', {
-            step,
-            error: result.error,
-          })
+      /*
+       * Everything from here is best-effort, and the `try` is load-bearing.
+       *
+       * The rule this file states is "a failed server save does not block
+       * anyone" — and the first version only honoured it for a *returned*
+       * error. `apiClient.updateProfile` throws on a non-2xx, so a rejected
+       * field or a dropped connection skipped `setSaving(false)` and skipped
+       * the navigation, leaving the Continue button spinning with no way past
+       * it. A validation error the person cannot see or fix became a wall.
+       *
+       * Catching is the whole fix. The draft is already in storage two lines
+       * above, and the last step re-sends every field, so the recovery is
+       * automatic and the cost of failing here is that the dashboard sees the
+       * profile a few minutes late.
+       */
+      try {
+        const body = stepPayload(step, merged)
+        if (Object.keys(body).length > 0) {
+          const result = await apiClient.updateProfile(userId, body)
+          if (!result.success) {
+            Logger.warn('auth', 'Onboarding step did not save to the server', {
+              step,
+              error: result.error,
+            })
+          }
         }
+      } catch (error) {
+        Logger.warn('auth', 'Onboarding step threw while saving', { step, error })
+      } finally {
+        // In `finally` rather than after the call: a throw here used to leave
+        // this stuck true, which is what made the button spin forever.
+        setSaving(false)
       }
-      setSaving(false)
 
+      // Outside the try, deliberately. Moving on is not conditional on the
+      // network — that is the entire point of saving the draft first.
       const after = nextStep(step)
       if (after) goTo(after)
     },
@@ -142,6 +163,9 @@ export function useOnboarding(step: OnboardingStep) {
     if (!userId) return
     const nextProgress = advance(progress, step)
     setProgress(nextProgress)
+    // `writeOnboarding` swallows its own errors, so this cannot throw — but the
+    // navigation stays after it for the same reason as in `commit`: skipping
+    // must never depend on anything that can fail.
     await writeOnboarding(userId, { progress: nextProgress, draft })
     const after = nextStep(step)
     if (after) goTo(after)

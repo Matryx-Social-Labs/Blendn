@@ -145,15 +145,28 @@ export default function PreferencesScreen() {
         />
       ) : null}
 
+      {/*
+        Named "Anonymity" rather than "At an event", and the toggle is phrased
+        as *turning anonymity off* rather than as turning visibility on.
+        
+        The concept has to be learned somewhere, and this is the only screen
+        that gets to teach it. Every surface afterwards — the check-in warning,
+        the room banner, the pseudonym on your own messages — says "anonymous",
+        so a person who met the idea here recognises it there. "Let people see
+        who I am" describes the same switch and teaches nothing.
+      */}
       <EmberFieldGroup
-        label="At an event"
-        helper="You can change this in the room, every time. Anonymous is the default."
+        label="Anonymity"
+        helper="You can switch this in the room too, every time, and a banner always shows which one you are."
       >
         <EmberToggle
-          label="Let people see who I am"
-          helper="Your name and first photo, to everyone in that room. Off means you appear under a made-up name instead."
-          value={revealByDefault}
-          onValueChange={setRevealByDefault}
+          label="Stay anonymous at events"
+          helper="On, you join rooms under a made-up name — nobody sees your name or photo until you choose to show them. Off, everyone in the room sees both."
+          // Inverted on purpose: the stored field is `reveal_by_default`, and
+          // the switch reads as anonymity. On means anonymous means *not*
+          // revealing, which is also the safe default being the "on" position.
+          value={!revealByDefault}
+          onValueChange={(anonymous) => setRevealByDefault(!anonymous)}
         />
       </EmberFieldGroup>
 
