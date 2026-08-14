@@ -107,32 +107,46 @@ interface ChipProps {
  * than the generic role.
  */
 export function EmberChip({ label, selected, onPress }: ChipProps) {
-  const body = (
-    <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : styles.chipLabelIdle]}>
-      {label}
-    </Text>
-  )
-
   return (
+    /*
+     * One box, not two.
+     *
+     * This was a `Pressable` wrapping a styled `View`, and the wrapper did not
+     * size to its child — so each chip claimed more width than its visible pill
+     * and rows wrapped early, sometimes leaving half the screen empty beside a
+     * gap the next chip would have fitted into.
+     *
+     * The padding, the radius and the border now live on the `Pressable`
+     * itself, so the thing being measured and the thing being drawn are the
+     * same box. The gradient becomes a background behind the label rather than
+     * a container around it.
+     *
+     * `alignSelf: 'flex-start'` because a wrap container stretches its items on
+     * the cross axis, and a chip should be as tall as its own content rather
+     * than as tall as the tallest chip on its line.
+     */
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
-      style={({ pressed }) => [pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.chip,
+        !selected && styles.chipIdle,
+        pressed && styles.pressed,
+      ]}
     >
       {selected ? (
         <LinearGradient
           colors={[...EMBER_GRADIENT.colors]}
           start={EMBER_GRADIENT.start}
           end={EMBER_GRADIENT.end}
-          style={styles.chip}
-        >
-          {body}
-        </LinearGradient>
-      ) : (
-        <View style={[styles.chip, styles.chipIdle]}>{body}</View>
-      )}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : styles.chipLabelIdle]}>
+        {label}
+      </Text>
     </Pressable>
   )
 }
@@ -372,6 +386,11 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    // The gradient is an absolute fill; without this it paints over the radius.
+    overflow: 'hidden',
+    // A wrap container stretches on the cross axis. A chip should be its own
+    // height, not the height of the tallest one sharing its line.
+    alignSelf: 'flex-start',
     // Comfortably over the 44pt floor once the 24/12 padding is applied to
     // 24pt of line height, and stated so a shorter label cannot shrink below it.
     minHeight: 48,
