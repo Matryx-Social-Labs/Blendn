@@ -76,14 +76,26 @@ export default function PreferencesScreen() {
   const [orientation, setOrientation] = useState<string | undefined>()
   const [showOrientation, setShowOrientation] = useState(false)
   const [lookingFor, setLookingFor] = useState<string[]>([])
-  const [revealByDefault, setRevealByDefault] = useState(false)
+  /*
+   * Holds *anonymity*, not its opposite.
+   *
+   * The stored field is `reveal_by_default` and the switch says "stay
+   * anonymous", so one of the two has to be inverted somewhere. Doing it once,
+   * at the boundary where the value is read and written, beats a `!` at the
+   * render site — that version reads as a bug every time somebody looks at it,
+   * and the default being safe stops being obvious.
+   *
+   * `true` here is the default and the safe one: anonymous unless you say
+   * otherwise.
+   */
+  const [anonymous, setAnonymous] = useState(true)
 
   useEffect(() => {
     if (!loaded) return
     setOrientation(draft.orientation)
     setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
-    setRevealByDefault(draft.reveal_by_default ?? false)
+    setAnonymous(!(draft.reveal_by_default ?? false))
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (value: string) =>
@@ -96,7 +108,7 @@ export default function PreferencesScreen() {
       step="preferences"
       title="Your "
       titleAccent="preferences"
-      subtitle="Your authentic self. Help us curate the right connections for your journey."
+      subtitle="How you show up, and who sees what."
       ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() =>
@@ -106,7 +118,7 @@ export default function PreferencesScreen() {
           // `orientationConsent` for why that is not just tidiness.
           show_orientation: orientationConsent(orientation, showOrientation),
           looking_for: lookingFor,
-          reveal_by_default: revealByDefault,
+          reveal_by_default: !anonymous,
         })
       }
       secondaryLabel="Skip"
@@ -115,7 +127,7 @@ export default function PreferencesScreen() {
     >
       <EmberFieldGroup
         label="Orientation"
-        helper="Used to find compatible matches. Hidden unless you choose otherwise below."
+        helper="Used for matching. Hidden unless you say otherwise."
       >
         <EmberChipRow>
           {ORIENTATIONS.map((option) => (
@@ -139,7 +151,7 @@ export default function PreferencesScreen() {
       {orientation ? (
         <EmberToggle
           label="Show it on my profile"
-          helper="Only people you've matched with or are talking to will see it. Never anyone else, and never in an event room."
+          helper="Only people you match or talk with. Never a room."
           value={showOrientation}
           onValueChange={setShowOrientation}
         />
@@ -157,16 +169,13 @@ export default function PreferencesScreen() {
       */}
       <EmberFieldGroup
         label="Anonymity"
-        helper="You can switch this in the room too, every time, and a banner always shows which one you are."
+        helper="You can change this in any room."
       >
         <EmberToggle
           label="Stay anonymous at events"
-          helper="On, you join rooms under a made-up name — nobody sees your name or photo until you choose to show them. Off, everyone in the room sees both."
-          // Inverted on purpose: the stored field is `reveal_by_default`, and
-          // the switch reads as anonymity. On means anonymous means *not*
-          // revealing, which is also the safe default being the "on" position.
-          value={!revealByDefault}
-          onValueChange={(anonymous) => setRevealByDefault(!anonymous)}
+          helper="Join rooms under a made-up name. Off, everyone there sees your name and photo."
+          value={anonymous}
+          onValueChange={setAnonymous}
         />
       </EmberFieldGroup>
 

@@ -8,6 +8,7 @@ import {
   ONBOARDING_ROUTES,
   advance,
   nextStep,
+  previousStep,
   stepPayload,
   type OnboardingDraft,
   type OnboardingProgress,
@@ -103,19 +104,34 @@ export function useOnboarding(step: OnboardingStep) {
   }, [])
 
   /**
-   * Back a step — pop, rather than pushing the previous route.
+   * Back a step.
    *
-   * Pushing "backwards" would animate forwards and grow the stack every time
-   * someone changed their mind, so eight taps of back-and-forth leaves sixteen
-   * screens behind you. Popping is the only version that both looks right and
-   * stays honest about where you are.
+   * Pops when there is something to pop, and falls back to replacing when there
+   * is not — and the fallback is the whole point, because "there is not" is
+   * common rather than exotic.
    *
-   * `canGoBack` guards the first step, where there is nothing underneath and
-   * `back()` would escape the flow.
+   * A history only exists for steps you walked through *this* launch. Resume
+   * drops you straight onto step five with `replace`, so the stack is one deep;
+   * the first back pops that single entry and every one after it finds nothing
+   * and does nothing. Which is exactly the reported symptom: back works once,
+   * then stops.
+   *
+   * Guarding on `previousStep` rather than on `canGoBack` also gets the first
+   * screen right for the correct reason — there is no step before `basics`, so
+   * there is nothing to go back *to*, whatever the navigation stack happens to
+   * contain underneath the flow.
    */
   const goBack = useCallback(() => {
-    if (router.canGoBack()) router.back()
-  }, [])
+    const previous = previousStep(step)
+    if (!previous) return
+    if (router.canGoBack()) {
+      router.back()
+      return
+    }
+    // No history — resumed onto this step, or already popped what there was.
+    // `replace` keeps the stack from growing backwards.
+    router.replace(ONBOARDING_ROUTES[previous] as never)
+  }, [step])
 
   /**
    * Jump to an arbitrary step, with no history.
