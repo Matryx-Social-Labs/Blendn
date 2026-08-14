@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native'
 
-import { estimateChipWidth, packChips } from '../../lib/chipPacking'
+import { estimateChipWidth, isCatchAll, packChips } from '../../lib/chipPacking'
 import {
   EMBER,
   EMBER_CONTROL_HEIGHT,
@@ -172,6 +172,7 @@ export function EmberChip({ label, selected, onPress }: ChipProps) {
 export function EmberChipRow({
   children,
   pack,
+  width,
 }: {
   children: ReactNode
   /**
@@ -187,24 +188,38 @@ export function EmberChipRow({
    * gender chips gains nothing and would just look unstable.
    */
   pack?: boolean
+  /**
+   * How much horizontal room the row actually has.
+   *
+   * Defaults to the screen less its page padding, which is right for a row
+   * sitting directly on the page and **wrong inside a card** — that costs
+   * another 32pt, and a packer told it has more room than it does plans a row
+   * that flexbox then breaks somewhere else. Callers inside a container pass
+   * the real number.
+   */
+  width?: number
 }) {
   const items = Children.toArray(children)
-  const ordered = pack
-    ? packChips(
-        items,
-        (child) => {
-          const label = isValidElement(child)
-            ? String((child.props as { label?: unknown }).label ?? '')
-            : ''
-          // The chip's own horizontal padding (20 × 2) plus its margin (12).
-          return estimateChipWidth(label, 52)
-        },
-        // Screen width less the 24pt page padding on each side. Close enough:
-        // a card narrows it further, and being a little pessimistic only ever
-        // packs one chip fewer, never overflows.
-        Dimensions.get('window').width - 48
-      )
-    : items
+  const labelOf = (child: ReactNode) =>
+    isValidElement(child) ? String((child.props as { label?: unknown }).label ?? '') : ''
+
+  let ordered = items
+  if (pack) {
+    // Catch-alls come out first so packing cannot hoist them, and go back on
+    // the end afterwards. "Prefer not to say" in row one is a worse list than
+    // any gap it would have filled.
+    const catchAlls = items.filter((c) => isCatchAll(labelOf(c)))
+    const rest = items.filter((c) => !isCatchAll(labelOf(c)))
+    ordered = [
+      ...packChips(
+        rest,
+        // The chip's own horizontal padding (20 × 2) plus its margin (12).
+        (child) => estimateChipWidth(labelOf(child), 52),
+        width ?? Dimensions.get('window').width - 48
+      ),
+      ...catchAlls,
+    ]
+  }
 
   return <View style={styles.chipRow}>{ordered}</View>
 }

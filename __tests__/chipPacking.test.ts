@@ -7,7 +7,7 @@
  * that reads as instability.
  */
 
-import { estimateChipWidth, packChips } from '../lib/chipPacking'
+import { estimateChipWidth, isCatchAll, packChips } from '../lib/chipPacking'
 
 const w = (n: number) => () => n
 const widths = (items: readonly number[]) => packChips(items, (n) => n, 100)
@@ -88,5 +88,38 @@ describe('packChips', () => {
 
   it('handles an empty list', () => {
     expect(packChips([], w(10), 100)).toEqual([])
+  })
+})
+
+describe('isCatchAll', () => {
+  it('recognises the answers that mean "none of the above"', () => {
+    // These belong at the end whatever packs best: reading "Prefer not to say"
+    // before the real options is backwards, and a packer that hoists one into
+    // the first row because it fills a gap makes the list harder to scan.
+    for (const label of ['Other', 'other', 'Something else', 'Prefer not to say', 'None of these']) {
+      expect([label, isCatchAll(label)]).toEqual([label, true])
+    }
+  })
+
+  it('leaves real options alone', () => {
+    for (const label of ['Design', 'Engineering', 'Queer', 'Other Sciences']) {
+      expect([label, isCatchAll(label)]).toEqual([label, false])
+    }
+  })
+})
+
+describe('the width estimate', () => {
+  it('does not overshoot a long label full of narrow letters', () => {
+    /*
+     * "Prefer not to say" is mostly f, t, i and spaces. An average tuned on
+     * short words judged it far wider than it renders, and overestimating is
+     * the direction that wastes space — a chip thought too wide is held back
+     * from a row it would have fitted.
+     *
+     * ~130pt of text at 16pt Manrope, plus 52 of padding and margin.
+     */
+    const estimated = estimateChipWidth('Prefer not to say', 52)
+    expect(estimated).toBeGreaterThan(160)
+    expect(estimated).toBeLessThan(195)
   })
 })

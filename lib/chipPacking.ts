@@ -22,16 +22,32 @@
 /**
  * Roughly how wide a chip will be.
  *
- * Manrope Medium at 16pt averages a shade over half its point size per
- * character across mixed-case English. 8.2 is that, measured against the
- * longest and shortest labels in the app rather than assumed — "Prefer not to
- * say" and "Gay" both land within a few points.
+ * Manrope Medium at 16pt averages a little under half its point size per
+ * character across mixed-case English. 7.6 rather than the 8.2 first used: the
+ * longer labels are full of narrow letters — "Prefer not to say" is mostly f,
+ * t, i and spaces — so a flat average tuned on short words overestimates them
+ * badly, and overestimating is the direction that wastes space. A chip judged
+ * too wide is held back from a row it would have fitted.
  *
  * `padding` is the chip's own horizontal padding plus its margin, which the
  * caller knows and this file should not.
  */
 export function estimateChipWidth(label: string, padding: number): number {
-  return Math.ceil(label.length * 8.2) + padding
+  return Math.ceil(label.length * 7.6) + padding
+}
+
+/**
+ * Catch-all options belong at the end, whatever packs best.
+ *
+ * "Prefer not to say", "Other", "Something else" — these are the answer you
+ * give when none of the others fit, so reading them before the real options is
+ * backwards, and a packer that hoists one into row one because it happens to
+ * fill a gap makes the list actively harder to scan.
+ *
+ * Order is a meaning here, not a layout, so it wins over packing.
+ */
+export function isCatchAll(label: string): boolean {
+  return /^(other|something else|prefer not to say|none of these)$/i.test(label.trim())
 }
 
 /**
