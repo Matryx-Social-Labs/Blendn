@@ -352,6 +352,21 @@ const styles = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   chip: {
+    /*
+     * A transparent border on *both* states, so selecting a chip does not
+     * change its width.
+     *
+     * The idle style added `borderWidth: 1` and the selected gradient had
+     * none, which made every unselected chip two points wider than its
+     * selected self. Tapping one therefore re-flowed the whole wrapped row —
+     * chips jumping to a different line the moment you chose one, which is why
+     * picking "Asexual" appeared to tidy the layout up. It was not tidying; it
+     * was re-packing around a chip that had just shrunk.
+     *
+     * 24/12 padding is the frame's 25/13 rounded to the spacing scale.
+     */
+    borderWidth: 1,
+    borderColor: 'transparent',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: EMBER_RADIUS.pill,
@@ -363,7 +378,7 @@ const styles = StyleSheet.create({
   },
   // `#141313` with a hairline border, per the frame — a shade below the cards
   // around it, so an unselected chip recedes rather than competing.
-  chipIdle: { backgroundColor: '#141313', borderWidth: 1, borderColor: 'rgba(73,71,71,0.2)' },
+  chipIdle: { backgroundColor: '#141313', borderColor: 'rgba(73,71,71,0.2)' },
   chipLabel: EMBER_TYPE.chip,
   chipLabelSelected: { color: EMBER.onGradientChip },
   chipLabelIdle: { color: EMBER.textPrimary },
