@@ -200,6 +200,15 @@ export interface OnboardingDraft {
   gender?: OnboardingGender
   dateOfBirth?: string
   orientation?: string
+  /*
+   * Show `orientation` to people who can already see who you are.
+   *
+   * Not "make it public" — the server gates it a second time on
+   * `maySeeIdentity`, so it reaches matches, open conversations, and rooms you
+   * revealed yourself in, and nobody else. Sending `true` is consent to show
+   * it, not a decision about who to.
+   */
+  show_orientation?: boolean
   looking_for?: string[]
   location?: string
   occupation?: string
@@ -224,7 +233,7 @@ const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = 
   basics: ['name', 'gender', 'dateOfBirth'],
   notifications: ['push_enabled'],
   location: ['share_location'],
-  preferences: ['orientation', 'looking_for'],
+  preferences: ['orientation', 'show_orientation', 'looking_for'],
   journey: ['location', 'occupation', 'education', 'work_field'],
   details: ['interests', 'bio'],
   media: ['photos'],
@@ -252,6 +261,28 @@ export function stepPayload(
     }
   }
   return body
+}
+
+/**
+ * Whether to record consent to show an orientation.
+ *
+ * `false` whenever there is no orientation, regardless of what the switch says.
+ *
+ * The case this exists for: someone picks an orientation, turns the switch on,
+ * then goes back and clears the orientation. Leaving the stored `true` behind
+ * means the consent outlives the thing it was consent *for* — so picking an
+ * orientation again months later would silently republish it to everyone who
+ * had matched in the meantime, with no second decision from the person.
+ *
+ * A function rather than a ternary in the screen because it is a privacy
+ * invariant and not a rendering detail: any future screen that writes these two
+ * fields has to obey it, and one that inlines the rule is one that can forget.
+ */
+export function orientationConsent(
+  orientation: string | undefined,
+  requested: boolean
+): boolean {
+  return orientation ? requested : false
 }
 
 /**

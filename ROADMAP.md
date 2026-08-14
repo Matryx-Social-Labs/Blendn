@@ -401,6 +401,23 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **Orientation can be shown, to people who already know who you are** — the
+  switch the Figma frame asks for, built with the exposure narrower than the
+  label implies. Two gates on the server: `show_orientation` (defaults false,
+  GDPR Article 9 means silence is not consent) and `maySeeIdentity` (matches,
+  open conversations, rooms you revealed yourself in).
+
+  A single public switch would put orientation in front of any caller holding a
+  token, which is a wider audience than the person's own name and photograph
+  get. Doing nothing was not the safe option either: orientation was already
+  collected and already fed `deriveInterestedIn`, shown to nobody, so the
+  algorithm knew and no human could.
+
+  The switch appears only once an orientation is chosen, and clearing the
+  orientation clears the consent — `orientationConsent`, tested, because a
+  stored `true` would outlive the thing it was consent for.
+
+
 - **Onboarding, eight screens** — `app/onboarding/*` against the Figma
   *🕓 Updates* canvas, on the Ember tokens. Per-step save, resume on quit, and
   the first writer `profiles.onboarded` has ever had.
