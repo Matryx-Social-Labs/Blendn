@@ -63,9 +63,27 @@ function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number 
     borderRadius: thickness,
   }
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={[bar, { width: size, height: thickness }]} />
-      <View style={[bar, { width: thickness, height: size }]} />
+    /*
+     * Fills the slot and centres inside itself, rather than being a child the
+     * slot centres.
+     *
+     * The slot already says `alignItems: center, justifyContent: center`, and
+     * the plus still landed at the bottom edge on a device — so something about
+     * the parent's box is not what it reads as. Rather than keep guessing at
+     * which of `aspectRatio`, the wrapping row, or a stale Fast Refresh style
+     * is responsible, this stops depending on the parent at all: an absolute
+     * fill has one possible size, and the bars centre within that.
+     *
+     * `pointerEvents="none"` so covering the slot does not swallow the tap that
+     * opens the picker.
+     */
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={[bar, { width: size, height: thickness }]} />
+          <View style={[bar, { width: thickness, height: size }]} />
+        </View>
+      </View>
     </View>
   )
 }
