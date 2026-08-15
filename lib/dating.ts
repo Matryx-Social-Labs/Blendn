@@ -86,12 +86,81 @@ export function orientationImpliesInterest(
   return true
 }
 
+/**
+ * The same question for every label somebody holds.
+ *
+ * **All of them, not any of them**, which mirrors the server exactly: one label
+ * it cannot read makes the whole derivation `null`, so if the app asked only
+ * when *every* label was unreadable it would skip the picker on sets the server
+ * is about to leave underived — and the person ends up with no dating tag and
+ * nothing on screen to explain it.
+ *
+ * An empty set implies nothing, same as a missing single label did.
+ */
+export function orientationsImplyInterest(
+  gender: Gender | null,
+  orientations: readonly Orientation[]
+): boolean {
+  if (!orientations.length) return false
+  return orientations.every((o) => orientationImpliesInterest(gender, o))
+}
+
 /** Show the direct "interested in" picker? The inverse, named for the caller. */
 export function needsInterestedInPicker(
   gender: Gender | null,
-  orientation: Orientation | null,
+  orientations: readonly Orientation[],
   intents: readonly string[]
 ): boolean {
   if (!intents.includes('dating')) return false
-  return !orientationImpliesInterest(gender, orientation)
+  return !orientationsImplyInterest(gender, orientations)
+}
+
+/**
+ * Three. Enough for the combinations people actually hold — "queer" plus
+ * "bisexual", or "asexual" plus a romantic orientation — and few enough that
+ * the field stays a set of labels rather than a paragraph.
+ */
+export const MAX_ORIENTATIONS = 3
+
+/**
+ * Tapping a chip, with the two rules the server also enforces.
+ *
+ * Here as a function rather than inline in each screen because there are two
+ * screens — onboarding and the Settings editor — and a cap enforced in one of
+ * them is a 400 from the other.
+ *
+ * Deselecting is always allowed, including from a full set and including
+ * "prefer not to say". A rule that can trap somebody in a state is worse than
+ * no rule.
+ */
+export function toggleOrientation(
+  current: readonly Orientation[],
+  value: Orientation
+): Orientation[] {
+  if (current.includes(value)) return current.filter((o) => o !== value)
+
+  // Exclusive in both directions: picking it clears the rest, and picking
+  // anything else clears it. Declining to answer is not a fourth thing you are,
+  // so "prefer not to say" beside "gay" is two contradictory statements.
+  if (value === 'prefer_not_to_say') return [value]
+  const kept = current.filter((o) => o !== 'prefer_not_to_say')
+
+  // At the cap this is a no-op, and the screen dims the chips it would refuse
+  // so the refusal is visible before the tap rather than after it.
+  if (kept.length >= MAX_ORIENTATIONS) return kept
+  return [...kept, value]
+}
+
+/**
+ * Would tapping this chip do nothing? Drives the dimmed state.
+ *
+ * "Prefer not to say" is never disabled — it replaces the set rather than
+ * joining it, so the cap does not apply to it.
+ */
+export function orientationDisabled(
+  current: readonly Orientation[],
+  value: Orientation
+): boolean {
+  if (current.includes(value) || value === 'prefer_not_to_say') return false
+  return current.filter((o) => o !== 'prefer_not_to_say').length >= MAX_ORIENTATIONS
 }

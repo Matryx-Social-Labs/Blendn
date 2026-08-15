@@ -199,9 +199,13 @@ export interface OnboardingDraft {
    */
   gender?: OnboardingGender
   dateOfBirth?: string
-  orientation?: string
   /*
-   * Show `orientation` to people who can already see who you are.
+   * Plural, capped at three, "prefer not to say" exclusive — the rules live in
+   * `lib/dating.ts` because the Settings editor writes this field too.
+   */
+  orientations?: string[]
+  /*
+   * Show `orientations` to people who can already see who you are.
    *
    * Not "make it public" — the server gates it a second time on
    * `maySeeIdentity`, so it reaches matches, open conversations, and rooms you
@@ -241,7 +245,7 @@ const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = 
   basics: ['name', 'gender', 'dateOfBirth'],
   notifications: ['push_enabled'],
   location: ['share_location'],
-  preferences: ['orientation', 'show_orientation', 'looking_for', 'reveal_by_default'],
+  preferences: ['orientations', 'show_orientation', 'looking_for', 'reveal_by_default'],
   journey: ['location', 'occupation', 'education', 'work_field'],
   details: ['interests', 'bio'],
   media: ['photos'],
@@ -296,23 +300,29 @@ export function anonymousByDefault(draft: Pick<OnboardingDraft, 'reveal_by_defau
 /**
  * Whether to record consent to show an orientation.
  *
- * `false` whenever there is no orientation, regardless of what the switch says.
+ * `false` whenever there are no orientations, regardless of what the switch
+ * says.
  *
  * The case this exists for: someone picks an orientation, turns the switch on,
- * then goes back and clears the orientation. Leaving the stored `true` behind
- * means the consent outlives the thing it was consent *for* — so picking an
- * orientation again months later would silently republish it to everyone who
- * had matched in the meantime, with no second decision from the person.
+ * then goes back and clears it. Leaving the stored `true` behind means the
+ * consent outlives the thing it was consent *for* — so picking an orientation
+ * again months later would silently republish it to everyone who had matched in
+ * the meantime, with no second decision from the person.
+ *
+ * Clearing the *last* label is what drops the consent, not clearing any of
+ * them. Going from three labels to two is an edit to something already
+ * published, and re-asking there would make the switch feel like it resets
+ * itself at random.
  *
  * A function rather than a ternary in the screen because it is a privacy
  * invariant and not a rendering detail: any future screen that writes these two
  * fields has to obey it, and one that inlines the rule is one that can forget.
  */
 export function orientationConsent(
-  orientation: string | undefined,
+  orientations: readonly string[] | undefined,
   requested: boolean
 ): boolean {
-  return orientation ? requested : false
+  return orientations?.length ? requested : false
 }
 
 /**

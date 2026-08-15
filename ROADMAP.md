@@ -319,46 +319,58 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 | 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
 
+### Orientation is a set, not a choice — **Done** (API #227, app #129)
+
+People hold more than one label — "queer" and "bisexual" together, "asexual"
+alongside a romantic orientation — and a single-choice control made somebody
+pick which part of themselves to leave out, on the screen that asks them to be
+authentic. `profiles.orientations String[]`, capped at three.
+
+- **"Prefer not to say" is exclusive**, the same rule `intentsAreCoherent`
+  applies to `just_here`. A refusal is not a fourth thing you are.
+- **`interested_in` derives from the union, never the intersection.** Adding a
+  label must not narrow the pool. A biromantic asexual person settles it —
+  `asexual` alone derives `[]`, so intersecting would delete a real combination
+  down to nobody.
+- **One unreadable label makes the whole derivation `null`.** Otherwise a woman
+  who picked "straight" and "queer" derives from "straight" alone and is pinned
+  to `["man"]`, narrowed on the strength of the label she just qualified.
+
+The caption is back to the frame's "Select all that apply to you". Chips past
+the cap are dimmed rather than removed: the unreachable ones are what tell
+somebody the limit exists.
+
+Both writers changed — onboarding step four *and* the Settings editor
+(`about-you`). One screen enforcing the cap while the other does not is a 400
+from the second, so `toggleOrientation`/`orientationDisabled` live in
+`lib/dating.ts` and both screens call them.
+
+The singular `orientation` stays accepted on the API, deprecated. Removing it
+fails silently: an installed build keeps sending it, zod drops the unknown key,
+the save returns 200 and stores nothing.
+
+
 ---
 
 ## Next
 
-### Orientation becomes multi-select
+### `about-you` does not prefill what you already answered
 
-**Decided: yes.** People hold more than one label — "queer" and "bisexual"
-together, or "asexual" alongside a romantic orientation — and a single-choice
-control makes somebody pick which part of themselves to leave out, on the screen
-that asks them to be authentic. Multi-select does not force anyone to choose
-several; it stops the UI denying that they might.
+Found while making orientation multi-select (#129), not fixed there.
 
-Two constraints make it work:
+Reached from Settings as **"You and matching"**, the screen loads the profile
+and hydrates only `name` and `age`. Intents, work field, gender, orientations
+and interested-in all render empty, whatever is stored — so opening it to change
+one answer means re-entering all of them, and `validate()` refuses to save until
+you do.
 
-- **"Prefer not to say" is exclusive.** It is a refusal, not a label, so it
-  cannot sit beside "bisexual". `intentsAreCoherent` already enforces exactly
-  this for `just_here`, so the rule has a shape to copy rather than invent.
-- **`interested_in` derives from the union, not the intersection.** Somebody who
-  is bisexual *and* queer is open to the union of what those imply. Taking the
-  intersection would quietly narrow their pool, which is the opposite of what
-  picking two labels means.
+It is not silent data loss today, because the refusal is visible and the fields
+are re-asked rather than blanked. It is still the wrong screen: an editor that
+shows nothing it is editing.
 
-Capped at three. Past that it stops describing a person and starts adding noise
-to the matcher.
-
-**This is an API change, not a caption.** In order:
-
-1. `profiles.orientation String?` becomes `orientations String[]`, with a
-   migration that carries every existing single value into a one-element array.
-2. `deriveInterestedIn` takes a set and unions the results. Its tests grow the
-   combination cases — the ambiguous pairs are where it will be wrong.
-3. `updateProfileSchema` validates the array: max 3, every value in the enum,
-   and the exclusivity rule.
-4. The account-deletion scrub clears it, like every other special-category field.
-5. Only then the screen: chips become multi-select and the caption goes back to
-   the frame's "Select all that apply to you", which will finally be true.
-
-Worth doing in that order because steps 1–4 are safe on their own — the column
-accepts more, nothing sends more yet — and step 5 is the one that changes what
-people see.
+`GET /profiles/:userId` returns every one of these to their owner, so the fix is
+hydration in the existing `load()`, not a new endpoint. Sized small; left out of
+#129 to keep that change to one field.
 
 ### Decided: friendship does not reveal identity
 

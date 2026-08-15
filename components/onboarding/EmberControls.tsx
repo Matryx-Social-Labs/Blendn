@@ -108,6 +108,15 @@ interface ChipProps {
   label: string
   selected: boolean
   onPress: () => void
+  /*
+   * Selectable, but not right now — a row with a cap that has been reached.
+   *
+   * Dimmed rather than hidden. The unreachable chips are what tell somebody the
+   * limit exists; removing them makes three-of-eight look like eight-of-eight
+   * that stops working, and a tap that does nothing with no explanation reads
+   * as a broken screen.
+   */
+  disabled?: boolean
 }
 
 /**
@@ -118,7 +127,7 @@ interface ChipProps {
  * announcing "radio button" on a list where three answers are allowed is worse
  * than the generic role.
  */
-export function EmberChip({ label, selected, onPress }: ChipProps) {
+export function EmberChip({ label, selected, onPress, disabled }: ChipProps) {
   return (
     /*
      * One box, not two.
@@ -139,12 +148,14 @@ export function EmberChip({ label, selected, onPress }: ChipProps) {
      */
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.chip,
         !selected && styles.chipIdle,
+        disabled && styles.chipDisabled,
         pressed && styles.pressed,
       ]}
     >
@@ -573,6 +584,9 @@ const styles = StyleSheet.create({
   // `#141313` with a hairline border, per the frame — a shade below the cards
   // around it, so an unselected chip recedes rather than competing.
   chipIdle: { backgroundColor: '#141313', borderColor: 'rgba(73,71,71,0.2)' },
+  // Opacity only, so the chip keeps its measured width and the row does not
+  // re-pack every time the cap is reached or released.
+  chipDisabled: { opacity: 0.35 },
   chipLabel: EMBER_TYPE.chip,
   chipLabelSelected: { color: EMBER.onGradientChip },
   chipLabelIdle: { color: EMBER.textPrimary },
