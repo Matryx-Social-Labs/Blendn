@@ -319,6 +319,24 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 | 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
 
+### The event screen stops showing faces — **Done** (#135)
+
+The client half of blendn-admin #229. `interestedPreview` was real photographs
+of everyone who had favourited an event, served ungated to any authenticated
+caller, and this screen rendered them as an avatar row — seeded from a nav
+param, so they travelled across the transition too.
+
+Removed end to end: the request, the field on `eventFromApi`, the nav param, the
+state, the interaction-manager gate that revealed them, and the row itself.
+
+What replaces it is three grey discs and the count. The composition needs a mass
+beside the number, and three anonymous circles say "several people" without
+saying which — which is the honest version, because favouriting has no check-in,
+no pseudonym and no reveal for anybody to have passed through.
+
+Also fixes the singular: "1 people are interested".
+
+
 ### The like button, which never existed — **Done** (#131)
 
 `likeAtEvent` shipped in `lib/apiClient.ts` with a request queue and three

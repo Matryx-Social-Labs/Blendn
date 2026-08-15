@@ -159,7 +159,7 @@ const buildEventGradientPalette = (seedInput: string) => {
 }
 
 export default function EventDetail() {
-  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam, interested } = useLocalSearchParams()
+  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const feedback = useInteractionFeedback()
@@ -219,15 +219,6 @@ export default function EventDetail() {
    * event they had no seat at.
    */
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
-  const [interestedAvatars, setInterestedAvatars] = useState<string[]>(() => {
-    if (interested && typeof interested === 'string') {
-      try {
-        const parsed = JSON.parse(interested)
-        if (Array.isArray(parsed)) return parsed.filter(Boolean)
-      } catch {}
-    }
-    return []
-  })
   const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
   const [showGallery, setShowGallery] = useState(false)
@@ -237,7 +228,6 @@ export default function EventDetail() {
     setLightboxIndex(index)
     setLightboxVisible(true)
   }, [])
-  const [showAvatars, setShowAvatars] = useState(false)
   const [showHeroHighRes, setShowHeroHighRes] = useState(false)
   const [mapFailed, setMapFailed] = useState(false)
   const [trayState, setTrayState] = useState<EventDetailTrayState>({
@@ -319,12 +309,6 @@ export default function EventDetail() {
           })
           setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
         }
-        if (d.interestedUsers) {
-          const avatars = d.interestedUsers
-            .map((u: { avatar?: string | null }) => u.avatar)
-            .filter((url: string | null | undefined): url is string => !!url)
-          setInterestedAvatars(avatars)
-        }
         if (d.chatGroup?.id) {
           setEventChatGroupId(d.chatGroup.id)
         }
@@ -361,11 +345,7 @@ export default function EventDetail() {
   }, [id])
 
   useEffect(() => {
-    setShowAvatars(false)
-    // Show avatars immediately after navigation
-    const task = InteractionManager.runAfterInteractions(() => {
-      setShowAvatars(true)
-    })
+    const task = InteractionManager.runAfterInteractions(() => {})
     return () => {
       task?.cancel?.()
     }
@@ -591,12 +571,6 @@ export default function EventDetail() {
           setInterestCount(d.stats.favoriteCount || 0)
           if (d.stats.averageRating != null) setAverageRating(d.stats.averageRating)
           setRatingCount(d.stats.ratingCount || 0)
-        }
-        if (d.interestedUsers) {
-          const avatars = d.interestedUsers
-            .map((u: { avatar?: string | null }) => u.avatar)
-            .filter((url: string | null | undefined): url is string => !!url)
-          setInterestedAvatars(avatars)
         }
         // Set chat group ID if available
         if (d.chatGroup?.id) {
@@ -1455,7 +1429,7 @@ export default function EventDetail() {
               </View>
             )}
 
-            {(isLoading || interestCount > 0 || (showAvatars && interestedAvatars.length > 0)) && (
+            {(isLoading || interestCount > 0) && (
               <View style={styles.attendingRow}>
                 {isLoading ? (
                 <>
@@ -1468,23 +1442,46 @@ export default function EventDetail() {
                 </>
               ) : (
                 <>
-                  {showAvatars && interestedAvatars && interestedAvatars.length > 0 ? (
-                    <View style={[styles.avatarsRow, { width: 35 + Math.max(interestedAvatars.length - 1, 0) * 16 }]}>
-                      {interestedAvatars.slice(0, 6).map((url, idx) => (
-                        <Image
-                          key={`${url}-${idx}`}
-                          source={{ uri: url } as any}
-                          placeholder={placeholderImg}
-                          style={[styles.avatarImage, { left: idx * 16 }]}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          transition={120}
+                  {/*
+                    Anonymous discs, not faces.
+
+                    This row used to render `interestedPreview` — real
+                    photographs of everyone who had favourited the event, from an
+                    endpoint that handed them to any authenticated caller with no
+                    identity gate. The server stopped sending them (blendn-admin
+                    #229) and this stops asking for them.
+
+                    Favouriting is a private act: unlike the roster it has no
+                    check-in, no pseudonym and no reveal, so nobody who used it
+                    consented to being shown. The count is the social proof the
+                    design actually asks for — the frame leads with "124+" and
+                    the faces were decoration on top of it.
+
+                    The discs stay because the composition needs a mass beside
+                    the number, and three grey circles say "several people"
+                    without saying which.
+                  */}
+                  {interestCount > 0 ? (
+                    <View
+                      style={[
+                        styles.avatarsRow,
+                        { width: 35 + (Math.min(interestCount, 3) - 1) * 16 },
+                      ]}
+                    >
+                      {Array.from({ length: Math.min(interestCount, 3) }).map((_, idx) => (
+                        <View
+                          key={`interested-${idx}`}
+                          style={[styles.avatarCircle, { left: idx * 16 }]}
                         />
                       ))}
                     </View>
                   ) : null}
                   {interestCount > 0 ? (
-                    <Text style={styles.attendingText}>+{Math.max(interestCount, 0)} people are interested</Text>
+                    <Text style={styles.attendingText}>
+                      {interestCount === 1
+                        ? '1 person is interested'
+                        : `${interestCount} people are interested`}
+                    </Text>
                   ) : null}
                 </>
               )}
