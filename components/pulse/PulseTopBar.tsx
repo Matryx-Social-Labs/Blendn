@@ -38,27 +38,62 @@ export const TOP_BAR_HEIGHT = 64
  * destination. An empty `justify-between` row still leaves the wordmark where
  * the frame puts it, at `x=24`.
  */
-export function PulseTopBar() {
+/**
+ * `leading` and `actions` exist so The Scene can use *this* bar.
+ *
+ * The Scene's header (`1141:4930`) and the Pulse's (`1141:4819`) are the same
+ * component in the design, and The Scene had grown its own lookalike — a
+ * second bar with different padding, a different fill and no blur. Two bars
+ * that are supposed to be one drift the first time either is touched.
+ *
+ * They differ in what they *hold*, not how they look. The Pulse is a tab and
+ * needs nothing; The Scene is pushed, so it needs a way back, and the actions
+ * that belong to the event it is showing. Both slots default to empty, which
+ * is the Pulse exactly as before.
+ *
+ * `pointerEvents` follows: `none` with no slots, so the feed scrolls under the
+ * bar untouched, and `box-none` once there are controls, so the buttons are
+ * tappable while the gaps between them still pass scrolls through.
+ */
+export function PulseTopBar({
+  leading,
+  actions,
+}: {
+  leading?: React.ReactNode
+  actions?: React.ReactNode
+} = {}) {
   const insets = useSafeAreaInsets()
+  const interactive = Boolean(leading || actions)
 
   return (
     <View
       style={[styles.bar, { paddingTop: insets.top, height: insets.top + TOP_BAR_HEIGHT }]}
-      pointerEvents="none"
+      pointerEvents={interactive ? 'box-none' : 'none'}
     >
       <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.row}>
+      <View style={styles.row} pointerEvents={interactive ? 'box-none' : 'none'}>
         {/*
-          The wordmark, in the accent rather than white.
-
-          Frame: Plus Jakarta Bold 16/24, `#FF906D`, `letterSpacing: -0.8`. It
-          is the only warm text in the bar, which is what makes it read as a
-          mark rather than as a heading — the screen's own title is "The Pulse"
-          in 48pt, in the feed below.
+          Frame: the left group is the glyph and the wordmark together, 16pt
+          apart, starting at x=24. With no leading glyph the wordmark simply
+          starts there instead, which is where it already was.
         */}
-        <Text style={styles.wordmark} accessibilityRole="header">
-          Blend&apos;n
-        </Text>
+        <View style={styles.leadingGroup} pointerEvents={interactive ? 'box-none' : 'none'}>
+          {leading}
+          {/*
+            The wordmark, in the accent rather than white.
+
+            Frame: Plus Jakarta Bold 16/24, `#FF906D`, `letterSpacing: -0.8`. It
+            is the only warm text in the bar, which is what makes it read as a
+            mark rather than as a heading — the screen's own title is "The Pulse"
+            in 48pt, in the feed below.
+          */}
+          <Text style={styles.wordmark} accessibilityRole="header">
+            Blend&apos;n
+          </Text>
+        </View>
+        <View style={styles.actions} pointerEvents={interactive ? 'box-none' : 'none'}>
+          {actions}
+        </View>
       </View>
     </View>
   )
@@ -83,6 +118,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Frame `1141:4931`: the glyph and the wordmark, 16pt apart.
+  leadingGroup: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   wordmark: {
     fontFamily: EMBER_FONTS.displayBold,
     fontSize: 16,

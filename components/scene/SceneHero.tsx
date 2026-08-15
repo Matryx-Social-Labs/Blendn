@@ -1,9 +1,11 @@
-import { Ionicons } from '@expo/vector-icons'
+import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, StyleSheet, Text, View } from 'react-native'
 
+import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { FeedMedia } from '../pulse/FeedMedia'
 
 /**
  * The Scene's hero — frame `1141:4855`, inside `1141:4853` (390 wide).
@@ -33,6 +35,7 @@ export const sceneHeroHeight = (width: number = Dimensions.get('window').width) 
 
 export function SceneHero({
   source,
+  playlist,
   title,
   dateLabel,
   timeLabel,
@@ -49,6 +52,15 @@ export function SceneHero({
   children,
 }: {
   source: React.ComponentProps<typeof Image>['source']
+  /**
+   * The organiser's media, cycling.
+   *
+   * The same `FeedMediaItem[]` the feed cards walk, from the same
+   * `feedPlaylist` — so a clip that plays on the card plays here, with the
+   * same poster rule and the same "a video is never cut off" behaviour. When
+   * absent the hero is a still, which is what an event with one photograph is.
+   */
+  playlist?: FeedMediaItem[]
   title: string
   dateLabel: string
   timeLabel: string
@@ -61,13 +73,22 @@ export function SceneHero({
 
   return (
     <View style={[styles.hero, { height: h }]}>
-      <Image
-        source={source}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={200}
-      />
+      {playlist && playlist.length > 0 ? (
+        /*
+         * `isActive` is unconditionally true: this is the screen the user
+         * opened, not one card among twenty in a feed, so the
+         * single-active-player policy is satisfied by there being one.
+         */
+        <FeedMedia playlist={playlist} isActive width={Dimensions.get('window').width} height={h} />
+      ) : (
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+        />
+      )}
       {/*
         Transparent to the page's own background, not to black, and spanning
         the whole hero rather than a band at its foot.
@@ -101,17 +122,25 @@ export function SceneHero({
         {/*
           Date and time side by side, each with its own icon.
 
+          **MaterialIcons, not Ionicons.** The frame's glyphs are Material
+          Symbols — solid, flat-capped — and the outline Ionicons that were here
+          are a visibly different family: thinner strokes, rounded caps, a
+          different calendar. Checked against the exported SVGs rather than
+          guessed: the date glyph is an 18x20 calendar with two tabs
+          (`event`), the time glyph a 20x20 clock with hands (`schedule`), and
+          the sizes below are the frame's, which are deliberately not equal.
+
           These arrive already formatted. The screen used to print one combined
           string under a single calendar icon, which labels half of what it says
           wrongly — and the frame gives them separate slots for that reason.
         */}
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Ionicons name="calendar-outline" size={18} color={EMBER.textSecondary} />
+            <MaterialIcons name="event" size={18} color={EMBER.textSecondary} />
             <Text style={styles.metaText}>{dateLabel}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={18} color={EMBER.textSecondary} />
+            <MaterialIcons name="schedule" size={20} color={EMBER.textSecondary} />
             <Text style={styles.metaText} numberOfLines={1}>
               {timeLabel}
             </Text>
@@ -122,17 +151,36 @@ export function SceneHero({
   )
 }
 
+/**
+ * The title. Frame `1141:4863`: Plus Jakarta ExtraBold 48, tracking -2.4.
+ *
+ * ## The frame's 43.2 line height cannot be used literally
+ *
+ * CSS `leading-[43.2px]` on a 48px font is legal — the glyphs simply overflow
+ * their line box and nothing is lost. React Native **clips** to the line box,
+ * so copying 43.2 across cut the tops and bottoms off the letters. It is the
+ * one number on this frame that does not survive translation, and it looked
+ * like a font-loading bug rather than a layout one.
+ *
+ * 56 is 1.17em: enough for Plus Jakarta's ascender and descender at this
+ * weight, and still tighter than the 1.3-1.4 a default would give, which is
+ * what the frame's leading is actually reaching for.
+ *
+ * ## No text shadow
+ *
+ * The frame specifies `0 0 30px rgba(255,144,109,0.3)`, a soft warm bloom. RN's
+ * `textShadow` is not CSS's: at radius 30 it renders as a flat warm rectangle
+ * sitting behind the words — a visible brown box, not a glow. The gradient over
+ * the hero is already what makes the title legible, and it does that job
+ * without an artefact. A real bloom needs a blurred layer behind the text, and
+ * should only be built if the plain title is measurably hard to read.
+ */
 export const sceneHeroTitleStyle = {
   fontFamily: EMBER_FONTS.displayExtraBold,
   fontSize: 48,
-  lineHeight: 43.2,
+  lineHeight: 56,
   letterSpacing: -2.4,
   color: EMBER.textPrimary,
-  // The frame's 0 0 30px rgba(255,144,109,0.3) — the warm bloom that keeps
-  // 48pt of white legible over a photograph nobody has seen yet.
-  textShadowColor: 'rgba(255,144,109,0.3)',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 30,
 } as const
 
 const styles = StyleSheet.create({
