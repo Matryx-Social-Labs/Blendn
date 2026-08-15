@@ -100,6 +100,50 @@ the screen looks like two designs.
 it, deliberately; the guard is scoped to The Pulse's own files so it stays a
 guard rather than a chore.
 
+## One surface, not three
+
+The screen was **a homepage mounted as a screen inside a screen**, and that was
+the reason nothing lined up with the frame — not the colours, which were only
+the symptom.
+
+Structurally it was:
+
+1. a sticky top bar, absolutely positioned
+2. `sectionBg` — a rounded, bordered, **elevated panel** at `top: stickyBarHeight
+   + 12`, with `overflow: hidden`, its own background and its own vertical
+   gradient
+3. the list, inside that panel
+
+The frame is one flat background, `#0F0E0E`, edge to edge, with content sitting
+directly on it. Three surfaces where the design has one, and every card drawn on
+the wrong one.
+
+All of it is gone. `container` is `EMBER.bg` and the list is the page.
+
+### The top bar went with it
+
+It held three things and none survive as a bar:
+
+| Was | Now |
+|---|---|
+| avatar → profile | **the Me tab**, which shows your photo |
+| `Blend'n` wordmark | gone — the screen's identity is "The Pulse" in 48pt |
+| settings gear | reached through Me → profile → settings, as it already was |
+
+The city picker had already moved into the headline block.
+
+**Your photo is the Me tab's icon.** That is where a profile picture belongs: the
+tab that *is* you, rather than a third control in a header. It reads
+`profile.photos[0]` through the cache-first `getProfile`, so on the common path
+it costs nothing and draws with a face on first paint. It falls back to the
+person glyph — a broken image where a face should be is worse than no face — and
+deliberately never uses the OAuth avatar, which 404s often enough that the rest
+of the app already refuses it.
+
+Removing the bar also deleted four scroll interpolations (`topBarTranslateY`,
+`topBarScale`, `topBarOpacity`, `sectionBgTop`) that existed only to animate it,
+and the local `TYPE_HEADER_*` constants it was the last consumer of.
+
 ## Where the build departs from the frame, and why
 
 ### 1. The gradient headline is a flat accent

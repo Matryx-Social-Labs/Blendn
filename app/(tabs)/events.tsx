@@ -79,7 +79,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { APP_COLORS, EMBER, EMBER_TYPE } from '../../lib/theme'
+import { APP_COLORS, EMBER } from '../../lib/theme'
 
 /*
  * Distance in METRES, not kilometres.
@@ -117,8 +117,6 @@ const CAROUSEL_CARD_WIDTH = Math.max(260, SCREEN_WIDTH - 62)
 const CAROUSEL_CARD_HEIGHT = Math.round(CAROUSEL_CARD_WIDTH * 1.55)
 const CAROUSEL_ITEM_SPACING = 14
 const CAROUSEL_ITEM_FULL = CAROUSEL_CARD_WIDTH + CAROUSEL_ITEM_SPACING
-const TYPE_HEADER_SIZE = 22
-const TYPE_HEADER_LINE = 28
 const TYPE_CARD_TITLE_SIZE = 20
 const TYPE_CARD_TITLE_LINE = 26
 const TYPE_BODY_SIZE = 14
@@ -354,8 +352,6 @@ export default function Events() {
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const { setScrollProgress } = useGradientOverlay()
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [avatarError, setAvatarError] = useState(false)
   const listRef = useRef<any>(null)
   const scrollY = useRef(new RNAnimated.Value(0)).current
   const [netError, setNetError] = useState<string | null>(null)
@@ -962,13 +958,6 @@ export default function Events() {
 
         const profile = data.profile
         if (profile) {
-          // Only use URLs that are valid and not empty
-          const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
-                         (Array.isArray(profile.photos) && profile.photos[0]) ||
-                         null // Don't use data.image (Google avatar) as it often fails
-          if (primary && primary.length > 0) {
-            setAvatarUrl(primary)
-          }
           /*
            * `profile.location` deliberately no longer sets the browse city.
            *
@@ -1581,12 +1570,6 @@ export default function Events() {
         const profileFirstName = getFirstName(profile.name)
         if (profileFirstName) {
           setUserFirstName(profileFirstName)
-        }
-        const primary = (Array.isArray(profile.profile_photos) && profile.profile_photos[0]) ||
-          (Array.isArray(profile.photos) && profile.photos[0]) ||
-          null
-        if (primary && primary.length > 0) {
-          setAvatarUrl(primary)
         }
         // `profile.location` does not set the browse city — see the note where
         // the profile is loaded above.
@@ -2290,25 +2273,6 @@ export default function Events() {
     />
   )
 
-  // Icon row only: the greeting and the city line that used to live up here
-  // moved into the scrolling headline block.
-  const stickyBarHeight = insets.top + 8 + 32
-  const sectionBgTop = stickyBarHeight + 12
-  const topBarTranslateY = scrollY.interpolate({
-    inputRange: [0, 200],
-    outputRange: [0, -7],
-    extrapolate: 'clamp',
-  })
-  const topBarScale = scrollY.interpolate({
-    inputRange: [0, 240],
-    outputRange: [1, 0.98],
-    extrapolate: 'clamp',
-  })
-  const topBarOpacity = scrollY.interpolate({
-    inputRange: [0, 260],
-    outputRange: [1, 0.93],
-    extrapolate: 'clamp',
-  })
   const heroParallaxY = scrollY.interpolate({
     inputRange: [0, 360],
     outputRange: [0, -18],
@@ -2333,72 +2297,24 @@ export default function Events() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/*
-        The top bar as frame `1141:4643` draws it: a glyph, the wordmark, a bell.
+        No top bar, and no panel around the list.
 
-        It replaces "Hey Sagar! / Bengaluru • Saturday, 15 Aug", which was not in
-        any frame and was doing three jobs at once — greeting, city control and
-        settings. The greeting is gone; the city control moved into the headline
-        block below, where it reads as a subtitle rather than as a caption bolted
-        to an avatar. Nothing was lost: the picker is still the only way out of
-        an empty state, and it is now larger and nearer the content it scopes.
+        This screen used to be two things stacked: a sticky bar, and a rounded
+        bordered elevated sheet holding everything else — `sectionBg`, absolutely
+        positioned below the bar with its own background, its own border and its
+        own gradient. A homepage mounted as a screen inside a screen, which is
+        why nothing lined up with the frame: the frame has one flat surface and
+        this had three.
 
-        Deliberately short. The screen's identity is "The Pulse" in 48pt
-        underneath; a bar that also announced itself would compete with it.
+        The frame is one background, `#0F0E0E`, edge to edge, with the content
+        sitting directly on it. So the list is the page now.
+
+        Nothing was lost with the bar. The avatar moved to the Me tab, where a
+        profile picture is the more usual place to find yourself; settings is
+        reached through it, as it already was from the profile screen; and the
+        city picker had already moved into the headline.
       */}
-      <RNAnimated.View
-        style={[
-          styles.topBar,
-          { paddingTop: insets.top + 8, opacity: topBarOpacity },
-        ]}
-        accessibilityRole="header"
-      >
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="View profile"
-          // 28pt glyph + 8 each side is 44.
-          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          onPress={() => router.push('/profile' as any)}
-        >
-          {avatarUrl && avatarUrl.length > 0 && !avatarError ? (
-            <OptimizedImage
-              source={avatarUrl}
-              style={styles.topBarAvatar}
-              width={56}
-              height={56}
-              quality={60}
-              onError={() => setAvatarError(true)}
-            />
-          ) : (
-            <Ionicons name="person-circle-outline" size={28} color={EMBER.textSecondary} />
-          )}
-        </TouchableOpacity>
 
-        <Text style={styles.wordmark}>Blend&apos;n</Text>
-
-        {/*
-          The frame's bell. There is no notification centre to open, so it goes
-          to settings — where push notifications are actually configured — rather
-          than being drawn as a control that does nothing. Noted in
-          `docs/PULSE.md`.
-        */}
-        <TouchableOpacity
-          accessibilityLabel="Open settings"
-          accessibilityRole="button"
-          // 22pt glyph needs 11 a side to clear 44; it had 8.
-          hitSlop={{ top: 11, right: 11, bottom: 11, left: 11 }}
-          onPress={() => router.push('/settings')}
-        >
-          <Ionicons name="settings-outline" size={22} color={EMBER.textPrimary} />
-        </TouchableOpacity>
-      </RNAnimated.View>
-      {/* Scrollable content clipped inside rounded section background */}
-      <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
-        <LinearGradient
-          colors={[EMBER.surfaceMedia, EMBER.bg]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
         {/* Banners */}
         <View style={styles.filtersBar}>
           {/*
@@ -2797,7 +2713,6 @@ export default function Events() {
             )
           )}
         />
-      </View>
 
       {/*
         The city picker.
@@ -2916,25 +2831,9 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // One flat surface. The frame is `#0F0E0E` edge to edge — no panel, no
+    // border, no gradient. Everything sits directly on it.
     backgroundColor: EMBER.bg,
-    
-  },
-  sectionBg: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 120,
-    bottom: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  bgImage: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.58,
   },
   bgScrim: {
     ...StyleSheet.absoluteFillObject,
@@ -2953,7 +2852,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 1,
-    paddingTop: 14,
+    paddingTop: 8,
     paddingBottom: 24,
     
    
@@ -3438,72 +3337,6 @@ const styles = StyleSheet.create({
     fontSize: TYPE_META_SIZE,
     marginBottom: 3,
   },
-  topBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  topBarAvatar: { width: 28, height: 28, borderRadius: 14 },
-  wordmark: {
-    ...EMBER_TYPE.sectionHeading,
-    color: EMBER.accent,
-    letterSpacing: -0.8,
-  },
-  topBarSticky: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 3,
-    paddingHorizontal: 14,
-    backgroundColor: EMBER.bg,
-    
-    paddingTop: 8,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  topBarCenter: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 10,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  defaultAvatar: {
-    backgroundColor: '#666',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topBarTitle: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_HEADER_SIZE,
-    lineHeight: TYPE_HEADER_LINE,
-    fontWeight: '700',
-  },
-  topBarSubtitle: {
-    marginTop: 2,
-    color: EMBER.textSecondary,
-    fontSize: TYPE_META_SIZE,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  cityPickerTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   cityPickerBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -3583,16 +3416,6 @@ const styles = StyleSheet.create({
   cityPickerCount: {
     color: EMBER.textSecondary,
     fontSize: 14,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
   },
   filtersBar: {
     paddingHorizontal: 16,

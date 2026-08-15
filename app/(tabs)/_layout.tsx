@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router, Tabs } from 'expo-router'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
@@ -47,12 +48,27 @@ const TabButton = memo(({
   isFocused,
   onPress,
   onLongPress,
+  avatarUrl,
 }: {
   label: string
   icon: keyof typeof Ionicons.glyphMap
   isFocused: boolean
   onPress: () => void
   onLongPress: () => void
+  /**
+   * Your own photograph, on the Me tab.
+   *
+   * The screens used to carry an avatar in a top bar that also held a wordmark
+   * and a settings gear. That bar is gone — it is not in any frame — and this is
+   * where a profile picture belongs anyway: the tab that *is* you, rather than a
+   * third control in a header.
+   *
+   * Falls back to the person glyph. A broken image where a face should be is
+   * worse than no face, and a Google avatar is deliberately not used as the
+   * source (it often 404s) — this is `profile.photos[0]`, the same photo the
+   * rest of the app shows.
+   */
+  avatarUrl?: string | null
 }) => (
   <Pressable
     accessibilityRole="button"
@@ -62,11 +78,19 @@ const TabButton = memo(({
     onLongPress={onLongPress}
     style={({ pressed }) => [styles.item, pressed && styles.pressed]}
   >
-    <Ionicons
-      name={icon}
-      size={22}
-      color={isFocused ? EMBER.accent : EMBER.textSecondary}
-    />
+    {avatarUrl ? (
+      <Image
+        source={{ uri: avatarUrl }}
+        style={[styles.avatar, isFocused && styles.avatarFocused]}
+        contentFit="cover"
+      />
+    ) : (
+      <Ionicons
+        name={icon}
+        size={22}
+        color={isFocused ? EMBER.accent : EMBER.textSecondary}
+      />
+    )}
     {/*
       Labelled, not icon-only. The bar this replaced showed four unlabelled
       glyphs, and two of the five slots here are words the product invented —
@@ -192,6 +216,42 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     eventId: null,
     badge: 0,
   })
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  /*
+   * Your photo for the Me tab.
+   *
+   * Read once through `getProfile`, which is cache-first — every screen that
+   * shows your profile has already warmed it, so on the common path this costs
+   * nothing and the bar draws with a face on first paint.
+   *
+   * `photos[0]`, not `user.image`: the OAuth avatar is deliberately not used
+   * anywhere in this app because it often 404s.
+   */
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const me = await apiClient.getCurrentUser()
+        if (cancelled || !me?.id) return
+        const r = await apiClient.getProfile(me.id)
+        if (cancelled || !r.success) return
+        const data = r.data as { profile_photos?: string[]; photos?: string[] } | undefined
+        // Same precedence the rest of the app uses.
+        const primary =
+          (Array.isArray(data?.profile_photos) && data.profile_photos[0]) ||
+          (Array.isArray(data?.photos) && data.photos[0]) ||
+          null
+        if (primary) setAvatarUrl(primary)
+      } catch (e) {
+        Logger.debug('navigation', 'avatar lookup failed', { error: e })
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   /*
    * Two sources, combined here.
@@ -283,6 +343,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         isFocused={isFocused}
         onPress={press(route.key, tab.name, isFocused)}
         onLongPress={longPress(route.key)}
+        avatarUrl={tab.name === 'profile' ? avatarUrl : null}
       />
     )
   }
@@ -345,6 +406,16 @@ const styles = StyleSheet.create({
     }),
   },
   item: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 4 },
+  avatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    // Same footprint as the 22pt glyph it replaces, so the row does not shift
+    // when the photo arrives.
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  avatarFocused: { borderColor: EMBER.accent },
   itemLabel: { ...EMBER_TYPE.meta, fontSize: 11, lineHeight: 14 },
   itemLabelOn: { color: EMBER.accent },
 
