@@ -81,7 +81,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { APP_COLORS, EMBER } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
 
 /*
  * Distance in METRES, not kilometres.
@@ -119,11 +119,24 @@ const CAROUSEL_CARD_WIDTH = Math.max(260, SCREEN_WIDTH - 62)
 const CAROUSEL_CARD_HEIGHT = Math.round(CAROUSEL_CARD_WIDTH * 1.55)
 const CAROUSEL_ITEM_SPACING = 14
 const CAROUSEL_ITEM_FULL = CAROUSEL_CARD_WIDTH + CAROUSEL_ITEM_SPACING
-const TYPE_CARD_TITLE_SIZE = 20
-const TYPE_CARD_TITLE_LINE = 26
-const TYPE_BODY_SIZE = 14
-const TYPE_META_SIZE = 13
-const TYPE_CAPTION_SIZE = 12
+/**
+ * Frame `1141:4643` — `Main`, and the two gaps its children use.
+ *
+ * Named rather than inlined because the render site needs two of them as well:
+ * the safe-area insets are added **there**, so the frame's numbers stay literal
+ * here and the device's corrections stay visibly separate from them.
+ *
+ * `MAIN_PADDING_TOP` is 96 on a 390pt artboard whose overlay header occupies
+ * the first 64 — so it is `TOP_BAR_HEIGHT + 32`, and it is written that way at
+ * the render site because the 32 is the part that means anything.
+ */
+const MAIN_PADDING_HORIZONTAL = 12
+const MAIN_PADDING_BOTTOM = 128
+const MAIN_GAP = 48
+/** A section's own rows; a vertical stack of cards inside one. */
+const SECTION_GAP = 24
+const STACK_GAP = 32
+
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
 
@@ -1080,7 +1093,6 @@ export default function Events() {
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
         /*
          * No cover-image condition.
          *
@@ -1701,7 +1713,7 @@ export default function Events() {
           go back to peeking.
         */}
         {featuredItems.length === 1 ? (
-          <View style={styles.pulseRowContent}>
+          <View>
             <FeaturedCard
               title={featuredItems[0].title}
               tag={featuredItems[0].category || null}
@@ -1721,7 +1733,6 @@ export default function Events() {
             snapToAlignment="start"
             snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
             decelerationRate="fast"
-            contentContainerStyle={styles.pulseRowContent}
             renderItem={({ item, index }) => (
               <FeaturedCard
                 title={item.title}
@@ -1793,19 +1804,29 @@ export default function Events() {
      * the city but whose GPS has not resolved yet.
      */
     return (
-      <View style={styles.nearbyContainer}>
+      <View style={styles.pulseSection}>
         <SectionHeader
           title={browsingHere ? 'Nearby' : `In ${place}`}
           actionLabel="VIEW ALL"
           onAction={() => router.push('/nearby-events' as any)}
         />
-        <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
-        <View style={{ paddingHorizontal: 0 }}>
+        {/*
+          The place is emphasised by family, not by `fontWeight`.
+
+          `fontWeight: '700'` on a nested `<Text>` inheriting Manrope is regular
+          on Android and bold on iOS, from identical code — the same trap the
+          stylesheet's second rule is about, and the one place in the render
+          that fell into it.
+        */}
+        <Text style={styles.sectionSubTitle}>
+          <Text style={{ fontFamily: EMBER_FONTS.bodyBold }}>{place}</Text> / {day}
+        </Text>
+        <View style={styles.pulseStack}>
         {items.map((ev) => {
-          const screenW = Dimensions.get('window').width
-          const containerPadding = 16 * 2 // styles.nearbyContainer paddingHorizontal
-          const innerW = Math.max(0, screenW - containerPadding)
-          const containerWidth = Math.min(420, Math.round(innerW * 0.96))
+          // The full content width. The old 96%-of-a-16pt-gutter came from a
+          // card that was inset inside a panel; there is no panel now, and the
+          // frame's gutter is the list's.
+          const containerWidth = SCREEN_WIDTH - (MAIN_PADDING_HORIZONTAL * 2)
           return (
             <NearbyEventCard
               key={ev.id}
@@ -1837,7 +1858,7 @@ export default function Events() {
   }
 
   const renderNearbyPrompt = () => (
-    <View style={styles.nearbyContainer}>
+    <View style={styles.pulseSection}>
       <SectionHeader title="Nearby" />
       <Text style={styles.sectionSubTitle}>
         Enable location to see events near you.
@@ -2175,7 +2196,11 @@ export default function Events() {
               // occupies the first 64 — so the 32 is the clearance, and the
               // status bar is what the artboard does not have.
               paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
-              paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
+              // The frame's 128 already clears the 88pt nav. `Math.max` so it
+              // still does if the nav grows — the bar's height has changed
+              // twice, and a feed that ends underneath it is not a visible
+              // failure, just a last card nobody can reach.
+              paddingBottom: insets.bottom + Math.max(MAIN_PADDING_BOTTOM, TAB_BAR_CLEARANCE + 24),
             },
           ]}
           showsVerticalScrollIndicator={false}
@@ -2206,7 +2231,6 @@ export default function Events() {
                 <FlatList
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.carouselList}
                   data={[...Array(5)].map((_, i) => i)}
                   keyExtractor={(item) => `s-int-${item}`}
                   getItemLayout={getCarouselItemLayout}
@@ -2535,99 +2559,113 @@ export default function Events() {
   )
 }
 
+/**
+ * The Pulse, from frame `1141:4643`.
+ *
+ * ## Why this was rewritten rather than corrected
+ *
+ * It had **107 keys** and 49 callers. The other 58 belonged to two previous
+ * layouts — an invite hero, a glass-panelled Nearby card, a `#007AFF` iOS-blue
+ * check-in button, a `#e8f5e8` status badge — and they were not inert: they were
+ * what seven restyle PRs kept landing beside and contradicting. Three type
+ * systems coexisted (local `TYPE_*` constants, raw numbers, `APP_COLORS`) and
+ * there was no spacing scale at all.
+ *
+ * ## Two rules, and everything here follows from them
+ *
+ * **1. The frame's numbers, unadjusted.** Values are the 390pt artboard's.
+ * Treating them as desktop measurements in need of shrinking is what produced
+ * the flat screen. The only additions are the safe-area insets, applied at the
+ * render site so that what came from the frame and what came from the hardware
+ * never blur together.
+ *
+ * **2. No `fontWeight`, anywhere.** Weight comes from the family. Custom fonts
+ * on Android ignore `fontWeight` outright and silently render regular, so
+ * `fontWeight: '700'` on Manrope gave bold on iOS and regular on Android from
+ * identical code — which the old sheet did in thirty places, and which no
+ * simulator screenshot would ever show. Every text style spreads an
+ * `EMBER_TYPE` entry; the sizes are the scale's, not the call site's.
+ *
+ * `APP_COLORS` is gone from this file entirely. It is the old blue palette, and
+ * one import of it is enough to put a blue separator on a warm-black page.
+ *
+ * ## What is undesigned, and marked as such
+ *
+ * The banners, the empty states and the city picker have behaviour and no
+ * frame. They are on the frame's palette and spacing scale, so they do not look
+ * foreign, but nothing here should be read as a design decision — see
+ * `docs/PLACEHOLDER_SCREENS.md` and the render sites for each.
+ */
 const styles = StyleSheet.create({
+  /* ---- The page --------------------------------------------------------- */
+
+  /**
+   * One flat surface. `#0F0E0E` edge to edge — no panel, no border, no
+   * gradient. This screen used to stack three of them.
+   */
   container: {
     flex: 1,
-    // One flat surface. The frame is `#0F0E0E` edge to edge — no panel, no
-    // border, no gradient. Everything sits directly on it.
     backgroundColor: EMBER.bg,
   },
-  bgScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: EMBER.bg,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: EMBER.textPrimary,
-  },
+  /**
+   * `Main`'s horizontal padding, and the only place it is applied.
+   *
+   * Every child used to carry its own 12 or 16 or 23. One gutter on the scroll
+   * content means a section cannot disagree with the section above it, and the
+   * horizontal rows still bleed to exactly where the frame puts them — a card
+   * starting at x=12 is a card starting at the content edge.
+   *
+   * Vertical padding is at the render site: it is the frame's 96 and 128 plus
+   * the insets, and the insets are not the frame's.
+   */
   listContainer: {
-    // Vertical padding is applied at the render site from the safe-area insets.
-    paddingHorizontal: 0,
+    paddingHorizontal: MAIN_PADDING_HORIZONTAL,
   },
-  carouselContainer: {
-    paddingTop: 16,
+
+  /* ---- Sections: Featured, Upcoming, Nearby ------------------------------ */
+
+  /**
+   * `Main` is `gap-[48px]`; a section is `gap-[24px]` inside.
+   *
+   * The gap is a `marginTop` on the section rather than a `gap` on the list's
+   * header, because the header also holds the banners and the empty state and
+   * those are not `Main` children — they are rows with no frame, and giving
+   * them the frame's section rhythm would assert a design that does not exist.
+   */
+  pulseSection: {
+    gap: SECTION_GAP,
+    marginTop: MAIN_GAP,
   },
-  // Skeletons only — the real headings are `SectionHeader`, which carries its
-  // own row. Kept so a loading placeholder lines up with the heading it stands
-  // in for.
+  /** A vertical column of cards inside a section — Upcoming, Nearby. */
+  pulseStack: {
+    gap: STACK_GAP,
+  },
+  /** "{City} / Tuesday", under a section heading. */
+  sectionSubTitle: {
+    ...EMBER_TYPE.meta,
+  },
+  /**
+   * Skeletons only. The real headings are `SectionHeader`, which carries its
+   * own row; this exists so a loading placeholder lines up with the heading it
+   * stands in for rather than drifting a few points off it.
+   */
   sectionHeaderRow: {
-    paddingHorizontal: 12,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Frame `1141:4643`: Main is `gap-[48px]`, sections are `gap-[24px]`
-  // and `gap-[32px]` internally. All three were roughly halved.
-  pulseSection: { gap: 24, marginTop: 48 },
-  pulseRowContent: { paddingHorizontal: 12 },
-  pulseStack: { gap: 32, paddingHorizontal: 12 },
-  sectionDividerLine: {
-    height: 1,
-    width: 73,
-    backgroundColor: EMBER.textPrimary,
-    opacity: 0.22,
-    borderRadius: 11,
-    transform: [{ rotate: '180deg' }],
-  },
-  sectionSubTitle: {
-    fontSize: TYPE_BODY_SIZE,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-    paddingHorizontal: 16,
-    marginBottom: 14,
-  },
-  carouselList: {
-    paddingHorizontal: 12,
-    paddingBottom: 20,
-  },
-  gradientFull: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-  },
-  upTextOverlay: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
-  },
-  upCategoryTag: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: TYPE_CAPTION_SIZE,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  upTitleLarge: {
-    color: '#FFFFFF',
-    fontSize: TYPE_CARD_TITLE_SIZE,
-    lineHeight: TYPE_CARD_TITLE_LINE,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  upVenueLarge: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: TYPE_META_SIZE,
+
+  /* ---- The checked-in strip --------------------------------------------- */
+  /*
+   * No frame. It is the only way to check out — `handleCheckOut` was complete
+   * and had no caller for a while, which cost three taps through the event
+   * detail screen — so it renders as a plain row above the feed until it is
+   * drawn. On the section scale so it does not read as a different app.
+   */
+
+  carouselContainer: {
+    gap: SECTION_GAP,
   },
   carouselCard: {
     width: CAROUSEL_CARD_WIDTH,
@@ -2675,14 +2713,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#46D27B',
   },
   carouselStatusText: {
-    color: '#FFFFFF',
-    fontSize: TYPE_CAPTION_SIZE,
-    fontWeight: '700',
+    ...EMBER_TYPE.categoryPill,
   },
   carouselHeartButton: {
     position: 'absolute',
     top: 16,
     right: 16,
+    // 34pt of visible circle, and `hitSlop` at the call site takes the target
+    // past 44 — the review's minimum, which a 34pt tap area failed.
     width: 34,
     height: 34,
     backgroundColor: 'rgba(20,19,19,0.62)',
@@ -2692,14 +2730,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.32)',
   },
-  carouselHeartText: {
-    fontSize: 16,
-    color: '#D81B60',
-    fontWeight: '800',
-  },
-  carouselContent: {
-    padding: 12,
-  },
   carouselContentOverlay: {
     position: 'absolute',
     left: 14,
@@ -2708,21 +2738,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   carouselEventTitle: {
-    fontSize: TYPE_CARD_TITLE_SIZE,
-    lineHeight: TYPE_CARD_TITLE_LINE,
-    fontWeight: '700',
-    color: EMBER.textPrimary,
+    ...EMBER_TYPE.cardTitle,
     textAlign: 'center',
   },
   carouselVenue: {
-    fontSize: TYPE_META_SIZE,
-    color: EMBER.textSecondary,
-    marginTop: 4,
+    ...EMBER_TYPE.meta,
   },
   carouselTime: {
-    fontSize: TYPE_META_SIZE,
+    ...EMBER_TYPE.meta,
     color: EMBER.accent,
-    marginTop: 8,
   },
   carouselCheckoutPill: {
     marginTop: 10,
@@ -2737,108 +2761,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.34)',
   },
   carouselCheckoutText: {
-    color: '#FFFFFF',
-    fontSize: TYPE_CAPTION_SIZE,
-    fontWeight: '700',
+    ...EMBER_TYPE.categoryPill,
   },
-  eventCard: {
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  eventImage: {
-    width: '100%',
-    height: 200,
-  },
-  eventContent: {
-    padding: 16,
-  },
-  eventTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  eventVenue: {
-    fontSize: 16,
-    color: '#CCCCCC',
-    marginBottom: 8,
-  },
-  eventDescription: {
-    fontSize: 14,
-    color: '#AAAAAA',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  eventMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  eventTime: {
-    fontSize: 14,
-    color: '#CCCCCC',
-  },
-  eventPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    backgroundColor: '#e8f5e8',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4CAF50',
-  },
-  checkinButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  checkinButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  interestButton: {
-    backgroundColor: '#fde7ef',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  interestButtonActive: {
-    backgroundColor: '#f8cfe0',
-  },
-  interestButtonText: {
-    color: '#D81B60',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  nearbyContainer: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
-  },
+
+  /* ---- Nearby, when there is no location -------------------------------- */
+
   nearbyCta: {
     marginTop: 12,
     minHeight: 44,
@@ -2850,280 +2777,20 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   nearbyCtaText: {
-    // Dark on warm. White on #FF906D fails contrast — see `EMBER.onGradient`.
+    ...EMBER_TYPE.categoryPill,
+    // Dark on warm. White on `#FF906D` fails contrast — see `EMBER.onGradient`.
     color: EMBER.onGradient,
-    fontSize: TYPE_BODY_SIZE,
-    fontWeight: '700',
   },
-  nearbyImage: {
-    width: '96%',
-    aspectRatio: 363 / 249,
-    maxWidth: 420,
-    alignSelf: 'center',
-  },
-  nearbyImageRadius: {
-    borderRadius: 23,
-  },
-  nearbyOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 88,
-    backgroundColor: 'transparent',
-    borderBottomLeftRadius: 23,
-    borderBottomRightRadius: 23,
-  },
-  nearbyInfoBox: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-  },
-  nearbyGlass: {
-    position: 'absolute',
-    left: 5,
-    right: 6,
-    top: 161,
-    bottom: 7,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  nearbyGlassSheen: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    opacity: 0.45,
-  },
-  // removed nearbyGlassInsetTop
-  nearbyGlassRim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  nearbyGlassInnerShadowBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 24,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    opacity: 0.4,
-  },
-  nearbyGlassTitle: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    top: 12,
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  nearbyGlassRow: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  nearbyMetaTextLight: {
-    color: EMBER.textPrimary,
-    fontSize: 12,
-  },
- 
-  nearbyTitle: {
-    color: EMBER.textPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  nearbyMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  nearbyMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: '48%',
-  },
-  nearbyMetaText: {
-    color: EMBER.textSecondary,
-    fontSize: 11,
-  },
-  featuredContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-  },
-  featuredImage: {
-    width: '100%',
-    aspectRatio: 363 / 474,
-    maxHeight: 474,
-  },
-  featuredRadius: {
-    borderRadius: 20,
-  },
-  featuredOverlayBox: {
-    position: 'absolute',
-    bottom: 16 + 110, // approximate to align like figma overlay box area height
-    left: 45,
-    right: 45,
-    alignItems: 'center',
-    gap: 12,
-  },
-  featuredTitle: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_CARD_TITLE_SIZE,
-    lineHeight: TYPE_CARD_TITLE_LINE,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  featuredChip: {
-    backgroundColor: 'rgba(255,144,109,0.32)',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  featuredChipText: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_META_SIZE,
-    fontWeight: '600',
-  },
-  featuredSubtitle: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_META_SIZE,
-    fontWeight: '600',
-  },
-  inviteHeroCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 14,
-    minHeight: 220,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: EMBER.surface,
-  },
-  inviteHeroContent: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-  },
-  inviteHeroKicker: {
-    color: EMBER.textSecondary,
-    fontSize: TYPE_CAPTION_SIZE,
-    fontWeight: '600',
-    marginBottom: 6,
-    letterSpacing: 0.2,
-  },
-  inviteHeroTitle: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_CARD_TITLE_SIZE,
-    lineHeight: TYPE_CARD_TITLE_LINE,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  inviteHeroMeta: {
-    color: EMBER.textSecondary,
-    fontSize: TYPE_META_SIZE,
-    marginBottom: 3,
-  },
-  cityPickerBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  cityPickerSheet: {
-    backgroundColor: EMBER.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
-    maxHeight: '70%',
-  },
-  cityPickerTitle: {
-    color: EMBER.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 14,
-  },
-  cityPickerEmpty: {
-    color: EMBER.textSecondary,
-    fontSize: 15,
-    paddingVertical: 12,
-  },
-  cityPickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  /*
-    Neutral, not a warning.
 
-    The other banners on this screen are red or amber because something is
-    wrong and an action is owed. This one is a statement of fact — you are
-    somewhere we do not serve yet — and dressing it as an alert would make an
-    ordinary situation read as a fault.
-  */
-  bannerNeutral: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  bannerNeutralText: {
-    flex: 1,
-    color: EMBER.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  cityPickerRowLocate: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderStyle: 'dashed',
-    marginBottom: 14,
-  },
-  cityPickerRowActive: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  cityPickerCity: {
-    color: EMBER.textPrimary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cityPickerCount: {
-    color: EMBER.textSecondary,
-    fontSize: 14,
-  },
+  /* ---- The rows with behaviour and no frame ----------------------------- */
+  /*
+   * The offline banner, the switch-city offer, the away notice, and the
+   * location and network errors. Undesigned, so they are deliberately plain:
+   * one shape, three colours, and the colour is the only thing that says how
+   * much the row matters.
+   */
+
   filtersBar: {
-    paddingHorizontal: 16,
     paddingBottom: 10,
     gap: 10,
   },
@@ -3147,7 +2814,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    // Was `APP_COLORS.separator`, which is the old blue palette's hairline. On
+    // a warm-black page it reads as a cold edge around a warm card.
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   bannerError: {
     flexDirection: 'row',
@@ -3158,12 +2827,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  /*
+   * Neutral, not a warning.
+   *
+   * The other banners are warm or sunken because something is wrong and an
+   * action is owed. This one is a statement of fact — you are somewhere we do
+   * not serve yet — and dressing it as an alert would make an ordinary
+   * situation read as a fault.
+   */
+  bannerNeutral: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  bannerNeutralText: {
+    ...EMBER_TYPE.helper,
+    color: EMBER.textSecondary,
+    flex: 1,
   },
   bannerText: {
+    ...EMBER_TYPE.cardBody,
     color: EMBER.textPrimary,
-    fontSize: TYPE_BODY_SIZE,
-    lineHeight: 20,
     flex: 1,
     marginRight: 12,
   },
@@ -3176,10 +2866,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   bannerCtaText: {
+    ...EMBER_TYPE.categoryPill,
     color: EMBER.onGradient,
-    fontWeight: '700',
-    fontSize: TYPE_CAPTION_SIZE,
   },
+
+  /* ---- Empty states ----------------------------------------------------- */
+  /*
+   * Three of them, and the copy is the design — "Coming soon to {city}",
+   * "Nothing on in {city}" and "No matches" are three different situations that
+   * one empty state used to conflate. See the render site.
+   */
+
   emptyState: {
     paddingHorizontal: 32,
     paddingVertical: 32,
@@ -3191,21 +2888,17 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(255,255,255,0.12)',
     marginBottom: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    color: EMBER.textPrimary,
-    fontSize: TYPE_CARD_TITLE_SIZE,
-    fontWeight: '700',
+    ...EMBER_TYPE.cardTitle,
     marginBottom: 8,
   },
   emptySub: {
-    color: EMBER.textSecondary,
-    fontSize: TYPE_BODY_SIZE,
-    lineHeight: 20,
+    ...EMBER_TYPE.cardBody,
     textAlign: 'center',
   },
   ctaGhost: {
@@ -3219,18 +2912,72 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   ctaGhostText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    ...EMBER_TYPE.categoryPill,
   },
-  cityPill: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
+
+  /* ---- The city picker -------------------------------------------------- */
+  /*
+   * A placeholder sheet, like the interest picker before it — see
+   * `docs/PLACEHOLDER_SCREENS.md`. The server's list is the whole contract:
+   * every entry opens with the number of events it claims.
+   */
+
+  cityPickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
   },
-  cityPillText: {
-    color: '#FFFFFF',
-    fontSize: TYPE_CAPTION_SIZE,
-    fontWeight: '600',
+  cityPickerSheet: {
+    backgroundColor: EMBER.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 36,
+    maxHeight: '70%',
   },
-}) 
+  cityPickerTitle: {
+    ...EMBER_TYPE.sectionHeading,
+    marginBottom: 14,
+  },
+  cityPickerEmpty: {
+    ...EMBER_TYPE.cardBody,
+    paddingVertical: 12,
+  },
+  cityPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  /*
+   * Dashed, and above the list rather than in it.
+   *
+   * "Use my current location" is the one row that is not gated on the city
+   * having events — a user standing somewhere we have not launched is absent
+   * from the list below and from the switch banner, and without this has no way
+   * to say where they are. The dash is what marks it as the odd one out.
+   */
+  cityPickerRowLocate: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderStyle: 'dashed',
+    marginBottom: 14,
+  },
+  cityPickerRowActive: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  cityPickerCity: {
+    ...EMBER_TYPE.categoryPill,
+  },
+  cityPickerCount: {
+    ...EMBER_TYPE.meta,
+  },
+})

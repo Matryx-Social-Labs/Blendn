@@ -77,6 +77,83 @@ describe('the overlay header, frame 1141:4819', () => {
   })
 })
 
+describe('the stylesheet, frame 1141:4643', () => {
+  /** Everything from `const styles = ...` to the end of the file. */
+  const SHEET = () => {
+    const src = SCREEN()
+    return src.slice(src.indexOf('const styles = StyleSheet.create({'))
+  }
+
+  it("carries Main's four numbers, unadjusted", () => {
+    const src = SCREEN()
+    expect(src).toContain('const MAIN_PADDING_HORIZONTAL = 12')
+    expect(src).toContain('const MAIN_PADDING_BOTTOM = 128')
+    expect(src).toContain('const MAIN_GAP = 48')
+    expect(src).toContain('const SECTION_GAP = 24')
+    expect(src).toContain('const STACK_GAP = 32')
+    // 96 is the fourth, written as `TOP_BAR_HEIGHT + 32` at the render site
+    // because the 32 is the part that means anything.
+  })
+
+  it('the page is one flat surface', () => {
+    const sheet = SHEET()
+    expect(sheet).toContain('backgroundColor: EMBER.bg')
+    // No panel: the screen used to stack a bar, a bordered elevated sheet and
+    // the list, and draw every card on the wrong one of the three.
+    expect(sheet).not.toContain('sectionBg')
+    expect(sheet).not.toContain('LinearGradient')
+  })
+
+  it('the gutter is applied once, on the scroll content', () => {
+    const sheet = SHEET()
+    const hits = sheet.match(/paddingHorizontal: MAIN_PADDING_HORIZONTAL/g) || []
+    expect(hits).toHaveLength(1)
+  })
+
+  it('has no key nothing uses', () => {
+    // It had 107 keys and 49 callers. The other 58 were two previous layouts,
+    // and they were what each restyle landed beside and contradicted.
+    const src = SCREEN()
+    const sheet = SHEET()
+    const declared = [...sheet.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*): \{/gm)].map((m) => m[1])
+    const used = new Set([...src.slice(0, src.length - sheet.length).matchAll(/styles\.([A-Za-z0-9]+)/g)].map((m) => m[1]))
+    expect(declared.length).toBeGreaterThan(0)
+    expect(declared.filter((k) => !used.has(k))).toEqual([])
+    expect([...used].filter((k) => !declared.includes(k))).toEqual([])
+  })
+
+  it('never asks for weight with fontWeight', () => {
+    /*
+     * The one rule in here that is a bug rather than a measurement. Custom
+     * fonts on Android ignore `fontWeight` outright and silently render
+     * regular, so `fontWeight: '700'` on Manrope is bold on iOS and regular on
+     * Android from identical code. The old sheet did it in thirty places and no
+     * simulator screenshot would ever have shown it.
+     */
+    expect(SCREEN()).not.toContain('fontWeight')
+  })
+
+  it('is on the shared type scale, with no local one beside it', () => {
+    const src = SCREEN()
+    expect(src).toContain('EMBER_TYPE')
+    expect(src).not.toContain('TYPE_CARD_TITLE_SIZE')
+    expect(src).not.toContain('TYPE_BODY_SIZE')
+    expect(src).not.toContain('TYPE_META_SIZE')
+    expect(src).not.toContain('TYPE_CAPTION_SIZE')
+  })
+
+  it('has no trace of the old blue palette', () => {
+    // One import of `APP_COLORS` is enough to put a cold hairline around a warm
+    // card. These four hexes were all in the sheet a release ago.
+    const src = SCREEN()
+    expect(src).not.toContain('APP_COLORS')
+    expect(src).not.toContain('#007AFF')
+    expect(src).not.toContain('#e8f5e8')
+    expect(src).not.toContain('#4CAF50')
+    expect(src).not.toContain('#fde7ef')
+  })
+})
+
 describe('the previous designs are gone, not merely uncalled', () => {
   /*
    * Twelve render functions from three layouts lived in this file, six of them

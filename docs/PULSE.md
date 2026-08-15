@@ -189,6 +189,50 @@ Removing the bar also deleted four scroll interpolations (`topBarTranslateY`,
 `topBarScale`, `topBarOpacity`, `sectionBgTop`) that existed only to animate it,
 and the local `TYPE_HEADER_*` constants it was the last consumer of.
 
+## The stylesheet, rewritten rather than corrected
+
+**107 keys, 49 of them with a caller.** The other 58 were two previous layouts:
+an invite hero, a glass-panelled Nearby card with a sheen and an inner shadow, a
+`#007AFF` iOS-blue check-in button, a `#e8f5e8` status badge. They were not
+inert — they are what seven restyle PRs kept landing beside and contradicting.
+It is 46 keys now and every one is used, which a test asserts by parsing the
+sheet rather than by anyone remembering to check.
+
+Two rules, and everything follows from them.
+
+**1. The frame's numbers, unadjusted.** `Main`'s four are named once and used by
+both the sheet and the render site — `paddingHorizontal: 12`, `paddingBottom:
+128`, `gap: 48`, and the 96 at the top, written as `TOP_BAR_HEIGHT + 32` because
+the 32 is the part that carries meaning. The only additions are the safe-area
+insets, applied at the render site so that what came from the frame and what came
+from the hardware never blur together. Treating the artboard's values as desktop
+measurements in need of shrinking is what produced the flat screen.
+
+The gutter is applied **once**, on the scroll content. Every child used to carry
+its own 12 or 16 or 23; one gutter means a section cannot disagree with the
+section above it, and the horizontal rows still start exactly where the frame
+puts them.
+
+**2. No `fontWeight`, anywhere — and this one was a bug, not a preference.**
+
+`lib/theme.ts` has said it from the start: custom fonts on Android ignore
+`fontWeight` entirely and silently render regular. So `fontWeight: '700'` on
+Manrope gave bold on iOS and **regular on Android from identical code** — in
+thirty places in this sheet, plus one nested `<Text>` in the Nearby subtitle.
+Nothing about it is visible in a simulator screenshot or to a typecheck, which
+is why it survived every design review this screen has had.
+
+Weight comes from the family now. Every text style spreads an `EMBER_TYPE`
+entry, so the three type systems that coexisted here — local `TYPE_*` constants,
+raw numbers, `APP_COLORS` — are one, and the sizes are the scale's rather than
+the call site's. `APP_COLORS` is gone from the file entirely; one import of the
+old blue palette is enough to put a cold hairline around a warm card.
+
+**What is undesigned is marked as such.** The banners, the empty states and the
+city picker have behaviour and no frame. They are on the frame's palette and
+spacing scale so they do not look foreign, but nothing in those blocks should be
+read as a design decision.
+
 ## Where the build departs from the frame, and why
 
 ### 1. The gradient headline is a flat accent
