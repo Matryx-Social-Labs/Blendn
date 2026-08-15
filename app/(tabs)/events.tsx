@@ -1100,9 +1100,7 @@ export default function Events() {
 
   const renderCheckedInCarousel = () => (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>You&apos;re checked in</Text>
-      </View>
+      <SectionHeader title="You're checked in" />
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1136,12 +1134,11 @@ export default function Events() {
 
   const renderInterestedCarousel = (items: Event[]) => (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Interested Events</Text>
-        <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/going' as any)}>
-          <Text style={styles.viewAllText}>See all</Text>
-        </TouchableOpacity>
-      </View>
+      <SectionHeader
+        title="Interested"
+        actionLabel="VIEW ALL"
+        onAction={() => router.push('/going' as any)}
+      />
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1746,9 +1743,7 @@ export default function Events() {
 
   const renderCarouselWithTitle = (title: string, items: Event[]) => (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
+      <SectionHeader title={title} />
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1902,15 +1897,7 @@ export default function Events() {
     if (!items.some(item => !!item.cover_image_url)) return null
     return (
     <View style={styles.carouselContainer}>
-      <View style={styles.sectionFancyRow}>
-        <View style={styles.sectionDividerLine} />
-        <View>
-          {titleLines.map((t, i) => (
-            <Text key={`${t}-${i}`} style={styles.sectionTitle}>{t}</Text>
-          ))}
-        </View>
-        <View style={styles.sectionDividerLine} />
-      </View>
+      <SectionHeader title={titleLines.join(' ')} />
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -2043,15 +2030,11 @@ export default function Events() {
      */
     return (
       <View style={styles.nearbyContainer}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>
-            {browsingHere ? 'Nearby Events' : `In ${place}`}
-          </Text>
-          <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/nearby-events' as any)}>
-            <Text style={styles.viewAllText}>View all</Text>
-            <Ionicons name="chevron-forward" size={19} color={APP_COLORS.accent} />
-          </TouchableOpacity>
-        </View>
+        <SectionHeader
+          title={browsingHere ? 'Nearby' : `In ${place}`}
+          actionLabel="VIEW ALL"
+          onAction={() => router.push('/nearby-events' as any)}
+        />
         <Text style={styles.sectionSubTitle}><Text style={{ fontWeight: '700' }}>{place}</Text> / {day}</Text>
         <View style={{ paddingHorizontal: 0 }}>
         {items.map((ev) => {
@@ -2091,9 +2074,7 @@ export default function Events() {
 
   const renderNearbyPrompt = () => (
     <View style={styles.nearbyContainer}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Nearby Events</Text>
-      </View>
+      <SectionHeader title="Nearby" />
       <Text style={styles.sectionSubTitle}>
         Enable location to see events near you.
       </Text>
@@ -2800,14 +2781,9 @@ export default function Events() {
                     <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
                       <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 6)} distance={8}>
                         <View style={styles.carouselContainer}>
-                          <View style={styles.sectionFancyRow}>
-                            <View style={styles.sectionDividerLine} />
-                            <View>
-                              <Text style={styles.sectionTitle}>Nightlife in</Text>
-                              <Text style={styles.sectionTitle}>{selectedCity ?? 'your city'}</Text>
-                            </View>
-                            <View style={styles.sectionDividerLine} />
-                          </View>
+                          <SectionHeader
+                            title={`Nightlife in ${selectedCity ?? 'your city'}`}
+                          />
                         </View>
                         {renderFeaturedHero(featuredNightlife)}
                       </FadeInUp>
@@ -2873,7 +2849,7 @@ export default function Events() {
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="navigate-outline" size={17} color={APP_COLORS.accent} />
+                  <Ionicons name="navigate-outline" size={17} color={EMBER.accent} />
                   <View>
                     <Text style={styles.cityPickerCity}>Use my current location</Text>
                     <Text style={styles.cityPickerCount}>{deviceCity}</Text>
@@ -2909,7 +2885,7 @@ export default function Events() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.cityPickerCity}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={13} color={APP_COLORS.accent} />
+                          <Ionicons name="navigate" size={13} color={EMBER.accent} />
                         ) : null}
                       </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
@@ -2984,30 +2960,19 @@ const styles = StyleSheet.create({
   carouselContainer: {
     paddingTop: 16,
   },
+  // Skeletons only — the real headings are `SectionHeader`, which carries its
+  // own row. Kept so a loading placeholder lines up with the heading it stands
+  // in for.
   sectionHeaderRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  sectionFancyRow: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9,
-  },
   pulseSection: { gap: 16, marginTop: 32 },
   pulseRowContent: { paddingHorizontal: 12 },
   pulseStack: { gap: 24, paddingHorizontal: 12 },
-  sectionTitle: {
-    fontSize: TYPE_HEADER_SIZE,
-    lineHeight: TYPE_HEADER_LINE,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-  },
   sectionDividerLine: {
     height: 1,
     width: 73,
@@ -3022,16 +2987,6 @@ const styles = StyleSheet.create({
     color: APP_COLORS.textSecondary,
     paddingHorizontal: 16,
     marginBottom: 14,
-  },
-  viewAllRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  viewAllText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: TYPE_BODY_SIZE,
-    fontWeight: '600',
   },
   carouselList: {
     paddingHorizontal: 12,
@@ -3279,13 +3234,14 @@ const styles = StyleSheet.create({
   nearbyCta: {
     marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 18,
   },
   nearbyCtaText: {
-    color: '#FFFFFF',
+    // Dark on warm. White on #FF906D fails contrast — see `EMBER.onGradient`.
+    color: EMBER.onGradient,
     fontSize: TYPE_BODY_SIZE,
     fontWeight: '700',
   },
@@ -3678,13 +3634,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   bannerCta: {
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
   },
   bannerCtaText: {
-    color: '#fff',
+    color: EMBER.onGradient,
     fontWeight: '700',
     fontSize: TYPE_CAPTION_SIZE,
   },
