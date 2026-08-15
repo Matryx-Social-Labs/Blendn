@@ -474,12 +474,16 @@ and a name collision with the room screen), and the large Nearby card as drawn
 (**Reserve Table** and *"+12 Friends are here"* need reservations and a social
 graph). Nearby still renders the existing list.
 
-**Still open: the bottom navigation.** The frame's bar is
+**Still open: the bottom navigation's *item set*.** The frame's bar is
 `Feed · Explore · [centre] · Circles · Me`, which is the same five-item shape The
 Banter uses — so those two frames agree, and the "three navs" conflict is
 narrower than recorded. But that bar has no slot for **Chat** or **Match**, both
 built and working, and "Circles" is the social graph, which does not exist. The
 four-tab bar stays until this is decided.
+
+The **centre button** is a separate question and it is settled (#172): seated in
+the bar rather than raised above it, mark at 34pt in the brand ink. That is
+geometry, and it holds whichever four words end up either side of it.
 
 
 ### Orientation is a set, not a choice — **Done** (API #227, app #129)
@@ -688,6 +692,71 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+- **The bottom of the screen stops fighting itself** (#171, #172, #173). Three
+  floating things — the tab bar's centre button, the Scene's CTA and the event
+  screen's action row — each designed as if it were the only one there.
+
+  **The CTA was not docked.** It sat at `insets.bottom + TAB_BAR_CLEARANCE`, and
+  the tab navigator already ends its children's viewport above the bar, so the
+  clearance counted twice and lifted the pill ~130pt into the middle of the
+  page, straight across the gallery rail. It had been "verified" before by
+  diffing rows across a scroll, which proved it was pinned and never checked
+  what it occluded.
+
+  **The centre button left the bar.** The frames draw it at `y=-16`; on a real
+  screen it overlapped whatever the other two put there, halo and all. Seated
+  with `alignSelf: 'center'`.
+
+  **The mark was the lightest thing in the row.** `monogram-white.png` has
+  strokes at 5.0% of its width, so at 28pt it drew a 1.18pt line against ~2pt
+  for every other glyph — measured off the PNG, not guessed. 34pt, tinted
+  `#1B1931`, the ink sampled from the logo artwork; it had been
+  `EMBER.onGradient`, which is the token for *text* on a gradient and rendered a
+  6.07:1 maroon smudge.
+
+  **The CTA became glass and lost 24pt.** 74 → 58, because the frame's height
+  came from a 40pt icon that set the box on its own; full-bleed → content width,
+  because a full-bleed pill is a bar and a bar is chrome. The gradient border
+  could not come along: `LinearGradient` + `padding: 1` + opaque child is the
+  standard fake gradient border and works *only* while the child is opaque —
+  made glass, the whole gradient rectangle showed through and the pill went
+  brown-purple. RN has no gradient `borderColor`. Hairline of white instead,
+  warmth moved into the tint.
+
+  **The tint is warm because neutral glass rendered near-black.** The pill docks
+  over the bottom of a dark map on `#0F0E0E` — nothing luminous to refract — and
+  read as a *disabled* control in the primary position. `#4B2F26` is
+  `gradientFrom` at 25% over the page.
+
+  **Two docks were double-glazed.** The Scene's dock had a full-bleed blur and
+  scrim behind a glass pill; `EventDetailScreen`'s `tabBar` was a translucent
+  tray with its own hairline holding two buttons that each already had one. A
+  second sheet of glass is a toolbar, not depth.
+
+  **The shipping button said the brand, not the action** — "Blend'n" on a
+  control whose job is to check you in, while the other two stages of its own
+  morph were verbs. "Blend in" now, both surfaces, pinned by
+  `__tests__/sceneCta.test.ts`.
+
+  `EventDetailScreen` was **not** wired to `SceneCTA`, despite a note in #172
+  saying it would be. Reading it rather than grepping it showed why: it is a
+  three-stage morph with loading states and a secondary check-out/RSVP button,
+  and `SceneCTA` is the simpler control. The test now guards against a later
+  "simplification" that swaps it in and quietly drops all three.
+
+  **Not screenshot-verified:** the shipping event screen. It is behind auth and
+  simulator text entry does not work (see the open item below), which is the
+  whole reason `__preview-scene` exists. Everything else in this entry was
+  looked at on a device, and the neutral-glass and gradient-bleed failures were
+  both found that way rather than by reading the diff.
+
+  **Open, for the designer:** a *filled* variant of the monogram for small
+  sizes — 34pt is as far as scaling an outline mark goes before it crowds its
+  disc. And a ruling on which gradient is canonical: the mark runs
+  `#F04C16` → `#8F55A6` (orange → purple), `EMBER_GRADIENT` runs
+  `#FF906D` → `#FF6D8D` (coral → pink) and never reaches purple. Both are in
+  use; nothing was changed on the strength of it.
 
 - **The Scene, built from its frame** (#162, #163). New components in
   `components/scene/`, a flat `#0F0E0E` page in place of a per-event hue wash
