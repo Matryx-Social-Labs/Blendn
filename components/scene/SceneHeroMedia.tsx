@@ -44,6 +44,16 @@ export function SceneHeroMedia({
   onPress?: (index: number) => void
 }) {
   const [index, setIndex] = useState(0)
+  /*
+   * Where the pager has actually *come to rest*, which lags `index`.
+   *
+   * `index` changes the instant an advance starts, because the dots have to
+   * follow the gesture. Tearing the video down on that same tick unmounted it
+   * at the *beginning* of a ~300ms slide, so the poster underneath was revealed
+   * and slid across — an image appearing from nowhere just as the clip ended.
+   * The player stays up until the scroll has settled somewhere else.
+   */
+  const [settled, setSettled] = useState(0)
   const [manual, setManual] = useState(false)
   const scrollRef = useRef<ScrollView>(null)
 
@@ -56,6 +66,13 @@ export function SceneHeroMedia({
     const wrapped = ((next % playlist.length) + playlist.length) % playlist.length
     scrollRef.current?.scrollTo({ x: wrapped * width, animated: true })
     setIndex(wrapped)
+    /*
+     * `onMomentumScrollEnd` does not fire reliably for a programmatic
+     * `scrollTo` on iOS, so a settled state that waited only for it would
+     * strand the outgoing video mounted forever. 400ms comfortably outlasts
+     * the paging animation.
+     */
+    setTimeout(() => setSettled(wrapped), 400)
   }
   const goToRef = useRef(goTo)
   goToRef.current = goTo
@@ -75,6 +92,7 @@ export function SceneHeroMedia({
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
     if (page !== index) setIndex(page)
+    setSettled(page)
   }
 
   return (
@@ -99,19 +117,27 @@ export function SceneHeroMedia({
             accessibilityLabel={`Open media ${i + 1} of ${playlist.length}`}
           >
             {/*
-              The poster is painted for every page, and the player mounts only
-              over the visible one. So a clip that is buffering shows the
-              organiser's own frame rather than black, and four off-screen pages
-              cost four images instead of four decoders.
+              The poster is painted for every page, and the player mounts over
+              the visible one. So a clip that is buffering shows the organiser's
+              own frame rather than black, and off-screen pages cost an image
+              each instead of a decoder each.
+
+              `transition={0}`, deliberately. A cross-fade here fought the
+              pager: the slide *is* the transition, and fading a new image in on
+              top of it showed two pictures at once for 200ms. With
+              `recyclingKey` as well, so `expo-image` cannot hand this page a
+              recycled view still holding the previous page's picture and then
+              dissolve out of it — which is the other half of the same flash.
             */}
             <Image
               source={{ uri: item.kind === 'image' ? item.url : item.posterUrl }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
               cachePolicy="memory-disk"
-              transition={200}
+              recyclingKey={item.kind === 'image' ? item.url : item.posterUrl}
+              transition={0}
             />
-            {item.kind === 'video' && i === index ? (
+            {item.kind === 'video' && (i === index || i === settled) ? (
               <FeedVideo
                 // Keyed by index too, so a playlist repeating the same clip gets
                 // a fresh player rather than one that has already ended.

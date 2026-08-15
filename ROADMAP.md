@@ -689,6 +689,37 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **The Scene, built from its frame** (#162, #163). New components in
+  `components/scene/`, a flat `#0F0E0E` page in place of a per-event hue wash
+  generated from a hash of the event id, and a full-bleed hero whose height is
+  an aspect rather than a number.
+
+  Several things the frame states could not be copied literally. Its title
+  leading is 43.2 on a 48pt font — legal CSS, where glyphs overflow the line
+  box, and **clipping** in React Native. Its `text-shadow` bloom renders as a
+  flat brown rectangle through RN's `textShadow`. Its "LIMITED ACCESS" pill had
+  nothing behind it, and `lib/scarcity.ts` replaces it with "8 SPOTS LEFT"
+  computed from real remaining capacity. Its avatar stack is the identity leak
+  removed in blendn-admin #229, so the discs are generated marks.
+
+  The glyphs are the frame's own — Material, and in the frame's colours
+  (`#FF906D` for date and time, `#F79EFF` and `#FF6D8D` for the amenity pair),
+  which was read off the exported SVGs' `fill` after twice getting it wrong
+  from the paths alone.
+
+  The hero is a pager that auto-advances until the first manual swipe and then
+  never again, `clipFirst` puts the video first, and both it and the gallery
+  rail open `SceneLightbox`. Two transition flashes were real and both fixed:
+  `transition={200}` cross-fading a poster on top of the pager's own slide, and
+  the player unmounting at the *start* of a 300ms slide so its poster showed
+  through the whole thing.
+
+  **Verified by frame-diffing, not by looking.** The clip was silently not
+  playing — 0.0% of hero pixels changing over four seconds — through three
+  successive remote samples: gtv-videos-bucket 403s, samplelib 301-redirects to
+  HTML, and two others carry `moov` at the end of the file. The fixture is now
+  the clip `seed-qa.ts` actually seeds.
+
 - **The launch plays the logo's own animation, and stops inflating it** (#161).
   The intro asset was cut to start at 1.55s of the master so its first frame
   matched the completed monogram the splash already showed. Seamless, and it
