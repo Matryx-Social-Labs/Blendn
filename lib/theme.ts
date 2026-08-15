@@ -314,4 +314,85 @@ export const EMBER_TYPE = {
     lineHeight: 24,
     color: EMBER.textSecondary,
   },
+
+  /* ---- The Pulse and the feed screens ------------------------------------ */
+
+  /**
+   * "The **Pulse**". Smaller than `display` because this screen scrolls under a
+   * sticky bar and `display` at 56 leaves no room for the search field beneath
+   * it on a 390pt frame — onboarding could spend the height, a feed cannot.
+   */
+  screenTitle: {
+    fontFamily: EMBER_FONTS.displayExtraBold,
+    fontSize: 48,
+    lineHeight: 48,
+    letterSpacing: -2.4,
+    color: EMBER.textPrimary,
+  },
+  /** "Featured", "Upcoming", "Nearby Experiences". */
+  sectionHeading: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textPrimary,
+  },
+  /** "VIEW ALL", and the "Launch Map" style text buttons. Uppercased in the
+   *  string rather than by `textTransform`, so the tracking lands on the real
+   *  glyphs — same rule as `eyebrow`. */
+  link: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 1.6,
+    color: EMBER.accent,
+  },
+  /** The headline on a featured card and on the large local card. */
+  cardTitleLarge: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 36,
+    lineHeight: 45,
+    color: EMBER.textPrimary,
+  },
+  /** The headline on an upcoming card. */
+  cardTitle: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 24,
+    lineHeight: 32,
+    color: EMBER.textPrimary,
+  },
+  /** Date, venue, distance, "142 joined" — everything on a card that is not a
+   *  name and not a paragraph. */
+  meta: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textSecondary,
+  },
+  /** The card's description paragraph. Same size as `meta`; separate because it
+   *  wraps and clamps where meta never does. */
+  cardBody: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textSecondary,
+  },
+  /**
+   * The pill on a featured card — "SONIC VOID", "EXCLUSIVE".
+   *
+   * No colour: it is the one type style whose colour is per-instance, because
+   * the frame alternates the gradient's two ends between cards.
+   */
+  tag: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 1.6,
+  },
+  /** The category pill over an upcoming card's image — "Dance", "Workshop". */
+  categoryPill: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textPrimary,
+  },
 } as const

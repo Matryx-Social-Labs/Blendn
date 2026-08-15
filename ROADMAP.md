@@ -319,6 +319,40 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 | 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
 
+### The Pulse — **Done** (#130), minus two sections
+
+Frame `1141:4643`, applied to `app/(tabs)/events.tsx`. A restyle, not a new
+screen: that file already had a featured carousel, Upcoming, Nearby, Nightlife,
+Interested, the checked-in strip, the city picker, empty states and skeletons —
+more than the frame draws. Nothing was removed. Notes in `docs/PULSE.md`.
+
+- **Search is the first caller `GET /events?search=` has ever had.** The
+  parameter existed in the endpoint and in `EventsParams`; no screen sent one.
+  Typing hides the curated sections and shows a flat list, and a search that
+  finds nothing gets its own empty — otherwise a typo answers "Coming soon to
+  Bengaluru" and tells somebody we have not launched in the city they are
+  standing in.
+- **`fetchMore` was dropping the city filter.** Page one sends `city`, page two
+  never did, so scrolling past the fold appended events from everywhere into a
+  city-scoped list. Found because `search` would have inherited it exactly.
+- Featured and Upcoming split from one sorted list; featured requires a cover
+  image, because that card is a photograph with words on it.
+- The interest heart was added back to the Upcoming card — the frame has no
+  place for it, and the card it replaced had one.
+
+**Not built, on purpose:** the "Explore the Grid" card (the deferred venues map,
+and a name collision with the room screen), and the large Nearby card as drawn
+(**Reserve Table** and *"+12 Friends are here"* need reservations and a social
+graph). Nearby still renders the existing list.
+
+**Still open: the bottom navigation.** The frame's bar is
+`Feed · Explore · [centre] · Circles · Me`, which is the same five-item shape The
+Banter uses — so those two frames agree, and the "three navs" conflict is
+narrower than recorded. But that bar has no slot for **Chat** or **Match**, both
+built and working, and "Circles" is the social graph, which does not exist. The
+four-tab bar stays until this is decided.
+
+
 ### Orientation is a set, not a choice — **Done** (API #227, app #129)
 
 People hold more than one label — "queer" and "bisexual" together, "asexual"
