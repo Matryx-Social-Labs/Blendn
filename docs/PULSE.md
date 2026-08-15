@@ -89,7 +89,27 @@ introducing a ninth treatment.
 **For the designer:** if the gradient text matters more than the build cost, say
 so and it becomes a dependency decision rather than a styling one.
 
-### 2. The city line is not in the frame, and it has to be
+### 2. The old top bar is gone
+
+The screen carried `Hey Sagar! / Saarbrücken • Saturday, 15 Aug` with an avatar
+and a gear — a bar that appears in no frame and did three jobs at once: greet,
+choose a city, open settings.
+
+The frame has `☰ Blend'n 🔔` and nothing else, because the screen's identity is
+**"The Pulse" in 48pt underneath**. A bar that also announces itself competes
+with the thing it sits above.
+
+Replaced with avatar → profile, the wordmark, and one control on the right.
+The greeting is gone. The city control moved into the headline block, where it
+is larger and sits next to the content it scopes.
+
+**The bell goes to settings.** There is no notification centre to open, and
+settings is where push notifications are actually configured — a bell that opens
+nothing would be the dead control this project keeps removing.
+
+**For the designer:** if a notification centre is wanted, it needs a frame.
+
+### 3. The city line is not in the frame, and it has to be
 
 The frame has a headline and a search field, and nothing that says which city you
 are looking at.
@@ -101,7 +121,7 @@ rather than a control bolted on.
 
 **For the designer:** this needs a real treatment. It is load-bearing.
 
-### 3. The prev/next arrows are absent, not inert
+### 4. The prev/next arrows are absent, not inert
 
 The frame puts a pair of round arrows beside "Upcoming". They belong to a
 horizontal row; the frame draws Upcoming as a **vertical stack**, which they
@@ -111,11 +131,11 @@ would scroll nothing of.
 rather than dead. A control that looks broken is worse than one that is not
 there.
 
-### 4. "VIEW ALL" only when there is more than is already shown
+### 5. "VIEW ALL" only when there is more than is already shown
 
 With four featured events and four on screen, it is a link to the same four.
 
-### 5. The heart is added, and the frame has no place for it
+### 6. The heart is added, and the frame has no place for it
 
 The card this replaced had an interest toggle. The frame's Upcoming card has one
 action — "Details".
@@ -128,13 +148,22 @@ silent toggle, and a mis-tap between them is annoying both ways.
 
 **For the designer:** where should this live?
 
-### 6. Featured shows only events with a cover image
+### 6b. Featured shows only events with a cover image
 
 The card is a photograph with words on it. Without an image it is a dark
 rectangle with a headline — worse than not being featured. Those events fall
 through to the Upcoming stack, which reads fine either way.
 
-### 7. Card sizes are whole numbers, not the frame's arithmetic
+### 7. A row of one is not a row
+
+The featured card is sized to let the next one peek, which is what tells
+somebody the row scrolls. With a **single** featured event — which is every city
+with a thin catalogue, so every city right now — that left a third of the screen
+empty beside it, reading as a layout that failed.
+
+One card fills the width. Two or more go back to peeking.
+
+### 8. Card sizes are whole numbers, not the frame's arithmetic
 
 The frame's featured card is 331.5 × 450 inside a 390 frame, which is a mask
 artifact rather than a chosen size — and 450 is taller than the visible area on
@@ -143,7 +172,7 @@ the shortest phone we support once the sticky bar and tab bar are subtracted.
 300 × 408 holds the ratio to within a percent and leaves the next card peeking,
 which is what tells somebody the row scrolls.
 
-### 8. Tags say the category, not a mood
+### 9. Tags say the category, not a mood
 
 The frame's pills read "SONIC VOID" and "EXCLUSIVE" — invented strings, in the
 same family as the invented interest chips on the onboarding frames.
@@ -151,7 +180,7 @@ same family as the invented interest chips on the onboarding frames.
 a pill reading "Nightlife" is a filter somebody can act on where "SONIC VOID" is
 a word.
 
-### 9. Zero is not shown
+### 10. Zero is not shown
 
 "0 joined" reads as a verdict on the event, and every event is 0 for a while —
 including, always, the first one anybody sees after we launch in their city. No

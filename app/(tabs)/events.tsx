@@ -28,6 +28,7 @@ import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import {
   FeaturedCard,
   FEATURED_CARD_GAP,
+  FEATURED_CARD_SOLO,
   FEATURED_CARD_WIDTH,
 } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
@@ -78,7 +79,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { APP_COLORS } from '../../lib/theme'
+import { APP_COLORS, EMBER, EMBER_TYPE } from '../../lib/theme'
 
 /*
  * Distance in METRES, not kilometres.
@@ -1809,28 +1810,50 @@ export default function Events() {
               : undefined
           }
         />
-        <FlatList
-          horizontal
-          data={featuredItems}
-          keyExtractor={(item, idx) => `feat-${item.id}-${idx}`}
-          showsHorizontalScrollIndicator={false}
-          snapToAlignment="start"
-          snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
-          decelerationRate="fast"
-          contentContainerStyle={styles.pulseRowContent}
-          renderItem={({ item, index }) => (
+        {/*
+          A row of one is not a row.
+
+          With a single featured event the peeking width leaves a third of the
+          screen empty beside it, which reads as a layout that failed rather
+          than as an invitation to scroll. One card fills the width; two or more
+          go back to peeking.
+        */}
+        {featuredItems.length === 1 ? (
+          <View style={styles.pulseRowContent}>
             <FeaturedCard
-              title={item.title}
-              tag={item.category || null}
-              imageUrl={item.cover_image_url}
-              dateLabel={featuredDateLabel(item.start_time)}
-              placeLabel={placeLabel(item)}
-              accentIndex={index}
-              onPress={() => handleEventPress(item)}
+              title={featuredItems[0].title}
+              tag={featuredItems[0].category || null}
+              imageUrl={featuredItems[0].cover_image_url}
+              dateLabel={featuredDateLabel(featuredItems[0].start_time)}
+              placeLabel={placeLabel(featuredItems[0])}
+              width={FEATURED_CARD_SOLO}
+              onPress={() => handleEventPress(featuredItems[0])}
             />
-          )}
-          ItemSeparatorComponent={() => <View style={{ width: FEATURED_CARD_GAP }} />}
-        />
+          </View>
+        ) : (
+          <FlatList
+            horizontal
+            data={featuredItems}
+            keyExtractor={(item, idx) => `feat-${item.id}-${idx}`}
+            showsHorizontalScrollIndicator={false}
+            snapToAlignment="start"
+            snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
+            decelerationRate="fast"
+            contentContainerStyle={styles.pulseRowContent}
+            renderItem={({ item, index }) => (
+              <FeaturedCard
+                title={item.title}
+                tag={item.category || null}
+                imageUrl={item.cover_image_url}
+                dateLabel={featuredDateLabel(item.start_time)}
+                placeLabel={placeLabel(item)}
+                accentIndex={index}
+                onPress={() => handleEventPress(item)}
+              />
+            )}
+            ItemSeparatorComponent={() => <View style={{ width: FEATURED_CARD_GAP }} />}
+          />
+        )}
       </View>
     )
   }
@@ -2286,7 +2309,9 @@ export default function Events() {
     />
   )
 
-  const stickyBarHeight = insets.top + 8 + 12 + 36
+  // Icon row only: the greeting and the city line that used to live up here
+  // moved into the scrolling headline block.
+  const stickyBarHeight = insets.top + 8 + 32
   const sectionBgTop = stickyBarHeight + 12
   const topBarTranslateY = scrollY.interpolate({
     inputRange: [0, 200],
@@ -2326,67 +2351,62 @@ export default function Events() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Background image tint to match Figma */}
-      {/* Image moved to global background in RootLayout */}
-      {/* Sticky top bar */}
+      {/*
+        The top bar as frame `1141:4643` draws it: a glyph, the wordmark, a bell.
+
+        It replaces "Hey Sagar! / Bengaluru • Saturday, 15 Aug", which was not in
+        any frame and was doing three jobs at once — greeting, city control and
+        settings. The greeting is gone; the city control moved into the headline
+        block below, where it reads as a subtitle rather than as a caption bolted
+        to an avatar. Nothing was lost: the picker is still the only way out of
+        an empty state, and it is now larger and nearer the content it scopes.
+
+        Deliberately short. The screen's identity is "The Pulse" in 48pt
+        underneath; a bar that also announced itself would compete with it.
+      */}
       <RNAnimated.View
         style={[
-          styles.topBarSticky,
-          { paddingTop: insets.top + 8, transform: [{ translateY: topBarTranslateY }, { scale: topBarScale }], opacity: topBarOpacity },
+          styles.topBar,
+          { paddingTop: insets.top + 8, opacity: topBarOpacity },
         ]}
         accessibilityRole="header"
       >
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="View profile" onPress={() => router.push('/profile' as any)}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="View profile"
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          onPress={() => router.push('/profile' as any)}
+        >
           {avatarUrl && avatarUrl.length > 0 && !avatarError ? (
             <OptimizedImage
               source={avatarUrl}
-              style={styles.avatar}
-              width={72}
-              height={72}
+              style={styles.topBarAvatar}
+              width={56}
+              height={56}
               quality={60}
               onError={() => setAvatarError(true)}
             />
           ) : (
-            <Ionicons name="person-circle-outline" size={38} color="#aaa" />
+            <Ionicons name="person-circle-outline" size={28} color={EMBER.textSecondary} />
           )}
         </TouchableOpacity>
-        <View style={styles.topBarCenter}>
-          <Text style={styles.topBarTitle}>Hey {userFirstName || 'User'}!</Text>
-          {/*
-            The city is a control now, not a caption.
 
-            It used to read `profile.location` — a string reverse-geocoded once
-            at signup — while the list underneath was filtered to wherever the
-            device currently was. Tapping it does the thing the label always
-            implied: change where you are browsing.
-          */}
-          <TouchableOpacity
-            style={styles.cityPickerTrigger}
-            onPress={() => setCityPickerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel={
-              selectedCity ? `Browsing ${selectedCity}. Change city` : 'Choose a city'
-            }
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          >
-            <Ionicons name="location-outline" size={13} color={APP_COLORS.textSecondary} />
-            <Text style={styles.topBarSubtitle} numberOfLines={1}>
-              {selectedCity ? `${selectedCity} • ${todayLabel}` : todayLabel}
-            </Text>
-            <Ionicons name="chevron-down" size={13} color={APP_COLORS.textSecondary} />
-          </TouchableOpacity>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            accessibilityLabel="Open settings"
-            accessibilityRole="button"
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-            onPress={() => router.push('/settings')}
-          >
-            <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.wordmark}>Blend&apos;n</Text>
+
+        {/*
+          The frame's bell. There is no notification centre to open, so it goes
+          to settings — where push notifications are actually configured — rather
+          than being drawn as a control that does nothing. Noted in
+          `docs/PULSE.md`.
+        */}
+        <TouchableOpacity
+          accessibilityLabel="Open settings"
+          accessibilityRole="button"
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          onPress={() => router.push('/settings')}
+        >
+          <Ionicons name="settings-outline" size={22} color={EMBER.textPrimary} />
+        </TouchableOpacity>
       </RNAnimated.View>
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
@@ -3457,12 +3477,22 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   topBar: {
-    paddingHorizontal: 14,
-   
-    paddingTop: 8,
-    paddingBottom: 12,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  topBarAvatar: { width: 28, height: 28, borderRadius: 14 },
+  wordmark: {
+    ...EMBER_TYPE.sectionHeading,
+    color: EMBER.accent,
+    letterSpacing: -0.8,
   },
   topBarSticky: {
     position: 'absolute',
