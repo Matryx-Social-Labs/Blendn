@@ -60,11 +60,28 @@ describe('eventFromApi', () => {
     const e = eventFromApi(serverEvent())
     expect(e.is_favorited).toBe(false)
     expect(e.favorite_count).toBe(0)
-    expect(e.interested_preview).toEqual([])
     expect(e.media).toEqual([])
     expect(e.user_checkin).toBeNull()
     expect(e.timezone).toBe('UTC')
     expect(e.check_in_radius).toBe(100)
+  })
+
+  it('carries no preview of who is interested', () => {
+    /*
+     * `interested_preview` was real photographs of everyone who had favourited
+     * an event — served ungated to any authenticated caller, and rendered as an
+     * avatar row on the event screen. Both doors are closed on the server
+     * (blendn-admin #229); this is the client half.
+     *
+     * Favouriting is a private act. Unlike the roster it has no check-in, no
+     * pseudonym and no reveal, so nobody who used it consented to being shown.
+     * `favorite_count` is the social proof, and it was always there.
+     */
+    const payload = serverEvent() as Record<string, unknown>
+    payload.interestedPreview = ['https://cdn.example/a-real-face.jpg']
+    const e = eventFromApi(payload as never)
+    expect(JSON.stringify(e)).not.toContain('a-real-face')
+    expect(e).not.toHaveProperty('interested_preview')
   })
 
   it('reads the category family from the parent, not the leaf', () => {

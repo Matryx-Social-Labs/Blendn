@@ -494,9 +494,6 @@ export default function Events() {
         category: event.category || '',
         description: event.description || '',
         interestCount: String(interestCounts[event.id] ?? event.favorite_count ?? 0),
-        interested: event.interested_preview && event.interested_preview.length > 0
-          ? JSON.stringify(event.interested_preview)
-          : '',
       } as any,
     })
   }, [userLocation, interestCounts])
@@ -1528,8 +1525,7 @@ export default function Events() {
         city: selectedCity ?? undefined,
         lat,
         lon,
-        include: 'checkins,activeCheckins,profile,interestedPreview',
-        interestedPreviewLimit: 3,
+        include: 'checkins,activeCheckins,profile',
         search: searchTerm || undefined,
       }, { force: !!options?.force })
 
@@ -1651,8 +1647,7 @@ export default function Events() {
         city: selectedCity ?? undefined,
         lat: userLocation?.latitude,
         lon: userLocation?.longitude,
-        include: 'checkins,interestedPreview',
-        interestedPreviewLimit: 3,
+        include: 'checkins',
         search: searchTerm || undefined,
       })
       if (error) return

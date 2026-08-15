@@ -88,7 +88,6 @@ export function eventFromApi(e: EventPayload) {
       is_favorited: e.isFavorited === true,
       favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
       user_checkin: e.userCheckin || null,
-      interested_preview: Array.isArray(e.interestedPreview) ? e.interestedPreview : [],
     }
 }
 
