@@ -531,7 +531,7 @@ half buys the design goal nothing.
 | — | The nav, rebuilt from frame `1141:4827` (#144) | **Done** |
 | — | The feed renders the frame's three sections and only those (#145) | **Done** |
 | — | `PulseTopBar` — the overlay header, frame `1141:4819` | **Done** |
-| — | Delete the orphaned render functions, hero interpolations and dead memos | |
+| — | Delete the orphaned render functions, hero interpolations and dead memos | **Done** |
 | — | Rewrite the 107-key `StyleSheet` from the frame | |
 
 **The overlay header is not the bar that was deleted in #141.** That one
@@ -549,6 +549,26 @@ it is not: it is a presence surface behind a time-boxed, reciprocal *Go Live*,
 and that gate does not exist. Shipping the switch would have been a third dead
 control and would have encoded the misreading. Notes in `docs/PULSE.md`.
 
+**291 lines of previous designs deleted, and one of them was doing network I/O.**
+Five orphaned render functions (`renderInterestedCarousel`,
+`renderCarouselWithTitle`, `renderCarouselFancy`, `renderInviteHero`,
+`renderFeaturedHero`), the two hero scroll interpolations, and four memos with
+no reader (`interestedItems`, `cityTopItems`, `bestPartiesItems`,
+`soonestWithImage`). Two more fell out behind them: `NIGHTLIFE_GROUPS`, and the
+`favoriteEvents` state whose effect fired `getUserFavorites` **on every events
+refetch** into something nothing rendered. `expo lint` names an orphan, so it is
+what verified the sweep and what confirmed no new one was created.
+
+Interested comes back as a section — with its fetch — the day it has a frame.
+Keeping a request alive against a design that does not exist is not "the data
+stays"; it is a call nobody reads.
+
+**Still dead, and older than this work:** `loadUserProfile`, `loadInterestData`
+and `loadInterestCounts` were already uncalled before the rebuild started. They
+are behaviour-half data loaders with no design driver, so they are out of this
+rewrite's scope — but `interestCounts` is therefore never populated, which means
+the count on every event card is permanently `undefined`. Its own item.
+
 **The five undesigned rows moved into the list header.** The checked-in strip,
 the offline banner, the switch-city offer, the away notice and the location and
 network errors were a sibling of the list, statically laid out where the overlay
@@ -558,6 +578,19 @@ anything to say.
 ---
 
 ## Next
+
+### The interest count on an event card is always `undefined`
+
+Found by `expo lint` while deleting the Pulse's orphans, not by looking at a
+device — the number simply never draws, so nothing looks broken.
+
+`renderEventItem` passes `interestCount={interestCounts[event.id]}`, and
+`interestCounts` has no writer: `loadInterestCounts` and `loadInterestData` are
+both defined and never called, and have been since before the Pulse rebuild
+started. Deliberately left out of that rewrite, which touches presentation only.
+
+Deciding whether the count comes back at all is the first half of the job — the
+Pulse frames do not draw one, and `EventCard` is used by more screens than this.
 
 ### `about-you` does not prefill what you already answered
 

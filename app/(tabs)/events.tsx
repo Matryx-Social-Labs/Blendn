@@ -127,20 +127,6 @@ const TYPE_CAPTION_SIZE = 12
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
 
-/**
- * Which parent categories count as a night out.
- *
- * Parent **slugs** from the server's taxonomy (`scripts/seed-categories.ts` in
- * blendn-admin), not names — slugs are what shared links and the mobile filter
- * already match on, and they do not change when someone retitles a category.
- *
- * Deliberately just `nightlife`. Adding `music` would sweep in the whole family
- * including Classical and Carnatic, which is the exact false positive the old
- * substring match produced. A gig is not a party, and if music deserves a
- * section it should get its own rather than being smuggled into this one.
- */
-const NIGHTLIFE_GROUPS = new Set(['nightlife'])
-
 const formatCarouselCardDate = (iso: string) => {
   try {
     return new Date(iso).toLocaleString(undefined, {
@@ -335,7 +321,6 @@ export default function Events() {
    * the moment anyone travels, which is how a Bengaluru header ended up over a
    * German query.
    */
-  const [favoriteEvents, setFavoriteEvents] = useState<Event[]>([])
   /*
    * The selection carries **how it was set**, not just what it is.
    *
@@ -1123,36 +1108,6 @@ export default function Events() {
     </View>
   )
 
-  const renderInterestedCarousel = (items: Event[]) => (
-    <View style={styles.carouselContainer}>
-      <SectionHeader
-        title="Interested"
-        actionLabel="VIEW ALL"
-        onAction={() => router.push('/going' as any)}
-      />
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
-        data={items.filter((item, idx) => !!item.cover_image_url && idx < 10)}
-        keyExtractor={keyExtractor}
-        getItemLayout={getCarouselItemLayout}
-        renderItem={({ item }) => (
-          <CarouselCard
-            event={item}
-            onPress={() => handleEventPress(item)}
-            onLongPress={() => handleEventPreview(item)}
-            onToggleInterest={() => toggleInterest(item)}
-            isInterested={!!interestStatuses[item.id]}
-            interestLoading={!!interestPending[item.id]}
-            statusLabel="Interested"
-          />
-        )}
-      />
-    </View>
-  )
-
-
   useEffect(() => {
     if (userLocation && events.length > 0) {
       checkEventProximity()
@@ -1393,34 +1348,6 @@ export default function Events() {
     })
     return () => sub.remove()
   }, [])
-
-  /*
-   * Favourites, fetched by user rather than read out of the browse list.
-   *
-   * Refetched when the events list is, so favouriting something on this screen
-   * still updates the carousel — `interestStatuses` covers the optimistic case
-   * in between.
-   */
-  useEffect(() => {
-    if (!user?.id) return
-    let cancelled = false
-    ;(async () => {
-      const result = await apiClient.getUserFavorites(user.id)
-      if (cancelled || !result.success || !result.data) return
-      setFavoriteEvents(
-        (result.data as any[]).map((e) => normalizeEvent({
-          ...e,
-          venue_name: e.venueName ?? e.venue_name ?? '',
-          start_time: e.startTime ?? e.start_time,
-          end_time: e.endTime ?? e.end_time,
-          cover_image_url: e.coverImageUrl ?? e.cover_image_url ?? null,
-        } as any))
-      )
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id, events])
 
   /**
    * Every path a user can take to a city, and all of them count as choosing.
@@ -1726,31 +1653,6 @@ export default function Events() {
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
 
-  const renderCarouselWithTitle = (title: string, items: Event[]) => (
-    <View style={styles.carouselContainer}>
-      <SectionHeader title={title} />
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
-        data={items.filter((item, idx) => !!item.cover_image_url && idx < 10)}
-        keyExtractor={keyExtractor}
-        getItemLayout={getCarouselItemLayout}
-        renderItem={({ item }) => (
-          <CarouselCard
-            event={item}
-            onPress={() => handleEventPress(item)}
-            onLongPress={() => handleEventPreview(item)}
-            onToggleInterest={() => toggleInterest(item)}
-            isInterested={!!interestStatuses[item.id]}
-            interestLoading={!!interestPending[item.id]}
-            statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
-          />
-        )}
-      />
-    </View>
-  )
-
   const UPCOMING_ITEM_WIDTH = CAROUSEL_CARD_WIDTH
   const UPCOMING_ITEM_HEIGHT = CAROUSEL_CARD_HEIGHT
   const UPCOMING_ITEM_FULL = CAROUSEL_ITEM_FULL
@@ -1878,129 +1780,6 @@ export default function Events() {
     </>
   )
 
-  const renderCarouselFancy = (titleLines: string[], items: Event[]) => {
-    if (!items.some(item => !!item.cover_image_url)) return null
-    return (
-    <View style={styles.carouselContainer}>
-      <SectionHeader title={titleLines.join(' ')} />
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselList}
-        data={items.filter(item => !!item.cover_image_url)}
-        keyExtractor={keyExtractor}
-        getItemLayout={getCarouselItemLayout}
-        renderItem={({ item }) => (
-          <CarouselCard
-            event={item}
-            onPress={() => handleEventPress(item)}
-            onLongPress={() => handleEventPreview(item)}
-            onToggleInterest={() => toggleInterest(item)}
-            isInterested={!!interestStatuses[item.id]}
-            interestLoading={!!interestPending[item.id]}
-            statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
-          />
-        )}
-      />
-    </View>
-  )}
-
-  const formatFeaturedDate = (iso: string) => {
-    try {
-      const d = new Date(iso)
-      const month = d.toLocaleString(undefined, { month: 'short' })
-      const day = d.getDate()
-      const year = d.getFullYear()
-      return `${month} ${day}, ${year}`
-    } catch {
-      return ''
-    }
-  }
-
-  const formatInviteDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString(undefined, {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    } catch {
-      return 'Date TBA'
-    }
-  }
-
-  const renderInviteHero = (ev?: Event) => {
-    if (!ev || !ev.cover_image_url) return null
-    return (
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => handleEventPress(ev)}
-        onLongPress={() => handleEventPreview(ev)}
-        style={styles.inviteHeroCard}
-        accessibilityRole="button"
-        accessibilityLabel={`Open invite for ${ev.title}`}
-      >
-        <OptimizedImage
-          source={ev.cover_image_url}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-          width={720}
-          height={360}
-          quality={70}
-          cachePolicy="memory-disk"
-          priority="high"
-        />
-        <LinearGradient
-          colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.78)']}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View style={styles.inviteHeroContent}>
-          <Text style={styles.inviteHeroKicker}>Invite</Text>
-          <Text style={styles.inviteHeroTitle} numberOfLines={2}>{ev.title}</Text>
-          <Text style={styles.inviteHeroMeta} numberOfLines={1}>{formatInviteDate(ev.start_time)}</Text>
-          <Text style={styles.inviteHeroMeta} numberOfLines={1}>
-            {ev.venue_name || ev.display_city || 'Location TBA'}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    )
-  }
-
-  const renderFeaturedHero = (ev?: Event) => {
-    if (!ev || !ev.cover_image_url) return null
-    const screenW = Dimensions.get('window').width
-    const featuredWidth = Math.max(0, Math.round(screenW - 46))
-    const featuredHeight = Math.round(featuredWidth * (474 / 363))
-    return (
-      <View style={styles.featuredContainer}>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => handleEventPress(ev)} onLongPress={() => handleEventPreview(ev)}>
-          <View style={[styles.featuredImage, styles.featuredRadius, { overflow: 'hidden' }]}>
-            <OptimizedImage
-              source={ev.cover_image_url}
-              style={StyleSheet.absoluteFillObject}
-              contentFit="cover"
-              width={featuredWidth}
-              height={featuredHeight}
-              quality={65}
-              cachePolicy="memory-disk"
-              priority="high"
-            />
-            <LinearGradient colors={["rgba(0,0,0,0)", "#000000"]} style={[styles.gradientFull, styles.featuredRadius]} />
-          </View>
-          <View style={styles.featuredOverlayBox}>
-            <Text style={styles.featuredTitle} numberOfLines={1}> - {ev.title} - </Text>
-            <View style={styles.featuredChip}>
-              <Text style={styles.featuredChipText}>{formatFeaturedDate(ev.start_time)}</Text>
-            </View>
-            <Text style={styles.featuredSubtitle} numberOfLines={1}>{ev.venue_name || 'Venue to be announced'}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
   const renderNearbyList = (items: Event[]) => {
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
     const place = selectedCity || 'Your area'
@@ -2102,29 +1881,6 @@ export default function Events() {
     return map
   }, [events, userLocation, proximityData])
 
-  /*
-   * Your own list, and therefore **not** scoped by the city you are browsing.
-   *
-   * This used to be `events.filter(is_favorited)`, which was harmless while
-   * `events` was everything and becomes a bug the moment `events` is one city:
-   * favourite something in Munich, browse Bengaluru, and it silently vanishes
-   * from a section whose whole promise is "things you said you wanted".
-   *
-   * Personal state is not discovery inventory. The checked-in strip already
-   * gets this right — `activeCheckins` is queried by user, not by the browse
-   * filter — and this brings Interested into line.
-   *
-   * Falls back to the in-page events if the favourites call fails, so a flaky
-   * network degrades the section rather than emptying it.
-   */
-  const interestedItems = useMemo(() => {
-    const now = Date.now()
-    const source = favoriteEvents.length > 0
-      ? favoriteEvents
-      : events.filter(e => !!interestStatuses[e.id])
-    return source.filter(e => new Date(e.end_time).getTime() >= now)
-  }, [favoriteEvents, events, interestStatuses])
-
   const upcomingItems = useMemo(() => {
     const now = Date.now()
     return events
@@ -2150,53 +1906,6 @@ export default function Events() {
       .sort((a, b) => a.d - b.d)
       .map(x => x.e)
   }, [events, userLocation, distanceMap])
-
-  /*
-   * "{City}'s Top Events" — now just an ordering, because the fetch is already
-   * scoped to the city.
-   *
-   * This used to re-filter by city name over `events`, which was itself only
-   * whatever fell inside a 10km box around the device. So the section could
-   * never show a Bengaluru event you were not standing next to, and its title
-   * was a radius wearing a city's name. It also matched on `address.includes`,
-   * which quietly pulled in anything with the city's name in its street line.
-   *
-   * With `city` scoping the query, the filter can only subtract — an event
-   * whose `display_city` disagrees with the server's `city` would vanish from a
-   * list it belongs in. So it is gone, and this is what it always meant: the
-   * city's events, most-wanted first.
-   */
-  const cityTopItems = useMemo(() => {
-    return events
-      .slice()
-      .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
-        new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events, interestCounts])
-
-  /*
-   * Nightlife, by the taxonomy rather than by guessing at names.
-   *
-   * This used to substring-match `party|night|club|music` against the category
-   * name. Events are tagged to leaves, so "Classical and Carnatic" matched on
-   * `music` and was presented as one of the Best Parties.
-   *
-   * `category_group` is the parent slug, which is what "everything of this
-   * kind" actually means — added to the payload in blendn-admin #214 so the
-   * client stops inferring a tree it is already being told about.
-   *
-   * **The fallback is gone, and it was the worse half.** When nothing matched,
-   * this returned *every* event sorted by interest — so a section titled
-   * "Discover the Best Parties" would confidently show a book club. An empty
-   * section is honest; a full one that ignores its own title is not. The
-   * render already guards on `length > 0`, so nothing appears rather than
-   * something wrong.
-   */
-  const bestPartiesItems = useMemo(() => {
-    return events
-      .filter(e => NIGHTLIFE_GROUPS.has((e.category_group || '').toLowerCase()))
-      .sort((a, b) => (interestCounts[b.id] || 0) - (interestCounts[a.id] || 0) ||
-        new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events, interestCounts])
 
   const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
 
@@ -2242,22 +1951,6 @@ export default function Events() {
     return filteredSortedEvents.filter(e => !shown.has(e.id))
   }, [isSearching, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
 
-  /*
-   * The top hero: the soonest event that has a cover image.
-   *
-   * Named for what it is. It used to be `inviteHeroEvent` and was presented as
-   * a featured invitation, but the selection has never been editorial — it
-   * walks three lists and takes the first item with an image. That is an
-   * image-availability check wearing a curator's hat.
-   *
-   * `upcomingItems` is already sorted by start time, so "first with an image"
-   * genuinely means "the soonest one we can show properly". Real curation is a
-   * separate feature; this at least stops claiming to be it.
-   */
-  const soonestWithImage = useMemo(
-    () => upcomingItems.find(e => !!e.cover_image_url),
-    [upcomingItems]
-  )
   const todayLabel = useMemo(
     () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
     []
@@ -2416,16 +2109,6 @@ export default function Events() {
     />
   )
 
-  const heroParallaxY = scrollY.interpolate({
-    inputRange: [0, 360],
-    outputRange: [0, -18],
-    extrapolate: 'clamp',
-  })
-  const heroOpacity = scrollY.interpolate({
-    inputRange: [0, 340],
-    outputRange: [1, 0.89],
-    extrapolate: 'clamp',
-  })
   const sectionLiftY = scrollY.interpolate({
     inputRange: [0, 300],
     outputRange: [0, -8],

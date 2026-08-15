@@ -77,6 +77,52 @@ describe('the overlay header, frame 1141:4819', () => {
   })
 })
 
+describe('the previous designs are gone, not merely uncalled', () => {
+  /*
+   * Twelve render functions from three layouts lived in this file, six of them
+   * with no caller — including, for one release, the *only* one built from the
+   * frame. Dead code is not inert here: it is what every restyle landed next
+   * to and contradicted. `expo lint` names an orphan, so these greps are the
+   * half lint cannot see — that the name is gone rather than newly re-wired.
+   */
+  it.each([
+    'renderInterestedCarousel',
+    'renderCarouselWithTitle',
+    'renderCarouselFancy',
+    'renderInviteHero',
+    'renderFeaturedHero',
+  ])('%s does not exist', (name) => {
+    expect(SCREEN()).not.toContain(name)
+  })
+
+  it.each([
+    'interestedItems',
+    'cityTopItems',
+    'bestPartiesItems',
+    'soonestWithImage',
+  ])('%s does not exist', (name) => {
+    expect(SCREEN()).not.toContain(name)
+  })
+
+  it('the hero interpolations went with the hero', () => {
+    // `sectionLiftY`/`sectionOpacity` stay — the three sections still use them.
+    const src = SCREEN()
+    expect(src).not.toContain('heroParallaxY')
+    expect(src).not.toContain('heroOpacity')
+    expect(src).toContain('sectionLiftY')
+  })
+
+  it('nothing is fetched that nothing reads', () => {
+    // `favoriteEvents` had one reader, `interestedItems`. Left behind, its
+    // effect would fire `getUserFavorites` on every events refetch into a
+    // state nothing renders.
+    const src = SCREEN()
+    expect(src).not.toContain('favoriteEvents')
+    expect(src).not.toContain('getUserFavorites')
+    expect(src).not.toContain('NIGHTLIFE_GROUPS')
+  })
+})
+
 describe('the bar does not clip the button that overhangs it', () => {
   /*
    * The centre button sits at `y=-16` — sixteen points above the bar's top
