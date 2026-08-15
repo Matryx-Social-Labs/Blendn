@@ -81,6 +81,48 @@ export const MIN_OUTSIDE_MS = 10 * 60 * 1000
 export const REPRIEVE_MS = 30 * 60 * 1000
 
 /**
+ * How often to take a reading, while the app is open and they are checked in.
+ *
+ * Two minutes, which is slower than it could be and deliberately so. The
+ * decision below needs **six** of these to span the ten minutes it requires, so
+ * the interval is not what makes an eviction fast — nothing here is fast. What
+ * it controls is battery, and a GPS fix every two minutes for the length of one
+ * evening is a cost nobody notices.
+ *
+ * Faster sampling would only make a *false* eviction arrive sooner, which is the
+ * one outcome every threshold in this file is written to avoid.
+ */
+export const SAMPLE_INTERVAL_MS = 2 * 60 * 1000
+
+/**
+ * How much history to keep.
+ *
+ * Thirty minutes, against a ten-minute decision window. The extra is slack for
+ * missed ticks — a backgrounded app takes no readings, and coming back to a
+ * buffer with a hole in it should still leave enough recent history to be
+ * useful.
+ *
+ * Bounded at all because an evening is long: unbounded, a five-hour event on an
+ * open phone accumulates 150 readings that nothing will ever read.
+ */
+export const SAMPLE_WINDOW_MS = 30 * 60 * 1000
+
+/**
+ * Drop readings too old to matter, newest last.
+ *
+ * Kept separate from `presenceAction` because that function must stay a pure
+ * decision over whatever it is handed — a caller passing full history should get
+ * the same answer as one passing a trimmed buffer, and folding the trim inside
+ * would hide a second policy inside the first.
+ */
+export function trimSamples(
+  samples: readonly PresenceSample[],
+  now: number
+): PresenceSample[] {
+  return samples.filter((s) => now - s.at <= SAMPLE_WINDOW_MS)
+}
+
+/**
  * What to do right now.
  *
  * `samples` newest last. `saidStillHereAt` is when they last answered the

@@ -372,7 +372,39 @@ wired to `setMatchPreferences` — optimistic, rolled back on failure, and
 deliberately without `rememberReveal`, because one tap at one event should not
 change how somebody enters every future one.
 
-**Still unmounted:** `lib/presence.ts`. Next.
+### The presence monitor runs — **Done** (#133)
+
+`lib/presence.ts` held the geofence eviction policy, with tests, since it was
+written, and **nothing ran it**. The fence was enforced once at check-in; after
+that somebody who went home stayed on the roster and in the match pool all
+night.
+
+`components/PresenceMonitor.tsx` mounts at the root — leaving a venue should be
+noticed whether or not the room is the screen you have open — and renders
+nothing until it has something to ask.
+
+- **Foreground only.** No background location: it needs iOS's *always*
+  permission, and it buys least exactly where a false eviction is least
+  recoverable, because nobody is looking at the phone to say "no, I'm still
+  here". The app-closed case is already covered by the chat lifecycle sweeper
+  closing the room when the event ends.
+- **A failed fix is a `null` sample, not a skipped one.** `presenceAction`
+  breaks a run of outside readings on a null rather than extending it, so losing
+  signal *stops* the clock. Skipping the sample would leave the previous outside
+  readings adjacent to the next one and let a basement look like a walk home.
+- **The prompt is not dismissible.** Tapping the backdrop would read as "I'm
+  still here" while recording nothing, so the reprieve would never start and the
+  same prompt would return two minutes later.
+- `SAMPLE_INTERVAL_MS` (2 min) and `SAMPLE_WINDOW_MS` (30 min) are tested
+  against the decision window, including that the interval can never grow past
+  the point where an eviction could not fire at all.
+
+Two calls to resolve the fence, because `/checkins/active` returns the event's
+title and cover but not its coordinates or radius.
+
+**Next:** the `checkin` state of the centre button — "inside a fence and not
+checked in" is a different query from this one, which only runs while you
+already are.
 
 
 ### The Pulse — **Done** (#130), minus two sections
