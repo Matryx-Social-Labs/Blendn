@@ -2,7 +2,10 @@ import {
   roomButtonAccessibilityLabel,
   roomButtonLabel,
   roomButtonPulses,
+  pickInsideEvent,
+  pickTodayEvents,
   roomButtonTarget,
+  type RoomButtonEvent,
   type RoomButtonState,
 } from '../lib/roomButton'
 
@@ -134,5 +137,127 @@ describe('the spoken label states the consequence', () => {
     expect(roomButtonAccessibilityLabel({ state: 'live', eventId: 'e', badge: 0 })).toBe(
       'Open the room'
     )
+  })
+})
+
+/*
+ * Which event the button is about.
+ *
+ * Both of these are the difference between a control that means something and
+ * one that points at whatever happened to be in an array.
+ */
+
+const HOUR = 3_600_000
+const iso = (ms: number) => new Date(ms).toISOString()
+
+describe('pickInsideEvent', () => {
+  // 3pm local on a fixed day, so "today" never depends on when tests run.
+  const now = new Date(2026, 9, 24, 15, 0, 0).getTime()
+
+  const running = (over: Partial<RoomButtonEvent> = {}): RoomButtonEvent => ({
+    id: 'e',
+    start_time: iso(now - HOUR),
+    end_time: iso(now + HOUR),
+    distance: 0.05, // 50 m
+    check_in_radius: 100,
+    ...over,
+  })
+
+  it('finds the event you are standing in', () => {
+    expect(pickInsideEvent([running()], now)).toBe('e')
+  })
+
+  it('converts kilometres to metres', () => {
+    /*
+     * `distance` is km and `check_in_radius` is m. Comparing them directly
+     * makes a 50 m radius pass at 50 km, and that exact mismatch has already
+     * shipped once in this codebase — the proximity gate compared metres to
+     * kilometres.
+     */
+    expect(pickInsideEvent([running({ distance: 0.2 })], now)).toBeNull()
+    expect(pickInsideEvent([running({ distance: 0.09 })], now)).toBe('e')
+  })
+
+  it('ignores an event that has not started', () => {
+    // Standing outside a venue at noon for a thing at nine is not a check-in
+    // opportunity, and offering one would put somebody on a roster hours early.
+    expect(pickInsideEvent([running({ start_time: iso(now + HOUR) })], now)).toBeNull()
+  })
+
+  it('ignores an event that has finished', () => {
+    expect(pickInsideEvent([running({ end_time: iso(now - 1) })], now)).toBeNull()
+  })
+
+  it('treats a missing end time as still running', () => {
+    expect(pickInsideEvent([running({ end_time: null })], now)).toBe('e')
+  })
+
+  it('picks the nearer centre when two fences overlap', () => {
+    // Two venues on one street. The nearer centre is the better guess at which
+    // building somebody is actually standing in.
+    const near = running({ id: 'near', distance: 0.02 })
+    const far = running({ id: 'far', distance: 0.08 })
+    expect(pickInsideEvent([far, near], now)).toBe('near')
+  })
+
+  it('says nothing without a fix', () => {
+    // No `distance` means no location was sent. Absent is not close.
+    expect(pickInsideEvent([running({ distance: null })], now)).toBeNull()
+    expect(pickInsideEvent([running({ distance: undefined })], now)).toBeNull()
+    expect(pickInsideEvent([], now)).toBeNull()
+  })
+
+  it('defaults a missing radius rather than letting everything in', () => {
+    expect(pickInsideEvent([running({ check_in_radius: null, distance: 0.05 })], now)).toBe('e')
+    expect(pickInsideEvent([running({ check_in_radius: null, distance: 0.5 })], now)).toBeNull()
+  })
+})
+
+describe('pickTodayEvents', () => {
+  const now = new Date(2026, 9, 24, 15, 0, 0).getTime()
+  const tonight = new Date(2026, 9, 24, 21, 0, 0).getTime()
+  const later = new Date(2026, 9, 24, 23, 0, 0).getTime()
+  const tomorrow = new Date(2026, 9, 25, 21, 0, 0).getTime()
+
+  const saved = (id: string, startMs: number, over: Partial<RoomButtonEvent> = {}) => ({
+    id,
+    start_time: iso(startMs),
+    end_time: iso(startMs + 3 * HOUR),
+    is_favorited: true,
+    ...over,
+  })
+
+  it('returns tonight, soonest first', () => {
+    const out = pickTodayEvents([saved('late', later), saved('early', tonight)], now)
+    expect(out).toEqual(['early', 'late'])
+  })
+
+  it('only counts what you saved', () => {
+    /*
+     * Every event in the city is not "yours". A button pointing at whatever
+     * happens to be on tonight is a recommendation wearing the clothes of a
+     * reminder.
+     */
+    expect(pickTodayEvents([saved('x', tonight, { is_favorited: false })], now)).toEqual([])
+  })
+
+  it('drops tomorrow', () => {
+    expect(pickTodayEvents([saved('t', tomorrow)], now)).toEqual([])
+  })
+
+  it('drops what already finished', () => {
+    // An event that ended at lunch is not something to be reminded about at
+    // three in the afternoon.
+    const lunch = new Date(2026, 9, 24, 12, 0, 0).getTime()
+    expect(pickTodayEvents([saved('done', lunch, { end_time: iso(lunch + HOUR) })], now)).toEqual([])
+  })
+
+  it('keeps one that started and is still going', () => {
+    const started = new Date(2026, 9, 24, 14, 0, 0).getTime()
+    expect(pickTodayEvents([saved('live', started)], now)).toEqual(['live'])
+  })
+
+  it('ignores unreadable dates rather than throwing', () => {
+    expect(pickTodayEvents([{ id: 'bad', start_time: 'nope', is_favorited: true }], now)).toEqual([])
   })
 })

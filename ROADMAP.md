@@ -402,9 +402,32 @@ nothing until it has something to ask.
 Two calls to resolve the fence, because `/checkins/active` returns the event's
 title and cover but not its coordinates or radius.
 
-**Next:** the `checkin` state of the centre button — "inside a fence and not
-checked in" is a different query from this one, which only runs while you
-already are.
+### All four centre-button states are live — **Done** (#134)
+
+`checkin` and `today` were inert because nothing fed `insideEventId` or
+`todayEventIds`. Both now come from `lib/roomSignal.ts`, published by The Pulse
+out of a fetch it was already making — that screen asks for events with a
+location and gets `distance` back on every one. Same module-level
+cache-with-subscribers shape as `lib/unread.ts`.
+
+- `pickInsideEvent` only counts events **running right now**. Standing outside a
+  venue at noon for a thing at nine is not a check-in opportunity, and offering
+  one would put somebody on a roster hours before the doors open.
+- It converts km to metres, with a test. That exact mismatch has already shipped
+  once here — the proximity gate compared metres to kilometres.
+- Overlapping fences resolve to the **nearer centre**: two venues on one street
+  is real, and the nearer centre is the better guess at which building somebody
+  is in.
+- `pickTodayEvents` counts **saved events only**. Every event in the city is not
+  yours, and a button pointing at whatever is on tonight is a recommendation
+  wearing the clothes of a reminder.
+- No margin on the offer, deliberately. `lib/presence.ts` widens the fence in the
+  other direction because a false *eviction* is harmful; a false *offer* is not,
+  because the server re-validates the GPS on the real check-in and refuses.
+
+`clearRoomSignal` runs in `clearAuthState`, not in `signOut` — a failed
+background refresh reaches that path without going through sign-out, and without
+it the next account on the device inherits the previous one's plans for tonight.
 
 
 ### The Pulse — **Done** (#130), minus two sections

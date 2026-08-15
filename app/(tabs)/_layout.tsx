@@ -15,6 +15,7 @@ import {
   roomButtonTarget,
   type RoomButtonTarget,
 } from '../../lib/roomButton'
+import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /**
@@ -138,7 +139,18 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
         />
       ) : null}
       <Pressable
-        onPress={() => router.push('/room')}
+        onPress={() => {
+          /*
+           * Each state goes somewhere real, which is the whole reason this is a
+           * mode switch rather than a link. A centre button that did nothing in
+           * three of its four states would be a dead control in the most
+           * prominent position on the screen.
+           */
+          if (target.state === 'live') router.push('/room')
+          else if (target.eventId) {
+            router.push({ pathname: '/event/[id]', params: { id: target.eventId } as never })
+          } else router.push('/nearby-events')
+        }}
         accessibilityRole="button"
         accessibilityLabel={roomButtonAccessibilityLabel(target)}
         style={({ pressed }) => [styles.centreButton, pressed && styles.pressed]}
@@ -182,36 +194,53 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   })
 
   /*
-   * Poll for the live room rather than subscribing.
+   * Two sources, combined here.
    *
-   * The socket knows about messages, not about check-ins, and a check-out can
-   * happen on another device or from the presence monitor. 30 seconds is slow
-   * enough to be free and fast enough that the button is right by the time
-   * somebody looks down at it after walking through a door.
+   * The live room is polled: the socket knows about messages, not check-ins,
+   * and a check-out can happen on another device or from the presence monitor.
+   * 30 seconds is slow enough to be free and fast enough that the button is
+   * right by the time somebody looks down at it after walking through a door.
    *
-   * `insideEventId` is deliberately absent until the presence monitor is
-   * mounted — see `docs/NAVIGATION.md`. Guessing it from a raw distance check
-   * would make this button flicker between "check in" and "what's on" while
-   * somebody stands still, which is worse than being slow to notice them
-   * arrive.
+   * Standing-inside-a-fence and going-tonight come from `lib/roomSignal.ts`,
+   * published by The Pulse from a fetch it was making anyway. Deriving them
+   * here would mean a second location permission dance and a second copy of the
+   * events list on a timer.
    */
   useEffect(() => {
     let cancelled = false
+    let activeEventId: string | null = null
+
+    const recompute = () => {
+      const signal = getRoomSignal()
+      setTarget(
+        roomButtonTarget({
+          activeEventId,
+          insideEventId: signal.insideEventId,
+          todayEventIds: signal.todayEventIds,
+        })
+      )
+    }
+
     const read = async () => {
       try {
         const r = await apiClient.getActiveCheckins()
         if (cancelled) return
         const active = r.success ? r.data?.checkIns?.[0] : null
-        setTarget(roomButtonTarget({ activeEventId: active?.eventId ?? null }))
+        activeEventId = active?.eventId ?? null
+        recompute()
       } catch (e) {
         Logger.debug('navigation', 'room button poll failed', { error: e })
       }
     }
+
+    recompute()
     void read()
     const id = setInterval(read, 30_000)
+    const unsubscribe = subscribeRoomSignal(recompute)
     return () => {
       cancelled = true
       clearInterval(id)
+      unsubscribe()
     }
   }, [])
 

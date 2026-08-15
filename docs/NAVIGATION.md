@@ -49,33 +49,37 @@ the status indicator. The screen is called The Pulse; the button is the pulse.
 
 ## The centre button
 
-| Your state | Button | Tap | Built |
+| Your state | Button | Label | Tap |
 |---|---|---|---|
-| Checked in | gradient, slow pulse, unread badge | The Room | ✅ |
-| Inside the geofence, not checked in | gradient, stronger pulse | check in to that event | ⏳ needs the presence monitor |
-| Event today you are going to | outline | that event | ⏳ needs `todayEventIds` |
-| Nothing on | flat, logo only | "what's on tonight near you" | ⏳ opens The Room's empty state today |
+| Checked in | gradient, slow pulse, unread badge | Room | The Room |
+| Inside a running event's fence, not checked in | gradient, pulse | Check in | that event |
+| Saved event today, not there yet | flat | Tonight | that event |
+| Nothing on | flat | What's on | nearby events |
 
-The four states and their precedence live in `lib/roomButton.ts` with tests. The
-two unbuilt rows are a matter of feeding it more inputs, not of changing it —
-`roomButtonTarget` already takes `insideEventId` and `todayEventIds` and orders
-them correctly.
+All four are live. The states, their precedence and the event selection are in
+`lib/roomButton.ts` with tests.
 
-**`insideEventId` stays absent until the presence monitor is mounted**, on
-purpose. Feeding it a raw distance check would make the most prominent control
-in the app flicker between "Check in" and "What's on" while somebody stands
-still, which is worse than being slow to notice them arrive.
+**Every state goes somewhere real**, which is the whole reason this is a mode
+switch rather than a link. A centre button that did nothing in three of its four
+states would be a dead control in the most prominent position on the screen.
 
-**The last row is the one that decides whether this works.** A centre button with
-nothing behind it is a dead control in the most prominent position on the screen,
-which is the failure this project has spent several PRs removing elsewhere. It
-gets a real destination: the two or three nearest events starting soon.
+**Where the inputs come from.** The live room is polled every 30s — the socket
+knows about messages, not check-ins, and a check-out can happen on another
+device or from the presence monitor. The other two come from `lib/roomSignal.ts`,
+published by The Pulse out of a fetch it was already making: that screen asks for
+events with a location and gets `distance` back on every one. Same shape as
+`lib/unread.ts`. Deriving them in the bar would mean a second location permission
+dance and a second copy of the events list on a timer.
 
-**The geofence states must come from `lib/presence.ts`**, not from a fresh
-`isInside()`. That module already carries the `max(150m, radius/2)` margin, the
-three-readings-over-ten-minutes hysteresis and the 30-minute reprieve, and it is
-tested. A naive distance check makes the button flicker between "check in" and
-"nothing on" while somebody stands still.
+**Two unit systems meet here.** `distance` is kilometres and `check_in_radius` is
+metres. The conversion lives in `pickInsideEvent` with a test on it, because that
+exact mismatch has already shipped once in this codebase.
+
+**No margin on the check-in offer, deliberately.** `lib/presence.ts` widens the
+fence generously in the other direction because a false *eviction* is harmful. A
+false *offer* is not: the server re-validates the GPS on the real check-in and
+refuses. So the button asks the plain question and lets the real gate be the
+gate.
 
 ## The Room — what the centre button opens
 
