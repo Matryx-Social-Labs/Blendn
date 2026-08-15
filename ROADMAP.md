@@ -689,6 +689,39 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **Filters on the Pulse, in the search row rather than floating.** Category,
+  when, and how far — every one of them a parameter `GET /events` has always
+  accepted, so this is a way to *say* what the API could already answer.
+
+  The frame draws a floating button (`1141:4815`, 56pt at x=310, 8pt above the
+  nav). It reads well on an artboard and badly on a device: it sits on top of
+  the card artwork it is meant to help you search, and it has to negotiate
+  z-order with a nav that is itself an overlay. Three attempts at its position
+  were wrong in three different ways before the measurement was even taken.
+
+  It is a **FILTER** action beside the search field instead, styled as
+  `EMBER_TYPE.link` — the same accent-uppercase treatment as "VIEW ALL" directly
+  beneath it. Search and filter are the same job, so they sit together, and the
+  header block stays exactly 133pt because the action shares the field's 56.
+
+  The cost is stated rather than hidden: it scrolls away, so somebody deep in
+  the feed must scroll up to change a filter. Accepted, because the count badge
+  means an active filter is always *visible* — and a filter you cannot see is
+  the failure that actually matters, since the symptom is "the app has no
+  events" rather than "I asked for board games within 2km".
+
+  A filtered feed is a flat list, not a magazine — the same reasoning as a
+  search. Somebody who asked for one thing should not scroll past Featured and
+  Upcoming to reach it, and "Featured" over a filtered set is not what the word
+  means.
+
+  `lib/eventFilters.ts` holds the only part with a wrong answer: turning "this
+  weekend" into two instants. Local days, not UTC — a UTC boundary puts "Today"
+  in Bengaluru at 05:30 and drops every late-night event into the wrong bucket,
+  which is least forgivable in exactly the category that matters. And asked *on*
+  a Saturday the weekend is today and tomorrow, not eight days away.
+
+
 ### The Pulse, rebuilt from scratch — **Done** (#144, #145, #146, #147, #148)
 
 Seven restyle PRs did not converge, because the file carried three designs'

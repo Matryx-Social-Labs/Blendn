@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /**
  * The top of The Pulse — the headline, where you are, and the search field.
@@ -45,6 +45,13 @@ interface Props {
   onChangeQuery: (next: string) => void
   onSubmitQuery?: () => void
   placeholder?: string
+  /**
+   * Opens the filter sheet. The count is drawn beside the label so an active
+   * filter is visible without opening anything — a filter you cannot see is one
+   * you forget you set, and then the app looks like it has no events.
+   */
+  onPressFilter?: () => void
+  activeFilterCount?: number
 }
 
 export function PulseHeader({
@@ -56,6 +63,8 @@ export function PulseHeader({
   onChangeQuery,
   onSubmitQuery,
   placeholder = 'Search experiences...',
+  onPressFilter,
+  activeFilterCount = 0,
 }: Props) {
   return (
     <View style={styles.wrap}>
@@ -114,7 +123,8 @@ export function PulseHeader({
         is the same mistake the chips made: the thing being measured stops being
         the thing being drawn.
       */}
-      <View style={styles.searchBox}>
+      <View style={styles.searchRow}>
+        <View style={[styles.searchBox, styles.searchBoxFlex]}>
         <Ionicons
           name="search"
           size={18}
@@ -132,14 +142,54 @@ export function PulseHeader({
           accessibilityLabel="Search experiences"
           style={styles.searchInput}
         />
-        {query.length > 0 ? (
+          {query.length > 0 ? (
+            <Pressable
+              onPress={() => onChangeQuery('')}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
+            >
+              <Ionicons name="close-circle" size={18} color={EMBER.textTertiary} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/*
+          FILTER, beside the search field rather than floating over the feed.
+
+          The frame draws a floating button (`1141:4815`) bottom-right. It reads
+          well on an artboard and badly on a device: it sits on top of the card
+          artwork it is meant to help you search, and it has to negotiate z-order
+          with a nav that is itself an overlay.
+
+          Search and filter are the same job — narrowing — so they belong
+          together, and `SectionHeader`'s "VIEW ALL" already gives the pattern
+          for an accent text action. The block stays 133pt because this shares
+          the search field's 56.
+
+          The cost, stated rather than hidden: this scrolls away, so somebody
+          deep in the feed must scroll up to change a filter. Accepted, because
+          the count below means they can always *see* one is on, which is the
+          failure that actually matters.
+        */}
+        {onPressFilter ? (
           <Pressable
-            onPress={() => onChangeQuery('')}
+            onPress={onPressFilter}
             accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
+            accessibilityLabel={
+              activeFilterCount > 0
+                ? `Filters, ${activeFilterCount} active. Change filters`
+                : 'Filter events'
+            }
+            hitSlop={{ top: 12, right: 8, bottom: 12, left: 8 }}
+            style={({ pressed }) => [styles.filterAction, pressed && styles.pressed]}
           >
-            <Ionicons name="close-circle" size={18} color={EMBER.textTertiary} />
+            <Text style={styles.filterLabel}>FILTER</Text>
+            {activeFilterCount > 0 ? (
+              <View style={styles.filterCount}>
+                <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+              </View>
+            ) : null}
           </Pressable>
         ) : null}
       </View>
@@ -180,6 +230,26 @@ const styles = StyleSheet.create({
   cityText: { ...EMBER_TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
   pressed: { opacity: 0.6 },
 
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Only the field flexes; FILTER is sized by its word.
+  searchBoxFlex: { flex: 1 },
+  filterAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  filterLabel: EMBER_TYPE.link,
+  filterCount: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountText: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 11,
+    lineHeight: 14,
+    color: EMBER.onGradientChip,
+  },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',

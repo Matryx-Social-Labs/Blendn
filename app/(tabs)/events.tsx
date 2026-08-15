@@ -33,13 +33,21 @@ import {
 } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
-import { eventFromApi, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
+import { eventFromApi, getCategories, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
+import {
+  activeFilterCount,
+  filtersToQuery,
+  hasActiveFilters,
+  NO_FILTERS,
+  type EventFilters,
+} from '../../lib/eventFilters'
 import {
   awayNotice,
   cityOnResume,
@@ -370,6 +378,30 @@ export default function Events() {
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const isSearching = searchTerm.trim().length > 0
+
+  /*
+   * What the person asked the feed for.
+   *
+   * `draft` is separate from `filters` because each choice would otherwise be a
+   * network round trip: picking a category, a day and a distance would fire
+   * three, the first two of which nobody sees, against a list flickering
+   * underneath them. The sheet edits the draft; only "Show results" commits.
+   */
+  const [filters, setFilters] = useState<EventFilters>(NO_FILTERS)
+  const [filterDraft, setFilterDraft] = useState<EventFilters>(NO_FILTERS)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([])
+
+  /*
+   * A filtered feed is a list, not a magazine.
+   *
+   * The same reasoning as a search: somebody who asked for board games this
+   * weekend within 2km has told you exactly what they want, and making them
+   * scroll past Featured and Upcoming to reach it is the screen ignoring the
+   * question it was just asked. It also stops the sections lying — "Featured"
+   * over a filtered set is not what the word means.
+   */
+  const isNarrowed = isSearching || hasActiveFilters(filters)
 
   useEffect(() => {
     const trimmed = searchInput.trim()
@@ -1017,6 +1049,39 @@ export default function Events() {
    * the list showing the previous city's events, which is the same class of
    * mismatch this whole change exists to remove.
    */
+  /*
+   * The filter's category list, from the server rather than a copy.
+   *
+   * Hardcoding it here is the mistake `profiles.interests` already made and
+   * `/work-fields` exists to avoid: the day a parent is added, an installed
+   * build is a client that cannot show it and cannot filter by it. Parents
+   * only — the events route sweeps a parent's children, so offering both
+   * levels would be two chips that return the same list.
+   *
+   * Failure is silent on purpose. No categories means no "What" group in the
+   * sheet, and When and How far still work; a filter sheet that refuses to open
+   * because one list did not load is worse than one with a section missing.
+   */
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const result = await getCategories()
+        if (cancelled || !Array.isArray(result?.data)) return
+        setCategoryOptions(
+          result.data
+            .filter((c) => !c.parent_id && typeof c.slug === 'string' && typeof c.name === 'string')
+            .map((c) => ({ slug: String(c.slug), name: String(c.name) }))
+        )
+      } catch (e) {
+        Logger.debug('events', 'category list unavailable', { error: e })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     if (!authLoading && user) {
       Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
@@ -1025,7 +1090,7 @@ export default function Events() {
     // `fetchEvents` is redefined every render and is deliberately not a
     // dependency — including it would refetch on every state change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, selectedCity, searchTerm])
+  }, [user, authLoading, selectedCity, searchTerm, filters])
 
   useEffect(() => {
     const authFirstName = getFirstName(user?.name)
@@ -1455,6 +1520,9 @@ export default function Events() {
         lon,
         include: 'checkins,activeCheckins,profile',
         search: searchTerm || undefined,
+        // `categorySlug`, `startDate`, `endDate` and `radius` — every one of
+        // them a parameter this endpoint has always accepted.
+        ...filtersToQuery(filters),
       }, { force: !!options?.force })
 
       if (error) {
@@ -1951,7 +2019,7 @@ export default function Events() {
      * are hidden, so every id they claim is an id that appears nowhere — and
      * searching a venue's name would return it and then not show it.
      */
-    if (isSearching) return filteredSortedEvents
+    if (isNarrowed) return filteredSortedEvents
 
     /*
      * Subtract exactly what the three sections draw, and nothing else.
@@ -1970,7 +2038,7 @@ export default function Events() {
     upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
     return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isSearching, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
@@ -2121,6 +2189,11 @@ export default function Events() {
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
       onChangeQuery={setSearchInput}
+      activeFilterCount={activeFilterCount(filters)}
+      onPressFilter={() => {
+        setFilterDraft(filters)
+        setFilterSheetOpen(true)
+      }}
     />
   )
 
@@ -2400,7 +2473,7 @@ export default function Events() {
                   Their data is untouched in the behaviour half above, so each
                   comes back as a section the day it has a frame.
                 */}
-                {!isSearching ? (
+                {!isNarrowed ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
                       {renderFeaturedRow()}
@@ -2408,7 +2481,7 @@ export default function Events() {
                   </RNAnimated.View>
                 ) : null}
 
-                {!isSearching && upcomingItems.length > 0 ? (
+                {!isNarrowed && upcomingItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
                       {renderUpcomingFigmaCarousel()}
@@ -2416,7 +2489,7 @@ export default function Events() {
                   </RNAnimated.View>
                 ) : null}
 
-                {isSearching
+                {isNarrowed
                   ? null
                   : userLocation
                   ? (nearbyItems.length > 0 ? (
@@ -2539,6 +2612,19 @@ export default function Events() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <FilterSheet
+        visible={filterSheetOpen}
+        draft={filterDraft}
+        categories={categoryOptions}
+        hasLocation={!!userLocation}
+        onChange={setFilterDraft}
+        onApply={() => {
+          setFilters(filterDraft)
+          setFilterSheetOpen(false)
+        }}
+        onClose={() => setFilterSheetOpen(false)}
+      />
 
       <ActionTray
         visible={trayState.visible}

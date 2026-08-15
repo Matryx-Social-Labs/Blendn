@@ -3,11 +3,13 @@ import { Dimensions, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import NearbyEventCard from '../../components/NearbyEventCard'
+import { FilterSheet } from '../../components/pulse/FilterControl'
 import { FeaturedCard, FEATURED_CARD_WIDTH } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
+import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
 import { EMBER } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
@@ -121,6 +123,9 @@ const NEARBY = [
 export default function PulsePreview() {
   const insets = useSafeAreaInsets()
   const [query, setQuery] = useState('')
+  const [filters, setFilters] = useState<EventFilters>(NO_FILTERS)
+  const [draft, setDraft] = useState<EventFilters>(NO_FILTERS)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
     <View style={styles.container}>
@@ -142,6 +147,11 @@ export default function PulsePreview() {
           onPressCity={() => {}}
           query={query}
           onChangeQuery={setQuery}
+          activeFilterCount={activeFilterCount(filters)}
+          onPressFilter={() => {
+            setDraft(filters)
+            setSheetOpen(true)
+          }}
         />
 
         <View style={styles.section}>
@@ -201,6 +211,26 @@ export default function PulsePreview() {
           </View>
         </View>
       </ScrollView>
+
+      <FilterSheet
+        visible={sheetOpen}
+        draft={draft}
+        categories={[
+          { slug: 'social', name: 'Social' },
+          { slug: 'music', name: 'Music' },
+          { slug: 'food-drink', name: 'Food & Drink' },
+          { slug: 'nightlife', name: 'Nightlife' },
+          { slug: 'arts-culture', name: 'Arts & Culture' },
+          { slug: 'sports', name: 'Sports' },
+        ]}
+        hasLocation
+        onChange={setDraft}
+        onApply={() => {
+          setFilters(draft)
+          setSheetOpen(false)
+        }}
+        onClose={() => setSheetOpen(false)}
+      />
     </View>
   )
 }
