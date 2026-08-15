@@ -1,7 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons'
+import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -45,9 +47,28 @@ export const MAP_HEIGHT = 256
  * `SCENE_CTA_INSET` is 24 rather than the content grid's 12: the frame gives the
  * CTA its own gutter, wider than the sections behind it, which is what stops a
  * full-width pill reading as another card in the stack.
+ *
+ * ## 58, not the frame's 74 — a deliberate deviation
+ *
+ * The frame's pill is 74 because it holds a **40pt** icon (`1227:2912`), and a
+ * 40pt icon beside a 28pt line of text sets the height on its own. Docked, that
+ * 74 sits on top of a 24pt dock gutter and an ~88pt tab bar: **186pt of
+ * permanent chrome**, better than a fifth of a 874pt screen, on a page whose
+ * whole job is to show you an event.
+ *
+ * The frame measured the CTA floating over a scroll, where it was the only
+ * thing at the bottom. It is not — the tab bar is under it. So the icon drops
+ * to 26, which is the size at which it stops driving the height and the label
+ * does, and the pill lands at 58. The dock gutter goes 12/12 → 10/10.
+ *
+ * Total saving: 24pt, chrome down to ~162pt. Recorded in `docs/SCENE.md` so the
+ * frame and the build disagreeing here is a decision and not drift.
  */
-export const SCENE_CTA_HEIGHT = 74
+export const SCENE_CTA_HEIGHT = 58
 export const SCENE_CTA_INSET = 24
+
+/** The CTA's icon. Sized here, not at the call site, because it sets the pill's height. */
+export const SCENE_CTA_ICON = 26
 
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
@@ -421,25 +442,34 @@ export function SceneCTA({
       accessibilityLabel={CTA_LABEL[state]}
       style={disabled ? styles.ctaDisabled : undefined}
     >
-      <LinearGradient
-        colors={
-          state === 'going'
-            ? // Joined is a settled state, not an invitation. The gradient stops
-              // shouting and the border reads as a confirmation.
-              ['#FF906D', '#FF906D']
-            : ['#FF906D', '#FF6D8D', '#F288FF']
-        }
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.ctaBorder}
-      >
+      {/*
+        Glass, and the gradient ring had to go to get it.
+
+        The pill was a `LinearGradient` with `padding: 1` wrapping an opaque
+        fill — a standard way to fake a gradient border, and it works only while
+        the inner fill is opaque. It is not any more: a 50%-alpha fill over a
+        gradient *rectangle* shows the whole rectangle, so the first attempt at
+        this rendered a brown-to-purple wash inside the pill rather than a
+        stroke around it. React Native has no gradient `borderColor` and no
+        masking without a new dependency, so a translucent pill and a gradient
+        ring are mutually exclusive here.
+
+        The ring is a hairline of white at 18% instead — which is the actual
+        glassmorphism idiom: an edge lit by the light passing through the sheet,
+        not a painted outline. The brand does not leave: the warm bloom under
+        the pill stays, and the icon takes the accent, so the gradient's warm
+        end is still the first colour in the control.
+      */}
+      <View style={[styles.ctaGlow, state === 'going' && styles.ctaGlowGoing]}>
         <View style={styles.ctaFill}>
+          <BlurView intensity={64} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.ctaTint} pointerEvents="none" />
           {icon}
           <Text style={styles.ctaLabel} numberOfLines={1}>
             {CTA_LABEL[state]}
           </Text>
         </View>
-      </LinearGradient>
+      </View>
     </Pressable>
   )
 }
@@ -581,22 +611,74 @@ const styles = StyleSheet.create({
     color: EMBER.textSecondary,
   },
 
-  ctaBorder: {
+  /*
+   * The warm bloom, and it is the only place the gradient's colour survives on
+   * this control now. `shadowRadius: 30` is a soft halo on iOS; on Android
+   * `elevation` cannot be coloured, so it simply does not get one rather than
+   * getting a grey drop-shadow that reads as a mistake.
+   */
+  ctaGlow: {
     borderRadius: 9999,
-    padding: 1,
-    shadowColor: '#FF906D',
-    shadowOpacity: 0.3,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 10 },
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FF906D',
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      default: {},
+    }),
   },
+  // Joined is settled, not an invitation: the bloom drops away and the pill
+  // stops advertising itself.
+  ctaGlowGoing: Platform.OS === 'ios' ? { shadowOpacity: 0.14 } : {},
   ctaFill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    paddingVertical: 16,
+    /*
+     * Content width, not screen width.
+     *
+     * A full-bleed pill is a *bar*, and a bar is a piece of chrome — it reads as
+     * part of the frame of the app rather than as an object sitting on the page.
+     * Padded to its label it becomes a floating control, which is what the node
+     * called "Floating CTA" is, and it stops claiming the whole width of a
+     * screen whose job is to show an event.
+     */
+    paddingHorizontal: 32,
+    // 14, with a 26pt icon and a 28pt line: 1 + 14 + 28 + 14 + 1 = 58, which is
+    // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
+    paddingVertical: 14,
     borderRadius: 9999,
-    backgroundColor: 'rgba(15,14,14,0.9)',
+    // Clips the BlurView to the pill. Without it the blur is a rectangle.
+    overflow: 'hidden',
+    // The lit edge. `hairlineWidth` would vanish at this radius, so 1pt.
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  /*
+   * The tint over the blur — **warm**, and that is the whole design.
+   *
+   * A neutral `rgba(15,14,14,0.5)` was tried first and it is what glass on this
+   * screen actually looks like: the pill docks over the bottom of a dark map on
+   * a `#0F0E0E` page, so there is nothing luminous behind it to refract and a
+   * neutral frost renders as a near-black slab. It read as a *disabled* control
+   * in the position of the primary one.
+   *
+   * `#4B2F26` is `gradientFrom` at 25% over the page background, so the tint is
+   * the brand's warm end rather than an invented brown. Frosted and warm is the
+   * tinted-glass idiom iOS itself uses for a docked primary action, and it
+   * keeps the colour the gradient ring used to carry.
+   *
+   * Alpha is platform-split: `expo-blur` on Android needs
+   * `experimentalBlurMethod` and degrades to nothing without it, so at 0.62 the
+   * label would sit on raw photograph. Android keeps a near-opaque fill and
+   * simply does not get the glass.
+   */
+  ctaTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(75,47,38,0.74)' : 'rgba(48,30,25,0.94)',
   },
   ctaDisabled: { opacity: 0.45 },
   ctaLabel: {

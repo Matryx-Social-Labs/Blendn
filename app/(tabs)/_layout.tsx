@@ -38,6 +38,21 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '..
 /** The mark on the centre button. Tinted at the call site — see `centreMark`. */
 const MONOGRAM = require('../../assets/logo/monogram-white.png')
 
+/**
+ * The brand's ink, sampled from the logo artwork rather than invented.
+ *
+ * Both the mono lockup and the full lockup draw the mark in `#1B1931` — one
+ * colour, byte-identical across the two files. The button was tinting it
+ * `EMBER.onGradient` (`#5B1600`), which is the token for *text* on a gradient
+ * and reads as a muddy maroon under a coral disc: 6.07:1, and desaturated in a
+ * way that makes a thin outline mark look smudged. The brand ink is 7.69:1 on
+ * `gradientFrom` and is what the mark is actually drawn in.
+ *
+ * Not promoted to `lib/theme.ts` — it is the logo's colour, not a UI role, and
+ * this is the only place the logo sits on a warm field.
+ */
+const BRAND_INK = '#1B1931'
+
 const TABS = [
   { name: 'events', label: 'Pulse', icon: 'flame', iconOff: 'flame-outline' },
   { name: 'going', label: 'Going', icon: 'bookmark', iconOff: 'bookmark-outline' },
@@ -115,9 +130,8 @@ TabButton.displayName = 'TabButton'
 /**
  * The Blend'n button.
  *
- * Raised above the bar, as all three frames draw it. Gradient only when there is
- * something live to go to — a permanently glowing button is one people stop
- * seeing, and the two states that glow are the two that are time-critical.
+ * Seated in the bar rather than raised above it — see `centreSlot` for why the
+ * frame's `y=-16` does not survive contact with a real screen.
  */
 const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
   const pulses = roomButtonPulses(target.state)
@@ -214,7 +228,7 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
           source={MONOGRAM}
           style={styles.centreMark}
           contentFit="contain"
-          tintColor={EMBER.onGradient}
+          tintColor={BRAND_INK}
           accessibilityIgnoresInvertColors
         />
         {target.badge > 0 ? (
@@ -380,13 +394,13 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
      * Two views, and the split is the whole reason the corners were filled.
      *
      * The rounded, blurred surface needs `overflow: 'hidden'` to clip the blur
-     * to its 48pt corners. The centre button hangs **16pt above the bar's top
-     * edge** (frame: `Container` at `y=-16`), so anything clipping the surface
-     * also decapitates the button.
+     * to its 48pt corners, so the outer view lays out and does not clip while
+     * `barSurface` is an absolute child holding the fill, the radius and the
+     * blur.
      *
-     * So the outer view lays out and does not clip; `barSurface` is an absolute
-     * child holding the fill, the radius and the blur. The button overhangs the
-     * surface and stays inside the parent, which is what the frame draws.
+     * The centre button used to *need* that split — it hung 16pt above the top
+     * edge and anything clipping the surface decapitated it. It no longer does;
+     * the split stays because the corner radius still needs somewhere to live.
      */
     <View
       style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 20) }]}
@@ -539,7 +553,20 @@ const styles = StyleSheet.create({
   },
   itemLabelOn: { color: EMBER.accent },
 
-  centreSlot: { alignItems: 'center' },
+  /*
+   * Centred in the bar's content band, not hanging above it.
+   *
+   * The frame draws the container at `y=-16`, so it cleared the bar's top edge
+   * by 16 and the button read as a sticker stuck onto the nav. On a real screen
+   * it also *collides*: the Scene's docked CTA and the Pulse's filter control
+   * both end just above the bar, and a button that leaves the bar overlaps
+   * them, with its warm halo bleeding onto whatever is behind.
+   *
+   * `alignSelf: 'center'` against the row's `alignItems: 'flex-start'` puts the
+   * 56pt disc in the middle of the 66pt band the four tabs occupy — visually
+   * centred, entirely inside the surface, nothing to collide with.
+   */
+  centreSlot: { alignItems: 'center', alignSelf: 'center' },
   centreButton: {
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,
@@ -547,12 +574,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    /*
-     * Frame: the container sits at `y=-16` in a bar whose content starts at 18,
-     * so it clears the top edge by 16. The parent does not clip — `barSurface`
-     * is the thing with `overflow: 'hidden'`.
-     */
-    marginTop: -34,
     ...Platform.select({
       ios: {
         // The frame's `Button:shadow` — the warm bloom under the button.
@@ -576,27 +597,30 @@ const styles = StyleSheet.create({
    * Deliberate deviation, recorded in `docs/PULSE.md` for the designer.
    */
   /*
-   * 28, not the frame's 17.5 — and it is still the weakest thing in the bar.
+   * 34, and the number comes from a stroke measurement rather than a ratio.
    *
    * The frame draws a `+`: one stroke, legible at any size. The Blend'n
-   * monogram is an *outline* mark with two interior counters, and
-   * `monogram-white.png` is 453x534 with roughly 20px strokes — so at 28pt the
-   * stroke renders about 1pt wide. On a device it reads as a faint scribble
-   * rather than as a mark, which a zoomed screenshot of the running app is the
-   * only way to see; every size in this file typechecks and lints identically.
+   * monogram is an *outline* mark with two interior counters — `monogram-
+   * white.png` is 453×534, ink box 441×522, and its strokes measure 22px and
+   * 30px across the middle row, so **5.0% of the mark's width**. At the old 28
+   * it drew 23.6 × 28 and the stroke landed at 1.18pt, against roughly 2pt for
+   * every other glyph in the bar. It was the lightest thing in the row while
+   * being the most important control in it.
    *
-   * 28 is the most that can be done from this side: it is half the 56pt button,
-   * which is where a logo-in-a-circle normally sits, and going larger starts
-   * crowding the disc instead of gaining weight.
+   * The mark's aspect is 0.845, so at 34 it draws 28.7 × 34 — inside the 39.6pt
+   * square inscribed in the 56pt disc, with the stroke at 1.43pt. Not parity
+   * with its neighbours, but 21% closer, and it stops looking like a badge
+   * floating in a field of coral.
    *
-   * **What is actually needed is a filled variant of the mark for small sizes.**
-   * Raised for the designer in `docs/PULSE.md`; an outline logo at 28pt is a
-   * drawing problem, not a layout one.
+   * **A filled variant of the mark would close the rest of the gap.** An
+   * outline logo under 40pt is a drawing problem, not a layout one — raised for
+   * the designer in `docs/PULSE.md`.
    */
-  centreMark: { width: 28, height: 28 },
+  centreMark: { width: 34, height: 34 },
   halo: {
     position: 'absolute',
-    top: -34,
+    // Level with the button now that the button is level with the bar.
+    top: 0,
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,
     borderRadius: CENTRE_SIZE / 2,

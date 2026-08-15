@@ -11,7 +11,6 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BlurView } from 'expo-blur'
 import { PulseTopBar } from '../../components/pulse/PulseTopBar'
 import { SceneHero } from '../../components/scene/SceneHero'
 import { SceneLightbox } from '../../components/scene/SceneLightbox'
@@ -26,6 +25,7 @@ import {
   SceneHeading,
   SceneLocationCard,
   SCENE_CTA_HEIGHT,
+  SCENE_CTA_ICON,
   SCENE_CTA_INSET,
   SCENE_PADDING_HORIZONTAL,
   SCENE_SECTION_GAP,
@@ -238,20 +238,31 @@ export default function ScenePreview() {
       */}
       <View style={styles.ctaDock} pointerEvents="box-none">
         {/*
-          A scrim, not a transparent gap.
+          No band. The glass is the pill's own outline.
 
-          Mirrors `PulseTopBar` at the other end of the screen: the same
-          `rgba(15,14,14,0.8)` fill over a 12-intensity blur, so content passes
-          underneath as a darkened blur rather than being sliced in half. Without
-          it the pill floated over live photographs — the gallery rail ran under
-          it and straight out the other side.
+          This carried a full-bleed scrim — first a flat `rgba(15,14,14,0.8)`
+          over a blur, then a graded one — on the reasoning that content
+          scrolling under a pinned control has to be damped or it runs through
+          the pill and out the other side. That was right when the pill itself
+          was opaque and full-width, because then the band and the pill were the
+          same object and the band was just its bleed.
+
+          The pill is glass now, and glass damps what is behind *it*. A second
+          full-width sheet of glass behind the first one is not glassmorphism,
+          it is a toolbar — the exact chrome this screen has too much of. So the
+          panel goes and the pill floats: one object, its own blur, its own lit
+          edge, its own shadow, with the page visible either side of it.
         */}
-        <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.ctaDockFill} pointerEvents="none" />
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state="join"
-            icon={<Ionicons name="radio-outline" size={40} color={EMBER.textPrimary} />}
+            icon={
+              <Ionicons
+                name="radio-outline"
+                size={SCENE_CTA_ICON}
+                color={EMBER.accent}
+              />
+            }
           />
         </View>
       </View>
@@ -293,13 +304,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    overflow: 'hidden',
+    /*
+     * No `overflow: 'hidden'` — it was here to clip a full-bleed blur to the
+     * dock, and the dock has no blur any more. Leaving it on would clip the
+     * pill's own warm shadow, which is the thing separating a floating control
+     * from the page behind it.
+     */
   },
-  ctaDockFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,14,14,0.8)' },
   ctaDockInner: {
     paddingHorizontal: SCENE_CTA_INSET,
-    paddingTop: 12,
-    paddingBottom: 12,
+    // 10, down from 12 — see SCENE_CTA_HEIGHT for the chrome arithmetic.
+    paddingTop: 10,
+    paddingBottom: 16,
+    // Centres the content-width pill. Without this it stretches to the dock and
+    // `paddingHorizontal: 32` on the fill buys nothing.
+    alignItems: 'center',
     justifyContent: 'center',
   },
 })
