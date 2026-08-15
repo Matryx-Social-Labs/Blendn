@@ -2,7 +2,7 @@ import { Image } from 'expo-image'
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, StyleSheet, View } from 'react-native'
 
-import { APP_COLORS } from '../lib/theme'
+import { EMBER } from '../lib/theme'
 
 const intro = require('../assets/logo/intro.webp')
 
@@ -161,7 +161,19 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: APP_COLORS.backgroundBase,
+    /*
+     * `EMBER.bg`, not `APP_COLORS.backgroundBase`.
+     *
+     * This overlay covers the whole screen and then fades. It was painting
+     * `#000000` while the root layout and every Stack screen underneath use
+     * `EMBER.bg` (`#0F0E0E`) — so the fade revealed a background that was
+     * *lighter and warmer* than the one it replaced. A colour shift at exactly
+     * the handoff, on top of the geometry jump the travel now fixes.
+     *
+     * Pure black beside a warm near-black is subtle in a screenshot and obvious
+     * in motion, which is why it survived: nobody diffs two blacks.
+     */
+    backgroundColor: EMBER.bg,
     zIndex: 10,
   },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
