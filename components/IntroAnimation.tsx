@@ -112,5 +112,17 @@ const styles = StyleSheet.create({
    * inside a flex column did not match the arithmetic. With `contentFit`
    * contain and a capped width, a wrong number can only letterbox.
    */
-  image: { height: 132, width: 132 * (720 / 346), maxWidth: '88%' },
+  /*
+   * 105, not 132 — and it has to move with `app.json`'s `imageWidth`.
+   *
+   * Measured on a 440pt device: the native splash rendered 144pt of logo and
+   * this rendered 147pt, which is why the handoff reads as one continuous mark
+   * rather than a jump. That agreement is the thing worth protecting, so
+   * neither number may be changed alone.
+   *
+   * They were both about a third of the screen's width, which is the top of the
+   * range a launch mark usually occupies. 105 here and 146 there put both at
+   * roughly 27%.
+   */
+  image: { height: 105, width: 105 * (720 / 346), maxWidth: '88%' },
 })
