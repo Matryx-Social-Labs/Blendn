@@ -365,21 +365,82 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export function SceneCTA({ label, icon }: { label: string; icon?: React.ReactNode }) {
+export type SceneCTAState = 'join' | 'going' | 'ended'
+
+/**
+ * What the button says, per state.
+ *
+ * **Capacity is deliberately absent.** `docs/CHECKIN.md:39` — "Check-in does not
+ * refuse at capacity" — so a full event still takes people. `max_capacity` is a
+ * number the organiser watches, not a door the app keeps, and the hero pill
+ * already reports it as information. A CTA that disabled itself on a full event
+ * would block an interaction the product explicitly allows.
+ *
+ * `ended` is the only state that disables, because it is the only one where
+ * tapping cannot do anything at all.
+ *
+ * ## "Blend in", not "Join the Experience"
+ *
+ * The frame's label is generic — it would fit any event app. The product is
+ * called Blend'n *because* blending in with people in real time is the thing it
+ * does, so the button is the one place the name can be a verb instead of a
+ * logo. It is also shorter, which matters at 20pt beside a 40pt icon.
+ *
+ * `going` follows it: "You're in" is the same voice, and it reads as being
+ * *inside* something rather than as a travel plan.
+ */
+const CTA_LABEL: Record<SceneCTAState, string> = {
+  join: 'Blend in',
+  going: "You're in",
+  ended: 'This event has ended',
+}
+
+export function SceneCTA({
+  state = 'join',
+  icon,
+  onPress,
+}: {
+  state?: SceneCTAState
+  icon?: React.ReactNode
+  onPress?: () => void
+}) {
+  const disabled = state === 'ended'
+  /*
+   * The label was a free string, which was survivable while this sat at the
+   * bottom of a 1900pt page and most people never reached it. Pinned to the
+   * screen for the whole visit it is the most-looked-at control here, and it
+   * said "Join the Experience" whether or not you already had — the classic
+   * "did that work?" failure, permanently in view.
+   */
   return (
-    <LinearGradient
-      colors={['#FF906D', '#FF6D8D', '#F288FF']}
-      start={{ x: 0, y: 0.5 }}
-      end={{ x: 1, y: 0.5 }}
-      style={styles.ctaBorder}
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected: state === 'going' }}
+      accessibilityLabel={CTA_LABEL[state]}
+      style={disabled ? styles.ctaDisabled : undefined}
     >
-      <View style={styles.ctaFill}>
-        {icon}
-        <Text style={styles.ctaLabel} numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
-    </LinearGradient>
+      <LinearGradient
+        colors={
+          state === 'going'
+            ? // Joined is a settled state, not an invitation. The gradient stops
+              // shouting and the border reads as a confirmation.
+              ['#FF906D', '#FF906D']
+            : ['#FF906D', '#FF6D8D', '#F288FF']
+        }
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.ctaBorder}
+      >
+        <View style={styles.ctaFill}>
+          {icon}
+          <Text style={styles.ctaLabel} numberOfLines={1}>
+            {CTA_LABEL[state]}
+          </Text>
+        </View>
+      </LinearGradient>
+    </Pressable>
   )
 }
 
@@ -537,6 +598,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     backgroundColor: 'rgba(15,14,14,0.9)',
   },
+  ctaDisabled: { opacity: 0.45 },
   ctaLabel: {
     fontFamily: EMBER_FONTS.displayBold,
     fontSize: 18,

@@ -1,4 +1,4 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
 import { useState } from 'react'
 import {
@@ -11,7 +11,8 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
+import { BlurView } from 'expo-blur'
+import { PulseTopBar } from '../../components/pulse/PulseTopBar'
 import { SceneHero } from '../../components/scene/SceneHero'
 import { SceneLightbox } from '../../components/scene/SceneLightbox'
 import {
@@ -235,14 +236,24 @@ export default function ScenePreview() {
         `box-none` so the gap either side of the pill still scrolls the page
         underneath; only the pill itself takes touches.
       */}
-      <View
-        style={[styles.ctaDock, { bottom: insets.bottom + TAB_BAR_CLEARANCE }]}
-        pointerEvents="box-none"
-      >
-        <SceneCTA
-          label="Join the Experience"
-          icon={<Ionicons name="radio-outline" size={40} color={EMBER.textPrimary} />}
-        />
+      <View style={styles.ctaDock} pointerEvents="box-none">
+        {/*
+          A scrim, not a transparent gap.
+
+          Mirrors `PulseTopBar` at the other end of the screen: the same
+          `rgba(15,14,14,0.8)` fill over a 12-intensity blur, so content passes
+          underneath as a darkened blur rather than being sliced in half. Without
+          it the pill floated over live photographs — the gallery rail ran under
+          it and straight out the other side.
+        */}
+        <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.ctaDockFill} pointerEvents="none" />
+        <View style={styles.ctaDockInner} pointerEvents="box-none">
+          <SceneCTA
+            state="join"
+            icon={<Ionicons name="radio-outline" size={40} color={EMBER.textPrimary} />}
+          />
+        </View>
       </View>
 
       <SceneLightbox
@@ -264,11 +275,31 @@ const styles = StyleSheet.create({
   },
   section: { gap: 16 },
   amenities: { flexDirection: 'row', gap: 16 },
+  /*
+   * `bottom: 0`, not `insets.bottom + TAB_BAR_CLEARANCE`.
+   *
+   * This screen lives inside `(tabs)`, and the tab navigator already ends its
+   * children's viewport above the tab bar. Adding the clearance on top of that
+   * counted it twice and lifted the pill 130pt into the middle of the content —
+   * measured: pill bottom at 726pt with the tab bar starting at 856pt, a gap of
+   * nothing underneath it. It read as floating in the page rather than docked
+   * to anything, and it landed squarely on the gallery rail.
+   *
+   * Full bleed, so the scrim reaches both edges; the pill takes the frame's
+   * 24pt gutter from `ctaDockInner`.
+   */
   ctaDock: {
     position: 'absolute',
-    left: SCENE_CTA_INSET,
-    right: SCENE_CTA_INSET,
-    height: SCENE_CTA_HEIGHT,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  ctaDockFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,14,14,0.8)' },
+  ctaDockInner: {
+    paddingHorizontal: SCENE_CTA_INSET,
+    paddingTop: 12,
+    paddingBottom: 12,
     justifyContent: 'center',
   },
 })
