@@ -319,6 +319,47 @@ server half is `blendn-admin/docs/ROADMAP.md`, deployed to staging (API
 | 13 | The card renders what it already knows | **Done** (#66) |
 | 14 | Anonymity in the room: the suggestion prompt and the status chip | **Done** (#67) |
 
+### The like button, which never existed — **Done** (#131)
+
+`likeAtEvent` shipped in `lib/apiClient.ts` with a request queue and three
+retries, and **had zero callers**. The room read `youLiked` back from the server
+and rendered it, so the app could show you that you had liked somebody while
+giving you no way to do it.
+
+What it offered instead, on `user/[id]`, was `createMessageRequest`: send a
+request, wait, be accepted or ignored. That is the rejection risk the mutual gate
+exists to remove — from this file's own opening: *"Mutual like opens the
+conversation. You never approach someone who has not already said yes."*
+
+- A heart on every Grid card, bottom-right, deliberately far from the safety
+  control top-right. One of those two means "I would like to meet this person"
+  and the other means "report or block them".
+- `lib/likes.ts` holds the rules, tested: local state wins over the server so a
+  refetch cannot downgrade `matched` back to `liked`; failure clears this
+  session's opinion rather than asserting not-liked, because a request can fail
+  after the write landed; and no state ever speaks for the other person, because
+  the roster carries `youLiked` and deliberately has no field for the reverse.
+- Mutual opens the conversation server-side for both at once, so the matched
+  card becomes a tap through to it.
+
+**Still needs a two-account device test.** The mutual branch cannot be exercised
+from one phone.
+
+### Navigation settled — `Pulse · Going · [Blend'n] · Banter · Me`
+
+Full reasoning in `docs/NAVIGATION.md`. The short version: the app has two
+mutually exclusive modes, and the built bar spent a whole tab on the one that is
+almost never active — `MatchScreen` is the room roster and rendered "Not Checked
+In Yet" ~99% of the time.
+
+So the centre control is the **mode switch**, not an action, and it opens The
+Room (`Grid | Chat`, as frame `1141:4951` draws it). The Match tab is deleted.
+Explore is deferred on catalogue grounds and Going takes the slot, rehoming
+`interested.tsx` and the orphaned `rate/[eventId]`.
+
+**Not built yet** — this entry records the decision; the bar itself is next.
+
+
 ### The Pulse — **Done** (#130), minus two sections
 
 Frame `1141:4643`, applied to `app/(tabs)/events.tsx`. A restyle, not a new

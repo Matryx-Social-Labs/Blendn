@@ -24,6 +24,13 @@ import OptimizedImage from '../OptimizedImage'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
+import {
+  likeAccessibilityLabel,
+  likeStateAfter,
+  likeStatusFor,
+  shouldSendLike,
+  type LikeStatus,
+} from '../../lib/likes'
 import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../../lib/matchBand'
 import { revealChipLabel } from '../../lib/reveal'
 import { apiClient } from '../../lib/apiClient'
@@ -38,22 +45,77 @@ import {
   EventCheckOutCallback
 } from '../../lib/socketClient'
 import { useLiveSync } from '../../lib/useLiveSync'
-import { APP_COLORS } from '../../lib/theme'
+import { APP_COLORS, EMBER } from '../../lib/theme'
 const placeholderImg = require('../../assets/images/icon.png')
 
 const { width } = Dimensions.get('window')
 
 // Memoized card components to prevent re-renders
+/**
+ * The button that was missing.
+ *
+ * Sits on the card rather than behind "View dossier", because the mechanic only
+ * works if liking is cheaper than deciding — a like that costs a screen
+ * transition is one people ration, and rationing is the hesitation the product
+ * exists to remove.
+ *
+ * Four states and no spinner. `sending` dims the heart it has already filled in
+ * rather than replacing it, so the thing you just chose stays on screen for the
+ * length of the round trip. A spinner here reads as "did that work?" on exactly
+ * the tap that must feel free.
+ */
+const LikeButton = memo(({
+  name,
+  status,
+  onPress,
+  size,
+}: {
+  name: string
+  status: LikeStatus
+  onPress: () => void
+  size: number
+}) => {
+  const matched = status === 'matched'
+  const liked = status === 'liked' || status === 'sending'
+  return (
+    <TouchableOpacity
+      style={[
+        styles.likeButton,
+        { width: size, height: size, borderRadius: size / 2 },
+        (liked || matched) && styles.likeButtonOn,
+        status === 'sending' && styles.likeButtonSending,
+      ]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: liked || matched, busy: status === 'sending' }}
+      accessibilityLabel={likeAccessibilityLabel(name, status)}
+      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+    >
+      <Ionicons
+        name={matched ? 'chatbubble' : liked ? 'heart' : 'heart-outline'}
+        size={Math.round(size * 0.45)}
+        color={matched || liked ? EMBER.onGradientChip : '#FFFFFF'}
+      />
+    </TouchableOpacity>
+  )
+})
+
+LikeButton.displayName = 'LikeButton'
+
 const SimilarCard = memo(({
   attendee,
   onOpenProfile,
   onSafetyPress,
   reasonLabel,
+  likeStatus,
+  onLike,
 }: {
   attendee: AttendeeProfile
   onOpenProfile: () => void
   onSafetyPress: () => void
   reasonLabel?: string
+  likeStatus: LikeStatus
+  onLike: () => void
 }) => {
   const rawUrl = attendee.profile_photos?.[0] || ''
 
@@ -115,6 +177,12 @@ const SimilarCard = memo(({
         >
           <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFF" />
         </TouchableOpacity>
+        <LikeButton
+          name={getDisplayName(attendee.name)}
+          status={likeStatus}
+          onPress={onLike}
+          size={40}
+        />
       </TouchableOpacity>
     </View>
   )
@@ -122,18 +190,23 @@ const SimilarCard = memo(({
 
 SimilarCard.displayName = 'SimilarCard'
 
+
 const StartupItem = memo(({
   attendee,
   onOpenProfile,
   onSafetyPress,
   isRightColumn,
   statusLabel,
+  likeStatus,
+  onLike,
 }: {
   attendee: AttendeeProfile
   onOpenProfile: () => void
   onSafetyPress: () => void
   isRightColumn?: boolean
   statusLabel?: string
+  likeStatus: LikeStatus
+  onLike: () => void
 }) => {
   const rawUrl = attendee.profile_photos?.[0] || ''
   const cardWidth = GRID_ITEM_WIDTH
@@ -197,6 +270,12 @@ const StartupItem = memo(({
         >
           <Ionicons name="ellipsis-horizontal" size={14} color="#FFFFFF" />
         </TouchableOpacity>
+        <LikeButton
+          name={getDisplayName(attendee.name)}
+          status={likeStatus}
+          onPress={onLike}
+          size={34}
+        />
       </TouchableOpacity>
     </View>
   )
@@ -308,6 +387,85 @@ export default function Match() {
   const [attendeesPage, setAttendeesPage] = useState(1)
   const [loadingMoreAttendees, setLoadingMoreAttendees] = useState(false)
   const currentEventIdRef = useRef<string | null>(null)
+
+  /*
+   * Who you have liked in this room, as far as this session knows.
+   *
+   * Layered over the server's `youLiked` rather than replacing it — see
+   * `likeStatusFor` in `lib/likes.ts` for why local has to win. The map is
+   * keyed by user id and deliberately not cleared on refetch; it is cleared
+   * when the room changes, because a like belongs to an event.
+   */
+  const [likeState, setLikeState] = useState<Record<string, LikeStatus>>({})
+  const [matchedConversations, setMatchedConversations] = useState<Record<string, string>>({})
+
+  /**
+   * Like someone, which is the one thing this screen could not do.
+   *
+   * Optimistic, because the mechanic only works if liking feels free. The
+   * rollback on failure is `undefined` rather than `'none'`: a request can fail
+   * after the write landed, so asserting not-liked would offer a like the
+   * server already holds.
+   *
+   * A mutual like opens a conversation server-side for both people at once, so
+   * the only thing left to do here is go to it. Nothing is sent to the other
+   * person on a one-sided like, and nothing is shown about them — there is no
+   * field for it and deliberately so.
+   */
+  const handleLike = useCallback(async (attendee: AttendeeProfile) => {
+    const eventId = currentEventIdRef.current
+    if (!eventId) return
+
+    const status = likeStatusFor(attendee.youLiked, likeState[attendee.user_id])
+
+    // Already matched: this tap opens the conversation instead of sending a
+    // second like the server would reject.
+    if (status === 'matched') {
+      const conversationId = matchedConversations[attendee.user_id]
+      if (conversationId) {
+        router.push({
+          pathname: '/private-chat/[conversationId]',
+          params: {
+            conversationId,
+            otherUserName: getDisplayName(attendee.name),
+            otherUserId: attendee.user_id,
+          } as any,
+        })
+      }
+      return
+    }
+
+    if (!shouldSendLike(status)) return
+
+    setLikeState((prev) => ({ ...prev, [attendee.user_id]: 'sending' }))
+    try {
+      const result = await apiClient.likeAtEvent(eventId, attendee.user_id)
+      const next = likeStateAfter({
+        ok: !!result.success,
+        mutual: result.data?.mutual,
+      })
+      setLikeState((prev) => {
+        const copy = { ...prev }
+        if (next === undefined) delete copy[attendee.user_id]
+        else copy[attendee.user_id] = next
+        return copy
+      })
+
+      if (result.success && result.data?.mutual && result.data.conversationId) {
+        const conversationId = result.data.conversationId
+        setMatchedConversations((prev) => ({ ...prev, [attendee.user_id]: conversationId }))
+      }
+    } catch (e) {
+      Logger.error('match', 'like failed', { error: e })
+      setLikeState((prev) => {
+        const copy = { ...prev }
+        delete copy[attendee.user_id]
+        return copy
+      })
+    }
+  }, [likeState, matchedConversations])
+
+
   const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
   const [similarIndex, setSimilarIndex] = useState(0)
@@ -543,6 +701,11 @@ export default function Match() {
       if (outcome.kind === 'notCheckedIn') {
         const clearRoom = () => {
           currentEventIdRef.current = null
+        // A like belongs to an event, so leaving the room drops what this
+        // session knew about it. Keeping it would carry one room's hearts onto
+        // the next room's cards for anyone who appears in both.
+        setLikeState({})
+        setMatchedConversations({})
           setEventInfo(null)
           setAttendees([])
           setAttendeesHasMore(false)
@@ -892,10 +1055,12 @@ export default function Match() {
           reasonLabel={item.reasonLabel}
           onSafetyPress={() => onSafetyPress(item.attendee.name || 'User', item.attendee.user_id)}
           onOpenProfile={() => openUserProfile(item.attendee.user_id)}
+          likeStatus={likeStatusFor(item.attendee.youLiked, likeState[item.attendee.user_id])}
+          onLike={() => handleLike(item.attendee)}
         />
       </Animated.View>
     ),
-    [getLiftStyle, onSafetyPress, openUserProfile]
+    [getLiftStyle, onSafetyPress, openUserProfile, likeState, handleLike]
   )
 
   const renderAlsoHereItem = useCallback(
@@ -906,9 +1071,11 @@ export default function Match() {
         onSafetyPress={() => onSafetyPress(attendee.name || 'User', attendee.user_id)}
         onOpenProfile={() => openUserProfile(attendee.user_id)}
         isRightColumn={(index + 1) % 2 === 0}
+        likeStatus={likeStatusFor(attendee.youLiked, likeState[attendee.user_id])}
+        onLike={() => handleLike(attendee)}
       />
     ),
-    [onSafetyPress, openUserProfile]
+    [onSafetyPress, openUserProfile, likeState, handleLike]
   )
 
   /**
@@ -1562,6 +1729,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  /*
+   * Bottom-right, opposite the safety control top-right.
+   *
+   * Deliberately far from it: one of these two is "I would like to meet this
+   * person" and the other is "report or block them", and a mis-tap between
+   * adjacent buttons would be the worst possible one in this app.
+   */
+  likeButton: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  likeButtonOn: {
+    backgroundColor: EMBER.gradientFrom,
+    borderColor: EMBER.gradientTo,
+  },
+  // Dimmed, not replaced by a spinner. The heart is already filled in, and
+  // swapping it mid-write makes the thing you just chose disappear for the
+  // length of a round trip on the tap that most needs to feel free.
+  likeButtonSending: { opacity: 0.6 },
   cardSafety: {
     position: 'absolute',
     top: 10,
