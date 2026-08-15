@@ -290,10 +290,26 @@ describe('the centre is the brand mark', () => {
      * `monogram-white.png` strokes measure 5.0% of the mark's width, so 28pt
      * drew a 1.18pt line against ~2pt for every other glyph in the bar — the
      * lightest thing in the row while being the most important control in it.
-     * 34 puts it at 1.43pt and still fits the 39.6pt square inscribed in the
-     * 56pt disc.
+     * 32 puts it at 1.35pt and fits the 36.8pt square inscribed in the 52pt
+     * disc, holding the same ~61% fill the disc had at 56.
      */
-    expect(NAV()).toContain('centreMark: { width: 34, height: 34 }')
+    expect(NAV()).toContain('centreMark: { width: 32, height: 32 }')
+  })
+
+  it('the bar is 88pt, the number TAB_BAR_CLEARANCE has always claimed', () => {
+    /*
+     * Seating the centre button made the disc — not the 48pt icon-plus-label
+     * column — the row's tallest child, so the bar grew from 100 to 108 while
+     * `TAB_BAR_CLEARANCE` stayed 88. Padding tolerated the drift; the Pulse's
+     * hero card, which is sized against the bar's real top edge, did not.
+     *
+     * 8 + 52 + max(inset - 6, 20) = 88 on a home-indicator phone.
+     */
+    const nav = NAV()
+    expect(nav).toContain('TAB_BAR_PADDING_TOP = 8')
+    expect(nav).toContain('const CENTRE_SIZE = 52')
+    expect(nav).toContain('export function tabBarTop')
+    expect(8 + 52 + Math.max(34 - 6, 20)).toBe(88)
   })
 
   it('is gradient in every state, not only when something is live', () => {

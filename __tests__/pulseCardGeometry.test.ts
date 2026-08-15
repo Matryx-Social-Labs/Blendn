@@ -82,33 +82,66 @@ describe('the card in view is centred and clears the tab bar', () => {
    * landed at 908 against a tab bar starting at ~843 — 65pt of the hero card,
    * including the space under its title, beneath the navigation.
    */
+  const CHROME = 64 + 32 + 133 + 48 + 24 + 24
+  const ASPECT = 450 / 331.5
+  const BREATH = 8
+  /** Mirrors `tabBarTop` / `tabBarBottomPadding` in `app/(tabs)/_layout.tsx`. */
+  const barTopOf = (screenH: number, insetBottom: number) =>
+    screenH - (8 + 52 + Math.max(insetBottom - 6, 20))
+
   const layout = (screenH: number, insetTop: number, insetBottom: number, screenW: number) => {
-    const CHROME = 64 + 32 + 133 + 48 + 24 + 24
-    const available = screenH - (insetTop + CHROME) - (insetBottom + 88) - 16
-    const width = Math.min(Math.round(screenW * 0.85), Math.round(available / (450 / 331.5)))
-    return { width, height: Math.round(width * (450 / 331.5)), inset: Math.round((screenW - width) / 2) }
+    const available = barTopOf(screenH, insetBottom) - (insetTop + CHROME) - BREATH
+    const width = Math.min(Math.round(screenW * 0.85), Math.round(available / ASPECT))
+    return { width, height: Math.round(width * ASPECT), inset: Math.round((screenW - width) / 2) }
   }
 
-  it('never lets the card reach the bar, on a tall phone or a short one', () => {
+  it('fits the card entirely above the bar, on a tall phone and a short one', () => {
     for (const [w, h, top, bottom] of [
       [440, 956, 62, 34], // iPhone 17 Pro Max, the device this was measured on
       [390, 844, 47, 34], // the artboard's own size
       [375, 667, 20, 0], // SE — no safe insets, short screen
     ] as const) {
       const l = layout(h, top, bottom, w)
-      const cardTop = top + 64 + 32 + 133 + 48 + 24 + 24
-      const barTop = h - bottom - 88
-      expect(cardTop + l.height).toBeLessThanOrEqual(barTop)
+      /*
+       * The card's **edge**, not its content.
+       *
+       * Letting the rounded bottom slide under the bar was tried: the last 32pt
+       * of the card is `1141:4666`'s padding with nothing drawn in it, so no
+       * content was hidden and it bought 45pt of width. It still read wrong — a
+       * card that runs out of sight behind the navigation looks clipped
+       * whatever is technically visible.
+       */
+      expect(top + CHROME + l.height).toBeLessThanOrEqual(barTopOf(h, bottom))
       expect(l.width).toBeGreaterThan(0)
     }
   })
 
+  it('the bar is the size it claims to be', () => {
+    /*
+     * `TAB_BAR_CLEARANCE` is 88 and the bar had grown to 108 — seating the
+     * centre button made the 56pt disc, not the 48pt icon-plus-label column,
+     * the tallest child. Anything placing an edge against the bar read the
+     * padding constant and was 20pt wrong.
+     *
+     * 8 + 52 + 28 = 88 on a home-indicator phone. The two agree again.
+     */
+    expect(8 + 52 + Math.max(34 - 6, 20)).toBe(88)
+    expect(956 - barTopOf(956, 34)).toBe(88)
+  })
+
   it('centres it — equal margins, so neighbours peek equally either side', () => {
     const l = layout(956, 62, 34, 440)
-    expect(440 - l.width - l.inset).toBe(l.inset)
-    // Screenshot-verified on the simulator: 61.0 left, 61.3 right, card 318.
-    expect(l.width).toBe(318)
-    expect(l.inset).toBe(61)
+    // Within a point: an odd leftover cannot split into two equal integers.
+    expect(Math.abs(440 - l.width - l.inset - l.inset)).toBeLessThanOrEqual(1)
+    /*
+     * Screenshot-verified: card 348, margins 46.0 / 46.3, bar top 868.
+     *
+     * The sequence, because each step was a real trade: 318 with 61pt margins
+     * (edge-clearing, 108pt bar) → 363 with 39pt margins but sliding under the
+     * bar → 348 with 46pt margins, fully visible, once the bar came back to 88.
+     */
+    expect(l.width).toBe(348)
+    expect(l.inset).toBe(46)
   })
 
   it('is exported as one function both call sites use', () => {
@@ -117,7 +150,7 @@ describe('the card in view is centred and clears the tab bar', () => {
     // two. Both now read `featuredCardLayout`.
     expect(CARD()).toContain('export function featuredCardLayout')
     const screen = SCREEN()
-    expect(screen).toContain('featuredCardLayout(insets, TAB_BAR_CLEARANCE)')
+    expect(screen).toContain('featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))')
     expect(screen.match(/width=\{featured\.width\}/g)?.length).toBe(2)
     expect(screen.match(/paddingHorizontal: featured\.inset/g)?.length).toBe(2)
   })
