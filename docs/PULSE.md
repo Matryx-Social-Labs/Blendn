@@ -127,10 +127,55 @@ It held three things and none survive as a bar:
 | Was | Now |
 |---|---|
 | avatar → profile | **the Me tab**, which shows your photo |
-| `Blend'n` wordmark | gone — the screen's identity is "The Pulse" in 48pt |
+| `Blend'n` wordmark | see below — it came back, as an overlay |
 | settings gear | reached through Me → profile → settings, as it already was |
 
 The city picker had already moved into the headline block.
+
+### The wordmark came back, as an overlay — frame `1141:4819`
+
+`components/pulse/PulseTopBar.tsx`. This is not the bar that was deleted. That
+one **reserved 64pt of layout** above a bordered panel; this one is
+`position: absolute, top: 0`, `rgba(15,14,14,0.8)` behind a 12pt backdrop blur,
+and the feed scrolls under it. It occupies nothing. The only thing keeping the
+headline out from behind it is `paddingTop` on the list's content — the same
+mechanism the floating nav has always used at the other end.
+
+The status bar is **added** to the frame's 64 rather than absorbed into it. The
+frame is a 390pt artboard with no notch, and taking its height literally is what
+put "The Pulse" underneath the clock on the device screenshot.
+
+Values are the frame's, unadjusted: `paddingHorizontal: 24`, wordmark in Plus
+Jakarta **Bold 16/24**, `#FF906D`, `letterSpacing: -0.8`. Accent rather than
+white, which is what makes it read as a mark and not as a second heading above
+"The Pulse" in 48pt.
+
+**The frame's two glyphs are not rendered, and neither is a placeholder.**
+
+| Glyph | Why it is absent |
+|---|---|
+| hamburger, 18×12, left | There is no drawer in this app. Inventing one to justify a glyph is the tail wagging the dog |
+| bell, 16×20, right | A notifications centre is designed and **not built** — no endpoint returns a notification. A bell that opens nothing is a dead control in the most-tapped corner of the screen |
+
+An earlier draft of this component put a **Pulse / Hotspots** feed switch in the
+hamburger's place, on the reading that Hotspots is "a replica of the Pulse page
+showing venues". `blendn-admin/docs/HOTSPOTS.md` exists precisely because that
+reading is wrong: Hotspots is a **presence** surface, gated behind a deliberate,
+time-boxed, reciprocal *Go Live* at one venue, and none of that gate is built —
+the only presence endpoint today is scoped to an event you have already checked
+into. A switch to it would be a third dead control, and shipping it as a venue
+list would have encoded the misreading the doc was written to stop. Both glyphs
+go in the moment they have a destination.
+
+### The undesigned rows moved into the feed's header
+
+The checked-in strip, the offline banner, the switch-city offer, the away notice
+and the location/network errors have behaviour and no frame. They used to be a
+**sibling** of the list, statically laid out at the top of the screen — which the
+overlay now covers — and they cost a 10pt spacer on every render where none of
+them had anything to say. They render into `ListHeaderComponent` instead, above
+the headline, so there is one scroll surface and they clear the bar with the same
+padding as everything else.
 
 **Your photo is the Me tab's icon.** That is where a profile picture belongs: the
 tab that *is* you, rather than a third control in a header. It reads

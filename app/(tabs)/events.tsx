@@ -34,6 +34,7 @@ import {
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE } from './_layout'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -2271,6 +2272,138 @@ export default function Events() {
    * Built once and rendered into both branches of the list header — see the
    * comment at the render site for why it cannot live in only one of them.
    */
+  /*
+   * The undesigned rows, rendered into the feed's header rather than above it.
+   *
+   * These five — the checked-in strip, the offline banner, the switch-city
+   * offer, the away notice, the location and network errors — have behaviour
+   * and no frame. They used to be a sibling of the list, statically laid out
+   * at the top of the screen, which the overlay header now covers. They also
+   * cost a 10pt spacer on every render where none of them had anything to say.
+   *
+   * In the header they clear the bar with the same padding everything else
+   * does, and there is one scroll surface instead of a fixed strip above one.
+   * Built once and rendered into both branches, for the same reason
+   * `pulseHeader` is.
+   */
+  const banners = (
+          <View style={styles.filtersBar}>
+            {/*
+              * The checked-in strip, at the top of the events tab.
+              *
+              * `renderCheckedInCarousel` and `handleCheckOut` were both complete
+              * -- optimistic update, rollback, in-flight dedupe, a Check out pill
+              * -- and neither had a caller, so checking out took three taps
+              * through the event detail screen. This is the whole fix.
+              */}
+            {checkedInEvents.length > 0 && renderCheckedInCarousel()}
+            {showPreviewHint && (
+              <View style={styles.bannerInfo}>
+                <Text style={styles.bannerText}>
+                  Tip: Long-press any event card for quick actions.
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss quick actions tip"
+                  onPress={markPreviewHintSeen}
+                  style={styles.bannerCta}
+                >
+                  <Text style={styles.bannerCtaText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/*
+              Offline is worth saying here. A dead socket is not.
+
+              This screen loads over HTTP, so "Realtime disconnected" was showing
+              above a list that had loaded perfectly — a warning about a subsystem
+              the page does not use. Chat, private chat and the room keep both,
+              because there a dead socket means messages you will not see.
+
+              No status dot replaces it either. `profiles.show_online` already
+              means "other attendees can see you're here", so a green dot on your
+              own avatar reads as exactly that — and wiring it to socket health
+              would show green while `show_online: false` made you invisible to
+              everyone. A lie in both directions, and unexplainable in support.
+            */}
+            <RealtimeStatusBanner
+              status={socketStatus}
+              style={styles.bannerWarn}
+              showSocketIssues={false}
+            />
+            {switchSuggestion && (
+              <View style={styles.bannerInfo}>
+                <Text style={styles.bannerText}>
+                  You&apos;re in {switchSuggestion}. Browse events here?
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Switch to ${switchSuggestion}`}
+                  onPress={() => chooseCity(switchSuggestion)}
+                  style={styles.bannerCta}
+                >
+                  <Text style={styles.bannerCtaText}>Switch</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/*
+              Where you are, when there is nothing to be done about it.
+
+              Found on a device in Saarbrücken: browsing Bengaluru, the app knew
+              exactly where the user was and never said so. The switch banner
+              above only speaks when the device's city has events — correct, since
+              offering a move to an empty screen is worse than silence — and the
+              consequence was that the people we have not launched near got no
+              acknowledgement at all.
+
+              **Passive on purpose.** There is nothing useful to tap: switching to
+              a city with no events is a dead end, and the picker in the header is
+              already the way to move. A button here would be a call to action
+              leading nowhere.
+
+              Never shown alongside the switch banner — `awayNotice` fires exactly
+              when `shouldOfferSwitch` cannot, and `lib/city.ts` pins that across
+              every combination rather than leaving it to inspection.
+            */}
+            {away && (
+              <View style={styles.bannerNeutral}>
+                <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
+                <Text style={styles.bannerNeutralText}>
+                  You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
+                </Text>
+              </View>
+            )}
+            {locationStatus === 'denied' && (
+              <View style={styles.bannerWarn}>
+                <Text style={styles.bannerText}>
+                  Enable Location to show nearby events and check-in.
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Open settings to enable location"
+                  onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
+                  style={styles.bannerCta}
+                >
+                  <Text style={styles.bannerCtaText}>Enable</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {!!netError && (
+              <View style={styles.bannerError}>
+                <Text style={styles.bannerText}>{netError}</Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading events"
+                  onPress={() => fetchEvents({ force: true })}
+                  style={styles.bannerCta}
+                >
+                  <Text style={styles.bannerCtaText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+  )
+
   const pulseHeader = (
     <PulseHeader
       title="The "
@@ -2316,7 +2449,7 @@ export default function Events() {
      */
     <View style={styles.container}>
       {/*
-        No top bar, and no panel around the list.
+        No panel around the list, and the bar is an overlay.
 
         This screen used to be two things stacked: a sticky bar, and a rounded
         bordered elevated sheet holding everything else — `sectionBg`, absolutely
@@ -2326,130 +2459,17 @@ export default function Events() {
         this had three.
 
         The frame is one background, `#0F0E0E`, edge to edge, with the content
-        sitting directly on it. So the list is the page now.
+        sitting directly on it. So the list is the page now, and `PulseTopBar`
+        floats over it holding nothing but the wordmark — it reserves no height
+        and the feed scrolls under it.
 
-        Nothing was lost with the bar. The avatar moved to the Me tab, where a
-        profile picture is the more usual place to find yourself; settings is
-        reached through it, as it already was from the profile screen; and the
-        city picker had already moved into the headline.
+        The old bar's other two controls did not come back with it. The avatar
+        is the Me tab, where a profile picture is the more usual place to find
+        yourself; settings is reached through it, as it already was from the
+        profile screen; and the city picker had already moved into the headline.
       */}
+        <PulseTopBar />
 
-        {/* Banners */}
-        <View style={styles.filtersBar}>
-          {/*
-            * The checked-in strip, at the top of the events tab.
-            *
-            * `renderCheckedInCarousel` and `handleCheckOut` were both complete
-            * -- optimistic update, rollback, in-flight dedupe, a Check out pill
-            * -- and neither had a caller, so checking out took three taps
-            * through the event detail screen. This is the whole fix.
-            */}
-          {checkedInEvents.length > 0 && renderCheckedInCarousel()}
-          {showPreviewHint && (
-            <View style={styles.bannerInfo}>
-              <Text style={styles.bannerText}>
-                Tip: Long-press any event card for quick actions.
-              </Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss quick actions tip"
-                onPress={markPreviewHintSeen}
-                style={styles.bannerCta}
-              >
-                <Text style={styles.bannerCtaText}>Got it</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {/*
-            Offline is worth saying here. A dead socket is not.
-
-            This screen loads over HTTP, so "Realtime disconnected" was showing
-            above a list that had loaded perfectly — a warning about a subsystem
-            the page does not use. Chat, private chat and the room keep both,
-            because there a dead socket means messages you will not see.
-
-            No status dot replaces it either. `profiles.show_online` already
-            means "other attendees can see you're here", so a green dot on your
-            own avatar reads as exactly that — and wiring it to socket health
-            would show green while `show_online: false` made you invisible to
-            everyone. A lie in both directions, and unexplainable in support.
-          */}
-          <RealtimeStatusBanner
-            status={socketStatus}
-            style={styles.bannerWarn}
-            showSocketIssues={false}
-          />
-          {switchSuggestion && (
-            <View style={styles.bannerInfo}>
-              <Text style={styles.bannerText}>
-                You&apos;re in {switchSuggestion}. Browse events here?
-              </Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={`Switch to ${switchSuggestion}`}
-                onPress={() => chooseCity(switchSuggestion)}
-                style={styles.bannerCta}
-              >
-                <Text style={styles.bannerCtaText}>Switch</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {/*
-            Where you are, when there is nothing to be done about it.
-
-            Found on a device in Saarbrücken: browsing Bengaluru, the app knew
-            exactly where the user was and never said so. The switch banner
-            above only speaks when the device's city has events — correct, since
-            offering a move to an empty screen is worse than silence — and the
-            consequence was that the people we have not launched near got no
-            acknowledgement at all.
-
-            **Passive on purpose.** There is nothing useful to tap: switching to
-            a city with no events is a dead end, and the picker in the header is
-            already the way to move. A button here would be a call to action
-            leading nowhere.
-
-            Never shown alongside the switch banner — `awayNotice` fires exactly
-            when `shouldOfferSwitch` cannot, and `lib/city.ts` pins that across
-            every combination rather than leaving it to inspection.
-          */}
-          {away && (
-            <View style={styles.bannerNeutral}>
-              <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
-              <Text style={styles.bannerNeutralText}>
-                You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
-              </Text>
-            </View>
-          )}
-          {locationStatus === 'denied' && (
-            <View style={styles.bannerWarn}>
-              <Text style={styles.bannerText}>
-                Enable Location to show nearby events and check-in.
-              </Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Open settings to enable location"
-                onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
-                style={styles.bannerCta}
-              >
-                <Text style={styles.bannerCtaText}>Enable</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {!!netError && (
-            <View style={styles.bannerError}>
-              <Text style={styles.bannerText}>{netError}</Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Retry loading events"
-                onPress={() => fetchEvents({ force: true })}
-                style={styles.bannerCta}
-              >
-                <Text style={styles.bannerCtaText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
         <VirtualizedList
           forwardedRef={listRef as any}
           data={showLoadingSkeleton ? [] : mainListData}
@@ -2464,10 +2484,14 @@ export default function Events() {
           contentContainerStyle={[
             styles.listContainer,
             {
-              // The status bar at the top; the floating nav plus the home
-              // indicator at the bottom. Padding, not layout, so the feed
-              // still scrolls under both.
-              paddingTop: insets.top + 24,
+              // The status bar and the overlay header at the top; the floating
+              // nav plus the home indicator at the bottom. Padding, not layout,
+              // so the feed still scrolls under all four.
+              //
+              // The frame's `Main` starts at y=96 on a 390pt artboard whose bar
+              // occupies the first 64 — so the 32 is the clearance, and the
+              // status bar is what the artboard does not have.
+              paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
               paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
             },
           ]}
@@ -2490,6 +2514,7 @@ export default function Events() {
                   entered disappears while the results for it arrive. The search
                   box has to outlive the thing it is searching.
                 */}
+                {banners}
                 {pulseHeader}
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={160} />
@@ -2548,6 +2573,7 @@ export default function Events() {
               </View>
             ) : (
               <View>
+                {banners}
                 {pulseHeader}
                 {/*
                   Empty means "this city has nothing on", and says so.

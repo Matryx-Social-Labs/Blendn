@@ -1,0 +1,93 @@
+import { BlurView } from 'expo-blur'
+import { StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
+
+/** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
+export const TOP_BAR_HEIGHT = 64
+
+/**
+ * The overlay header — frame `1141:4819`.
+ *
+ * ## An overlay, not a header component
+ *
+ * It sits at `top: 0` over the feed with an 80%-opacity fill and a 12pt
+ * backdrop blur, and the feed scrolls **under** it. The bar this replaced
+ * reserved its own height and sat above a bordered panel, which is half of why
+ * the old Pulse read as a page inside a page. Nothing here occupies layout;
+ * the screen clears it with padding on the scroll content.
+ *
+ * The status bar is added to the 64 rather than absorbed into it: the frame is
+ * a 390pt artboard with no notch, and taking its height literally is what put
+ * "The Pulse" underneath the clock on a real device.
+ *
+ * ## One thing in it, and the frame draws three
+ *
+ * The frame has an 18×12 glyph at the left and a 16×20 glyph at the right. The
+ * wordmark is the only one rendered, because it is the only one that goes
+ * anywhere.
+ *
+ * - **The left glyph is a hamburger.** There is no drawer in this app, and
+ *   inventing one to justify a glyph is the tail wagging the dog.
+ * - **The right glyph is a bell.** A notifications centre is designed and not
+ *   built; no endpoint returns a notification. A bell that opens nothing is a
+ *   dead control in the most-tapped corner of the screen.
+ *
+ * Both are recorded in `docs/PULSE.md` and go in the moment they have a
+ * destination. An empty `justify-between` row still leaves the wordmark where
+ * the frame puts it, at `x=24`.
+ */
+export function PulseTopBar() {
+  const insets = useSafeAreaInsets()
+
+  return (
+    <View
+      style={[styles.bar, { paddingTop: insets.top, height: insets.top + TOP_BAR_HEIGHT }]}
+      pointerEvents="none"
+    >
+      <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.row}>
+        {/*
+          The wordmark, in the accent rather than white.
+
+          Frame: Plus Jakarta Bold 16/24, `#FF906D`, `letterSpacing: -0.8`. It
+          is the only warm text in the bar, which is what makes it read as a
+          mark rather than as a heading — the screen's own title is "The Pulse"
+          in 48pt, in the feed below.
+        */}
+        <Text style={styles.wordmark} accessibilityRole="header">
+          Blend&apos;n
+        </Text>
+      </View>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    // Frame: `rgba(15,14,14,0.8)` — `EMBER.bg` at 80%, so the feed shows
+    // through as a darkened blur rather than disappearing behind a solid band.
+    backgroundColor: 'rgba(15,14,14,0.8)',
+  },
+  row: {
+    height: TOP_BAR_HEIGHT,
+    // Frame: the left group starts at x=24.
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  wordmark: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: -0.8,
+    color: EMBER.accent,
+  },
+})
