@@ -9,10 +9,18 @@ name: CI
 
 on:
   pull_request:
-    branches: [dev, main]
+    branches: [dev, main, stage, prod]
     paths-ignore: ["**.md", "docs/**"]
   push:
-    branches: [dev]
+    # `stage` and `prod` are here because pushing to them ships: each one has an
+    # EAS workflow that builds and submits to TestFlight and Play. They were
+    # absent, so the two branches that reach real testers were the two nothing
+    # checked.
+    #
+    # The EAS workflows now verify for themselves as well — see
+    # `.eas/workflows/`. That is the gate that cannot be bypassed; this is the
+    # one that reports in the pull request, before the merge rather than after.
+    branches: [dev, stage, prod]
     paths-ignore: ["**.md", "docs/**"]
 
 concurrency:
@@ -21,7 +29,10 @@ concurrency:
 
 jobs:
   verify:
-    name: typecheck + lint
+    # Named for what it runs. It has run the test suite since the suite existed
+    # and said "typecheck + lint" on the pull request page the whole time, so
+    # the one check people looked at under-reported itself.
+    name: typecheck + test + lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -50,7 +61,12 @@ jobs:
         run: npm test -- --ci
 
       - name: Lint
-        # Not a gate yet: this repo has never been linted in CI, so the backlog
-        # is unmeasured. Reported so the size is visible, and tightened to a
-        # gate once it is known and burned down.
-        run: npx expo lint || echo "::warning::lint reported issues (non-blocking for now)"
+        # A gate now. The backlog it was waiting on is measured and empty:
+        # `expo lint` reports 0 errors, and the ~79 warnings are style notes
+        # that do not fail a run.
+        #
+        # The API repo learned this one the expensive way — three merges went
+        # red there on unused imports that `tsc` and `jest` both pass, because
+        # its lint *was* a gate and nobody ran it locally first. Here the
+        # failure was quieter: a warning nobody reads is a check nobody has.
+        run: npx expo lint

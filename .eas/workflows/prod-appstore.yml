@@ -28,8 +28,31 @@ on:
   push:
     branches: ['prod']
 
+# Nothing builds until the suite is green.
+#
+# Both platforms used to fan out straight off the push, so a merge to this
+# branch shipped to TestFlight and Play internal whatever the tests said. The
+# GitHub workflow does not cover it either: `ci.yml` fires on pull requests into
+# `dev` and pushes to `dev`, and a push to this branch matches neither.
+#
+# It runs here rather than being read off a GitHub check on purpose. A green
+# check is a fact about *a commit*, and gating on one means trusting that the
+# commit it describes is the commit about to be built — across two systems, one
+# of which can be down. This runs on the same machine, against the same
+# checkout, moments before the build.
 jobs:
+  verify:
+    name: typecheck + test
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Typecheck against baseline
+        run: ./scripts/typecheck.sh
+      - name: Test
+        run: npm test -- --ci
+
   build_ios:
+    needs: [verify]
     type: build
     params:
       platform: ios
@@ -43,6 +66,7 @@ jobs:
       profile: production
 
   build_android:
+    needs: [verify]
     type: build
     params:
       platform: android
