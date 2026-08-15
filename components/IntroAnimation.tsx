@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import React, { useEffect, useRef, useState } from 'react'
-import { Animated, StyleSheet, View } from 'react-native'
+import { Animated, Easing, StyleSheet, View } from 'react-native'
 
 import { APP_COLORS } from '../lib/theme'
 
@@ -52,9 +52,36 @@ const intro = require('../assets/logo/intro.webp')
 const DURATION_MS = 1340
 const FADE_MS = 260
 
+/*
+ * Where the intro has to *arrive*, so the mark does not teleport on handover.
+ *
+ * Measured on device at 0.2s intervals through a cold launch, in points on a
+ * 440pt screen:
+ *
+ *   0.2 - 1.2s   119 x 141   centre y 478    monogram, static
+ *   1.4s          76 x  91   centre y 478    shrinking
+ *   1.6s         190 x  59   centre y 479    wordmark writing on
+ *   1.8s         203 x  58   centre y 479    lockup complete
+ *   2.0s+        304 x 100   centre y 355    SIGN-IN
+ *
+ * The last two rows are consecutive frames. The mark jumped **1.5x in scale and
+ * 123pt upward at once**, which is the whole of what read as a jolt — the
+ * splash-to-intro handoff was already seamless, and this was the other end.
+ *
+ * So the container travels: it starts where the native splash left the mark and
+ * ends exactly where sign-in draws its lockup, and the asset's own slide-and-
+ * write plays on top of that.
+ *
+ * If sign-in's lockup moves or resizes, these two numbers are what has to
+ * follow — and the way to check is to sample a launch, not to look at one.
+ */
+const TRAVEL_SCALE = 304 / 203
+const TRAVEL_Y = -123
+
 export function IntroAnimation({ onDone }: { onDone: () => void }) {
   const [visible, setVisible] = useState(true)
   const opacity = useRef(new Animated.Value(1)).current
+  const travel = useRef(new Animated.Value(0)).current
   const finished = useRef(false)
 
   // One shot. `onDone` is called exactly once however this ends — timer, error,
@@ -73,15 +100,48 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   }).current
 
   useEffect(() => {
+    /*
+     * Eased so it stays put and then moves, rather than drifting throughout.
+     *
+     * The monogram is static for the first second while fonts and images
+     * decode; a linear travel would slide it during that hold, which reads as
+     * the screen sagging. `Easing.in(Easing.cubic)` keeps it near zero early
+     * and does almost all the movement in the last third — arriving as the
+     * wordmark lands, which is the moment the composition changes anyway.
+     *
+     * Transform only, so `useNativeDriver` holds. This runs while auth, asset
+     * loading and routing are all still going underneath, which is exactly when
+     * the JS thread must not be carrying an animation.
+     */
+    const travelling = Animated.timing(travel, {
+      toValue: 1,
+      duration: DURATION_MS,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    })
+    travelling.start()
     const timer = setTimeout(finish, DURATION_MS)
-    return () => clearTimeout(timer)
-  }, [finish])
+    return () => {
+      travelling.stop()
+      clearTimeout(timer)
+    }
+  }, [finish, travel])
 
   if (!visible) return null
 
   return (
     <Animated.View style={[styles.overlay, { opacity }]} pointerEvents="none">
-      <View style={styles.centre}>
+      <Animated.View
+        style={[
+          styles.centre,
+          {
+            transform: [
+              { translateY: travel.interpolate({ inputRange: [0, 1], outputRange: [0, TRAVEL_Y] }) },
+              { scale: travel.interpolate({ inputRange: [0, 1], outputRange: [1, TRAVEL_SCALE] }) },
+            ],
+          },
+        ]}
+      >
         <Image
           source={intro}
           style={styles.image}
@@ -93,7 +153,7 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
           onError={finish}
           transition={0}
         />
-      </View>
+      </Animated.View>
     </Animated.View>
   )
 }
