@@ -119,7 +119,6 @@ export default function PulsePreview() {
           title="The "
           titleAccent="Pulse"
           city="Bengaluru"
-          dateLabel="Friday, Aug 15"
           onPressCity={() => {}}
           query={query}
           onChangeQuery={setQuery}
