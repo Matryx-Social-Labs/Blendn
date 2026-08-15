@@ -12,7 +12,7 @@
 #
 # ## What this does, and why each step
 #
-# 1. **Trim to 1.55-5.50s.** Two separate cuts, for two reasons.
+# 1. **Trim to 0-5.50s.** The tail is cut; the head is deliberately kept.
 #
 #    The tail first. The animation is *not* over at 4.6s, which a coarse contact
 #    sheet suggested and which was wrong. A coloured wipe trails the letters as
@@ -22,18 +22,34 @@
 #    leaving at **5.43s**, so the cut is 5.50s. Everything after that is a
 #    static hold carrying the end of the audio.
 #
-#    The head matters more. The master opens by drawing the monogram from
-#    nothing over ~1.6s — but the *native splash already shows the completed
-#    monogram*, so playing that would erase a logo the user is looking at and
-#    draw it again. A visible reset, and the kind of thing that reads as a bug.
-#    Starting at 1.55s means the first frame of the animation is what the native
-#    splash was already displaying, and the handoff is invisible. What plays is
-#    the part that adds something: the mark sliding left and the wordmark
-#    writing on.
-# 2. **Speed up 3x** to ~1.3s. A launch animation people see every single time
-#    has to be brief; several seconds of logo is a toll booth.
+#    The head used to start at 1.55s, and that was the wrong call. The master
+#    opens by drawing the monogram from nothing over ~1.6s. The reasoning for
+#    skipping it was that the native splash already shows the completed
+#    monogram, so drawing it again would erase a logo the user is looking at —
+#    true, but the conclusion was wrong. What actually shipped was a launch
+#    whose first ~800ms is a *static* monogram: the logo's own animation, the
+#    best part of the artwork, never played at all.
+#
+#    The erase-and-redraw problem is real and is solved in the component
+#    instead, with a short black hold between the splash and the animation. A
+#    cut to black reads as a cut; a logo dissolving back to nothing reads as a
+#    bug. That one beat buys the whole draw-on, so the head now starts at 0.
+#
+#    Frame 0 is fully transparent (the first drawn pixels land at 0.10s), which
+#    costs one frame and is harmless — the component's black hold is what the
+#    timing is actually tuned on.
+# 2. **Speed up 3x** to ~1.8s. A launch animation people see every single time
+#    has to be brief; several seconds of logo is a toll booth. The rate is
+#    unchanged from the 1.55s cut — the extra half-second is the draw-on that
+#    cut was throwing away, not a slower playback.
 # 3. **Crop to the artwork.** The logo occupies 916x440 of the 1920x1080 frame.
 #    Shipping the empty margin spends the pixel budget on nothing.
+#
+#    This window was measured against the *whole* master, not just the tail:
+#    the union of every frame's alpha bounding box from 0 to 5.5s is
+#    x=527..1398, y=340..734, which sits inside it. So including the head
+#    changes no geometry — same 720x346 output, same aspect, and therefore the
+#    component's travel numbers and `lockup-hero.png` are untouched.
 # 4. **Recolour the wordmark to white.** This is the important one — see below.
 # 5. **Encode animated WebP** with alpha, play-once.
 #
@@ -66,7 +82,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # 720px wide is ~3x the on-screen width, right for the densest phones.
-FILTER="trim=1.55:5.50,setpts=0.33*(PTS-STARTPTS),crop=916:440:503:319,fps=24,scale=720:-2:flags=lanczos"
+FILTER="trim=0:5.50,setpts=0.33*(PTS-STARTPTS),crop=916:440:503:319,fps=24,scale=720:-2:flags=lanczos"
 
 echo "1/3 extracting frames (-an strips the audio track)"
 ffmpeg -v error -y -i "$SRC" -vf "$FILTER" -an "$WORK/f%03d.png"
