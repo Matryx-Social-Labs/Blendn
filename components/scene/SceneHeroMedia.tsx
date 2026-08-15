@@ -55,6 +55,12 @@ export function SceneHeroMedia({
    */
   const [settled, setSettled] = useState(0)
   const [manual, setManual] = useState(false)
+  /*
+   * Also in a ref, because the *value* is needed inside a callback whose
+   * identity must not change. See `onEnded` below.
+   */
+  const manualRef = useRef(false)
+  manualRef.current = manual
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -78,6 +84,12 @@ export function SceneHeroMedia({
   goToRef.current = goTo
 
   const current = playlist[index]
+
+  // Defined once. See the note at its use site for why the identity matters.
+  const onClipEnded = useRef((from: number) => {
+    if (manualRef.current || playlist.length < 2) return
+    goToRef.current(from + 1)
+  }).current
 
   useEffect(() => {
     if (manual || playlist.length < 2) return
@@ -143,7 +155,18 @@ export function SceneHeroMedia({
                 // a fresh player rather than one that has already ended.
                 key={`${item.url}-${i}-active`}
                 source={item.url}
-                onEnded={!manual && playlist.length > 1 ? () => goToRef.current(i + 1) : undefined}
+                /*
+                 * A stable function, always — never `undefined`.
+                 *
+                 * This used to flip to `undefined` the moment `manual` became
+                 * true, which is the first frame of a drag: the prop changed,
+                 * `FeedVideo` re-rendered, the player remounted, and the
+                 * ScrollView's content changed underneath a gesture that was
+                 * still in progress. The swipe was being cancelled by the swipe
+                 * itself. Reading `manual` from a ref inside keeps the
+                 * identity constant across that re-render.
+                 */
+                onEnded={() => onClipEnded(i)}
               />
             ) : null}
           </Pressable>
