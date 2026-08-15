@@ -87,6 +87,40 @@ describe('The Pulse uses one accent', () => {
     }
   })
 
+  /*
+   * The same colour, written a different way.
+   *
+   * `#0A84FF` is `rgba(10,132,255,…)`, and eight of those were live on this
+   * screen while a hex-only check reported it clean: a blue chip on the
+   * nightlife hero, a blue "Going" pill, two blue banner fills, and blue body
+   * text on carousel meta.
+   *
+   * So this parses every `rgb`/`rgba` literal and rejects blue-dominant ones
+   * rather than matching strings. Blue-dominant means b clearly above both r and
+   * g, which greys (r≈g≈b) and anything in the warm palette never are.
+   */
+  it.each(PULSE_SURFACE)('%s hardcodes no blue-dominant rgb literal', (file) => {
+    const offenders: string[] = []
+    const literal = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g
+    for (const m of read(file).matchAll(literal)) {
+      const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])]
+      if (b > r + 25 && b > g + 15) offenders.push(m[0] + ')')
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('recognises the old accent in either notation', () => {
+    // Guards the guard: #0A84FF is rgb(10,132,255), and a check that misses the
+    // second spelling is the one that already shipped.
+    const asRgb = 'rgba(10,132,255,0.32)'
+    const m = asRgb.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)!
+    const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])]
+    expect(b > r + 25 && b > g + 15).toBe(true)
+    expect(`#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`.toUpperCase()).toBe(
+      APP_COLORS.accent.toUpperCase()
+    )
+  })
+
   it('every section heading goes through one component', () => {
     /*
      * The blue chevron lived in a hand-rolled header row. Seven of those
