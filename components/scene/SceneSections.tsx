@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 
+import type { FeedMediaItem } from '../../lib/feedMedia'
 import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { staticMapUrl } from '../../lib/staticMap'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
@@ -232,13 +233,13 @@ export function SceneLocationCard({
  * is stills, and `SceneHero` is motion.
  */
 export function SceneGallery({
-  photos,
+  items,
   onOpen,
 }: {
-  photos: string[]
+  items: FeedMediaItem[]
   onOpen: (index: number) => void
 }) {
-  if (photos.length === 0) return null
+  if (items.length === 0) return null
   return (
     <View style={styles.gallerySection}>
       <SceneHeading>Gallery</SceneHeading>
@@ -252,26 +253,43 @@ export function SceneGallery({
         snapToInterval={GALLERY_TILE + 12}
         decelerationRate="fast"
       >
-        {photos.map((uri, i) => (
-          <Pressable
-            key={`${uri}-${i}`}
-            onPress={() => onOpen(i)}
-            accessibilityRole="imagebutton"
-            accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
-          >
-            <Image
-              source={{ uri }}
-              style={styles.galleryTile}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-              // The rail draws at a third of the hero's size, so it must not
-              // decode at the hero's. Left to expo-image's own sizing via the
-              // style, which is why these are fixed points rather than flex.
-              recyclingKey={uri}
-            />
-          </Pressable>
-        ))}
+        {items.map((item, i) => {
+          /*
+           * A clip shows its **poster**, never the clip.
+           *
+           * A rail of muted autoplaying videos is the single most reliable way
+           * to make a scroll stutter, and it would also mean several decoders
+           * alive at once for tiles nobody has asked to watch. The badge says
+           * there is motion behind it; the lightbox is where it plays.
+           */
+          const uri = item.kind === 'image' ? item.url : item.posterUrl
+          return (
+            <Pressable
+              key={`${item.url}-${i}`}
+              onPress={() => onOpen(i)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={
+                item.kind === 'video'
+                  ? `Video ${i + 1} of ${items.length}`
+                  : `Photo ${i + 1} of ${items.length}`
+              }
+            >
+              <Image
+                source={{ uri }}
+                style={styles.galleryTile}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+                recyclingKey={uri}
+              />
+              {item.kind === 'video' ? (
+                <View style={styles.playBadge} pointerEvents="none">
+                  <MaterialIcons name="play-arrow" size={22} color={EMBER.textPrimary} />
+                </View>
+              ) : null}
+            </Pressable>
+          )
+        })}
       </ScrollView>
     </View>
   )
@@ -291,16 +309,26 @@ export function SceneAmenity({
   icon,
   title,
   subtitle,
+  /**
+   * The frame gives each tile its **own** colour, not the accent.
+   *
+   * `local_bar` is `#F79EFF` and `camera` is `#FF6D8D` — the violet and rose
+   * stops of the brand gradient rather than its orange end. Painting them both
+   * `EMBER.accent`, which is what this did, collapses a deliberate two-colour
+   * pair into one and makes the row look like a repeated element.
+   */
+  color = EMBER.accent,
   style,
 }: {
   icon: React.ComponentProps<typeof MaterialIcons>['name']
   title: string
   subtitle: string
+  color?: string
   style?: StyleProp<ViewStyle>
 }) {
   return (
     <View style={[styles.amenity, style]}>
-      <MaterialIcons name={icon} size={20} color={EMBER.accent} />
+      <MaterialIcons name={icon} size={20} color={color} />
       <Text style={styles.amenityTitle}>{title}</Text>
       <Text style={styles.amenitySubtitle}>{subtitle}</Text>
     </View>
@@ -442,6 +470,17 @@ const styles = StyleSheet.create({
     height: GALLERY_TILE,
     borderRadius: 24,
     backgroundColor: EMBER.surfaceSunken,
+  },
+  playBadge: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15,14,14,0.7)',
   },
 
   amenity: {

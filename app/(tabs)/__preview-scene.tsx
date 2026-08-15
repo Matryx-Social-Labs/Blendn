@@ -1,10 +1,12 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
+import { useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { SceneHero } from '../../components/scene/SceneHero'
+import { SceneLightbox } from '../../components/scene/SceneLightbox'
 import {
   SceneAmenity,
   SceneBodyAccent,
@@ -19,6 +21,7 @@ import {
   SCENE_SECTION_GAP,
 } from '../../components/scene/SceneSections'
 import { highlightEntities } from '../../lib/entityHighlight'
+import { scarcityLabel } from '../../lib/scarcity'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -64,19 +67,33 @@ const SCREEN_W = Dimensions.get('window').width
 const PLAYLIST: FeedMediaItem[] = [
   {
     kind: 'video',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    /*
+     * The clip `seed-qa.ts` puts on staging — the same one the Pulse cards
+     * play, so the harness and the real feed cannot disagree about what a
+     * video looks like here.
+     *
+     * Verified rather than assumed: 200, `video/mp4`, H.264 High, and `moov`
+     * at byte 36 — faststart, which `docs/MEDIA.md` calls non-optional. Three
+     * other samples were tried first and every one failed *silently*, leaving
+     * the hero on a still with nothing to say why: Google's
+     * gtv-videos-bucket clips now 403, `samplelib` 301-redirects to an HTML
+     * page, and `filesamples` and `media.w3` both carry `moov` at the end.
+     */
+    url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
     posterUrl: 'https://picsum.photos/seed/thescene/1200/1800',
   },
   { kind: 'image', url: 'https://picsum.photos/seed/scene-b/1200/1800' },
   { kind: 'image', url: 'https://picsum.photos/seed/scene-c/1200/1800' },
 ]
 
-const GALLERY = [
-  'https://picsum.photos/seed/g1/600/600',
-  'https://picsum.photos/seed/g2/600/600',
-  'https://picsum.photos/seed/g3/600/600',
-  'https://picsum.photos/seed/g4/600/600',
-]
+/*
+ * The gallery is the same playlist the hero shows.
+ *
+ * One set of media, two presentations — the hero is the teaser and the rail is
+ * the index of it. Giving them different lists would mean an organiser's third
+ * photograph could appear in one and not the other with nothing to explain it.
+ */
+const GALLERY = PLAYLIST
 
 export default function ScenePreview() {
   const insets = useSafeAreaInsets()
@@ -91,6 +108,7 @@ export default function ScenePreview() {
    */
   const { y } = useLocalSearchParams<{ y?: string }>()
   const offset = Number(y) || 0
+  const [lightbox, setLightbox] = useState<number | null>(null)
 
   return (
     <View style={styles.container}>
@@ -122,7 +140,8 @@ export default function ScenePreview() {
           title="The Scene"
           dateLabel="October 24, 2026"
           timeLabel="21:00 — Late"
-          limited
+          scarcity={scarcityLabel({ maxCapacity: 140, currentCapacity: 132 })}
+          onPressMedia={(i) => setLightbox(i)}
         />
 
         <View style={styles.content}>
@@ -145,6 +164,8 @@ export default function ScenePreview() {
             </SceneBody>
           </View>
 
+          <SceneGallery items={GALLERY} onOpen={(i) => setLightbox(i)} />
+
           <SceneAttendees count={124} seed="the-scene" />
 
           <SceneLocationCard
@@ -153,8 +174,6 @@ export default function ScenePreview() {
             map={<SceneMap latitude={12.9716} longitude={77.5946} width={SCREEN_W - 24} />}
           />
 
-          <SceneGallery photos={GALLERY} onOpen={() => {}} />
-
           {/*
             Drawn here and *not* on the real screen: nothing populates amenities
             yet. Rendering the fixture is how the frame stays reviewable without
@@ -162,9 +181,9 @@ export default function ScenePreview() {
           */}
           <View style={styles.amenities}>
             {/* Frame `1141:4919`: a martini glass — Material `local_bar`. */}
-            <SceneAmenity icon="local-bar" title="Open Bar" subtitle="Premium Spirits" />
+            <SceneAmenity icon="local-bar" title="Open Bar" subtitle="Premium Spirits" color="#F79EFF" />
             {/* Frame `1141:4925`: a segmented wheel — Material `camera`. */}
-            <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" />
+            <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" color="#FF6D8D" />
           </View>
 
           <SceneCTA
@@ -173,6 +192,13 @@ export default function ScenePreview() {
           />
         </View>
       </ScrollView>
+
+      <SceneLightbox
+        items={GALLERY}
+        initialIndex={lightbox ?? 0}
+        visible={lightbox !== null}
+        onClose={() => setLightbox(null)}
+      />
     </View>
   )
 }

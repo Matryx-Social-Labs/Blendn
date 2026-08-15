@@ -5,7 +5,7 @@ import { Dimensions, StyleSheet, Text, View } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
-import { FeedMedia } from '../pulse/FeedMedia'
+import { SceneHeroMedia } from './SceneHeroMedia'
 
 /**
  * The Scene's hero — frame `1141:4855`, inside `1141:4853` (390 wide).
@@ -40,15 +40,34 @@ export function SceneHero({
   dateLabel,
   timeLabel,
   /**
-   * Whether to draw "LIMITED ACCESS".
+   * The scarcity pill's text, or nothing.
    *
-   * The frame draws it unconditionally. Doing that would make every event claim
-   * limited access including the uncapped ones, which is a thing the screen
-   * would simply be saying that is not true — so the caller decides, from
-   * whether the event actually has a capacity.
+   * ## The frame says "LIMITED ACCESS" and we cannot
+   *
+   * It draws that on every event. Nothing in the product backs it: the only
+   * thing an organiser is asked is `max_capacity`, whose own placeholder reads
+   * "Unlimited if blank" — a fire-safety number, not a claim about
+   * exclusivity. A 500-person warehouse night has a capacity and is not
+   * exclusive. `visibility` is public/private/unlisted, which is about who can
+   * *find* the event rather than who may attend.
+   *
+   * This was briefly wired to `max_capacity > 0`, which meant "the organiser
+   * filled in a field" and rendered as "this is hard to get into". That is the
+   * interface asserting something it does not know.
+   *
+   * The Pulse hit the same thing first and settled it: its frame's pills read
+   * "SONIC VOID" and "EXCLUSIVE", and `FeaturedCard` shows the category
+   * instead, because a pill you can act on beats a pill that sounds exciting.
+   * See `docs/PULSE.md`.
+   *
+   * So the caller passes a string it can defend — "12 SPOTS LEFT" computed
+   * from real remaining capacity — or nothing at all. Genuine exclusivity
+   * needs an access model the organiser actually sets, which does not exist
+   * yet and is a schema change, not a label.
    */
-  limited = false,
+  scarcity,
   height,
+  onPressMedia,
   children,
 }: {
   source: React.ComponentProps<typeof Image>['source']
@@ -59,13 +78,18 @@ export function SceneHero({
    * `feedPlaylist` — so a clip that plays on the card plays here, with the
    * same poster rule and the same "a video is never cut off" behaviour. When
    * absent the hero is a still, which is what an event with one photograph is.
+   *
+   * Swipeable, and auto-advancing until the first swipe. See `SceneHeroMedia`
+   * for why it stops permanently rather than resuming.
    */
   playlist?: FeedMediaItem[]
   title: string
   dateLabel: string
   timeLabel: string
-  limited?: boolean
+  scarcity?: string | null
   height?: number
+  /** Opens the lightbox at the item currently shown. */
+  onPressMedia?: (index: number) => void
   /** The title is a shared element on the real screen; the harness passes none. */
   children?: React.ReactNode
 }) {
@@ -74,12 +98,12 @@ export function SceneHero({
   return (
     <View style={[styles.hero, { height: h }]}>
       {playlist && playlist.length > 0 ? (
-        /*
-         * `isActive` is unconditionally true: this is the screen the user
-         * opened, not one card among twenty in a feed, so the
-         * single-active-player policy is satisfied by there being one.
-         */
-        <FeedMedia playlist={playlist} isActive width={Dimensions.get('window').width} height={h} />
+        <SceneHeroMedia
+          playlist={playlist}
+          width={Dimensions.get('window').width}
+          height={h}
+          onPress={onPressMedia}
+        />
       ) : (
         <Image
           source={source}
@@ -107,9 +131,9 @@ export function SceneHero({
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.info}>
-        {limited ? (
+        {scarcity ? (
           <View style={styles.pill}>
-            <Text style={styles.pillText}>LIMITED ACCESS</Text>
+            <Text style={styles.pillText}>{scarcity}</Text>
           </View>
         ) : null}
 
@@ -130,17 +154,23 @@ export function SceneHero({
           (`event`), the time glyph a 20x20 clock with hands (`schedule`), and
           the sizes below are the frame's, which are deliberately not equal.
 
+          The **glyphs are the accent, the text is not** — checked against the
+          exported SVGs, which carry `fill="#FF906D"` while the labels beside
+          them are `#AEAAAA`. Drawing both in the muted grey, which is what
+          this did, loses the one spot of warmth in the hero's caption and was
+          the difference that read as "still not the design".
+
           These arrive already formatted. The screen used to print one combined
           string under a single calendar icon, which labels half of what it says
           wrongly — and the frame gives them separate slots for that reason.
         */}
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <MaterialIcons name="event" size={18} color={EMBER.textSecondary} />
+            <MaterialIcons name="event" size={18} color={EMBER.accent} />
             <Text style={styles.metaText}>{dateLabel}</Text>
           </View>
           <View style={styles.metaItem}>
-            <MaterialIcons name="schedule" size={20} color={EMBER.textSecondary} />
+            <MaterialIcons name="schedule" size={20} color={EMBER.accent} />
             <Text style={styles.metaText} numberOfLines={1}>
               {timeLabel}
             </Text>

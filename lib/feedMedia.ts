@@ -159,3 +159,30 @@ export function feedPlaylist(
 
   return out
 }
+
+/**
+ * The same playlist, with the first clip moved to the front.
+ *
+ * ## Why this is not what the feed does
+ *
+ * `feedPlaylist` leads with the cover image, and that is right for a card: a
+ * card is a thumbnail in a list, and the cover is the picture the organiser
+ * chose to *be* that event in a feed. Reordering it would mean the identity of
+ * a card changed depending on whether a clip happened to be attached.
+ *
+ * Opening the event is a different act. The person has committed a tap, the
+ * hero is two thirds of the screen, and the clip is the best thing the
+ * organiser uploaded — so it plays first and the stills follow one by one. The
+ * cover is not lost; it is the next item, and it is also the poster painted
+ * under the clip while it buffers.
+ *
+ * Stable otherwise: relative order is preserved for everything else, so an
+ * organiser's arrangement survives apart from the one promotion.
+ */
+export function clipFirst(playlist: readonly FeedMediaItem[]): FeedMediaItem[] {
+  const at = playlist.findIndex((item) => item.kind === 'video')
+  // -1 (no clip) and 0 (already first) are both already correct, and returning
+  // a copy in every case keeps the return type honestly mutable.
+  if (at <= 0) return [...playlist]
+  return [playlist[at], ...playlist.slice(0, at), ...playlist.slice(at + 1)]
+}

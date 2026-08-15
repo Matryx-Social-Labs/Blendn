@@ -1,4 +1,4 @@
-import { feedClip, feedPlaylist, feedPoster, type EventMediaItem } from '../lib/feedMedia'
+import { feedClip, feedPlaylist, feedPoster, type EventMediaItem , clipFirst } from '../lib/feedMedia'
 
 /*
  * Which asset a feed card draws.
@@ -146,5 +146,40 @@ describe('feedPlaylist', () => {
   it('is empty when there is nothing at all, rather than throwing', () => {
     expect(feedPlaylist(undefined, null)).toEqual([])
     expect(feedPlaylist([], null)).toEqual([])
+  })
+})
+
+describe('clipFirst', () => {
+  const img = (url: string) => ({ kind: 'image' as const, url })
+  const vid = (url: string) => ({ kind: 'video' as const, url, posterUrl: 'p.jpg' })
+
+  it('promotes the first clip to the front', () => {
+    const out = clipFirst([img('a'), img('b'), vid('v'), img('c')])
+    expect(out.map((i) => i.url)).toEqual(['v', 'a', 'b', 'c'])
+  })
+
+  it('leaves the rest in their original order', () => {
+    // The organiser's arrangement is theirs; exactly one thing moves.
+    const out = clipFirst([img('a'), img('b'), vid('v')])
+    expect(out.map((i) => i.url)).toEqual(['v', 'a', 'b'])
+  })
+
+  it('changes nothing when the clip is already first', () => {
+    const out = clipFirst([vid('v'), img('a')])
+    expect(out.map((i) => i.url)).toEqual(['v', 'a'])
+  })
+
+  it('changes nothing when there is no clip', () => {
+    const out = clipFirst([img('a'), img('b')])
+    expect(out.map((i) => i.url)).toEqual(['a', 'b'])
+  })
+
+  it('promotes only the first clip when there are several', () => {
+    const out = clipFirst([img('a'), vid('v1'), vid('v2')])
+    expect(out.map((i) => i.url)).toEqual(['v1', 'a', 'v2'])
+  })
+
+  it('handles an empty playlist', () => {
+    expect(clipFirst([])).toEqual([])
   })
 })
