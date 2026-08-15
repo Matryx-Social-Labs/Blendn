@@ -23,6 +23,8 @@ import {
   ORIENTATIONS,
   ORIENTATION_LABELS,
   needsInterestedInPicker,
+  orientationDisabled,
+  toggleOrientation,
   type Gender,
   type Orientation,
 } from '../lib/dating'
@@ -116,7 +118,7 @@ export default function AboutYou() {
   const [interestIds, setInterestIds] = useState<string[]>([])
 
   const [gender, setGender] = useState<Gender | null>(null)
-  const [orientation, setOrientation] = useState<Orientation | null>(null)
+  const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
 
   /*
@@ -141,7 +143,7 @@ export default function AboutYou() {
   const [error, setError] = useState<string | null>(null)
 
   const wantsDating = intents.includes('dating')
-  const askInterestedIn = needsInterestedInPicker(gender, orientation, intents)
+  const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   useEffect(() => {
     let cancelled = false
@@ -186,7 +188,7 @@ export default function AboutYou() {
           // Cleared, not hidden: nothing should be stored that the person can
           // no longer see they gave.
           setGender(null)
-          setOrientation(null)
+          setOrientations([])
           setInterestedIn([])
         }
         return next
@@ -219,9 +221,9 @@ export default function AboutYou() {
        * The bug that made dating silently inert.
        *
        * Nothing required these, and the save below drops them when they are
-       * absent (`...(wantsDating && orientation ? { orientation } : {})`). So a
+       * absent (`...(wantsDating && orientations.length ? ... : {})`). So a
        * user could tick Dating, continue, and land with `gender: man`,
-       * `orientation: null`, `interested_in: []` — at which point
+       * no orientations, `interested_in: []` — at which point
        * `matchCompatibleForDating` fails closed, no card can ever carry a
        * dating tag, and nothing anywhere says why. That is exactly what device
        * testing found.
@@ -230,7 +232,7 @@ export default function AboutYou() {
        * the entire input to dating compatibility.
        */
       if (!gender) return 'Pick how you identify so dating matches can work.'
-      if (!orientation) return 'Pick who you are interested in so dating matches can work.'
+      if (!orientations.length) return 'Pick who you are interested in so dating matches can work.'
       if (askInterestedIn && interestedIn.length === 0) {
         // `deriveInterestedIn` returns null for genuinely ambiguous pairs
         // (non-binary + straight, queer, pansexual, prefer-not-to-say), so for
@@ -273,7 +275,7 @@ export default function AboutYou() {
         ...(intents.length > 0 ? { intent_default: intents } : {}),
         ...(workField ? { work_field: workField } : {}),
         ...(wantsDating && gender ? { gender } : {}),
-        ...(wantsDating && orientation ? { orientation } : {}),
+        ...(wantsDating && orientations.length ? { orientations } : {}),
         // Sent only when the app asked directly. Otherwise the server derives
         // it, and a client-supplied value always wins over derivation.
         ...(wantsDating && askInterestedIn && interestedIn.length > 0
@@ -408,20 +410,32 @@ export default function AboutYou() {
               </View>
 
               <Text style={styles.section}>You identify as</Text>
+              <Text style={styles.hint}>Select all that apply — up to three.</Text>
               <View style={styles.row}>
-                {ORIENTATIONS.map((o) => (
-                  <Pressable
-                    key={o}
-                    onPress={() => setOrientation(o)}
-                    style={[styles.chip, orientation === o ? styles.chipOn : styles.chipOff]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: orientation === o }}
-                  >
-                    <Text style={[styles.chipText, orientation === o && styles.chipTextOn]}>
-                      {ORIENTATION_LABELS[o]}
-                    </Text>
-                  </Pressable>
-                ))}
+                {ORIENTATIONS.map((o) => {
+                  const selected = orientations.includes(o)
+                  // Dimmed rather than removed at the cap: the chips you cannot
+                  // reach are what tell you the limit exists.
+                  const disabled = orientationDisabled(orientations, o)
+                  return (
+                    <Pressable
+                      key={o}
+                      onPress={() => setOrientations(toggleOrientation(orientations, o))}
+                      disabled={disabled}
+                      style={[
+                        styles.chip,
+                        selected ? styles.chipOn : styles.chipOff,
+                        disabled && styles.chipDisabled,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled }}
+                    >
+                      <Text style={[styles.chipText, selected && styles.chipTextOn]}>
+                        {ORIENTATION_LABELS[o]}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
               </View>
 
               {askInterestedIn ? (
@@ -521,6 +535,9 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
   chipOff: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.14)' },
   chipOn: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: '#FFFFFF' },
+  // Opacity only, so a chip that becomes unreachable keeps its width and the
+  // row does not re-wrap under the finger that just filled the set.
+  chipDisabled: { opacity: 0.35 },
   chipText: { color: 'rgba(255,255,255,0.85)', fontSize: 15 },
   chipTextOn: { color: '#FFFFFF', fontWeight: '600' },
   input: {

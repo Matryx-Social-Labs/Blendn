@@ -10,6 +10,13 @@ import {
 } from '../../components/onboarding/EmberControls'
 import { LookingForCards } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import {
+  ORIENTATIONS as ORIENTATION_VALUES,
+  ORIENTATION_LABELS,
+  orientationDisabled,
+  toggleOrientation,
+  type Orientation,
+} from '../../lib/dating'
 import { anonymousByDefault, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -26,6 +33,18 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * in. Not to every caller. The server gates it twice and this flag is only the
  * first gate; the second is `maySeeIdentity`, the same one that decides who
  * sees your real name and face.
+ *
+ * ## Three labels, not one
+ *
+ * People hold more than one — "queer" alongside "bisexual", "asexual" alongside
+ * a romantic orientation — so a single choice made someone pick which part of
+ * themselves to omit, and the frame's caption asked for something the control
+ * refused. The cap, the "prefer not to say" exclusivity and the dimming rule
+ * are in `lib/dating.ts` rather than here, because the Settings editor renders
+ * the same field and a rule enforced in one screen is a 400 from the other.
+ *
+ * The server derives `interested_in` from the **union** of the labels, so
+ * adding a second one never narrows who you are shown.
  *
  * That ordering is the reason. This app withholds someone's name and
  * photograph from anyone who has not earned them, so a field more sensitive
@@ -58,25 +77,28 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * these answers do not reach matching. Also in `docs/ONBOARDING.md`.
  */
 
-const ORIENTATIONS = [
-  { label: 'Straight', value: 'straight' },
-  { label: 'Gay', value: 'gay' },
-  { label: 'Lesbian', value: 'lesbian' },
-  { label: 'Bisexual', value: 'bisexual' },
-  { label: 'Asexual', value: 'asexual' },
-  { label: 'Queer', value: 'queer' },
-  { label: 'Pansexual', value: 'pansexual' },
-  { label: 'Prefer not to say', value: 'prefer_not_to_say' },
-]
-
-// "Demisexual" is in the frame and not in the server's list, so it is not
-// offered — a chip that 400s on save is worse than an absent one.
-// The five live in `LookingForCards` now, beside the artwork each one uses.
+/*
+ * The list and its labels come from `lib/dating.ts`, not from a copy here.
+ *
+ * This screen used to hold its own array of eight, which is the same shape of
+ * mistake `profiles.interests` made on the server — two lists that agree until
+ * one of them is edited. The Settings editor renders the same field, so a copy
+ * here is a copy that has to be kept in step with a second screen as well as
+ * with the API.
+ *
+ * "Demisexual" is in the frame and not in the server's list, so it is not
+ * offered — a chip that 400s on save is worse than an absent one.
+ * The five looking-for options live in `LookingForCards`, beside their artwork.
+ */
+const ORIENTATIONS = ORIENTATION_VALUES.map((value) => ({
+  value,
+  label: ORIENTATION_LABELS[value],
+}))
 
 export default function PreferencesScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('preferences')
 
-  const [orientation, setOrientation] = useState<string | undefined>()
+  const [orientations, setOrientations] = useState<Orientation[]>([])
   const [showOrientation, setShowOrientation] = useState(false)
   const [lookingFor, setLookingFor] = useState<string[]>([])
   /*
@@ -97,7 +119,7 @@ export default function PreferencesScreen() {
 
   useEffect(() => {
     if (!loaded) return
-    setOrientation(draft.orientation)
+    setOrientations((draft.orientations ?? []) as Orientation[])
     setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
     setAnonymous(anonymousByDefault(draft))
@@ -118,10 +140,10 @@ export default function PreferencesScreen() {
       ctaBusy={saving}
       onContinue={() =>
         void commit({
-          orientation,
-          // Clearing the orientation clears the consent with it — see
+          orientations,
+          // Clearing the last one clears the consent with it — see
           // `orientationConsent` for why that is not just tidiness.
-          show_orientation: orientationConsent(orientation, showOrientation),
+          show_orientation: orientationConsent(orientations, showOrientation),
           looking_for: lookingFor,
           reveal_by_default: !anonymous,
         })
@@ -133,22 +155,19 @@ export default function PreferencesScreen() {
       <EmberSection
         title="Orientation"
         /*
-         * The frame says "Select all that apply to you" and that caption is
-         * wrong here, twice over.
+         * The frame's own caption, and it is finally true.
          *
-         * The control is single-select — tapping a chip replaces the choice —
-         * and `profiles.orientation` is a single `String?` that
-         * `deriveInterestedIn` reads one value from. So the frame's caption
-         * described a control nobody had built and a column that cannot hold
-         * the answer, and copying it onto a single-select was worse than
-         * either: a caption that tells you to do something the screen refuses.
+         * It said "Select all that apply to you" against a single-select
+         * control and a `String?` column, so for a while the screen said "Pick
+         * the one that fits best" instead — a caption that describes what the
+         * screen does beats one that asks for something it refuses.
          *
-         * Whether orientation *should* be multi-select is a real question —
-         * people do hold more than one label — but it is an API change
-         * (`orientation` to `orientations[]`, and `deriveInterestedIn` reworked
-         * around it), not a caption. Raised in docs/ONBOARDING.md.
+         * The column is `orientations String[]` now and this row takes three,
+         * so the frame's wording comes back. The cap is stated rather than
+         * discovered: chips that would be refused are dimmed, and a limit you
+         * meet by tapping a dead chip is one people read as a bug.
          */
-        caption="Pick the one that fits best. Tap again to clear it."
+        caption="Select all that apply to you — up to three."
         /*
          * Always rendered, hidden until there is an orientation to show.
          *
@@ -167,12 +186,12 @@ export default function PreferencesScreen() {
          */
         right={
           <View
-            style={{ opacity: orientation ? 1 : 0 }}
-            pointerEvents={orientation ? 'auto' : 'none'}
+            style={{ opacity: orientations.length ? 1 : 0 }}
+            pointerEvents={orientations.length ? 'auto' : 'none'}
             // Hidden from screen readers too — an invisible control that is
             // still announced is worse than one that shifts the layout.
-            accessibilityElementsHidden={!orientation}
-            importantForAccessibility={orientation ? 'auto' : 'no-hide-descendants'}
+            accessibilityElementsHidden={!orientations.length}
+            importantForAccessibility={orientations.length ? 'auto' : 'no-hide-descendants'}
           >
             <EmberInlineToggle
               label="Show on profile"
@@ -188,10 +207,9 @@ export default function PreferencesScreen() {
             <EmberChip
               key={option.value}
               label={option.label}
-              selected={orientation === option.value}
-              onPress={() =>
-                setOrientation(orientation === option.value ? undefined : option.value)
-              }
+              selected={orientations.includes(option.value)}
+              disabled={orientationDisabled(orientations, option.value)}
+              onPress={() => setOrientations(toggleOrientation(orientations, option.value))}
             />
           ))}
         </EmberChipRow>

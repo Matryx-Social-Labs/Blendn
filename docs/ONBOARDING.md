@@ -14,7 +14,7 @@ Design tokens are in [`DESIGN_TOKENS.md`](./DESIGN_TOKENS.md).
 | 1 | `/onboarding/basics` | `1141:3928` | first name, gender, **date of birth** | **no** |
 | 2 | `/onboarding/notifications` | `1141:4064` | push permission → `push_enabled` | yes |
 | 3 | `/onboarding/location` | `1141:4119` | location permission → `share_location` | yes |
-| 4 | `/onboarding/preferences` | `1141:4192` | orientation, looking-for | yes |
+| 4 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), looking-for | yes |
 | 5 | `/onboarding/journey` | `1141:4290` | city, occupation, field of work, education | yes |
 | 6 | `/onboarding/details` | `1141:4408` | interests, bio | yes |
 | 7 | `/onboarding/media` | `1141:4502` | up to six photos | yes |
@@ -124,39 +124,66 @@ using.
 - The switch appears **only once an orientation is chosen**. One offering to
   publish an unfilled field means nothing, and invites someone to turn it on
   and assume it did something.
-- **Clearing the orientation clears the consent** — `orientationConsent` in
+- **Clearing the last one clears the consent** — `orientationConsent` in
   `lib/onboarding.ts`, tested. A stored `true` would outlive the thing it was
   consent for, so answering the question again months later would republish it
   to everyone who had matched in the meantime, with no second decision.
+
+  The *last* label, not any of them. Going from three labels to two is an edit
+  to something already published, and re-asking there would make the switch look
+  like it resets itself at random.
 
 The label on screen says who can see it rather than repeating "Show on
 profile", and `EmberToggle` requires its helper text rather than accepting it as
 optional. A privacy switch whose blast radius is not on the screen is one people
 mis-set, and the cost of mis-setting this one is not symmetrical.
 
-### 2. Orientation: the frame says "select all", the column holds one
+### 2. Orientation: the frame's caption is finally true
 
 Frame `1141:4192` captions the Orientation chips *"Select all that apply to
-you"*. Two things make that impossible as drawn:
+you"*. For a while that was impossible as drawn — `profiles.orientation` was a
+single `String?` and `deriveInterestedIn` read exactly one value — so the screen
+was single-select and the caption said *"Pick the one that fits best"* instead.
+A caption describing what the screen does beats one asking for something it
+refuses.
 
-- `profiles.orientation` is a single `String?`
-- `deriveInterestedIn` reads exactly one value from it
+**Now it is `orientations String[]`, capped at three**, and the frame's wording
+is back with the cap stated: *"Select all that apply to you — up to three."*
 
-So the screen is single-select and the caption now says so — *"Pick the one that
-fits best."* Shipping the frame's wording over a single-select control would be
-worse than either option, because it tells someone to do something the screen
-then refuses.
+People hold more than one label. "Queer" plus "bisexual" is a common pair, and
+"asexual" alongside a romantic orientation is another; a single choice made
+somebody pick which part of themselves to omit, on the screen that asks them to
+be authentic.
 
-**Whether it should be multi-select is a real question.** People do hold more
-than one label, and "queer" plus "bisexual" is a common pair. But it is an API
-change — `orientation` becomes `orientations[]`, and `deriveInterestedIn` has to
-decide what a set of labels implies about who to match — not a caption change.
+**Three rules, all enforced in `lib/dating.ts` rather than in the screen:**
 
-**Decided: multiple**, capped at three, with "Prefer not to say" exclusive and
-`interested_in` derived from the union. The reasoning and the build order are in
-`ROADMAP.md` — it is an API change (schema, `deriveInterestedIn`, validation,
-scrub) before it is a screen change, and the caption goes back to the frame's
-"Select all that apply to you" only once the control can honour it.
+| Rule | Why there and not here |
+|---|---|
+| At most three | The Settings editor writes this field too |
+| No duplicates | Same |
+| "Prefer not to say" is exclusive | Same, and the server rejects the pair |
+
+Two screens write orientation — onboarding step four and `about-you`, reached
+from Settings as "You and matching". A cap enforced in one of them is a 400 from
+the other, so `toggleOrientation` and `orientationDisabled` are shared and
+tested once.
+
+**Chips past the cap are dimmed, not removed.** The unreachable ones are what
+tell somebody a limit exists; hiding them makes three-of-eight look like
+eight-of-eight that stopped working, and a tap that does nothing with no
+explanation reads as a broken screen. "Prefer not to say" is never dimmed — it
+replaces the set rather than joining it.
+
+**`interested_in` derives from the union**, never the intersection: adding a
+label must not narrow who you are shown. And if any one label is one the server
+cannot read, the whole derivation returns "ask" rather than unioning the rest —
+otherwise a woman who picked "straight" and "queer" would be pinned to `["man"]`
+on the strength of the label she just qualified. `needsInterestedInPicker`
+mirrors that rule exactly, which is why it checks **every** label rather than
+any.
+
+**"Demisexual" is still not offered.** It is in the frame and not in the
+server's list, and a chip that 400s on save is worse than an absent one.
 
 ### 3. "Looking for" does not reach matching
 

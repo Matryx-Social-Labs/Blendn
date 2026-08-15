@@ -264,11 +264,11 @@ describe('parsing what is on disk', () => {
 
 describe('orientationConsent', () => {
   it('records consent when there is an orientation and the switch is on', () => {
-    expect(orientationConsent('bisexual', true)).toBe(true)
+    expect(orientationConsent(['bisexual'], true)).toBe(true)
   })
 
   it('records none when the switch is off', () => {
-    expect(orientationConsent('bisexual', false)).toBe(false)
+    expect(orientationConsent(['bisexual'], false)).toBe(false)
   })
 
   it('drops consent when the orientation is cleared', () => {
@@ -280,7 +280,14 @@ describe('orientationConsent', () => {
      * the person.
      */
     expect(orientationConsent(undefined, true)).toBe(false)
-    expect(orientationConsent('', true)).toBe(false)
+    expect(orientationConsent([], true)).toBe(false)
+  })
+
+  it('keeps consent when one of several labels is removed', () => {
+    // Clearing the *last* label drops the consent; going from three to two
+    // is an edit to something already published. Re-asking there would make
+    // the switch look like it resets itself at random.
+    expect(orientationConsent(['queer', 'bisexual'], true)).toBe(true)
   })
 })
 

@@ -1468,9 +1468,18 @@ class ApiClientClass {
        */
       intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
       gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
-      orientation?: string | null
       /*
-       * Show `orientation` to people who already passed the identity gate —
+       * Up to three, distinct, and `prefer_not_to_say` cannot be combined with
+       * anything. `interested_in` derives from the **union**, so a second label
+       * never narrows who the person is shown.
+       *
+       * The singular `orientation` the server still accepts is deliberately not
+       * typed here — it is a compatibility shim for builds already in the
+       * field, not a shape new code should reach for.
+       */
+      orientations?: string[]
+      /*
+       * Show `orientations` to people who already passed the identity gate —
        * matches, open conversations, rooms you revealed yourself in. Never to
        * every caller: the server gates it twice, and this flag is only the
        * first of the two.
