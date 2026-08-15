@@ -105,7 +105,7 @@ export function PulseHeader({
             onPress={() => onChangeQuery('')}
             accessibilityRole="button"
             accessibilityLabel="Clear search"
-            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
           >
             <Ionicons name="close-circle" size={18} color={EMBER.textTertiary} />
           </Pressable>
@@ -120,7 +120,14 @@ const styles = StyleSheet.create({
   title: EMBER_TYPE.screenTitle,
   titleAccent: { color: EMBER.accent },
 
-  cityRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    // The row is text-height on its own, which put the only way out of an empty
+    // state under the touch floor. `hitSlop` alone was not enough.
+    minHeight: 44,
+  },
   cityText: { ...EMBER_TYPE.meta, flexShrink: 1 },
   pressed: { opacity: 0.6 },
 

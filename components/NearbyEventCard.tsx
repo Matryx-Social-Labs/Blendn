@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native'
-import { APP_COLORS } from '../lib/theme'
+import { APP_COLORS, EMBER } from '../lib/theme'
 
 type NearbyEvent = {
   id: string
@@ -74,7 +74,7 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
             <Text
               numberOfLines={2}
               style={{
-                color: APP_COLORS.textPrimary,
+                color: EMBER.textPrimary,
                 fontSize: 20,
                 lineHeight: 26,
                 fontWeight: '700',
@@ -93,11 +93,11 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 * scale, maxWidth: '55%' }}>
                 <Ionicons name="time-outline" size={13} color="#FFFFFF" />
-                <Text numberOfLines={1} style={{ color: APP_COLORS.textPrimary, fontSize: 13 }}>{timeLabel}</Text>
+                <Text numberOfLines={1} style={{ color: EMBER.textPrimary, fontSize: 13 }}>{timeLabel}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 * scale, maxWidth: '40%' }}>
                 <Ionicons name="map-outline" size={13} color="#FFFFFF" />
-                <Text numberOfLines={1} style={{ color: APP_COLORS.textPrimary, fontSize: 13 }}>{locationLabel}</Text>
+                <Text numberOfLines={1} style={{ color: EMBER.textPrimary, fontSize: 13 }}>{locationLabel}</Text>
               </View>
             </View>
           </View>
@@ -161,6 +161,6 @@ function Frame({
 
 const styles = StyleSheet.create({
   placeholder: {
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
   },
 })
