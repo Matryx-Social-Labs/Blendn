@@ -66,3 +66,49 @@ export function scarcityLabel({ maxCapacity, currentCapacity }: ScarcityInput): 
   // letter-spacing lands on the real glyphs — the same rule as EMBER_TYPE.
   return left === 1 ? '1 SPOT LEFT' : `${left} SPOTS LEFT`
 }
+
+/**
+ * What the organiser said about the door.
+ *
+ * Mirrors `events.door_policy` in the API. `open` is the default and almost
+ * every event, and it draws nothing — leaving the pill to say something true
+ * about capacity instead.
+ */
+export type DoorPolicy = 'open' | 'guest_list' | 'members_only' | 'invite_only'
+
+const DOOR_LABELS: Record<Exclude<DoorPolicy, 'open'>, string> = {
+  guest_list: 'GUEST LIST ONLY',
+  members_only: 'MEMBERS ONLY',
+  invite_only: 'INVITE ONLY',
+}
+
+/**
+ * The hero pill: what the organiser set, or how full it is, or nothing.
+ *
+ * ## The order is deliberate
+ *
+ * A door policy outranks a spot count because it is a *condition of entry* and
+ * the count is only a nudge. "Three left" beside a guest-list door would tell
+ * someone to hurry towards a night they cannot get into, which is worse than
+ * saying nothing.
+ *
+ * ## Neither is enforced here
+ *
+ * The label is the organiser's description of their own door, exactly like
+ * `min_age`, and nothing in the app or the API blocks a join on it. This
+ * function must never be read as a permission check — it decides what a badge
+ * says.
+ */
+export function heroPillLabel({
+  doorPolicy,
+  maxCapacity,
+  currentCapacity,
+}: ScarcityInput & { doorPolicy?: DoorPolicy | null }): string | null {
+  if (doorPolicy && doorPolicy !== 'open') {
+    // Unknown values fall through to capacity rather than rendering a raw enum
+    // — an API that grows a case should not print `members_only` at anybody.
+    const label = DOOR_LABELS[doorPolicy as Exclude<DoorPolicy, 'open'>]
+    if (label) return label
+  }
+  return scarcityLabel({ maxCapacity, currentCapacity })
+}

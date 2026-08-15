@@ -21,7 +21,7 @@ import {
   SCENE_SECTION_GAP,
 } from '../../components/scene/SceneSections'
 import { highlightEntities } from '../../lib/entityHighlight'
-import { scarcityLabel } from '../../lib/scarcity'
+import { heroPillLabel } from '../../lib/scarcity'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -140,7 +140,7 @@ export default function ScenePreview() {
           title="The Scene"
           dateLabel="October 24, 2026"
           timeLabel="21:00 — Late"
-          scarcity={scarcityLabel({ maxCapacity: 140, currentCapacity: 132 })}
+          scarcity={heroPillLabel({ doorPolicy: 'open', maxCapacity: 140, currentCapacity: 132 })}
           onPressMedia={(i) => setLightbox(i)}
         />
 

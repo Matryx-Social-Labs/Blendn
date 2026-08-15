@@ -1,4 +1,4 @@
-import { scarcityLabel } from '../lib/scarcity'
+import { heroPillLabel, scarcityLabel } from '../lib/scarcity'
 
 /**
  * The scarcity pill's rule.
@@ -48,5 +48,42 @@ describe('scarcityLabel', () => {
   it('treats missing or nonsense occupancy as zero rather than throwing', () => {
     expect(scarcityLabel({ maxCapacity: 100, currentCapacity: null })).toBeNull()
     expect(scarcityLabel({ maxCapacity: 100, currentCapacity: -5 })).toBeNull()
+  })
+})
+
+describe('heroPillLabel', () => {
+  it('prefers the organiser door policy over the spot count', () => {
+    // "3 left" beside a guest-list door sends someone hurrying towards a night
+    // they cannot get into.
+    expect(
+      heroPillLabel({ doorPolicy: 'guest_list', maxCapacity: 50, currentCapacity: 47 }),
+    ).toBe('GUEST LIST ONLY')
+  })
+
+  it('falls back to spots left when the door is open', () => {
+    expect(
+      heroPillLabel({ doorPolicy: 'open', maxCapacity: 50, currentCapacity: 47 }),
+    ).toBe('3 SPOTS LEFT')
+  })
+
+  it('says nothing when the door is open and there is room', () => {
+    expect(heroPillLabel({ doorPolicy: 'open', maxCapacity: 500, currentCapacity: 10 })).toBeNull()
+    expect(heroPillLabel({ maxCapacity: 0, currentCapacity: 0 })).toBeNull()
+  })
+
+  it('maps every non-open policy to words rather than an enum', () => {
+    expect(heroPillLabel({ doorPolicy: 'members_only' })).toBe('MEMBERS ONLY')
+    expect(heroPillLabel({ doorPolicy: 'invite_only' })).toBe('INVITE ONLY')
+  })
+
+  it('falls through to capacity for a policy it does not know', () => {
+    // An API that grows a case must not print a raw enum value at anybody.
+    expect(
+      heroPillLabel({
+        doorPolicy: 'ticketed' as never,
+        maxCapacity: 50,
+        currentCapacity: 47,
+      }),
+    ).toBe('3 SPOTS LEFT')
   })
 })
