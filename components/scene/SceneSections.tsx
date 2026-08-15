@@ -34,6 +34,21 @@ export const SCENE_PADDING_HORIZONTAL = 12
 export const SCENE_SECTION_GAP = 64
 /** Frame `1141:4910`: the map band inside the Location card. */
 export const MAP_HEIGHT = 256
+/**
+ * Frame `1227:2903`: the floating CTA's own band, and its inset.
+ *
+ * The node is named **"Floating CTA"** and is a *sibling* of `Main`, not a child
+ * — it lives outside the scrolling content. Built inside the ScrollView it
+ * became the last thing on a ~1900pt page, which put the only action this
+ * screen has as far from the reader as the layout allows.
+ *
+ * `SCENE_CTA_INSET` is 24 rather than the content grid's 12: the frame gives the
+ * CTA its own gutter, wider than the sections behind it, which is what stops a
+ * full-width pill reading as another card in the stack.
+ */
+export const SCENE_CTA_HEIGHT = 74
+export const SCENE_CTA_INSET = 24
+
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
 

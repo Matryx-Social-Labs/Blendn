@@ -31,6 +31,24 @@ import { useVideoPlayer, VideoView } from 'expo-video'
  */
 const IMAGE_DWELL_MS = 4000
 
+/**
+ * How long to wait for a clip to say *anything* before giving up on it.
+ *
+ * A clip advances the pager when it reaches its end. A clip that never loads
+ * never reaches its end, so without this the carousel stops on that page for
+ * good — and because the poster is painted underneath, it does not look broken.
+ * It looks like a still the organiser chose, and the rest of their media is
+ * simply never seen.
+ *
+ * Not hypothetical: three separate clip URLs failed exactly this way in one
+ * afternoon — a 403, a redirect to an HTML page, and two files with their `moov`
+ * atom at the end. Every one of them was silent until the frames were diffed.
+ *
+ * 15s to reach `readyToPlay` covers a slow connection on a 12 MB clip, which is
+ * the ceiling `docs/MEDIA.md` sets.
+ */
+const CLIP_READY_TIMEOUT_MS = 15_000
+
 export function SceneHeroMedia({
   playlist,
   width,
@@ -196,6 +214,13 @@ export function SceneHeroMedia({
                  * identity constant across that re-render.
                  */
                 onEnded={() => onClipEnded(i)}
+                /*
+                 * A failed clip advances like a finished one — the *only*
+                 * difference is that `autoAdvances` is ignored. Someone who has
+                 * taken manual control still should not be parked on a page
+                 * that will never render anything.
+                 */
+                onFailed={() => goToRef.current(i + 1)}
               />
             ) : null}
           </Pressable>
@@ -254,12 +279,18 @@ function HeroVideo({
   active,
   loop,
   onEnded,
+  onFailed,
 }: {
   source: string
   /** Whether this is the page in view. Mounted-but-inactive pages preload. */
   active: boolean
   loop: boolean
   onEnded: () => void
+  /**
+   * The clip will not play. Treated exactly like reaching the end, so the pager
+   * moves on and the rest of the organiser's media is still seen.
+   */
+  onFailed: () => void
 }) {
   const player = useVideoPlayer(source, (p) => {
     p.muted = true
@@ -285,12 +316,53 @@ function HeroVideo({
 
   const endedRef = useRef(onEnded)
   endedRef.current = onEnded
+  const failedRef = useRef(onFailed)
+  failedRef.current = onFailed
+
   useEffect(() => {
     // `playToEnd` rather than polling: the player already knows, and a poll has
     // to pick an interval that is wrong either way.
     const sub = player.addListener('playToEnd', () => endedRef.current())
     return () => sub.remove()
   }, [player])
+
+  /*
+   * Two ways a clip fails, and they need different detection.
+   *
+   * The player *reports* one of them: a 404, a codec it cannot open, a host that
+   * refuses. `statusChange` carries that as `error`.
+   *
+   * The other is silence — a socket that opens and never delivers, or a
+   * redirect to something that is not a video. Nothing errors and nothing
+   * plays, so only a clock notices. The timer is armed while this page is
+   * active and disarmed the moment the player says it is ready.
+   */
+  useEffect(() => {
+    if (!active) return
+    let settled = false
+
+    const give_up = () => {
+      if (settled) return
+      settled = true
+      failedRef.current()
+    }
+
+    const timer = setTimeout(give_up, CLIP_READY_TIMEOUT_MS)
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error') give_up()
+      // Ready means it will either play to its end or loop; either way the
+      // watchdog has done its job and must not fire mid-playback.
+      if (status === 'readyToPlay') {
+        settled = true
+        clearTimeout(timer)
+      }
+    })
+
+    return () => {
+      clearTimeout(timer)
+      sub.remove()
+    }
+  }, [active, player])
 
   return (
     <VideoView
