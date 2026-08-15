@@ -10,6 +10,7 @@ import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
+import { feedPlaylist } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
@@ -166,8 +167,20 @@ export default function PulsePreview() {
                 key={e.id}
                 title={e.title}
                 tag={e.tag}
-                imageUrl={null}
-                videoUrl={'videoUrl' in e ? (e as { videoUrl?: string }).videoUrl : null}
+                playlist={feedPlaylist(
+                  'videoUrl' in e
+                    ? [
+                        {
+                          id: e.id,
+                          url: (e as { videoUrl?: string }).videoUrl,
+                          thumbnail_url: 'https://loremflickr.com/1024/1024/concert?lock=3',
+                          type: 'video',
+                          order: 1,
+                        },
+                      ]
+                    : [],
+                  'https://loremflickr.com/1024/1024/rooftop,party?lock=11'
+                )}
                 isActive={i === 0}
                 dateLabel={e.dateLabel}
                 placeLabel={e.placeLabel}

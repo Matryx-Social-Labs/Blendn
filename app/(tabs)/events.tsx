@@ -48,6 +48,7 @@ import {
   NO_FILTERS,
   type EventFilters,
 } from '../../lib/eventFilters'
+import { feedPlaylist } from '../../lib/feedMedia'
 import {
   awayNotice,
   cityOnResume,
@@ -387,6 +388,26 @@ export default function Events() {
    * three, the first two of which nobody sees, against a list flickering
    * underneath them. The sheet edits the draft; only "Show results" commits.
    */
+  /*
+   * Which Featured card the viewport has settled on.
+   *
+   * Only that one walks its media and mounts a player — see `FeedMedia`. A row
+   * where every card played would allocate a decoder per card, and it fails as
+   * dropped frames and battery rather than as an error.
+   *
+   * 60% visible, held for 250ms: a card half-dragged past is not the one you
+   * are looking at, and without the delay a fast flick would start and tear
+   * down a player for every card it crossed.
+   */
+  const [featuredActiveIndex, setFeaturedActiveIndex] = useState(0)
+  const featuredViewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 })
+  const onFeaturedViewable = useRef(
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+      const first = viewableItems.find((v) => v.index !== null)
+      if (first?.index != null) setFeaturedActiveIndex(first.index)
+    }
+  )
+
   const [filters, setFilters] = useState<EventFilters>(NO_FILTERS)
   const [filterDraft, setFilterDraft] = useState<EventFilters>(NO_FILTERS)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -1785,7 +1806,8 @@ export default function Events() {
             <FeaturedCard
               title={featuredItems[0].title}
               tag={featuredItems[0].category || null}
-              imageUrl={featuredItems[0].cover_image_url}
+              playlist={feedPlaylist(featuredItems[0].media, featuredItems[0].cover_image_url)}
+              isActive
               dateLabel={featuredDateLabel(featuredItems[0].start_time)}
               placeLabel={placeLabel(featuredItems[0])}
               width={FEATURED_CARD_SOLO}
@@ -1801,11 +1823,14 @@ export default function Events() {
             snapToAlignment="start"
             snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
             decelerationRate="fast"
+            viewabilityConfig={featuredViewability.current}
+            onViewableItemsChanged={onFeaturedViewable.current}
             renderItem={({ item, index }) => (
               <FeaturedCard
                 title={item.title}
                 tag={item.category || null}
-                imageUrl={item.cover_image_url}
+                playlist={feedPlaylist(item.media, item.cover_image_url)}
+                isActive={index === featuredActiveIndex}
                 dateLabel={featuredDateLabel(item.start_time)}
                 placeLabel={placeLabel(item)}
                 accentIndex={index}
