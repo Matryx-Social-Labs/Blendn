@@ -24,6 +24,8 @@ import {
   SceneCTA,
   SceneHeading,
   SceneLocationCard,
+  SCENE_CTA_HEIGHT,
+  SCENE_CTA_INSET,
   SCENE_PADDING_HORIZONTAL,
   SCENE_SECTION_GAP,
 } from '../../components/scene/SceneSections'
@@ -162,7 +164,14 @@ export default function ScenePreview() {
       />
       <ScrollView
         contentOffset={{ x: 0, y: offset }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 48 }}
+        /*
+          Room for the floating CTA, so the last section is reachable rather
+          than parked underneath it. Anything pinned over a scroll has to pay
+          for its own height here or it silently eats the end of the content.
+        */
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 24,
+        }}
       >
         <SceneHero
           playlist={PLAYLIST}
@@ -216,12 +225,25 @@ export default function ScenePreview() {
             <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" color="#FF6D8D" />
           </View>
 
-          <SceneCTA
-            label="Join the Experience"
-            icon={<Ionicons name="radio-outline" size={24} color={EMBER.textPrimary} />}
-          />
         </View>
       </ScrollView>
+
+      {/*
+        Outside the ScrollView, as frame `1227:2903` has it — the node is a
+        sibling of `Main`, not a child, and is named "Floating CTA".
+
+        `box-none` so the gap either side of the pill still scrolls the page
+        underneath; only the pill itself takes touches.
+      */}
+      <View
+        style={[styles.ctaDock, { bottom: insets.bottom + TAB_BAR_CLEARANCE }]}
+        pointerEvents="box-none"
+      >
+        <SceneCTA
+          label="Join the Experience"
+          icon={<Ionicons name="radio-outline" size={40} color={EMBER.textPrimary} />}
+        />
+      </View>
 
       <SceneLightbox
         items={GALLERY}
@@ -242,6 +264,13 @@ const styles = StyleSheet.create({
   },
   section: { gap: 16 },
   amenities: { flexDirection: 'row', gap: 16 },
+  ctaDock: {
+    position: 'absolute',
+    left: SCENE_CTA_INSET,
+    right: SCENE_CTA_INSET,
+    height: SCENE_CTA_HEIGHT,
+    justifyContent: 'center',
+  },
 })
 
 /**
