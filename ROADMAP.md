@@ -516,6 +516,36 @@ the save returns 200 and stores nothing.
 
 ## Next
 
+### Deferred features, and the UI that is waiting on each
+
+**Read this before building any of the features named below.** Each has a piece
+of drawn design that cannot ship until it exists, and the point of this section
+is that the UI goes in *with* the logic, in one pass, rather than being
+retrofitted months later by someone who has to rediscover which frame it came
+from.
+
+The failure mode this prevents is the one already in this repo: a control gets
+built to match a frame, has nothing behind it, and either ships dead or gets
+quietly dropped and forgotten. `renderFeaturedRow` had no caller for a release;
+`likeAtEvent` had none at all.
+
+| Feature | Drawn, and waiting | Interim |
+|---|---|---|
+| **Friend graph** | The Nearby card's social-proof row — frame `1141:4788`, a 40×40 avatar stack with "+12" and the label "Friends are here" at x=56 | Ships as a check-in count, "12 people here now", from `event_check_ins` |
+
+**Friend graph — what to change when it lands.** This app has matches and
+conversations; it has no concept of a friend. `intent_default` mentions
+`friendship` as an *intent*, which is a different thing entirely. So the avatar
+stack has no source, and a stack of match avatars would be worse than none —
+those are private connections, and putting their faces on a venue card next to
+"are here" would leak both who you matched with and where they are, which is the
+same class as the roster and interested-list leaks.
+
+When the graph is built: restore the avatar stack on the Nearby venue card, and
+sweep for anywhere else social proof is shown as a count that would read better
+as faces. Gate it on the same identity rules as everything else — a face is
+identity, and being somewhere is location.
+
 ### The interest count on an event card is always `undefined`
 
 Found by `expo lint` while deleting the Pulse's orphans, not by looking at a

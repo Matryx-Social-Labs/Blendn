@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import OptimizedImage from '../OptimizedImage'
+import { FeedVideo } from './FeedVideo'
 
 import { Dimensions } from 'react-native'
 
@@ -62,19 +63,33 @@ export const FEATURED_CARD_GAP = 24
  * `accentIndex` carries that alternation rather than a colour — a caller
  * passing the list index gets the frame's rhythm without knowing the palette.
  *
- * ## Sized in whole points, not from the frame's arithmetic
+ * ## Sized by the frame's ratio, at whatever width it is given
  *
- * The frame's card is 331.5 × 450 inside a 390 frame, which is a mask artifact
- * rather than a chosen number, and 450 is taller than the visible area on the
- * shortest phone we support once the sticky bar and the tab bar are subtracted.
- * 300 × 408 keeps the frame's ratio to within a percent and leaves the next
- * card peeking, which is what tells somebody the row scrolls.
+ * The frame's card is 331.5 × 450 — 85% of a 390pt artboard, and a 1.357 ratio.
+ * Both numbers are taken proportionally now; taking the width proportionally and
+ * the height literally is what made the card 58pt short on a 440pt phone, and
+ * correct on exactly the one device that matches the artboard.
  */
 interface Props {
   title: string
   /** The category name — already the real one, from the server's taxonomy. */
   tag?: string | null
   imageUrl?: string | null
+  /**
+   * A short clip that plays over the cover image while this card is the one on
+   * screen. Absent for most events, and the card is complete without it — the
+   * image is the poster, not a placeholder for the video.
+   */
+  videoUrl?: string | null
+  /**
+   * Whether this is the card the viewport has settled on.
+   *
+   * Only the active card mounts a player, so this is the single-active-player
+   * policy rather than a hint. Default `false`: a card that is never told it is
+   * active shows its photograph and costs nothing, which is the right behaviour
+   * for every caller that does not track viewability.
+   */
+  isActive?: boolean
   /** "Oct 24", formatted by the caller so this component holds no date logic. */
   dateLabel: string
   /** Venue name, or the city when the venue is unnamed. */
@@ -90,6 +105,8 @@ export function FeaturedCard({
   title,
   tag,
   imageUrl,
+  videoUrl,
+  isActive = false,
   dateLabel,
   placeLabel,
   accentIndex = 0,
@@ -128,6 +145,21 @@ export function FeaturedCard({
         // way. Every card in the row stays the same size whatever loaded.
         <View style={styles.imageFallback} />
       )}
+
+      {/*
+        The clip, over the photograph, only for the card the viewport settled on.
+
+        Mounted rather than paused: an unmounted card allocates no decoder, so a
+        row of six costs one player instead of six. `FeedVideo` explains why that
+        distinction is the whole policy.
+
+        The image above stays mounted underneath — it is the poster. First paint
+        is a real photograph, a slow network shows the photograph rather than
+        black, and a clip that 404s leaves a card that looks finished instead of
+        broken. There is no spinner because the poster already is one, and it is
+        one nobody can tell from the finished thing.
+      */}
+      {videoUrl && isActive ? <FeedVideo source={videoUrl} /> : null}
 
       {/*
         Top-to-bottom, transparent to page colour.

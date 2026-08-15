@@ -59,6 +59,10 @@ const FEATURED = [
     id: 'f1',
     title: 'Sunset Rooftop Sessions',
     tag: 'Live music',
+    // A real clip, so the harness exercises the poster-then-video path rather
+    // than only the still one. Public sample; the seed uses our own assets.
+    videoUrl:
+      'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
     dateLabel: 'Fri, 22 Aug',
     placeLabel: 'The Humming Tree, Indiranagar',
   },
@@ -147,12 +151,14 @@ export default function PulsePreview() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.rail}
           >
-            {FEATURED.map((e) => (
+            {FEATURED.map((e, i) => (
               <FeaturedCard
                 key={e.id}
                 title={e.title}
                 tag={e.tag}
                 imageUrl={null}
+                videoUrl={'videoUrl' in e ? (e as { videoUrl?: string }).videoUrl : null}
+                isActive={i === 0}
                 dateLabel={e.dateLabel}
                 placeLabel={e.placeLabel}
                 width={FEATURED_CARD_WIDTH}
