@@ -1,0 +1,68 @@
+/**
+ * When an event is genuinely running out of room, and what to say about it.
+ *
+ * ## Why this is not "LIMITED ACCESS"
+ *
+ * The frame draws a "LIMITED ACCESS" pill on every event. Nothing backs that.
+ * The only capacity question an organiser is asked is `max_capacity`, and its
+ * own placeholder reads "Unlimited if blank" — it is a room's safe occupancy,
+ * not a statement about exclusivity. Treating "the organiser filled this in" as
+ * "this is hard to get into" is the interface inventing a fact, and it would
+ * fire on the 500-capacity warehouse night as readily as the 20-seat dinner.
+ *
+ * What *is* true and worth saying is that a specific event is nearly full. That
+ * needs no new question for the organiser: both numbers already exist.
+ *
+ * ## The thresholds
+ *
+ * Two, and an event has to pass **either**:
+ *
+ * - **under 20% remaining** — proportional, so it means the same thing on a
+ *   30-person dinner and a 400-person night;
+ * - **10 or fewer places left** — absolute, because "8 left" is urgent whatever
+ *   the denominator, and on a 400-capacity event 8 left is 2% and would have
+ *   been caught by the first rule anyway. The pair covers the small event that
+ *   is proportionally full but numerically roomy, and the large one that is the
+ *   other way round.
+ *
+ * Silence is the default. A pill that appears on most events is furniture, and
+ * furniture is ignored precisely when it finally means something.
+ */
+
+/** Below this many places remaining, always urgent. */
+const ABSOLUTE_THRESHOLD = 10
+/** Below this share of capacity remaining, urgent. */
+const PROPORTION_THRESHOLD = 0.2
+
+export interface ScarcityInput {
+  /** 0 or absent means uncapped. */
+  maxCapacity?: number | null
+  /** How many places are already taken. */
+  currentCapacity?: number | null
+}
+
+/**
+ * The pill's label, or `null` when there is nothing honest to say.
+ *
+ * Returns `null` rather than an empty string so a caller cannot render a pill
+ * containing nothing, which is a bordered gap that looks like a failed load.
+ */
+export function scarcityLabel({ maxCapacity, currentCapacity }: ScarcityInput): string | null {
+  const max = Number(maxCapacity) || 0
+  // Uncapped: the overwhelmingly common case, and the one the frame gets wrong.
+  if (max <= 0) return null
+
+  const taken = Math.max(Number(currentCapacity) || 0, 0)
+  const left = max - taken
+
+  // Over capacity is possible — check-in does not refuse, by design, see
+  // docs/CHECKIN.md — so this clamps rather than printing "-3 SPOTS LEFT".
+  if (left <= 0) return 'FULL'
+
+  const urgent = left <= ABSOLUTE_THRESHOLD || left / max < PROPORTION_THRESHOLD
+  if (!urgent) return null
+
+  // Uppercased in the string rather than by `textTransform`, so the pill's
+  // letter-spacing lands on the real glyphs — the same rule as EMBER_TYPE.
+  return left === 1 ? '1 SPOT LEFT' : `${left} SPOTS LEFT`
+}

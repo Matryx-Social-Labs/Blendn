@@ -1,9 +1,11 @@
-import { Ionicons } from '@expo/vector-icons'
+import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, StyleSheet, Text, View } from 'react-native'
 
+import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { SceneHeroMedia } from './SceneHeroMedia'
 
 /**
  * The Scene's hero — frame `1141:4855`, inside `1141:4853` (390 wide).
@@ -33,27 +35,61 @@ export const sceneHeroHeight = (width: number = Dimensions.get('window').width) 
 
 export function SceneHero({
   source,
+  playlist,
   title,
   dateLabel,
   timeLabel,
   /**
-   * Whether to draw "LIMITED ACCESS".
+   * The scarcity pill's text, or nothing.
    *
-   * The frame draws it unconditionally. Doing that would make every event claim
-   * limited access including the uncapped ones, which is a thing the screen
-   * would simply be saying that is not true — so the caller decides, from
-   * whether the event actually has a capacity.
+   * ## The frame says "LIMITED ACCESS" and we cannot
+   *
+   * It draws that on every event. Nothing in the product backs it: the only
+   * thing an organiser is asked is `max_capacity`, whose own placeholder reads
+   * "Unlimited if blank" — a fire-safety number, not a claim about
+   * exclusivity. A 500-person warehouse night has a capacity and is not
+   * exclusive. `visibility` is public/private/unlisted, which is about who can
+   * *find* the event rather than who may attend.
+   *
+   * This was briefly wired to `max_capacity > 0`, which meant "the organiser
+   * filled in a field" and rendered as "this is hard to get into". That is the
+   * interface asserting something it does not know.
+   *
+   * The Pulse hit the same thing first and settled it: its frame's pills read
+   * "SONIC VOID" and "EXCLUSIVE", and `FeaturedCard` shows the category
+   * instead, because a pill you can act on beats a pill that sounds exciting.
+   * See `docs/PULSE.md`.
+   *
+   * So the caller passes a string it can defend — "12 SPOTS LEFT" computed
+   * from real remaining capacity — or nothing at all. Genuine exclusivity
+   * needs an access model the organiser actually sets, which does not exist
+   * yet and is a schema change, not a label.
    */
-  limited = false,
+  scarcity,
   height,
+  onPressMedia,
   children,
 }: {
   source: React.ComponentProps<typeof Image>['source']
+  /**
+   * The organiser's media, cycling.
+   *
+   * The same `FeedMediaItem[]` the feed cards walk, from the same
+   * `feedPlaylist` — so a clip that plays on the card plays here, with the
+   * same poster rule and the same "a video is never cut off" behaviour. When
+   * absent the hero is a still, which is what an event with one photograph is.
+   *
+   * Swipeable, and auto-advancing until the first swipe. See `SceneHeroMedia`
+   * for why it stops permanently rather than resuming.
+   */
+  playlist?: FeedMediaItem[]
   title: string
   dateLabel: string
   timeLabel: string
-  limited?: boolean
+  scarcity?: string | null
   height?: number
+  /** Opens the lightbox at the item currently shown. */
+  onPressMedia?: (index: number) => void
   /** The title is a shared element on the real screen; the harness passes none. */
   children?: React.ReactNode
 }) {
@@ -61,13 +97,22 @@ export function SceneHero({
 
   return (
     <View style={[styles.hero, { height: h }]}>
-      <Image
-        source={source}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={200}
-      />
+      {playlist && playlist.length > 0 ? (
+        <SceneHeroMedia
+          playlist={playlist}
+          width={Dimensions.get('window').width}
+          height={h}
+          onPress={onPressMedia}
+        />
+      ) : (
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+        />
+      )}
       {/*
         Transparent to the page's own background, not to black, and spanning
         the whole hero rather than a band at its foot.
@@ -86,9 +131,9 @@ export function SceneHero({
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.info}>
-        {limited ? (
+        {scarcity ? (
           <View style={styles.pill}>
-            <Text style={styles.pillText}>LIMITED ACCESS</Text>
+            <Text style={styles.pillText}>{scarcity}</Text>
           </View>
         ) : null}
 
@@ -101,17 +146,31 @@ export function SceneHero({
         {/*
           Date and time side by side, each with its own icon.
 
+          **MaterialIcons, not Ionicons.** The frame's glyphs are Material
+          Symbols — solid, flat-capped — and the outline Ionicons that were here
+          are a visibly different family: thinner strokes, rounded caps, a
+          different calendar. Checked against the exported SVGs rather than
+          guessed: the date glyph is an 18x20 calendar with two tabs
+          (`event`), the time glyph a 20x20 clock with hands (`schedule`), and
+          the sizes below are the frame's, which are deliberately not equal.
+
+          The **glyphs are the accent, the text is not** — checked against the
+          exported SVGs, which carry `fill="#FF906D"` while the labels beside
+          them are `#AEAAAA`. Drawing both in the muted grey, which is what
+          this did, loses the one spot of warmth in the hero's caption and was
+          the difference that read as "still not the design".
+
           These arrive already formatted. The screen used to print one combined
           string under a single calendar icon, which labels half of what it says
           wrongly — and the frame gives them separate slots for that reason.
         */}
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Ionicons name="calendar-outline" size={18} color={EMBER.textSecondary} />
+            <MaterialIcons name="event" size={18} color={EMBER.accent} />
             <Text style={styles.metaText}>{dateLabel}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={18} color={EMBER.textSecondary} />
+            <MaterialIcons name="schedule" size={20} color={EMBER.accent} />
             <Text style={styles.metaText} numberOfLines={1}>
               {timeLabel}
             </Text>
@@ -122,17 +181,36 @@ export function SceneHero({
   )
 }
 
+/**
+ * The title. Frame `1141:4863`: Plus Jakarta ExtraBold 48, tracking -2.4.
+ *
+ * ## The frame's 43.2 line height cannot be used literally
+ *
+ * CSS `leading-[43.2px]` on a 48px font is legal — the glyphs simply overflow
+ * their line box and nothing is lost. React Native **clips** to the line box,
+ * so copying 43.2 across cut the tops and bottoms off the letters. It is the
+ * one number on this frame that does not survive translation, and it looked
+ * like a font-loading bug rather than a layout one.
+ *
+ * 56 is 1.17em: enough for Plus Jakarta's ascender and descender at this
+ * weight, and still tighter than the 1.3-1.4 a default would give, which is
+ * what the frame's leading is actually reaching for.
+ *
+ * ## No text shadow
+ *
+ * The frame specifies `0 0 30px rgba(255,144,109,0.3)`, a soft warm bloom. RN's
+ * `textShadow` is not CSS's: at radius 30 it renders as a flat warm rectangle
+ * sitting behind the words — a visible brown box, not a glow. The gradient over
+ * the hero is already what makes the title legible, and it does that job
+ * without an artefact. A real bloom needs a blurred layer behind the text, and
+ * should only be built if the plain title is measurably hard to read.
+ */
 export const sceneHeroTitleStyle = {
   fontFamily: EMBER_FONTS.displayExtraBold,
   fontSize: 48,
-  lineHeight: 43.2,
+  lineHeight: 56,
   letterSpacing: -2.4,
   color: EMBER.textPrimary,
-  // The frame's 0 0 30px rgba(255,144,109,0.3) — the warm bloom that keeps
-  // 48pt of white legible over a photograph nobody has seen yet.
-  textShadowColor: 'rgba(255,144,109,0.3)',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 30,
 } as const
 
 const styles = StyleSheet.create({
