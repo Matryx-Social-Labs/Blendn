@@ -25,6 +25,14 @@ import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import NearbyEventCard from '../../components/NearbyEventCard'
 import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
+import {
+  FeaturedCard,
+  FEATURED_CARD_GAP,
+  FEATURED_CARD_WIDTH,
+} from '../../components/pulse/FeaturedCard'
+import { PulseHeader } from '../../components/pulse/PulseHeader'
+import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
@@ -42,6 +50,12 @@ import {
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres } from '../../lib/geo'
+import {
+  featuredDateLabel,
+  joinedCount,
+  placeLabel,
+  upcomingDayLabel,
+} from '../../lib/pulse'
 import { revealPromptText, revealReadiness } from '../../lib/reveal'
 import {
   PUBLIC_CHECKIN_WARNING,
@@ -343,6 +357,35 @@ export default function Events() {
   const listRef = useRef<any>(null)
   const scrollY = useRef(new RNAnimated.Value(0)).current
   const [netError, setNetError] = useState<string | null>(null)
+
+  /*
+   * Search, in two pieces of state rather than one.
+   *
+   * `searchInput` is what is on screen and updates on every keystroke, so the
+   * field never lags the finger. `searchTerm` is what the request is scoped by
+   * and only catches up once typing stops — one is a render concern, the other
+   * is a network one, and sharing a variable makes every keystroke a fetch.
+   *
+   * `GET /events` has taken a `search` parameter the whole time and no screen
+   * in the app has ever sent one. This is the first.
+   */
+  const [searchInput, setSearchInput] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const isSearching = searchTerm.trim().length > 0
+
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    // No wait when clearing. Emptying the box is a request to see the normal
+    // screen again, and making somebody watch a spinner for a third of a second
+    // to get back to where they started reads as the app being slow.
+    if (trimmed.length === 0) {
+      setSearchTerm('')
+      return
+    }
+    const id = setTimeout(() => setSearchTerm(trimmed), 350)
+    return () => clearTimeout(id)
+  }, [searchInput])
+
   const [trayState, setTrayState] = useState<EventsTrayState>({
     visible: false,
     title: '',
@@ -994,7 +1037,7 @@ export default function Events() {
     // `fetchEvents` is redefined every render and is deliberately not a
     // dependency — including it would refetch on every state change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, selectedCity])
+  }, [user, authLoading, selectedCity, searchTerm])
 
   useEffect(() => {
     const authFirstName = getFirstName(user?.name)
@@ -1486,6 +1529,7 @@ export default function Events() {
         lon,
         include: 'checkins,activeCheckins,profile,interestedPreview',
         interestedPreviewLimit: 3,
+        search: searchTerm || undefined,
       }, { force: !!options?.force })
 
       if (error) {
@@ -1580,13 +1624,24 @@ export default function Events() {
     try {
       if (loading) return
       Logger.journey('events', 'fetchMore:start', { page: page + 1 })
+      /*
+       * The same scope as page one, which it did not used to have.
+       *
+       * `city` was missing here while `fetchEvents` sends it, so scrolling to
+       * the bottom of a city-scoped list appended events from everywhere — the
+       * list silently stopped meaning what its own header said, and only past
+       * the fold where nobody looks twice. `search` would have inherited the
+       * identical bug the moment it was added, which is how this was found.
+       */
       const { data, error } = await fetchEventsApi({
         page: page + 1,
         limit: PAGE_SIZE,
+        city: selectedCity ?? undefined,
         lat: userLocation?.latitude,
         lon: userLocation?.longitude,
         include: 'checkins,interestedPreview',
         interestedPreviewLimit: 3,
+        search: searchTerm || undefined,
       })
       if (error) return
       if (!data || data.length === 0) return
@@ -1610,7 +1665,7 @@ export default function Events() {
       setInterestCounts((prev) => ({ ...prev, ...countMap }))
       setCheckinStatuses((prev) => ({ ...prev, ...checkinMap }))
     } catch {}
-  }, [loading, page, userLocation])
+  }, [loading, page, userLocation, selectedCity, searchTerm])
 
   const loadInterestData = async () => {
     try {
@@ -1710,39 +1765,103 @@ export default function Events() {
   // Compensate item spacing so the snapped card centers visually.
   const UPCOMING_SIDE_PADDING = ((SCREEN_WIDTH - UPCOMING_ITEM_WIDTH) / 2) - (CAROUSEL_ITEM_SPACING / 2)
 
-  const renderUpcomingFigmaCarousel = () => (
-    <View style={styles.carouselContainer}>
-      <View style={styles.sectionFancyRow}>
-        <View style={styles.sectionDividerLine} />
-        <Text style={styles.sectionTitle}>Upcoming events</Text>
-        <View style={styles.sectionDividerLine} />
-      </View>
-      <FlatList
-        horizontal
-        data={upcomingItems}
-        keyExtractor={(item, idx) => `up-${item.id}-${idx}`}
-        showsHorizontalScrollIndicator={false}
-        snapToAlignment="center"
-        snapToInterval={UPCOMING_ITEM_FULL}
-        contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
-        style={{ paddingVertical: 12, height: UPCOMING_ITEM_HEIGHT + 24 }}
-        removeClippedSubviews={false}
-        getItemLayout={(_, index) => ({ length: UPCOMING_ITEM_FULL, offset: UPCOMING_ITEM_FULL * index, index })}
-        renderItem={({ item }) => (
-          <View style={{ width: UPCOMING_ITEM_FULL, alignItems: 'center' }}>
-            <CarouselCard
-              event={item}
+  /*
+   * Featured, then Upcoming — the frame's two sections, from one sorted list.
+   *
+   * `upcomingItems` is already ordered by start time, so the split is a slice
+   * rather than a second query. **Featured takes only events that have a cover
+   * image**: the card is a photograph with words on it, and one without an image
+   * is a dark rectangle with a headline — worse than not being featured. The
+   * stack below reads fine either way, so everything else falls through to it.
+   *
+   * `featuredIds` is what stops the two sections showing the same event twice,
+   * which is the same subtraction `mainListData` does further down for the same
+   * reason.
+   */
+  const renderFeaturedRow = () => {
+    if (featuredItems.length === 0) return null
+    return (
+      <View style={styles.pulseSection}>
+        <SectionHeader
+          title="Featured"
+          /*
+           * "VIEW ALL" only once there is more than the row already shows.
+           *
+           * With four featured events and four on screen it is a link to the
+           * same four, which is the kind of control that teaches people the
+           * app's links do nothing.
+           */
+          actionLabel={upcomingItems.length > featuredItems.length ? 'VIEW ALL' : undefined}
+          onAction={
+            upcomingItems.length > featuredItems.length
+              ? () => router.push('/nearby-events')
+              : undefined
+          }
+        />
+        <FlatList
+          horizontal
+          data={featuredItems}
+          keyExtractor={(item, idx) => `feat-${item.id}-${idx}`}
+          showsHorizontalScrollIndicator={false}
+          snapToAlignment="start"
+          snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
+          decelerationRate="fast"
+          contentContainerStyle={styles.pulseRowContent}
+          renderItem={({ item, index }) => (
+            <FeaturedCard
+              title={item.title}
+              tag={item.category || null}
+              imageUrl={item.cover_image_url}
+              dateLabel={featuredDateLabel(item.start_time)}
+              placeLabel={placeLabel(item)}
+              accentIndex={index}
               onPress={() => handleEventPress(item)}
-              onLongPress={() => handleEventPreview(item)}
-              onToggleInterest={() => toggleInterest(item)}
-              isInterested={!!interestStatuses[item.id]}
-              interestLoading={!!interestPending[item.id]}
-              statusLabel={checkinStatuses[item.id]?.status === 'checked_in' ? 'Going' : undefined}
             />
-          </View>
-        )}
-      />
-    </View>
+          )}
+          ItemSeparatorComponent={() => <View style={{ width: FEATURED_CARD_GAP }} />}
+        />
+      </View>
+    )
+  }
+
+  const renderUpcomingStack = () => {
+    if (upcomingStackItems.length === 0) return null
+    return (
+      <View style={styles.pulseSection}>
+        {/*
+          No prev/next arrows. The frame draws a pair beside this heading, and
+          they belong to a horizontal row — this is a vertical stack, so they
+          would scroll nothing. `SectionHeader` only renders them when handlers
+          are passed, which is why they are absent rather than inert.
+        */}
+        <SectionHeader title="Upcoming" />
+        <View style={styles.pulseStack}>
+          {upcomingStackItems.map((item) => (
+            <UpcomingCard
+              key={`up-${item.id}`}
+              title={item.title}
+              category={item.category || null}
+              imageUrl={item.cover_image_url}
+              dayLabel={upcomingDayLabel(item.start_time)}
+              joinedCount={joinedCount(item)}
+              distanceLabel={formatDistance(item.distance)}
+              description={item.short_description || null}
+              onPress={() => handleEventPress(item)}
+              isFavorited={!!interestStatuses[item.id]}
+              favoriteBusy={!!interestPending[item.id]}
+              onToggleFavorite={() => toggleInterest(item)}
+            />
+          ))}
+        </View>
+      </View>
+    )
+  }
+
+  const renderUpcomingFigmaCarousel = () => (
+    <>
+      {renderFeaturedRow()}
+      {renderUpcomingStack()}
+    </>
   )
 
   const renderCarouselFancy = (titleLines: string[], items: Event[]) => {
@@ -2083,7 +2202,27 @@ export default function Events() {
 
   const filteredSortedEvents = useMemo(() => events, [events])
 
+  const featuredItems = useMemo(
+    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
+    [upcomingItems]
+  )
+  const upcomingStackItems = useMemo(() => {
+    const featuredIds = new Set(featuredItems.map(e => e.id))
+    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
+  }, [upcomingItems, featuredItems])
+
   const mainListData = useMemo(() => {
+    /*
+     * A search is a flat list, not a magazine.
+     *
+     * Normally this holds only what the sections above did not already show,
+     * because a carousel and the list beneath it repeating the same event reads
+     * as a bug. Under a search that subtraction becomes the bug: the sections
+     * are hidden, so every id they claim is an id that appears nowhere — and
+     * searching a venue's name would return it and then not show it.
+     */
+    if (isSearching) return filteredSortedEvents
+
     const shown = new Set<string>()
     interestedItems.forEach(e => shown.add(e.id))
     upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
@@ -2092,7 +2231,7 @@ export default function Events() {
     bestPartiesItems.slice(0, 10).forEach(e => shown.add(e.id))
     const remaining = filteredSortedEvents.filter(e => !shown.has(e.id))
     return remaining
-  }, [filteredSortedEvents, interestedItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
+  }, [isSearching, filteredSortedEvents, interestedItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
 
   /*
    * The top hero: the soonest event that has a cover image.
@@ -2117,6 +2256,24 @@ export default function Events() {
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
+
+  /*
+   * The Pulse's headline, city line and search field.
+   *
+   * Built once and rendered into both branches of the list header — see the
+   * comment at the render site for why it cannot live in only one of them.
+   */
+  const pulseHeader = (
+    <PulseHeader
+      title="The "
+      titleAccent="Pulse"
+      city={selectedCity}
+      dateLabel={todayLabel}
+      onPressCity={() => setCityPickerOpen(true)}
+      query={searchInput}
+      onChangeQuery={setSearchInput}
+    />
+  )
 
   const stickyBarHeight = insets.top + 8 + 12 + 36
   const sectionBgTop = stickyBarHeight + 12
@@ -2366,6 +2523,16 @@ export default function Events() {
           ListHeaderComponent={(
             showLoadingSkeleton ? (
               <View>
+                {/*
+                  In both branches, deliberately.
+
+                  Searching triggers a load, and a header that only exists on
+                  the loaded branch unmounts the moment you finish typing — the
+                  field loses focus, the keyboard drops, and the text you just
+                  entered disappears while the results for it arrive. The search
+                  box has to outlive the thing it is searching.
+                */}
+                {pulseHeader}
                 <View style={styles.sectionHeaderRow}>
                   <SkeletonLine width={160} />
                   <SkeletonLine width={80} />
@@ -2423,6 +2590,7 @@ export default function Events() {
               </View>
             ) : (
               <View>
+                {pulseHeader}
                 {/*
                   Empty means "this city has nothing on", and says so.
 
@@ -2459,21 +2627,46 @@ export default function Events() {
                         telling us where to go next, which is worth saying back
                         to them rather than treating as a dead end.
                       */}
+                      {/*
+                        A search that found nothing is not a city that has
+                        nothing.
+
+                        Without this, typing a misspelt venue name answers
+                        "Coming soon to Bengaluru" — which tells somebody we
+                        have not launched in the city they are standing in,
+                        because of a typo. The city copy below is about the
+                        city; this one is about the query, and the way out is
+                        to clear it rather than to move.
+                      */}
                       <Text style={styles.emptyTitle}>
-                        {!selectedCity
+                        {isSearching
+                          ? 'No matches'
+                          : !selectedCity
                           ? 'No events yet'
                           : notLiveHere
                             ? `Coming soon to ${selectedCity}`
                             : `Nothing on in ${selectedCity}`}
                       </Text>
                       <Text style={styles.emptySub}>
-                        {!selectedCity
+                        {isSearching
+                          ? `Nothing here matches “${searchTerm}”${selectedCity ? ` in ${selectedCity}` : ''}.`
+                          : !selectedCity
                           ? 'There are no published events to show right now.'
                           : notLiveHere
                             ? "We're not live here yet — you're early. Browse another city in the meantime, and we'll be here soon."
                             : 'Nothing is on here at the moment. Try another city, or check back.'}
                       </Text>
-                      {cityOptions.length > 0 && (
+                      {isSearching && (
+                        <ScalePress
+                          style={styles.ctaGhost}
+                          onPress={() => setSearchInput('')}
+                          accessibilityRole="button"
+                          accessibilityLabel="Clear search"
+                        >
+                          <Text style={styles.ctaGhostText}>Clear search</Text>
+                        </ScalePress>
+                      )}
+                      {!isSearching && cityOptions.length > 0 && (
                         <ScalePress
                           style={styles.ctaGhost}
                           onPress={() => setCityPickerOpen(true)}
@@ -2483,32 +2676,43 @@ export default function Events() {
                           <Text style={styles.ctaGhostText}>Change city</Text>
                         </ScalePress>
                       )}
-                      <ScalePress
-                        style={styles.ctaGhost}
-                        onPress={() => fetchEvents({ force: true })}
-                        accessibilityRole="button"
-                        accessibilityLabel="Refresh events"
-                      >
-                        <Text style={styles.ctaGhostText}>Refresh</Text>
-                      </ScalePress>
+                      {!isSearching && (
+                        <ScalePress
+                          style={styles.ctaGhost}
+                          onPress={() => fetchEvents({ force: true })}
+                          accessibilityRole="button"
+                          accessibilityLabel="Refresh events"
+                        >
+                          <Text style={styles.ctaGhostText}>Refresh</Text>
+                        </ScalePress>
+                      )}
                     </View>
                   </FadeInUp>
                 )}
-                {soonestWithImage ? (
+                {/*
+                  Under a search, none of the curated sections render.
+
+                  A hero, three carousels and a nightlife rail are how you
+                  browse when you do not know what you want. Somebody who has
+                  typed a venue's name knows exactly what they want, and
+                  making them scroll past five editorial rails to reach it is
+                  the screen ignoring the question it was just asked.
+                */}
+                {!isSearching && soonestWithImage ? (
                   <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
                       {renderInviteHero(soonestWithImage)}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
-                {interestedItems.length > 0 && interestedItems.some(e => !!e.cover_image_url) ? (
+                {!isSearching && interestedItems.length > 0 && interestedItems.some(e => !!e.cover_image_url) ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
                       {renderInterestedCarousel(interestedItems.slice(0, 10))}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
-                {upcomingItems.length > 0 ? (
+                {!isSearching && upcomingItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
                       {renderUpcomingFigmaCarousel()}
@@ -2516,7 +2720,9 @@ export default function Events() {
                   </RNAnimated.View>
                 ) : null}
 
-                {userLocation
+                {isSearching
+                  ? null
+                  : userLocation
                   ? (nearbyItems.length > 0 ? (
                     <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                       <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 4)} distance={8}>
@@ -2532,7 +2738,7 @@ export default function Events() {
                     </RNAnimated.View>
                   ) : null)}
 
-                {selectedCity && cityTopItems.length > 0 ? (
+                {!isSearching && selectedCity && cityTopItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 5)} distance={8}>
                       {renderCarouselFancy([`${selectedCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
@@ -2556,6 +2762,7 @@ export default function Events() {
                   section — which is what an honest empty looks like.
                 */}
                 {(() => {
+                  if (isSearching) return null
                   const featuredNightlife = bestPartiesItems.find(e => !!e.cover_image_url)
                   if (!featuredNightlife) return null
                   return (
@@ -2761,6 +2968,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 9,
   },
+  pulseSection: { gap: 16, marginTop: 32 },
+  pulseRowContent: { paddingHorizontal: 12 },
+  pulseStack: { gap: 24, paddingHorizontal: 12 },
   sectionTitle: {
     fontSize: TYPE_HEADER_SIZE,
     lineHeight: TYPE_HEADER_LINE,
