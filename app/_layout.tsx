@@ -20,6 +20,7 @@ import { apiClient } from '../lib/apiClient';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
 import { readOnboarding } from '../lib/onboardingStorage';
+import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
 import { APP_COLORS } from '../lib/theme';
 import queryCache from '../lib/queryCache';
@@ -535,6 +536,18 @@ function RootLayout() {
         }}
       />
           </Stack>
+          {/*
+            Watches whether somebody is still at the event they checked into,
+            and checks them out when they are plainly not.
+
+            At the root rather than inside The Room, because leaving a venue
+            should be noticed whether or not the room is the screen you have
+            open. Renders nothing until it has something to ask.
+
+            Gated on a signed-in user: with nobody signed in there is no
+            check-in to watch, and the fence lookup would 401 on a timer.
+          */}
+          {user ? <PresenceMonitor /> : null}
         </View>
         </ToastProvider>
       </GradientOverlayProvider>

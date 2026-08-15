@@ -91,9 +91,12 @@ Matchmaking is not a third segment. It **is** the Grid: the ranking, the
 shared-interest chips and the "both open to dating" tag are the matchmaking
 output, computed server-side and already rendered.
 
-Three things mount here that currently render nowhere:
-`components/RoomVisibilityBanner.tsx`, the `lib/presence.ts` sampling loop, and
-`event-preferences/[eventId]` as the room's own settings.
+`RoomVisibilityBanner` mounts here, above the toggle so it shows in both
+segments. `event-preferences/[eventId]` is the room's own settings, reachable
+from the Grid.
+
+The presence monitor is **not** here — it mounts at the root, because leaving a
+venue should be noticed whether or not the room is the screen you have open.
 
 ---
 
