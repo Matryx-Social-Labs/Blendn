@@ -575,7 +575,25 @@ const styles = StyleSheet.create({
    *
    * Deliberate deviation, recorded in `docs/PULSE.md` for the designer.
    */
-  centreMark: { width: 24, height: 24 },
+  /*
+   * 28, not the frame's 17.5 — and it is still the weakest thing in the bar.
+   *
+   * The frame draws a `+`: one stroke, legible at any size. The Blend'n
+   * monogram is an *outline* mark with two interior counters, and
+   * `monogram-white.png` is 453x534 with roughly 20px strokes — so at 28pt the
+   * stroke renders about 1pt wide. On a device it reads as a faint scribble
+   * rather than as a mark, which a zoomed screenshot of the running app is the
+   * only way to see; every size in this file typechecks and lints identically.
+   *
+   * 28 is the most that can be done from this side: it is half the 56pt button,
+   * which is where a logo-in-a-circle normally sits, and going larger starts
+   * crowding the disc instead of gaining weight.
+   *
+   * **What is actually needed is a filled variant of the mark for small sizes.**
+   * Raised for the designer in `docs/PULSE.md`; an outline logo at 28pt is a
+   * drawing problem, not a layout one.
+   */
+  centreMark: { width: 28, height: 28 },
   halo: {
     position: 'absolute',
     top: -34,

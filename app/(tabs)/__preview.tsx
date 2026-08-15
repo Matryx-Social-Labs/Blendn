@@ -1,14 +1,15 @@
-import { Stack } from 'expo-router'
 import { useState } from 'react'
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { Dimensions, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { FeaturedCard, FEATURED_CARD_WIDTH } from '../components/pulse/FeaturedCard'
-import { PulseHeader } from '../components/pulse/PulseHeader'
-import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
-import { SectionHeader } from '../components/pulse/SectionHeader'
-import { UpcomingCard } from '../components/pulse/UpcomingCard'
-import { EMBER } from '../lib/theme'
+import NearbyEventCard from '../../components/NearbyEventCard'
+import { FeaturedCard, FEATURED_CARD_WIDTH } from '../../components/pulse/FeaturedCard'
+import { PulseHeader } from '../../components/pulse/PulseHeader'
+import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
+import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { UpcomingCard } from '../../components/pulse/UpcomingCard'
+import { EMBER } from '../../lib/theme'
+import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
  * The Pulse, rendered against fixtures — a screenshot harness, not a screen.
@@ -44,6 +45,7 @@ import { EMBER } from '../lib/theme'
 /** Frame `1141:4643` → Main: `paddingHorizontal 12`, `gap 48`. */
 const MAIN_PADDING_HORIZONTAL = 12
 const MAIN_GAP = 48
+const SCREEN_W = Dimensions.get('window').width
 
 /*
  * Deliberately boring strings of realistic length.
@@ -91,26 +93,40 @@ const UPCOMING = [
   },
 ]
 
+/*
+ * The frame's Nearby section is asymmetric — a `Large Featured Local` 366x782
+ * with a 366x342 image over a 440pt body, then a `Small Info Local` 366x343.
+ * We draw a uniform stack of `NearbyEventCard`. Rendered here so the difference
+ * is visible rather than argued about.
+ */
+const NEARBY = [
+  {
+    id: 'n1',
+    title: 'The Umbra Kitchen',
+    address: 'Lavelle Road',
+    cover_image_url: null,
+  },
+  {
+    id: 'n2',
+    title: 'Basement Six Listening Bar',
+    address: 'Church Street',
+    cover_image_url: null,
+  },
+]
+
 export default function PulsePreview() {
   const insets = useSafeAreaInsets()
   const [query, setQuery] = useState('')
 
   return (
     <View style={styles.container}>
-      {/*
-        No router header. It is 96pt of white chrome the real tab screen does
-        not have, and leaving it on makes every vertical measurement taken from
-        this harness wrong by exactly that much — which would be a worse lie
-        than having no harness.
-      */}
-      <Stack.Screen options={{ headerShown: false }} />
       <PulseTopBar />
       <ScrollView
         contentContainerStyle={[
           styles.content,
           {
             paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
-            paddingBottom: insets.bottom + 128,
+            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -125,7 +141,7 @@ export default function PulsePreview() {
         />
 
         <View style={styles.section}>
-          <SectionHeader title="Featured" actionLabel="VIEW ALL" />
+          <SectionHeader title="Featured" actionLabel="VIEW ALL" onAction={() => {}} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -160,6 +176,20 @@ export default function PulsePreview() {
                 distanceLabel={e.distanceLabel}
                 description={e.description}
                 onPress={() => {}}
+              />
+            ))}
+          </View>
+        </View>
+        <View style={styles.section}>
+          <SectionHeader title="Nearby Experiences" />
+          <View style={styles.stack}>
+            {NEARBY.map((e) => (
+              <NearbyEventCard
+                key={e.id}
+                event={e as never}
+                width={SCREEN_W - MAIN_PADDING_HORIZONTAL * 2}
+                timeLabel="Tonight, 8:00 PM"
+                locationLabel={`${e.address} · 2.1 km`}
               />
             ))}
           </View>
