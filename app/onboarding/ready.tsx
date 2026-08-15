@@ -1,7 +1,8 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { Image, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
+import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { previousStep } from '../../lib/onboarding'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
@@ -57,7 +58,26 @@ export default function ReadyScreen() {
     >
       <View style={styles.card}>
         {primaryPhoto ? (
-          <Image source={{ uri: primaryPhoto }} style={styles.avatar} />
+          /*
+           * `OptimizedImage`, not React Native's `<Image>`.
+           *
+           * This is a 96pt avatar drawing whatever the person uploaded — which
+           * `docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
+           * at its native size regardless of the box it is drawn in, so a
+           * summary card was holding a four-megapixel bitmap to show a thumbnail,
+           * and re-downloading it on every mount because RN's cache is separate
+           * from the one the rest of the app warms.
+           *
+           * `width`/`height` are the decode hint, so the bitmap is the size of
+           * the thing on screen.
+           */
+          <OptimizedImage
+            source={primaryPhoto}
+            style={styles.avatar}
+            width={AVATAR}
+            height={AVATAR}
+            contentFit="cover"
+          />
         ) : (
           <View style={[styles.avatar, styles.avatarEmpty]} />
         )}
@@ -95,6 +115,9 @@ function Summary({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** One number, so the box and the decode hint cannot drift apart. */
+const AVATAR = 96
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: EMBER.surface,
@@ -103,7 +126,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  avatar: { width: 96, height: 96, borderRadius: EMBER_RADIUS.pill },
+  avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill },
   avatarEmpty: { backgroundColor: EMBER.surfaceSunken },
   name: { ...EMBER_TYPE.subtitle, fontSize: 24, lineHeight: 32, color: EMBER.textPrimary },
   role: { ...EMBER_TYPE.subtitle, color: EMBER.accent },

@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Dimensions,
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
 
+import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
 import { previousStep } from '../../lib/onboarding'
@@ -168,7 +168,20 @@ export default function MediaScreen() {
               }
               style={[styles.slot, primary && styles.slotPrimary, primary && styles.slotChosen]}
             >
-              <Image source={{ uri: url }} style={styles.photo} resizeMode="cover" />
+              {/*
+                Same reasoning as the summary card's avatar: the grid draws
+                uploads at roughly a third of the screen, and RN's Image would
+                decode each at full resolution and keep it in a cache the rest
+                of the app does not share. Six photos is six full-size bitmaps
+                for six thumbnails.
+              */}
+              <OptimizedImage
+                source={url}
+                style={styles.photo}
+                width={SLOT}
+                height={SLOT}
+                contentFit="cover"
+              />
 
               {primary ? (
                 <>
