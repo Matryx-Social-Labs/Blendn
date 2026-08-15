@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, usePathname } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
@@ -22,7 +21,7 @@ import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
-import { APP_COLORS } from '../lib/theme';
+import { EMBER } from '../lib/theme';
 import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
@@ -50,21 +49,6 @@ const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 // Preloaded with the rest, so the splash hands over to a decoded animation
 // rather than to an empty frame that pops in a moment later.
 const INTRO_ASSET = require('../assets/logo/intro.webp');
-
-function BackgroundGradient() {
-  return (
-    <View style={styles.bg} pointerEvents="none">
-      <LinearGradient
-        colors={['#111214', APP_COLORS.backgroundBase]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Overlay for future animated darkening if needed */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: 0 }]} />
-    </View>
-  );
-}
 
 function RootLayout() {
   const { user, loading, isNewAccount } = useAuth();
@@ -357,7 +341,6 @@ function RootLayout() {
       <GradientOverlayProvider>
         <ToastProvider>
         <View style={styles.root}>
-          <BackgroundGradient />
           {/*
             * Rendered last in the tree but drawn on top, so it covers whatever
             * the router settles on. Deliberately not a gate — auth, assets and
@@ -367,7 +350,10 @@ function RootLayout() {
           {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
           <Stack
             screenOptions={{
-              contentStyle: { backgroundColor: APP_COLORS.backgroundBase },
+              // Every pushed screen sits on the same flat surface as the root.
+              // This was `#000000`, so a push revealed a different black than
+              // the tab underneath it.
+              contentStyle: { backgroundColor: EMBER.bg },
               animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
             }}
           >
@@ -560,7 +546,19 @@ export default Sentry.wrap(RootLayout);
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: APP_COLORS.backgroundBase,
+    /*
+     * One flat surface for the whole app.
+     *
+     * This was `#000000` with a `#111214 -> #000000` gradient painted over it,
+     * behind every screen. Both are the previous design's cool near-blacks, and
+     * they showed through as a faintly different panel edge wherever a screen
+     * did not paint its own opaque background — which is the "outline" that
+     * survived flattening The Pulse itself.
+     *
+     * The frame is flat `#0F0E0E`. A gradient here is one more surface than the
+     * design has.
+     */
+    backgroundColor: EMBER.bg,
   },
   bg: {
     ...StyleSheet.absoluteFillObject,

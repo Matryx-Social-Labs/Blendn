@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import EventCard from '../../components/EventCard'
 import FadeInUp from '../../components/motion/FadeInUp'
@@ -32,6 +32,7 @@ import {
   FEATURED_CARD_WIDTH,
 } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
+import { TAB_BAR_CLEARANCE } from './_layout'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
@@ -2295,7 +2296,16 @@ export default function Events() {
   })
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    /*
+     * A plain `View`, not a `SafeAreaView`.
+     *
+     * `edges={['top','bottom']}` inset the *container*, so the scroll surface
+     * itself ended above the home indicator and the feed stopped dead at the
+     * nav with a visible edge. The insets belong on the scroll content, not on
+     * the thing that scrolls: content then runs edge to edge and simply starts
+     * and ends clear of the hardware.
+     */
+    <View style={styles.container}>
       {/*
         No top bar, and no panel around the list.
 
@@ -2442,7 +2452,16 @@ export default function Events() {
           refreshControl={
             <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} />
           }
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[
+            styles.listContainer,
+            {
+              // The status bar at the top; the floating nav plus the home
+              // indicator at the bottom. Padding, not layout, so the feed
+              // still scrolls under both.
+              paddingTop: insets.top + 8,
+              paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
@@ -2824,7 +2843,7 @@ export default function Events() {
         size={trayState.size}
         dismissible={trayState.dismissible}
       />
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -2851,12 +2870,8 @@ const styles = StyleSheet.create({
     color: EMBER.textPrimary,
   },
   listContainer: {
-    paddingHorizontal: 1,
-    paddingTop: 8,
-    paddingBottom: 24,
-    
-   
-   
+    // Vertical padding is applied at the render site from the safe-area insets.
+    paddingHorizontal: 0,
   },
   carouselContainer: {
     paddingTop: 16,
