@@ -137,3 +137,93 @@ export function roomButtonAccessibilityLabel(target: RoomButtonTarget): string {
       return "See what's on near you"
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Picking the events the button is about                                      */
+/* -------------------------------------------------------------------------- */
+
+/** The fields these need. Anything shaped like a `BlendnEvent` satisfies it. */
+export interface RoomButtonEvent {
+  id: string
+  start_time: string
+  end_time?: string | null
+  /** Kilometres, from the server, present only when a fix was sent. */
+  distance?: number | null
+  check_in_radius?: number | null
+  is_favorited?: boolean
+}
+
+/**
+ * The event you are standing inside, if any.
+ *
+ * Only events that are **running right now** count. Standing outside a venue at
+ * noon for a thing that starts at nine is not a check-in opportunity, and
+ * offering one would put somebody on a roster hours before the doors open.
+ *
+ * `distance` is kilometres and `check_in_radius` is metres — the units differ
+ * and the mismatch has bitten this codebase before, so the conversion happens
+ * here rather than at a call site.
+ *
+ * **No margin.** `lib/presence.ts` widens the fence generously in the other
+ * direction because a false *eviction* is harmful; a false *offer* to check in
+ * is not — the server re-validates the GPS on the actual check-in and refuses
+ * it. So this asks the plain question and lets the real gate be the gate.
+ */
+export function pickInsideEvent(
+  events: readonly RoomButtonEvent[],
+  now: number = Date.now()
+): string | null {
+  let best: { id: string; distanceM: number } | null = null
+
+  for (const e of events) {
+    if (typeof e.distance !== 'number' || !Number.isFinite(e.distance)) continue
+    const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : 100
+    const distanceM = e.distance * 1000
+    if (distanceM > radiusM) continue
+
+    const start = new Date(e.start_time).getTime()
+    if (!Number.isFinite(start) || start > now) continue
+    const end = e.end_time ? new Date(e.end_time).getTime() : NaN
+    if (Number.isFinite(end) && end < now) continue
+
+    // Two fences can overlap on one street. The nearer centre is the better
+    // guess at which building somebody is actually in.
+    if (!best || distanceM < best.distanceM) best = { id: e.id, distanceM }
+  }
+
+  return best?.id ?? null
+}
+
+/**
+ * Events today you said you were going to, soonest first.
+ *
+ * **Saved only.** Every event in the city is not "yours", and a button that
+ * pointed at whatever happens to be on tonight would be a recommendation
+ * wearing the clothes of a reminder.
+ *
+ * Today in local time, and ending after now — an event that finished at lunch
+ * is not something to be reminded about at nine.
+ */
+export function pickTodayEvents(
+  events: readonly RoomButtonEvent[],
+  now: number = Date.now()
+): string[] {
+  const today = new Date(now)
+  return events
+    .filter((e) => {
+      if (!e.is_favorited) return false
+      const start = new Date(e.start_time)
+      if (Number.isNaN(start.getTime())) return false
+      if (
+        start.getFullYear() !== today.getFullYear() ||
+        start.getMonth() !== today.getMonth() ||
+        start.getDate() !== today.getDate()
+      ) {
+        return false
+      }
+      const end = e.end_time ? new Date(e.end_time).getTime() : NaN
+      return Number.isFinite(end) ? end >= now : true
+    })
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    .map((e) => e.id)
+}

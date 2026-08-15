@@ -50,6 +50,7 @@ import {
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres } from '../../lib/geo'
+import { publishRoomSignal } from '../../lib/roomSignal'
 import {
   featuredDateLabel,
   joinedCount,
@@ -1538,7 +1539,18 @@ export default function Events() {
         return
       }
 
-      setEvents((eventsData || []).map(normalizeEvent))
+      const normalized = (eventsData || []).map(normalizeEvent)
+      setEvents(normalized)
+      /*
+       * Hand the centre button what this fetch already knows.
+       *
+       * This screen asks for events with a location and gets `distance` back on
+       * every one. The tab bar needs two facts derived from exactly that —
+       * whether you are standing inside a fence, and what you said you were
+       * going to tonight — and re-deriving them there would mean a second
+       * location permission dance and a second copy of this list on a timer.
+       */
+      publishRoomSignal(normalized)
       setPage(0)
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
       initialLoadedRef.current = true
@@ -1645,7 +1657,11 @@ export default function Events() {
       })
       if (error) return
       if (!data || data.length === 0) return
-      setEvents(prev => [...prev, ...data.map(normalizeEvent)])
+      setEvents(prev => {
+        const merged = [...prev, ...data.map(normalizeEvent)]
+        publishRoomSignal(merged)
+        return merged
+      })
       setPage(prev => prev + 1)
       const interestMap: { [eventId: string]: boolean } = {}
       const countMap: Record<string, number> = {}

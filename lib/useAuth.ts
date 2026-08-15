@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
+import { clearRoomSignal } from './roomSignal'
 import { Sentry } from './sentry'
 import { subscribeSessionExpired } from './sessionEvents'
 
@@ -198,6 +199,15 @@ const initializeAuth = async (): Promise<AuthState> => {
 const clearAuthState = async () => {
   await TokenStorage.clearAll()
   stopSessionRefresh()
+  /*
+   * The centre button's cache is per-account.
+   *
+   * Without this the next person to sign in on the same device inherits the
+   * previous one's saved events, and the bar offers them somebody else's
+   * plans for tonight. Cleared here rather than in `signOut` because a failed
+   * background refresh reaches this path without going through it.
+   */
+  clearRoomSignal()
   updateAuthState({
     session: null,
     user: null,
