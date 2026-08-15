@@ -1972,11 +1972,6 @@ export default function Events() {
     return filteredSortedEvents.filter(e => !shown.has(e.id))
   }, [isSearching, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
 
-  const todayLabel = useMemo(
-    () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
-    []
-  )
-
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
 
@@ -2123,7 +2118,6 @@ export default function Events() {
       title="The "
       titleAccent="Pulse"
       city={selectedCity}
-      dateLabel={todayLabel}
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
       onChangeQuery={setSearchInput}

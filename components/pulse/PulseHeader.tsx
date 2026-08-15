@@ -14,9 +14,16 @@ import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
  * returns nothing, refreshing will never help, and the copy that used to say
  * "try refreshing or explore with location enabled" named the cause as the cure.
  *
- * So the line stays, directly under the headline where it reads as a subtitle
- * rather than as a control bolted on. Raised for the designer in
- * `docs/PULSE.md` rather than silently invented.
+ * So it stays — but **on** the headline rather than under it. As its own row it
+ * cost 70pt and pushed the search field away from the title it belongs to,
+ * which is what made the top of this screen read as loose beside the design.
+ * The heading row is 366 wide and "The Pulse" uses about 250 of it; the chip
+ * goes in the dead space that was already there, and the block stays exactly
+ * 133pt.
+ *
+ * The date went with the row. It was decoration — every card carries the date
+ * that matters, and today's is on the status bar three inches above. Raised for
+ * the designer in `docs/PULSE.md` rather than silently invented.
  *
  * ## The accent is flat, not a gradient
  *
@@ -31,10 +38,8 @@ interface Props {
   /** Second half of the headline, in the accent colour. */
   title: string
   titleAccent: string
-  /** `null` while the city is still being resolved — the row holds its height. */
+  /** `null` while the city is still being resolved — the chip reads "Choose city". */
   city: string | null
-  /** "Fri 15 Aug", already formatted by the caller. */
-  dateLabel: string
   onPressCity: () => void
   query: string
   onChangeQuery: (next: string) => void
@@ -46,7 +51,6 @@ export function PulseHeader({
   title,
   titleAccent,
   city,
-  dateLabel,
   onPressCity,
   query,
   onChangeQuery,
@@ -55,24 +59,52 @@ export function PulseHeader({
 }: Props) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title} accessibilityRole="header">
-        {title}
-        <Text style={styles.titleAccent}>{titleAccent}</Text>
-      </Text>
+      {/*
+        The city sits **on** the headline, not under it.
 
-      <Pressable
-        onPress={onPressCity}
-        accessibilityRole="button"
-        accessibilityLabel={city ? `Browsing ${city}. Change city` : 'Choose a city'}
-        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-        style={({ pressed }) => [styles.cityRow, pressed && styles.pressed]}
-      >
-        <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
-        <Text style={styles.cityText} numberOfLines={1}>
-          {city ? `${city} • ${dateLabel}` : dateLabel}
+        Frame `1141:4644` makes `Section - Header & Search` exactly 133pt —
+        heading 48, gap 29, input 56 — and draws no city line at all. We need
+        one anyway: it is the way out of "Nothing on in Bengaluru", and it is the
+        only control that answers "why is this screen empty".
+
+        A third row cost 70pt and pushed the search field away from the title it
+        belongs to, which is what made the top of the screen read as loose next
+        to the design. The heading row is 366 wide and "The Pulse" only uses
+        about 250 of it, so the control goes in the ~116pt of dead space that was
+        already there. Zero added height, and it reads as "The Pulse *in*
+        Bengaluru" — which is what it means.
+
+        Right-aligned with a pin and a chevron so it reads as a control rather
+        than as a subtitle. The date that used to ride along with it is gone:
+        every card carries the date that actually matters, and today's date is on
+        the status bar three inches above.
+      */}
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">
+          {title}
+          <Text style={styles.titleAccent}>{titleAccent}</Text>
         </Text>
-        <Ionicons name="chevron-down" size={14} color={EMBER.textSecondary} />
-      </Pressable>
+
+        <Pressable
+          onPress={onPressCity}
+          accessibilityRole="button"
+          accessibilityLabel={city ? `Browsing ${city}. Change city` : 'Choose a city'}
+          hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          style={({ pressed }) => [styles.cityChip, pressed && styles.pressed]}
+        >
+          <Ionicons name="location-outline" size={13} color={EMBER.textSecondary} />
+          {/*
+            Truncated rather than wrapped. "Thiruvananthapuram" would otherwise
+            take a second line and reintroduce the height this change removes;
+            the first several characters are enough to recognise, and tapping it
+            opens the full list.
+          */}
+          <Text style={styles.cityText} numberOfLines={1}>
+            {city ?? 'Choose city'}
+          </Text>
+          <Ionicons name="chevron-down" size={13} color={EMBER.textSecondary} />
+        </Pressable>
+      </View>
 
       {/*
         One box, with the icon absolutely placed inside its padding.
@@ -116,19 +148,36 @@ export function PulseHeader({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 24, paddingHorizontal: 12 },
-  title: EMBER_TYPE.screenTitle,
-  titleAccent: { color: EMBER.accent },
-
-  cityRow: {
+  // Frame: heading 48 → **29** → input 56, for a block of exactly 133.
+  wrap: { gap: 29, paddingHorizontal: 12 },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    // The row is text-height on its own, which put the only way out of an empty
-    // state under the touch floor. `hitSlop` alone was not enough.
-    minHeight: 44,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  cityText: { ...EMBER_TYPE.meta, flexShrink: 1 },
+  // Only the title flexes. The city must never be the thing that truncates
+  // first: a clipped headline is cosmetic, a clipped city is the control you
+  // cannot read.
+  title: { ...EMBER_TYPE.screenTitle, flexShrink: 1 },
+  titleAccent: { color: EMBER.accent },
+
+  cityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    // Bounded so a long name cannot squeeze the headline to nothing; the text
+    // truncates inside it instead.
+    maxWidth: '42%',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surfaceSunken,
+    // The chip is 27pt tall on its own, under the 44pt touch floor. It is the
+    // only way out of "Nothing on in Bengaluru", so it gets `hitSlop` at the
+    // call site rather than a taller box that would break the 48pt heading row.
+  },
+  cityText: { ...EMBER_TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
   pressed: { opacity: 0.6 },
 
   searchBox: {
