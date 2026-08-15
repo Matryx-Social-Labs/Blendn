@@ -27,7 +27,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
-import PhotoLightbox from '../PhotoLightbox';
 import ScalePress from '../motion/ScalePress';
 import { SkeletonBlock, SkeletonLine } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
@@ -68,10 +67,6 @@ interface EventDetail {
   latitude: number
   longitude: number
   check_in_radius: number
-  // Optional media fields for gallery support
-  gallery?: string[]
-  gallery_photos?: string[]
-  pre_event_gallery?: string[]
   images?: string[]
 }
 
@@ -99,10 +94,6 @@ type EventDetailTrayState = {
 
 const { width } = Dimensions.get('window')
 const CONTENT_HORIZONTAL_PADDING = 14
-const GALLERY_GAP = 12
-const galleryTileSize = Math.floor((width - (CONTENT_HORIZONTAL_PADDING * 2) - GALLERY_GAP) / 2)
-const GALLERY_FULL_WIDTH = Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))
-const GALLERY_TALL_HEIGHT = (galleryTileSize * 2) + GALLERY_GAP
 const TOP_BAR_EXTRA_TOP_PADDING = 0
 const TOP_BAR_INSET_REDUCTION = 24
 
@@ -194,13 +185,6 @@ export default function EventDetail() {
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
   const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
-  const [showGallery, setShowGallery] = useState(false)
-  const [lightboxIndex, setLightboxIndex] = useState(0)
-  const [lightboxVisible, setLightboxVisible] = useState(false)
-  const openGalleryLightbox = useCallback((index: number) => {
-    setLightboxIndex(index)
-    setLightboxVisible(true)
-  }, [])
   const [showHeroHighRes, setShowHeroHighRes] = useState(false)
   const [mapFailed, setMapFailed] = useState(false)
   const [trayState, setTrayState] = useState<EventDetailTrayState>({
@@ -209,7 +193,6 @@ export default function EventDetail() {
     message: '',
     buttons: [],
   })
-  const galleryOffsetRef = React.useRef<number | null>(null)
   const lastFetchRef = React.useRef<number>(0)
   const actionMorph = React.useRef(new RNAnimated.Value(0)).current
   const checkedInMorphTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -258,10 +241,6 @@ export default function EventDetail() {
           latitude: d.latitude ?? 0,
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
-          gallery: d.gallery,
-          gallery_photos: d.gallery_photos,
-          pre_event_gallery: d.pre_event_gallery,
-          images: d.images,
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -305,11 +284,6 @@ export default function EventDetail() {
     return () => {
       task?.cancel?.()
     }
-  }, [id])
-
-  useEffect(() => {
-    setShowGallery(false)
-    galleryOffsetRef.current = null
   }, [id])
 
   useEffect(() => {
@@ -519,10 +493,6 @@ export default function EventDetail() {
           latitude: d.latitude ?? 0,
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
-          gallery: d.gallery,
-          gallery_photos: d.gallery_photos,
-          pre_event_gallery: d.pre_event_gallery,
-          images: d.images,
         })
         // Set interest info and check-in status from userStatus
         if (d.userStatus) {
@@ -569,23 +539,6 @@ export default function EventDetail() {
       }
     }, [id, loading])
   )
-
-  // Prepare gallery sources from event or fallback - moved before early returns to follow Rules of Hooks
-  const galleryUrls = React.useMemo(() => {
-    if (!event) return [] as string[]
-    const evt: any = event
-    const candidates: any[] = [evt.gallery, evt.gallery_photos, evt.pre_event_gallery, evt.images]
-    for (const arr of candidates) {
-      if (Array.isArray(arr) && arr.length > 0) {
-        return arr.filter(Boolean)
-      }
-    }
-    return [] as string[]
-  }, [event])
-
-  const gallerySources: Array<string | number> = React.useMemo(() => {
-    return galleryUrls
-  }, [galleryUrls])
 
   const getCurrentLocation = async () => {
     try {
@@ -1082,110 +1035,6 @@ export default function EventDetail() {
   const effectiveTopInset = Math.max(6, insets.top - TOP_BAR_INSET_REDUCTION)
   const stickyBarHeight = effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING + 12 + 36
 
-  const renderBentoGallery = (sources: Array<string | number>) => {
-    if (!sources || sources.length === 0) return null
-
-    const buildImageSource = (src: string | number, dims: { width: number; height: number }) => {
-      if (typeof src === 'string') {
-        const opt = getOptimizedImageUrl(src, { width: Math.round(dims.width), height: Math.round(dims.height), resize: 'cover', quality: 70, format: 'webp' })
-        return opt && opt !== src ? { uri: opt } : { uri: src }
-      }
-      return src
-    }
-
-    const img = (src: string | number, w: number, h: number, key: string) => {
-      const photoIndex = parseInt(key.replace('g-', ''), 10)
-      return (
-        <TouchableOpacity key={key} activeOpacity={0.85} onPress={() => openGalleryLightbox(photoIndex)}>
-          <Image
-            source={buildImageSource(src, { width: w, height: h }) as any}
-            placeholder={placeholderImg}
-            style={[styles.galleryImage, { width: Math.round(w), height: Math.round(h) }]}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-            accessibilityLabel={`Event photo ${photoIndex + 1}`}
-          />
-        </TouchableOpacity>
-      )
-    }
-
-    const n = sources.length
-
-    // 1 item: full width hero
-    if (n === 1) {
-      return (
-        <View style={styles.galleryRow}>
-          {img(sources[0], GALLERY_FULL_WIDTH, GALLERY_TALL_HEIGHT, 'g-0')}
-        </View>
-      )
-    }
-
-    // 2 items: two squares
-    if (n === 2) {
-      return (
-        <View style={styles.galleryRow}>
-          {img(sources[0], galleryTileSize, galleryTileSize, 'g-0')}
-          {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
-        </View>
-      )
-    }
-
-    // 3 items: tall on left, two stacked on right
-    if (n === 3) {
-      return (
-        <View style={styles.galleryRow}>
-          {img(sources[0], galleryTileSize, GALLERY_TALL_HEIGHT, 'g-0')}
-          <View style={styles.galleryColumn}>
-            {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
-            {img(sources[2], galleryTileSize, galleryTileSize, 'g-2')}
-          </View>
-        </View>
-      )
-    }
-
-    // 4 items: 2x2 grid
-    if (n === 4) {
-      return (
-        <View style={styles.galleryColumn}>
-          <View style={styles.galleryRow}>
-            {img(sources[0], galleryTileSize, galleryTileSize, 'g-0')}
-            {img(sources[1], galleryTileSize, galleryTileSize, 'g-1')}
-          </View>
-          <View style={styles.galleryRow}>
-            {img(sources[2], galleryTileSize, galleryTileSize, 'g-2')}
-            {img(sources[3], galleryTileSize, galleryTileSize, 'g-3')}
-          </View>
-        </View>
-      )
-    }
-
-    // 5+ items: 3-layout row then fill remaining as 2-col grid
-    const first = sources.slice(0, 3)
-    const rest = sources.slice(3)
-    const rows: React.ReactNode[] = []
-    rows.push(
-      <View key="row-0" style={styles.galleryRow}>
-        {img(first[0], galleryTileSize, GALLERY_TALL_HEIGHT, 'g-0')}
-        <View style={styles.galleryColumn}>
-          {img(first[1], galleryTileSize, galleryTileSize, 'g-1')}
-          {img(first[2], galleryTileSize, galleryTileSize, 'g-2')}
-        </View>
-      </View>
-    )
-
-    for (let i = 0; i < rest.length; i += 2) {
-      rows.push(
-        <View key={`row-${1 + (i / 2)}`} style={styles.galleryRow}>
-          {img(rest[i], galleryTileSize, galleryTileSize, `g-${3 + i}`)}
-          {rest[i + 1] !== undefined && img(rest[i + 1], galleryTileSize, galleryTileSize, `g-${3 + i + 1}`)}
-        </View>
-      )
-    }
-
-    return <View style={styles.galleryColumn}>{rows}</View>
-  }
-
   const openEventChat = useCallback(async () => {
     try {
       let chatId = eventChatGroupId
@@ -1335,15 +1184,6 @@ export default function EventDetail() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           scrollEventThrottle={16}
-          onScroll={(e) => {
-            if (showGallery) return
-            const offset = galleryOffsetRef.current
-            if (!offset) return
-            const y = e.nativeEvent.contentOffset.y
-            if (y > offset - 500) {
-              setShowGallery(true)
-            }
-          }}
         >
           {isLoading ? (
             <SkeletonBlock width={'100%'} height={HERO_HEIGHT} borderRadius={0} />
@@ -1619,28 +1459,6 @@ export default function EventDetail() {
               </>
             )}
 
-            {isLoading ? (
-              <View style={{ paddingHorizontal: 14, marginBottom: 20 }}>
-                <SkeletonLine width={120} style={{ marginBottom: 10 }} />
-                <SkeletonBlock width={'100%'} height={GALLERY_TALL_HEIGHT} borderRadius={12} />
-              </View>
-            ) : (
-              <>
-                <Text style={styles.sectionTitle}>Gallery</Text>
-                <View
-                  style={styles.gallerySection}
-                  onLayout={(e) => {
-                    galleryOffsetRef.current = e.nativeEvent.layout.y
-                  }}
-                >
-                  {showGallery ? (
-                    renderBentoGallery(gallerySources)
-                  ) : (
-                    <SkeletonBlock width={'100%'} height={GALLERY_TALL_HEIGHT} borderRadius={12} />
-                  )}
-                </View>
-              </>
-            )}
 
             
 
@@ -1847,12 +1665,6 @@ export default function EventDetail() {
         </View>
       </Modal>
 
-      <PhotoLightbox
-        photos={gallerySources.filter((s): s is string => typeof s === 'string')}
-        initialIndex={lightboxIndex}
-        visible={lightboxVisible}
-        onClose={() => setLightboxVisible(false)}
-      />
     </SafeAreaView>
   )
 }
@@ -2130,38 +1942,6 @@ const styles = StyleSheet.create({
   locationImage: {
     width: '100%',
     height: 200,
-  },
-  galleryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: GALLERY_GAP,
-    marginBottom: 20,
-    paddingHorizontal: 14,
-  },
-  galleryTile: {
-    width: galleryTileSize,
-    height: galleryTileSize,
-    borderRadius: 12,
-  },
-  gallerySection: {
-    paddingHorizontal: 14,
-    marginBottom: 20,
-  },
-  galleryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: GALLERY_GAP,
-    marginBottom: GALLERY_GAP,
-  },
-  galleryColumn: {
-    flexDirection: 'column',
-    gap: GALLERY_GAP,
-    flex: 1,
-  },
-  galleryImage: {
-    borderRadius: 12,
-    backgroundColor: '#1A1A1A',
   },
   detailsSection: {
     marginBottom: 24,
