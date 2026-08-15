@@ -18,6 +18,47 @@ Nobody downloads an `.ipa` or an `.aab`, and nobody opens Transporter.
 The two platforms are independent chains in each workflow. An iOS signing
 problem does not stop Android testers getting a build.
 
+## Nothing builds until the suite is green
+
+Both EAS workflows start with a `verify` job — typecheck against the baseline,
+then the full test suite — and both `build_ios` and `build_android` declare
+`needs: [verify]`. A red suite stops the build before an EAS credit is spent,
+and long before anything reaches a tester.
+
+That gap was real and quiet. `ci.yml` fires on pull requests into `dev` and
+pushes to `dev`; a push to `stage` or `prod` matched neither, so **the two
+branches that actually ship were the two nothing checked.** They are on the
+GitHub triggers now as well.
+
+**Why the gate lives in the EAS workflow rather than reading a GitHub check.** A
+green check is a fact about *a commit*. Gating on one means trusting that the
+commit it describes is the commit about to be built — across two systems, one of
+which can be down or slow. The `verify` job runs on the same machine, against
+the same checkout, moments before the build. The GitHub run still happens; its
+job is to report in the pull request, before the merge rather than after.
+
+**The two platform chains stay independent of each other.** Both wait on
+`verify` and neither waits on the other, so an iOS signing problem still cannot
+stop Android testers getting a build.
+
+## What the app's tests actually cover
+
+309 tests across 19 suites, and **every one of them tests a pure function** —
+`lib/presence.ts`, `lib/roomButton.ts`, `lib/likes.ts`, `lib/onboarding.ts`,
+`lib/city.ts` and the rest. Nothing renders a component.
+
+That is worth stating plainly, because it sets what CI can and cannot catch.
+Green means the *decisions* are right: who gets checked out of a room, what the
+centre button offers, whether a like can be double-sent, which city a browse is
+scoped to.
+
+It says nothing about layout. Every visual bug that has reached a device on this
+project — a `+` glyph sitting low, chips wrapping a row early, an illustration
+flying off screen — is in a class these tests structurally cannot see, because
+there is no layout engine in the test environment to be wrong. **That class
+needs a device**, which is why device passes are part of the definition of done
+and not a nicety.
+
 ## Why EAS Workflows and not GitHub Actions
 
 The workflow YAML lives in `.eas/workflows/`, and Expo's GitHub App watches
