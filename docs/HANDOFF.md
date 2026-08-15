@@ -55,10 +55,39 @@ tested, and render nowhere today:
 draws real names and faces; it gets the same reveal-gating as The Grid,
 including the system lines ("Cosmic Panda pinned a location").
 
-### 5. The splash → sign-up logo transition
+### 5. The splash → sign-up logo transition — **built, measured, closed**
 
-Measure `components/IntroAnimation.tsx`'s end state; match position and size in
-`app/index.tsx` so the video ends and the logo simply stays. Needs a device.
+Shipped in #161. The numbers below are what it actually does on a 440pt screen,
+so a frame that disagrees with them is a change request rather than a bug.
+
+| Beat | What is on screen |
+|---|---|
+| Native splash | Monogram alone, **96 × 114pt**, centre y **478pt**, on `EMBER.bg` |
+| **Black hold, 180ms** | Nothing. The splash fades out over 200ms first, so the gap reads longer than the number |
+| Animation, 1848ms | The monogram **draws itself from nothing**, slides left, and the wordmark writes on |
+| Landing | Lockup **196 × 56pt**, centre y **333pt** — exactly where sign-in draws its own |
+
+Three things worth knowing before redrawing any of it:
+
+**The black hold is load-bearing.** The splash shows a completed monogram and
+the animation opens by drawing one from nothing. Without a cut between them the
+logo appears to dissolve and redraw itself, which reads as a fault. The hold is
+what buys the draw-on, and it is also what *unlocked* the splash mark being
+resized independently — before it, the two had to be the same size.
+
+**The mark barely changes size across the whole sequence.** It ends at 196pt
+against sign-in's 196pt. An earlier build grew it to 304pt and snapped back;
+that was a measurement error, not a design intent, and it should not be
+reintroduced as one.
+
+**Do not size the launch mark against the tagline.** "Same place. Same vibe.
+Instant connections." is 304pt wide — half again the lockup above it. The two
+are not meant to align, and treating them as a single block is exactly the
+mistake that produced the zoom.
+
+If the lockup moves or resizes on sign-in, `TRAVEL_SCALE` and `TRAVEL_Y` in
+`components/IntroAnimation.tsx` follow, and `__tests__/introTiming.test.ts`
+guards the ratio staying near 1.
 
 ---
 

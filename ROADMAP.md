@@ -689,6 +689,34 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **The launch plays the logo's own animation, and stops inflating it** (#161).
+  The intro asset was cut to start at 1.55s of the master so its first frame
+  matched the completed monogram the splash already showed. Seamless, and it
+  meant the first ~800ms of every launch was a *static* logo — the draw-on never
+  played once. It plays from frame 0 now, with a 180ms black hold between the
+  splash and the first drawn frame: a cut reads as a cut, where a logo
+  dissolving to nothing reads as a bug.
+
+  Two defects surfaced while measuring it. `TRAVEL_SCALE` was `304 / 203` and
+  **304pt is the width of sign-in's tagline, not its lockup** — the original
+  pass measured a band containing the mark *and* the body copy under it, so the
+  travel grew the mark to the width of a sentence and the fade revealed the real
+  lockup at two thirds the size. It survived one verification pass because that
+  pass re-measured the same contaminated band. And the intro mounted on the
+  first render, before the splash was dismissed, so its timers ran behind it —
+  invisible while the opening frames were a static monogram, not once they are
+  the logo drawing itself.
+
+  Measured per row on a 440pt screen: intro 200.0pt at cy 478.5, sign-in lockup
+  196.3pt at cy 333.2, tagline 304.3pt at cy 398.5. The final intro frame now
+  lands 196.0pt at cy 333.3. Splash mark down from 119pt of ink to 96pt, its
+  background from `#000000` to `EMBER.bg`. The black hold is what freed it: the
+  splash no longer has to match the animation's first frame.
+
+  **The lesson, since it has now cost two regressions:** a bounding box drawn
+  around a rectangle that *contains* the thing you are measuring is not a
+  measurement of that thing. Isolate the row band.
+
 - **Filters on the Pulse, in the search row rather than floating.** Category,
   when, and how far — every one of them a parameter `GET /events` has always
   accepted, so this is a way to *say* what the API could already answer.
@@ -1080,11 +1108,14 @@ would later refuse. API #181–#182, app #55–#58.
   and notification icons were the **Expo starter placeholder**.
 
 - **Startup animation** (#58). The 8.575s ProRes master is an editing codec no
-  phone decodes; `scripts/build-intro-animation.sh` cuts it to 1.08s of animated
-  WebP. Two non-obvious calls, both documented in the script: it starts
-  mid-motion so it continues the native splash instead of redrawing the logo
-  from nothing, and the wordmark is recoloured to white because the master was
-  authored for a light background and measured 3/255 luminance on black.
+  phone decodes; `scripts/build-intro-animation.sh` cuts it to animated WebP.
+  The wordmark is recoloured to white because the master was authored for a
+  light background and measured 3/255 luminance on black.
+
+  It also started mid-motion, to continue the native splash rather than redraw
+  the logo from nothing. **That call was reversed in #161** — it was buying a
+  seamless handoff at the price of never playing the logo's animation at all.
+  The head is no longer trimmed and a black hold separates the two instead.
 
 - **Password reset reaches phones** (API #181). `forgot-password` skipped
   `role === "attendee"` — every mobile user — while still returning `ok`, so the
