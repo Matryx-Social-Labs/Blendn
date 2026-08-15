@@ -1,15 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { FeedMedia } from './FeedMedia'
 
-import { Dimensions } from 'react-native'
-
 const SCREEN_WIDTH = Dimensions.get('window').width
-const ROW_PADDING = 12
 
 /**
  * Narrow enough that the next card peeks, which is what tells somebody the row
@@ -30,7 +27,41 @@ const ROW_PADDING = 12
  * as flat next to the design.
  */
 export const FEATURED_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.85)
-export const FEATURED_CARD_SOLO = SCREEN_WIDTH - ROW_PADDING * 2
+
+/**
+ * The row's own gutter — **24**, and it is not `Main`'s 12.
+ *
+ * Measured off `1141:4660`, the carousel's mask: it sits at section-x `-12`,
+ * which cancels `Main`'s 12pt padding and makes the row **full-bleed 390**.
+ * Card 1 then starts at x=**24** inside it (`1141:4663`).
+ *
+ * The build had the row inside `Main`'s gutter instead, so the card started at
+ * 12 and the row was clipped at `screen − 12`. Two visible consequences:
+ *
+ * 1. **The card was not centred.** The frame leaves 24 to its left and 34.5 to
+ *    its right on a 390 artboard — near-centred, biased left just enough to
+ *    show the next card. At 12 it read as jammed against the edge.
+ * 2. **The row stopped short.** A carousel whose scroll area ends 12pt inside
+ *    the screen looks like a clipped list rather than one that runs off the
+ *    edge, which is the whole affordance the peek is there to create.
+ *
+ * The card's own geometry was never wrong — radius 32, padding 32, gap 16, pill
+ * at 17/5, meta gaps 24 and 8, title 36/45 all match `1141:4663` exactly. Only
+ * where it sat did.
+ */
+export const FEATURED_ROW_INSET = 24
+
+/**
+ * The width when there is nothing to peek at.
+ *
+ * One featured event in a narrow-catalogue city — which is every city right
+ * now — left a card at 300 against a 402pt screen and 78pt of dead space beside
+ * it, reading as a broken layout rather than as an invitation to scroll.
+ *
+ * Insets by the row's gutter, not `Main`'s, so the solo card lands centred
+ * between the same two edges the carousel's first card does.
+ */
+export const FEATURED_CARD_SOLO = SCREEN_WIDTH - FEATURED_ROW_INSET * 2
 /*
  * The card's shape, not one of its two numbers.
  *
@@ -47,6 +78,77 @@ export const FEATURED_CARD_SOLO = SCREEN_WIDTH - ROW_PADDING * 2
 export const FEATURED_CARD_ASPECT = 450 / 331.5
 export const FEATURED_CARD_HEIGHT = Math.round(FEATURED_CARD_WIDTH * FEATURED_CARD_ASPECT)
 export const FEATURED_CARD_GAP = 24
+
+const SCREEN_HEIGHT = Dimensions.get('window').height
+
+/**
+ * Everything between the top of the screen and the top of the card, summed.
+ *
+ * Not guessed — each term is a constant this screen already applies, and the
+ * total was checked against a screenshot: on a 440 × 956 device with a 62pt top
+ * inset the card's top measured **387**, and `62 + 325 = 387`.
+ *
+ * | | |
+ * |---|---|
+ * | `TOP_BAR_HEIGHT` | 64 |
+ * | content `paddingTop` | 32 |
+ * | `PulseHeader` — frame `1141:4645` | 133 |
+ * | `MAIN_GAP` — frame: section at y=277, header ends 229 | 48 |
+ * | `SectionHeader` — frame `1141:4655` | 24 |
+ * | `SECTION_GAP` — frame: mask at section-y 48, after a 24 header | 24 |
+ *
+ * A layout pass would be more robust than arithmetic, but `onLayout` only
+ * reports after the first paint, so the card would render at one width and
+ * visibly resize. These are all fixed values; if one of them changes, this sum
+ * and `__tests__/pulseCardGeometry.test.ts` change with it.
+ */
+const CHROME_ABOVE_CARD = 64 + 32 + 133 + 48 + 24 + 24
+
+/** So the card's bottom edge is visibly clear of the bar, not flush against it. */
+const CARD_BOTTOM_BREATH = 16
+
+/**
+ * The card's size and the row's gutter, for a screen with these safe insets.
+ *
+ * ## Two constraints the frame does not have
+ *
+ * `Main` is a 390 × 3548 scrolling artboard, so the frame never had to fit the
+ * Featured card inside a viewport — and at 85% of the screen it does not. On a
+ * 440 × 956 device the card came out 374 × 508 with its top at 387, so its
+ * bottom landed at 908 against a tab bar starting at ~843: **65pt of the hero
+ * card, including part of its title, sat underneath the navigation.**
+ *
+ * So the height is clamped to the space actually available and the width
+ * follows from the frame's aspect. The card gets smaller on short screens and
+ * reaches the frame's 85% on tall ones; it is never cut off by the bar.
+ *
+ * ## Centred, not left-biased
+ *
+ * The frame puts card 1 at x=24 in a 390 viewport — near-centred, biased left
+ * to reveal the next card. Once the card is narrower than 85% there is room to
+ * do better: the gutter is `(screen - card) / 2`, so **the card in view is
+ * centred and its neighbours peek equally on both sides**. With `snapToInterval`
+ * at `width + gap` every card lands in the same centred position, which is what
+ * makes the row read as a carousel rather than as a list that starts flush.
+ */
+export function featuredCardLayout(insets: { top: number; bottom: number }, tabBarClearance: number) {
+  const available =
+    SCREEN_HEIGHT -
+    (insets.top + CHROME_ABOVE_CARD) -
+    (insets.bottom + tabBarClearance) -
+    CARD_BOTTOM_BREATH
+
+  const width = Math.min(
+    FEATURED_CARD_WIDTH,
+    Math.round(available / FEATURED_CARD_ASPECT)
+  )
+  return {
+    width,
+    height: Math.round(width * FEATURED_CARD_ASPECT),
+    /** Half the leftover, so the card in view sits in the middle of the screen. */
+    inset: Math.round((SCREEN_WIDTH - width) / 2),
+  }
+}
 
 /**
  * One card in the Featured row — a photograph with the event written over it.
