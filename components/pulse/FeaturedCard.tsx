@@ -19,10 +19,19 @@ const ROW_PADDING = 12
  * left a card at 300 against a 402pt screen and 78pt of dead space beside it,
  * reading as a broken layout rather than as an invitation to scroll.
  */
-export const FEATURED_CARD_WIDTH = Math.min(300, SCREEN_WIDTH - ROW_PADDING * 2 - 48)
+/*
+ * The frame's proportions, not a smaller guess at them.
+ *
+ * Frame `1141:4643` is **390pt wide** — a phone frame. Its card is 331.5 x 450,
+ * which is 85% of the frame width. Everything here was shrunk on the assumption
+ * that the frame's numbers were desktop values needing adjustment for a phone;
+ * they were already phone values, and the shrinking is what made the screen read
+ * as flat next to the design.
+ */
+export const FEATURED_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.85)
 export const FEATURED_CARD_SOLO = SCREEN_WIDTH - ROW_PADDING * 2
-export const FEATURED_CARD_HEIGHT = 408
-export const FEATURED_CARD_GAP = 16
+export const FEATURED_CARD_HEIGHT = 450
+export const FEATURED_CARD_GAP = 24
 
 /**
  * One card in the Featured row — a photograph with the event written over it.
@@ -126,14 +135,14 @@ export function FeaturedCard({
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Ionicons name="calendar-outline" size={13} color={EMBER.textSecondary} />
+            <Ionicons name="calendar-outline" size={15} color={EMBER.textSecondary} />
             <Text style={styles.metaText} numberOfLines={1}>
               {dateLabel}
             </Text>
           </View>
           {placeLabel ? (
             <View style={[styles.metaItem, styles.metaItemFlexible]}>
-              <Ionicons name="location-outline" size={13} color={EMBER.textSecondary} />
+              <Ionicons name="location-outline" size={15} color={EMBER.textSecondary} />
               <Text style={styles.metaText} numberOfLines={1}>
                 {placeLabel}
               </Text>
@@ -155,24 +164,24 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.9 },
   imageFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceMedia },
 
-  body: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 24, gap: 12 },
+  body: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 32, gap: 16 },
 
   tagPill: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(45,44,44,0.55)',
+    backgroundColor: 'rgba(45,44,44,0.4)',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
+    paddingHorizontal: 17,
+    paddingVertical: 5,
   },
-  tagText: { ...EMBER_TYPE.tag, fontSize: 12, lineHeight: 18, letterSpacing: 1.2 },
+  tagText: EMBER_TYPE.tag,
 
-  title: { ...EMBER_TYPE.cardTitleLarge, fontSize: 30, lineHeight: 36 },
+  title: EMBER_TYPE.cardTitleLarge,
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 24 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // Only the place shrinks. The date is short and fixed, so letting both flex
   // truncates "Oct 24" before the venue name it was competing with.
   metaItemFlexible: { flexShrink: 1 },
-  metaText: { ...EMBER_TYPE.meta, fontSize: 14, lineHeight: 20, flexShrink: 1 },
+  metaText: { ...EMBER_TYPE.meta, flexShrink: 1 },
 })

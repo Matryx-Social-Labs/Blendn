@@ -116,7 +116,7 @@ export function PulseHeader({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 16, paddingHorizontal: 12 },
+  wrap: { gap: 24, paddingHorizontal: 12 },
   title: EMBER_TYPE.screenTitle,
   titleAccent: { color: EMBER.accent },
 
@@ -137,12 +137,13 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.pill,
-    paddingLeft: 20,
-    paddingRight: 20,
-    // Not `EMBER_CONTROL_HEIGHT`: 64 is the onboarding form control, and this
-    // sits under a 48pt headline where that reads as a second heading.
-    height: 56,
+    // Frame: `pl-[48px] pr-[24px] py-[17px]`. The left inset is wide because
+    // the search glyph sits inside it at `left-[16px]`; 20 put the icon and the
+    // placeholder almost on top of each other.
+    paddingLeft: 48,
+    paddingRight: 24,
+    paddingVertical: 17,
   },
-  searchIcon: { marginTop: 1 },
+  searchIcon: { position: 'absolute', left: 16 },
   searchInput: { ...EMBER_TYPE.input, flex: 1, padding: 0 },
 })

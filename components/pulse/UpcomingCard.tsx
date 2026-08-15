@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import OptimizedImage from '../OptimizedImage'
 
-const IMAGE_HEIGHT = 150
+// Frame: 165.38 in a 390pt frame.
+const IMAGE_HEIGHT = 165
 
 /**
  * An event in the Upcoming list — image, name, who is going, how far.
@@ -136,13 +137,13 @@ export function UpcomingCard({
           <View style={styles.metaRow}>
             {showJoined ? (
               <View style={styles.metaItem}>
-                <Ionicons name="people-outline" size={13} color={EMBER.textSecondary} />
+                <Ionicons name="people-outline" size={15} color={EMBER.textSecondary} />
                 <Text style={styles.metaText}>{`${joinedCount} joined`}</Text>
               </View>
             ) : null}
             {distanceLabel ? (
               <View style={styles.metaItem}>
-                <Ionicons name="navigate-outline" size={13} color={EMBER.textSecondary} />
+                <Ionicons name="navigate-outline" size={15} color={EMBER.textSecondary} />
                 <Text style={styles.metaText}>{distanceLabel}</Text>
               </View>
             ) : null}
@@ -179,12 +180,12 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
-    padding: 16,
-    gap: 16,
+    padding: 24,
+    gap: 24,
   },
   media: {
     height: IMAGE_HEIGHT,
-    borderRadius: 24,
+    borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceSunken,
   },
@@ -196,10 +197,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(39,37,37,0.75)',
     borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: 12,
-    paddingVertical: 3,
+    paddingVertical: 4,
     maxWidth: '70%',
   },
-  categoryText: { ...EMBER_TYPE.categoryPill, fontSize: 13, lineHeight: 20 },
+  categoryText: EMBER_TYPE.categoryPill,
   favorite: {
     position: 'absolute',
     right: 12,
@@ -216,18 +217,18 @@ const styles = StyleSheet.create({
   // the state you just chose vanish for the length of a round trip.
   favoriteBusy: { opacity: 0.5 },
 
-  body: { gap: 12 },
+  body: { gap: 16 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   // Only the title flexes. The date is short and must never be the thing that
   // truncates — "Nov" is not a date.
-  title: { ...EMBER_TYPE.cardTitle, fontSize: 20, lineHeight: 26, flex: 1 },
-  day: { ...EMBER_TYPE.meta, color: EMBER.accent, fontSize: 14, lineHeight: 26 },
+  title: { ...EMBER_TYPE.cardTitle, flex: 1 },
+  day: { ...EMBER_TYPE.meta, color: EMBER.accent },
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText: { ...EMBER_TYPE.meta, fontSize: 14, lineHeight: 20 },
+  metaText: EMBER_TYPE.meta,
 
-  description: { ...EMBER_TYPE.cardBody, fontSize: 14, lineHeight: 20 },
+  description: EMBER_TYPE.cardBody,
 
   action: {
     backgroundColor: EMBER.surface,
@@ -238,8 +239,8 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontFamily: EMBER_TYPE.tag.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 24,
     color: EMBER.textPrimary,
   },
   pressed: { opacity: 0.7 },
