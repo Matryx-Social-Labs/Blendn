@@ -1527,8 +1527,22 @@ export default function EventDetail() {
             </View>
           ) : (
             <View style={styles.actionLabelStack}>
+              {/*
+                "Blend in", not "Blend'n".
+
+                This button checks you in. It was labelled with the *brand* —
+                the noun — which names the product rather than the action, and
+                left the one control on the screen saying nothing about what
+                pressing it does. The name works here precisely because it is
+                also a verb, and the other two stages of this morph are already
+                verbs ("Go to Chat"), so the noun was the odd one out.
+
+                Same label the Scene's floating CTA uses; `SceneSections.tsx`
+                carries the reasoning. Pinned by `__tests__/sceneCta.test.ts` so
+                the two surfaces cannot drift apart again.
+              */}
               <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: blendOpacity }]}>
-                Blend&apos;n
+                Blend in
               </RNAnimated.Text>
               <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: checkedOpacity }]}>
                 Checked In
@@ -2205,6 +2219,24 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.32)',
   },
+  /*
+   * Layout only. It used to be a second sheet of glass.
+   *
+   * This carried its own fill (`rgba(18,18,19,0.45)`), its own hairline border,
+   * its own 22pt radius and `overflow: 'hidden'` — a translucent tray holding
+   * two translucent buttons, each with a hairline of its own. Two nested sheets
+   * of glass do not read as depth, they read as a smudge with two outlines: the
+   * tray's edge and the pill's edge run parallel 8pt apart and neither one is
+   * the thing you are meant to press.
+   *
+   * The buttons already carry a `BlurView`, a sheen and a border each. They are
+   * the objects. This is the row they sit in.
+   *
+   * `left/right: 16` plus `paddingHorizontal: 8` puts the pill's edge at 24 —
+   * `SCENE_CTA_INSET`, the gutter the frame gives the floating CTA. Left as it
+   * was rather than collapsed into one number, because that is what it already
+   * measured and changing it would move the button for no reason.
+   */
   tabBar: {
     position: 'absolute',
     left: 16,
@@ -2216,11 +2248,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(18,18,19,0.45)',
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
-    overflow: 'hidden',
   },
   glassButtonBlur: {
     ...StyleSheet.absoluteFillObject,
