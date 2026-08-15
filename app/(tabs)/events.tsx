@@ -2222,15 +2222,24 @@ export default function Events() {
      */
     if (isSearching) return filteredSortedEvents
 
+    /*
+     * Subtract exactly what the three sections draw, and nothing else.
+     *
+     * This used to subtract Interested, city-top and nightlife as well. Those
+     * sections are gone, so every id they claimed became an id that appears
+     * **nowhere** — the event is not in a carousel, because there is no
+     * carousel, and it is filtered out of the list underneath for being in one.
+     *
+     * The same bug in the other direction is why `isSearching` returns early
+     * above. Keeping this list in step with what actually renders is the whole
+     * job of this memo, so it now names the three and only the three.
+     */
     const shown = new Set<string>()
-    interestedItems.forEach(e => shown.add(e.id))
+    featuredItems.forEach(e => shown.add(e.id))
     upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
-    nearbyItems.slice(0, 10).forEach(e => shown.add(e.id))
-    cityTopItems.slice(0, 10).forEach(e => shown.add(e.id))
-    bestPartiesItems.slice(0, 10).forEach(e => shown.add(e.id))
-    const remaining = filteredSortedEvents.filter(e => !shown.has(e.id))
-    return remaining
-  }, [isSearching, filteredSortedEvents, interestedItems, upcomingItems, nearbyItems, cityTopItems, bestPartiesItems])
+    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
+    return filteredSortedEvents.filter(e => !shown.has(e.id))
+  }, [isSearching, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
 
   /*
    * The top hero: the soonest event that has a cover image.
@@ -2647,23 +2656,34 @@ export default function Events() {
                   making them scroll past five editorial rails to reach it is
                   the screen ignoring the question it was just asked.
                 */}
-                {!isSearching && soonestWithImage ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
-                      {renderInviteHero(soonestWithImage)}
-                    </FadeInUp>
-                  </RNAnimated.View>
-                ) : null}
-                {!isSearching && interestedItems.length > 0 && interestedItems.some(e => !!e.cover_image_url) ? (
+                {/*
+                  Three sections, in the frame's order, and nothing else.
+
+                  Frame `1141:4643` draws Featured at y=277, Upcoming at y=839
+                  and Nearby at y=2335. That is the whole screen.
+
+                  What used to be here, and is now gone: an invite hero, an
+                  Interested carousel, a "{City}'s Top Events" fancy carousel and
+                  a nightlife hero. None of them is in any frame. They were three
+                  designs' worth of sediment stacked in one list, which is why
+                  every fix landed next to something older that contradicted it —
+                  and why `renderFeaturedRow`, the one function built *from* the
+                  frame, had no caller at all while six that were not still ran.
+
+                  Their data is untouched in the behaviour half above, so each
+                  comes back as a section the day it has a frame.
+                */}
+                {!isSearching ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
-                      {renderInterestedCarousel(interestedItems.slice(0, 10))}
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
+                      {renderFeaturedRow()}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
+
                 {!isSearching && upcomingItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
                       {renderUpcomingFigmaCarousel()}
                     </FadeInUp>
                   </RNAnimated.View>
@@ -2674,59 +2694,18 @@ export default function Events() {
                   : userLocation
                   ? (nearbyItems.length > 0 ? (
                     <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 4)} distance={8}>
+                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
                         {renderNearbyList(nearbyItems.slice(0, 4))}
                       </FadeInUp>
                     </RNAnimated.View>
                   ) : null)
                   : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? (
                     <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 4)} distance={8}>
+                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
                         {renderNearbyPrompt()}
                       </FadeInUp>
                     </RNAnimated.View>
                   ) : null)}
-
-                {!isSearching && selectedCity && cityTopItems.length > 0 ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 5)} distance={8}>
-                      {renderCarouselFancy([`${selectedCity}’s`, 'Top Events'], cityTopItems.slice(0, 10))}
-                    </FadeInUp>
-                  </RNAnimated.View>
-                ) : null}
-
-                {/*
-                  Nightlife, and only when there is actually nightlife.
-
-                  Two things were wrong here and they compounded. The heading
-                  said "Discover the Best Parties" — "Best" being an editorial
-                  claim nothing backs, since the ordering is interest count.
-                  And the hero fell back through `cityTopItems` and
-                  `upcomingItems`, so when no nightlife existed the section
-                  still rendered, under a parties heading, showing whatever
-                  happened to have a cover image. A book club presented as the
-                  best party in town.
-
-                  No fallback now. If there is no nightlife, there is no
-                  section — which is what an honest empty looks like.
-                */}
-                {(() => {
-                  if (isSearching) return null
-                  const featuredNightlife = bestPartiesItems.find(e => !!e.cover_image_url)
-                  if (!featuredNightlife) return null
-                  return (
-                    <RNAnimated.View style={{ transform: [{ translateY: heroParallaxY }], opacity: heroOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 6)} distance={8}>
-                        <View style={styles.carouselContainer}>
-                          <SectionHeader
-                            title={`Nightlife in ${selectedCity ?? 'your city'}`}
-                          />
-                        </View>
-                        {renderFeaturedHero(featuredNightlife)}
-                      </FadeInUp>
-                    </RNAnimated.View>
-                  )
-                })()}
                 <View style={{ height: 8 }} />
               </View>
             )
