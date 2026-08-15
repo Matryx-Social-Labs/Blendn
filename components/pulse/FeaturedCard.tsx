@@ -5,7 +5,22 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import OptimizedImage from '../OptimizedImage'
 
-export const FEATURED_CARD_WIDTH = 300
+import { Dimensions } from 'react-native'
+
+const SCREEN_WIDTH = Dimensions.get('window').width
+const ROW_PADDING = 12
+
+/**
+ * Narrow enough that the next card peeks, which is what tells somebody the row
+ * scrolls.
+ *
+ * `FEATURED_CARD_SOLO` is the width when there is nothing to peek at. One
+ * featured event in a narrow-catalogue city — which is every city right now —
+ * left a card at 300 against a 402pt screen and 78pt of dead space beside it,
+ * reading as a broken layout rather than as an invitation to scroll.
+ */
+export const FEATURED_CARD_WIDTH = Math.min(300, SCREEN_WIDTH - ROW_PADDING * 2 - 48)
+export const FEATURED_CARD_SOLO = SCREEN_WIDTH - ROW_PADDING * 2
 export const FEATURED_CARD_HEIGHT = 408
 export const FEATURED_CARD_GAP = 16
 
@@ -43,6 +58,8 @@ interface Props {
   placeLabel?: string | null
   /** Position in the row. Only used to alternate the pill's colour. */
   accentIndex?: number
+  /** Full width when it is the only card — see `FEATURED_CARD_SOLO`. */
+  width?: number
   onPress: () => void
 }
 
@@ -53,6 +70,7 @@ export function FeaturedCard({
   dateLabel,
   placeLabel,
   accentIndex = 0,
+  width = FEATURED_CARD_WIDTH,
   onPress,
 }: Props) {
   const accent = accentIndex % 2 === 0 ? EMBER.gradientFrom : EMBER.gradientTo
@@ -62,13 +80,13 @@ export function FeaturedCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, { width }, pressed && styles.pressed]}
     >
       {imageUrl ? (
         <OptimizedImage
           source={imageUrl}
           style={StyleSheet.absoluteFill as never}
-          width={FEATURED_CARD_WIDTH}
+          width={Math.round(width)}
           height={FEATURED_CARD_HEIGHT}
           contentFit="cover"
           priority="high"
@@ -129,7 +147,6 @@ export function FeaturedCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: FEATURED_CARD_WIDTH,
     height: FEATURED_CARD_HEIGHT,
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
