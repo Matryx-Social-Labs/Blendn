@@ -10,7 +10,7 @@ import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
-import { APP_COLORS } from '../lib/theme'
+import { APP_COLORS, EMBER } from '../lib/theme'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     maxWidth: '86%',
   },
   tagline: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 21,
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: APP_COLORS.separator,
   },
   dividerText: {
-    color: APP_COLORS.textTertiary,
+    color: EMBER.textTertiary,
     fontSize: 13,
   },
   // Outlined rather than filled: email is the third option, and giving it the
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.24)',
   },
   emailLabel: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     // Level with `googleLabel` and the Apple button — see the note there.
     fontSize: 21,
     fontWeight: '500',
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   legal: {
-    color: APP_COLORS.textTertiary,
+    color: EMBER.textTertiary,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
