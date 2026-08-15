@@ -64,12 +64,12 @@
         "expo-splash-screen",
         {
           "image": "./assets/logo/monogram-gradient.png",
-          "imageWidth": 180,
+          "imageWidth": 146,
           "resizeMode": "contain",
           "backgroundColor": "#000000",
           "dark": {
             "image": "./assets/logo/monogram-gradient.png",
-            "imageWidth": 180,
+            "imageWidth": 146,
             "resizeMode": "contain",
             "backgroundColor": "#000000"
           }
