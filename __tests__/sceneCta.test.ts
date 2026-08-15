@@ -138,3 +138,75 @@ describe('what the button says', () => {
     expect(src).toContain("const disabled = state === 'ended'")
   })
 })
+
+/**
+ * The *shipping* screen, which is a different component from `SceneCTA`.
+ *
+ * `EventDetailScreen` does not use `SceneCTA` and should not: its action is a
+ * three-stage morph (check in → checked in → go to chat) with loading states
+ * and a secondary check-out/RSVP button beside it. `SceneCTA` is the simpler
+ * control. Replacing one with the other would lose behaviour.
+ *
+ * What they do have to agree on is the *language*, and nothing enforced that —
+ * the harness said "Blend in" while the real button said "Blend'n", and the
+ * only way to notice was to sign in and look.
+ */
+const DETAIL = () =>
+  readFileSync(
+    join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'),
+    'utf8'
+  )
+
+describe('the shipping event screen agrees with the CTA it is not', () => {
+  it('labels the check-in action with the verb, not the brand', () => {
+    const detail = DETAIL()
+    expect(detail).toContain('Blend in')
+    /*
+     * The noun as a *label* is the regression. `Blend&apos;n` is how it was
+     * written — the brand, which names the product rather than the action, on
+     * the one control the screen has. The other two stages of the same morph
+     * are verbs ("Go to Chat"), so the noun was the odd one out.
+     *
+     * The brand still appears in this repo as a brand: the wordmark in
+     * `PulseTopBar`, "Blend'n Match", "Start Blend'n". Only this button was
+     * using it to mean "do something".
+     */
+    const labels = detail.slice(detail.indexOf('actionLabelStack'))
+    expect(labels.slice(0, labels.indexOf('</View>'))).not.toContain('Blend&apos;n')
+  })
+
+  it('the action row is not a second sheet of glass', () => {
+    /*
+     * `tabBar` was a translucent tray with its own fill, hairline and radius,
+     * holding two buttons that each already carry a BlurView, a sheen and a
+     * border. Two nested sheets read as a smudge with two parallel outlines,
+     * neither of which is the thing you press. Same defect the Scene's dock
+     * had, found in the same pass.
+     */
+    const detail = DETAIL()
+    const bar = detail.slice(detail.indexOf('tabBar: {'))
+    const block = bar.slice(0, bar.indexOf('},'))
+    const declared = block
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => !l.startsWith('*') && !l.startsWith('/*') && !l.startsWith('//'))
+    for (const prop of ['backgroundColor:', 'borderWidth:', 'borderColor:', 'overflow:']) {
+      expect(declared.some((l) => l.startsWith(prop))).toBe(false)
+    }
+    // The buttons keep their own glass — this is a collapse, not a strip.
+    expect(detail).toContain('glassButtonBlur')
+    expect(detail).toContain('glassButtonSheen')
+  })
+
+  it('keeps the behaviour SceneCTA does not have', () => {
+    /*
+     * Guard against a later "simplification" that swaps this for `SceneCTA` and
+     * silently drops the morph, the spinners and the secondary button.
+     */
+    const detail = DETAIL()
+    expect(detail).toContain('Go to Chat')
+    expect(detail).toContain('Checked In')
+    expect(detail).toContain('Checking in...')
+    expect(detail).toContain('secondaryActionButton')
+  })
+})
