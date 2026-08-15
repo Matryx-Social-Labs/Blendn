@@ -512,6 +512,48 @@ The singular `orientation` stays accepted on the API, deprecated. Removing it
 fails silently: an installed build keeps sending it, zod drops the unknown key,
 the save returns 200 and stores nothing.
 
+### The Pulse, rebuilt from scratch
+
+Seven restyle PRs did not converge, because the file carried three designs'
+worth of sediment: **107 style keys**, **12 render functions** from two previous
+layouts, three type systems, no spacing scale. Every fix landed next to
+something older that contradicted it. Plan:
+`~/.claude/plans/pulse-from-scratch.md`.
+
+The measurement that set the scope: `app/(tabs)/events.tsx` is 3548 lines,
+**2298 of behaviour and 1250 of presentation**, cleanly separated at the
+`return`. Only the 1250 is rewritten. State, effects and handlers are not
+touched — a diff above the `return` is a mistake, and moving the device-tested
+half buys the design goal nothing.
+
+| # | What | State |
+|---|---|---|
+| — | The nav, rebuilt from frame `1141:4827` (#144) | **Done** |
+| — | The feed renders the frame's three sections and only those (#145) | **Done** |
+| — | `PulseTopBar` — the overlay header, frame `1141:4819` | **Done** |
+| — | Delete the orphaned render functions, hero interpolations and dead memos | |
+| — | Rewrite the 107-key `StyleSheet` from the frame | |
+
+**The overlay header is not the bar that was deleted in #141.** That one
+reserved 64pt above a bordered panel. This one floats: `top: 0`, no layout,
+`rgba(15,14,14,0.8)` behind a 12pt blur, and the feed scrolls under it. The
+frame's 64 gets `insets.top` **added** to it rather than absorbed — the artboard
+is 390pt with no notch, and reading its height literally is what put "The Pulse"
+under the status bar on a device.
+
+**Neither of the frame's two glyphs is rendered.** The hamburger has no drawer
+to open; the bell has no endpoint — nothing in the API returns a notification.
+A draft put a **Pulse / Hotspots** switch where the hamburger is, on the reading
+that Hotspots is a venue list. `blendn-admin/docs/HOTSPOTS.md` is explicit that
+it is not: it is a presence surface behind a time-boxed, reciprocal *Go Live*,
+and that gate does not exist. Shipping the switch would have been a third dead
+control and would have encoded the misreading. Notes in `docs/PULSE.md`.
+
+**The five undesigned rows moved into the list header.** The checked-in strip,
+the offline banner, the switch-city offer, the away notice and the location and
+network errors were a sibling of the list, statically laid out where the overlay
+now sits — and they cost a 10pt spacer on every render where none of them had
+anything to say.
 
 ---
 
