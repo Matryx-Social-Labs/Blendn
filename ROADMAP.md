@@ -512,69 +512,6 @@ The singular `orientation` stays accepted on the API, deprecated. Removing it
 fails silently: an installed build keeps sending it, zod drops the unknown key,
 the save returns 200 and stores nothing.
 
-### The Pulse, rebuilt from scratch
-
-Seven restyle PRs did not converge, because the file carried three designs'
-worth of sediment: **107 style keys**, **12 render functions** from two previous
-layouts, three type systems, no spacing scale. Every fix landed next to
-something older that contradicted it. Plan:
-`~/.claude/plans/pulse-from-scratch.md`.
-
-The measurement that set the scope: `app/(tabs)/events.tsx` is 3548 lines,
-**2298 of behaviour and 1250 of presentation**, cleanly separated at the
-`return`. Only the 1250 is rewritten. State, effects and handlers are not
-touched — a diff above the `return` is a mistake, and moving the device-tested
-half buys the design goal nothing.
-
-| # | What | State |
-|---|---|---|
-| — | The nav, rebuilt from frame `1141:4827` (#144) | **Done** |
-| — | The feed renders the frame's three sections and only those (#145) | **Done** |
-| — | `PulseTopBar` — the overlay header, frame `1141:4819` | **Done** |
-| — | Delete the orphaned render functions, hero interpolations and dead memos | **Done** |
-| — | Rewrite the 107-key `StyleSheet` from the frame | |
-
-**The overlay header is not the bar that was deleted in #141.** That one
-reserved 64pt above a bordered panel. This one floats: `top: 0`, no layout,
-`rgba(15,14,14,0.8)` behind a 12pt blur, and the feed scrolls under it. The
-frame's 64 gets `insets.top` **added** to it rather than absorbed — the artboard
-is 390pt with no notch, and reading its height literally is what put "The Pulse"
-under the status bar on a device.
-
-**Neither of the frame's two glyphs is rendered.** The hamburger has no drawer
-to open; the bell has no endpoint — nothing in the API returns a notification.
-A draft put a **Pulse / Hotspots** switch where the hamburger is, on the reading
-that Hotspots is a venue list. `blendn-admin/docs/HOTSPOTS.md` is explicit that
-it is not: it is a presence surface behind a time-boxed, reciprocal *Go Live*,
-and that gate does not exist. Shipping the switch would have been a third dead
-control and would have encoded the misreading. Notes in `docs/PULSE.md`.
-
-**291 lines of previous designs deleted, and one of them was doing network I/O.**
-Five orphaned render functions (`renderInterestedCarousel`,
-`renderCarouselWithTitle`, `renderCarouselFancy`, `renderInviteHero`,
-`renderFeaturedHero`), the two hero scroll interpolations, and four memos with
-no reader (`interestedItems`, `cityTopItems`, `bestPartiesItems`,
-`soonestWithImage`). Two more fell out behind them: `NIGHTLIFE_GROUPS`, and the
-`favoriteEvents` state whose effect fired `getUserFavorites` **on every events
-refetch** into something nothing rendered. `expo lint` names an orphan, so it is
-what verified the sweep and what confirmed no new one was created.
-
-Interested comes back as a section — with its fetch — the day it has a frame.
-Keeping a request alive against a design that does not exist is not "the data
-stays"; it is a call nobody reads.
-
-**Still dead, and older than this work:** `loadUserProfile`, `loadInterestData`
-and `loadInterestCounts` were already uncalled before the rebuild started. They
-are behaviour-half data loaders with no design driver, so they are out of this
-rewrite's scope — but `interestCounts` is therefore never populated, which means
-the count on every event card is permanently `undefined`. Its own item.
-
-**The five undesigned rows moved into the list header.** The checked-in strip,
-the offline banner, the switch-city offer, the away notice and the location and
-network errors were a sibling of the list, statically laid out where the overlay
-now sits — and they cost a 10pt spacer on every render where none of them had
-anything to say.
-
 ---
 
 ## Next
@@ -721,6 +658,100 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+### The Pulse, rebuilt from scratch — **Done** (#144, #145, #146, #147, #148)
+
+Seven restyle PRs did not converge, because the file carried three designs'
+worth of sediment: **107 style keys**, **12 render functions** from two previous
+layouts, three type systems, no spacing scale. Every fix landed next to
+something older that contradicted it. Plan:
+`~/.claude/plans/pulse-from-scratch.md`.
+
+The measurement that set the scope: `app/(tabs)/events.tsx` was 3527 lines,
+**2298 of behaviour and 1229 of presentation**, cleanly separated at the
+`return`. Only the 1250 is rewritten. State, effects and handlers are not
+touched — a diff above the `return` is a mistake, and moving the device-tested
+half buys the design goal nothing.
+
+| # | What | State |
+|---|---|---|
+| — | The nav, rebuilt from frame `1141:4827` (#144) | **Done** |
+| — | The feed renders the frame's three sections and only those (#145) | **Done** |
+| — | `PulseTopBar` — the overlay header, frame `1141:4819` | **Done** |
+| — | Delete the orphaned render functions, hero interpolations and dead memos | **Done** |
+| — | Rewrite the 107-key `StyleSheet` from the frame | **Done** |
+
+**The overlay header is not the bar that was deleted in #141.** That one
+reserved 64pt above a bordered panel. This one floats: `top: 0`, no layout,
+`rgba(15,14,14,0.8)` behind a 12pt blur, and the feed scrolls under it. The
+frame's 64 gets `insets.top` **added** to it rather than absorbed — the artboard
+is 390pt with no notch, and reading its height literally is what put "The Pulse"
+under the status bar on a device.
+
+**Neither of the frame's two glyphs is rendered.** The hamburger has no drawer
+to open; the bell has no endpoint — nothing in the API returns a notification.
+A draft put a **Pulse / Hotspots** switch where the hamburger is, on the reading
+that Hotspots is a venue list. `blendn-admin/docs/HOTSPOTS.md` is explicit that
+it is not: it is a presence surface behind a time-boxed, reciprocal *Go Live*,
+and that gate does not exist. Shipping the switch would have been a third dead
+control and would have encoded the misreading. Notes in `docs/PULSE.md`.
+
+**291 lines of previous designs deleted, and one of them was doing network I/O.**
+Five orphaned render functions (`renderInterestedCarousel`,
+`renderCarouselWithTitle`, `renderCarouselFancy`, `renderInviteHero`,
+`renderFeaturedHero`), the two hero scroll interpolations, and four memos with
+no reader (`interestedItems`, `cityTopItems`, `bestPartiesItems`,
+`soonestWithImage`). Two more fell out behind them: `NIGHTLIFE_GROUPS`, and the
+`favoriteEvents` state whose effect fired `getUserFavorites` **on every events
+refetch** into something nothing rendered. `expo lint` names an orphan, so it is
+what verified the sweep and what confirmed no new one was created.
+
+Interested comes back as a section — with its fetch — the day it has a frame.
+Keeping a request alive against a design that does not exist is not "the data
+stays"; it is a call nobody reads.
+
+**The stylesheet: 107 keys down to 46, and every one of them has a caller.**
+Rewritten from the frame rather than corrected — 58 of the 107 belonged to two
+previous layouts (an invite hero, a glass-panelled Nearby card, a `#007AFF`
+check-in button, a `#e8f5e8` status badge), and dead keys are what each restyle
+landed beside and contradicted. `Main`'s four numbers are named once and used by
+both the sheet and the render site: `paddingHorizontal 12`, `paddingBottom 128`,
+`gap 48`, and `96` at the top, written as `TOP_BAR_HEIGHT + 32` because the 32 is
+the part that means anything. The gutter is applied **once**, on the scroll
+content, so a section can no longer disagree with the one above it.
+
+**The one bug the rewrite fixed rather than restyled: `fontWeight` did nothing
+on Android.** Custom fonts ignore it outright and silently render regular, so
+`fontWeight: '700'` on Manrope was bold on iOS and regular on Android from
+identical code — in **thirty** places, plus one nested `<Text>` in the render.
+Weight comes from the family now; every text style spreads an `EMBER_TYPE`
+entry, so the three coexisting type systems (local `TYPE_*` constants, raw
+numbers, `APP_COLORS`) are one. No simulator screenshot would ever have shown
+this, which is why the test greps for it.
+
+`APP_COLORS` is gone from the file entirely, and so are the four hexes of the
+old blue palette. Seven new greps in `__tests__/pulseNav.test.ts`, two of them
+verified by breaking the file and watching them fail.
+
+**Still dead, and older than this work:** `loadUserProfile`, `loadInterestData`
+and `loadInterestCounts` were already uncalled before the rebuild started. They
+are behaviour-half data loaders with no design driver, so they are out of this
+rewrite's scope — but `interestCounts` is therefore never populated, which means
+the count on every event card is permanently `undefined`. Its own item.
+
+**The five undesigned rows moved into the list header.** The checked-in strip,
+the offline banner, the switch-city offer, the away notice and the location and
+network errors were a sibling of the list, statically laid out where the overlay
+now sits — and they cost a 10pt spacer on every render where none of them had
+anything to say.
+
+**The file: 3527 lines to 2983.** No surviving handler, effect or piece of state
+was edited. The 544 are the render, the stylesheet, and the dead code that sat
+between them — the four orphaned memos and the favourites fetch are above the
+`return`, and the plan's "do not touch the behaviour half" is about not *moving*
+tested code, not about keeping code nothing calls.
+
+---
 
 - **The bar, rebuilt from the frame it was supposed to come from.** Frame
   `1141:4827`, measured with `get_metadata` rather than eyeballed from a render.
