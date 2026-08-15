@@ -2355,6 +2355,7 @@ export default function Events() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="View profile"
+          // 28pt glyph + 8 each side is 44.
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
           onPress={() => router.push('/profile' as any)}
         >
@@ -2383,7 +2384,8 @@ export default function Events() {
         <TouchableOpacity
           accessibilityLabel="Open settings"
           accessibilityRole="button"
-          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          // 22pt glyph needs 11 a side to clear 44; it had 8.
+          hitSlop={{ top: 11, right: 11, bottom: 11, left: 11 }}
           onPress={() => router.push('/settings')}
         >
           <Ionicons name="settings-outline" size={22} color={EMBER.textPrimary} />
@@ -2392,7 +2394,7 @@ export default function Events() {
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
         <LinearGradient
-          colors={['#111214', APP_COLORS.backgroundBase]}
+          colors={['#111214', EMBER.bg]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -2478,7 +2480,7 @@ export default function Events() {
           */}
           {away && (
             <View style={styles.bannerNeutral}>
-              <Ionicons name="location-outline" size={14} color={APP_COLORS.textSecondary} />
+              <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
               <Text style={styles.bannerNeutralText}>
                 You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
               </Text>
@@ -2623,7 +2625,7 @@ export default function Events() {
                         <Ionicons
                           name={notLiveHere ? 'rocket-outline' : 'calendar-outline'}
                           size={36}
-                          color={APP_COLORS.textTertiary}
+                          color={EMBER.textTertiary}
                         />
                       </View>
                       {/*
@@ -2914,7 +2916,7 @@ export default function Events() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: APP_COLORS.backgroundBase,
+    backgroundColor: EMBER.bg,
     
   },
   sectionBg: {
@@ -2928,7 +2930,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: APP_COLORS.separator,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
   },
   bgImage: {
     ...StyleSheet.absoluteFillObject,
@@ -2942,12 +2944,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundBase,
+    backgroundColor: EMBER.bg,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
   },
   listContainer: {
     paddingHorizontal: 1,
@@ -2976,7 +2978,7 @@ const styles = StyleSheet.create({
   sectionDividerLine: {
     height: 1,
     width: 73,
-    backgroundColor: APP_COLORS.textPrimary,
+    backgroundColor: EMBER.textPrimary,
     opacity: 0.22,
     borderRadius: 11,
     transform: [{ rotate: '180deg' }],
@@ -2984,7 +2986,7 @@ const styles = StyleSheet.create({
   sectionSubTitle: {
     fontSize: TYPE_BODY_SIZE,
     lineHeight: 20,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     paddingHorizontal: 16,
     marginBottom: 14,
   },
@@ -3026,7 +3028,7 @@ const styles = StyleSheet.create({
   carouselCard: {
     width: CAROUSEL_CARD_WIDTH,
     borderRadius: 36,
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
     marginHorizontal: CAROUSEL_ITEM_SPACING / 2,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -3105,7 +3107,7 @@ const styles = StyleSheet.create({
     fontSize: TYPE_CARD_TITLE_SIZE,
     lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     textAlign: 'center',
   },
   carouselVenue: {
@@ -3233,6 +3235,8 @@ const styles = StyleSheet.create({
   },
   nearbyCta: {
     marginTop: 12,
+    minHeight: 44,
+    justifyContent: 'center',
     alignSelf: 'flex-start',
     backgroundColor: EMBER.accent,
     paddingHorizontal: 16,
@@ -3328,12 +3332,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nearbyMetaTextLight: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 12,
   },
  
   nearbyTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
@@ -3350,7 +3354,7 @@ const styles = StyleSheet.create({
     maxWidth: '48%',
   },
   nearbyMetaText: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: 11,
   },
   featuredContainer: {
@@ -3374,7 +3378,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   featuredTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_CARD_TITLE_SIZE,
     lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
@@ -3387,12 +3391,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   featuredChipText: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_META_SIZE,
     fontWeight: '600',
   },
   featuredSubtitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_META_SIZE,
     fontWeight: '600',
   },
@@ -3405,7 +3409,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
   },
   inviteHeroContent: {
     position: 'absolute',
@@ -3421,14 +3425,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   inviteHeroTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_CARD_TITLE_SIZE,
     lineHeight: TYPE_CARD_TITLE_LINE,
     fontWeight: '700',
     marginBottom: 8,
   },
   inviteHeroMeta: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: TYPE_META_SIZE,
     marginBottom: 3,
   },
@@ -3457,7 +3461,7 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 3,
     paddingHorizontal: 14,
-    backgroundColor: APP_COLORS.backgroundBase,
+    backgroundColor: EMBER.bg,
     
     paddingTop: 8,
     paddingBottom: 12,
@@ -3481,14 +3485,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topBarTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_HEADER_SIZE,
     lineHeight: TYPE_HEADER_LINE,
     fontWeight: '700',
   },
   topBarSubtitle: {
     marginTop: 2,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: TYPE_META_SIZE,
     lineHeight: 18,
     fontWeight: '500',
@@ -3504,7 +3508,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   cityPickerSheet: {
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
@@ -3513,13 +3517,13 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   cityPickerTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 14,
   },
   cityPickerEmpty: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: 15,
     paddingVertical: 12,
   },
@@ -3553,7 +3557,7 @@ const styles = StyleSheet.create({
   },
   bannerNeutralText: {
     flex: 1,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -3570,12 +3574,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
   },
   cityPickerCity: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   cityPickerCount: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: 14,
   },
   settingsButton: {
@@ -3584,7 +3588,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
   },
@@ -3611,7 +3615,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
   },
@@ -3622,18 +3626,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
   },
   bannerText: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_BODY_SIZE,
     lineHeight: 20,
     flex: 1,
     marginRight: 12,
   },
   bannerCta: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: EMBER.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -3653,7 +3659,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 22,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
     borderColor: APP_COLORS.separator,
     marginBottom: 18,
@@ -3661,13 +3667,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: TYPE_CARD_TITLE_SIZE,
     fontWeight: '700',
     marginBottom: 8,
   },
   emptySub: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     fontSize: TYPE_BODY_SIZE,
     lineHeight: 20,
     textAlign: 'center',

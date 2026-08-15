@@ -119,8 +119,11 @@ const styles = StyleSheet.create({
   action: EMBER_TYPE.link,
   arrows: { flexDirection: 'row', gap: 8 },
   arrow: {
-    width: 40,
-    height: 40,
+    // 44, not the frame's 40. The frame draws a 40pt circle and 40 is under the
+    // touch-target floor on both platforms; the visible disc can be smaller than
+    // the target, but here they are the same view, so the view grows.
+    width: 44,
+    height: 44,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
     alignItems: 'center',

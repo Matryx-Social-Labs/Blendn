@@ -23,6 +23,7 @@ import { APP_COLORS, EMBER } from '../lib/theme'
 
 const PULSE_SURFACE = [
   'app/(tabs)/events.tsx',
+  'components/NearbyEventCard.tsx',
   'components/EventCard.tsx',
   'components/pulse/PulseHeader.tsx',
   'components/pulse/SectionHeader.tsx',
@@ -39,6 +40,42 @@ describe('The Pulse uses one accent', () => {
 
   it.each(PULSE_SURFACE)('%s does not reach for the old blue accent', (file) => {
     expect(read(file)).not.toContain('APP_COLORS.accent')
+  })
+
+  /*
+   * The accent was only half of it, and checking only the accent is how the
+   * other half survived a round of "no blue left".
+   *
+   * The old palette's greys are cool and the new one's are warm: `#000000`
+   * against `#0F0E0E`, `#1C1C1E` against `#211F1F`, `#EBEBF599` against
+   * `#AEAAAA`. On a screen whose whole identity is a warm gradient, a pure-black
+   * page and cool grey body text read as a different design — which is exactly
+   * what it looked like on a device after the accent was "fixed".
+   *
+   * `separator` and `success` are exempt: a neutral white alpha works on either
+   * palette, and Ember defines no semantic success colour.
+   */
+  const BANNED = [
+    'APP_COLORS.backgroundBase',
+    'APP_COLORS.backgroundElevated',
+    'APP_COLORS.backgroundCard',
+    'APP_COLORS.textPrimary',
+    'APP_COLORS.textSecondary',
+    'APP_COLORS.textTertiary',
+  ]
+
+  it.each(PULSE_SURFACE)('%s takes its surfaces and text from Ember', (file) => {
+    const body = read(file)
+    const found = BANNED.filter((token) => body.includes(token))
+    // Named, so a failure says which token rather than just "something".
+    expect(found).toEqual([])
+  })
+
+  it('the two palettes really do differ on the greys', () => {
+    // If these ever converge the test above becomes theatre, so assert the
+    // premise rather than assuming it.
+    expect(APP_COLORS.backgroundBase).not.toBe(EMBER.bg)
+    expect(APP_COLORS.textSecondary).not.toBe(EMBER.textSecondary)
   })
 
   it.each(PULSE_SURFACE)('%s hardcodes no hex accent', (file) => {

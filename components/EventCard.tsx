@@ -96,7 +96,7 @@ const EventCard = memo<EventCardProps>(({
             cachePolicy="memory-disk"
           />
         ) : (
-          <View style={[styles.eventImage, { backgroundColor: APP_COLORS.backgroundCard }]} />
+          <View style={[styles.eventImage, { backgroundColor: EMBER.surface }]} />
         )}
       </Reanimated.View>
       
@@ -218,7 +218,7 @@ EventCard.displayName = 'EventCard'
 
 const styles = StyleSheet.create({
   eventCard: {
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
@@ -244,17 +244,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 26,
     fontWeight: '700',
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     marginBottom: 6,
   },
   eventVenue: {
     fontSize: 13,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     marginBottom: 10,
   },
   eventDescription: {
     fontSize: 14,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     lineHeight: 20,
     marginBottom: 14,
   },
@@ -266,13 +266,13 @@ const styles = StyleSheet.create({
   },
   eventTime: {
     fontSize: 13,
-    color: APP_COLORS.textTertiary,
+    color: EMBER.textTertiary,
     flex: 1,
   },
   eventPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
   },
   statusRow: {
     flexDirection: 'row',
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   chipNeutral: {
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
   },
@@ -301,11 +301,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,188,92,0.16)',
   },
   chipWarningText: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
   },
   chipText: {
     fontSize: 12,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
   },
   statusBadge: {
     backgroundColor: 'rgba(52,199,89,0.18)',
@@ -319,12 +319,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   distanceBadge: {
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: APP_COLORS.separator,
   },
   distanceText: {
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
   },
   checkinButton: {
     backgroundColor: EMBER.accent,
