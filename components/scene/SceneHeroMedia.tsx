@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, typ
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
-import { FeedVideo } from '../pulse/FeedVideo'
+import { useVideoPlayer, VideoView } from 'expo-video'
 
 /**
  * The hero's media: a swipeable pager that also advances on its own.
@@ -55,12 +55,6 @@ export function SceneHeroMedia({
    */
   const [settled, setSettled] = useState(0)
   const [manual, setManual] = useState(false)
-  /*
-   * Also in a ref, because the *value* is needed inside a callback whose
-   * identity must not change. See `onEnded` below.
-   */
-  const manualRef = useRef(false)
-  manualRef.current = manual
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -86,8 +80,20 @@ export function SceneHeroMedia({
   const current = playlist[index]
 
   // Defined once. See the note at its use site for why the identity matters.
+  /*
+   * Whether the pager is still driving itself.
+   *
+   * One value, because "does the clip loop" and "does the clip advance" are
+   * exact complements and were written as two expressions in two places. The
+   * day they disagreed a clip would either freeze on its last frame or loop
+   * forever while the timer tried to move past it.
+   */
+  const autoAdvances = !manual && playlist.length > 1
+  const autoAdvancesRef = useRef(autoAdvances)
+  autoAdvancesRef.current = autoAdvances
+
   const onClipEnded = useRef((from: number) => {
-    if (manualRef.current || playlist.length < 2) return
+    if (!autoAdvancesRef.current) return
     goToRef.current(from + 1)
   }).current
 
@@ -149,12 +155,35 @@ export function SceneHeroMedia({
               recyclingKey={item.kind === 'image' ? item.url : item.posterUrl}
               transition={0}
             />
-            {item.kind === 'video' && (i === index || i === settled) ? (
-              <FeedVideo
-                // Keyed by index too, so a playlist repeating the same clip gets
-                // a fresh player rather than one that has already ended.
-                key={`${item.url}-${i}-active`}
+            {/*
+              Mounted for the neighbours too, and playing only when active.
+
+              It used to mount on arrival, so opening the source, buffering and
+              the first frame *all* began the moment the page landed — and the
+              poster sat there for the whole of it. On a clip of any size that
+              is a visible wait at exactly the moment someone has just asked to
+              see it.
+
+              A window of one page either side means the load has already
+              happened by the time you get there. It costs at most one extra
+              decoder — bounded, unlike a feed, because a hero has one playlist
+              and the window is fixed.
+            */}
+            {item.kind === 'video' && Math.abs(i - index) <= 1 ? (
+              <HeroVideo
+                key={`${item.url}-${i}`}
                 source={item.url}
+                active={i === index || i === settled}
+                /*
+                 * Loops exactly when nothing is going to advance past it.
+                 *
+                 * `FeedVideo` derives this as `!onEnded`, and once `onEnded`
+                 * became a stable always-defined function that derivation was
+                 * permanently false — so after a manual swipe the clip played
+                 * once and froze on its last frame, advancing nowhere and
+                 * looping never.
+                 */
+                loop={!autoAdvances}
                 /*
                  * A stable function, always — never `undefined`.
                  *
@@ -207,3 +236,71 @@ const styles = StyleSheet.create({
   },
   dotActive: { backgroundColor: EMBER.accent, width: 18 },
 })
+
+/**
+ * A clip in the hero.
+ *
+ * Separate from `FeedVideo`, which encodes the *feed's* policy: mount means
+ * play, and looping is inferred from whether a callback was passed. A hero
+ * page has to be mounted while it is merely *next* — so that arriving on it is
+ * instant — which makes "mounted" and "playing" two different states, and it
+ * has to loop or advance depending on whether the viewer has taken over.
+ *
+ * Muted, like the feed. Sound belongs in the lightbox, where opening it is a
+ * deliberate act.
+ */
+function HeroVideo({
+  source,
+  active,
+  loop,
+  onEnded,
+}: {
+  source: string
+  /** Whether this is the page in view. Mounted-but-inactive pages preload. */
+  active: boolean
+  loop: boolean
+  onEnded: () => void
+}) {
+  const player = useVideoPlayer(source, (p) => {
+    p.muted = true
+  })
+
+  // `loop` can change after construction — a manual swipe flips it — so it is
+  // assigned on every change rather than only in the setup callback.
+  useEffect(() => {
+    player.loop = loop
+  }, [player, loop])
+
+  useEffect(() => {
+    /*
+     * Playing follows visibility, not mounting.
+     *
+     * The neighbour is mounted so its source is open and buffered before
+     * anyone swipes to it; playing it there would burn battery on something
+     * nobody is looking at, and it would arrive already part-way through.
+     */
+    if (active) player.play()
+    else player.pause()
+  }, [active, player])
+
+  const endedRef = useRef(onEnded)
+  endedRef.current = onEnded
+  useEffect(() => {
+    // `playToEnd` rather than polling: the player already knows, and a poll has
+    // to pick an interval that is wrong either way.
+    const sub = player.addListener('playToEnd', () => endedRef.current())
+    return () => sub.remove()
+  }, [player])
+
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      nativeControls={false}
+      allowsFullscreen={false}
+      allowsPictureInPicture={false}
+      accessible={false}
+    />
+  )
+}
