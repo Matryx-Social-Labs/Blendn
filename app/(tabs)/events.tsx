@@ -2394,7 +2394,7 @@ export default function Events() {
       {/* Scrollable content clipped inside rounded section background */}
       <View style={[styles.sectionBg, { top: sectionBgTop }]}> 
         <LinearGradient
-          colors={['#111214', EMBER.bg]}
+          colors={[EMBER.surfaceMedia, EMBER.bg]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -3056,7 +3056,7 @@ const styles = StyleSheet.create({
     left: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(18, 127, 213, 0.84)',
+    backgroundColor: 'rgba(255,144,109,0.84)',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -3081,7 +3081,7 @@ const styles = StyleSheet.create({
     right: 16,
     width: 34,
     height: 34,
-    backgroundColor: 'rgba(15,35,54,0.62)',
+    backgroundColor: 'rgba(20,19,19,0.62)',
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3112,18 +3112,20 @@ const styles = StyleSheet.create({
   },
   carouselVenue: {
     fontSize: TYPE_META_SIZE,
-    color: 'rgba(230,248,255,0.8)',
+    color: EMBER.textSecondary,
     marginTop: 4,
   },
   carouselTime: {
     fontSize: TYPE_META_SIZE,
-    color: '#AEE5F5',
+    color: EMBER.accent,
     marginTop: 8,
   },
   carouselCheckoutPill: {
     marginTop: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     alignSelf: 'center',
-    backgroundColor: 'rgba(16,31,48,0.65)',
+    backgroundColor: 'rgba(20,19,19,0.65)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
@@ -3385,7 +3387,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   featuredChip: {
-    backgroundColor: 'rgba(10,132,255,0.32)',
+    backgroundColor: 'rgba(255,144,109,0.32)',
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 8,
@@ -3418,7 +3420,7 @@ const styles = StyleSheet.create({
     bottom: 16,
   },
   inviteHeroKicker: {
-    color: '#D1E8FF',
+    color: EMBER.textSecondary,
     fontSize: TYPE_CAPTION_SIZE,
     fontWeight: '600',
     marginBottom: 6,
@@ -3604,9 +3606,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: 'rgba(10,132,255,0.18)',
+    backgroundColor: 'rgba(255,144,109,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(10,132,255,0.45)',
+    borderColor: 'rgba(255,144,109,0.45)',
   },
   bannerWarn: {
     flexDirection: 'row',
@@ -3680,6 +3682,8 @@ const styles = StyleSheet.create({
   },
   ctaGhost: {
     marginTop: 12,
+    minHeight: 44,
+    justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 16,

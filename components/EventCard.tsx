@@ -149,7 +149,16 @@ const EventCard = memo<EventCardProps>(({
               accessibilityLabel="Check in to event"
             >
               {checkInLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                /*
+                 * `onGradient`, matching the label beside it.
+                 *
+                 * This was `#FFFFFF`, which was legible while the button was
+                 * iOS blue and is ~2.2:1 once the fill became `EMBER.accent`
+                 * (#FF906D). The static label was moved to the dark token and
+                 * the loading state was missed — so the button met contrast
+                 * except at the moment it was working.
+                 */
+                <ActivityIndicator size="small" color={EMBER.onGradient} />
               ) : (
                 <Typography variant="button" uppercaseButton style={styles.checkinButtonText}>Check In</Typography>
               )}
@@ -329,7 +338,9 @@ const styles = StyleSheet.create({
   checkinButton: {
     backgroundColor: EMBER.accent,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 20,
   },
   checkinButtonText: {
@@ -340,13 +351,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   interestButton: {
-    backgroundColor: 'rgba(10,132,255,0.15)',
+    // The accent at low alpha, so the heart sits in a tint of the colour it is
+    // drawn in rather than a tint of the previous design's.
+    backgroundColor: 'rgba(255,144,109,0.15)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 20,
   },
   interestButtonActive: {
-    backgroundColor: 'rgba(10,132,255,0.26)',
+    backgroundColor: 'rgba(255,144,109,0.26)',
   },
   interestButtonText: {
     color: '#FF7BA2',
