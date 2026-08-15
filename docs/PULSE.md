@@ -74,6 +74,32 @@ Three things follow from it, and none are drawn:
 
 ---
 
+## One palette, and how it came to be two
+
+The screen shipped half-restyled. `Featured` and `Upcoming` were built as new
+components on Liquid Ember; `Nearby`, `Interested`, `Nightlife`, the checked-in
+strip and the city-top rail were left on the previous design. The visible result
+was a **`View all` with an iOS-blue `#0A84FF` chevron** sitting two sections
+below an Ember heading.
+
+Underneath it was worse than a colour: **seven hand-rolled section headers and
+two using `SectionHeader`.** Two of the seven were a centred heading flanked by
+divider rules — a treatment that appears in no frame at all.
+
+All seven are gone. Every heading on this screen is now `SectionHeader`, so the
+next section anybody adds inherits the design rather than copying whichever
+neighbour they happened to look at.
+
+`__tests__/pulsePalette.test.ts` greps the files that draw this screen for
+`APP_COLORS.accent` and for hardcoded blues. Crude on purpose: a typecheck
+cannot see this, a unit test cannot see this, and **a render test could not see
+it either** — both colours are valid and both render. The only symptom is that
+the screen looks like two designs.
+
+`APP_COLORS` is not deprecated. Screens that have not been restyled still use
+it, deliberately; the guard is scoped to The Pulse's own files so it stays a
+guard rather than a chore.
+
 ## Where the build departs from the frame, and why
 
 ### 1. The gradient headline is a flat accent

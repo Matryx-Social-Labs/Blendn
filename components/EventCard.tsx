@@ -5,7 +5,7 @@ import React, { memo, useEffect, useMemo, useRef } from 'react'
 import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
 import Reanimated from 'react-native-reanimated'
 import { formatEventDateTime } from '../lib/time'
-import { APP_COLORS } from '../lib/theme'
+import { APP_COLORS, EMBER } from '../lib/theme'
 import OptimizedImage from './OptimizedImage'
 import Typography from './Typography'
 
@@ -174,12 +174,12 @@ const EventCard = memo<EventCardProps>(({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {interestLoading ? (
-                <ActivityIndicator size="small" color={APP_COLORS.accent} />
+                <ActivityIndicator size="small" color={EMBER.accent} />
               ) : (
                 <Ionicons
                   name={interested ? 'heart' : 'heart-outline'}
                   size={16}
-                  color={APP_COLORS.accent}
+                  color={EMBER.accent}
                 />
               )}
             </TouchableOpacity>
@@ -327,13 +327,15 @@ const styles = StyleSheet.create({
     color: APP_COLORS.textSecondary,
   },
   checkinButton: {
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   checkinButtonText: {
-    color: APP_COLORS.textPrimary,
+    // Dark on warm, per `EMBER.onGradient`. `textPrimary` is white and was
+    // legible on the old blue; it is not on this one.
+    color: EMBER.onGradient,
     fontSize: 14,
     fontWeight: '600',
   },
