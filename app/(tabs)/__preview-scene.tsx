@@ -218,11 +218,23 @@ export default function ScenePreview() {
             Drawn here and *not* on the real screen: nothing populates amenities
             yet. Rendering the fixture is how the frame stays reviewable without
             the screen asserting two facts it does not have.
+
+            `marginTop` pulls this up to the frame's **48**. `1141:4899` groups
+            the Location card and this grid into one column at `gap-[48px]`,
+            tighter than `Main`'s 64 between unrelated blocks — the map and the
+            amenities describe the same place, and the frame spaces them as a
+            pair rather than as two sections.
           */}
-          <View style={styles.amenities}>
-            {/* Frame `1141:4919`: a martini glass — Material `local_bar`. */}
-            <SceneAmenity icon="local-bar" title="Open Bar" subtitle="Premium Spirits" color="#F79EFF" />
-            {/* Frame `1141:4925`: a segmented wheel — Material `camera`. */}
+          <View style={[styles.amenities, styles.amenitiesGap]}>
+            {/* Frame `1141:4919`: a martini glass at **18** — Material `local_bar`. */}
+            <SceneAmenity
+              icon="local-bar"
+              title="Open Bar"
+              subtitle="Premium Spirits"
+              color="#F79EFF"
+              iconSize={18}
+            />
+            {/* Frame `1141:4925`: a segmented wheel at **20** — Material `camera`. */}
             <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" color="#FF6D8D" />
           </View>
 
@@ -286,6 +298,12 @@ const styles = StyleSheet.create({
   },
   section: { gap: 16 },
   amenities: { flexDirection: 'row', gap: 16 },
+  /*
+   * −16 against the stack's 64, landing on the frame's 48 (`1141:4899`).
+   * A margin rather than a different `gap` on the parent: only this one pair is
+   * tighter, and changing the column's gap would move every other section too.
+   */
+  amenitiesGap: { marginTop: -16 },
   /*
    * `bottom: 0`, not `insets.bottom + TAB_BAR_CLEARANCE`.
    *

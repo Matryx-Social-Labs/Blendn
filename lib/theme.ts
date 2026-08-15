@@ -231,6 +231,13 @@ export const EMBER_CONTROL_HEIGHT = 64
 export const EMBER_FONTS = {
   displayExtraBold: 'PlusJakartaSans_800ExtraBold',
   displayBold: 'PlusJakartaSans_700Bold',
+  /*
+   * Added for the Location card, which the frame sets entirely in Regular
+   * (`1141:4903`, `1141:4905`). It was built Bold because Regular was not
+   * loaded — and a `fontFamily` naming an unloaded family does not throw, it
+   * silently renders the system font, so the weight was simply wrong.
+   */
+  displayRegular: 'PlusJakartaSans_400Regular',
   bodyRegular: 'Manrope_400Regular',
   bodyMedium: 'Manrope_500Medium',
   bodySemiBold: 'Manrope_600SemiBold',
@@ -345,6 +352,32 @@ export const EMBER_TYPE = {
     lineHeight: 24,
     letterSpacing: 1.6,
     color: EMBER.accent,
+  },
+  /**
+   * The Scene's Location card — `1141:4903` and `1141:4905`.
+   *
+   * Both are Plus Jakarta **Regular**, and both were built Bold. Regular was
+   * not loaded at the time, and a `fontFamily` naming an unloaded family does
+   * not throw or warn — it renders the system font, which on a dark screen
+   * reads as "a slightly different weight" rather than as a bug.
+   *
+   * The eyebrow's 1.6px tracking and `#AEAAAA` are what make it an eyebrow;
+   * bold at 16pt with wide tracking reads as a heading competing with the real
+   * headings on the page.
+   */
+  cardEyebrow: {
+    fontFamily: EMBER_FONTS.displayRegular,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 1.6,
+    color: EMBER.textSecondary,
+  },
+  /** The venue name under it — same family and size, no tracking. */
+  cardValue: {
+    fontFamily: EMBER_FONTS.displayRegular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textPrimary,
   },
   /** The headline on a featured card and on the large local card. */
   cardTitleLarge: {

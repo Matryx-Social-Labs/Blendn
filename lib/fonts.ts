@@ -20,6 +20,7 @@ import {
   Manrope_700Bold,
 } from '@expo-google-fonts/manrope'
 import {
+  PlusJakartaSans_400Regular,
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans'
@@ -33,6 +34,7 @@ import {
  * identical code. The weight is part of the family name.
  */
 export const EMBER_FONT_MODULES = {
+  PlusJakartaSans_400Regular,
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
   Manrope_400Regular,

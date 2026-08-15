@@ -16,7 +16,7 @@ import {
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { staticMapUrl } from '../../lib/staticMap'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
 
 /**
  * The Scene's body sections — frame `1141:4875` and `1227:2903`.
@@ -127,7 +127,20 @@ export function SceneAttendees({ count, seed }: { count: number; seed: string })
         <Text style={styles.attendeeCount}>{count > 0 ? `${count}+` : '—'}</Text>
       </View>
       {shown > 0 ? (
-        <View style={styles.stack}>
+        /*
+          One image node, not three creatures.
+          A screen reader walking this row unlabelled announces the emoji —
+          "butterfly", "turtle", "fox" — which is worse than silence: it is
+          confidently wrong about what is on the screen. The discs carry no
+          information a blind user needs; the *count* beside them is the whole
+          message, and it is already in the heading above.
+        */
+        <View
+          style={styles.stack}
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel={`${count} people interested`}
+        >
           {Array.from({ length: shown }, (_, i) => {
             /*
              * Seeded by the event and the position — deliberately *not* by any
@@ -138,8 +151,26 @@ export function SceneAttendees({ count, seed }: { count: number; seed: string })
              * draw them from even if we wanted to. Seeding this way keeps them
              * stable across renders (so the row does not reshuffle on every
              * scroll) while encoding nothing about who is attending.
+             *
+             * ## A creature, not a letter
+             *
+             * These drew `.initial`, which is `seed[0]` — and the seed here is
+             * the *event* id, so all three discs showed the same letter. On the
+             * harness that was a row reading "T T T", which looks like a
+             * rendering fault rather than three people.
+             *
+             * A *varied* letter would have been worse, not better: a letter on
+             * a disc reads as somebody's initial, and nobody's initial is what
+             * this is. The faces were removed from this stack as a security fix
+             * because a face is identity (blendn-admin #229); inventing
+             * initials re-adds a weaker version of the same claim about people
+             * the payload does not even describe.
+             *
+             * A creature says "a person is here" and nothing else — and it is
+             * the convention the product already uses, since the pseudonyms it
+             * hands out are adjective-plus-animal.
              */
-            const { colors, initial } = pseudonymAvatar(`${seed}:${i}`)
+            const { colors, character } = pseudonymAvatar(`${seed}:${i}`)
             return (
               <LinearGradient
                 key={i}
@@ -148,7 +179,7 @@ export function SceneAttendees({ count, seed }: { count: number; seed: string })
                 end={{ x: 1, y: 1 }}
                 style={[styles.avatar, i > 0 && styles.avatarOverlap]}
               >
-                <Text style={styles.avatarInitial}>{initial}</Text>
+                <Text style={styles.avatarCharacter}>{character}</Text>
               </LinearGradient>
             )
           })}
@@ -354,19 +385,49 @@ export function SceneAmenity({
    * pair into one and makes the row look like a repeated element.
    */
   color = EMBER.accent,
+  /**
+   * The frame's two icons are **different sizes** — `1141:4919` is 18 and
+   * `1141:4925` is 20 — and both were built at 20.
+   *
+   * That is not a mistake in the design: `local_bar` is a tall narrow glass and
+   * `camera` is a wide circle, so matching their box sizes makes the cocktail
+   * read larger than the camera. The frame sized them to look equal, which is
+   * what optical sizing is for, and copying the numbers is the whole point of
+   * measuring rather than eyeballing.
+   */
+  iconSize = 20,
   style,
 }: {
   icon: React.ComponentProps<typeof MaterialIcons>['name']
   title: string
   subtitle: string
   color?: string
+  iconSize?: number
   style?: StyleProp<ViewStyle>
 }) {
   return (
-    <View style={[styles.amenity, style]}>
-      <MaterialIcons name={icon} size={20} color={color} />
-      <Text style={styles.amenityTitle}>{title}</Text>
-      <Text style={styles.amenitySubtitle}>{subtitle}</Text>
+    /*
+      Grouped, and its type is capped.
+
+      Two Texts in a fixed 126pt box: at a large accessibility size the title
+      and subtitle together overflow the tile and RN clips them, so the tile
+      shows half a word. 1.5 is the largest step both lines still fit at.
+
+      `accessible` collapses the pair into one announcement — "Open Bar,
+      Premium Spirits" — rather than two stops that each say half of it.
+    */
+    <View
+      style={[styles.amenity, style]}
+      accessible
+      accessibilityLabel={`${title}. ${subtitle}`}
+    >
+      <MaterialIcons name={icon} size={iconSize} color={color} />
+      <Text style={styles.amenityTitle} maxFontSizeMultiplier={1.5} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.amenitySubtitle} maxFontSizeMultiplier={1.5} numberOfLines={2}>
+        {subtitle}
+      </Text>
     </View>
   )
 }
@@ -522,10 +583,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarOverlap: { marginLeft: -16 },
-  avatarInitial: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 18,
-    color: EMBER.onGradient,
+  /*
+   * 26 inside a 48pt inner circle — the disc is 56 with a 4pt border, so the
+   * usable area is 48 and this fills 54% of it, which centres a glyph without
+   * letting its bounding box touch the ring.
+   *
+   * No `fontFamily`: an emoji has to resolve to the system colour font, and
+   * naming a text face here makes some platforms fall back to a monochrome
+   * outline.
+   */
+  avatarCharacter: {
+    fontSize: 26,
+    lineHeight: 32,
+    textAlign: 'center',
   },
   avatarMore: { backgroundColor: EMBER.surfaceSunken },
   avatarMoreText: {
@@ -542,21 +612,31 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     overflow: 'hidden',
   },
-  cardBody: { paddingTop: 32, paddingHorizontal: 32, paddingBottom: 32, gap: 8 },
-  eyebrow: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 1.6,
-    color: EMBER.textSecondary,
-  },
-  venue: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-    paddingTop: 8,
-  },
+  /*
+   * `1141:4901`: `pt-[32px] px-[32px] pb-[56px]`, `gap-[8px]`.
+   *
+   * The bottom is **56**, not 32. It is the gap between the address line and
+   * the map band below it, and at 32 the two crowded — the card read as text
+   * sitting on a photograph rather than as a caption above a map.
+   */
+  cardBody: { paddingTop: 32, paddingHorizontal: 32, paddingBottom: 56, gap: 8 },
+  /*
+   * `1141:4903`: Plus Jakarta **Regular**, not Bold.
+   *
+   * Both this and the venue name were built Bold. The frame sets the whole card
+   * in Regular and lets the 1.6px tracking and the `#AEAAAA` do the eyebrow's
+   * work — bold at 16pt with wide tracking reads as a heading competing with
+   * "The Experience" above it, which is a heading.
+   */
+  eyebrow: EMBER_TYPE.cardEyebrow,
+  /*
+   * `1141:4904` is `pt-[16px]`, and `1141:4905` is Plus Jakarta **Regular**.
+   *
+   * The 8 came from reusing the card's `gap`; the frame gives this container
+   * its own top padding on top of that gap, so the venue name sits 24 below the
+   * eyebrow rather than 16.
+   */
+  venue: { ...EMBER_TYPE.cardValue, paddingTop: 16 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   address: {
     fontFamily: EMBER_FONTS.bodyRegular,
@@ -589,8 +669,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,14,14,0.7)',
   },
 
+  /*
+   * `1141:4917` is `grid-rows-[126px]` — a **fixed** 126, not content height.
+   *
+   * Content-sized, the two tiles agreed only while their text wrapped the same
+   * way. "Open Bar / Premium Spirits" and "Pro Photo / Digital Gallery" both
+   * fit one line each, so the row looked right — until an amenity with a longer
+   * subtitle wrapped and one tile grew taller than its neighbour, which is a
+   * ragged row rather than a pair.
+   *
+   * A grid row is a floor and a ceiling in CSS; here it is `height`, so the
+   * pair is always level whatever the vocabulary eventually contains.
+   */
   amenity: {
     flex: 1,
+    height: 126,
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.05)',

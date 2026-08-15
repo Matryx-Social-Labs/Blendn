@@ -144,15 +144,54 @@ export function SceneHero({
         Also `none`. The caption covers the bottom third and holds no controls,
         so the pager underneath keeps that area swipeable.
       */}
-      <View style={styles.info} pointerEvents="none">
+      {/*
+        One node to VoiceOver, not five.
+
+        Unlabelled, this caption is read as four separate fragments in visual
+        order — a scarcity pill, a title, a date, a time — and the two meta
+        items are icon-plus-text pairs, so the swipe order includes stops that
+        announce nothing. Grouped, it is a single announcement in the order
+        somebody actually wants: what it is, when, and how tight the door is.
+
+        `accessibilityRole="header"` because this *is* the screen's heading, and
+        it lets a VoiceOver user jump straight here with the rotor rather than
+        swiping past the hero's media pager.
+      */}
+      <View
+        style={styles.info}
+        pointerEvents="none"
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={[title, dateLabel, timeLabel, scarcity]
+          .filter(Boolean)
+          .join('. ')}
+      >
         {scarcity ? (
           <View style={styles.pill}>
-            <Text style={styles.pillText}>{scarcity}</Text>
+            <Text style={styles.pillText} maxFontSizeMultiplier={1.4}>
+              {scarcity}
+            </Text>
           </View>
         ) : null}
 
         {children ?? (
-          <Text style={styles.title} numberOfLines={2}>
+          /*
+            Capped at 1.2, and this is the one place in the app where the cap is
+            not optional.
+            React Native **clips** a glyph to its `lineHeight` where CSS lets it
+            overflow — the same difference that made the frame's 43.2 leading on
+            a 48pt font unusable here. At Accessibility XXXL iOS scales text by
+            about 3.1x, which would ask for a 149pt glyph inside a 56pt line and
+            render two rows of sliced letterforms over a photograph.
+            `numberOfLines={2}` truncates, it does not rescue the line box.
+
+            1.2 gives 58pt on a 56pt line, which still fits because the line
+            height carries a little slack, and it is the largest step that does.
+            Somebody who needs bigger type than that gets it everywhere else on
+            this screen; the hero title is a display element with the same words
+            in the accessible label below.
+          */
+          <Text style={styles.title} numberOfLines={2} maxFontSizeMultiplier={1.2}>
             {title}
           </Text>
         )}

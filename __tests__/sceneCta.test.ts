@@ -210,3 +210,113 @@ describe('the shipping event screen agrees with the CTA it is not', () => {
     expect(detail).toContain('secondaryActionButton')
   })
 })
+
+/**
+ * The six deltas `docs/SCENE.md` recorded against the frame, and the two
+ * accessibility gaps beside them.
+ *
+ * Every number is from `get_design_context`, not from the render.
+ */
+const SECTIONS = () => SRC()
+const HERO = () =>
+  readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
+const THEME = () => readFileSync(join(__dirname, '..', 'lib', 'theme.ts'), 'utf8')
+
+describe('the Location card matches 1141:4900', () => {
+  it('pads the body 32/32/56, not 32 all round', () => {
+    // `1141:4901` is `pt-[32px] px-[32px] pb-[56px]` — the bottom is the gap to
+    // the map band, and at 32 the address crowded it.
+    expect(SECTIONS()).toContain('paddingBottom: 56')
+  })
+
+  it('sets the venue name 16 below the eyebrow', () => {
+    // `1141:4904` is `pt-[16px]`; the 8 came from reusing the card's own gap.
+    expect(SECTIONS()).toContain('...EMBER_TYPE.cardValue, paddingTop: 16')
+  })
+
+  it('draws both lines in Plus Jakarta Regular', () => {
+    /*
+     * `1141:4903` and `1141:4905` are both `font-normal`, and both were built
+     * Bold — because Regular was not loaded, and a `fontFamily` naming an
+     * unloaded family renders the system font without throwing or warning.
+     */
+    const theme = THEME()
+    expect(theme).toContain("displayRegular: 'PlusJakartaSans_400Regular'")
+    expect(theme).toContain('cardEyebrow')
+    expect(theme).toContain('cardValue')
+    expect(SECTIONS()).toContain('eyebrow: EMBER_TYPE.cardEyebrow')
+  })
+})
+
+describe('the amenity tiles match 1141:4917', () => {
+  it('are a fixed 126 tall, so the pair cannot go ragged', () => {
+    // `grid-rows-[126px]`. Content-sized, the two agreed only while their text
+    // wrapped identically — which today's two fixtures happen to do.
+    expect(SECTIONS()).toContain('height: 126')
+  })
+
+  it('lets each icon take its own size', () => {
+    /*
+     * `1141:4919` is 18 and `1141:4925` is 20, and both were built at 20. Not a
+     * mistake in the design: a tall narrow martini glass and a wide round
+     * camera at the same box size do not look the same size.
+     */
+    expect(SECTIONS()).toContain('iconSize = 20')
+    expect(PREVIEW()).toContain('iconSize={18}')
+  })
+})
+
+describe('the accessibility gaps docs/SCENE.md recorded', () => {
+  it('caps dynamic type on the 48pt hero title', () => {
+    /*
+     * RN **clips** a glyph to its `lineHeight` where CSS lets it overflow. At
+     * Accessibility XXXL iOS scales by ~3.1x, which asks for a 149pt glyph
+     * inside a 56pt line: two rows of sliced letterforms over a photograph.
+     * `numberOfLines` truncates and does not rescue the line box.
+     */
+    expect(HERO()).toContain('maxFontSizeMultiplier={1.2}')
+  })
+
+  it('caps the amenity tiles, which live in a fixed box', () => {
+    expect(SECTIONS()).toContain('maxFontSizeMultiplier={1.5}')
+  })
+
+  it('gives the hero caption one grouped announcement', () => {
+    // Ungrouped it reads as four fragments, two of which are icon-plus-text
+    // pairs with stops that announce nothing.
+    const hero = HERO()
+    expect(hero).toContain('accessibilityRole="header"')
+    expect(hero).toContain('[title, dateLabel, timeLabel, scarcity]')
+  })
+
+  it('stops the avatar row announcing the creatures', () => {
+    /*
+     * Unlabelled, a screen reader says "butterfly, turtle, fox" — worse than
+     * silence, because it is confidently wrong about what is on screen. The
+     * count is the whole message.
+     */
+    expect(SECTIONS()).toContain('accessibilityLabel={`${count} people interested`}')
+  })
+})
+
+describe('the attendee discs carry a creature, not a letter', () => {
+  it('never draws initial here', () => {
+    /*
+     * `.initial` is `seed[0]` and the seed is the *event* id, so all three
+     * discs showed the same letter — a row reading "T T T". A varied letter
+     * would be worse: a letter reads as somebody's initial, and the faces were
+     * removed from this stack precisely because a face is identity.
+     */
+    expect(SECTIONS()).not.toContain('avatarInitial')
+    expect(SECTIONS()).toContain('const { colors, character } = pseudonymAvatar')
+  })
+
+  it('picks colour and creature from different mixes of the hash', () => {
+    // Taking both from `h` correlates them: with 8 hues and 16 creatures every
+    // panda would be the same blue, and a row of three would repeat a pairing
+    // far more often than chance.
+    const lib = readFileSync(join(__dirname, '..', 'lib', 'pseudonymAvatar.ts'), 'utf8')
+    expect(lib).toContain('CHARACTERS')
+    expect(lib).toContain('h ^ 0x9e3779b9')
+  })
+})
