@@ -19,27 +19,23 @@ Canvas **🕓 Updates**. The Prototype canvas is an older purple design; ignore 
 
 ## The work, in order
 
-### 1. Orientation becomes multi-select
+~~1. Orientation multi-select~~ — **done**, API #227 and app #129. Verified
+against staging end to end, including the three rejections.
 
-Fully specified in `ROADMAP.md` under "Orientation becomes multi-select". API
-first — steps 1–4 are safe alone because the column accepts more while nothing
-sends more yet. Capped at three, "Prefer not to say" exclusive, `interested_in`
-from the **union**.
-
-### 2. The Pulse — `1141:4643`
+### 1. The Pulse — `1141:4643`
 
 Unblocked. Structure is in `docs/HOMEPAGE_AUDIT.md`. Cut the "Explore the Grid"
 card (that is the venues map being deferred). Centre nav button is the Blendn
 logo opening a sheet that shows *your* QR **and** a scan action — one button,
 both directions.
 
-### 3. The Scene — `1141:4853`
+### 2. The Scene — `1141:4853`
 
 Swipe-to-join with the logo replacing "Join the Experience". **No price** — there
 is no price anywhere in the schema and the user has said so twice. No amenity
 chips. Attendee stack per **SCRUM-25**.
 
-### 4. The Grid — `1141:4951`
+### 3. The Grid — `1141:4951`
 
 Unblocked as of the decision below. Reveal-gated: real name and face only for
 people who revealed in *this* room, pseudonym for everyone else.
@@ -52,14 +48,14 @@ tested, and render nowhere today:
   (sample on a timer while checked in and foregrounded, feed `presenceAction`,
   `'ask'` shows `PRESENCE_COPY.ask`, `'checkOut'` calls check-out and says so)
 
-### 5. The Banter, DM, match notification, anonymous chatroom
+### 4. The Banter, DM, match notification, anonymous chatroom
 
 `1141:5247`, `5430`, `5389`, `5498`. Mostly a re-skin of working features — see
 "What is genuinely already built" in the audit. The anonymous chatroom frame
 draws real names and faces; it gets the same reveal-gating as The Grid,
 including the system lines ("Cosmic Panda pinned a location").
 
-### 6. The splash → sign-up logo transition
+### 5. The splash → sign-up logo transition
 
 Measure `components/IntroAnimation.tsx`'s end state; match position and size in
 `app/index.tsx` so the video ends and the logo simply stays. Needs a device.
@@ -121,6 +117,13 @@ or every selection changes the width and re-wraps the row.
 **Estimating text width does not work.** Two rounds of tuning a per-character
 average proved the approach wrong, not the coefficient. Chips measure themselves
 with `onLayout` now.
+
+**Accepted is not written.** `show_orientation` had a column, a validator, both
+read gates and a switch on screen, and no line writing it — so the toggle
+returned 200 and did nothing for as long as it existed. It failed in the *safe*
+direction, so nothing went red. `__tests__/age-routes.test.ts` now loops over
+`updateProfileSchema` asserting every accepted field reaches the upsert; when
+you add a field to that route, that loop is what catches you forgetting it.
 
 **Ask staging for the response instead of re-reading the diff.** Three of the
 eight `date_of_birth` leaks were found that way and none by inspection — a
