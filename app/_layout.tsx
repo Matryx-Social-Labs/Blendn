@@ -355,11 +355,28 @@ function RootLayout() {
         <View style={styles.root}>
           {/*
             * Rendered last in the tree but drawn on top, so it covers whatever
-            * the router settles on. Deliberately not a gate — auth, assets and
-            * routing all resolve underneath while it plays, and it is simply
-            * removed when done. It never delays a signed-in user.
+            * the router settles on. Deliberately not a gate — auth and routing
+            * both resolve underneath while it plays, and it is simply removed
+            * when done. It never delays a signed-in user.
+            *
+            * `assetsReady` gates the *mount*, though, and that is not the same
+            * thing as gating startup. The intro used to mount on the first
+            * render, which is before the native splash has been dismissed —
+            * so its timers ran while the splash was still covering it, and on
+            * a slow cold start the animation was already partway through by
+            * the time anyone could see it. It survived because the old asset
+            * opened on a static monogram identical to the splash, so the
+            * frames being eaten were indistinguishable from the splash
+            * itself. The asset now opens by drawing that monogram, and eaten
+            * frames would mean the logo appearing half-drawn.
+            *
+            * Same condition `hideAsync` waits on, and it flips in the render
+            * before the effect fires, so the overlay is up before the splash
+            * begins fading out. Nothing shows between them.
             */}
-          {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
+          {showIntro && assetsReady && (
+            <IntroAnimation onDone={() => setShowIntro(false)} />
+          )}
           <Stack
             screenOptions={{
               // Every pushed screen sits on the same flat surface as the root.
