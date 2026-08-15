@@ -1,4 +1,4 @@
-import { feedClip, feedPoster, type EventMediaItem } from '../lib/feedMedia'
+import { feedClip, feedPlaylist, feedPoster, type EventMediaItem } from '../lib/feedMedia'
 
 /*
  * Which asset a feed card draws.
@@ -90,5 +90,61 @@ describe('feedPoster', () => {
   it('returns null rather than a broken url', () => {
     expect(feedPoster([], null)).toBeNull()
     expect(feedPoster(undefined, null)).toBeNull()
+  })
+})
+
+describe('feedPlaylist', () => {
+  it('opens with the cover', () => {
+    const p = feedPlaylist([video()], 'https://cdn.example/cover.jpg')
+    expect(p[0]).toEqual({ kind: 'image', url: 'https://cdn.example/cover.jpg' })
+  })
+
+  it('never shows the cover twice', () => {
+    /*
+     * The dashboard keeps `cover_image_url` and `event_media` as separate
+     * fields, so an organiser uploading the same photograph to both is the
+     * normal case, not a mistake. A playlist that then showed it twice in a row
+     * reads as a stuck carousel rather than a loop.
+     */
+    const cover = 'https://cdn.example/cover.jpg'
+    const p = feedPlaylist([image({ url: cover }), video()], cover)
+    expect(p.filter((i) => i.url === cover)).toHaveLength(1)
+  })
+
+  it('walks in `order`, not array position', () => {
+    const p = feedPlaylist(
+      [image({ url: 'b.jpg', order: 9 }), image({ url: 'a.jpg', order: 1 })],
+      null
+    )
+    expect(p.map((i) => i.url)).toEqual(['a.jpg', 'b.jpg'])
+  })
+
+  it('drops a video it cannot poster rather than leaving a gap', () => {
+    // A black rectangle mid-loop is worse than on a static card: it arrives
+    // while somebody is already watching.
+    const p = feedPlaylist([video({ thumbnail_url: null })], null)
+    expect(p).toEqual([])
+  })
+
+  it('never includes a document', () => {
+    // `event_media.type` allows it — a menu or a floor plan. It has no business
+    // in a card that autoplays.
+    const p = feedPlaylist([{ type: 'document', url: 'menu.pdf', order: 0 }], 'c.jpg')
+    expect(p.map((i) => i.kind)).toEqual(['image'])
+  })
+
+  it('carries each video its own poster', () => {
+    const p = feedPlaylist([video()], 'https://cdn.example/cover.jpg')
+    const v = p.find((i) => i.kind === 'video')
+    expect(v).toEqual({
+      kind: 'video',
+      url: 'https://cdn.example/clip.mp4',
+      posterUrl: 'https://cdn.example/poster.jpg',
+    })
+  })
+
+  it('is empty when there is nothing at all, rather than throwing', () => {
+    expect(feedPlaylist(undefined, null)).toEqual([])
+    expect(feedPlaylist([], null)).toEqual([])
   })
 })

@@ -3,8 +3,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
-import OptimizedImage from '../OptimizedImage'
-import { FeedVideo } from './FeedVideo'
+import type { FeedMediaItem } from '../../lib/feedMedia'
+import { FeedMedia } from './FeedMedia'
 
 import { Dimensions } from 'react-native'
 
@@ -74,13 +74,13 @@ interface Props {
   title: string
   /** The category name — already the real one, from the server's taxonomy. */
   tag?: string | null
-  imageUrl?: string | null
   /**
-   * A short clip that plays over the cover image while this card is the one on
-   * screen. Absent for most events, and the card is complete without it — the
-   * image is the poster, not a placeholder for the video.
+   * Everything this event can show, in order — build it with `feedPlaylist`.
+   *
+   * One photograph is the common case and behaves exactly as a static card. An
+   * event with several, or with a clip, cycles them while it is active.
    */
-  videoUrl?: string | null
+  playlist?: FeedMediaItem[]
   /**
    * Whether this is the card the viewport has settled on.
    *
@@ -104,8 +104,7 @@ interface Props {
 export function FeaturedCard({
   title,
   tag,
-  imageUrl,
-  videoUrl,
+  playlist = [],
   isActive = false,
   dateLabel,
   placeLabel,
@@ -130,15 +129,19 @@ export function FeaturedCard({
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
       style={({ pressed }) => [styles.card, { width, height }, pressed && styles.pressed]}
     >
-      {imageUrl ? (
-        <OptimizedImage
-          source={imageUrl}
-          style={StyleSheet.absoluteFill as never}
-          width={Math.round(width)}
-          height={height}
-          contentFit="cover"
-          priority="high"
-        />
+      {/*
+        The whole media set, walked while this is the card on screen.
+
+        `playlist` replaces the old image-or-video pair. An event usually has one
+        photograph and this behaves exactly as before for it; an event with three
+        photographs and a clip now shows all four rather than only the first.
+
+        `FeedMedia` keeps the opening still mounted underneath whatever is
+        playing, so this component no longer needs a loading or an error state —
+        there is always a photograph behind.
+      */}
+      {playlist.length > 0 ? (
+        <FeedMedia playlist={playlist} isActive={isActive} width={width} height={height} />
       ) : (
         // Not a broken-image glyph and not a blank rectangle: an event with no
         // cover still has a name, and the scrim below keeps it legible either
@@ -159,8 +162,6 @@ export function FeaturedCard({
         broken. There is no spinner because the poster already is one, and it is
         one nobody can tell from the finished thing.
       */}
-      {videoUrl && isActive ? <FeedVideo source={videoUrl} /> : null}
-
       {/*
         Top-to-bottom, transparent to page colour.
 

@@ -41,6 +41,11 @@ export interface FeedClip {
   posterUrl: string
 }
 
+/** One thing a card can show. */
+export type FeedMediaItem =
+  | { kind: 'image'; url: string }
+  | { kind: 'video'; url: string; posterUrl: string }
+
 /**
  * The clip a card should play, or `null` for a still card.
  *
@@ -97,4 +102,60 @@ export function feedPoster(
 
   const withThumb = sorted.find((m) => m.thumbnail_url)
   return withThumb?.thumbnail_url ?? null
+}
+
+
+/**
+ * Everything a card can show, in the order it should show it.
+ *
+ * ## The cover comes first, and only once
+ *
+ * `cover_image_url` is the picture the organiser chose to represent the event,
+ * so it opens. It is then **excluded** from the rest of the walk, because an
+ * organiser who uploads their cover into `media` as well — which the dashboard
+ * makes easy, since the two are separate fields — would otherwise get a
+ * playlist that shows the same photograph twice in a row and reads as a stuck
+ * carousel rather than a loop.
+ *
+ * ## A video with no poster is dropped, not skipped-with-a-gap
+ *
+ * Same rule as `feedClip`: the still under a player is what shows while the
+ * first frame decodes, so a video we cannot poster is a black rectangle mid-loop
+ * — worse in a carousel than as a static card, because it arrives while
+ * somebody is already watching.
+ *
+ * ## Documents never appear
+ *
+ * `event_media.type` allows `document`, which is a menu or a floor plan. It has
+ * no business in a card that autoplays.
+ */
+export function feedPlaylist(
+  media: readonly EventMediaItem[] | null | undefined,
+  coverImageUrl?: string | null
+): FeedMediaItem[] {
+  const out: FeedMediaItem[] = []
+  if (coverImageUrl) out.push({ kind: 'image', url: coverImageUrl })
+
+  if (!Array.isArray(media)) return out
+
+  const sorted = [...media]
+    .filter((m) => typeof m?.url === 'string' && m.url.length > 0)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  for (const m of sorted) {
+    if (m.url === coverImageUrl) continue
+
+    if (m.type === 'image') {
+      out.push({ kind: 'image', url: m.url as string })
+      continue
+    }
+
+    if (m.type === 'video') {
+      const posterUrl = m.thumbnail_url || coverImageUrl
+      if (!posterUrl) continue
+      out.push({ kind: 'video', url: m.url as string, posterUrl })
+    }
+  }
+
+  return out
 }

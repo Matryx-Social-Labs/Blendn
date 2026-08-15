@@ -35,15 +35,38 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 export function FeedVideo({
   source,
   style,
+  onEnded,
 }: {
   /** A direct MP4 URL. See `docs/MEDIA.md` for what the pipeline guarantees. */
   source: string
   style?: StyleProp<ViewStyle>
+  /**
+   * Fired once the clip reaches its end.
+   *
+   * When supplied the player does **not** loop — the card is walking a playlist
+   * and this is how it learns the clip is done. Without it the clip loops
+   * forever, which is right for a card whose only media is one video.
+   */
+  onEnded?: () => void
 }) {
+  const loop = !onEnded
   const player = useVideoPlayer(source, (p) => {
-    p.loop = true
+    p.loop = loop
     p.muted = true
   })
+
+  useEffect(() => {
+    if (!onEnded) return
+    /*
+     * `playToEnd` rather than polling `currentTime` against `duration`.
+     *
+     * A poll has to pick an interval, and every choice is wrong somewhere: too
+     * slow and the card sits on a frozen last frame, too fast and it burns a
+     * timer on the JS thread for the whole clip. The player already knows.
+     */
+    const sub = player.addListener('playToEnd', () => onEnded())
+    return () => sub.remove()
+  }, [player, onEnded])
 
   useEffect(() => {
     /*
