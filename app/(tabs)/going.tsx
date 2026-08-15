@@ -15,10 +15,10 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { apiClient } from '../lib/apiClient'
-import { Logger } from '../lib/logger'
-import { formatEventDateTime } from '../lib/time'
-import { useAuth } from '../lib/useAuth'
+import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
+import { formatEventDateTime } from '../../lib/time'
+import { useAuth } from '../../lib/useAuth'
 
 interface EventRow {
   id: string
@@ -32,7 +32,21 @@ interface EventRow {
   longitude: number
 }
 
-export default function InterestedScreen() {
+/**
+ * Going — the events that are yours.
+ *
+ * This screen was `app/interested.tsx`, reachable only from two "view all" rows
+ * on The Pulse. It is a tab now because an events app's most-returned-to
+ * question is *what am I going to*, and because the alternative for that slot
+ * was Explore — a browse-by-category surface that returns three results per
+ * category on a one-city catalogue and reads as broken. See
+ * `docs/NAVIGATION.md`.
+ *
+ * Saved events today. Attending and past-with-rating are the next two sections;
+ * `rate/[eventId]` is built and currently linked from nowhere, and this is where
+ * it belongs.
+ */
+export default function GoingScreen() {
   const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
@@ -183,12 +197,13 @@ export default function InterestedScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/*
+        No back button. This is a tab, and a tab has nowhere to go back to —
+        the chevron it used to carry came from being a pushed route and would
+        now dead-end on whatever happened to be underneath.
+      */}
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Interested</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Going</Text>
       </View>
 
       {loading ? (
@@ -219,7 +234,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingHorizontal: 14,
     paddingTop: 6,
     paddingBottom: 10,

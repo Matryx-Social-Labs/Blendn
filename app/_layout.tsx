@@ -512,11 +512,19 @@ function RootLayout() {
           animation: routeTransition,
         }}
       />
+      {/*
+        The Room, which the Blend'n button in the middle of the bar opens.
+
+        Presented as a sheet rather than a push: it is a mode you are in for the
+        length of an event, not a page in a stack, and the swipe-down out of it
+        matches the chevron the screen draws. `docs/NAVIGATION.md`.
+      */}
       <Stack.Screen
-        name="interested"
+        name="room"
         options={{
           headerShown: false,
-          animation: routeTransition,
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
         }}
       />
       <Stack.Screen
