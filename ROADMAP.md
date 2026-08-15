@@ -647,6 +647,43 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **The bar, rebuilt from the frame it was supposed to come from.** Frame
+  `1141:4827`, measured with `get_metadata` rather than eyeballed from a render.
+
+  Four things were wrong, and each had survived a round of "fixed":
+
+  - **The bar clipped its own centre button.** The button sits at `y=-16`, above
+    the bar's top edge, and the surface needs `overflow: 'hidden'` to clip its
+    48pt corners. Both lived on one view, so the surface clipped the button too.
+    Now the outer view lays out and does not clip; `barSurface` is an absolute
+    child that holds the fill, the radius and the blur.
+  - **The items were equal-width.** The frame's five slots are 40.08 / 56.23 /
+    56 / 52.03 / 22.98 with a uniform 26.66 gap — `space-between` over
+    content-sized children. `flex: 1` gave every label the widest one's box,
+    which is what made the row read as cramped. This was the "absolutely
+    positioned items" note in the plan: the positions only *look* irregular
+    because the labels are different lengths.
+  - **The active state was a colour swap.** The frame's active item is the same
+    item at 110% — icon 24.2 against 22, label box 26.4 against 24, both exactly
+    ×1.1. One transform, so there is no second set of sizes to keep in step.
+  - **The centre was a glyph with a word under it.** It is the Blend'n monogram
+    now, no label, gradient in every state. It was gradient-only-when-live on
+    the reasoning that a permanent glow stops being seen — right for a status
+    light, wrong for a brand mark. The status it carried is in the badge, the
+    slow breath, and where the button goes.
+
+  `monogram-white.png` tinted to `onGradient`, not `monogram-gradient.png`,
+  which would be orange on orange; it is the asset the splash already ships, so
+  no second copy of the logo entered the bundle. Rendered at 24 rather than the
+  frame's 17.5 — a `+` is one stroke and reads at any size, a two-counter line
+  mark at 31% of a 56pt circle is a smudge. Deviation recorded for the designer.
+
+  `__tests__/pulseNav.test.ts` pins all four, verified by breaking two and
+  watching them fail. They are source greps because none of this is visible to
+  a typecheck — every one is a valid style object that draws the wrong thing —
+  and `react-test-renderer` 19 returns `null` for a bare `<View>` in this setup,
+  so there is no tree to assert against.
+
 - **How you enter a room is a setting, with two safeguards** — the onboarding
   question, a first-time warning, and a banner that runs for as long as you are
   in the room. `lib/roomVisibility.ts` + `components/RoomVisibilityBanner.tsx`.

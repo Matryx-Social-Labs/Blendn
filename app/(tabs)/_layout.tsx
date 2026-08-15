@@ -12,7 +12,6 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
   roomButtonAccessibilityLabel,
-  roomButtonLabel,
   roomButtonPulses,
   roomButtonTarget,
   type RoomButtonTarget,
@@ -35,6 +34,9 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '..
  * this is the most visible control in the app and it is driven by a geofence, a
  * clock and a network call.
  */
+
+/** The mark on the centre button. Tinted at the call site — see `centreMark`. */
+const MONOGRAM = require('../../assets/logo/monogram-white.png')
 
 const TABS = [
   { name: 'events', label: 'Pulse', icon: 'flame', iconOff: 'flame-outline' },
@@ -77,21 +79,23 @@ const TabButton = memo(({
     accessibilityState={isFocused ? { selected: true } : {}}
     onPress={onPress}
     onLongPress={onLongPress}
-    style={({ pressed }) => [styles.item, pressed && styles.pressed]}
+    style={({ pressed }) => [styles.item, isFocused && styles.itemOn, pressed && styles.pressed]}
   >
-    {avatarUrl ? (
-      <Image
-        source={{ uri: avatarUrl }}
-        style={[styles.avatar, isFocused && styles.avatarFocused]}
-        contentFit="cover"
-      />
-    ) : (
-      <Ionicons
-        name={icon}
-        size={22}
-        color={isFocused ? EMBER.accent : EMBER.textSecondary}
-      />
-    )}
+    <View style={styles.iconBox}>
+      {avatarUrl ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          style={[styles.avatar, isFocused && styles.avatarFocused]}
+          contentFit="cover"
+        />
+      ) : (
+        <Ionicons
+          name={icon}
+          size={22}
+          color={isFocused ? EMBER.accent : EMBER.textSecondary}
+        />
+      )}
+    </View>
     {/*
       Labelled, not icon-only. The bar this replaced showed four unlabelled
       glyphs, and two of the five slots here are words the product invented —
@@ -153,7 +157,6 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
 
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] })
   const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] })
-  const live = target.state === 'live' || target.state === 'checkin'
 
   return (
     <View style={styles.centreSlot}>
@@ -180,18 +183,39 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
         accessibilityLabel={roomButtonAccessibilityLabel(target)}
         style={({ pressed }) => [styles.centreButton, pressed && styles.pressed]}
       >
-        {live ? (
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-        <Ionicons
-          name={target.state === 'checkin' ? 'location' : 'sparkles'}
-          size={24}
-          color={live ? EMBER.onGradient : EMBER.textSecondary}
+        {/*
+          Gradient in every state, as the frame draws it.
+
+          It used to be gradient only when something was live, on the reasoning
+          that a permanently glowing button is one people stop seeing. That was
+          right while this was a *status light*. It is the Blend'n mark now — the
+          brand's one fixed point in the app — and a logo that changes colour
+          depending on whether you are near an event is not a logo.
+
+          The status it used to carry has not been dropped: it is in the badge,
+          in the slow breath below, and in where the button goes.
+        */}
+        <LinearGradient
+          colors={[...EMBER_GRADIENT.colors]}
+          start={EMBER_GRADIENT.start}
+          end={EMBER_GRADIENT.end}
+          style={StyleSheet.absoluteFill}
+        />
+        {/*
+          `monogram-white.png` tinted, not `monogram-gradient.png`.
+
+          The gradient monogram is the mark for a dark background — on the warm
+          button it would be orange on orange. This is the white silhouette
+          tinted to `onGradient`, the same dark-on-warm pairing every gradient
+          control in the app uses, and it is the asset the splash already ships
+          so no second copy of the logo enters the bundle.
+        */}
+        <Image
+          source={MONOGRAM}
+          style={styles.centreMark}
+          contentFit="contain"
+          tintColor={EMBER.onGradient}
+          accessibilityIgnoresInvertColors
         />
         {target.badge > 0 ? (
           <View style={styles.badge}>
@@ -201,9 +225,11 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
           </View>
         ) : null}
       </Pressable>
-      <Text style={styles.centreLabel} numberOfLines={1}>
-        {roomButtonLabel(target.state)}
-      </Text>
+      {/*
+        No label. The frame's centre slot is a 56pt circle and nothing else —
+        the four words either side are the navigation, and a fifth under the
+        brand mark made the row read as five tabs with one shouting.
+      */}
     </View>
   )
 })
@@ -350,22 +376,31 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   }
 
   return (
+    /*
+     * Two views, and the split is the whole reason the corners were filled.
+     *
+     * The rounded, blurred surface needs `overflow: 'hidden'` to clip the blur
+     * to its 48pt corners. The centre button hangs **16pt above the bar's top
+     * edge** (frame: `Container` at `y=-16`), so anything clipping the surface
+     * also decapitates the button.
+     *
+     * So the outer view lays out and does not clip; `barSurface` is an absolute
+     * child holding the fill, the radius and the blur. The button overhangs the
+     * surface and stays inside the parent, which is what the frame draws.
+     */
     <View
-      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}
+      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 20) }]}
       pointerEvents="box-none"
     >
-      {/*
-        The frame's 20pt backdrop blur. `expo-blur` blurs what is *behind* a
-        view, which is exactly right for a bar the feed scrolls under — the same
-        reason it was the wrong tool for the onboarding background, where there
-        was nothing behind to blur.
-      */}
-      <BlurView
-        intensity={20}
-        tint="dark"
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      <View style={styles.barSurface} pointerEvents="none">
+        {/*
+          The frame's 20pt backdrop blur. `expo-blur` blurs what is *behind* a
+          view, which is exactly right for a bar the feed scrolls under — the
+          same reason it was the wrong tool for the onboarding background, where
+          there was nothing behind to blur.
+        */}
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      </View>
       {renderTab(TABS[0])}
       {renderTab(TABS[1])}
       <RoomButton target={target} />
@@ -431,14 +466,34 @@ const CENTRE_SIZE = 56
 export const TAB_BAR_CLEARANCE = 88
 
 const styles = StyleSheet.create({
+  /*
+   * Frame `1141:4827`, measured rather than guessed.
+   *
+   * `space-between` with **content-sized** items, not `flex: 1` and
+   * `space-around`. The frame's five slots are 40.08 / 56.23 / 56 / 52.03 /
+   * 22.98 wide with a uniform 26.66 gap between every pair — which is what
+   * space-between over content-sized children produces, and is why the item
+   * positions look irregular. Equal-width slots made every label share the
+   * widest one's box, so "Me" sat in a 78pt cell and the row read as cramped.
+   *
+   * `paddingTop: 18` puts the icon boxes at y=18 and therefore every label at
+   * y=42, which is where all four of the frame's labels sit despite their
+   * containers starting at four different heights.
+   */
   bar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-around',
-    paddingTop: 10,
-    paddingHorizontal: 8,
+    justifyContent: 'space-between',
+    paddingTop: 18,
+    // Frame: first item's left edge is 27.51, last item's right edge is 359.64
+    // in a 390pt frame.
+    paddingHorizontal: 27.5,
+  },
+  // The surface, separate from the layout — see the note at the render site.
+  barSurface: {
+    ...StyleSheet.absoluteFillObject,
     // Frame `1141:4643`: `rgba(27,25,25,0.9)` under a 20pt backdrop blur, with
-    // 48pt top corners. It was 0.96 and 32 — nearly opaque and half the radius.
+    // 48pt top corners.
     backgroundColor: 'rgba(27,25,25,0.9)',
     borderTopLeftRadius: 48,
     borderTopRightRadius: 48,
@@ -454,7 +509,17 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  item: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 4 },
+  item: { alignItems: 'center' },
+  /*
+   * The frame's active item is not a different component, it is the same one at
+   * 110%: its icon is 24.2 against everyone else's 22, and its label box is
+   * 26.4 against 24. Both are exactly ×1.1, so one transform reproduces it and
+   * there is no second set of sizes to keep in step.
+   */
+  itemOn: { transform: [{ scale: 1.1 }] },
+  // A fixed box, so glyphs of different natural heights (the frame's are 24.2,
+  // 18, 22×16 and 16) all put their label on the same line.
+  iconBox: { height: 24, alignItems: 'center', justifyContent: 'center' },
   avatar: {
     width: 24,
     height: 24,
@@ -474,7 +539,7 @@ const styles = StyleSheet.create({
   },
   itemLabelOn: { color: EMBER.accent },
 
-  centreSlot: { flex: 1, alignItems: 'center', gap: 4 },
+  centreSlot: { alignItems: 'center' },
   centreButton: {
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,
@@ -482,26 +547,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: EMBER.surface,
-    // Lifted so it breaks the bar's top edge, as every frame draws it. Negative
-    // margin rather than absolute positioning, so the slot still reserves its
-    // width and the four tabs space evenly around it.
-    marginTop: -22,
+    /*
+     * Frame: the container sits at `y=-16` in a bar whose content starts at 18,
+     * so it clears the top edge by 16. The parent does not clip — `barSurface`
+     * is the thing with `overflow: 'hidden'`.
+     */
+    marginTop: -34,
+    ...Platform.select({
+      ios: {
+        // The frame's `Button:shadow` — the warm bloom under the button.
+        shadowColor: EMBER.gradientFrom,
+        shadowOpacity: 0.45,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      android: { elevation: 12 },
+      default: {},
+    }),
   },
+  /*
+   * The mark, at 24 rather than the frame's 17.5.
+   *
+   * The frame draws a `+` in a 17.5pt box, and a plus is a single stroke that
+   * reads at any size. The Blend'n monogram is a two-counter line mark — at
+   * 17.5 inside a 56pt circle it fills 31% and reads as a smudge. 24 puts it at
+   * 43%, which is where a logo-in-a-circle normally sits.
+   *
+   * Deliberate deviation, recorded in `docs/PULSE.md` for the designer.
+   */
+  centreMark: { width: 24, height: 24 },
   halo: {
     position: 'absolute',
-    top: -22,
+    top: -34,
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,
     borderRadius: CENTRE_SIZE / 2,
     backgroundColor: EMBER.gradientFrom,
-  },
-  centreLabel: {
-    ...EMBER_TYPE.meta,
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    marginTop: -16,
   },
 
   badge: {
