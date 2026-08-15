@@ -64,11 +64,37 @@ function hash(seed: string): number {
   return Math.abs(h)
 }
 
+/**
+ * The cast. One of these rides on each disc.
+ *
+ * **Animals, because the product already speaks in animals.** The pseudonyms
+ * this app hands out are adjective-plus-creature — "Cosmic Panda", "Velvet
+ * Heron" — so a panda on a disc is the same convention the label beside it uses,
+ * not a new one invented for the avatar.
+ *
+ * **Not people.** A human character carries skin tone, hair, gender and age, and
+ * three of those under "124 interested" at an 18+ nightlife event is a
+ * demographic claim about identifiable people — the same inference the header of
+ * this file explains we refuse to make from a blurred photograph. A fox implies
+ * nothing about anybody.
+ *
+ * Emoji rather than bundled art: it costs no asset, no network and no
+ * dependency, renders at any size, and every one of these has had a colour
+ * glyph on iOS and Android for years. The list avoids anything whose meaning
+ * shifts by platform or which renders monochrome on either.
+ */
+const CHARACTERS = [
+  '🦊', '🐼', '🦉', '🐙', '🦁', '🐝', '🦋', '🐢',
+  '🦜', '🐺', '🐬', '🦩', '🐨', '🦄', '🐡', '🦔',
+] as const
+
 export interface PseudonymAvatar {
   /** Two stops, drawn as a gradient disc. */
   colors: readonly [string, string]
   /** One character, taken from the pseudonym itself. */
   initial: string
+  /** A creature, for surfaces that draw a face rather than a letter. */
+  character: string
 }
 
 /**
@@ -86,8 +112,18 @@ export function pseudonymAvatar(pseudonym: string): PseudonymAvatar {
    * crash or a blank hole there is worse than a neutral disc.
    */
   const seed = trimmed.length > 0 ? trimmed : 'anonymous'
-  const colors = HUES[hash(seed) % HUES.length]
-  return { colors, initial: seed[0].toUpperCase() }
+  const h = hash(seed)
+  /*
+   * Colour and creature are drawn from *different* mixes of the same hash.
+   *
+   * Taking both from `h` directly correlates them — with 8 hues and 16
+   * creatures, every panda would be the same blue — and a row of three would
+   * repeat a pairing far more often than chance. `h` for the hue and a second
+   * cheap mix for the creature gives 128 usable combinations.
+   */
+  const colors = HUES[h % HUES.length]
+  const character = CHARACTERS[Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % CHARACTERS.length]
+  return { colors, initial: seed[0].toUpperCase(), character }
 }
 
 /**
