@@ -867,7 +867,7 @@ export default function Chat() {
         </Text>
         <ScalePress
           style={styles.emptyCta}
-          onPress={() => router.push(activeTab === 'group' ? '/(tabs)/events' as any : '/(tabs)/match' as any)}
+          onPress={() => router.push(activeTab === 'group' ? '/(tabs)/events' as any : '/room' as any)}
           accessibilityRole="button"
           accessibilityLabel={activeTab === 'group' ? 'Browse events' : 'Discover people'}
         >

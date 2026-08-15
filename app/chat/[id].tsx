@@ -139,8 +139,34 @@ const headerStyles = StyleSheet.create({
   subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 })
 
-export default function GroupChat() {
-  const { id: chatRoomId, roomName, eventTitle, eventImage } = useLocalSearchParams()
+/**
+ * The event room chat.
+ *
+ * Reached two ways, which is why it takes props at all. As a route it reads the
+ * chat room id from the URL, the way it always has. As a **segment of The Room**
+ * it is handed one, because there the id comes from whichever event you are
+ * checked into rather than from navigation.
+ *
+ * `embedded` drops the header and the back button: The Room already draws both
+ * above the `Grid | Chat` toggle, and a second header inside the segment would
+ * stack two titles and two ways back out of one screen.
+ *
+ * Props are optional so the route keeps working untouched — expo-router passes
+ * none, so every default is the old behaviour.
+ */
+export default function GroupChat(props?: {
+  chatRoomId?: string
+  roomName?: string
+  eventTitle?: string
+  eventImage?: string
+  embedded?: boolean
+}) {
+  const params = useLocalSearchParams()
+  const chatRoomId = props?.chatRoomId ?? params.id
+  const roomName = props?.roomName ?? params.roomName
+  const eventTitle = props?.eventTitle ?? params.eventTitle
+  const eventImage = props?.eventImage ?? params.eventImage
+  const embedded = props?.embedded === true
   const { user: authUser, loading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -522,18 +548,26 @@ export default function GroupChat() {
   ) : null
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <SafeAreaView
+      style={styles.container}
+      // Embedded, The Room owns the top inset — it draws the title and the
+      // segments above this. Claiming 'top' here too would inset twice and
+      // leave a bar of page colour under the toggle.
+      edges={embedded ? ['bottom'] : ['top', 'bottom']}
+    >
+      {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
       <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <GroupChatHeader
-          name={(roomName as string) || 'Event Chat'}
-          imageUrl={(eventImage as string) || null}
-          subtitle={(eventTitle as string) || undefined}
-          typingCount={typingUsers.size}
-          onBack={() => router.back()}
-        />
+        {embedded ? null : (
+          <GroupChatHeader
+            name={(roomName as string) || 'Event Chat'}
+            imageUrl={(eventImage as string) || null}
+            subtitle={(eventTitle as string) || undefined}
+            typingCount={typingUsers.size}
+            onBack={() => router.back()}
+          />
+        )}
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
 
         <FlatList

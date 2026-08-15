@@ -1139,7 +1139,7 @@ export default function Events() {
     <View style={styles.carouselContainer}>
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Interested Events</Text>
-        <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/interested' as any)}>
+        <TouchableOpacity style={styles.viewAllRow} onPress={() => router.push('/going' as any)}>
           <Text style={styles.viewAllText}>See all</Text>
         </TouchableOpacity>
       </View>

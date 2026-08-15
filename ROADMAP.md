@@ -357,7 +357,22 @@ Room (`Grid | Chat`, as frame `1141:4951` draws it). The Match tab is deleted.
 Explore is deferred on catalogue grounds and Going takes the slot, rehoming
 `interested.tsx` and the orphaned `rate/[eventId]`.
 
-**Not built yet** — this entry records the decision; the bar itself is next.
+**Built** (#132). `MatchScreen` moved out of the deleted Match tab and into
+`/room`, presented as a sheet with the frame's `Grid | Join Chat` toggle.
+`app/interested.tsx` became the Going tab. `lib/roomButton.ts` holds the centre
+button's four states with tests.
+
+Two of those four states are still inert, and deliberately: `checkin` needs the
+presence monitor mounted and `today` needs the saved-events list threaded in.
+`roomButtonTarget` already accepts both inputs and orders them correctly, so
+that is wiring rather than design.
+
+Also mounted for the first time: `RoomVisibilityBanner`, with its reveal toggle
+wired to `setMatchPreferences` — optimistic, rolled back on failure, and
+deliberately without `rememberReveal`, because one tap at one event should not
+change how somebody enters every future one.
+
+**Still unmounted:** `lib/presence.ts`. Next.
 
 
 ### The Pulse — **Done** (#130), minus two sections

@@ -49,12 +49,22 @@ the status indicator. The screen is called The Pulse; the button is the pulse.
 
 ## The centre button
 
-| Your state | Button | Tap |
-|---|---|---|
-| Checked in | gradient, slow pulse, unread badge | The Room |
-| Inside the geofence, not checked in | gradient, stronger pulse | check in to that event |
-| Event today you are going to | outline + countdown | that event |
-| Nothing on | flat, logo only | "what's on tonight near you" |
+| Your state | Button | Tap | Built |
+|---|---|---|---|
+| Checked in | gradient, slow pulse, unread badge | The Room | ✅ |
+| Inside the geofence, not checked in | gradient, stronger pulse | check in to that event | ⏳ needs the presence monitor |
+| Event today you are going to | outline | that event | ⏳ needs `todayEventIds` |
+| Nothing on | flat, logo only | "what's on tonight near you" | ⏳ opens The Room's empty state today |
+
+The four states and their precedence live in `lib/roomButton.ts` with tests. The
+two unbuilt rows are a matter of feeding it more inputs, not of changing it —
+`roomButtonTarget` already takes `insideEventId` and `todayEventIds` and orders
+them correctly.
+
+**`insideEventId` stays absent until the presence monitor is mounted**, on
+purpose. Feeding it a raw distance check would make the most prominent control
+in the app flicker between "Check in" and "What's on" while somebody stands
+still, which is worse than being slow to notice them arrive.
 
 **The last row is the one that decides whether this works.** A centre button with
 nothing behind it is a dead control in the most prominent position on the screen,
@@ -96,7 +106,13 @@ Three things mount here that currently render nowhere:
 | **Banter** | DMs and event rooms in one inbox | `app/(tabs)/chat.tsx` — already holds both |
 | **Me** | profile, edit, settings, blocked, **your code** | `app/(tabs)/profile.tsx` |
 
-**`Match` is deleted.** Its screen becomes the centre button's destination.
+**`Match` is deleted.** Its screen is the Grid segment of `/room`. The two
+things that pointed at it — the match push notification and the Banter empty
+state's "Discover People" — now open the room.
+
+`/room` is presented as a **sheet**, not a push: it is a mode you are in for the
+length of an event rather than a page in a stack, and swiping down out of it
+matches the chevron the screen draws.
 
 ### Why Going and not Explore
 
@@ -106,8 +122,12 @@ Explore is a worse Pulse until there is volume, and Pulse already carries
 Nearby, Nightlife and search.
 
 Going is about **your** events rather than the catalogue, so it is useful from
-the first day and grows on its own. It also rehomes `rate/[eventId]`, a built
-screen that nothing in the app links to.
+the first day and grows on its own.
+
+Today it is the old `app/interested.tsx`, moved into the tab and stripped of the
+back chevron it carried as a pushed route. Attending and past-with-rating are
+the next two sections, and **`rate/[eventId]` — built, linked from nowhere —
+belongs in the third.**
 
 When the catalogue justifies Explore, **Going moves into Me** — it is your data —
 and Explore takes the slot. No re-drawing.

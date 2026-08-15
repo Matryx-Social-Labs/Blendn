@@ -274,7 +274,10 @@ function navigateFromNotificationData(data: Record<string, any> | undefined) {
         break
       }
       case 'match': {
-        router.push('/(tabs)/match')
+        // A match notification is about somebody in a room, so it opens the
+        // room. The Match tab it used to open no longer exists — that screen is
+        // now the Grid segment of `/room`.
+        router.push('/room')
         break
       }
     }
