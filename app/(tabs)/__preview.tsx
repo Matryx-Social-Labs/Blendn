@@ -4,7 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import NearbyEventCard from '../../components/NearbyEventCard'
 import { FilterSheet } from '../../components/pulse/FilterControl'
-import { FeaturedCard, FEATURED_CARD_WIDTH } from '../../components/pulse/FeaturedCard'
+import {
+  FeaturedCard,
+  FEATURED_CARD_GAP,
+  featuredCardLayout,
+} from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
@@ -127,6 +131,8 @@ export default function PulsePreview() {
   const [filters, setFilters] = useState<EventFilters>(NO_FILTERS)
   const [draft, setDraft] = useState<EventFilters>(NO_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // Same sizing the real screen uses, or the harness proves the wrong geometry.
+  const featured = featuredCardLayout(insets, TAB_BAR_CLEARANCE)
 
   return (
     <View style={styles.container}>
@@ -160,7 +166,7 @@ export default function PulsePreview() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rail}
+            contentContainerStyle={[styles.rail, { paddingHorizontal: featured.inset }]}
           >
             {FEATURED.map((e, i) => (
               <FeaturedCard
@@ -184,7 +190,7 @@ export default function PulsePreview() {
                 isActive={i === 0}
                 dateLabel={e.dateLabel}
                 placeLabel={e.placeLabel}
-                width={FEATURED_CARD_WIDTH}
+                width={featured.width}
                 onPress={() => {}}
               />
             ))}
@@ -252,7 +258,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   content: { gap: MAIN_GAP },
   section: { gap: 24 },
-  // The rail bleeds to the edge; the gutter is the card's own leading inset.
-  rail: { paddingHorizontal: MAIN_PADDING_HORIZONTAL, gap: 16 },
+  /*
+   * The Featured row, and it does **not** take `Main`'s gutter.
+   *
+   * Frame `1141:4660` masks the carousel at section-x `-12` — full-bleed 390,
+   * with card 1 at x=24 inside it. This had `MAIN_PADDING_HORIZONTAL` (12) and
+   * a 16pt gap, so the harness was demonstrating a card 12pt too far left with
+   * the cards 8pt too close together, which is exactly the geometry the real
+   * screen was being checked against.
+   */
+  rail: { gap: FEATURED_CARD_GAP },
   stack: { paddingHorizontal: MAIN_PADDING_HORIZONTAL, gap: 32 },
 })

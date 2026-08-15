@@ -28,8 +28,7 @@ import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
 import {
   FeaturedCard,
   FEATURED_CARD_GAP,
-  FEATURED_CARD_SOLO,
-  FEATURED_CARD_WIDTH,
+  featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -1775,6 +1774,22 @@ export default function Events() {
    */
   const renderFeaturedRow = () => {
     if (featuredItems.length === 0) return null
+    /*
+     * Sized against the viewport, not only against the frame.
+     *
+     * `Main` is a 390 × 3548 scrolling artboard, so the design never had to fit
+     * this card between the header and the navigation — and at the frame's 85%
+     * of the screen width it does not. Measured on a 440 × 956 device: the card
+     * came out 374 × 508 with its top at 387, putting its bottom at 908 against
+     * a tab bar that starts at ~843. Sixty-five points of the hero card, and
+     * most of the gap under its title, sat beneath the bar.
+     *
+     * The page still runs the full height of the screen and still scrolls
+     * *under* the bar — that is padding, not layout, and it is what makes the
+     * bar read as a floating overlay. It is only this one card, the thing the
+     * screen opens on, that is sized to clear it.
+     */
+    const featured = featuredCardLayout(insets, TAB_BAR_CLEARANCE)
     return (
       <View style={styles.pulseSection}>
         <SectionHeader
@@ -1802,7 +1817,7 @@ export default function Events() {
           go back to peeking.
         */}
         {featuredItems.length === 1 ? (
-          <View>
+          <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
             <FeaturedCard
               title={featuredItems[0].title}
               tag={featuredItems[0].category || null}
@@ -1810,7 +1825,7 @@ export default function Events() {
               isActive
               dateLabel={featuredDateLabel(featuredItems[0].start_time)}
               placeLabel={placeLabel(featuredItems[0])}
-              width={FEATURED_CARD_SOLO}
+              width={featured.width}
               onPress={() => handleEventPress(featuredItems[0])}
             />
           </View>
@@ -1820,8 +1835,24 @@ export default function Events() {
             data={featuredItems}
             keyExtractor={(item, idx) => `feat-${item.id}-${idx}`}
             showsHorizontalScrollIndicator={false}
+            /*
+              Full-bleed, then inset by the row's own 24.
+
+              Frame `1141:4660` — the carousel's mask — sits at section-x `-12`,
+              cancelling `Main`'s gutter so the row is the full 390, with card 1
+              starting at x=24 inside it. Built inside the gutter instead, the
+              card began at 12 and the scroll area ended 12pt short of the
+              screen: not centred, and a carousel that looks clipped rather than
+              one running off the edge.
+
+              `snapToInterval` is unchanged and still correct — the leading
+              padding is part of the content, so card N's left edge lands at
+              offset `N × (width + gap)` and snapping puts it back at x=24.
+            */
+            style={styles.featuredBleed}
+            contentContainerStyle={{ paddingHorizontal: featured.inset }}
             snapToAlignment="start"
-            snapToInterval={FEATURED_CARD_WIDTH + FEATURED_CARD_GAP}
+            snapToInterval={featured.width + FEATURED_CARD_GAP}
             decelerationRate="fast"
             viewabilityConfig={featuredViewability.current}
             onViewableItemsChanged={onFeaturedViewable.current}
@@ -1834,6 +1865,7 @@ export default function Events() {
                 dateLabel={featuredDateLabel(item.start_time)}
                 placeLabel={placeLabel(item)}
                 accentIndex={index}
+                width={featured.width}
                 onPress={() => handleEventPress(item)}
               />
             )}
@@ -2740,6 +2772,16 @@ const styles = StyleSheet.create({
   pulseSection: {
     gap: SECTION_GAP,
     marginTop: MAIN_GAP,
+  },
+  /*
+   * Cancels `Main`'s gutter so the Featured row runs edge to edge.
+   *
+   * The frame does this with a mask at section-x `-12` (`1141:4660`); a
+   * negative margin is the React Native equivalent. The section *header* keeps
+   * the gutter — only the scrolling row bleeds, which is what the frame draws.
+   */
+  featuredBleed: {
+    marginHorizontal: -MAIN_PADDING_HORIZONTAL,
   },
   /** A vertical column of cards inside a section — Upcoming, Nearby. */
   pulseStack: {
