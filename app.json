@@ -97,7 +97,8 @@
           "organization": "matryx-social-labs-private-lim"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
