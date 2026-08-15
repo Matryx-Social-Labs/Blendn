@@ -31,7 +31,7 @@ import {
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
-import { TAB_BAR_CLEARANCE } from './_layout'
+import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
@@ -138,6 +138,7 @@ const CAROUSEL_ITEM_FULL = CAROUSEL_CARD_WIDTH + CAROUSEL_ITEM_SPACING
  * the first 64 — so it is `TOP_BAR_HEIGHT + 32`, and it is written that way at
  * the render site because the 32 is the part that means anything.
  */
+const SCREEN_HEIGHT = Dimensions.get('window').height
 const MAIN_PADDING_HORIZONTAL = 12
 const MAIN_PADDING_BOTTOM = 128
 const MAIN_GAP = 48
@@ -1789,7 +1790,7 @@ export default function Events() {
      * bar read as a floating overlay. It is only this one card, the thing the
      * screen opens on, that is sized to clear it.
      */
-    const featured = featuredCardLayout(insets, TAB_BAR_CLEARANCE)
+    const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
     return (
       <View style={styles.pulseSection}>
         <SectionHeader

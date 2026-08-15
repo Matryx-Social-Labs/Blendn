@@ -104,8 +104,19 @@ const SCREEN_HEIGHT = Dimensions.get('window').height
  */
 const CHROME_ABOVE_CARD = 64 + 32 + 133 + 48 + 24 + 24
 
-/** So the card's bottom edge is visibly clear of the bar, not flush against it. */
-const CARD_BOTTOM_BREATH = 16
+/**
+ * Daylight between the card's bottom edge and the bar.
+ *
+ * The rule is on the **edge**, not the content. Letting the card's rounded
+ * bottom slide under the bar was tried — the last 32pt of the card is
+ * `1141:4666`'s padding with nothing drawn in it, so no content was hidden and
+ * it bought 45pt of width. It still read wrong: a card that runs out of sight
+ * behind the navigation looks clipped, whatever is technically visible.
+ *
+ * So the card sits fully on the page, and the space it needs comes out of the
+ * bar instead — see `TAB_BAR_PADDING_TOP` and `CENTRE_SIZE`.
+ */
+const CARD_BOTTOM_BREATH = 8
 
 /**
  * The card's size and the row's gutter, for a screen with these safe insets.
@@ -131,12 +142,15 @@ const CARD_BOTTOM_BREATH = 16
  * at `width + gap` every card lands in the same centred position, which is what
  * makes the row read as a carousel rather than as a list that starts flush.
  */
-export function featuredCardLayout(insets: { top: number; bottom: number }, tabBarClearance: number) {
-  const available =
-    SCREEN_HEIGHT -
-    (insets.top + CHROME_ABOVE_CARD) -
-    (insets.bottom + tabBarClearance) -
-    CARD_BOTTOM_BREATH
+export function featuredCardLayout(insets: { top: number; bottom: number }, barTop: number) {
+  /*
+   * `barTop` is the bar's real top edge, not `TAB_BAR_CLEARANCE`.
+   *
+   * The clearance constant is a *padding* number and has been 88 through two
+   * changes of the bar's actual height — at the time of writing it under-reports
+   * it by 20pt. Fine for reserving scroll space, wrong for placing an edge.
+   */
+  const available = barTop - (insets.top + CHROME_ABOVE_CARD) - CARD_BOTTOM_BREATH
 
   const width = Math.min(
     FEATURED_CARD_WIDTH,

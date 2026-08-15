@@ -403,7 +403,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
      * the split stays because the corner radius still needs somewhere to live.
      */
     <View
-      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 20) }]}
+      style={[styles.bar, { paddingBottom: tabBarBottomPadding(insets.bottom) }]}
       pointerEvents="box-none"
     >
       <View style={styles.barSurface} pointerEvents="none">
@@ -467,7 +467,17 @@ export default function TabLayout() {
   )
 }
 
-const CENTRE_SIZE = 56
+/*
+ * 52, down from 56.
+ *
+ * The disc is the tallest child in the row, so it — not the 48pt icon-plus-
+ * label column — sets the bar's height, and the bar's height is what the
+ * Pulse's hero card has left over. Four points here are four points of card.
+ *
+ * The mark scales with it (34 -> 32), so it still fills ~61% of the disc, the
+ * same proportion it had at 56.
+ */
+const CENTRE_SIZE = 52
 
 /**
  * How much bottom padding a screen needs so its last item clears the bar.
@@ -478,6 +488,46 @@ const CENTRE_SIZE = 56
  * changes height.
  */
 export const TAB_BAR_CLEARANCE = 88
+
+/**
+ * The bar's own chrome, so callers can work out where its top edge actually is.
+ *
+ * `TAB_BAR_CLEARANCE` is a *padding* number — how much a scroll must reserve so
+ * its last item is reachable — and it has been 88 through two changes of the
+ * bar's real height. That is fine for padding and wrong for anything that needs
+ * the edge: at 88 it under-reported the bar by 20pt, and the Pulse's hero card
+ * was sized against it.
+ *
+ * Height is `paddingTop + line + max(bottom inset, 20)`, where the line is the
+ * 56pt centre button — the tallest child now that it is seated in the row
+ * rather than raised above it.
+ */
+export const TAB_BAR_PADDING_TOP = 8
+export const TAB_BAR_LINE = CENTRE_SIZE
+
+/**
+ * The bar's bottom padding.
+ *
+ * `insets.bottom` is 34 on a home-indicator phone, and the indicator itself is
+ * a 5pt pill sitting about 8pt off the bottom edge — so the full inset is more
+ * room than it needs. Six points come back to the page, and 20 is the floor for
+ * a device that reports no inset at all.
+ */
+export function tabBarBottomPadding(bottomInset: number) {
+  return Math.max(bottomInset - 6, 20)
+}
+
+/**
+ * Where the bar's top edge sits, measured from the top of the screen.
+ *
+ * `8 + 52 + 28 = 88` on the phone this was measured on — which is finally the
+ * same number as `TAB_BAR_CLEARANCE`. Those two had drifted 20pt apart, and
+ * anything placing an edge against the bar was reading the padding constant and
+ * getting it wrong.
+ */
+export function tabBarTop(screenHeight: number, bottomInset: number) {
+  return screenHeight - (TAB_BAR_PADDING_TOP + TAB_BAR_LINE + tabBarBottomPadding(bottomInset))
+}
 
 const styles = StyleSheet.create({
   /*
@@ -498,7 +548,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingTop: 18,
+    /*
+     * 10, down from the frame's 18.
+     *
+     * The frame's 18 put the icon boxes at y=18 and every label at y=42, which
+     * is where all four of its labels sit. That still holds — the whole row
+     * simply starts 8pt lower.
+     *
+     * Seating the centre button grew this bar from 100 to 108: the row's line
+     * height is now the 56pt disc rather than the 48pt icon-plus-label column.
+     * Those 8pt came out of the screen above, and the Pulse's hero card is
+     * sized against exactly that space. Taking them back off the top padding
+     * returns the bar to its previous height and gives the card the room.
+     */
+    paddingTop: TAB_BAR_PADDING_TOP,
     // Frame: first item's left edge is 27.51, last item's right edge is 359.64
     // in a 390pt frame.
     paddingHorizontal: 27.5,
@@ -607,16 +670,16 @@ const styles = StyleSheet.create({
    * every other glyph in the bar. It was the lightest thing in the row while
    * being the most important control in it.
    *
-   * The mark's aspect is 0.845, so at 34 it draws 28.7 × 34 — inside the 39.6pt
-   * square inscribed in the 56pt disc, with the stroke at 1.43pt. Not parity
-   * with its neighbours, but 21% closer, and it stops looking like a badge
-   * floating in a field of coral.
+   * The mark's aspect is 0.845, so at 32 it draws 27 × 32 — inside the 36.8pt
+   * square inscribed in the 52pt disc, with the stroke at 1.35pt. Not parity
+   * with its neighbours, but 14% closer than the old 28, and it stops looking
+   * like a badge floating in a field of coral.
    *
    * **A filled variant of the mark would close the rest of the gap.** An
    * outline logo under 40pt is a drawing problem, not a layout one — raised for
    * the designer in `docs/PULSE.md`.
    */
-  centreMark: { width: 34, height: 34 },
+  centreMark: { width: 32, height: 32 },
   halo: {
     position: 'absolute',
     // Level with the button now that the button is level with the bar.

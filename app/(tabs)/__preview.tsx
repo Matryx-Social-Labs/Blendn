@@ -16,7 +16,7 @@ import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
-import { TAB_BAR_CLEARANCE } from './_layout'
+import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 
 /**
  * The Pulse, rendered against fixtures — a screenshot harness, not a screen.
@@ -53,6 +53,7 @@ import { TAB_BAR_CLEARANCE } from './_layout'
 const MAIN_PADDING_HORIZONTAL = 12
 const MAIN_GAP = 48
 const SCREEN_W = Dimensions.get('window').width
+const SCREEN_HEIGHT = Dimensions.get('window').height
 
 /*
  * Deliberately boring strings of realistic length.
@@ -132,7 +133,7 @@ export default function PulsePreview() {
   const [draft, setDraft] = useState<EventFilters>(NO_FILTERS)
   const [sheetOpen, setSheetOpen] = useState(false)
   // Same sizing the real screen uses, or the harness proves the wrong geometry.
-  const featured = featuredCardLayout(insets, TAB_BAR_CLEARANCE)
+  const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
 
   return (
     <View style={styles.container}>
