@@ -2458,7 +2458,7 @@ export default function Events() {
               // The status bar at the top; the floating nav plus the home
               // indicator at the bottom. Padding, not layout, so the feed
               // still scrolls under both.
-              paddingTop: insets.top + 8,
+              paddingTop: insets.top + 24,
               paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
             },
           ]}
@@ -2886,9 +2886,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  pulseSection: { gap: 16, marginTop: 32 },
+  // Frame `1141:4643`: Main is `gap-[48px]`, sections are `gap-[24px]`
+  // and `gap-[32px]` internally. All three were roughly halved.
+  pulseSection: { gap: 24, marginTop: 48 },
   pulseRowContent: { paddingHorizontal: 12 },
-  pulseStack: { gap: 24, paddingHorizontal: 12 },
+  pulseStack: { gap: 32, paddingHorizontal: 12 },
   sectionDividerLine: {
     height: 1,
     width: 73,

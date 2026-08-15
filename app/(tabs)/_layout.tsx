@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router, Tabs } from 'expo-router'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -17,7 +18,7 @@ import {
   type RoomButtonTarget,
 } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -353,6 +354,18 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}
       pointerEvents="box-none"
     >
+      {/*
+        The frame's 20pt backdrop blur. `expo-blur` blurs what is *behind* a
+        view, which is exactly right for a bar the feed scrolls under — the same
+        reason it was the wrong tool for the onboarding background, where there
+        was nothing behind to blur.
+      */}
+      <BlurView
+        intensity={20}
+        tint="dark"
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       {renderTab(TABS[0])}
       {renderTab(TABS[1])}
       <RoomButton target={target} />
@@ -380,7 +393,20 @@ export default function TabLayout() {
          * the feed; screens clear it with `TAB_BAR_CLEARANCE` in their own
          * bottom padding rather than by losing the space.
          */
-        tabBarStyle: { position: 'absolute', borderTopWidth: 0, elevation: 0 },
+        tabBarStyle: {
+          position: 'absolute',
+          borderTopWidth: 0,
+          elevation: 0,
+          /*
+           * Transparent, or the corners fill.
+           *
+           * react-navigation paints its own bar behind the custom one and that
+           * bar is square, so with an opaque default it showed as two filled
+           * wedges either side of the 48pt radius. The custom bar is the only
+           * surface.
+           */
+          backgroundColor: 'transparent',
+        },
       }}
       tabBar={(props) => <BlendnTabBar {...props} />}
     >
@@ -402,7 +428,7 @@ const CENTRE_SIZE = 56
  * exported because a hardcoded guess in each one drifts the moment the bar
  * changes height.
  */
-export const TAB_BAR_CLEARANCE = 64
+export const TAB_BAR_CLEARANCE = 88
 
 const styles = StyleSheet.create({
   bar: {
@@ -411,9 +437,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingTop: 10,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(27,25,25,0.96)',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    // Frame `1141:4643`: `rgba(27,25,25,0.9)` under a 20pt backdrop blur, with
+    // 48pt top corners. It was 0.96 and 32 — nearly opaque and half the radius.
+    backgroundColor: 'rgba(27,25,25,0.9)',
+    borderTopLeftRadius: 48,
+    borderTopRightRadius: 48,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: EMBER.gradientFrom,
@@ -436,7 +465,13 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   avatarFocused: { borderColor: EMBER.accent },
-  itemLabel: { ...EMBER_TYPE.meta, fontSize: 11, lineHeight: 14 },
+  itemLabel: {
+    ...EMBER_TYPE.meta,
+    // 16/24 medium, as drawn. 11 was a guess that made every label a caption.
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 16,
+    lineHeight: 24,
+  },
   itemLabelOn: { color: EMBER.accent },
 
   centreSlot: { flex: 1, alignItems: 'center', gap: 4 },
@@ -461,7 +496,13 @@ const styles = StyleSheet.create({
     borderRadius: CENTRE_SIZE / 2,
     backgroundColor: EMBER.gradientFrom,
   },
-  centreLabel: { ...EMBER_TYPE.meta, fontSize: 11, lineHeight: 14, marginTop: -18 },
+  centreLabel: {
+    ...EMBER_TYPE.meta,
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 16,
+    lineHeight: 24,
+    marginTop: -16,
+  },
 
   badge: {
     position: 'absolute',
