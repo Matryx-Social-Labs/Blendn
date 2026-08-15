@@ -371,6 +371,16 @@ export default function TabLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         sceneStyle: { backgroundColor: EMBER.bg },
+        /*
+         * Absolute, so the scene fills the screen and the bar floats over it.
+         *
+         * By default react-navigation shortens the scene by the bar's height,
+         * which is why content stopped dead at the nav with a visible edge
+         * instead of passing under it. The frame draws a translucent bar over
+         * the feed; screens clear it with `TAB_BAR_CLEARANCE` in their own
+         * bottom padding rather than by losing the space.
+         */
+        tabBarStyle: { position: 'absolute', borderTopWidth: 0, elevation: 0 },
       }}
       tabBar={(props) => <BlendnTabBar {...props} />}
     >
@@ -383,6 +393,16 @@ export default function TabLayout() {
 }
 
 const CENTRE_SIZE = 56
+
+/**
+ * How much bottom padding a screen needs so its last item clears the bar.
+ *
+ * The bar is `position: absolute`, so the scene no longer reserves room for it
+ * and content scrolls underneath. Screens add this to their own bottom inset;
+ * exported because a hardcoded guess in each one drifts the moment the bar
+ * changes height.
+ */
+export const TAB_BAR_CLEARANCE = 64
 
 const styles = StyleSheet.create({
   bar: {
