@@ -30,7 +30,21 @@ const ROW_PADDING = 12
  */
 export const FEATURED_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.85)
 export const FEATURED_CARD_SOLO = SCREEN_WIDTH - ROW_PADDING * 2
-export const FEATURED_CARD_HEIGHT = 450
+/*
+ * The card's shape, not one of its two numbers.
+ *
+ * The width was taken proportionally (85% of the screen) and the height was
+ * taken **literally** (450), so the two only agreed on a 390pt device. On the
+ * 440pt phone this was screenshotted against, the card came out 374 x 450 where
+ * the frame's proportions want 374 x 508 — 58pt short, which reads as a squat
+ * card with the caption crowding the bottom edge, and gets worse the wider the
+ * phone.
+ *
+ * Half-proportional is the trap: it looks correct on the one device whose width
+ * matches the artboard, which is the device a designer checks it on.
+ */
+export const FEATURED_CARD_ASPECT = 450 / 331.5
+export const FEATURED_CARD_HEIGHT = Math.round(FEATURED_CARD_WIDTH * FEATURED_CARD_ASPECT)
 export const FEATURED_CARD_GAP = 24
 
 /**
@@ -83,20 +97,28 @@ export function FeaturedCard({
   onPress,
 }: Props) {
   const accent = accentIndex % 2 === 0 ? EMBER.gradientFrom : EMBER.gradientTo
+  /*
+   * From the width it is actually being drawn at, not from the default.
+   *
+   * `width` is a prop — the solo card is `FEATURED_CARD_SOLO`, wider than the
+   * carousel one — so pinning the height to a constant made the shape wrong for
+   * whichever of the two was not the default.
+   */
+  const height = Math.round(width * FEATURED_CARD_ASPECT)
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
-      style={({ pressed }) => [styles.card, { width }, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, { width, height }, pressed && styles.pressed]}
     >
       {imageUrl ? (
         <OptimizedImage
           source={imageUrl}
           style={StyleSheet.absoluteFill as never}
           width={Math.round(width)}
-          height={FEATURED_CARD_HEIGHT}
+          height={height}
           contentFit="cover"
           priority="high"
         />
@@ -156,7 +178,8 @@ export function FeaturedCard({
 
 const styles = StyleSheet.create({
   card: {
-    height: FEATURED_CARD_HEIGHT,
+    // Height comes from the width prop at the call site — see `height` above.
+    // Leaving it here as well would win over the inline style on the solo card.
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceMedia,

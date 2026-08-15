@@ -177,8 +177,20 @@ function RootLayout() {
        * nothing in the logs to explain it. An allow-list is the smallest change
        * that lets a second signed-out screen exist at all.
        */
+      /*
+       * `__preview` is the design screenshot harness — see `app/__preview.tsx`.
+       *
+       * Signed out on purpose, and behind `__DEV__` so it cannot be reached in
+       * a shipped build. Reaching the real Pulse needs a login, a network, a
+       * location grant and unexpired staging data; none of those has anything
+       * to do with whether a card is the right height, and each of them can
+       * blank the screen on its own.
+       */
       const isAuthRoute =
-        isIndex || pathname === '/sign-in' || pathname === '/forgot-password';
+        isIndex ||
+        pathname === '/sign-in' ||
+        pathname === '/forgot-password' ||
+        (__DEV__ && pathname === '/__preview');
 
       if (!user) {
         // Not authenticated → send to login index, unless already somewhere
