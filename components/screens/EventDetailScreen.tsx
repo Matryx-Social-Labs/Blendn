@@ -41,7 +41,7 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient';
-import { APP_COLORS } from '../../lib/theme';
+import { APP_COLORS, EMBER } from '../../lib/theme';
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
@@ -105,6 +105,21 @@ const GALLERY_FULL_WIDTH = Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))
 const GALLERY_TALL_HEIGHT = (galleryTileSize * 2) + GALLERY_GAP
 const TOP_BAR_EXTRA_TOP_PADDING = 0
 const TOP_BAR_INSET_REDUCTION = 24
+
+/*
+ * The Scene — frame `1141:4853`, 390 wide. See `docs/SCENE.md`.
+ *
+ * Type is used at the frame's own values because that is what this codebase
+ * already does: `EMBER_TYPE.screenTitle` ships 48/-2.4 unscaled, and the
+ * frame's "The Experience" is 16/24 exactly like `sectionHeading`. Only
+ * *layout* is scaled, and only where it is genuinely proportional.
+ *
+ * The hero is one of those: it is a photograph, so its shape has to survive the
+ * change of screen width rather than its absolute height. 574 on a 390 frame is
+ * an aspect, not a number of points.
+ */
+const HERO_ASPECT = 390 / 574
+const HERO_HEIGHT = Math.round(width / HERO_ASPECT)
 const CHECKIN_RULES_TEXT = [
   'Before you check in, please confirm:',
   '1. You are physically at the event venue.',
@@ -115,48 +130,6 @@ const CHECKIN_RULES_TEXT = [
   '6. Harassment, hate speech, or unsafe behavior is prohibited.',
   '7. Violations can lead to check-in revocation or account restrictions.',
 ].join('\n')
-
-const hashSeed = (value: string) => {
-  let hash = 0
-  for (let i = 0; i < value.length; i += 1) {
-    hash = ((hash << 5) - hash) + value.charCodeAt(i)
-    hash |= 0
-  }
-  return Math.abs(hash)
-}
-
-const hslToHex = (h: number, s: number, l: number) => {
-  const sat = s / 100
-  const light = l / 100
-  const c = (1 - Math.abs(2 * light - 1)) * sat
-  const x = c * (1 - Math.abs((h / 60) % 2 - 1))
-  const m = light - c / 2
-  let r = 0
-  let g = 0
-  let b = 0
-  if (h < 60) [r, g, b] = [c, x, 0]
-  else if (h < 120) [r, g, b] = [x, c, 0]
-  else if (h < 180) [r, g, b] = [0, c, x]
-  else if (h < 240) [r, g, b] = [0, x, c]
-  else if (h < 300) [r, g, b] = [x, 0, c]
-  else [r, g, b] = [c, 0, x]
-  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0')
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
-}
-
-const buildEventGradientPalette = (seedInput: string) => {
-  const seed = hashSeed(seedInput || 'blendn-event')
-  const hue = seed % 360
-  const accentHue = (hue + 32 + (seed % 38)) % 360
-  return {
-    pageTop: hslToHex(hue, 44, 30),
-    pageBottom: hslToHex(accentHue, 32, 15),
-    surfaceTop: hslToHex(hue, 36, 24),
-    surfaceBottom: hslToHex(accentHue, 28, 11),
-    heroOverlayStart: 'rgba(0,0,0,0.06)',
-    heroOverlayEnd: `rgba(6,6,10,${0.86 + ((seed % 10) * 0.008)})`,
-  }
-}
 
 export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
@@ -245,11 +218,6 @@ export default function EventDetail() {
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   const [announcementText, setAnnouncementText] = useState('')
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
-  const gradientPalette = React.useMemo(() => {
-    const seed = `${event?.cover_image_url || cover || ''}|${event?.category || category || ''}|${event?.title || title || ''}`
-    return buildEventGradientPalette(seed)
-  }, [event?.cover_image_url, event?.category, event?.title, cover, category, title])
-
   const closeTray = useCallback(() => {
     setTrayState((prev) => ({ ...prev, visible: false }))
   }, [])
@@ -1069,15 +1037,40 @@ export default function EventDetail() {
     }
   }
 
+  /**
+   * The hero's date, without the time.
+   *
+   * This used to return both in one string. The frame gives them separate
+   * slots with their own icons — a calendar and a clock — and a single blob
+   * under a calendar icon reads as the wrong label for half of what it says.
+   */
   const formatHeroDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
+      month: 'long',
       day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+      year: 'numeric',
     })
+  }
+
+  /**
+   * "21:00 — 02:00", or "21:00 — Late" when the end lands on another day.
+   *
+   * The frame draws "21:00 — Late", and "Late" is the honest word for it:
+   * printing "02:00" beside a 21:00 start reads as ending *before* it began
+   * unless you also print the date, which is more chrome than a hero meta row
+   * can carry. Rolling past midnight is the normal case for these events, so
+   * this is the common path rather than an edge case.
+   */
+  const formatHeroTimeRange = (startString: string, endString?: string | null) => {
+    const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false }
+    const start = new Date(startString)
+    const startLabel = start.toLocaleTimeString('en-GB', opts)
+    if (!endString) return startLabel
+    const end = new Date(endString)
+    if (Number.isNaN(end.getTime())) return startLabel
+    const sameDay = start.toDateString() === end.toDateString()
+    return `${startLabel} — ${sameDay ? end.toLocaleTimeString('en-GB', opts) : 'Late'}`
   }
 
   const isLoading = loading
@@ -1088,7 +1081,6 @@ export default function EventDetail() {
   const sharedEventId = String(event?.id || id || '')
   const effectiveTopInset = Math.max(6, insets.top - TOP_BAR_INSET_REDUCTION)
   const stickyBarHeight = effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING + 12 + 36
-  const sectionBgTop = stickyBarHeight + 12
 
   const renderBentoGallery = (sources: Array<string | number>) => {
     if (!sources || sources.length === 0) return null
@@ -1296,15 +1288,17 @@ export default function EventDetail() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {event?.cover_image_url ? (
-        <Image source={{ uri: event.cover_image_url }} style={styles.bgImage} contentFit="cover" blurRadius={20} />
-      ) : null}
-      <LinearGradient
-        colors={[gradientPalette.pageTop, gradientPalette.pageBottom]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.bgScrim}
-      />
+      {/*
+        Flat #0F0E0E, which is what the frame specifies for the whole page.
+
+        This was a blurred copy of the cover at 58% opacity under a gradient
+        generated from a hash of the event id, so every event washed the screen
+        — chrome, surfaces and all — in its own hue. Measured on a test event it
+        was painting the top bar rgb(20,52,46): green. The frame's page is one
+        flat near-black with #141313 cards on it, and the colour in the design
+        comes from the accent and the photography, not from tinting the
+        furniture.
+      */}
       {/* Sticky top bar */}
       <View style={[styles.topBarSticky, { paddingTop: effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING }]}>
         <TouchableOpacity style={styles.navButton} onPress={() => router.back()}>
@@ -1326,14 +1320,17 @@ export default function EventDetail() {
         </View>
       </View>
 
-      {/* Scrollable content clipped inside rounded section background */}
-      <View style={[styles.sectionBg, { top: sectionBgTop }]}>
-        <LinearGradient
-          colors={[gradientPalette.surfaceTop, gradientPalette.surfaceBottom]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.gradientFull}
-        />
+      {/*
+        The content scrolls the page, not a sheet on top of it.
+
+        This was an absolutely-positioned panel pinned below the top bar with a
+        30pt radius, a light border and its own gradient — a bottom sheet the
+        hero peeked out from behind. The frame has no such object: the hero
+        dissolves into the page and the sections sit directly on it, which is
+        also why the hero can be full-bleed now. The sheet was what forced it to
+        be a card.
+      */}
+      <View style={styles.sectionBg}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -1349,7 +1346,7 @@ export default function EventDetail() {
           }}
         >
           {isLoading ? (
-            <SkeletonBlock width={'100%'} height={430} borderRadius={30} />
+            <SkeletonBlock width={'100%'} height={HERO_HEIGHT} borderRadius={0} />
           ) : (
             <View style={styles.heroCard}>
               <Reanimated.View sharedTransitionTag={`event-image-${sharedEventId}`} style={styles.coverImage}>
@@ -1359,7 +1356,7 @@ export default function EventDetail() {
                     if (!coverUrl) return placeholderImg
                     const opt = getOptimizedImageUrl(coverUrl, {
                       width,
-                      height: 430,
+                      height: HERO_HEIGHT,
                       resize: 'cover',
                       quality: showHeroHighRes ? 75 : 45,
                       format: 'webp',
@@ -1373,29 +1370,57 @@ export default function EventDetail() {
                   transition={200}
                 />
               </Reanimated.View>
+              {/*
+                The photograph is not tinted. A second gradient used to sit here
+                in a hue derived from the event's id, so the organiser's image
+                was recoloured by a hash of its primary key. The frame has one
+                gradient over the hero and it is neutral.
+              */}
+              {/*
+                Transparent to the page's own background, not to black. The
+                frame ends this gradient on #0F0E0E so the photograph dissolves
+                into the screen rather than into a darker band sitting on it —
+                the same "nobody diffs two blacks" trap the launch overlay hit.
+              */}
               <LinearGradient
-                colors={[gradientPalette.heroOverlayStart, gradientPalette.heroOverlayEnd]}
-                style={styles.heroGradient}
-              />
-              <LinearGradient
-                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.48)']}
+                colors={['rgba(15,14,14,0)', EMBER.bg]}
                 start={{ x: 0.5, y: 0.25 }}
                 end={{ x: 0.5, y: 1 }}
                 style={styles.heroInfoGradient}
               />
               <View style={styles.heroInfo}>
+                {/*
+                  Driven by real capacity, not decoration. The frame draws this
+                  unconditionally, but an event with no cap is not limited
+                  access and saying so would be a lie the card tells on every
+                  event. `max_capacity` of 0 means uncapped.
+                */}
+                {event && event.max_capacity > 0 ? (
+                  <View style={styles.heroPill}>
+                    <Text style={styles.heroPillText}>LIMITED ACCESS</Text>
+                  </View>
+                ) : null}
                 <Reanimated.Text sharedTransitionTag={`event-title-${sharedEventId}`} style={styles.heroTitle} numberOfLines={2}>
                   {event?.title || ''}
                 </Reanimated.Text>
+                {/*
+                  Date and time, side by side — the venue moved out of the hero
+                  and into the Location card, which is where the frame puts it
+                  and where the address it belongs with already lives.
+                */}
                 <View style={styles.heroMetaRow}>
-                  <Ionicons name="time-outline" size={13} color="#FFFFFF" />
-                  <Reanimated.Text sharedTransitionTag={`event-date-${sharedEventId}`} style={styles.heroMetaText}>
-                    {event ? formatHeroDate(event.start_time) : ''}
-                  </Reanimated.Text>
-                </View>
-                <View style={styles.heroMetaRow}>
-                  <Ionicons name="location-outline" size={13} color="#FFFFFF" />
-                  <Text style={styles.heroMetaText} numberOfLines={1}>{event?.venue_name || 'Location TBA'}</Text>
+                  <View style={styles.heroMetaItem}>
+                    <Ionicons name="calendar-outline" size={18} color={EMBER.textSecondary} />
+                    <Reanimated.Text sharedTransitionTag={`event-date-${sharedEventId}`} style={styles.heroMetaText}>
+                      {event ? formatHeroDate(event.start_time) : ''}
+                    </Reanimated.Text>
+                  </View>
+                  <View style={styles.heroMetaItem}>
+                    <Ionicons name="time-outline" size={18} color={EMBER.textSecondary} />
+                    <Text style={styles.heroMetaText} numberOfLines={1}>
+                      {event ? formatHeroTimeRange(event.start_time, event.end_time) : ''}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -1837,14 +1862,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: APP_COLORS.backgroundBase,
   },
-  bgImage: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.58,
-  },
-  bgScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1880,53 +1897,85 @@ const styles = StyleSheet.create({
   },
   coverImage: {
     width: '100%',
-    height: 430,
+    height: HERO_HEIGHT,
     backgroundColor: '#1A1A1A',
-    borderRadius: 30,
   },
+  /*
+   * Full bleed, no card.
+   *
+   * This was inset 10pt with a 30pt radius and a hairline border — a card
+   * floating on the page. The frame runs the photograph edge to edge and
+   * dissolves its foot into the background, so the border and the radius are
+   * not smaller versions of the design, they are a different idea.
+   */
   heroCard: {
-    marginHorizontal: 10,
-    marginTop: 8,
-    borderRadius: 30,
+    height: HERO_HEIGHT,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.32)',
   },
-  heroGradient: {
+  /*
+   * The full hero, not a 180pt band at its foot.
+   *
+   * The frame's gradient is `inset-0` — it spans the whole photograph. At 180
+   * it was sized for the old 430pt card; against a hero half again as tall the
+   * 48pt title would start above the gradient's top edge and sit on bare
+   * photograph, which is exactly the case the bloom shadow cannot rescue.
+   */
+  heroInfoGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  heroInfoGradient: {
+  /* 32pt inset on all sides, bottom-aligned, 16pt between the three blocks. */
+  heroInfo: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 180,
+    padding: 32,
+    gap: 16,
+    alignItems: 'flex-start',
   },
-  heroInfo: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
+  heroPill: {
+    backgroundColor: 'rgba(255,144,109,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,144,109,0.2)',
+    borderRadius: 9999,
+    paddingHorizontal: 17,
+    paddingVertical: 7,
+  },
+  heroPillText: {
+    color: EMBER.accent,
+    fontSize: 16,
+    lineHeight: 24,
+    // Tracking on the real glyphs, so the string is uppercased rather than
+    // `textTransform`ed — same rule as EMBER_TYPE.eyebrow and link.
+    letterSpacing: 0.8,
   },
   heroTitle: {
     color: '#FFFFFF',
-    fontSize: 29,
-    lineHeight: 34,
-    fontWeight: '700',
-    marginBottom: 8,
+    fontSize: 48,
+    lineHeight: 43.2,
+    letterSpacing: -2.4,
+    fontWeight: '800',
+    // The frame's 0 0 30px rgba(255,144,109,0.3) — the warm bloom that keeps
+    // 48pt of white legible over an arbitrary photograph.
+    textShadowColor: 'rgba(255,144,109,0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 30,
   },
   heroMetaRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 32,
+  },
+  heroMetaItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 8,
   },
   heroMetaText: {
-    color: 'rgba(255,255,255,0.95)',
-    fontSize: 13,
-    marginLeft: 6,
+    color: EMBER.textSecondary,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '500',
     flexShrink: 1,
   },
   content: {
@@ -2333,25 +2382,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 120,
   },
+  /* Just the page. See the note at its use site for what this used to be. */
   sectionBg: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 120,
-    bottom: 0,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: '#111214',
-  },
-  gradientFull: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: EMBER.bg,
   },
   topBarSticky: {
     position: 'absolute',

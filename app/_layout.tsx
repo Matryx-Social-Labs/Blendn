@@ -190,7 +190,7 @@ function RootLayout() {
         isIndex ||
         pathname === '/sign-in' ||
         pathname === '/forgot-password' ||
-        (__DEV__ && pathname === '/__preview');
+        (__DEV__ && pathname.startsWith('/__preview'));
 
       if (!user) {
         // Not authenticated → send to login index, unless already somewhere
