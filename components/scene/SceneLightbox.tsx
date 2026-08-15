@@ -164,6 +164,23 @@ function LightboxVideo({
   })
 
   /*
+   * The poster is removed once the player has a frame to show.
+   *
+   * Both it and the video use `contentFit="contain"`, and they rarely share an
+   * aspect: a 16:9 clip letterboxes into a band while a 2:3 poster fills nearly
+   * the whole screen, so the poster stayed visible *around* the playing video
+   * and read as a background it could not shake off. It is a loading state, and
+   * a loading state that outlives the load is just clutter.
+   */
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const sub = player.addListener('statusChange', ({ status }) => {
+      setReady(status === 'readyToPlay')
+    })
+    return () => sub.remove()
+  }, [player])
+
+  /*
    * Play and pause follow visibility rather than mount, so swiping away stops
    * the audio immediately instead of when the row is finally recycled.
    *
@@ -179,12 +196,14 @@ function LightboxVideo({
 
   return (
     <View style={styles.media}>
-      <Image
-        source={{ uri: poster }}
-        style={StyleSheet.absoluteFill}
-        contentFit="contain"
-        cachePolicy="memory-disk"
-      />
+      {!ready || !active ? (
+        <Image
+          source={{ uri: poster }}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+        />
+      ) : null}
       {active ? (
         <VideoView
           player={player}

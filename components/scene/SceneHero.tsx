@@ -129,8 +129,22 @@ export function SceneHero({
         start={{ x: 0.5, y: 0.25 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
+        /*
+         * Nothing here may take a touch.
+         *
+         * This covers the *entire* hero and is drawn after the pager, so
+         * without this it swallowed every gesture aimed at the media beneath
+         * it — the hero could not be swiped and tapping it opened nothing.
+         * A decorative overlay that eats input is the most invisible kind of
+         * broken: it looks exactly right and simply does not respond.
+         */
+        pointerEvents="none"
       />
-      <View style={styles.info}>
+      {/*
+        Also `none`. The caption covers the bottom third and holds no controls,
+        so the pager underneath keeps that area swipeable.
+      */}
+      <View style={styles.info} pointerEvents="none">
         {scarcity ? (
           <View style={styles.pill}>
             <Text style={styles.pillText}>{scarcity}</Text>
