@@ -384,9 +384,21 @@ const styles = StyleSheet.create({
   googleMark: {
     marginRight: 2,
   },
+  /*
+   * 20, to sit level with the Apple button beside it.
+   *
+   * `AppleAuthentication.AppleAuthenticationButton` draws its own label — the
+   * system renders it and there is no prop for the type. Measured on device at
+   * 56pt tall it puts 20pt of glyph on screen; ours at `fontSize: 16` put 15.
+   * A third smaller, side by side, on the first screen anybody sees.
+   *
+   * So the two we control move to meet the one we do not. If the Apple button
+   * ever changes size, this is the number that has to follow it — and the way
+   * to check is to measure a screenshot, not to look at one.
+   */
   googleLabel: {
     color: '#1F1F1F',
-    fontSize: 16,
+    fontSize: 21,
     fontWeight: '500',
   },
   appleButton: {
@@ -420,7 +432,8 @@ const styles = StyleSheet.create({
   },
   emailLabel: {
     color: APP_COLORS.textPrimary,
-    fontSize: 16,
+    // Level with `googleLabel` and the Apple button — see the note there.
+    fontSize: 21,
     fontWeight: '500',
   },
   pressed: {
