@@ -254,7 +254,46 @@ describe('the centre is the brand mark', () => {
     expect(src).toContain('monogram-white.png')
     // Tinted dark-on-warm. The gradient monogram would be orange on orange.
     expect(src).not.toContain('monogram-gradient.png')
-    expect(src).toContain('tintColor={EMBER.onGradient}')
+    expect(src).toContain('tintColor={BRAND_INK}')
+  })
+
+  it('tints the mark with the logo ink, not the on-gradient text token', () => {
+    /*
+     * `EMBER.onGradient` is `#5B1600` — the colour for *text* on a gradient
+     * button. Used on the mark it rendered a muddy maroon at 6.07:1 and made a
+     * thin outline logo look smudged.
+     *
+     * `#1B1931` is sampled from the artwork: both the mono lockup and the full
+     * lockup draw the mark in it, byte-identical. 7.69:1 on `gradientFrom`.
+     * Pinned because it is a value nobody can re-derive by reading the code —
+     * it came from measuring two PNGs.
+     */
+    expect(NAV()).toContain("const BRAND_INK = '#1B1931'")
+  })
+
+  it('the centre button is seated in the bar, not hanging above it', () => {
+    /*
+     * The frame puts the container at `y=-16`. On a real screen the Scene's
+     * docked CTA and the Pulse's filter control both end just above the bar, so
+     * a button that leaves the bar overlaps them and bleeds its halo onto them.
+     *
+     * `alignSelf: 'center'` against the row's `flex-start` is what seats it.
+     */
+    const src = NAV()
+    expect(src).not.toContain('marginTop: -34')
+    expect(src).not.toContain('top: -34')
+    expect(src).toContain("centreSlot: { alignItems: 'center', alignSelf: 'center' }")
+  })
+
+  it('the mark is sized from its stroke, not from a ratio of the disc', () => {
+    /*
+     * `monogram-white.png` strokes measure 5.0% of the mark's width, so 28pt
+     * drew a 1.18pt line against ~2pt for every other glyph in the bar — the
+     * lightest thing in the row while being the most important control in it.
+     * 34 puts it at 1.43pt and still fits the 39.6pt square inscribed in the
+     * 56pt disc.
+     */
+    expect(NAV()).toContain('centreMark: { width: 34, height: 34 }')
   })
 
   it('is gradient in every state, not only when something is live', () => {
