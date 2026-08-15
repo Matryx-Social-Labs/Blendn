@@ -1,7 +1,14 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
 import { useState } from 'react'
-import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import {
+  Dimensions,
+  Image as RNImage,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
@@ -58,6 +65,17 @@ const ENTITIES = ['The Scene', 'The Obsidian Vault', 'Bengaluru', 'Nightlife']
 const SCREEN_W = Dimensions.get('window').width
 
 /*
+ * A bundled asset resolved to a URI.
+ *
+ * `FeedMediaItem.posterUrl` is a `string`, because in the real app every poster
+ * comes from `event_media` over the network. `require()` returns an asset id,
+ * and `{ uri: <number> }` renders nothing — so it is resolved here rather than
+ * widening the type of the thing the whole feed depends on for one fixture.
+ */
+const POSTER_URI =
+  RNImage.resolveAssetSource(require('../../assets/fixtures/sample-clip-poster.jpg')).uri
+
+/*
  * A clip first, then stills — so the harness exercises the video path.
  *
  * Every still carries the same poster rule the feed uses. The clip is Google's
@@ -80,7 +98,19 @@ const PLAYLIST: FeedMediaItem[] = [
      * page, and `filesamples` and `media.w3` both carry `moov` at the end.
      */
     url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
-    posterUrl: 'https://picsum.photos/seed/thescene/1200/1800',
+    /*
+     * The clip's **own** opening frame, not an unrelated picture.
+     *
+     * This pointed at a random photograph, so swiping to the clip showed one
+     * image and then visibly swapped to another the instant the player
+     * decoded — which is exactly the fault `lib/video-poster.ts` was written
+     * to remove for real uploads. Fixing the pipeline and leaving the fixture
+     * mismatched meant the harness kept demonstrating the bug.
+     *
+     * Extracted at 0.1s with ffmpeg from the same clip `seed-qa.ts` seeds, so
+     * the handoff here is the handoff a correctly-uploaded event gets.
+     */
+    posterUrl: POSTER_URI,
   },
   { kind: 'image', url: 'https://picsum.photos/seed/scene-b/1200/1800' },
   { kind: 'image', url: 'https://picsum.photos/seed/scene-c/1200/1800' },
