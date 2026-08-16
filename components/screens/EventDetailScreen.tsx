@@ -55,8 +55,7 @@ import {
   SceneMap,
   type SceneCTAState,
 } from '../scene/SceneSections';
-import { TAB_BAR_CLEARANCE } from '../../app/(tabs)/_layout';
-import { feedPlaylist } from '../../lib/feedMedia';
+import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
 import { highlightEntities } from '../../lib/entityHighlight';
 import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
@@ -94,7 +93,7 @@ interface EventDetail {
    * one cover image while the event had a gallery and, since #244, video. The
    * hero and the gallery are the two things the frame is mostly made of.
    */
-  media?: Array<{ id: string; url: string; type: string }>
+  media?: Array<{ id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }>
 }
 
 interface CheckInStatus {
@@ -120,7 +119,6 @@ type EventDetailTrayState = {
 }
 
 const { width } = Dimensions.get('window')
-const CONTENT_HORIZONTAL_PADDING = 14
 const TOP_BAR_EXTRA_TOP_PADDING = 0
 const TOP_BAR_INSET_REDUCTION = 24
 
@@ -137,7 +135,6 @@ const TOP_BAR_INSET_REDUCTION = 24
  * an aspect, not a number of points.
  */
 const HERO_ASPECT = 390 / 574
-const HERO_HEIGHT = Math.round(width / HERO_ASPECT)
 const CHECKIN_RULES_TEXT = [
   'Before you check in, please confirm:',
   '1. You are physically at the event venue.',
@@ -1083,38 +1080,6 @@ export default function EventDetail() {
     }
   }
 
-  /*
-   * RSVP and check out, which frame `1141:4853` has nowhere to put.
-   *
-   * The frame draws one CTA. The old screen had five controls -- check in,
-   * RSVP, check out, interest, share -- and the first three do not all fit one
-   * button. Interest and share moved to the top bar, check in *is* the CTA, and
-   * these two would otherwise have been dropped by the rewrite. Lint caught
-   * that they had become unreferenced, which is the same way two things went
-   * missing in the MatchScreen rebuild.
-   *
-   * A tray rather than invented chrome: it is the idiom the app already uses
-   * for secondary actions, and it keeps the frame's one-CTA composition intact.
-   * Raised for the designer in `docs/SCENE.md` -- the design needs a home for
-   * these or an explicit decision that they do not belong here.
-   */
-  const openMore = useCallback(() => {
-    const buttons: ActionTrayButton[] = []
-
-    if (!isEnded) {
-      const committed = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-      buttons.push({
-        label: committed ? "I'm not going" : 'Count me in',
-        onPress: () => {
-          closeTray()
-          void handleToggleRsvp()
-        },
-      })
-    }
-
-    buttons.push({ label: 'Close', variant: 'primary', onPress: closeTray })
-    showTray(event?.title || 'This event', '', buttons)
-  }, [isEnded, isCheckedIn, rsvpStatus, event?.title, handleToggleRsvp, handleCheckout, showTray, closeTray])
 
   if (!isLoading && !event) {
     return (
@@ -1130,12 +1095,14 @@ export default function EventDetail() {
   /*
    * Everything the organiser uploaded, as one list.
    *
-   * `feedPlaylist` puts the cover first and then the rest, which is the same
-   * order the Pulse cards use -- so the picture somebody tapped on the feed is
-   * the first thing the hero shows, rather than a different one with nothing to
-   * explain the swap.
+   * `clipFirst`, and the wrapper is the whole point -- `feedPlaylist` alone
+   * leads with the cover, which is right for a card in a feed and wrong here.
+   * `clipFirst`'s own note says why: opening the event is a different act, the
+   * person has committed a tap, the hero is two thirds of the screen, and the
+   * clip is the best thing the organiser uploaded. Calling the bare
+   * `feedPlaylist` buried every video behind the stills.
    */
-  const playlist = feedPlaylist(event?.media, event?.cover_image_url)
+  const playlist = clipFirst(feedPlaylist(event?.media, event?.cover_image_url))
 
   /*
    * Accented mid-paragraph by exact match against things the payload already
@@ -1168,56 +1135,53 @@ export default function EventDetail() {
         was touched.
       */}
       <PulseTopBar
-        leading={
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            hitSlop={12}
-          >
-            <Ionicons name="chevron-back" size={22} color={EMBER.textPrimary} />
-          </Pressable>
-        }
+        /*
+          Zero, because `app/_layout.tsx` presents this route with
+          `presentation: 'modal'`.
+
+          `useSafeAreaInsets()` reads the *root* provider, so inside a sheet it
+          reports the device's notch even though iOS has already dropped the
+          sheet below it. The bar then pads by an inset that is not there and
+          the wordmark sits in a dark band. Same fault, same fix as `room.tsx`
+          -- see `topInset` on the bar.
+        */
+        topInset={0}
+        leading={<SceneBarButton icon="chevron-back" label="Back" onPress={() => router.back()} />}
+        /*
+          Back, heart, share -- exactly the harness, and nothing else.
+
+          An overflow "..." was added here for RSVP and was wrong twice over:
+          it is not in frame `1141:4853`, and it put a control the design never
+          asked for in the most prominent slot on the screen. The two undesigned
+          actions live together below the CTA instead, which is where secondary
+          things belong and where the frame leaves room.
+        */
         actions={
           <>
-            <Pressable
+            <SceneBarButton
+              icon={userInterested ? 'heart' : 'heart-outline'}
+              label={userInterested ? 'Remove from interested events' : 'Save this event'}
+              active={userInterested}
               onPress={handleToggleInterest}
-              accessibilityRole="button"
-              accessibilityLabel={
-                userInterested ? 'Remove from interested events' : 'Save this event'
-              }
-              hitSlop={12}
-            >
-              <Ionicons
-                name={userInterested ? 'heart' : 'heart-outline'}
-                size={22}
-                color={userInterested ? EMBER.accent : EMBER.textPrimary}
-              />
-            </Pressable>
-            <Pressable
-              onPress={handleShare}
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              hitSlop={12}
-            >
-              <Ionicons name="share-outline" size={22} color={EMBER.textPrimary} />
-            </Pressable>
-            <Pressable
-              onPress={openMore}
-              accessibilityRole="button"
-              accessibilityLabel="More actions"
-              hitSlop={12}
-            >
-              <Ionicons name="ellipsis-horizontal" size={22} color={EMBER.textPrimary} />
-            </Pressable>
+            />
+            <SceneBarButton icon="share-outline" label="Share" onPress={handleShare} />
           </>
         }
       />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        /*
+          Room for the floating CTA, and no more.
+
+          `TAB_BAR_CLEARANCE` was in here and does not belong: `/event/[id]` is
+          a root stack route, not a child of `(tabs)`, so there is no tab bar
+          beneath it. Counting it anyway padded the scroll by 88pt and lifted
+          the dock into the middle of the content -- the harness carries a note
+          about the same double-count from the other direction.
+        */
         contentContainerStyle={{
-          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 24,
+          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + SCENE_CTA_INSET + 24,
         }}
       >
         {isLoading && !event ? (
@@ -1312,21 +1276,49 @@ export default function EventDetail() {
             in `docs/SCENE.md` as a delta for the designer rather than resolved
             by dropping the control.
           */}
-          {isCheckedIn && !isEnded ? (
-            <Pressable
-              onPress={handleCheckout}
-              disabled={checkingOut}
-              accessibilityRole="button"
-              accessibilityLabel="Check out of event"
-              accessibilityState={{ disabled: checkingOut }}
-              style={styles.secondaryAction}
-            >
-              {checkingOut ? (
-                <ActivityIndicator size="small" color={EMBER.textSecondary} />
-              ) : (
-                <Text style={styles.secondaryActionText}>Check out</Text>
-              )}
-            </Pressable>
+          {!isEnded ? (
+            <View style={styles.secondaryRow}>
+              {/*
+                RSVP, which frame `1141:4853` has no home for. It was briefly
+                behind a "..." in the top bar -- a control the design never
+                asked for, in the screen's most prominent slot. Grouped here
+                with check out instead: both are undesigned, both are
+                secondary, and the frame leaves this space empty.
+              */}
+              <Pressable
+                onPress={handleToggleRsvp}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+                    ? "Cancel going to this event"
+                    : 'Say you are going'
+                }
+                style={styles.secondaryAction}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+                    ? "Not going"
+                    : "I'm going"}
+                </Text>
+              </Pressable>
+
+              {isCheckedIn ? (
+                <Pressable
+                  onPress={handleCheckout}
+                  disabled={checkingOut}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check out of event"
+                  accessibilityState={{ disabled: checkingOut }}
+                  style={styles.secondaryAction}
+                >
+                  {checkingOut ? (
+                    <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                  ) : (
+                    <Text style={styles.secondaryActionText}>Check out</Text>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
           <SceneCTA
             state={ctaState}
@@ -1450,11 +1442,52 @@ export default function EventDetail() {
   )
 }
 
+/**
+ * A top-bar button — a 36pt disc at 8% white, as `app/preview/scene.tsx` draws it.
+ *
+ * Bare glyphs on the blur is what made the header read as unfinished: the bar
+ * is translucent over photography, so an icon with no disc behind it has no
+ * consistent contrast and no apparent hit target.
+ */
+function SceneBarButton({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name']
+  label: string
+  active?: boolean
+  onPress?: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={styles.barButton}
+    >
+      <Ionicons name={icon} size={20} color={active ? EMBER.accent : EMBER.textPrimary} />
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
+  barButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
   content: {
     paddingHorizontal: SCENE_PADDING_HORIZONTAL,
-    paddingTop: SCENE_SECTION_GAP,
+    // 48 under the hero, as the harness has it -- not the 64 that separates
+    // unrelated sections further down.
+    paddingTop: 48,
     gap: SCENE_SECTION_GAP,
   },
   section: { gap: 16 },
@@ -1466,9 +1499,10 @@ const styles = StyleSheet.create({
   },
   ctaDockInner: {
     paddingHorizontal: SCENE_CTA_INSET,
-    paddingBottom: TAB_BAR_CLEARANCE,
+    paddingBottom: SCENE_CTA_INSET,
     gap: 10,
   },
+  secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
   /* Quiet, because the CTA beside it is the thing to press. */
   secondaryAction: {
     alignSelf: 'center',
@@ -1483,7 +1517,7 @@ const styles = StyleSheet.create({
   organiserBar: {
     position: 'absolute',
     right: 16,
-    bottom: TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 32,
+    bottom: SCENE_CTA_HEIGHT + SCENE_CTA_INSET + 72,
     gap: 12,
   },
   organiserButton: {
