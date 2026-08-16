@@ -305,6 +305,71 @@ Android OAuth client carried the *debug* SHA-1, so it worked on every machine
 anyone would debug it on and failed on everything installed from the store. Two
 clients now, one per certificate. See RELEASING.md.
 
+### The Grid card, the profession filter, and the strip that became a ring — **Done** (#201)
+
+Three things, and the third is the one worth remembering.
+
+**The card says something true, once.** Frame `1141:4951`: name, occupation
+under it, one labelled box. The pair it replaced said the same thing twice —
+*"You both picked Techno and Board games"* directly above chips reading *Techno,
+Board games*. `gridCardBox` returns `SHARED INTERESTS` → `SAME FIELD` →
+`ATTENDING LIVE` → `null`, in that order. A box with nothing true in it is worse
+than no box.
+
+**Profession filters, interests do not.** The roster is already *ranked* by
+compatibility with shared interests in the score, so filtering on them narrows a
+list already sorted by them. Client-side, and that is not a preference:
+`workField` is null below `MIN_ROOM_FOR_WORK_FIELD` (8), so a `?workField=`
+parameter would filter on the **real column** while the response suppresses it —
+narrowing to one result would tell you a suppressed attribute by elimination.
+
+**The checked-in strip became a ring on the Blend'n button.** A section header, a
+carousel of full-width cards and a Check out pill — about a third of the first
+screen, permanently, for one bit of information, pushing the feed the screen
+exists for below the fold.
+
+The requirement that fell out of moving it: `roomButtonPulses` is true for both
+`live` and `checkin`, so a glow that is *only* a breath looks identical whether
+you are in a room or standing outside one. Survivable while the strip named the
+event; not survivable once the button is the only signal. So `roomButtonGlow`
+splits them — a breath for the invitation, a **steady ring** for the state.
+
+The ring is static on purpose, and this is the general rule: **motion cannot
+carry a state.** It is invisible in a screenshot, with Reduce Motion on, and to
+anybody not looking at the instant it swells.
+
+**Check out moved rather than vanished.** The strip held the only one-tap check
+out — `handleCheckOut` had gone caller-less once before, which cost three taps
+through the event detail screen and is why the strip was built. Two callers now:
+the Pulse's long-press tray (which offered a way in and no way out) and the room
+screen's top bar, which is where the ringed button goes.
+
+**A test was passing for the wrong reason.** `pulseCardGeometry` asserted
+`position: 'absolute'` against `events.tsx` to check the *tab bar* floats over
+the feed — and was matching the carousel's gradient and status pill. Deleting the
+carousel broke a test about the tab bar, which is the tell. It reads `_layout.tsx`
+now, which is the file that positions the bar.
+
+### Next — CORE EXPERTISE, decided and not yet built
+
+The frame's card carries two specialism tags under the occupation ("Spatial Web",
+"LLM Architecture", "UX Psychology"). Nothing in the product backs them, so the
+card ships without the row. Decided:
+
+| | Decision |
+|---|---|
+| **D25** | **Curated, scoped to the work field.** Pick your field, then 2–3 specialisms from that field's list. Free text is where somebody types their employer — precisely what `work_field`'s coarse bucket exists to prevent, since *"works in design is an attribute; Principal Designer at Swiggy is an address"* — and it is unnormalisable and unfilterable besides. |
+| **D26** | **On the basics step, right after work field.** Same question one level deeper, the picker scopes off the answer above it, and basics is the step that cannot be skipped. A skippable step is an empty field for most people, and an empty row puts the card back where it started. |
+| **D27** | **Hide the row until there is data.** Every existing profile has none. Falling back to the work field as a tag would repeat the line directly above it — the redundancy just removed. |
+
+Owed: the specialism vocabulary (~19 fields × 8–12 each), `profiles.expertise`,
+the roster field, the basics step, and the card's tag row. The vocabulary is the
+bulk of it and is a product-judgement job more than an engineering one.
+
+Also still owed from the same frame: `sharedWorkField` is computed in
+`lib/matching.ts` for ranking and never returned, so the card's SAME FIELD box
+has no server field behind it yet.
+
 ### Previously in Now — done
 
 **After signup: retire onboarding, ask once, gate at the point of use.** The

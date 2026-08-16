@@ -19,13 +19,14 @@ the home screen for a long time and it does *more* than the frame draws:
 | Featured | a featured carousel |
 | Upcoming | Upcoming events |
 | Nearby Experiences | Nearby Events |
-| — | **You're checked in** (with check-out) |
+| — | ~~**You're checked in** (with check-out)~~ — removed, see below |
 | — | **Interested** |
 | — | **Nightlife in `<city>`** |
 | — | city picker, empty states, skeletons, offline banner, long-press preview |
 
 So this work applies Liquid Ember to working, device-tested logic rather than
-building from nothing. Nothing in that list was removed.
+building from nothing. **One thing has since been removed** — the checked-in
+strip, below.
 
 ---
 
@@ -169,13 +170,37 @@ go in the moment they have a destination.
 
 ### The undesigned rows moved into the feed's header
 
-The checked-in strip, the offline banner, the switch-city offer, the away notice
-and the location/network errors have behaviour and no frame. They used to be a
+The offline banner, the switch-city offer, the away notice and the
+location/network errors have behaviour and no frame. They used to be a
 **sibling** of the list, statically laid out at the top of the screen — which the
 overlay now covers — and they cost a 10pt spacer on every render where none of
 them had anything to say. They render into `ListHeaderComponent` instead, above
 the headline, so there is one scroll surface and they clear the bar with the same
 padding as everything else.
+
+### The checked-in strip is gone — it is a ring on the Blend'n button now
+
+It was the fifth of those rows, and the only one that never earned its space. A
+section header, a horizontal list of **full-width** cards and a Check out pill:
+roughly a third of the first screen, permanently, to say one bit of information —
+*you are checked in somewhere*. It was the most expensive square footage on the
+screen, and it pushed the hero card the Pulse exists for below the fold.
+
+That bit lives on the centre button now, which already reads the same active
+check-in and is on **every** screen rather than only this one. It draws a steady
+ring when you are in a room. The full reasoning — including why the ring is
+static rather than animated — is in `NAVIGATION.md`.
+
+**For the designer.** This creates two asks, and neither is drawn anywhere yet:
+
+1. **The ring.** Currently a 2pt `accent` ring, 4pt clear of the 52pt disc, with
+   the existing breath behind it. It works and it was not designed — worth a
+   frame, since it is now the app's only permanent statement of a state.
+2. **Where check-out belongs.** It is in the Room's top bar (a quiet
+   `surfaceSunken` pill beside the bell) and on the Pulse's long-press tray.
+   Neither is in a frame. The constraint is that it must stay reachable in one
+   tap from the ring, because the three-tap version through the event detail
+   screen is what the strip was originally built to fix.
 
 **Your photo is the Me tab's icon.** That is where a profile picture belongs: the
 tab that *is* you, rather than a third control in a header. It reads
