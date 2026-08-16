@@ -143,6 +143,7 @@ const SimilarCard = memo(({
         {rawUrl ? (
           <OptimizedImage
             source={rawUrl as any}
+            recyclingKey={rawUrl}
             style={styles.similarImage as any}
             contentFit="cover"
             width={SIMILAR_CARD_WIDTH}
@@ -241,6 +242,7 @@ const StartupItem = memo(({
         {rawUrl ? (
           <OptimizedImage
             source={rawUrl as any}
+            recyclingKey={rawUrl}
             style={styles.gridImage as any}
             contentFit="cover"
             width={cardWidth}

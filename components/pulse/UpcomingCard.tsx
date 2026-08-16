@@ -83,6 +83,7 @@ export function UpcomingCard({
         {imageUrl ? (
           <OptimizedImage
             source={imageUrl}
+            recyclingKey={imageUrl ?? undefined}
             style={StyleSheet.absoluteFill as never}
             height={IMAGE_HEIGHT}
             contentFit="cover"

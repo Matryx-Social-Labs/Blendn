@@ -98,7 +98,7 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
 
       <View style={headerStyles.avatarWrap}>
         {imageUrl ? (
-          <OptimizedImage source={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+          <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
             <Ionicons name="people" size={18} color="#fff" />

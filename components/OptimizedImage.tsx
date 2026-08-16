@@ -22,6 +22,25 @@ interface OptimizedImageProps {
   blurRadius?: number
   transition?: number
   cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk'
+  /**
+   * What this view is *for*, so a recycled one cannot arrive holding the last
+   * card's picture.
+   *
+   * `expo-image` reuses native views inside a virtualised list. Without a key
+   * it has no way to know that the view it just handed you was showing
+   * something else, so a card scrolling into place paints the **previous
+   * card's photograph** for a frame or two and then dissolves into its own.
+   * It reads as a flicker, it is worst on exactly the fast scroll a feed
+   * invites, and it is invisible in a screenshot.
+   *
+   * `SceneHeroMedia` has always passed one — it uses `expo-image` directly.
+   * This component did not expose the prop at all, so nothing rendered through
+   * it could. The feed is a `FlatList` of many cards and is where recycling
+   * actually happens.
+   *
+   * Pass the image's own URL. Anything stable and unique per picture works.
+   */
+  recyclingKey?: string
   testID?: string
   accessibilityLabel?: string
   accessibilityRole?: string
@@ -51,6 +70,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   blurRadius,
   transition = 200, // Faster transition
   cachePolicy = 'memory-disk',
+  recyclingKey,
   testID,
   accessibilityLabel,
   accessibilityRole,
@@ -137,6 +157,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
           style={[StyleSheet.absoluteFill]}
           contentFit={contentFit}
           cachePolicy={cachePolicy}
+          recyclingKey={recyclingKey}
           testID={`${testID}-fallback`}
         />
       )
@@ -166,6 +187,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               onError={handleError}
               cachePolicy={cachePolicy}
               priority={priority}
+              recyclingKey={recyclingKey}
               blurRadius={blurRadius ? blurRadius + 2 : 4}
               testID={`${testID}-low-quality`}
             />
@@ -192,6 +214,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               }}
               transition={effectiveEnableProgressive ? 0 : transition}
               cachePolicy={cachePolicy}
+              recyclingKey={recyclingKey}
               priority={priority}
               blurRadius={blurRadius}
               testID={`${testID}-high-quality`}

@@ -89,6 +89,7 @@ const EventCard = memo<EventCardProps>(({
         {event.cover_image_url ? (
           <OptimizedImage
             source={event.cover_image_url}
+            recyclingKey={event.cover_image_url ?? undefined}
             style={styles.eventImage}
             contentFit="cover"
             width={400}

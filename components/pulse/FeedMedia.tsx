@@ -99,6 +99,15 @@ export function FeedMedia({
           height={Math.round(height)}
           contentFit="cover"
           priority="high"
+          /*
+            The feed is a virtualised list, which is the one place native image
+            views are actually recycled. Without a key `expo-image` can hand a
+            card a view still holding the *previous* card's photograph, paint
+            it for a frame or two and dissolve into the right one — a flicker
+            that is worst on the fast scroll a feed invites, and that no
+            screenshot catches.
+          */
+          recyclingKey={opener.kind === 'image' ? opener.url : opener.posterUrl}
         />
       ) : null}
 
@@ -109,6 +118,9 @@ export function FeedMedia({
           width={Math.round(width)}
           height={Math.round(height)}
           contentFit="cover"
+          // Same reason, and it matters twice over here: this view is reused
+          // as the card walks its own playlist, not only as cards recycle.
+          recyclingKey={current.url}
         />
       ) : null}
 
