@@ -64,7 +64,13 @@ export default function Room() {
   useEffect(() => {
     let cancelled = false
     apiClient
-      .getActiveCheckins({ force: true })
+      /*
+       * Cached. `MatchScreen` mounts in the same pass and asks for the same
+       * thing, so `queuedRequest`'s in-flight dedupe collapses the two into one
+       * request -- but forcing made that one request bypass a live SWR cache,
+       * which is a round trip before the room can name itself.
+       */
+      .getActiveCheckins()
       .then((r) => {
         if (cancelled) return
         const active = r.success ? r.data?.checkIns?.[0] : null
