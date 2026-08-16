@@ -49,15 +49,58 @@ the status indicator. The screen is called The Pulse; the button is the pulse.
 
 ## The centre button
 
-| Your state | Button | Label | Tap |
+| Your state | Button | Glow | Tap |
 |---|---|---|---|
-| Checked in | gradient, slow pulse, unread badge | Room | The Room |
-| Inside a running event's fence, not checked in | gradient, pulse | Check in | that event |
-| Saved event today, not there yet | flat | Tonight | that event |
-| Nothing on | flat | What's on | nearby events |
+| Checked in | gradient, unread badge | **steady ring** + slow breath | The Room |
+| Inside a running event's fence, not checked in | gradient | slow breath only | that event |
+| Saved event today, not there yet | gradient | none | that event |
+| Nothing on | gradient | none | nearby events |
 
 All four are live. The states, their precedence and the event selection are in
 `lib/roomButton.ts` with tests.
+
+**Gradient in every state**, as the frame draws it. It used to be gradient only
+when something was live, on the reasoning that a permanently glowing button is
+one people stop seeing. That was right while this was a *status light*. It is the
+Blend'n mark now — the brand's one fixed point in the app — and a logo that
+changes colour depending on whether you are near an event is not a logo. The
+status it used to carry is in the badge, the glow, and where the tap goes.
+
+### The ring is the checked-in state, and it is not decoration
+
+The Pulse used to carry a **"You're checked in"** strip: a section header, a
+carousel of full-width cards and a Check out pill. About a third of the first
+screen, permanently, to say one bit of information. It is gone, and this button
+is where that bit went.
+
+Which puts a requirement on the glow that did not exist before. `roomButtonPulses`
+is true for **both** `live` and `checkin`, so as long as the glow was only a
+breath the button looked identical whether you were in a room or merely standing
+outside one. Fine while the strip named the event. Not fine once this is the only
+signal. So `roomButtonGlow` splits them:
+
+```
+invite   a breath                        "there is a room here, come in"
+live     a breath around a steady ring   "you are in it"
+```
+
+**The ring is static on purpose, and the reason generalises: motion cannot carry
+a state.** It is invisible in a screenshot, invisible to anybody who has turned
+motion off at the OS level, and invisible to anybody not looking at the instant
+it swells. A ring that is simply always there is legible at a glance and survives
+all three. The breath is the invitation; the ring is the status.
+
+Drawn as a separate absolute view rather than a border on the button, because RN
+grows borders **inward** — a border on `centreButton` would shrink the gradient
+and the mark sitting on it, the same arithmetic that made the Banter's unread dot
+an 8pt core inside a 12pt footprint. It is `accent`, not `gradientFrom`: the halo
+behind it is `gradientFrom`, and a ring the colour of its own glow disappears
+into it at the top of every breath.
+
+**Check out is in the Room's top bar.** The strip held the only one-tap check
+out, so it moved with the signal rather than being dropped — one tap from the
+ringed button. The Pulse's long-press tray also offers it now; it used to offer a
+way in and no way out.
 
 **Every state goes somewhere real**, which is the whole reason this is a mode
 switch rather than a link. A centre button that did nothing in three of its four
