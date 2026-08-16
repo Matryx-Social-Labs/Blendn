@@ -3,34 +3,52 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import PhotoLightbox from '../../components/PhotoLightbox'
+import OptimizedImage from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
-import {
-  PROFILE_GUTTER,
-  PROFILE_SECTION_GAP,
-  ProfileBio,
-  ProfileDetail,
-  ProfileGallery,
-  ProfileHeading,
-  ProfileHero,
-  ProfileInterests,
-  ProfileOwnCta,
-} from '../../components/profile/ProfileSections'
-import { TAB_BAR_CLEARANCE } from './_layout'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
-import { EMBER } from '../../lib/theme'
+import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
+
+/** One number and what it counts. */
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue} maxFontSizeMultiplier={1.2}>{value}</Text>
+      <Text style={styles.statLabel} maxFontSizeMultiplier={1.3}>{label}</Text>
+    </View>
+  )
+}
+
+/** A destination. Icon, label, chevron -- nothing that changes state in place. */
+function PanelRow({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap
+  label: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={20} color={EMBER.textPrimary} />
+      <Text style={styles.rowLabel} maxFontSizeMultiplier={1.4}>{label}</Text>
+      <Ionicons name="chevron-forward" size={18} color={EMBER.textSecondary} />
+    </Pressable>
+  )
+}
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
-const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
-const INTERSTITIAL_HEIGHT = Math.round(WINDOW_WIDTH * 1.15)
-const CARD_BORDER_RADIUS = 16
-const PHOTO_BORDER_RADIUS = 20
 const PROFILE_CACHE_TTL = 2 * 60 * 1000
 
 interface UserProfileViewModel {
@@ -59,13 +77,7 @@ function ProfileInner() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const lastBackgroundRefreshRef = React.useRef(0)
-  const [lightboxIndex, setLightboxIndex] = useState(0)
-  const [lightboxVisible, setLightboxVisible] = useState(false)
 
-  const openLightbox = useCallback((index: number) => {
-    setLightboxIndex(index)
-    setLightboxVisible(true)
-  }, [])
 
   const photoList = useMemo(() => {
     const raw = profile?.photos || []
@@ -151,154 +163,123 @@ function ProfileInner() {
     }
   }, [user, authLoading, getUserAndProfile])
 
-  const renderSkeleton = () => (
-    <>
-      {/* Hero skeleton */}
-      <SkeletonBlock width={WINDOW_WIDTH} height={HERO_HEIGHT} borderRadius={0} />
-      {/* Quick actions skeleton */}
-      <View style={styles.quickActionsRow}>
-        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
-        <SkeletonBlock width={(WINDOW_WIDTH - 48) / 2} height={44} borderRadius={12} />
-      </View>
-      {/* Details card skeleton */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'60%'} style={{ marginBottom: 12 }} />
-          <SkeletonLine width={'40%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'50%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'35%'} />
-        </View>
-      </View>
-      {/* Interstitial skeleton */}
-      <View style={styles.cardContainer}>
-        <SkeletonBlock width={WINDOW_WIDTH - 32} height={INTERSTITIAL_HEIGHT * 0.5} borderRadius={PHOTO_BORDER_RADIUS} />
-      </View>
-      {/* About card skeleton */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'25%'} style={{ marginBottom: 10 }} />
-          <SkeletonLine width={'90%'} style={{ marginBottom: 6 }} />
-          <SkeletonLine width={'70%'} />
-        </View>
-      </View>
-      {/* Interests card skeleton */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
-          <View style={styles.tagsRow}>
-            {[...Array(4)].map((_, i) => (
-              <SkeletonBlock key={`skt_${i}`} width={78} height={32} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
-            ))}
-          </View>
-        </View>
-      </View>
-      {/* Stats card skeleton */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
-          <View style={styles.statsRow}>
-            {[...Array(3)].map((_, i) => (
-              <View key={`sks_${i}`} style={styles.statItem}>
-                <SkeletonBlock width={24} height={24} borderRadius={12} />
-                <SkeletonBlock width={30} height={20} borderRadius={4} />
-                <SkeletonBlock width={50} height={12} borderRadius={4} />
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-    </>
-  )
-
   /*
-   * `1141:5633` -- the same pieces `app/user/[id].tsx` draws, because it is the
-   * same person seen from the other side.
+   * The Me tab is a control panel, not a showcase.
    *
-   * This screen was the last one still on `APP_COLORS`, and it was not for want
-   * of components: `components/profile/ProfileSections.tsx` was written for
-   * *both* frames -- `1141:5163` (attendee) and `1141:5633` (this one) -- and
-   * only the attendee half was ever wired. The own-profile half sat built and
-   * unreachable while this screen kept drawing the old hero, the old quick
-   * actions and the old stat tiles.
+   * It was briefly the editorial frame `1141:5633` -- and that was a second
+   * copy of a screen that already existed. `app/user/[id].tsx` has a `'self'`
+   * mode: point it at your own id and it renders exactly that page, Connect
+   * suppressed, CTA reading "You".
    *
-   * Three differences from the attendee view, all following from it being you:
+   * Two reasons that belongs there and not here:
    *
-   *   - nothing is gated, so `blurred` is never set and every photo is yours
-   *   - there is nobody to Connect to, so `ProfileActions` is replaced by
-   *     `ProfileOwnCta` -- the only reason to look at your own profile is to
-   *     change what other people see
-   *   - the top bar carries Settings, which no attendee profile has
+   *   - **It cannot drift.** Preview *is* the attendee screen, so "how others
+   *     see me" is guaranteed honest, gating included, rather than a second
+   *     implementation that agrees with the first until somebody edits one.
+   *   - **A tab is somewhere you go to do something.** Settings, sign out, fix
+   *     your photos. The frame has a single action and a 751pt hero; opening it
+   *     to change a notification toggle meant scrolling past a portrait of
+   *     yourself first.
    */
-  const renderContent = () => (
-    <>
-      <ProfileHero
-        width={WINDOW_WIDTH}
-        photos={photoList}
-        title={`${profile?.name || 'New User'}${profile?.age ? `, ${profile.age}` : ''}`}
-        subtitle={profile?.occupation || profile?.location || null}
-        pseudonym={profile?.name || 'You'}
-        bottomInset={TAB_BAR_CLEARANCE}
-        onPressMedia={() => openLightbox(0)}
-      />
-
-      <View style={styles.canvas}>
-        {profile?.bio ? (
-          <View style={styles.section}>
-            <ProfileHeading title="About" />
-            <ProfileBio text={profile.bio} />
-          </View>
-        ) : null}
-
-        {profile?.interests && profile.interests.length > 0 ? (
-          <View style={styles.section}>
-            <ProfileHeading title="Interests" />
-            <ProfileInterests interests={profile.interests} />
-          </View>
-        ) : null}
-
-        {/*
-          Occupation and education, asymmetric -- a filled card and a ruled
-          block. Both are real fields on the profile; the frame's `PRO` badge
-          and `@handle` are not, and are recorded in `docs/PROFILE.md` rather
-          than invented here.
-        */}
-        {profile?.occupation || profile?.education ? (
-          <View style={styles.details}>
-            {profile.occupation ? (
-              <ProfileDetail label="OCCUPATION" value={profile.occupation} />
-            ) : null}
-            {profile.education ? (
-              <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
-            ) : null}
-          </View>
-        ) : null}
-
-        {photoList.length > 1 ? (
-          <View style={styles.section}>
-            <ProfileHeading
-              title="Gallery"
-              trailing={`${photoList.length} photo${photoList.length === 1 ? '' : 's'}`}
-            />
-            <ProfileGallery
-              photos={photoList.slice(1)}
-              columnWidth={(WINDOW_WIDTH - PROFILE_GUTTER * 2 - 16) / 2}
-              onPressPhoto={(index) => openLightbox(index + 1)}
-            />
-          </View>
-        ) : null}
-
-        <ProfileOwnCta onEdit={() => router.push('/edit-profile')} />
+  const renderSkeleton = () => (
+    <View style={styles.panel}>
+      <View style={styles.identity}>
+        <SkeletonBlock width={72} height={72} borderRadius={9999} />
+        <View style={styles.identityText}>
+          <SkeletonLine width={'70%'} style={{ marginBottom: 8 }} />
+          <SkeletonLine width={'45%'} />
+        </View>
       </View>
-
-      <PhotoLightbox
-        photos={photoList}
-        initialIndex={lightboxIndex}
-        visible={lightboxVisible}
-        onClose={() => setLightboxVisible(false)}
-      />
-    </>
+      <View style={styles.rows}>
+        {[0, 1, 2].map((i) => (
+          <SkeletonBlock key={`skr_${i}`} width={WINDOW_WIDTH - 32} height={56} borderRadius={20} />
+        ))}
+      </View>
+    </View>
   )
 
+  const mark = pseudonymAvatar(profile?.id || user?.id || 'you')
+  const avatar = photoList[0] || null
+  const stats = profile?.stats
+
+  const renderContent = () => (
+    <View style={styles.panel}>
+      {/*
+        The whole card is the way through to Preview, rather than a small
+        "view as" link beside it. Tapping your own face to see your own page is
+        the gesture people already expect, and it makes the one screen that
+        motivates filling a profile in the easiest thing on the tab to reach.
+      */}
+      <Pressable
+        onPress={() => router.push({ pathname: '/user/[id]', params: { id: profile?.id || user?.id || '' } })}
+        accessibilityRole="button"
+        accessibilityLabel="Preview your profile as others see it"
+        style={({ pressed }) => [styles.identity, pressed && styles.pressed]}
+      >
+        {avatar ? (
+          <OptimizedImage
+            source={avatar}
+            recyclingKey={avatar}
+            style={styles.avatar as never}
+            width={72}
+            height={72}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: mark.colors[0] }]}>
+            <Text style={styles.avatarGlyph} maxFontSizeMultiplier={1}>
+              {mark.character}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.identityText}>
+          <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+            {profile?.name || 'You'}
+            {profile?.age ? `, ${profile.age}` : ''}
+          </Text>
+          <Text style={styles.identityHint} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+            See your profile as others do
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={20} color={EMBER.textSecondary} />
+      </Pressable>
+
+      {/*
+        Counts, not a gallery. `stats` is three numbers and there is no endpoint
+        that returns the events behind them -- the frame's `CIRCLE PRESENCE`
+        cards need an API before they need a component. Three honest numbers
+        beat three invented cards.
+
+        `eventsOrganized` is hidden at zero because almost nobody organises, and
+        a permanent "0 Hosted" reads as a thing you failed to do rather than a
+        role you do not have.
+      */}
+      {stats ? (
+        <View style={styles.stats}>
+          <Stat value={stats.eventsAttended} label="Attended" />
+          <Stat value={stats.eventsFavorited} label="Saved" />
+          {stats.eventsOrganized > 0 ? (
+            <Stat value={stats.eventsOrganized} label="Hosted" />
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.rows}>
+        <PanelRow
+          icon="create-outline"
+          label="Edit profile"
+          onPress={() => router.push('/edit-profile')}
+        />
+        <PanelRow
+          icon="settings-outline"
+          label="Settings"
+          onPress={() => router.push('/settings')}
+        />
+      </View>
+    </View>
+  )
 
   if (authLoading || loading) {
     return (
@@ -333,10 +314,78 @@ function ProfileInner() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
 
-  /* The same three from `app/user/[id].tsx`, because it is the same page. */
-  canvas: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 32, gap: PROFILE_SECTION_GAP },
-  section: { gap: 24 },
-  details: { gap: 48 },
+  /* 16 gutter and 24 between blocks -- the app's ordinary page rhythm. */
+  panel: { padding: 16, gap: 24 },
+
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 16,
+    borderRadius: 32,
+    backgroundColor: EMBER.surfaceMedia,
+  },
+  avatar: { width: 72, height: 72, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
+  avatarGlyph: { fontSize: 34, lineHeight: 42 },
+  identityText: { flex: 1, gap: 2 },
+  name: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.8,
+    color: EMBER.textPrimary,
+  },
+  identityHint: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textSecondary,
+  },
+
+  stats: { flexDirection: 'row', gap: 12 },
+  stat: {
+    flex: 1,
+    gap: 2,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    backgroundColor: EMBER.surfaceSunken,
+  },
+  statValue: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 24,
+    lineHeight: 30,
+    color: EMBER.textPrimary,
+  },
+  statLabel: {
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: EMBER.textSecondary,
+  },
+
+  rows: { gap: 8 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 18,
+    /* 56 tall: comfortably over the 44pt touch minimum without feeling like a form. */
+    minHeight: 56,
+    borderRadius: 20,
+    backgroundColor: EMBER.surfaceSunken,
+  },
+  rowLabel: {
+    flex: 1,
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textPrimary,
+  },
+  pressed: { opacity: 0.7 },
+
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -344,71 +393,11 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.bg,
     padding: 20,
   },
-  errorText: { fontSize: 16, // EMBER has no destructive token; this surface is the only one that needs one.
-    color: '#FF3B30', textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  retryButtonText: { color: '#000', fontWeight: '600', fontSize: 16 },
-
-  // Hero
-
-  // Quick Actions
-  quickActionsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginTop: 12,
-    gap: 12,
-  },
-
-  // Cards
-  cardContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  card: {
-    backgroundColor: EMBER.surface,
-    borderRadius: CARD_BORDER_RADIUS,
-    padding: 16,
-  },
-
-  // Details
-
-  // Interstitial photos
-
-  // About
-
-  // Tags / Interests
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  tag: {
-    backgroundColor: EMBER.bg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(73,71,71,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-
-  // Member since
-
-  // Gallery
-
-  // Profile Completion
+  // EMBER has no destructive token; this surface is the only one that needs one.
+  errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center', marginBottom: 20 },
+  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 9999 },
+  retryButtonText: { color: EMBER.onGradient, fontWeight: '600', fontSize: 16 },
 })
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

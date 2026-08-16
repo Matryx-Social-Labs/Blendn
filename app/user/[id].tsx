@@ -18,6 +18,7 @@ import {
   ProfileHero,
   ProfileInterests,
 } from '../../components/profile/ProfileSections'
+import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -85,6 +86,8 @@ function UserProfileInner() {
   const [liked, setLiked] = useState(false)
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [lightboxVisible, setLightboxVisible] = useState(false)
   const [connectSending, setConnectSending] = useState(false)
 
   const hydrateCtaState = useCallback(async (targetUserId: string) => {
@@ -455,7 +458,19 @@ function UserProfileInner() {
                     title="Gallery"
                     trailing={`${photos.length} photo${photos.length === 1 ? '' : 's'}`}
                   />
-                  <ProfileGallery photos={photos.slice(1)} columnWidth={columnWidth} />
+                  <ProfileGallery
+                    photos={photos.slice(1)}
+                    columnWidth={columnWidth}
+                    /*
+                     * `+1` because the gallery is `photos.slice(1)` -- the hero
+                     * already cycles the first one. Without the offset every
+                     * tap opened the photo before the one you touched.
+                     */
+                    onPressPhoto={(i) => {
+                      setLightboxIndex(i + 1)
+                      setLightboxVisible(true)
+                    }}
+                  />
                 </View>
               ) : null}
 
@@ -507,6 +522,18 @@ function UserProfileInner() {
       />
 
       {/* Frame `1141:5228`. Back, and the safety menu the frame draws at the right. */}
+      {/*
+        `ProfileGallery` has always wrapped each tile in a `Pressable` and this
+        screen never passed `onPressPhoto`, so every tap on somebody's photos
+        did nothing at all -- a tap target that looks live and is not.
+      */}
+      <PhotoLightbox
+        photos={photos}
+        initialIndex={lightboxIndex}
+        visible={lightboxVisible}
+        onClose={() => setLightboxVisible(false)}
+      />
+
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
         <Pressable
           onPress={() => router.back()}

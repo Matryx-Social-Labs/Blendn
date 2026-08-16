@@ -143,20 +143,28 @@ describe('the screen renders through the rebuilt components', () => {
   })
 })
 
-describe('your own profile draws the same pieces as everybody else’s', () => {
+describe('the Me tab is a control panel, not a second profile', () => {
   /*
-   * `ProfileSections.tsx` was written for both frames and only the attendee
-   * half was ever wired -- the fifth time something here was built and never
-   * called. `noOrphanComponents` could not see it: the file *had* an importer,
-   * just not the second one it was written for.
+   * It was briefly the editorial frame `1141:5633` -- which was a second copy
+   * of a screen that already existed. `app/user/[id].tsx` has a `'self'` mode,
+   * so pointing it at your own id renders that page with Connect suppressed.
+   *
+   * Preview being *the same screen* is the whole point: "how others see me"
+   * cannot drift from how they actually see you, gating included.
    */
   const OWN = () => codeOnly(read('app/(tabs)/profile.tsx'))
 
-  it('renders through components/profile, not its own hero', () => {
+  it('sends Preview to the attendee screen rather than re-rendering it', () => {
     const src = OWN()
-    for (const name of ['ProfileHero', 'ProfileBio', 'ProfileInterests', 'ProfileDetail', 'ProfileOwnCta']) {
-      expect(src).toContain(`<${name}`)
-    }
+    expect(src).toContain("pathname: '/user/[id]'")
+    // The editorial pieces belong to that screen now, not this one.
+    expect(src).not.toMatch(/<ProfileHero|<ProfileOwnCta|<ProfileBio/)
+  })
+
+  it('offers Edit profile and Settings', () => {
+    const src = OWN()
+    expect(src).toContain("router.push('/edit-profile')")
+    expect(src).toContain("router.push('/settings')")
   })
 
   it('has left APP_COLORS behind', () => {
@@ -164,12 +172,14 @@ describe('your own profile draws the same pieces as everybody else’s', () => {
     expect(OWN()).not.toContain('APP_COLORS.')
   })
 
-  it('clears the tab bar under the hero name', () => {
+  it('shows counts, and hides a role you do not have', () => {
     /*
-     * The name is anchored to the hero's bottom, which is right on the
-     * full-screen attendee route and put "Kishore, 28" under the tab bar here.
+     * `stats` is three numbers and no endpoint returns the events behind them,
+     * so the frame's `CIRCLE PRESENCE` gallery stays unbuilt. `eventsOrganized`
+     * is hidden at zero: a permanent "0 Hosted" reads as something you failed
+     * to do rather than a role you do not have.
      */
-    expect(OWN()).toContain('bottomInset={TAB_BAR_CLEARANCE}')
+    expect(OWN()).toContain('stats.eventsOrganized > 0')
   })
 
   it('does not invent a handle, a tier, or an event history', () => {
@@ -183,5 +193,25 @@ describe('your own profile draws the same pieces as everybody else’s', () => {
     expect(src).not.toMatch(/@blendn|handle|username/i)
     expect(src).not.toMatch(/\bPRO\b/)
     expect(src).not.toMatch(/CIRCLE PRESENCE/i)
+  })
+})
+
+describe('a photo you can tap actually opens', () => {
+  it('gives the attendee gallery a lightbox', () => {
+    /*
+     * `ProfileGallery` has always wrapped each tile in a `Pressable`, and
+     * `app/user/[id].tsx` never passed `onPressPhoto` -- so every tap on
+     * somebody's photos did nothing at all. A tap target that looks live and
+     * is not is worse than a plain image.
+     */
+    const src = codeOnly(read('app/user/[id].tsx'))
+    expect(src).toContain('onPressPhoto=')
+    expect(src).toContain('<PhotoLightbox')
+  })
+
+  it('offsets the index past the hero photo', () => {
+    // The gallery is `photos.slice(1)`, so without `+1` every tap opened the
+    // photo before the one you touched.
+    expect(codeOnly(read('app/user/[id].tsx'))).toContain('setLightboxIndex(i + 1)')
   })
 })
