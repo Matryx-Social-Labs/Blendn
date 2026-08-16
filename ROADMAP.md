@@ -520,6 +520,16 @@ the save returns 200 and stores nothing.
 
 ## Next
 
+### The Banter's two loose ends
+
+- **Search is drawn and does nothing.** The field is built to the frame and is
+  not wired. Needs a decision first: conversation titles only (client-side,
+  today), or message bodies too — which is a server endpoint that does not
+  exist.
+- **Pinning, if it is ever wanted, has no rail left.** The frame's Pinned rail
+  is now "Live now". A pinned rail and a live rail are two rails, and the screen
+  would have to say which is which. See [`docs/BANTER.md`](docs/BANTER.md).
+
 ### Deferred features, and the UI that is waiting on each
 
 **Read this before building any of the features named below.** Each has a piece
@@ -692,6 +702,55 @@ two answers to one question, and the client's is the one an attacker controls.
 ---
 
 ## Done
+
+- **The Banter, rebuilt from scratch against frame `1141:5247`.** The old screen
+  was deleted rather than adapted — 1465 lines of `personal` / `group` tabbed
+  presentation replaced by `components/banter/BanterSections.tsx` and a screen
+  that keeps only the data layer. Designer notes: [`docs/BANTER.md`](docs/BANTER.md).
+
+  **One inbox, not two tabs.** The old screen fetched only the visible half, so
+  the other half was always as stale as the last time you looked at it, and
+  "did anyone message me" needed two places checked. Merged and sorted by last
+  message, with never-used rooms at the bottom. A person is a photograph; a room
+  is a `#211F1F` disc with a glyph, which is the frame's whole distinction.
+
+  **The rail says "Live now", not "Pinned".** Nothing in the product can pin a
+  conversation — no column, no endpoint, no gesture — so the frame's rail could
+  not be built as drawn, and filling it from "most recent" would have duplicated
+  the list beneath it under a label that lies. What *is* pinned by circumstance
+  is the event room you are checked into: temporary, anonymous, useful only
+  while you are there. Those rooms are lifted out of Recent into the frame's own
+  rail component. `isCheckedIn` is a new server field (blendn-admin #248) —
+  `checked_in` with no `check_out_time` — because the client cannot derive it:
+  "the event is underway" is not "I am there".
+
+  **Message requests kept a card the frame does not have.** A request is the one
+  row that cannot be opened, since tapping it has to mean accept or decline.
+  Matching the frame exactly would have left the endpoint with nothing calling
+  it. Built from the frame's own parts; decline left, accept right.
+
+  **The compose FAB removed** by decision — a DM starts from a person and every
+  route to one already goes through a profile.
+
+  **The unread dot was measured wrong twice over.** Frame `1141:5296` rings it
+  with `shadow: 0 0 0 2px #0F0E0E` — *outset*. RN's `borderWidth` grows inwards,
+  so the obvious transcription left an 8pt accent core in a 12pt footprint. The
+  dot sits at the **bounding box's** corner and the avatar is a circle, so from
+  the 56pt avatar's centre the dot's centre is `√(22²+22²) = 31.1` against a
+  radius of 28 — it is centred outside the photograph and only its inner edge
+  reaches back in. An 8pt core reaches 27.1 and grazes the rim; the frame's 12pt
+  core reaches 25.1 and bites in. That one number is the difference between a
+  dot that looks attached and one that looks like it fell off. Rebuilt as a 16pt
+  `#0F0E0E` ring holding a 12pt accent circle at `-2, -2`.
+
+  Not a copy-paste fix: the pinned rail's presence dot (`1141:5265`) *is* a
+  single 16pt "Background+Border", so `borderWidth: 2` is right there and wrong
+  three lines away. Both pinned by tests.
+
+  Also: `PulseTopBar` takes a `title`, so the bar reads **The Banter** rather
+  than claiming to be the home screen; and pinned names size to content, which
+  stops "Gala Night" rendering as "Gala Nig…". 20 tests in
+  `__tests__/banterInbox.test.ts`.
 
 - **Every image in a virtualised list gets a recycling key** (#184, #185).
   `expo-image` reuses native views inside a `FlatList`, and without a key it
