@@ -56,9 +56,18 @@ describe('the overlay header, frame 1141:4819', () => {
   })
 
   it('adds the status bar to the 64 rather than absorbing it', () => {
-    // The frame is a 390pt artboard with no notch. Taking its height literally
-    // is what put "The Pulse" underneath the clock on a real device.
-    expect(TOP_BAR()).toContain('insets.top + TOP_BAR_HEIGHT')
+    /*
+     * The frame is a 390pt artboard with no notch. Taking its height literally
+     * is what put "The Pulse" underneath the clock on a real device.
+     *
+     * `topInset ?? insets.top` rather than `insets.top`: a screen presented as
+     * a sheet is already below the notch, and `useSafeAreaInsets()` reads the
+     * root provider, so it would otherwise pad by an inset that is not there.
+     * The Grid did exactly that and drew a black band above its header. Every
+     * pushed screen still takes the device inset, which is why this is a
+     * defaulted override rather than a required prop.
+     */
+    expect(TOP_BAR()).toContain('(topInset ?? insets.top) + TOP_BAR_HEIGHT')
   })
 
   it('owns no control of its own', () => {

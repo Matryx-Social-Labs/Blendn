@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import MatchScreen from '../components/screens/MatchScreen'
 import { NotificationBell } from '../components/pulse/NotificationBell'
@@ -46,7 +46,6 @@ import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
  */
 export default function Room() {
   const [chatState, setChatState] = useState<'idle' | 'loading' | 'missing'>('idle')
-  const insets = useSafeAreaInsets()
   const [eventId, setEventId] = useState<string | null>(null)
   const [eventTitle, setEventTitle] = useState<string | null>(null)
   const [rosterCount, setRosterCount] = useState(0)
@@ -179,6 +178,12 @@ export default function Room() {
         designer, not to fork the component over.
       */}
       <PulseTopBar
+        /*
+          Zero, because this screen is a `presentation: 'modal'` sheet: iOS has
+          already dropped it below the notch, and the shared inset would be a
+          second one. See `topInset` on the bar.
+        */
+        topInset={0}
         leading={
           <Pressable
             onPress={() => router.back()}
@@ -199,7 +204,7 @@ export default function Room() {
         reason to look, and the accent falls on the event because that is the
         part that changes.
       */}
-      <View style={[styles.pageHead, { paddingTop: insets.top + TOP_BAR_HEIGHT + 8 }]}>
+      <View style={[styles.pageHead, { paddingTop: TOP_BAR_HEIGHT + 8 }]}>
         <Text style={styles.pageTitle} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
           The Grid
         </Text>
@@ -223,7 +228,8 @@ export default function Room() {
         />
       ) : null}
 
-      <View style={styles.segments} accessibilityRole="tablist">
+      <View style={styles.segments}>
+        <View style={styles.segmentTrack} accessibilityRole="tablist">
         {/*
           Grid is where you are; Join Chat is a door. Kept as a segmented pair
           because the frame draws it that way and the two are the room's two
@@ -236,6 +242,7 @@ export default function Room() {
           busy={chatState === 'loading'}
           onPress={() => void openChat()}
         />
+        </View>
       </View>
 
       {/*
@@ -312,32 +319,49 @@ const styles = StyleSheet.create({
   titleAccent: { color: EMBER.accent },
   headerSpacer: { width: 24 },
 
-  segments: {
+  /*
+   * Frame `1141:4959`: the pair is a pill, centred, not two full-width segments.
+   *
+   * `#211F1F` at `p-6` around the buttons, with an inset shadow — so the
+   * unselected side is a hole in the track rather than a second button, and
+   * only the selected one is raised. Content-width, because two 32pt-padded
+   * labels are narrower than the screen and stretching them would make the
+   * track read as a tab bar.
+   */
+  segments: { alignItems: 'center', paddingVertical: 12 },
+  segmentTrack: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  segment: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
+    padding: 6,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
-    // Carried in both states so selecting one does not change its width and
-    // re-lay the row — the same rule the onboarding chips learned.
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
   },
-  segmentOn: { backgroundColor: EMBER.surface, borderColor: EMBER.accent },
-  segmentText: { ...EMBER_TYPE.chip, color: EMBER.textSecondary },
-  segmentTextOn: { color: EMBER.textPrimary },
+  // Frame `1141:4961`: `px-32 py-8`, `#2d2c2c`, raised.
+  segment: {
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 8,
+    borderRadius: EMBER_RADIUS.pill,
+  },
+  segmentOn: {
+    backgroundColor: '#2D2C2C',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  // Frame `1141:4963`: Manrope Bold 14/20, accent when selected, `#AEAAAA` when not.
+  segmentText: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textSecondary,
+  },
+  segmentTextOn: { color: EMBER.accent },
 
   body: { flex: 1 },
-  // Absolute rather than `display: none`, so the hidden pane keeps its layout
-  // and the visible one does not re-measure on every toggle.
-  pane: { ...StyleSheet.absoluteFillObject },
-  paneHidden: { opacity: 0, zIndex: -1 },
 
   centred: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
   emptyTitle: { ...EMBER_TYPE.cardTitle, fontSize: 18, textAlign: 'center' },

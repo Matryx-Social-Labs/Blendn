@@ -202,12 +202,17 @@ describe('the room carries the shared header', () => {
 
   it('offsets the content below the overlay', () => {
     /*
-     * `PulseTopBar` draws over the content at absolute position. Without the
-     * offset the page heading and the visibility banner render behind the blur
-     * — which is exactly what shipped in the first screenshot of this change.
+     * `PulseTopBar` draws over the content at absolute position, so the heading
+     * must clear it or it renders behind the blur — which is what the first
+     * screenshot of this change showed.
+     *
+     * The offset is `TOP_BAR_HEIGHT` alone, not `insets.top + TOP_BAR_HEIGHT`:
+     * this screen is a sheet, and the notch is accounted for once by the bar's
+     * own `topInset`. See the sheet block below for why adding it here was the
+     * bug rather than the fix.
      */
     const src = ROOM_SCREEN()
-    expect(src).toContain('insets.top + TOP_BAR_HEIGHT')
+    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + 8')
     // And the safe area must not inset the screen a second time.
     expect(src).toContain("edges={['left', 'right']}")
   })
@@ -240,5 +245,62 @@ describe('Join Chat is a door, not a pane', () => {
   it('draws no subtitle until both halves are real', () => {
     // "0 people at undefined" is worse than no subtitle.
     expect(ROOM_SCREEN()).toContain('eventTitle && rosterCount > 0')
+  })
+})
+
+describe('the sheet does not pay for the notch twice', () => {
+  it('passes topInset 0 to the shared bar', () => {
+    /*
+     * `/room` is `presentation: 'modal'`, and iOS already drops a sheet below
+     * the notch. `useSafeAreaInsets()` reads the nearest provider and the app's
+     * lives at the root, so inside the sheet it still reports the *device's*
+     * inset -- the bar padded by a notch that was not there, and the heading
+     * offset by `insets.top + TOP_BAR_HEIGHT` counted the same 62pt again.
+     *
+     * That is the black band above the header, and it was invisible in the code.
+     */
+    const src = ROOM_SCREEN()
+    expect(src).toContain('topInset={0}')
+    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + 8')
+    expect(src).not.toContain('insets.top + TOP_BAR_HEIGHT')
+  })
+
+  it('keeps the override optional, so every other screen is unchanged', () => {
+    // The Pulse, the Scene and the Banter are pushed, not presented, and their
+    // inset is correct. Defaulting to `insets.top` leaves them alone.
+    const bar = readFileSync(
+      join(__dirname, '..', 'components', 'pulse', 'PulseTopBar.tsx'),
+      'utf8'
+    )
+    expect(bar).toContain('topInset ?? insets.top')
+  })
+})
+
+describe('the toggle is the frame’s pill', () => {
+  it('is a track holding two buttons, not two stretched segments', () => {
+    /*
+     * Frame `1141:4959`: `#211F1F` at p6 around the pair, centred and
+     * content-width. The unselected side is a hole in the track rather than a
+     * second button -- stretching both to full width makes it read as a tab bar.
+     */
+    const src = ROOM_SCREEN()
+    expect(src).toContain('styles.segmentTrack')
+    const track = src.slice(src.indexOf('segmentTrack: {'))
+    const body = track.slice(0, track.indexOf('},'))
+    expect(body).toContain('padding: 6')
+    expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
+  })
+
+  it('raises only the selected side, and accents its label', () => {
+    // Frame `1141:4961`: `#2D2C2C` with a drop shadow; `1141:4963`: the accent.
+    const src = ROOM_SCREEN()
+    expect(src.slice(src.indexOf('segmentOn: {'))).toContain("backgroundColor: '#2D2C2C'")
+    expect(src).toContain('segmentTextOn: { color: EMBER.accent }')
+  })
+
+  it('does not stretch the buttons', () => {
+    const src = ROOM_SCREEN()
+    const seg = src.slice(src.indexOf('  segment: {'))
+    expect(seg.slice(0, seg.indexOf('},'))).not.toContain('flex: 1')
   })
 })
