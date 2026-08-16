@@ -187,11 +187,51 @@ export function SceneHeroMedia({
               decoder — bounded, unlike a feed, because a hero has one playlist
               and the window is fixed.
             */}
-            {item.kind === 'video' && Math.abs(i - index) <= 1 ? (
+            {/*
+              Mounted only while it is the page in view — the Pulse's rule.
+
+              This kept the clip mounted for the neighbours too, so its source
+              was open and buffered before anyone swiped. That preload cost a
+              correctness bug it took three attempts to kill: a mounted player
+              that has played to its end sits on its final frame, and every
+              signal available for resetting it was unreliable. `active` is
+              `i === index || i === settled`, which on a TWO-item playlist never
+              goes false — moving to page 1 leaves `settled` lagging at 0, so
+              `i === settled` holds. Keying on `isCurrent` instead fixed some
+              returns and not others.
+
+              `FeedVideo` never had any of this, and the reason is structural
+              rather than clever: **mount means play**. An inactive card
+              unmounts, and the next mount is a new `useVideoPlayer` at zero.
+              There is no state to reset because there is no surviving player.
+
+              So the hero adopts the same rule. The cost is that a clip starts
+              buffering on arrival rather than one page early; the gain is that
+              "it plays" stops depending on a prop transition that a two-item
+              playlist never performs.
+            */}
+            {item.kind === 'video' && i === index ? (
               <HeroVideo
                 key={`${item.url}-${i}`}
                 source={item.url}
                 active={i === index || i === settled}
+                /*
+                  Which page the pager is actually ON, undiluted.
+
+                  `active` is `index || settled` so the clip keeps playing
+                  through a ~300ms slide rather than being torn down mid-
+                  transition. That is right for play/pause and useless as a
+                  reset signal: with a two-item playlist, moving to page 1 while
+                  `settled` still lags at 0 leaves `i === settled` true, so
+                  `active` never goes false and an effect keyed on it never
+                  runs again.
+
+                  That is the whole reason this bug survived on the Scene and
+                  never existed on the Pulse. `FeedVideo`'s reset is the
+                  *unmount* -- mount means play -- and an unmount always
+                  happens. Here the page stays mounted, so the reset needs a
+                  signal that actually toggles.
+                */
                 /*
                  * Loops exactly when nothing is going to advance past it.
                  *
@@ -304,11 +344,12 @@ function HeroVideo({
 
   useEffect(() => {
     /*
-     * Playing follows visibility, not mounting.
+     * Playing follows visibility, and mounting now follows it too.
      *
-     * The neighbour is mounted so its source is open and buffered before
-     * anyone swipes to it; playing it there would burn battery on something
-     * nobody is looking at, and it would arrive already part-way through.
+     * With the clip mounted only while it is the page in view, arriving on it
+     * constructs a new player at zero -- so there is nothing to reset and no
+     * `replay()` call. `active` still distinguishes the settle window, during
+     * which the page is leaving but should not be torn down mid-slide.
      */
     if (active) player.play()
     else player.pause()

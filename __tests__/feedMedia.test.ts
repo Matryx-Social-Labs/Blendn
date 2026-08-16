@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 import { feedClip, feedPlaylist, feedPoster, type EventMediaItem , clipFirst } from '../lib/feedMedia'
 
 /*
@@ -181,5 +184,56 @@ describe('clipFirst', () => {
 
   it('handles an empty playlist', () => {
     expect(clipFirst([])).toEqual([])
+  })
+})
+
+describe('a hero clip restarts when the carousel comes back to it', () => {
+  /*
+   * Reported from a device: the clip plays once, the pager advances when it
+   * ends, and on the next lap the hero sits frozen on the clip's final frame.
+   *
+   * Three attempts failed before the cause was structural rather than a missing
+   * call. A mounted player that has played to its end sits on its last frame,
+   * and every signal for resetting it was unreliable: `active` is
+   * `i === index || i === settled`, which on a TWO-item playlist never goes
+   * false -- moving to page 1 leaves `settled` lagging at 0, so `i === settled`
+   * still holds. Keying the reset on `isCurrent` fixed some returns and not
+   * others.
+   *
+   * `FeedVideo` never had the bug, and not by being cleverer: **mount means
+   * play**. An inactive card unmounts, and the next mount is a new
+   * `useVideoPlayer` at zero. There is no state to reset because no player
+   * survives. The hero uses the same rule now.
+   */
+  const heroSrc = readFileSync(
+    join(__dirname, '..', 'components', 'scene', 'SceneHeroMedia.tsx'),
+    'utf8'
+  )
+
+  it('mounts the clip only while it is the page in view', () => {
+    expect(heroSrc).toContain('item.kind === \'video\' && i === index ?')
+    // The preload window that let a finished player survive the page.
+    expect(heroSrc).not.toContain('Math.abs(i - index) <= 1')
+  })
+
+  it('does not depend on a prop transition a two-item playlist never makes', () => {
+    /*
+     * Code only. The comment above the mount rule names `isCurrent` on purpose
+     * -- recording the attempt that half-worked is what stops it being tried
+     * again -- so asserting on raw source would fail on its own explanation.
+     */
+    const code = heroSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    expect(code).not.toContain('isCurrent')
+    expect(code).not.toContain('endedOnce')
+  })
+
+  it('leaves the feed on the same rule', () => {
+    const feed = readFileSync(
+      join(__dirname, '..', 'components', 'pulse', 'FeedVideo.tsx'),
+      'utf8'
+    )
+    expect(feed).toContain('player.play()')
+    // Its doc is the canonical statement of the policy both now share.
+    expect(feed).toContain('single-active-player policy')
   })
 })
