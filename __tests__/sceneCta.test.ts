@@ -157,57 +157,74 @@ const DETAIL = () =>
     'utf8'
   )
 
-describe('the shipping event screen agrees with the CTA it is not', () => {
+describe('the event screen IS the Scene now, and kept what the CTA lacks', () => {
+  /*
+   * This block used to guard the gap between the harness and the shipping
+   * screen: `app/event/[id].tsx` rendered a hand-built morphing action row
+   * while `components/scene/*` was reachable only from `app/preview/scene.tsx`.
+   * The gap is closed — the screen renders `SceneCTA` — so these assertions
+   * move to the new structure rather than being deleted. Each keeps its intent.
+   */
   it('labels the check-in action with the verb, not the brand', () => {
-    const detail = DETAIL()
-    expect(detail).toContain('Blend in')
     /*
-     * The noun as a *label* is the regression. `Blend&apos;n` is how it was
-     * written — the brand, which names the product rather than the action, on
-     * the one control the screen has. The other two stages of the same morph
-     * are verbs ("Go to Chat"), so the noun was the odd one out.
-     *
-     * The brand still appears in this repo as a brand: the wordmark in
-     * `PulseTopBar`, "Blend'n Match", "Start Blend'n". Only this button was
-     * using it to mean "do something".
+     * Unchanged rule, new home. `SceneCTA` owns the label now, so the check
+     * reads the component instead of the screen — and the brand-as-verb is
+     * still what must never come back: `Blend'n` names the product, where the
+     * other two states are things you can do.
      */
-    const labels = detail.slice(detail.indexOf('actionLabelStack'))
-    expect(labels.slice(0, labels.indexOf('</View>'))).not.toContain('Blend&apos;n')
+    const cta = SRC().slice(SRC().indexOf('const CTA_LABEL'))
+    const table = cta.slice(0, cta.indexOf('}'))
+    expect(table).toContain('Blend in')
+    expect(table).not.toContain('Blend&apos;n')
+    expect(table).not.toContain("Blend'n")
   })
 
-  it('the action row is not a second sheet of glass', () => {
+  it('has one pill and no tray behind it', () => {
     /*
-     * `tabBar` was a translucent tray with its own fill, hairline and radius,
-     * holding two buttons that each already carry a BlurView, a sheen and a
-     * border. Two nested sheets read as a smudge with two parallel outlines,
-     * neither of which is the thing you press. Same defect the Scene's dock
-     * had, found in the same pass.
+     * The old `tabBar` was a translucent tray with its own fill, hairline and
+     * radius, holding buttons that each already carried a BlurView and a sheen
+     * — two nested sheets reading as a smudge with two outlines, neither of
+     * which is the thing you press.
+     *
+     * The screen has no action row at all now, which satisfies this by
+     * construction; asserting the absence keeps a future rewrite from
+     * reintroducing one.
      */
     const detail = DETAIL()
-    const bar = detail.slice(detail.indexOf('tabBar: {'))
-    const block = bar.slice(0, bar.indexOf('},'))
-    const declared = block
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => !l.startsWith('*') && !l.startsWith('/*') && !l.startsWith('//'))
-    for (const prop of ['backgroundColor:', 'borderWidth:', 'borderColor:', 'overflow:']) {
-      expect(declared.some((l) => l.startsWith(prop))).toBe(false)
-    }
-    // The buttons keep their own glass — this is a collapse, not a strip.
-    expect(detail).toContain('glassButtonBlur')
-    expect(detail).toContain('glassButtonSheen')
+    expect(detail).not.toContain('tabBar: {')
+    expect(detail).not.toContain('glassButtonBlur')
   })
 
   it('keeps the behaviour SceneCTA does not have', () => {
     /*
-     * Guard against a later "simplification" that swaps this for `SceneCTA` and
-     * silently drops the morph, the spinners and the secondary button.
+     * THE test, and it earned its place: the first draft of the render swap
+     * moved check out into an overflow tray, two taps behind an ellipsis.
+     * Leaving a venue is the most time-sensitive action in the app and it was
+     * a visible button before, so that was a downgrade dressed as a
+     * simplification — which is exactly what this was written to catch.
+     *
+     * `SceneCTA` has three states and no secondary control, so anything the
+     * old morph carried beside it has to be placed deliberately.
      */
     const detail = DETAIL()
-    expect(detail).toContain('Go to Chat')
-    expect(detail).toContain('Checked In')
-    expect(detail).toContain('Checking in...')
-    expect(detail).toContain('secondaryActionButton')
+    // Check out: one tap, beside the CTA, only while checked in.
+    expect(detail).toContain('secondaryAction')
+    expect(detail).toContain('accessibilityLabel="Check out of event"')
+    expect(detail).toContain('{isCheckedIn && !isEnded ? (')
+    // The in-flight states the morph used to show.
+    expect(detail).toContain('checkingOut ? (')
+    expect(detail).toContain('checkingIn || checkingOut ? (')
+    // RSVP has no home in the frame either, and is reachable rather than gone.
+    expect(detail).toContain('handleToggleRsvp')
+  })
+
+  it('renders the rebuilt Scene rather than a second implementation of it', () => {
+    // The whole point of the swap. If this fails, something has grown a
+    // parallel Scene again — which is how the last one went unnoticed.
+    const detail = DETAIL()
+    for (const c of ['SceneHero', 'SceneCTA', 'SceneGallery', 'SceneLocationCard']) {
+      expect(detail).toContain(c)
+    }
   })
 })
 
