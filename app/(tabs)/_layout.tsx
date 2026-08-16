@@ -698,7 +698,35 @@ const styles = StyleSheet.create({
    * outline logo under 40pt is a drawing problem, not a layout one — raised for
    * the designer in `docs/PULSE.md`.
    */
-  centreMark: { width: 32, height: 32 },
+  centreMark: {
+    width: 32,
+    height: 32,
+    /*
+     * Optically centred, which is not the same as centred.
+     *
+     * The asset's **bounding box** is exact — 8pt of padding on all four sides
+     * — so `contentFit: 'contain'` places it perfectly by the box, and it
+     * still reads as sitting left in the disc. The mark's ink is not evenly
+     * distributed inside its own box: the left is stacked solid bars and the
+     * right tapers to a point, so its centre of **mass** is 9.2% left of the
+     * canvas centre and the eye follows the mass.
+     *
+     * Measured both ways, at 320pt in a 520pt disc:
+     *
+     * | shift | ink gap L / R | mass offset |
+     * |---|---|---|
+     * | 0%    | 124 / 125 — box centred | −23.9 |
+     * | 9%    | 148 / 101 | +0.1 — mass centred |
+     *
+     * The two definitions disagree by 9%, which is the whole problem. 5% is
+     * the midpoint: neither gap nor mass is exactly zero, and nothing looks
+     * wrong — which is what optical centring is. 1.6pt at this size.
+     *
+     * A transform rather than a margin, so it moves the glyph without moving
+     * the box the badge is positioned against.
+     */
+    transform: [{ translateX: 1.6 }],
+  },
   halo: {
     position: 'absolute',
     // Level with the button now that the button is level with the bar.
