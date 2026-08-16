@@ -72,6 +72,19 @@ const CONVERSATIONS: ConversationItem[] = [
     kind: 'direct',
   },
   {
+    /*
+     * A match who has not revealed. The server sends the pseudonym as the name
+     * and no photo, so this row must draw the generated mark rather than an
+     * empty circle — the case that was rendering as a grey hole.
+     */
+    id: 'c3b',
+    title: 'Cosmic Panda',
+    preview: 'Nice to finally talk properly.',
+    timeLabel: '5h ago',
+    kind: 'direct',
+    pseudonymous: true,
+  },
+  {
     id: 'c4',
     title: 'Product Team',
     preview: 'Liam: Meeting moved to 10 AM tomorrow.',

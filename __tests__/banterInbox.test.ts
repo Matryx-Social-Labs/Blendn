@@ -257,3 +257,56 @@ describe('the unread dot lands on the avatar', () => {
     expect(body).toContain('borderWidth: 2')
   })
 })
+
+describe('a match is anonymous until they reveal', () => {
+  it('carries the reveal state instead of dropping it', () => {
+    /*
+     * The server gates the payload — pre-reveal `name` is the pseudonym and
+     * `image` is null — so the list cannot leak a name it was never sent. What
+     * it can get wrong is *drawing* that state: a null photo through the
+     * ordinary avatar is an empty grey circle, which reads as a broken row
+     * rather than as anonymity working.
+     */
+    const src = SCREEN()
+    expect(src).toContain('they_revealed: conv.theyRevealed !== false')
+    expect(src).toContain('pseudonymous: !c.they_revealed')
+  })
+
+  it('defaults an absent flag to revealed, not to anonymous', () => {
+    /*
+     * Looks like the wrong direction and is not. `mayShowRealName` returns
+     * true for a conversation that never had a pseudonym — an accepted message
+     * request, which has shown real names since it existed. Defaulting to
+     * `false` would stamp a generated disc over every one of them.
+     *
+     * Safe because this flag picks a picture, not a permission: the name and
+     * the photo are gated server-side either way.
+     */
+    expect(SCREEN()).toContain('!== false')
+    expect(SCREEN()).not.toContain('theyRevealed === true')
+  })
+
+  it('draws the generated mark, seeded on the pseudonym', () => {
+    /*
+     * The same mark the Scene's attendee discs and the room use, so one person
+     * is one colour and one creature everywhere they appear under that name.
+     *
+     * Seeded on `item.title` — which *is* the pseudonym pre-reveal. Never a
+     * user id: that is stable forever and would rebuild exactly the
+     * cross-surface identity the pseudonyms exist to prevent.
+     */
+    const sections = SECTIONS()
+    expect(sections).toContain('<PseudonymDisc pseudonym={item.title} />')
+    expect(sections).toContain('pseudonymAvatar(pseudonym)')
+    const disc = sections.slice(sections.indexOf('function PseudonymDisc'))
+    expect(disc.slice(0, disc.indexOf('}\n'))).not.toContain('id')
+  })
+
+  it('names an unknown person the way the server does', () => {
+    // The server's last resort is `UNNAMED = "Someone"`. "Unknown" reads as a
+    // data error, which an unrevealed match is not.
+    const src = SCREEN()
+    expect(src).toContain("|| 'Someone'")
+    expect(src).not.toContain("|| 'Unknown'")
+  })
+})

@@ -89,6 +89,23 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * - **The compose FAB**, removed by decision: a DM starts from a person, and
  *   every path to one already goes through a profile.
  *
+ * ## Anonymity holds in the inbox
+ *
+ * A DM that opens from a mutual like carries the pseudonym the match card
+ * showed, and the real name appears only when that person reveals. The server
+ * gates it — pre-reveal, `name` is the pseudonym and `image` is `null` — so the
+ * list cannot leak a name it was never sent.
+ *
+ * What it *can* get wrong is drawing that state as a fault. A null photo
+ * through the ordinary avatar is an empty grey circle, which reads as a broken
+ * row rather than as anonymity working. `theyRevealed` is carried through so an
+ * unrevealed match gets the generated mark instead — the same one the Scene's
+ * discs and the room use, seeded on the pseudonym.
+ *
+ * `revealRequested` is carried and **not yet drawn**: the frame has no slot for
+ * it, so today you only learn someone asked by opening the thread. Recorded in
+ * `docs/BANTER.md` as a question for the designer, not invented here.
+ *
  * **Message requests** are the reverse — in this and not in the frame. A
  * request is the one row that cannot be opened, because tapping it has to mean
  * accept or decline. Matching the frame exactly would have deleted the only
@@ -117,6 +134,17 @@ interface PersonalChat {
   last_message?: string
   last_message_time?: string
   unread_count: number
+  /**
+   * They have revealed themselves to you.
+   *
+   * The server already gates the payload — pre-reveal, `name` is the pseudonym
+   * and `image` is `null`, so there is nothing here to leak. This flag exists
+   * so the row can *draw* the difference: an unrevealed match gets the
+   * generated mark rather than an empty circle.
+   */
+  they_revealed: boolean
+  /** They have asked you to reveal. There is no "declined". */
+  reveal_requested: boolean
 }
 
 interface MessageRequest {
@@ -243,6 +271,7 @@ export default function Chat() {
         timeLabel: c.last_message_time ? formatRelativeTime(c.last_message_time) : '',
         avatarUrl: c.other_user_avatar,
         kind: 'direct' as const,
+        pseudonymous: !c.they_revealed,
         unread: c.unread_count > 0,
         sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
         open: () => handlePersonalChatPress(c),
@@ -596,12 +625,36 @@ export default function Chat() {
           const otherUser = conv.otherUser || conv.other_user || {}
           return {
             conversation_id: convId,
-            other_user_name: otherUser?.name || otherUser?.display_name || 'Unknown',
+            /*
+             * Already the pseudonym when they have not revealed —
+             * `displayNameInConversation` on the server decides this and every
+             * other surface resolves through it. "Someone" rather than
+             * "Unknown" to match the server's own last resort; "Unknown" reads
+             * as a data error, which this is not.
+             */
+            other_user_name: otherUser?.name || otherUser?.display_name || 'Someone',
             other_user_id: String(otherUser?.id || otherUser?.user_id || ''),
             other_user_avatar: otherUser?.image || otherUser?.avatar || null,
             last_message: preview.text,
             last_message_time: preview.time,
             unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
+            /*
+             * Absent means revealed, which looks like the wrong direction and
+             * is not.
+             *
+             * The gate is entirely server-side: `name` is already the pseudonym
+             * and `image` already `null` before a reveal, so this flag decides
+             * a *picture*, not a permission, and cannot leak either way.
+             *
+             * Defaulting to `false` would draw a generated disc over every
+             * accepted message request — conversations that never had a
+             * pseudonym and have shown real names since they existed
+             * (`mayShowRealName` returns `true` for them precisely so this does
+             * not happen). Failing "closed" here would mislabel real people as
+             * anonymous, which is the worse error.
+             */
+            they_revealed: conv.theyRevealed !== false,
+            reveal_requested: conv.revealRequested === true,
           }
         }).filter((conv: PersonalChat) => !!conv.conversation_id)
 
