@@ -3,7 +3,7 @@ import { Asset } from 'expo-asset';
 import { router, Stack, usePathname } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
@@ -22,7 +22,6 @@ import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
-import queryCache from '../lib/queryCache';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
@@ -329,17 +328,29 @@ function RootLayout() {
     };
   }, [pathname, loading]);
 
-  // Keep data fresh when app returns from background.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
-      queryCache.clear();
-      apiClient.clearResponseCache();
-    });
-    return () => {
-      sub.remove();
-    };
-  }, []);
+  /*
+   * Foreground no longer wipes the caches, and that IS the freshness strategy.
+   *
+   * This cleared `queryCache` and the whole `apiClient` response cache on every
+   * return to the foreground, on the reasoning that backgrounded data is stale.
+   * The cost was that **every** minimise-and-restore started cold: the room, the
+   * feed, the profile, all of them, and the first screen you looked at paid a
+   * full round trip before it could render. That is the second half of "I open
+   * the room, wait a few seconds, minimise, open it again, wait again" -- the
+   * first half was `force: true` on mount, fixed separately.
+   *
+   * It is also redundant. Every cached endpoint is `swr: true` with a TTL, so a
+   * read returns immediately and revalidates behind the paint, and an entry past
+   * its TTL blocks and refetches on its own. Clearing turns every entry into the
+   * second case unconditionally, including ones written a second ago.
+   *
+   * `useLiveSync` still fires on foreground for the screens that want a nudge --
+   * see the Pulse and MatchScreen -- and it now reads cache rather than forcing,
+   * so it repaints instantly and updates behind.
+   *
+   * What must still be cleared on **sign-out** is a different question with a
+   * different answer, and `clearResponseCache` is still there for it.
+   */
 
   return (
     <ErrorBoundary
