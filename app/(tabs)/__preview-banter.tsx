@@ -34,26 +34,16 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * starts at 8! Are you coming?" — and a two-word fixture would hide the
  * wrapping the two-line preview exists to handle.
  */
+/*
+ * Event rooms, because that is all the rail holds.
+ *
+ * It was four people when the section was called "Pinned". It is called
+ * "Live now" and holds the rooms you are checked into, so a fixture with a
+ * face in it would show a layout the screen cannot produce.
+ */
 const PINNED: PinnedItem[] = [
-  {
-    id: 'p1',
-    name: 'Elena',
-    avatarUrl: 'https://picsum.photos/seed/elena/200/200',
-    online: true,
-  },
-  { id: 'p2', name: 'Gala Night', isEvent: true, online: true },
-  {
-    id: 'p3',
-    name: 'Marcus',
-    avatarUrl: 'https://picsum.photos/seed/marcus/200/200',
-    muted: true,
-  },
-  {
-    id: 'p4',
-    name: 'Sophie',
-    avatarUrl: 'https://picsum.photos/seed/sophie/200/200',
-    muted: true,
-  },
+  { id: 'p1', name: 'Gala Night', isEvent: true, online: true },
+  { id: 'p2', name: 'Rooftop Sessions', isEvent: true, online: true },
 ]
 
 const CONVERSATIONS: ConversationItem[] = [
