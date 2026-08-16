@@ -426,39 +426,39 @@ The remaining call sites are `onSync`'s poller, the location effect at
 as a runaway loop and chased as one for an afternoon. `docs/PERFORMANCE.md`
 now says to compare a walk only against the same walk.
 
-### Next — the Grid paints twenty cards in one 98ms commit
+### Done — the Grid paints only what fits (#219)
 
-Diagnosed, not fixed. `getEventMatches` asks for `limit: 20`;
-`MatchScreen.tsx:989` renders them with a plain `shown.map()` inside a
-`ScrollView`; each `GridCard` draws three `LinearGradient`s. Sixty native
-gradient views in one commit, ~5ms a card, six frames dropped on the screen the
-whole product exists for. Nothing is virtualised, so a 60-person event pays
-three times this.
+The roster was a `shown.map()` inside a `ScrollView`: twenty cards, sixty
+`LinearGradient`s, one **98ms** commit on the screen the whole product exists
+for. A `GridCard` is a full-width card over 280pt tall, so three fill the
+screen — **seventeen of the twenty were built where nobody could see them**, and
+the cost was linear in how busy the night was. A sixty-person event paid three
+times it, which is exactly backwards.
 
-Three ways out, and the choice is a product one:
+Now a `FlatList` with `initialNumToRender={4}`. **Worst commit 98ms → 43ms**;
+roster arrival is 39.9ms + 34.7ms instead of one 98ms hitch.
 
-**A — `FlatList` with `numColumns={2}`.** The ScrollView becomes the list, the
-filter header becomes `ListHeaderComponent`, "Show more" becomes
-`ListFooterComponent`. Only what fits renders, so the cost stops scaling with
-the roster. Correct and the only one that survives a busy event — but it
-restructures the render of a 1000-line screen that is the core of the product.
+Two corrections to what this entry said before it was built:
 
-**B — cap the first paint, grow on the next frame.** ~5 lines, no
-restructuring: paint the four cards that fit, add the rest a frame later. Turns
-one 98ms hitch into ~40ms then ~58ms. The wait the user actually feels drops by
-half and the screen still does linear work.
+- **No `numColumns`.** This entry said `numColumns={2}`; that was wrong.
+  `styles.list` sets no `flexDirection`, so the Grid has always been one column
+  of full-width cards. Two columns is a different design, not a faster one. A
+  test pins it.
+- The chip rail needed `marginHorizontal: -12` on the new header. As a direct
+  child of the old `ScrollView` it measured its inset from the screen edge;
+  inheriting the cards' `paddingHorizontal: 12` pushed it 12pt right of the
+  cards it sits above. Caught on the screenshot, not by a test.
 
-**C — fewer gradients per card.** ~5ms a card is the three `LinearGradient`s.
-Two of them could plausibly be flat fills at no visual cost — **but that is a
-design change and needs the designer, not me.**
+`ListFooterComponent` renders even when the list is empty, which the old branch
+could not — so "Show more" is guarded on there being cards, or it sits under
+"Nobody here yet" offering a second page of nobody. Also pinned.
 
-A is right, B is safe, C needs an answer first. Not started pending that call.
-
-Separately and regardless: `GridCard` is `export function`, not `memo`, and the
-parent hands it four inline arrows plus a fresh `toPerson()` object per card. A
-plain `memo()` would not bite until those are stabilised, and stabilising them
-does nothing for *first* paint — which is the measured problem. Worth doing
-after A or B, not instead of them.
+Still open, and deliberately not done here: `GridCard` is `export function`,
+not `memo`, and the parent hands it four inline arrows plus a fresh
+`toPerson()` per card. Virtualisation bounds how much that costs — six mounted
+rows rather than twenty — so it is no longer the shape of a hitch. The third
+option from this entry, **fewer `LinearGradient`s per card, still needs the
+designer.**
 
 ### Next — CORE EXPERTISE, decided and not yet built
 
