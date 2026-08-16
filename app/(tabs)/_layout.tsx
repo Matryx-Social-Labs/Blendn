@@ -138,6 +138,20 @@ const TabButton = memo(({
     <Text
       style={[styles.itemLabel, isFocused && styles.itemLabelOn]}
       numberOfLines={1}
+      /*
+       * Capped at 1.2 — tighter than anywhere else, and the bar is why.
+       *
+       * `tabBarTop` computes the bar's height from `TAB_BAR_LINE`, a constant.
+       * A label that grows does not make the bar taller; it overflows a box
+       * whose size something else has already decided, and takes the Pulse's
+       * hero card sizing with it, since that is measured against the same
+       * number.
+       *
+       * Five words across a 440pt bar is the tightest horizontal budget in the
+       * app. Somebody who needs larger type gets it on every screen the bar
+       * leads to.
+       */
+      maxFontSizeMultiplier={1.2}
     >
       {label}
     </Text>

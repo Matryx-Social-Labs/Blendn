@@ -179,7 +179,25 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   if (!visible) return null
 
   return (
-    <Animated.View style={[styles.overlay, { opacity }]} pointerEvents="none">
+    /*
+      Invisible to VoiceOver, and deliberately not labelled "loading".
+
+      This is the brand mark drawing itself over a black screen for under two
+      seconds. It carries no information: there is nothing to act on, nothing
+      to read, and the screen it hands off to announces itself. Left visible to
+      the accessibility tree it becomes a focus stop that says nothing, on the
+      very first thing anybody meets.
+
+      `accessibilityElementsHidden` is the iOS half and
+      `importantForAccessibility="no-hide-descendants"` the Android half —
+      both are needed, and neither implies the other.
+    */
+    <Animated.View
+      style={[styles.overlay, { opacity }]}
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <Animated.View
         style={[
           styles.centre,

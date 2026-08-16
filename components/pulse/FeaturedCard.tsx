@@ -294,27 +294,44 @@ export function FeaturedCard({
       <View style={styles.body}>
         {tag ? (
           <View style={[styles.tagPill, { borderColor: `${accent}1A` }]}>
-            <Text style={[styles.tagText, { color: accent }]} numberOfLines={1}>
+            <Text
+              style={[styles.tagText, { color: accent }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.4}
+            >
               {tag.toUpperCase()}
             </Text>
           </View>
         ) : null}
 
-        <Text style={styles.title} numberOfLines={3}>
+        {/*
+          Capped at 1.3.
+
+          The card is a **fixed aspect** box — height is derived from width —
+          so its caption cannot grow into more room. At 36/45 over three lines
+          an uncapped title at Accessibility XXXL would need roughly 420pt of
+          the card's ~470pt height, pushing the date and venue off the bottom
+          and leaving a photograph with a wall of text on it.
+
+          `numberOfLines` truncates, which is the right failure here: a title
+          cut short still tells you what the event is, where a caption pushed
+          off the card tells you nothing about when or where.
+        */}
+        <Text style={styles.title} numberOfLines={3} maxFontSizeMultiplier={1.3}>
           {title}
         </Text>
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
             <Ionicons name="calendar-outline" size={15} color={EMBER.textSecondary} />
-            <Text style={styles.metaText} numberOfLines={1}>
+            <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={1.4}>
               {dateLabel}
             </Text>
           </View>
           {placeLabel ? (
             <View style={[styles.metaItem, styles.metaItemFlexible]}>
               <Ionicons name="location-outline" size={15} color={EMBER.textSecondary} />
-              <Text style={styles.metaText} numberOfLines={1}>
+              <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={1.4}>
                 {placeLabel}
               </Text>
             </View>

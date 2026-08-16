@@ -183,7 +183,19 @@ export default function SignIn() {
             <Ionicons name="chevron-back" size={26} color={APP_COLORS.textPrimary} />
           </Pressable>
 
-          <Image source={lockup} style={styles.lockup} resizeMode="contain" />
+          {/*
+            Decorative. The wordmark is a picture of the product's name, and
+            the name is not what somebody needs read to them here — the buttons
+            below say what this screen does. Announced, it is one more stop
+            before the first thing you can act on.
+          */}
+          <Image
+            source={lockup}
+            style={styles.lockup}
+            resizeMode="contain"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
 
           <Text style={styles.placeholderBanner}>
             PLACEHOLDER DESIGN — logic is final, layout is not
