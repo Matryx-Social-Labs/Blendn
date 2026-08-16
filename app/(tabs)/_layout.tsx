@@ -35,8 +35,27 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '..
  * clock and a network call.
  */
 
-/** The mark on the centre button. Tinted at the call site — see `centreMark`. */
-const MONOGRAM = require('../../assets/logo/monogram-white.png')
+/**
+ * The mark on the centre button. Tinted at the call site — see `centreMark`.
+ *
+ * The **bold** cut, not the one the splash uses.
+ *
+ * `monogram-white.png` has strokes at 4.86% of the mark's width, which at 32pt
+ * draws a 1.35pt line against roughly 2pt for every other glyph in this bar —
+ * the lightest thing in the row while being the most important control in it.
+ * `monogram-white-bold.png` is the same artwork with its strokes dilated to
+ * 6.40%, so the line lands at 1.78pt: near parity, with every counter still
+ * open.
+ *
+ * It is a thickening of the designer's own file, not a redraw. A genuinely
+ * *filled* variant was tried first by flood-filling the enclosed regions and it
+ * destroys the mark — the B becomes a blob — so that ask stands, and now has
+ * evidence behind it.
+ *
+ * The splash and the intro keep the original: at 118pt the thin cut is the
+ * better drawing, and this exists for small sizes only.
+ */
+const MONOGRAM = require('../../assets/logo/monogram-white-bold.png')
 
 /**
  * The brand's ink, sampled from the logo artwork rather than invented.
