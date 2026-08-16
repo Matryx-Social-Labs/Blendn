@@ -51,6 +51,7 @@ export default function Room() {
   const [rosterCount, setRosterCount] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [revealBusy, setRevealBusy] = useState(false)
+  const [checkOutBusy, setCheckOutBusy] = useState(false)
 
   /*
    * Which room, from the server rather than from navigation.
@@ -157,6 +158,39 @@ export default function Room() {
     }
   }, [eventId, revealed, revealBusy])
 
+  /*
+   * Leaving the room.
+   *
+   * This lives here because the Pulse's "You're checked in" strip — which
+   * carried the only one-tap check out — is gone, replaced by the ring on the
+   * Blend'n button. The strip cost a third of the first screen to say one thing;
+   * the ring says it for free. But the check out inside it was real, so it
+   * moved rather than vanished, and this is the screen that button now opens.
+   *
+   * No confirmation. Checking out ends your *presence* — it drops you off the
+   * Grid and out of the headcount — and presence is reversible: walk back in and
+   * check in again. It does not touch attendance, so the event chat you have
+   * already joined stays writable either way (`mayWriteToRoom` on the server is
+   * deliberately keyed on membership, not on being inside the fence).
+   *
+   * `router.back()` only on success. Closing the screen first would be a lie
+   * about a request that might still fail, and the failure worth catching is the
+   * one where somebody believes they left a roster they are still on.
+   */
+  const checkOut = useCallback(async () => {
+    if (!eventId || checkOutBusy) return
+    setCheckOutBusy(true)
+    try {
+      const result = await apiClient.checkOut(eventId)
+      if (result.success) router.back()
+      else Logger.warn('presence', 'check out refused', { error: result.error })
+    } catch (e) {
+      Logger.error('presence', 'check out failed', { error: e })
+    } finally {
+      setCheckOutBusy(false)
+    }
+  }, [eventId, checkOutBusy])
+
   return (
     /*
       `edges` drops 'top' because `PulseTopBar` is an *overlay*: it draws over
@@ -195,7 +229,36 @@ export default function Room() {
             <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
           </Pressable>
         }
-        actions={<NotificationBell />}
+        actions={
+          <>
+            {/*
+              Only once the room is known. Before the check-in lookup lands
+              there is nothing to check out *of*, and a live-looking control
+              that no-ops is worse than one that arrives a moment late.
+            */}
+            {eventId ? (
+              <Pressable
+                onPress={() => void checkOut()}
+                disabled={checkOutBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Check out of this event"
+                accessibilityHint="Removes you from the Grid. You can check in again while you are here."
+                accessibilityState={{ disabled: checkOutBusy }}
+                hitSlop={8}
+                style={({ pressed }) => [styles.checkOut, pressed && styles.pressed]}
+              >
+                {checkOutBusy ? (
+                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                ) : (
+                  <Text style={styles.checkOutText} maxFontSizeMultiplier={1.2}>
+                    Check out
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
+            <NotificationBell />
+          </>
+        }
       />
 
       {/*
@@ -360,6 +423,30 @@ const styles = StyleSheet.create({
     color: EMBER.textSecondary,
   },
   segmentTextOn: { color: EMBER.accent },
+
+  /*
+   * Quiet, and next to the bell rather than in the page.
+   *
+   * A secondary-coloured pill on the surface, not an accent one: leaving is the
+   * least interesting thing you can do in a room you just walked into, and the
+   * warm palette is spent on the reveal toggle and the segments, which are the
+   * two decisions worth making here.
+   */
+  checkOut: {
+    minHeight: 32,
+    minWidth: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surfaceSunken,
+  },
+  checkOutText: {
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
+  },
 
   body: { flex: 1 },
 

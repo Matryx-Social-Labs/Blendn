@@ -1,5 +1,9 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 import {
   roomButtonAccessibilityLabel,
+  roomButtonGlow,
   roomButtonLabel,
   roomButtonPulses,
   pickInsideEvent,
@@ -111,6 +115,101 @@ describe('pulsing is rationed', () => {
      */
     expect(roomButtonPulses('today')).toBe(false)
     expect(roomButtonPulses('idle')).toBe(false)
+  })
+})
+
+describe('the glow carries the checked-in state on its own', () => {
+  /*
+   * The Pulse's "You're checked in" strip is gone -- a section header, a
+   * carousel and a Check out pill, about a third of the first screen, to say
+   * one bit. The button says it now, which makes these the tests that stop the
+   * bit from being lost.
+   */
+  it('tells being in a room apart from standing outside one', () => {
+    /*
+     * The failure this exists to catch: `roomButtonPulses` is true for BOTH, so
+     * a glow that is only a breath looks identical whether you are checked in
+     * or merely near a door. That was survivable while the strip named the
+     * event and is not now.
+     */
+    expect(roomButtonGlow('live')).toBe('live')
+    expect(roomButtonGlow('checkin')).toBe('invite')
+    expect(roomButtonGlow('live')).not.toBe(roomButtonGlow('checkin'))
+  })
+
+  it('stays dark when you are in no room', () => {
+    expect(roomButtonGlow('today')).toBe('none')
+    expect(roomButtonGlow('idle')).toBe('none')
+  })
+
+  it('glows in exactly the states that pulse', () => {
+    /*
+     * One rule, two readers. If a state ever pulses without glowing (or the
+     * reverse) the button animates around a ring that is not there, or draws a
+     * ring nothing is animating -- both read as a rendering fault.
+     */
+    const states = ['live', 'checkin', 'today', 'idle'] as const
+    for (const s of states) {
+      expect(roomButtonGlow(s) !== 'none').toBe(roomButtonPulses(s))
+    }
+  })
+})
+
+describe('the ring is drawn, not merely animated', () => {
+  const bar = readFileSync(join(__dirname, '..', 'app/(tabs)/_layout.tsx'), 'utf8')
+
+  it('renders a static ring for live, outside the animated halo', () => {
+    /*
+     * Motion cannot carry a state: it is invisible in a screenshot, with Reduce
+     * Motion on, and to anyone not looking at the instant it swells. So the
+     * ring is a plain View gated on the glow, not another interpolation.
+     */
+    expect(bar).toContain("glow === 'live' ? <View pointerEvents=\"none\" style={styles.liveRing} /> : null")
+    expect(bar).toContain('liveRing: {')
+  })
+
+  it('keeps the ring off the button, so the disc is not eaten', () => {
+    /*
+     * RN grows borders inward. A border on `centreButton` would shrink the
+     * gradient and the mark sitting on it -- the same arithmetic that made the
+     * Banter's unread dot an 8pt core inside a 12pt footprint.
+     */
+    const ring = bar.slice(bar.indexOf('liveRing: {'))
+    const body = ring.slice(0, ring.indexOf('},'))
+    expect(body).toContain('position: \'absolute\'')
+    expect(body).toContain('CENTRE_SIZE + 8')
+    const button = bar.slice(bar.indexOf('centreButton: {'))
+    expect(button.slice(0, button.indexOf('},'))).not.toContain('borderWidth')
+  })
+
+  it('makes the halo big enough to see', () => {
+    // At the old 1.06 it grew 52 -> 55 and showed as a 1.5pt rim under a disc
+    // already casting a 16pt shadow. It was invisible, which only became a
+    // problem when it stopped being the second-best signal.
+    expect(bar).toContain('outputRange: [1, 1.42]')
+  })
+})
+
+describe('the Pulse no longer carries the checked-in strip', () => {
+  const pulse = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
+
+  it('has dropped the carousel and its header', () => {
+    expect(pulse).not.toContain("You're checked in")
+    expect(pulse).not.toContain('renderCheckedInCarousel')
+  })
+
+  it('did not take check out with it', () => {
+    /*
+     * The strip held the only one-tap check out, and `handleCheckOut` had gone
+     * caller-less once before -- which cost three taps through the event detail
+     * screen and is why the strip was added in the first place. Two callers
+     * now: the long-press tray here, and the room screen's top bar.
+     */
+    expect(pulse).toContain("label: 'Check Out'")
+    expect(pulse).toContain('void handleCheckOut(event)')
+    expect(readFileSync(join(__dirname, '..', 'app/room.tsx'), 'utf8')).toContain(
+      'apiClient.checkOut(eventId)'
+    )
   })
 })
 
