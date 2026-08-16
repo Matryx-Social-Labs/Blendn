@@ -17,7 +17,7 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
 /**
  * The Grid's card and filters, against fixtures — frame `1141:4951`.
  *
- * Deep-link `exp+blendn:///__preview-grid`.
+ * Deep-link `exp+blendn:///preview/grid`.
  *
  * The real screen needs a check-in, a roster and people who exist. None of that
  * decides whether a card's tags wrap or whether the filter chips read as
@@ -26,7 +26,27 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
  * The fixtures deliberately include a suppressed profession and a zero overlap,
  * because those are the rows most likely to be drawn wrong.
  */
+/*
+ * Ordered worst-case first, deliberately.
+ *
+ * A harness that leads with the richest card shows the arrangement least likely
+ * to be wrong. The thin ones are the point: most people share no interests, and
+ * `workField` is null in any room under eight.
+ */
 const ROOM: GridPerson[] = [
+  /* The floor: nothing shared, not here. Only the band should speak. */
+  { userId: '7', name: 'Dusk Marten', sharedInterests: [] },
+  /* Nothing shared at all, but standing in the room. */
+  { userId: '6', name: 'Slate Ibis', age: 41, workField: 'Legal', sharedInterests: [], insideNow: true },
+  /* No interests, but a shared intent. */
+  {
+    userId: '5',
+    name: 'Amber Lynx',
+    age: 27,
+    workField: 'Finance',
+    sharedInterests: [],
+    sharedWorkField: true,
+  },
   {
     userId: '1',
     name: 'Cosmic Panda',
@@ -54,8 +74,6 @@ const ROOM: GridPerson[] = [
   },
   /* Suppressed profession — every room under 8 people looks like this. */
   { userId: '4', name: 'Quiet Heron', age: 31, workField: null, sharedInterests: ['Techno'] },
-  /* Nothing in common: the card must not render an empty "IN COMMON" block. */
-  { userId: '5', name: 'Amber Lynx', age: 27, workField: 'Finance', sharedInterests: [] },
 ]
 
 export default function GridPreview() {
@@ -97,12 +115,15 @@ export default function GridPreview() {
           style={styles.chipRail}
           contentContainerStyle={styles.chipRow}
         >
+          {/*
+            "All" as a chip, not as the absence of a selection. A filter row
+            whose off-state is "nothing looks pressed" gives no way to see that
+            you are unfiltered and no obvious way back.
+          */}
           <Chip
-            label={`2+ shared`}
-            selected={filters.minShared > 0}
-            onPress={() =>
-              setFilters((f) => ({ ...f, minShared: f.minShared > 0 ? 0 : 2 }))
-            }
+            label="All"
+            selected={filters.workFields.length === 0}
+            onPress={() => setFilters(NO_GRID_FILTERS)}
           />
           {fields.map((field) => (
             <Chip

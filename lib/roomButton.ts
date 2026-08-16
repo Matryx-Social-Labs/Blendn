@@ -117,6 +117,36 @@ export function roomButtonPulses(state: RoomButtonState): boolean {
 }
 
 /**
+ * How the button glows — and it is two different things, not one at two volumes.
+ *
+ * The Pulse used to carry a **"You're checked in"** carousel: a section header,
+ * a horizontal strip of cards and a Check out pill, roughly 200pt of the first
+ * screen, to say one bit of information. It is gone, and this is where that bit
+ * went.
+ *
+ * Which puts a real requirement on the glow. `roomButtonPulses` is true for both
+ * `live` and `checkin`, so as long as the glow is *only* a breath, the button
+ * looks identical whether you are in a room or merely standing outside one —
+ * fine while the carousel said which, and not fine once it is the only signal.
+ *
+ *     invite  a breath, and nothing else    "there is a room here, come in"
+ *     live    a breath around a steady ring "you are in it"
+ *
+ * The **ring is the status and the breath is the invitation**, and that split is
+ * deliberate: motion cannot carry a state. It is invisible in a screenshot, to
+ * anybody who has turned motion off at the OS level, and to anybody who simply
+ * is not looking at the moment it swells. A ring that is always there is legible
+ * at a glance and survives all three.
+ */
+export type RoomButtonGlow = 'none' | 'invite' | 'live'
+
+export function roomButtonGlow(state: RoomButtonState): RoomButtonGlow {
+  if (state === 'live') return 'live'
+  if (state === 'checkin') return 'invite'
+  return 'none'
+}
+
+/**
  * What a screen reader hears.
  *
  * States the consequence, because two of these four take an action rather than

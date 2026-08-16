@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
+import { gridCardBox } from '../../lib/gridCardContent'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
 import OptimizedImage from '../OptimizedImage'
@@ -67,6 +68,8 @@ export interface GridPerson {
   workField?: string | null
   /** Names, already intersected by the server. Never their whole list. */
   sharedInterests?: string[]
+  /** You are both in this field. Already computed server-side for ranking. */
+  sharedWorkField?: boolean
   /** Empty unless they have revealed. */
   photo?: string | null
   /** In the venue right now, as opposed to checked in earlier. */
@@ -98,8 +101,14 @@ export function GridCard({
   onSafety: () => void
 }) {
   const mark = pseudonymAvatar(person.name)
-  const shared = person.sharedInterests ?? []
   const title = person.age ? `${person.name}, ${person.age}` : person.name
+
+  /*
+   * The one labelled block, and which of three things fills it. Their
+   * attributes go above the name; this is what you SHARE. See
+   * `lib/gridCardContent.ts` for why those are kept apart.
+   */
+  const box = gridCardBox(person)
 
   return (
     <Pressable
@@ -193,7 +202,7 @@ export function GridCard({
         </View>
       </View>
 
-      {shared.length > 0 ? (
+      {box ? (
         /*
           Frame `1141:5002` is "12 MUTUAL CONNECTIONS" over a stack of faces —
           the friend graph, which is deferred. The slot takes the interest
@@ -205,22 +214,28 @@ export function GridCard({
           "2 SHARED INTERESTS" — one fact, announced twice.
         */
         <View style={styles.overlap}>
-            <View style={styles.overlapHead}>
-              <MaterialIcons name="join-inner" size={14} color={EMBER.accent} />
-              <Text style={styles.overlapCount} maxFontSizeMultiplier={1.3}>
-                {shared.length} SHARED {shared.length === 1 ? 'INTEREST' : 'INTERESTS'}
-              </Text>
-            </View>
-
-            <View style={styles.tags}>
-              {shared.map((interest) => (
-                <View key={interest} style={styles.tag}>
-                  <Text style={styles.tagLabel} maxFontSizeMultiplier={1.3}>
-                    {interest}
-                  </Text>
-                </View>
-              ))}
+          {/* Frame `1141:5039`: icon and label, 8 apart. */}
+          <View style={styles.overlapHead}>
+            <MaterialIcons
+              name={
+                box.kind === 'interests'
+                  ? 'join-inner'
+                  : box.kind === 'field'
+                    ? 'work-outline'
+                    : 'place'
+              }
+              size={14}
+              color={EMBER.accent}
+            />
+            <Text style={styles.boxLabel} maxFontSizeMultiplier={1.3}>
+              {box.label}
+            </Text>
           </View>
+
+          {/* Frame `1141:5045`: Manrope Regular 14/20, `#AEAAAA`, wraps. */}
+          <Text style={styles.boxValue} maxFontSizeMultiplier={1.4}>
+            {box.value}
+          </Text>
         </View>
       ) : null}
 
@@ -356,12 +371,20 @@ const styles = StyleSheet.create({
   // Frame `1141:5002`: `#141313`, radius 32, p16, gap 8.
   overlap: { backgroundColor: EMBER.surfaceMedia, borderRadius: 32, padding: 16, gap: 12 },
   overlapHead: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  overlapCount: {
+  // Frame `1141:5043`: Manrope Bold 12/16, tracking 0.3, uppercase, white.
+  boxLabel: {
     fontFamily: EMBER_FONTS.bodyBold,
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: 0.3,
     color: EMBER.textPrimary,
+  },
+  // Frame `1141:5045`: Manrope Regular 14/20, `#AEAAAA`.
+  boxValue: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textSecondary,
   },
 
   // Frame `1141:4998`: `#272525`, px12 py4, radius full.

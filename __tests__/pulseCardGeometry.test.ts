@@ -163,7 +163,17 @@ describe('the card in view is centred and clears the tab bar', () => {
     // The bar is a floating overlay: the feed runs the full height of the
     // screen and passes beneath it. Only the hero card is sized to clear it.
     expect(SCREEN()).toContain('paddingBottom: insets.bottom + Math.max(')
-    expect(SCREEN()).toContain("position: 'absolute'")
+    /*
+     * Against the layout, which is where the bar is positioned.
+     *
+     * This read `SCREEN()` and passed on `position: 'absolute'` appearing
+     * anywhere in it — which it did, in the checked-in carousel's gradient and
+     * status pill. Deleting that carousel broke a test about the tab bar, which
+     * is the tell: it was matching an unrelated string in a file that does not
+     * position the bar at all. `tabBarStyle` in `_layout.tsx` is the thing the
+     * sentence above is actually about.
+     */
+    expect(read('app/(tabs)/_layout.tsx')).toContain("position: 'absolute'")
   })
 })
 

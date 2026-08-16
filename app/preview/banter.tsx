@@ -15,7 +15,7 @@ import {
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { EMBER } from '../../lib/theme'
-import { TAB_BAR_CLEARANCE } from './_layout'
+import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
 
 /**
  * The Banter, against fixtures — frame `1141:5247`.
@@ -24,7 +24,7 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * login, a network and a conversation that exists, and none of those has
  * anything to do with whether a row is the right height.
  *
- * Deep-link `exp+blendn:///__preview-banter`.
+ * Deep-link `exp+blendn:///preview/banter`.
  */
 
 /*

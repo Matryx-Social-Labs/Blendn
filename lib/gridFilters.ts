@@ -19,28 +19,30 @@
  * small room every `workField` is null, so the control has nothing to offer and
  * shows nothing. Same answer, no leak.
  *
- * ## Why filters and not sorts
+ * ## Profession only
  *
- * `rankMatches` already orders the roster by compatibility, and shared interests
- * are part of that score. A shared-interest *sort* would re-order a list that is
- * already ordered partly by the same thing — two orderings disagreeing about one
- * list, which is confusing to use and worse to debug. Narrowing is the thing
- * that was actually missing.
+ * There was a "2+ shared" interest filter here too. It is gone: the roster is
+ * already *ranked* by compatibility with shared interests in the score, so
+ * filtering on them narrows a list that is already sorted by them — and the
+ * overlap is shown on every card that has one, which is what somebody actually
+ * wants from it. Filtering by profession is the one cut the ranking does not
+ * already make for you.
+ *
+ * "All" is an explicit chip rather than the absence of a selection, because a
+ * filter row whose off-state is "nothing looks pressed" gives you no way to see
+ * that you are unfiltered, and no obvious way back.
  */
 
 export interface GridFilterable {
   workField?: string | null
-  sharedInterests?: string[]
 }
 
 export interface GridFilters {
-  /** Empty means "no profession filter", never "match nothing". */
+  /** Empty means everyone — the "All" chip — never "match nothing". */
   workFields: readonly string[]
-  /** Only people sharing at least this many interests. 0 is off. */
-  minShared: number
 }
 
-export const NO_GRID_FILTERS: GridFilters = { workFields: [], minShared: 0 }
+export const NO_GRID_FILTERS: GridFilters = { workFields: [] }
 
 /**
  * The professions worth offering, from the people actually in this room.
@@ -61,11 +63,6 @@ export function availableWorkFields(people: readonly GridFilterable[]): string[]
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([field]) => field)
-}
-
-/** The largest overlap anyone in this room has with you. */
-export function maxSharedInterests(people: readonly GridFilterable[]): number {
-  return people.reduce((max, p) => Math.max(max, p.sharedInterests?.length ?? 0), 0)
 }
 
 /**
@@ -99,17 +96,13 @@ export function applyGridFilters<T extends GridFilterable>(
       if (!f || !wanted.has(f)) return false
     }
 
-    if (filters.minShared > 0) {
-      if ((p.sharedInterests?.length ?? 0) < filters.minShared) return false
-    }
-
     return true
   })
 }
 
 /** Whether anything is narrowing the list, for the "clear" affordance. */
 export function hasActiveFilters(filters: GridFilters): boolean {
-  return filters.workFields.length > 0 || filters.minShared > 0
+  return filters.workFields.length > 0
 }
 
 /**

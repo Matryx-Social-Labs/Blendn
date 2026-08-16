@@ -84,15 +84,39 @@ import { useLiveSync } from '../../lib/useLiveSync'
 interface AttendeeProfile {
   user_id: string
   name?: string
+  /**
+   * Whole years, derived server-side. Never a birth date.
+   *
+   * Newly on the roster: it was already public on `/profiles/[userId]` for any
+   * authenticated caller, so a card could not say what the profile one tap
+   * away said anyway.
+   */
   age?: number
-  bio?: string
+  /*
+   * `bio` used to be declared here and the roster has never sent it --
+   * `MatchCard` carries eight fields and it is not among them. Declaring it
+   * made the card look richer than it could ever be, and the age in its own
+   * title never rendered for the same reason until now.
+   */
   /** The *shared* interests, named, as the server computed them. Not their whole list. */
   interests?: string[]
   /** The shared subset only — "Both here to network". Never their full intent. */
   sharedIntents?: string[]
+  /**
+   * You are both in this field.
+   *
+   * `lib/matching.ts` has always computed it — it moves the ranking — and never
+   * returned it. "Design" under a name is an attribute; "You both work in
+   * Design" is a reason to walk over, from the same fact.
+   */
+  sharedWorkField?: boolean
   /** A label like "Design". Null in rooms under 8, where it would identify. */
   workField?: string | null
   profile_photos?: string[]
+  /**
+   * Only ever set by the socket, for somebody who walked in while you were
+   * looking. The REST roster does not carry it — `MatchCard` has no such field.
+   */
   last_seen?: string
   /** Still physically in the room, per presence. */
   insideNow?: boolean
@@ -359,6 +383,13 @@ export default function Match({
           name: data.userName,
           profile_photos: data.userImage ? [data.userImage] : undefined,
           last_seen: data.checkInTime,
+          /*
+           * Somebody who just checked in is, by definition, in the room. Without
+           * this they arrive as the only card with no presence pin and no
+           * "Here now" line — the one person you can be certain about looking
+           * like the one you cannot.
+           */
+          insideNow: true,
         }
         return [newAttendee, ...prev]
       })
@@ -690,6 +721,7 @@ export default function Match({
       age: a.age,
       workField: a.workField,
       sharedInterests: a.interests,
+      sharedWorkField: a.sharedWorkField,
       photo: a.profile_photos?.[0] ?? null,
       insideNow: a.insideNow,
       liked: likeStatusFor(a.youLiked, likeState[a.user_id]) === 'matched'
@@ -799,10 +831,15 @@ export default function Match({
             style={styles.chipRail}
             contentContainerStyle={styles.chipRow}
           >
+            {/*
+              "All" as a chip, not as the absence of a selection. A filter row
+              whose off-state is "nothing looks pressed" gives no way to see
+              that you are unfiltered and no obvious way back.
+            */}
             <Chip
-              label="2+ shared"
-              selected={filters.minShared > 0}
-              onPress={() => setFilters((f) => ({ ...f, minShared: f.minShared > 0 ? 0 : 2 }))}
+              label="All"
+              selected={filters.workFields.length === 0}
+              onPress={() => setFilters(NO_GRID_FILTERS)}
             />
             {workFields.map((field) => (
               <Chip

@@ -12,6 +12,7 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
   roomButtonAccessibilityLabel,
+  roomButtonGlow,
   roomButtonPulses,
   roomButtonTarget,
   type RoomButtonTarget,
@@ -168,6 +169,7 @@ TabButton.displayName = 'TabButton'
  */
 const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
   const pulses = roomButtonPulses(target.state)
+  const glow = roomButtonGlow(target.state)
   const pulse = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -202,8 +204,24 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
     return () => loop.stop()
   }, [pulses, pulse])
 
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] })
-  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] })
+  /*
+   * 1.42, up from 1.06.
+   *
+   * The halo is the same size as the button and sits behind it, so at 1.06 it
+   * grew 52 -> 55 and showed as a 1.5pt rim: a ring the width of a hairline,
+   * fading to nothing, under a disc that already casts a 16pt warm shadow. It
+   * was invisible, which did not matter while the Pulse carried a "You're
+   * checked in" strip and does now that it does not.
+   *
+   * At 1.42 it reaches 74pt and stands 11pt clear of the button on every side,
+   * which is a glow you can see from across a room -- the point of it.
+   *
+   * It bleeds above the bar's top edge, deliberately: the button's own shadow
+   * already does, and a glow contained inside the nav would read as a swelling
+   * button rather than something radiating out of it.
+   */
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.42] })
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
 
   return (
     <View style={styles.centreSlot}>
@@ -213,6 +231,16 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
           style={[styles.halo, { opacity: haloOpacity, transform: [{ scale }] }]}
         />
       ) : null}
+      {/*
+        The ring, and only when you are actually in a room.
+
+        This is the piece that replaced the carousel, and it is static on
+        purpose -- see `roomButtonGlow`. The breath above says "there is a room
+        here"; a ring that is simply always drawn says "you are in it", and it
+        keeps saying so at the bottom of every fade, in a screenshot, and with
+        Reduce Motion on.
+      */}
+      {glow === 'live' ? <View pointerEvents="none" style={styles.liveRing} /> : null}
       <Pressable
         onPress={() => {
           /*
@@ -749,6 +777,28 @@ const styles = StyleSheet.create({
     height: CENTRE_SIZE,
     borderRadius: CENTRE_SIZE / 2,
     backgroundColor: EMBER.gradientFrom,
+  },
+  /*
+   * A 2pt ring 4pt off the button, so there is a dark gap between the two.
+   *
+   * Drawn as a bordered box rather than a thicker button border: a border on
+   * `centreButton` would eat into the disc (RN grows borders inward, the same
+   * arithmetic that made the Banter's unread dot an 8pt core in a 12pt
+   * footprint), shrinking the gradient and the mark on it.
+   *
+   * `accent` rather than `gradientFrom`: the halo behind it is `gradientFrom`,
+   * and a ring in the same colour as its own glow disappears into it at the top
+   * of every breath.
+   */
+  liveRing: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: CENTRE_SIZE + 8,
+    height: CENTRE_SIZE + 8,
+    borderRadius: (CENTRE_SIZE + 8) / 2,
+    borderWidth: 2,
+    borderColor: EMBER.accent,
   },
 
   badge: {

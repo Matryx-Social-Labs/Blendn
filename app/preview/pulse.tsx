@@ -17,7 +17,7 @@ import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
-import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
+import { TAB_BAR_CLEARANCE, tabBarTop } from '../(tabs)/_layout'
 
 /**
  * The Pulse, rendered against fixtures — a screenshot harness, not a screen.
@@ -38,7 +38,7 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
  * has anything to do with whether a card is the right height.
  *
  * So: fixed data, no auth, no network, deep-linkable. Boot the simulator and
- * open `exp+blendn:///__preview` to get the same pixels every time.
+ * open `exp+blendn:///preview/pulse` to get the same pixels every time.
  *
  * ## What it is not
  *

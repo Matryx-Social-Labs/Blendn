@@ -1,11 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Animated as RNAnimated,
   Dimensions,
   AppState,
@@ -24,7 +22,7 @@ import EventCard from '../../components/EventCard'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import NearbyEventCard from '../../components/NearbyEventCard'
-import OptimizedImage, { preloadImages } from '../../components/OptimizedImage'
+import { preloadImages } from '../../components/OptimizedImage'
 import {
   FeaturedCard,
   FEATURED_CARD_GAP,
@@ -200,98 +198,6 @@ const getFirstName = (value?: string | null): string | null => {
   return trimmed.split(/\s+/)[0] || null
 }
 
-// Memoized carousel card component to prevent re-renders
-const CarouselCard = memo(({
-  event,
-  onPress,
-  onLongPress,
-  onToggleInterest,
-  isInterested,
-  interestLoading,
-  statusLabel,
-  showCheckout,
-  onCheckout,
-  checkoutLoading,
-}: {
-  event: Event
-  onPress: () => void
-  onLongPress?: () => void
-  onToggleInterest?: () => void
-  isInterested?: boolean
-  interestLoading?: boolean
-  statusLabel?: string
-  showCheckout?: boolean
-  onCheckout?: () => void
-  checkoutLoading?: boolean
-}) => {
-  if (!event.cover_image_url) return null
-
-  return (
-    <TouchableOpacity style={styles.carouselCard} onPress={onPress} onLongPress={onLongPress} delayLongPress={320}>
-      <View style={styles.carouselImage}>
-        <OptimizedImage
-          source={event.cover_image_url}
-          recyclingKey={event.cover_image_url ?? undefined}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-          width={260}
-          height={120}
-          quality={60}
-          cachePolicy="memory-disk"
-          priority="high"
-        />
-        <LinearGradient
-          colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.24)', 'rgba(0,0,0,0.88)']}
-          locations={[0, 0.5, 1]}
-          style={styles.carouselGradient}
-        />
-        {statusLabel ? (
-          <View style={styles.carouselStatusPill}>
-            <View style={styles.carouselStatusDot} />
-            <Text style={styles.carouselStatusText}>{statusLabel}</Text>
-          </View>
-        ) : null}
-        <View style={styles.carouselContentOverlay}>
-          <Text style={styles.carouselEventTitle} numberOfLines={2}>{event.title}</Text>
-          <Text style={styles.carouselTime}>{formatCarouselCardDate(event.start_time)}</Text>
-          <Text style={styles.carouselVenue} numberOfLines={1}>{event.venue_name || event.display_city || 'Location TBA'}</Text>
-          {showCheckout && onCheckout && (
-            <TouchableOpacity
-              onPress={onCheckout}
-              disabled={checkoutLoading}
-              style={styles.carouselCheckoutPill}
-            >
-              {checkoutLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.carouselCheckoutText}>Check out</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      {onToggleInterest && (
-        <TouchableOpacity
-          onPress={onToggleInterest}
-          style={styles.carouselHeartButton}
-          disabled={interestLoading}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityRole="button"
-          accessibilityLabel={isInterested ? 'Remove from interested events' : 'Mark as interested'}
-        >
-          {interestLoading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Ionicons name={isInterested ? 'heart' : 'heart-outline'} size={18} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  )
-})
-
-CarouselCard.displayName = 'CarouselCard'
-
 export default function Events() {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
@@ -334,7 +240,6 @@ export default function Events() {
   }, [presence.finished, checkedInEventId])
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
-  const [checkOutPending, setCheckOutPending] = useState<Record<string, boolean>>({})
   /*
    * Browse scope, and the two things that are *not* it.
    *
@@ -834,61 +739,9 @@ export default function Events() {
     }
   }, [user, interestStatuses, interestCounts, feedback, showTray, closeTray])
 
-  const handleEventPreview = useCallback((event: Event) => {
-    markPreviewHintSeen()
-    const checkinStatus = checkinStatuses[event.id]
-    const proximity = proximityData[event.id]
-    const isCheckedIn = checkinStatus?.status === 'checked_in'
-    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!interestStatuses[event.id]
-    const summary = [
-      formatCarouselCardDate(event.start_time),
-      event.venue_name || event.display_city || 'Location TBA',
-      (event.short_description || event.description || '').trim(),
-      'Tip: long-press cards for quick actions.',
-    ].filter(Boolean).join('\n')
-
-    const buttons: ActionTrayButton[] = [
-      {
-        label: interested ? 'Remove Interest' : 'Mark Interested',
-        onPress: () => {
-          closeTray()
-          toggleInterest(event)
-        },
-      },
-      {
-        label: 'View Details',
-        variant: 'primary',
-        onPress: () => {
-          closeTray()
-          handleEventPress(event)
-        },
-      },
-    ]
-
-    if (canCheckIn) {
-      buttons.unshift({
-        label: 'Check In',
-        variant: 'primary',
-        onPress: () => {
-          closeTray()
-          handleCheckIn(event)
-        },
-      })
-    }
-
-    showTray({
-      title: event.title,
-      message: summary,
-      buttons,
-      size: 'expanded',
-    })
-  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, showTray, markPreviewHintSeen])
-
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
-    setCheckOutPending((prev) => ({ ...prev, [event.id]: true }))
     feedback.tap()
 
     const previousStatus = checkinStatuses[event.id]
@@ -944,9 +797,78 @@ export default function Events() {
       })
     } finally {
       checkOutInFlightRef.current.delete(event.id)
-      setCheckOutPending((prev) => ({ ...prev, [event.id]: false }))
     }
   }, [checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
+
+  const handleEventPreview = useCallback((event: Event) => {
+    markPreviewHintSeen()
+    const checkinStatus = checkinStatuses[event.id]
+    const proximity = proximityData[event.id]
+    const isCheckedIn = checkinStatus?.status === 'checked_in'
+    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
+    const interested = !!interestStatuses[event.id]
+    const summary = [
+      formatCarouselCardDate(event.start_time),
+      event.venue_name || event.display_city || 'Location TBA',
+      (event.short_description || event.description || '').trim(),
+      'Tip: long-press cards for quick actions.',
+    ].filter(Boolean).join('\n')
+
+    const buttons: ActionTrayButton[] = [
+      {
+        label: interested ? 'Remove Interest' : 'Mark Interested',
+        onPress: () => {
+          closeTray()
+          toggleInterest(event)
+        },
+      },
+      {
+        label: 'View Details',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleEventPress(event)
+        },
+      },
+    ]
+
+    if (canCheckIn) {
+      buttons.unshift({
+        label: 'Check In',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          handleCheckIn(event)
+        },
+      })
+    }
+
+    /*
+     * The mirror of Check In, and it was missing.
+     *
+     * `isCheckedIn` was computed here only to be negated into `canCheckIn`, so
+     * the tray offered a way in and no way out — the checked-in strip was
+     * carrying that on its own. With the strip gone this is the Pulse's check
+     * out, and `handleCheckOut` below (optimistic, rolled back, deduped) finally
+     * has a second caller.
+     */
+    if (isCheckedIn) {
+      buttons.unshift({
+        label: 'Check Out',
+        onPress: () => {
+          closeTray()
+          void handleCheckOut(event)
+        },
+      })
+    }
+
+    showTray({
+      title: event.title,
+      message: summary,
+      buttons,
+      size: 'expanded',
+    })
+  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen])
 
   /*
    * NOT memoised, and that is the fix.
@@ -1169,44 +1091,32 @@ export default function Events() {
     }
   }
 
+  /** Shared by the skeleton strips, which are all `CAROUSEL_ITEM_FULL` wide. */
   const getCarouselItemLayout = useCallback((_: any, index: number) => ({
     length: CAROUSEL_ITEM_FULL,
     offset: CAROUSEL_ITEM_FULL * index,
     index,
   }), [])
 
-  const renderCheckedInCarousel = () => (
-    <View style={styles.carouselContainer}>
-      <SectionHeader title="You're checked in" />
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        /*
-         * No cover-image condition.
-         *
-         * This filtered on `!!item.cover_image_url`, so an event without one
-         * silently vanished from the strip -- and with it the only Check out
-         * button, for exactly the events most likely to be small and hastily
-         * created. A missing image is a reason to render a placeholder, never a
-         * reason to hide the thing somebody is currently checked in to.
-         */
-        data={checkedInEvents.slice(0, 10)}
-        keyExtractor={keyExtractor}
-        getItemLayout={getCarouselItemLayout}
-        renderItem={({ item }) => (
-          <CarouselCard
-            event={item}
-            onPress={() => handleEventPress(item)}
-            onLongPress={() => handleEventPreview(item)}
-            statusLabel="Going"
-            showCheckout
-            onCheckout={() => handleCheckOut(item)}
-            checkoutLoading={!!checkOutPending[item.id]}
-          />
-        )}
-      />
-    </View>
-  )
+  /*
+   * The checked-in strip used to be here.
+   *
+   * A section header, a horizontal list of full-width cards and a Check out
+   * pill — roughly a third of the first screen, permanently, to say one bit of
+   * information: *you are checked in somewhere*. It was the most expensive
+   * square footage on the Pulse and it pushed the feed the screen exists for
+   * below the fold.
+   *
+   * That bit now lives on the Blend'n button in the tab bar, which is where the
+   * app already keeps this state — `roomButtonTarget` reads the same active
+   * check-in and the button is on every screen rather than only this one. It
+   * draws a steady ring when you are in a room; see `roomButtonGlow`.
+   *
+   * **Check out moved with it, it was not dropped.** The strip carried the only
+   * one-tap check-out and that is worth protecting, so it is now in the room
+   * screen's top bar — the place the glowing button takes you. `handleCheckOut`
+   * below stays for the long-press action tray, which is the other caller.
+   */
 
   useEffect(() => {
     if (userLocation && events.length > 0) {
@@ -2125,15 +2035,6 @@ export default function Events() {
    */
   const banners = (
           <View style={styles.filtersBar}>
-            {/*
-              * The checked-in strip, at the top of the events tab.
-              *
-              * `renderCheckedInCarousel` and `handleCheckOut` were both complete
-              * -- optimistic update, rollback, in-flight dedupe, a Check out pill
-              * -- and neither had a caller, so checking out took three taps
-              * through the event detail screen. This is the whole fix.
-              */}
-            {checkedInEvents.length > 0 && renderCheckedInCarousel()}
             {showPreviewHint && (
               <View style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
@@ -2822,114 +2723,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-
-  /* ---- The checked-in strip --------------------------------------------- */
-  /*
-   * No frame. It is the only way to check out — `handleCheckOut` was complete
-   * and had no caller for a while, which cost three taps through the event
-   * detail screen — so it renders as a plain row above the feed until it is
-   * drawn. On the section scale so it does not read as a different app.
-   */
-
-  carouselContainer: {
-    gap: SECTION_GAP,
-  },
-  carouselCard: {
-    width: CAROUSEL_CARD_WIDTH,
-    borderRadius: 36,
-    backgroundColor: EMBER.surface,
-    marginHorizontal: CAROUSEL_ITEM_SPACING / 2,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  carouselImage: {
-    width: '100%',
-    height: CAROUSEL_CARD_HEIGHT,
-  },
-  carouselGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: CAROUSEL_CARD_HEIGHT,
-  },
-  carouselStatusPill: {
-    position: 'absolute',
-    top: 18,
-    left: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,144,109,0.84)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    gap: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.38)',
-  },
-  carouselStatusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#46D27B',
-  },
-  carouselStatusText: {
-    ...EMBER_TYPE.categoryPill,
-  },
-  carouselHeartButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    // 34pt of visible circle, and `hitSlop` at the call site takes the target
-    // past 44 — the review's minimum, which a 34pt tap area failed.
-    width: 34,
-    height: 34,
-    backgroundColor: 'rgba(20,19,19,0.62)',
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.32)',
-  },
-  carouselContentOverlay: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 20,
-    alignItems: 'center',
-  },
-  carouselEventTitle: {
-    ...EMBER_TYPE.cardTitle,
-    textAlign: 'center',
-  },
-  carouselVenue: {
-    ...EMBER_TYPE.meta,
-  },
-  carouselTime: {
-    ...EMBER_TYPE.meta,
-    color: EMBER.accent,
-  },
-  carouselCheckoutPill: {
-    marginTop: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignSelf: 'center',
-    backgroundColor: 'rgba(20,19,19,0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.34)',
-  },
-  carouselCheckoutText: {
-    ...EMBER_TYPE.categoryPill,
   },
 
   /* ---- Nearby, when there is no location -------------------------------- */
