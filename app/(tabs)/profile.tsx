@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
@@ -43,7 +44,7 @@ interface UserProfileViewModel {
   memberSince?: string
 }
 
-export default function Profile() {
+function ProfileInner() {
   const { user, loading: authLoading } = useAuth()
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
@@ -788,3 +789,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function Profile() {
+  return (
+    <ScreenProfiler id="me">
+      <ProfileInner />
+    </ScreenProfiler>
+  )
+}

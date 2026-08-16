@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -46,7 +47,7 @@ interface EventRow {
  * `rate/[eventId]` is built and currently linked from nowhere, and this is where
  * it belongs.
  */
-export default function GoingScreen() {
+function GoingScreenInner() {
   const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
@@ -259,3 +260,16 @@ const styles = StyleSheet.create({
 })
 
 
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function GoingScreen() {
+  return (
+    <ScreenProfiler id="going">
+      <GoingScreenInner />
+    </ScreenProfiler>
+  )
+}

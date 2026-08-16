@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -220,7 +221,7 @@ const revealStyles = StyleSheet.create({
   buttonText: { color: APP_COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
 })
 
-export default function PrivateChat() {
+function PrivateChatInner() {
   const { conversationId, otherUserName, otherUserId, otherUserAvatar } = useLocalSearchParams()
   const { user: authUser } = useAuth()
   const [messages, setMessages] = useState<PrivateMessage[]>([])
@@ -860,3 +861,16 @@ const styles = StyleSheet.create({
   },
   emptyCtaText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function PrivateChat() {
+  return (
+    <ScreenProfiler id="dm">
+      <PrivateChatInner />
+    </ScreenProfiler>
+  )
+}

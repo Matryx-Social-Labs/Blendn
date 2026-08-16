@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../lib/perf'
 import { AntDesign } from '@expo/vector-icons'
 import {
   GoogleSignin,
@@ -55,7 +56,7 @@ const MONOGRAM_HEIGHT = 96
 /** ~200pt wide at this ratio — the hero of the signed-out screen. */
 const LOCKUP_HEIGHT = 60
 
-export default function Index() {
+function IndexInner() {
   const { user, loading } = useAuth()
   const [signingIn, setSigningIn] = useState(false)
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false)
@@ -447,3 +448,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function Index() {
+  return (
+    <ScreenProfiler id="splash-signin">
+      <IndexInner />
+    </ScreenProfiler>
+  )
+}

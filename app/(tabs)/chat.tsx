@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -214,7 +215,7 @@ const previewFromConversation = (conv: any): { text?: string; time?: string } =>
 const displayPreview = (text?: string, fallback: string = 'Start chatting'): string =>
   (text && text.trim().length > 0 ? text : fallback)
 
-export default function Chat() {
+function ChatInner() {
   const insets = useSafeAreaInsets()
   const { user, loading: authLoading } = useAuth()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
@@ -932,3 +933,16 @@ const styles = StyleSheet.create({
     color: EMBER.textSecondary,
   },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function Chat() {
+  return (
+    <ScreenProfiler id="banter">
+      <ChatInner />
+    </ScreenProfiler>
+  )
+}

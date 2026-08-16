@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
 
@@ -45,7 +46,7 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
   { label: 'Other', value: 'prefer_not_to_say' },
 ]
 
-export default function BasicsScreen() {
+function BasicsScreenInner() {
   const { draft, loaded, saving, commit } = useOnboarding('basics')
 
   const [name, setName] = useState('')
@@ -207,3 +208,16 @@ const styles = StyleSheet.create({
   dateLarge: { flex: 1.5 },
   error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function BasicsScreen() {
+  return (
+    <ScreenProfiler id="onboard-basics">
+      <BasicsScreenInner />
+    </ScreenProfiler>
+  )
+}

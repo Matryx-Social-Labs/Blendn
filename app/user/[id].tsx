@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -62,7 +63,7 @@ interface UserProfileView {
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
 
-export default function UserProfile() {
+function UserProfileInner() {
   /*
    * `eventId` arrives from the Grid, and only from there.
    *
@@ -589,3 +590,16 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function UserProfile() {
+  return (
+    <ScreenProfiler id="attendee">
+      <UserProfileInner />
+    </ScreenProfiler>
+  )
+}

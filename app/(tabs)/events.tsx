@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
@@ -202,7 +203,7 @@ const getFirstName = (value?: string | null): string | null => {
   return trimmed.split(/\s+/)[0] || null
 }
 
-export default function Events() {
+function EventsInner() {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
@@ -2996,3 +2997,16 @@ const styles = StyleSheet.create({
     ...EMBER_TYPE.meta,
   },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function Events() {
+  return (
+    <ScreenProfiler id="pulse">
+      <EventsInner />
+    </ScreenProfiler>
+  )
+}
