@@ -1822,12 +1822,25 @@ export default function Events() {
     )
   }
 
-  const renderUpcomingFigmaCarousel = () => (
-    <>
-      {renderFeaturedRow()}
-      {renderUpcomingStack()}
-    </>
-  )
+  /*
+   * `renderUpcomingFigmaCarousel` was here, and it drew Featured a second time.
+   *
+   *     const renderUpcomingFigmaCarousel = () => (
+   *       <>
+   *         {renderFeaturedRow()}     // <- already rendered by the caller
+   *         {renderUpcomingStack()}
+   *       </>
+   *     )
+   *
+   * The list renders Featured in its own `!isNarrowed` branch and then this one
+   * directly beneath it, so any city with at least one upcoming event drew the
+   * whole Featured carousel twice — the same hero, the same events, one screen
+   * apart. Live since #130.
+   *
+   * It had one caller and its only job was bundling two rows, one of which the
+   * caller already had. Gone rather than corrected: a wrapper that returns
+   * exactly one thing is the thing.
+   */
 
   const renderNearbyList = (items: Event[]) => {
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
@@ -2463,7 +2476,7 @@ export default function Events() {
                 {!isNarrowed && upcomingItems.length > 0 ? (
                   <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
                     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
-                      {renderUpcomingFigmaCarousel()}
+                      {renderUpcomingStack()}
                     </FadeInUp>
                   </RNAnimated.View>
                 ) : null}
