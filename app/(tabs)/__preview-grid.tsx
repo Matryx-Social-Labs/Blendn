@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import { GridCard, type GridPerson } from '../../components/grid/GridCard'
 import {
   applyGridFilters,
@@ -60,6 +61,8 @@ const ROOM: GridPerson[] = [
 export default function GridPreview() {
   const insets = useSafeAreaInsets()
   const [filters, setFilters] = useState<GridFilters>(NO_GRID_FILTERS)
+  /** Who the composer is open for, so the disclosure can name them. */
+  const [connectTo, setConnectTo] = useState<GridPerson | null>(null)
 
   const fields = useMemo(() => availableWorkFields(ROOM), [])
   const shown = useMemo(() => applyGridFilters(ROOM, filters), [filters])
@@ -138,12 +141,22 @@ export default function GridPreview() {
                 key={person.userId}
                 person={person}
                 onOpenProfile={() => {}}
-                onConnect={() => {}}
+                onLike={() => {}}
+                onConnect={() => setConnectTo(person)}
               />
             ))}
           </View>
         )}
       </ScrollView>
+
+      <ConnectSheet
+        visible={!!connectTo}
+        displayName={connectTo?.name ?? ''}
+        /* The fixture with a photo is the revealed one, so both copies show. */
+        theyAreRevealed={!!connectTo?.photo}
+        onSend={() => setConnectTo(null)}
+        onDismiss={() => setConnectTo(null)}
+      />
     </View>
   )
 }

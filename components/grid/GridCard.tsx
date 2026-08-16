@@ -34,14 +34,25 @@ import OptimizedImage from '../OptimizedImage'
  * small things is exactly the shape an overlap needs. When the friend graph
  * lands it takes the slot back and the overlap moves up beside the name.
  *
- * ## Two buttons, one meaning each
+ * ## Two actions, and they are not the same thing
  *
- * **Connect is the like.** It is private until it is mutual — nothing reaches
- * the other person unless they tap it too, and then the conversation opens
- * pseudonymously. It is deliberately *not* a message request: a request carries
- * your real name and photograph (`message-requests/route.ts` returns
- * `sender.name` and `sender.image` ungated), which is a strange thing to send
- * one tap from a roster of strangers you know only as pseudonyms.
+ *   Like     "I would talk to you"    private, symmetric, stays pseudonymous
+ *   Connect  "here is who I am, why"  immediate, one-sided, and it reveals you
+ *
+ * A like reaches nobody unless it is returned, and the conversation it opens is
+ * pseudonymous. A request returns `sender.name` and `sender.image` ungated, so
+ * it hands over a real name and face — deliberately, because the anonymity
+ * exists to stop people being identified, not to let people send unsolicited
+ * messages without accountability.
+ *
+ * **Like is the prominent one.** The safe, reversible, symmetric action should
+ * be the easy one; the action with a cost should take a moment. Making the
+ * heavier button the more attractive one is how people end up revealing
+ * themselves by reflex.
+ *
+ * The profile is the card itself. Three buttons for three actions would make
+ * the two that matter compete, and tapping a card to open the thing it
+ * describes needs no teaching.
  */
 
 /** Frame `1141:4984`: 80pt, 2pt `rgba(255,144,109,0.2)`. */
@@ -62,16 +73,25 @@ export interface GridPerson {
   insideNow?: boolean
   /** Whether *you* liked them. Never whether they liked you. */
   liked?: boolean
+  /**
+   * You have already sent a request. One per pair for all time
+   * (`@@unique([sender_id, recipient_id])`), so this never resets.
+   */
+  requested?: boolean
   pending?: boolean
 }
 
 export function GridCard({
   person,
   onOpenProfile,
+  onLike,
   onConnect,
 }: {
   person: GridPerson
   onOpenProfile: () => void
+  /** The like. Private until mutual. */
+  onLike: () => void
+  /** Opens the composer. Sending reveals you — see `ConnectSheet`. */
   onConnect: () => void
 }) {
   const mark = pseudonymAvatar(person.name)
@@ -79,6 +99,12 @@ export function GridCard({
   const title = person.age ? `${person.name}, ${person.age}` : person.name
 
   return (
+    <Pressable
+      onPress={onOpenProfile}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${person.name}'s profile`}
+      style={({ pressed }) => pressed && styles.pressed}
+    >
     <LinearGradient
       // Frame `1141:4978`: 147deg, #141313 → #0F0E0E.
       colors={[EMBER.surfaceMedia, EMBER.bg]}
@@ -174,41 +200,29 @@ export function GridCard({
       ) : null}
 
       <View style={styles.actions}>
-        <Pressable
-          onPress={onOpenProfile}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${person.name}'s profile`}
-          style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
-        >
-          <Text style={styles.secondaryLabel} maxFontSizeMultiplier={1.3}>
-            View Profile
-          </Text>
-        </Pressable>
-
         {/*
-          Connect is the like. Private until mutual, and it opens a pseudonymous
-          conversation — never a message request, which would hand over a real
-          name and face one tap from a roster of pseudonyms.
+          The like, and the prominent one. Nothing reaches them unless they tap
+          it too — so the action with no cost is the action with no friction.
         */}
         <Pressable
-          onPress={onConnect}
+          onPress={onLike}
           disabled={person.liked || person.pending}
           accessibilityRole="button"
           accessibilityLabel={
             person.liked
-              ? `You have connected with ${person.name}`
-              : `Connect with ${person.name}. They are only told if they connect back`
+              ? `You liked ${person.name}`
+              : `Like ${person.name}. They are only told if they like you back`
           }
           accessibilityState={{ disabled: person.liked || person.pending }}
           style={({ pressed }) => [
             styles.button,
-            person.liked && styles.connected,
+            person.liked && styles.liked,
             (pressed || person.pending) && styles.pressed,
           ]}
         >
           {person.liked ? (
-            <Text style={styles.connectedLabel} maxFontSizeMultiplier={1.3}>
-              Connected
+            <Text style={styles.likedLabel} maxFontSizeMultiplier={1.3}>
+              Liked
             </Text>
           ) : (
             <>
@@ -218,14 +232,40 @@ export function GridCard({
                 end={EMBER_GRADIENT.end}
                 style={StyleSheet.absoluteFill}
               />
-              <Text style={styles.connectLabel} maxFontSizeMultiplier={1.3}>
-                Connect
+              <Text style={styles.likeLabel} maxFontSizeMultiplier={1.3}>
+                Like
               </Text>
             </>
           )}
         </Pressable>
+
+        {/*
+          The request. Quieter than the like on purpose: it reveals you, and the
+          sheet says so before anything is typed.
+        */}
+        <Pressable
+          onPress={onConnect}
+          disabled={person.requested}
+          accessibilityRole="button"
+          accessibilityLabel={
+            person.requested
+              ? `You have already sent ${person.name} a request`
+              : `Connect with ${person.name}. Sends a message and shows them your name and photo`
+          }
+          accessibilityState={{ disabled: person.requested }}
+          style={({ pressed }) => [
+            styles.button,
+            styles.secondary,
+            (pressed || person.requested) && styles.pressed,
+          ]}
+        >
+          <Text style={styles.secondaryLabel} maxFontSizeMultiplier={1.3}>
+            {person.requested ? 'Requested' : 'Connect'}
+          </Text>
+        </Pressable>
       </View>
     </LinearGradient>
+    </Pressable>
   )
 }
 
@@ -324,14 +364,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: EMBER.textPrimary,
   },
-  connectLabel: {
+  likeLabel: {
     fontFamily: EMBER_FONTS.bodyBold,
     fontSize: 14,
     lineHeight: 20,
     color: EMBER.onGradient,
   },
-  connected: { backgroundColor: EMBER.surfaceSunken },
-  connectedLabel: {
+  liked: { backgroundColor: EMBER.surfaceSunken },
+  likedLabel: {
     fontFamily: EMBER_FONTS.bodyBold,
     fontSize: 14,
     lineHeight: 20,
