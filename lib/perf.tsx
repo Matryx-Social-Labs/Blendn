@@ -39,8 +39,8 @@ import React, { Profiler, type ReactNode } from 'react'
  * Every commit slower than `SLOW_COMMIT_MS` logs immediately. Everything is
  * aggregated regardless, and `dumpPerf()` prints the table:
  *
- *     PERF pulse            commits=23  total=412ms  worst=88ms  mount=88ms
- *     PERF room             commits=7   total=96ms   worst=41ms  mount=41ms
+ *     PERF pulse   commits=27  total=257ms  worst=25ms  mount=19ms  mounts=1
+ *     PERF room    commits=7   total=96ms   worst=41ms  mount=41ms  mounts=1
  *
  * `commits` is the one people skip and should not: a screen with a small worst
  * case and a hundred commits is re-rendering on something it should not be
@@ -62,6 +62,15 @@ interface Stat {
   total: number
   worst: number
   mount: number
+  /**
+   * How many times this screen mounted from scratch.
+   *
+   * Anything above 1 for a screen you visited once is a different defect from a
+   * slow render and is invisible without this counter: the commits look like
+   * re-renders, so you go hunting for the state that changed when nothing did —
+   * the tree was torn down and rebuilt. It cost an afternoon on the Pulse.
+   */
+  mounts: number
 }
 
 const stats = new Map<string, Stat>()
@@ -82,11 +91,14 @@ export function ScreenProfiler({ id, children }: { id: string; children: ReactNo
     <Profiler
       id={id}
       onRender={(_id, phase, actualDuration) => {
-        const s = stats.get(id) ?? { commits: 0, total: 0, worst: 0, mount: 0 }
+        const s = stats.get(id) ?? { commits: 0, total: 0, worst: 0, mount: 0, mounts: 0 }
         s.commits += 1
         s.total += actualDuration
         s.worst = Math.max(s.worst, actualDuration)
-        if (phase === 'mount') s.mount = actualDuration
+        if (phase === 'mount') {
+          s.mount = actualDuration
+          s.mounts += 1
+        }
         stats.set(id, s)
 
         if (actualDuration >= SLOW_COMMIT_MS) {
@@ -128,7 +140,8 @@ export function dumpPerf(): void {
     // eslint-disable-next-line no-console
     console.log(
       `PERF ${r.id.padEnd(18)} commits=${String(r.commits).padEnd(4)} ` +
-        `total=${r.total.toFixed(0)}ms  worst=${r.worst.toFixed(0)}ms  mount=${r.mount.toFixed(0)}ms`
+        `total=${r.total.toFixed(0)}ms  worst=${r.worst.toFixed(0)}ms  ` +
+        `mount=${r.mount.toFixed(0)}ms  mounts=${r.mounts}`
     )
   }
 }
@@ -136,4 +149,44 @@ export function dumpPerf(): void {
 /** Start again — between two runs of the same flow, so they can be compared. */
 export function resetPerf(): void {
   stats.clear()
+}
+
+/**
+ * Which prop or piece of state caused this render.
+ *
+ * `<Profiler>` counts commits and times them; it cannot say *why* there were
+ * sixty. Reading the code to answer that failed three times in a row on the
+ * Pulse — `setState` in a loop, a JS-driven scroll handler, `setScrollProgress`
+ * — each a plausible culprit and each, on inspection, innocent.
+ *
+ * So the instrument answers it instead. Pass the suspects; every render logs
+ * only the ones whose identity actually changed.
+ *
+ *     useWhyRender('pulse', { events, checkinStatuses, proximityData })
+ *
+ *     WHY pulse: checkinStatuses
+ *     WHY pulse: proximityData, interestStatuses
+ *
+ * Identity, deliberately, not deep equality: a new object with identical
+ * contents still re-renders every memoised child, and that is the defect being
+ * hunted rather than a false positive.
+ *
+ * Dev-only and cheap — a shallow compare over a handful of keys — but it is a
+ * diagnostic, not a permanent fixture. Leave it behind only where a screen has
+ * a standing reason to be watched.
+ */
+export function useWhyRender(id: string, watched: Record<string, unknown>): void {
+  const previous = React.useRef<Record<string, unknown> | null>(null)
+
+  if (__DEV__) {
+    const before = previous.current
+    if (before) {
+      const changed = Object.keys(watched).filter((k) => watched[k] !== before[k])
+      if (changed.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`WHY ${id}: ${changed.join(', ')}`)
+      }
+    }
+    previous.current = { ...watched }
+  }
 }

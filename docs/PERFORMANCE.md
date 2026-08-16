@@ -60,14 +60,43 @@ Walked: Pulse → Scene → Pulse → Going → Banter → Me → Room.
 re-rendering on something it has no business watching, and that is the shape
 that reads as *lag* rather than as a wait.
 
+**This walk visits the Pulse twice**, so its row is two visits and every other
+row is one. A single visit measures **27 commits / 257ms**. That is not a
+detail: 60 was read as a runaway loop and chased as one for an afternoon, when
+the number was simply counted over two visits and is close to linear in them.
+**Compare a walk only against the same walk.**
+
 ### The two that matter
 
-**Pulse — 60 commits, 627ms.** Ten times the commit count of the Scene for a
-screen you are only looking at. The leading suspect is already written down:
-`renderEventItem` closes over `checkinStatuses`, `proximityData` and
-`interestStatuses`, three maps that change whenever anybody checks in, moves, or
-taps a heart, so every change gives `renderItem` a new identity and `FlatList`
-re-renders every mounted row.
+**Pulse — 27 commits per visit.** Five times the Scene's, for a screen you are
+only looking at. The leading suspect is already written down: `renderEventItem`
+closes over `checkinStatuses`, `proximityData` and `interestStatuses`, three
+maps that change whenever anybody checks in, moves, or taps a heart, so every
+change gives `renderItem` a new identity and `FlatList` re-renders every mounted
+row.
+
+`useWhyRender` puts a number on it: **six state objects change identity together,
+seventeen times in one visit** — `events`, `checkinStatuses`, `proximityData`,
+`interestStatuses`, `interestCounts`, `checkedInEvents`. Together, because
+`fetchEvents` sets five of them after one `await` and React batches them, and
+the sixth follows from the `[userLocation, events]` proximity effect. So the
+question is not "which six things are wrong" but **"why does the load cascade
+run seventeen times".**
+
+Four answers have been *disproved*, and are listed so nobody spends the
+afternoon again:
+
+| ruled out | how |
+|---|---|
+| `setState` in a loop | no such loop exists |
+| the JS scroll handler / `setScrollProgress` | inspection |
+| `filters` unstable in the fetch effect's deps | it is `useState`, so stable |
+| `useLiveSync` restarting on a new `onSync` | it refs the callback; deps are `[enabled]` |
+| the screen remounting | `mounts=0` for the walk — every commit is an update |
+
+The fetch effect's own deps were probed directly and changed **once**. So the
+seventeen cascades are not that effect refiring, and `fetchEvents` has only four
+call sites. That is where the next session starts.
 
 **Room/Grid — one 98ms commit.** Six frames dropped in a single hitch, against a
 13ms mount. Something after mount is doing bulk work in one commit; the roster
@@ -84,6 +113,10 @@ what anybody is feeling.
 1. `exp+blendn:///preview/perf`, press **Reset**
 2. walk the same flow as the baseline above
 3. come back, or read `PERF ` lines from the Metro log
+
+`mounts` is the column to check before any of that. Above 1 for a screen you
+visited once means the tree was torn down and rebuilt, which presents as a pile
+of commits and sends you hunting for state that never changed.
 
 Compare `commits` and `total`. `worst` alone can improve while the screen still
 feels bad, because sixty cheap commits and one expensive one feel different and
