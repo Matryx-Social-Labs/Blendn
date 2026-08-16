@@ -118,12 +118,29 @@ export function SceneBodyAccent({ children }: { children: string }) {
  * Real faces come back only with the friend graph (deferred), where "people you
  * have matched with" is a set the viewer is already entitled to see.
  */
-export function SceneAttendees({ count, seed }: { count: number; seed: string }) {
+/**
+ * Who is here, or who says they will be.
+ *
+ * The heading is a prop because the number means two different things either
+ * side of the doors. Before an event nobody has checked in, so "Attendees: —"
+ * is the screen reporting emptiness for a night that has not happened; the
+ * honest figure then is how many people said they are coming. Once it starts,
+ * the interesting number is who actually turned up.
+ */
+export function SceneAttendees({
+  count,
+  seed,
+  label = 'Attendees',
+}: {
+  count: number
+  seed: string
+  label?: string
+}) {
   const { shown, remainder } = avatarStack(count)
   return (
     <View style={styles.attendeesSection}>
       <View style={styles.attendees}>
-        <SceneHeading>Attendees</SceneHeading>
+        <SceneHeading>{label}</SceneHeading>
         <Text style={styles.attendeeCount}>{count > 0 ? `${count}+` : '—'}</Text>
       </View>
       {shown > 0 ? (
@@ -447,7 +464,7 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export type SceneCTAState = 'join' | 'going' | 'ended'
+export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended'
 
 /**
  * What the button says, per state.
@@ -472,10 +489,29 @@ export type SceneCTAState = 'join' | 'going' | 'ended'
  * *inside* something rather than as a travel plan.
  */
 const CTA_LABEL: Record<SceneCTAState, string> = {
+  rsvp: "I'm going",
+  rsvpd: "You're going",
   join: 'Blend in',
   going: "You're in",
   ended: 'This event has ended',
 }
+
+/**
+ * The two states before the doors open, and why the button changes at all.
+ *
+ * "Blend in" is a check-in, and a check-in needs the event to be **running** —
+ * `pickInsideEvent` requires `start <= now` and the server re-validates it. So
+ * on an event that is still two days away the button was offering the one
+ * action that cannot succeed: a dead control in the most prominent position on
+ * the screen, which is the same fault the centre nav button was redesigned to
+ * stop having.
+ *
+ * Before the doors, the honest offer is the one that *is* available — saying
+ * you are coming. `rsvpd` is its off-switch rather than a second control, for
+ * the same reason `going` is not accompanied by a "leave" button: one slot,
+ * one subject, and the state tells you which way the tap goes.
+ */
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going']
 
 export function SceneCTA({
   state = 'join',
@@ -487,6 +523,12 @@ export function SceneCTA({
   onPress?: () => void
 }) {
   const disabled = state === 'ended'
+  /*
+   * Quiet once you have already said yes. The gradient is for the thing that
+   * still needs doing; a fully lit pill that only un-does something reads as
+   * the primary action of the screen.
+   */
+  const quiet = CTA_QUIET.includes(state)
   /*
    * The label was a free string, which was survivable while this sat at the
    * bottom of a 1900pt page and most people never reached it. Pinned to the
@@ -521,7 +563,7 @@ export function SceneCTA({
         the pill stays, and the icon takes the accent, so the gradient's warm
         end is still the first colour in the control.
       */}
-      <View style={[styles.ctaGlow, state === 'going' && styles.ctaGlowGoing]}>
+      <View style={[styles.ctaGlow, quiet && styles.ctaGlowGoing]}>
         <View style={styles.ctaFill}>
           <BlurView intensity={64} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.ctaTint} pointerEvents="none" />

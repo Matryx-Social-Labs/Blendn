@@ -267,7 +267,13 @@ export const sceneHeroTitleStyle = {
 } as const
 
 const styles = StyleSheet.create({
-  hero: { width: '100%', overflow: 'hidden' },
+  /*
+   * `surfaceSunken`, so an event with no cover is a dark panel rather than a
+   * transparent hole. `source` is undefined in that case and `expo-image`
+   * draws nothing, which would otherwise show the page straight through the
+   * hero and put the title on nothing.
+   */
+  hero: { width: '100%', overflow: 'hidden', backgroundColor: EMBER.surfaceSunken },
   /* 32pt on every side, bottom-aligned, 16pt between the three blocks. */
   info: {
     position: 'absolute',

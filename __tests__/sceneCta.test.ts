@@ -12,6 +12,9 @@ import { join } from 'path'
 const SRC = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
 
+/** Any repo file, by path segments. */
+const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
+
 const PREVIEW = () =>
   readFileSync(join(__dirname, '..', 'app', 'preview', 'scene.tsx'), 'utf8')
 
@@ -197,33 +200,50 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
 
   it('keeps the behaviour SceneCTA does not have', () => {
     /*
-     * THE test, and it earned its place: the first draft of the render swap
-     * moved check out into an overflow tray, two taps behind an ellipsis.
-     * Leaving a venue is the most time-sensitive action in the app and it was
-     * a visible button before, so that was a downgrade dressed as a
-     * simplification — which is exactly what this was written to catch.
+     * THE test, and it has now caught three separate versions of the same
+     * mistake while this screen was rewritten:
      *
-     * `SceneCTA` has three states and no secondary control, so anything the
-     * old morph carried beside it has to be placed deliberately.
+     *   1. check out moved into an overflow tray -- two taps behind an
+     *      ellipsis, for the most time-sensitive action in the app
+     *   2. RSVP put a "..." in the top bar, a control the design never asked
+     *      for in the screen's most prominent slot
+     *   3. the secondary row deleted, taking check out's only caller with it
+     *
+     * The settled answer: the CTA is **one slot whose subject changes with the
+     * clock**, so there is no second control on this screen at all. RSVP is
+     * the CTA before the doors; check in is the CTA after; check out lives in
+     * the room the CTA opens.
      */
     const detail = DETAIL()
-    /*
-     * Check out and RSVP: one tap each, grouped below the CTA.
-     *
-     * Neither is in frame `1141:4853`, and both were briefly behind a "..." in
-     * the top bar -- a control the design never asked for, in the screen's most
-     * prominent slot. They sit together in the space the frame leaves empty.
-     */
-    expect(detail).toContain('secondaryRow')
-    expect(detail).toContain('accessibilityLabel="Check out of event"')
-    expect(detail).toContain('{isCheckedIn ? (')
-    // And no overflow in the bar: the top bar is back / heart / share, as drawn.
-    expect(detail).not.toContain('ellipsis-horizontal')
-    // The in-flight states the morph used to show.
-    expect(detail).toContain('checkingOut ? (')
-    expect(detail).toContain('checkingIn || checkingOut ? (')
-    // RSVP has no home in the frame either, and is reachable rather than gone.
+
+    // The CTA is time-aware. "Blend in" before the event cannot succeed --
+    // check-in requires the event to be running -- so it must not be offered.
+    expect(detail).toContain('hasStarted')
+    expect(detail).toContain("? (rsvpd ? 'rsvpd' : 'rsvp')")
     expect(detail).toContain('handleToggleRsvp')
+
+    // No second control, and no overflow in the bar.
+    expect(detail).not.toContain('secondaryRow')
+    expect(detail).not.toContain('ellipsis-horizontal')
+
+    // The in-flight states the old morph showed.
+    /*
+     * Only check-in spins now: check out left this screen with the secondary
+     * row, so `checkingOut` was a state nothing could ever set.
+     */
+    expect(detail).toContain('checkingIn ? (')
+  })
+
+  it('check out really is where this screen says it moved to', () => {
+    /*
+     * The Scene stopped carrying check out on the grounds that its CTA opens
+     * the room and the room has it. That is only true while the room does --
+     * so the claim is asserted rather than trusted, and this fails the day
+     * somebody tidies the room's top bar.
+     */
+    const room = read('app', 'room.tsx')
+    expect(room).toContain('apiClient.checkOut(eventId)')
+    expect(room).toContain('Check out')
   })
 
   it('renders the rebuilt Scene rather than a second implementation of it', () => {
@@ -343,5 +363,43 @@ describe('the attendee discs carry a creature, not a letter', () => {
     const lib = readFileSync(join(__dirname, '..', 'lib', 'pseudonymAvatar.ts'), 'utf8')
     expect(lib).toContain('CHARACTERS')
     expect(lib).toContain('h ^ 0x9e3779b9')
+  })
+})
+
+describe('the Scene is a full-screen route', () => {
+  /*
+   * Pinned because it was lost twice — once by shipping the rebuilt screen into
+   * the sheet the old one used, and once by a `git reset --hard` that discarded
+   * the fix after it had been verified on device.
+   *
+   * A sheet insets from the top, rounds its corners and leaves the previous
+   * screen visible above it. Frame `1141:4853` is a full-bleed artboard whose
+   * hero dissolves into the page, and the design deliberately removed a
+   * bottom-sheet panel from *inside* this screen — presenting the whole screen
+   * as a sheet puts that shape straight back, one level up.
+   */
+  const layout = () => read('app', '_layout.tsx')
+
+  it('presents /event/[id] as a card, never a modal', () => {
+    const src = layout()
+    const block = src.slice(src.indexOf('name="event/[id]"'))
+    const options = block.slice(0, block.indexOf('/>'))
+    expect(options).toContain("presentation: 'card'")
+    expect(options).not.toContain("presentation: 'modal'")
+  })
+
+  it('does not zero the top inset, which only a sheet needs', () => {
+    /*
+     * `topInset={0}` is correct inside a sheet — iOS has already cleared the
+     * notch, so the shared bar would pad by it twice. On a full-screen route it
+     * is the opposite error: the bar rides up under the status bar.
+     */
+    expect(DETAIL()).not.toContain('topInset={0}')
+  })
+
+  it('leaves room.tsx zeroing its inset, because that one IS a sheet', () => {
+    // Guards against someone "fixing" both together. The rule is per
+    // presentation, not per screen.
+    expect(read('app', 'room.tsx')).toContain('topInset={0}')
   })
 })
