@@ -456,16 +456,32 @@ function RootLayout() {
           animation: routeTransition,
         }} 
       />
-      <Stack.Screen 
-        name="event/[id]" 
-        options={{ 
+      {/*
+        Full screen, not a sheet.
+
+        This was `presentation: 'modal'`, and it is why the rebuilt Scene never
+        looked like its own harness: a sheet insets itself from the top, rounds
+        its corners, and leaves the previous screen visible above it. Frame
+        `1141:4853` is a full-bleed artboard whose hero dissolves into the page
+        -- and the old bottom-sheet panel was deliberately deleted from that
+        design, so presenting the whole screen as a sheet reintroduced exactly
+        the shape the rebuild removed, one level up at the window.
+
+        It cost a bug too: `useSafeAreaInsets()` reads the root provider, so
+        inside a sheet `PulseTopBar` padded by a notch iOS had already cleared
+        and the wordmark sat in a dark band.
+
+        `slide_from_bottom` goes with it -- that is a sheet's motion.
+      */}
+      <Stack.Screen
+        name="event/[id]"
+        options={{
           headerShown: false,
-          animation: 'slide_from_bottom',
-          presentation: 'modal',
-          animationDuration: 280,
+          animation: routeTransition,
+          presentation: 'card',
           gestureEnabled: true,
           fullScreenGestureEnabled: true,
-        }} 
+        }}
       />
       {/* Nested segment layouts handle their own screens */}
       <Stack.Screen

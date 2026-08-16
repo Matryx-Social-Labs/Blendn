@@ -61,7 +61,6 @@ import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
-import { getMapImageUrlCache, setMapImageUrlCache } from '../../lib/mapImageCache';
 const placeholderImg = require('../../assets/images/icon.png');
 
 interface EventDetail {
@@ -134,7 +133,6 @@ const TOP_BAR_INSET_REDUCTION = 24
  * change of screen width rather than its absolute height. 574 on a 390 frame is
  * an aspect, not a number of points.
  */
-const HERO_ASPECT = 390 / 574
 const CHECKIN_RULES_TEXT = [
   'Before you check in, please confirm:',
   '1. You are physically at the event venue.',
@@ -185,7 +183,6 @@ export default function EventDetail() {
   const [checkingIn, setCheckingIn] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
-  const [proximityStatus, setProximityStatus] = useState<any>(null)
   // Initialize from params for instant display
   const [interestCount, setInterestCount] = useState<number>(() => {
     if (interestCountParam && typeof interestCountParam === 'string') {
@@ -472,12 +469,16 @@ export default function EventDetail() {
         event.longitude
       )
 
+      /*
+       * Logged, not stored.
+       *
+       * `proximityStatus` was written here and read by nothing -- the old
+       * render showed a distance readout, the frame has none, and the CTA
+       * derives availability from the clock while the server re-validates the
+       * GPS on the actual check-in. Keeping the journey log: it is how a failed
+       * check-in gets diagnosed after the fact.
+       */
       const isNearby = distance <= (event.check_in_radius || 100)
-      setProximityStatus({
-        nearby: isNearby,
-        distance_meters: distance,
-        event_id: event.id
-      })
       Logger.journey('proximity', 'detail:check:success', { distance, isNearby })
     } catch (error) {
       Logger.error('events', 'detail:check:exception', { error: error as any })
@@ -839,26 +840,18 @@ export default function EventDetail() {
     }
   }
 
-  const handleCheckout = async () => {
-    setCheckingOut(true)
-    try {
-      const result = await apiClient.checkOut(String(id))
-      if (result.success) {
-        feedback.success()
-        showTray('Checked out', 'You have been checked out of this event.')
-        // Update check-in status directly - no need for another API call
-        setCheckInStatus({ success: true, checked_in: false })
-      } else {
-        feedback.error()
-        showTray('Checkout failed', result.error || 'Please try again.')
-      }
-    } catch (e: any) {
-      feedback.error()
-      showTray('Error', e?.message || 'Unknown error')
-    } finally {
-      setCheckingOut(false)
-    }
-  }
+  /*
+   * `handleCheckout` lived here and is gone -- the control moved, it was not
+   * dropped.
+   *
+   * The CTA is one slot whose subject changes with the clock, so there is no
+   * second control on this screen to hang it from. When you are checked in the
+   * CTA reads "You're in" and opens the room, and check out is in the room's
+   * top bar -- one tap from here. The Pulse's long-press tray has it too.
+   *
+   * `apiClient.checkOut` is called from both of those, so this was the third
+   * copy of a flow with two homes already.
+   */
 
   // === ORGANIZER ACTIONS ===
 
@@ -1071,6 +1064,11 @@ export default function EventDetail() {
   const primaryActionDisabled = checkingIn || checkingOut || actionStage === 'checked'
   const primaryActionPress = () => {
     if (checkingIn || checkingOut) return
+    // Before the doors, the button is the RSVP and its own off-switch.
+    if (!isCheckedIn && !hasStarted) {
+      void handleToggleRsvp()
+      return
+    }
     if (!isCheckedIn) {
       handleCheckIn()
       return
@@ -1112,7 +1110,31 @@ export default function EventDetail() {
     (e): e is string => !!e && e.length > 2
   )
 
-  const ctaState: SceneCTAState = isEnded ? 'ended' : isCheckedIn ? 'going' : 'join'
+  /*
+   * One control, and what it offers depends on the clock.
+   *
+   * "Blend in" is a check-in, and a check-in needs the event to be **running**
+   * -- the server re-validates the time and `pickInsideEvent` requires
+   * `start <= now`. So on an event two days out the button was offering the one
+   * action that cannot succeed. A dead control in the most prominent position
+   * on the screen is the exact fault the centre nav button was redesigned to
+   * stop having.
+   *
+   * Before the doors it offers the thing that *is* available. After they open
+   * it becomes the check-in. That also retires the secondary "I'm going" pill
+   * this screen briefly grew: RSVP was never a second action alongside
+   * checking in, it is the same slot at an earlier hour.
+   */
+  const hasStarted = event ? new Date(event.start_time).getTime() <= Date.now() : false
+  const rsvpd = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+
+  const ctaState: SceneCTAState = isEnded
+    ? 'ended'
+    : isCheckedIn
+      ? 'going'
+      : !hasStarted
+        ? (rsvpd ? 'rsvpd' : 'rsvp')
+        : 'join'
 
 
   const when = event ? new Date(event.start_time) : null
@@ -1145,7 +1167,6 @@ export default function EventDetail() {
           the wordmark sits in a dark band. Same fault, same fix as `room.tsx`
           -- see `topInset` on the bar.
         */
-        topInset={0}
         leading={<SceneBarButton icon="chevron-back" label="Back" onPress={() => router.back()} />}
         /*
           Back, heart, share -- exactly the harness, and nothing else.
@@ -1276,50 +1297,6 @@ export default function EventDetail() {
             in `docs/SCENE.md` as a delta for the designer rather than resolved
             by dropping the control.
           */}
-          {!isEnded ? (
-            <View style={styles.secondaryRow}>
-              {/*
-                RSVP, which frame `1141:4853` has no home for. It was briefly
-                behind a "..." in the top bar -- a control the design never
-                asked for, in the screen's most prominent slot. Grouped here
-                with check out instead: both are undesigned, both are
-                secondary, and the frame leaves this space empty.
-              */}
-              <Pressable
-                onPress={handleToggleRsvp}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-                    ? "Cancel going to this event"
-                    : 'Say you are going'
-                }
-                style={styles.secondaryAction}
-              >
-                <Text style={styles.secondaryActionText}>
-                  {rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-                    ? "Not going"
-                    : "I'm going"}
-                </Text>
-              </Pressable>
-
-              {isCheckedIn ? (
-                <Pressable
-                  onPress={handleCheckout}
-                  disabled={checkingOut}
-                  accessibilityRole="button"
-                  accessibilityLabel="Check out of event"
-                  accessibilityState={{ disabled: checkingOut }}
-                  style={styles.secondaryAction}
-                >
-                  {checkingOut ? (
-                    <ActivityIndicator size="small" color={EMBER.textSecondary} />
-                  ) : (
-                    <Text style={styles.secondaryActionText}>Check out</Text>
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
           <SceneCTA
             state={ctaState}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
@@ -1502,18 +1479,6 @@ const styles = StyleSheet.create({
     paddingBottom: SCENE_CTA_INSET,
     gap: 10,
   },
-  secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
-  /* Quiet, because the CTA beside it is the thing to press. */
-  secondaryAction: {
-    alignSelf: 'center',
-    minHeight: 36,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9999,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  secondaryActionText: { ...EMBER_TYPE.meta, color: EMBER.textSecondary },
   organiserBar: {
     position: 'absolute',
     right: 16,
