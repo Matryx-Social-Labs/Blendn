@@ -210,7 +210,7 @@ export function setupNotificationListener(
 }
 
 // Navigate based on notification payload data
-function navigateFromNotificationData(data: Record<string, any> | undefined) {
+export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   if (!data) return
 
   // Support both backend payload format (type) and legacy local format (screen)
@@ -277,6 +277,52 @@ function navigateFromNotificationData(data: Record<string, any> | undefined) {
         // A match notification is about somebody in a room, so it opens the
         // room. The Match tab it used to open no longer exists — that screen is
         // now the Grid segment of `/room`.
+        router.push('/room')
+        break
+      }
+      /*
+       * The five below fell straight through this switch and navigated
+       * nowhere. Every one is a kind `sendPushNotification` actually emits —
+       * they are in `NotificationData["type"]` and in the `notification_kind`
+       * enum — so tapping any of these pushes opened the app and left you
+       * wherever you were, which reads as the notification being broken.
+       *
+       * Found while wiring the notifications centre, which routes through this
+       * same function rather than carrying a second copy of it.
+       */
+      case 'message_request':
+      case 'message_request_response': {
+        /*
+         * The Banter tab, which is where requests are listed
+         * (`app/(tabs)/chat.tsx` loads them) — there is no dedicated route.
+         *
+         * Deliberately not the sender's profile: the decision is
+         * accept-or-decline, and a request from somebody you have not accepted
+         * must not deep-link to a profile you are not yet entitled to see.
+         */
+        router.push('/(tabs)/chat')
+        break
+      }
+      case 'waitlist_promoted': {
+        // "A place opened up" is only actionable on the event itself.
+        if (data.eventId) {
+          router.push({ pathname: '/event/[id]', params: { id: String(data.eventId) } as any })
+        } else {
+          router.push('/(tabs)/events')
+        }
+        break
+      }
+      case 'reveal_request':
+      case 'reveal': {
+        /*
+         * Same destination as `match`: all three are about one pairing, and
+         * `/room` is where they are acted on.
+         *
+         * Deliberately **not** a profile route keyed on `senderId`. The reveal
+         * gate decides what you may see of somebody and is enforced by the
+         * screens that ask the server; deep-linking to a profile would be the
+         * app asserting an entitlement the server has not granted.
+         */
         router.push('/room')
         break
       }
@@ -397,4 +443,4 @@ export async function initializePushNotifications(): Promise<string | null> {
     Logger.error('notifications', 'Error initializing push notifications', { error })
     return null
   }
-} 
+}

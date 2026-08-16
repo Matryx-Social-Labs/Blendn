@@ -9,6 +9,7 @@ import {
   FEATURED_CARD_GAP,
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
+import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
@@ -137,7 +138,7 @@ export default function PulsePreview() {
 
   return (
     <View style={styles.container}>
-      <PulseTopBar />
+      <PulseTopBar actions={<NotificationBell />} />
       <ScrollView
         contentContainerStyle={[
           styles.content,

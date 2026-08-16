@@ -30,13 +30,15 @@ export const TOP_BAR_HEIGHT = 64
  *
  * - **The left glyph is a hamburger.** There is no drawer in this app, and
  *   inventing one to justify a glyph is the tail wagging the dog.
- * - **The right glyph is a bell.** A notifications centre is designed and not
- *   built; no endpoint returns a notification. A bell that opens nothing is a
- *   dead control in the most-tapped corner of the screen.
+ * - **The right glyph is a bell.** It was left out for the same reason — a
+ *   notifications centre was designed and not built, and a bell that opens
+ *   nothing is a dead control in the most-tapped corner of the screen. That
+ *   reason has expired: `GET /notifications` exists (blendn-admin #242), and
+ *   The Pulse passes `NotificationBell` in through `actions`.
  *
- * Both are recorded in `docs/PULSE.md` and go in the moment they have a
- * destination. An empty `justify-between` row still leaves the wordmark where
- * the frame puts it, at `x=24`.
+ * The hamburger is still recorded in `docs/PULSE.md` and goes in the moment it
+ * has a destination. An empty `justify-between` row still leaves the wordmark
+ * where the frame puts it, at `x=24`.
  */
 /**
  * `leading` and `actions` exist so The Scene can use *this* bar.

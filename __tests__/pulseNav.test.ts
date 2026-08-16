@@ -61,18 +61,35 @@ describe('the overlay header, frame 1141:4819', () => {
     expect(TOP_BAR()).toContain('insets.top + TOP_BAR_HEIGHT')
   })
 
-  it('renders no control that opens nothing', () => {
-    // The frame draws a hamburger at the left and a bell at the right. There is
-    // no drawer, and no endpoint returns a notification.
+  it('owns no control of its own', () => {
+    /*
+     * The frame draws a hamburger at the left and a bell at the right. The
+     * hamburger still opens nothing — there is no drawer — and the bell is now
+     * real, but it is passed *in* through `actions` rather than built here.
+     *
+     * The bar stays a presentational overlay: it knows about layout, blur and
+     * the wordmark, and nothing about what its slots do. A control declared
+     * inside it would be one The Scene inherits by accident, since The Scene
+     * renders this same component.
+     */
     const src = TOP_BAR()
     expect(src).not.toContain('Pressable')
     expect(src).not.toContain('TouchableOpacity')
     expect(src).not.toContain('onPress')
   })
 
+  it('carries the bell, now that the bell goes somewhere', () => {
+    /*
+     * It was left out because "a bell that opens nothing is a dead control in
+     * the most-tapped corner of the screen". `GET /notifications` exists
+     * (blendn-admin #242), so it is not dead any more.
+     */
+    expect(SCREEN()).toContain('<PulseTopBar actions={<NotificationBell />} />')
+  })
+
   it('the feed clears it with padding, not with a spacer', () => {
     const src = SCREEN()
-    expect(src).toContain('<PulseTopBar />')
+    expect(src).toContain('<PulseTopBar')
     expect(src).toContain('paddingTop: insets.top + TOP_BAR_HEIGHT + 32')
   })
 })
