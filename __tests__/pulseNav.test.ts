@@ -297,6 +297,22 @@ describe('the centre is the brand mark', () => {
     expect(NAV()).toContain("const BRAND_INK = '#1B1931'")
   })
 
+  it('optically centres the mark, which is not the same as centring it', () => {
+    /*
+     * The asset's bounding box is exact — 8pt padding on all four sides — so
+     * `contentFit: 'contain'` places it perfectly *by the box*, and it still
+     * reads as sitting left. The ink is not evenly distributed inside that
+     * box: the left is stacked solid bars, the right tapers to a point, so the
+     * centre of mass is 9.2% left of the canvas centre and the eye follows
+     * mass.
+     *
+     * 1.6pt is 5% of the drawn size — the midpoint between box-centred (0%)
+     * and mass-centred (9%), which disagree by the whole width of the problem.
+     */
+    const mark = NAV().slice(NAV().indexOf('centreMark: {'))
+    expect(mark.slice(0, mark.indexOf('},'))).toContain('translateX: 1.6')
+  })
+
   it('the centre button is seated in the bar, not hanging above it', () => {
     /*
      * The frame puts the container at `y=-16`. On a real screen the Scene's
@@ -319,7 +335,10 @@ describe('the centre is the brand mark', () => {
      * 32 puts it at 1.35pt and fits the 36.8pt square inscribed in the 52pt
      * disc, holding the same ~61% fill the disc had at 56.
      */
-    expect(NAV()).toContain('centreMark: { width: 32, height: 32 }')
+    const mark = NAV().slice(NAV().indexOf('centreMark: {'))
+    const block = mark.slice(0, mark.indexOf('},'))
+    expect(block).toContain('width: 32')
+    expect(block).toContain('height: 32')
   })
 
   it('the bar is 88pt, the number TAB_BAR_CLEARANCE has always claimed', () => {
