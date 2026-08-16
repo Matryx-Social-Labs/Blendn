@@ -350,6 +350,36 @@ the feed — and was matching the carousel's gradient and status pill. Deleting 
 carousel broke a test about the tab bar, which is the tell. It reads `_layout.tsx`
 now, which is the file that positions the bar.
 
+### The card's age and shared-field were declared but never mapped — **Done** (#203)
+
+Server half `blendn-admin#255`, on staging.
+
+`AttendeeProfile` declared `age` and `sharedWorkField`. `GridPerson` declared
+them. `gridCardBox` branched on one and the card title rendered the other —
+`person.age ? `${name}, ${age}` : name`. And the map from the API response set
+**neither**, so the title could never say "Priya, 29" and the SAME FIELD box
+could never fire, on any card, ever.
+
+Nothing caught it. Both are optional, so the compiler was satisfied; both degrade
+to a card that merely says *less*, so no test failed and no screen looked broken.
+**A field is not wired because a type says it exists.** The root was one level
+up: `MatchCard` in `lib/apiClient.ts` never learned the fields, so there was
+nothing to map from.
+
+**The load-more path was worse.** It mapped five of nine fields, and
+`setAttendees` *replaces* the list rather than appending — so tapping "Load more"
+stripped the occupation line, the shared-field box and the age off every card
+that already had them, and emptied the profession filter with them
+(`availableWorkFields` reads `workField`). The room got visibly worse for asking
+to see more of it.
+
+The tests were **mutation-checked rather than assumed**, which mattered: the
+obvious version — assert each field appears in the file — passed when the first
+map's lines were deleted, because a field present in *either* map satisfied it.
+They now assert per-field occurrences across both paths, plus a guard that there
+are still exactly two maps, since a third would quietly turn ">= 2" back into
+"somewhere".
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",
