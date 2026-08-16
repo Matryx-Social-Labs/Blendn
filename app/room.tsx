@@ -2,16 +2,16 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import GroupChat from './chat/[id]'
 import MatchScreen from '../components/screens/MatchScreen'
+import { NotificationBell } from '../components/pulse/NotificationBell'
+import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
 
-type Segment = 'grid' | 'chat'
 
 /**
  * The Room — what the Blend'n button in the middle of the bar opens.
@@ -45,14 +45,11 @@ type Segment = 'grid' | 'chat'
  * the Grid.
  */
 export default function Room() {
-  const [segment, setSegment] = useState<Segment>('grid')
-  const [chat, setChat] = useState<{
-    id: string
-    name?: string
-    eventTitle?: string
-  } | null>(null)
   const [chatState, setChatState] = useState<'idle' | 'loading' | 'missing'>('idle')
+  const insets = useSafeAreaInsets()
   const [eventId, setEventId] = useState<string | null>(null)
+  const [eventTitle, setEventTitle] = useState<string | null>(null)
+  const [rosterCount, setRosterCount] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [revealBusy, setRevealBusy] = useState(false)
 
@@ -72,6 +69,7 @@ export default function Room() {
         if (cancelled) return
         const active = r.success ? r.data?.checkIns?.[0] : null
         setEventId(active?.eventId ?? null)
+        setEventTitle(active?.event?.title ?? null)
         setRevealed(active?.revealed === true)
       })
       .catch((e) => Logger.warn('match', 'active check-in lookup failed', { error: e }))
@@ -88,20 +86,34 @@ export default function Room() {
    * Grid is the landing segment, and fetching a chat group nobody asked for
    * would put a request on the wire at the busiest moment of the night.
    */
+  /*
+   * Join Chat goes to the room, rather than swapping a pane underneath.
+   *
+   * This screen used to hold both views mounted and hide one. The reasoning was
+   * that a room is one place you are standing in — but it meant the event chat
+   * existed twice: once embedded here and once at `app/chat/[id]`, with one
+   * socket subscription, one moderation path and one composer duplicated across
+   * both. Two mounts of a live room is where subscription leaks live.
+   *
+   * So the toggle is a door. The Grid keeps its state because it is still
+   * mounted underneath; the chat is the screen that already exists.
+   */
   const openChat = useCallback(async () => {
-    setSegment('chat')
-    if (chat || chatState === 'loading' || !eventId) return
+    if (chatState === 'loading' || !eventId) return
     setChatState('loading')
     try {
       const result = await apiClient.getEventChat(eventId)
       const id = result.data?.chatGroupId ?? result.data?.id
       if (result.success && id) {
-        setChat({
-          id: String(id),
-          name: result.data?.chatGroupName ?? result.data?.name,
-          eventTitle: result.data?.chatGroupName ?? result.data?.name,
-        })
         setChatState('idle')
+        router.push({
+          pathname: '/chat/[id]',
+          params: {
+            id: String(id),
+            roomName: result.data?.chatGroupName ?? result.data?.name ?? 'Event chat',
+            eventTitle: result.data?.chatGroupName ?? result.data?.name ?? '',
+          } as never,
+        })
       } else {
         setChatState('missing')
       }
@@ -109,7 +121,7 @@ export default function Room() {
       Logger.error('match', 'chat group lookup failed', { error: e })
       setChatState('missing')
     }
-  }, [chat, chatState, eventId])
+  }, [chatState, eventId])
 
   /*
    * Flipping your visibility, from inside the room it applies to.
@@ -147,22 +159,60 @@ export default function Room() {
   }, [eventId, revealed, revealBusy])
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Close the room"
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Ionicons name="chevron-down" size={24} color={EMBER.textPrimary} />
-        </Pressable>
-        <Text style={styles.title} accessibilityRole="header">
-          The <Text style={styles.titleAccent}>Grid</Text>
+    /*
+      `edges` drops 'top' because `PulseTopBar` is an *overlay*: it draws over
+      the content at absolute position, the way it does on the Pulse and the
+      Scene. Letting the safe area inset the whole screen as well would push
+      everything down twice, and offsetting the content below is what the bar
+      expects -- without it the page heading renders behind the blur.
+    */
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      {/*
+        The same bar as the Pulse, the Scene and the Banter — frame `1141:5129`
+        is that component, and it carries the wordmark rather than a screen name.
+        The dismiss lives in the leading slot because this is presented as a
+        sheet.
+
+        The frame sets the wordmark at 24/32; the shared bar is 16/24. The bar
+        wins: the whole point of it being shared is that it does not vary per
+        screen, and one frame drawing it larger is a variance to raise with the
+        designer, not to fork the component over.
+      */}
+      <PulseTopBar
+        leading={
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Close the room"
+            hitSlop={12}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+          </Pressable>
+        }
+        actions={<NotificationBell />}
+      />
+
+      {/*
+        Frame `1141:4954`: Plus Jakarta ExtraBold 36/40 tracking -1.8, over a
+        Manrope 18/28 line that names the count and the event — the count is the
+        reason to look, and the accent falls on the event because that is the
+        part that changes.
+      */}
+      <View style={[styles.pageHead, { paddingTop: insets.top + TOP_BAR_HEIGHT + 8 }]}>
+        <Text style={styles.pageTitle} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+          The Grid
         </Text>
-        {/* Balances the chevron so the title sits centred without measuring. */}
-        <View style={styles.headerSpacer} />
+        {/*
+          Only once both halves are real. "0 people at undefined" is worse than
+          no subtitle, and the count arrives a moment after the title does.
+        */}
+        {eventTitle && rosterCount > 0 ? (
+          <Text style={styles.pageSubtitle} maxFontSizeMultiplier={1.3}>
+            {`${rosterCount} ${rosterCount === 1 ? 'person' : 'people'} at `}
+            <Text style={styles.pageSubtitleAccent}>{eventTitle}</Text>
+          </Text>
+        ) : null}
       </View>
 
       {eventId ? (
@@ -174,54 +224,37 @@ export default function Room() {
       ) : null}
 
       <View style={styles.segments} accessibilityRole="tablist">
-        <SegmentButton
-          label="Grid"
-          selected={segment === 'grid'}
-          onPress={() => setSegment('grid')}
-        />
+        {/*
+          Grid is where you are; Join Chat is a door. Kept as a segmented pair
+          because the frame draws it that way and the two are the room's two
+          halves — but only one of them is a place this screen renders.
+        */}
+        <SegmentButton label="Grid" selected onPress={() => {}} />
         <SegmentButton
           label="Join Chat"
-          selected={segment === 'chat'}
+          selected={false}
+          busy={chatState === 'loading'}
           onPress={() => void openChat()}
         />
       </View>
 
+      {/*
+        The lookup failed, so the door did not open.
+        
+        Rendered rather than swallowed: without it the toggle is a control that
+        sometimes does nothing, which reads as the app being broken rather than
+        as the room not being ready. The chat is created on first check-in, so
+        the honest cause is almost always "nobody has opened it yet".
+      */}
+      {chatState === 'missing' ? (
+        <Text style={styles.chatMissing} maxFontSizeMultiplier={1.4}>
+          The chat for this event is not open yet.
+        </Text>
+      ) : null}
+
       <View style={styles.body}>
-        {/*
-          Both segments stay mounted, and only one is shown.
+        <MatchScreen onRosterCount={setRosterCount} />
 
-          Unmounting the Grid on every toggle would re-request the roster and
-          replay its entry animation, and unmounting the chat would drop the
-          socket and lose the draft in the composer. A room is one place you are
-          standing in; switching what you are looking at should not reload it.
-        */}
-        <View style={[styles.pane, segment !== 'grid' && styles.paneHidden]} pointerEvents={segment === 'grid' ? 'auto' : 'none'}>
-          <MatchScreen />
-        </View>
-
-        <View style={[styles.pane, segment !== 'chat' && styles.paneHidden]} pointerEvents={segment === 'chat' ? 'auto' : 'none'}>
-          {chat ? (
-            <GroupChat
-              chatRoomId={chat.id}
-              roomName={chat.name}
-              eventTitle={chat.eventTitle}
-              embedded
-            />
-          ) : chatState === 'loading' ? (
-            <View style={styles.centred}>
-              <ActivityIndicator color={EMBER.accent} />
-            </View>
-          ) : chatState === 'missing' ? (
-            <View style={styles.centred}>
-              <Text style={styles.emptyTitle}>No chat for this room</Text>
-              <Text style={styles.emptyBody}>
-                {eventId
-                  ? 'The organiser has not opened a chat for this event.'
-                  : 'Check in to an event to join its chat.'}
-              </Text>
-            </View>
-          ) : null}
-        </View>
       </View>
     </SafeAreaView>
   )
@@ -230,25 +263,38 @@ export default function Room() {
 function SegmentButton({
   label,
   selected,
+  busy,
   onPress,
 }: {
   label: string
   selected: boolean
+  /** Resolving the chat group before navigating. */
+  busy?: boolean
   onPress: () => void
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={busy}
+      /*
+       * `tab` even though Join Chat navigates: it reads as a tab, it is drawn as
+       * a tab, and telling a screen reader it is a button would describe the
+       * pixels rather than the control. The label carries the consequence.
+       */
       accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
+      accessibilityState={{ selected, busy }}
+      accessibilityLabel={selected ? label : `${label}. Opens the event chat`}
       style={({ pressed }) => [
         styles.segment,
         selected && styles.segmentOn,
-        pressed && styles.pressed,
+        (pressed || busy) && styles.pressed,
       ]}
     >
-      <Text style={[styles.segmentText, selected && styles.segmentTextOn]}>{label}</Text>
+      {busy ? (
+        <ActivityIndicator size="small" color={EMBER.accent} />
+      ) : (
+        <Text style={[styles.segmentText, selected && styles.segmentTextOn]}>{label}</Text>
+      )}
     </Pressable>
   )
 }
@@ -297,5 +343,32 @@ const styles = StyleSheet.create({
   emptyTitle: { ...EMBER_TYPE.cardTitle, fontSize: 18, textAlign: 'center' },
   emptyBody: { ...EMBER_TYPE.meta, textAlign: 'center' },
 
+  // Frame `1141:4953`: the heading block sits 12 in from the page edge.
+  // `paddingTop` is applied inline — it depends on the notch and the overlay bar.
+  pageHead: { paddingHorizontal: 12, paddingBottom: 16, gap: 8 },
+  // Frame `1141:4956`: Plus Jakarta ExtraBold 36/40, tracking -1.8.
+  pageTitle: {
+    fontFamily: EMBER_FONTS.displayExtraBold,
+    fontSize: 36,
+    lineHeight: 40,
+    letterSpacing: -1.8,
+    color: EMBER.textPrimary,
+  },
+  // Frame `1141:4958`: Manrope Regular 18/28, the event in `#FF6D8D`.
+  pageSubtitle: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 18,
+    lineHeight: 28,
+    color: EMBER.textSecondary,
+  },
+  pageSubtitleAccent: { color: EMBER.gradientTo },
+  chatMissing: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textTertiary,
+  },
   pressed: { opacity: 0.6 },
 })

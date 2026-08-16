@@ -183,3 +183,62 @@ describe('the rebuilt Grid kept what the frame has no slot for', () => {
     expect(fetches.filter((f) => /workField|minShared/.test(f))).toEqual([])
   })
 })
+
+const ROOM_SCREEN = () =>
+  readFileSync(join(__dirname, '..', 'app', 'room.tsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+
+describe('the room carries the shared header', () => {
+  it('uses PulseTopBar rather than a screen-local bar', () => {
+    /*
+     * Frame `1141:5129` is that component: same `rgba(15,14,14,0.8)`, same 12pt
+     * blur, same accent wordmark. The frame sets the wordmark at 24/32 and the
+     * shared bar is 16/24 — the bar wins, because the point of a shared bar is
+     * that it does not vary per screen. Raised with the designer instead.
+     */
+    expect(ROOM_SCREEN()).toContain('<PulseTopBar')
+  })
+
+  it('offsets the content below the overlay', () => {
+    /*
+     * `PulseTopBar` draws over the content at absolute position. Without the
+     * offset the page heading and the visibility banner render behind the blur
+     * — which is exactly what shipped in the first screenshot of this change.
+     */
+    const src = ROOM_SCREEN()
+    expect(src).toContain('insets.top + TOP_BAR_HEIGHT')
+    // And the safe area must not inset the screen a second time.
+    expect(src).toContain("edges={['left', 'right']}")
+  })
+})
+
+describe('Join Chat is a door, not a pane', () => {
+  it('navigates to the event room', () => {
+    /*
+     * The screen used to mount the chat here and hide it. That meant the event
+     * chat existed twice — once embedded, once at `app/chat/[id]` — with one
+     * socket, one moderation path and one composer duplicated across both.
+     */
+    const src = ROOM_SCREEN()
+    expect(src).toContain("pathname: '/chat/[id]'")
+    expect(src).not.toContain('<GroupChat')
+  })
+
+  it('says so when the room has no chat yet', () => {
+    // Otherwise the toggle is a control that sometimes does nothing, which
+    // reads as the app being broken rather than the chat not existing yet.
+    expect(ROOM_SCREEN()).toContain('The chat for this event is not open yet.')
+  })
+
+  it('takes the roster count from the screen that fetched it', () => {
+    // Rather than a second request for a number already in memory one level
+    // down.
+    expect(ROOM_SCREEN()).toContain('<MatchScreen onRosterCount={setRosterCount} />')
+  })
+
+  it('draws no subtitle until both halves are real', () => {
+    // "0 people at undefined" is worse than no subtitle.
+    expect(ROOM_SCREEN()).toContain('eventTitle && rosterCount > 0')
+  })
+})

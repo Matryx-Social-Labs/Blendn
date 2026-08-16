@@ -105,7 +105,17 @@ const getDisplayName = (name?: string) => {
   return normalized.length > 0 ? normalized : 'Guest'
 }
 
-export default function Match() {
+export default function Match({
+  /**
+   * How many people the roster found, reported up.
+   *
+   * `room.tsx` draws the page heading and the frame's subtitle names the count
+   * — "240 Curated Minds at Future Echoes '24". The count is the reason to
+   * look, and this screen is the one that fetches it, so it says so rather than
+   * the header running a second request for a number already in memory here.
+   */
+  onRosterCount,
+}: { onRosterCount?: (count: number) => void } = {}) {
   const insets = useSafeAreaInsets()
   /*
    * `initialized`, not just `user`.
@@ -650,6 +660,10 @@ export default function Match() {
    * The roster, narrowed. Order is preserved -- `rankMatches` ranked this and a
    * filter must not re-rank it.
    */
+  useEffect(() => {
+    onRosterCount?.(attendees.length)
+  }, [attendees.length, onRosterCount])
+
   const workFields = useMemo(() => availableWorkFields(attendees), [attendees])
   const shown = useMemo(() => applyGridFilters(attendees, filters), [attendees, filters])
   const empty = emptyReason(attendees.length, shown.length, filters)
