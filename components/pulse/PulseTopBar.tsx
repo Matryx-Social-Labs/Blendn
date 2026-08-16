@@ -60,9 +60,19 @@ export const TOP_BAR_HEIGHT = 64
 export function PulseTopBar({
   leading,
   actions,
+  title = "Blend'n",
 }: {
   leading?: React.ReactNode
   actions?: React.ReactNode
+  /**
+   * The word in the accent slot.
+   *
+   * Per screen, not fixed: the Pulse's frame (`1141:4819`) puts the wordmark
+   * here, The Banter's (`1141:5351`) puts "The Banter" — same position, same
+   * `#FF906D` Plus Jakarta Bold 16/24. Hardcoding the wordmark made every
+   * screen that reused this bar claim to be the home screen.
+   */
+  title?: string
 } = {}) {
   const insets = useSafeAreaInsets()
   const interactive = Boolean(leading || actions)
@@ -89,8 +99,8 @@ export function PulseTopBar({
             mark rather than as a heading — the screen's own title is "The Pulse"
             in 48pt, in the feed below.
           */}
-          <Text style={styles.wordmark} accessibilityRole="header">
-            Blend&apos;n
+          <Text style={styles.wordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+            {title}
           </Text>
         </View>
         <View style={styles.actions} pointerEvents={interactive ? 'box-none' : 'none'}>
