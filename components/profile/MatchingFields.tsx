@@ -12,6 +12,7 @@ import {
   type Gender,
   type Orientation,
 } from '../../lib/dating'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -230,17 +231,45 @@ export function MatchingFields({
   )
 }
 
-/* Copied verbatim from `about-you`, so the extraction changes nothing visible. */
+/*
+ * EMBER, now that the extraction itself is merged and verified.
+ *
+ * These were `about-you`'s raw hexes, copied character for character on
+ * purpose: changing the markup and the palette in one step would have made an
+ * onboarding regression impossible to tell from an intentional change. That
+ * step is done, so this one is safe — and it lifts onboarding onto the app's
+ * palette at the same time, which it was never on.
+ *
+ * A selected chip takes the gradient's warm end as a *fill* rather than a
+ * brighter grey. On a screen of a dozen chips, "which are on" has to be
+ * answerable at a glance, and a 10% lightness step is not.
+ */
 const styles = StyleSheet.create({
-  section: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginTop: 24, marginBottom: 10 },
+  section: {
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: EMBER.textSecondary,
+    marginTop: 24,
+    marginBottom: 10,
+  },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
-  chipOff: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.14)' },
-  chipOn: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: '#FFFFFF' },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 9999, borderWidth: 1 },
+  chipOff: { backgroundColor: 'rgba(45,44,44,0.4)', borderColor: 'rgba(73,71,71,0.1)' },
+  chipOn: { backgroundColor: EMBER.accent, borderColor: EMBER.accent },
   // Opacity only, so a chip that becomes unreachable keeps its width and the
   // row does not reflow under your thumb.
   chipDisabled: { opacity: 0.35 },
-  chipText: { color: 'rgba(255,255,255,0.85)', fontSize: 15 },
-  chipTextOn: { color: '#FFFFFF', fontWeight: '600' },
-  hint: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 },
+  chipText: { fontFamily: EMBER_FONTS.bodyRegular, fontSize: 15, color: EMBER.textPrimary },
+  /* Dark on warm — white on the accent fails contrast. */
+  chipTextOn: { fontFamily: EMBER_FONTS.bodyBold, color: EMBER.onGradientChip },
+  hint: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
+    marginTop: 8,
+  },
 })

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { EMBER } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     ActivityIndicator,
@@ -260,7 +261,7 @@ export default function PhotoManager({
               style={styles.removeButton}
               onPress={() => handleRemovePhoto(index)}
             >
-              <Ionicons name="close-circle" size={24} color="#FF4444" />
+              <Ionicons name="close-circle" size={24} color="#FF3B30" />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
@@ -278,10 +279,10 @@ export default function PhotoManager({
         disabled={uploading}
       >
         {uploading ? (
-          <ActivityIndicator size="small" color="#7C3AED" />
+          <ActivityIndicator size="small" color={EMBER.accent} />
         ) : (
           <>
-            <Ionicons name="add" size={32} color="#7C3AED" />
+            <Ionicons name="add" size={32} color={EMBER.accent} />
             <Text style={styles.addPhotoText}>Add Photo</Text>
           </>
         )}
@@ -292,7 +293,7 @@ export default function PhotoManager({
   if (loading) {
     return (
       <View style={[styles.container, styles.loadingContainer, style]}>
-        <ActivityIndicator size="large" color="#7C3AED" />
+        <ActivityIndicator size="large" color={EMBER.accent} />
         <Text style={styles.loadingText}>Loading photos...</Text>
       </View>
     )
@@ -309,7 +310,7 @@ export default function PhotoManager({
 
       {photos.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="camera-outline" size={48} color="#CCCCCC" />
+          <Ionicons name="camera-outline" size={48} color={EMBER.textTertiary} />
           <Text style={styles.emptyText}>No photos yet</Text>
           {editable && (
             <Text style={styles.emptyHint}>Add photos to make your profile stand out</Text>
@@ -342,7 +343,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666666',
+    color: EMBER.textSecondary,
   },
   header: {
     flexDirection: 'row',
@@ -353,11 +354,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: EMBER.textPrimary,
   },
   hint: {
     fontSize: 12,
-    color: '#6B7280',
+    color: EMBER.textSecondary,
     fontStyle: 'italic',
   },
   emptyState: {
@@ -369,12 +370,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#9CA3AF',
+    color: EMBER.textSecondary,
     marginTop: 12,
   },
   emptyHint: {
     fontSize: 14,
-    color: '#D1D5DB',
+    color: EMBER.textTertiary,
     marginTop: 4,
     textAlign: 'center',
   },
@@ -392,7 +393,7 @@ const styles = StyleSheet.create({
   photo: {
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: EMBER.surfaceSunken,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -417,7 +418,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: 'rgba(124, 58, 237, 0.9)',
+    backgroundColor: EMBER.accent,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -450,17 +451,17 @@ const styles = StyleSheet.create({
   addPhoto: {
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#7C3AED',
+    borderColor: EMBER.accent,
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: EMBER.surfaceMedia,
     margin: 4,
   },
   addPhotoText: {
     marginTop: 4,
     fontSize: 12,
-    color: '#7C3AED',
+    color: EMBER.accent,
     fontWeight: '500',
   },
 })

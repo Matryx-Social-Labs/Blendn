@@ -127,3 +127,29 @@ describe('the irreversible row is hard to hit by accident', () => {
     expect(src).toContain('sectionHeaderSpaced: { marginTop: 40 }')
   })
 })
+
+describe('the editor is on the app’s palette', () => {
+  it('has left APP_COLORS, and so has its photo manager', () => {
+    /*
+     * `PhotoManager` was written for a *light* UI and never updated: `#F8FAFC`
+     * panels, `#1F2937` text, a `#7C3AED` purple accent. On this screen that
+     * rendered "Add Photo" as a white box with a purple dashed border, and the
+     * "Photos (0/6)" heading as navy on near-black.
+     */
+    expect(read('app/edit-profile.tsx')).not.toContain('APP_COLORS')
+    const pm = read('components/PhotoManager.tsx')
+    expect(pm).not.toMatch(/#7C3AED|#F8FAFC|#1F2937|#F3F4F6/)
+  })
+
+  it('fills a selected chip rather than lightening it', () => {
+    /*
+     * On a card of a dozen chips, "which are on" has to be answerable at a
+     * glance. The old pair was `rgba(255,255,255,0.06)` against
+     * `rgba(255,255,255,0.16)` -- a 10% lightness step.
+     */
+    const src = codeOnly(read('components/profile/MatchingFields.tsx'))
+    expect(src).toContain('chipOn: { backgroundColor: EMBER.accent')
+    // Dark on warm: white on the accent fails contrast.
+    expect(src).toContain('EMBER.onGradientChip')
+  })
+})
