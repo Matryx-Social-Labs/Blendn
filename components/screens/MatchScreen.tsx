@@ -643,8 +643,19 @@ export default function Match({
        * One fewer round trip before the room can render, and one fewer reader
        * of a column that is on its way out.
        */
-      // Load active event and attendees
-      await loadActiveEventAndAttendees(authUser.id, true)
+      /*
+       * Not forced. Both endpoints behind this have SWR caches --
+       * `getActiveCheckins` at `CHECKINS_SWR_TTL`, `getEventMatches` at 30s --
+       * and forcing on mount bypassed both, so opening the room always cost two
+       * sequential round trips before anything could render. With
+       * `attendees.length === 0` on a fresh mount that is a full-screen spinner
+       * every single time, which is the "wait a few seconds, close it, wait
+       * again" this screen was reported for.
+       *
+       * Reading the cache paints immediately and revalidates behind the paint.
+       * Forcing belongs to a human asking for it -- see `onPullToRefresh`.
+       */
+      await loadActiveEventAndAttendees(authUser.id)
     } catch (e) {
       Logger.error('match', 'Unexpected error during initialization', { error: e })
     } finally {
@@ -673,7 +684,13 @@ export default function Match({
     enabled: !!authUser,
     onSync: async () => {
       if (!authUser) return
-      await loadActiveEventAndAttendees(authUser.id, true)
+      /*
+       * Also not forced. `swr: true` already refreshes in the background on a
+       * cache read, so this gets fresh data either way -- and forcing made
+       * every return-from-background block on the network before the roster
+       * could update.
+       */
+      await loadActiveEventAndAttendees(authUser.id)
     },
     domains: ['match'],
     connectedIntervalMs: 30000,

@@ -1530,7 +1530,12 @@ export default function Events() {
 
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
-    onSync: () => fetchEvents({ silent: true, force: true }),
+    /*
+     * Not forced. `getEvents` is `swr: true`, so a cached read already
+     * revalidates in the background -- forcing only made every foreground
+     * return block on the network before the feed could update.
+     */
+    onSync: () => fetchEvents({ silent: true }),
     domains: ['events'],
     connectedIntervalMs: 30000,
     disconnectedIntervalMs: 12000,
@@ -1544,7 +1549,9 @@ export default function Events() {
     if (loading) return
     const key = `${userLocation.latitude},${userLocation.longitude}`
     if (lastFetchLocationRef.current !== key) {
-      fetchEvents({ silent: true, force: true })
+      // Same reasoning as `onSync`: the location changed, the cache key changed
+      // with it, so there is nothing stale to force past.
+      fetchEvents({ silent: true })
     }
   }, [user, authLoading, userLocation, loading])
 

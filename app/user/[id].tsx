@@ -101,7 +101,9 @@ export default function UserProfile() {
     }
 
     try {
-      const convResult = await apiClient.getConversations({ force: true })
+      // Cached: this runs on mount, and the conversation list changes far more
+      // slowly than the screen is opened.
+      const convResult = await apiClient.getConversations()
       if (convResult.success && convResult.data) {
         const found = convResult.data.find((conv: any) => {
           const otherUser = conv.otherUser || conv.other_user || {}
@@ -117,7 +119,7 @@ export default function UserProfile() {
         }
       }
 
-      const requestResult = await apiClient.getMessageRequests({ status: 'pending' }, { force: true })
+      const requestResult = await apiClient.getMessageRequests({ status: 'pending' })
       if (requestResult.success && requestResult.data?.requests) {
         const requests = requestResult.data.requests
         const hasPending = requests.some((request: any) => {
