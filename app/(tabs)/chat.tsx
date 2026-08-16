@@ -761,7 +761,7 @@ export default function Chat() {
         >
           <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
             {item.event_image ? (
-              <OptimizedImage source={item.event_image} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
+              <OptimizedImage source={item.event_image} recyclingKey={item.event_image} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
             ) : (
               <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarInitials}>{(item.event_title || 'E').slice(0,1)}</Text>
@@ -806,7 +806,7 @@ export default function Chat() {
         >
           <View style={[styles.avatarContainer, dynamicStyles.avatarSpacing]}>
             {item.other_user_avatar ? (
-              <OptimizedImage source={item.other_user_avatar} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
+              <OptimizedImage source={item.other_user_avatar} recyclingKey={item.other_user_avatar} style={[styles.avatar as any, dynamicStyles.avatar]} width={Math.round(dynamicStyles.avatar.width)} height={Math.round(dynamicStyles.avatar.height)} quality={60} />
             ) : (
               <View style={[styles.avatar, dynamicStyles.avatar, styles.avatarFallback]}>
                 <Text style={styles.avatarInitials}>{getInitials(item.other_user_name)}</Text>

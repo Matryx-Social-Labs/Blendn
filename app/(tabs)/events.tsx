@@ -231,6 +231,7 @@ const CarouselCard = memo(({
       <View style={styles.carouselImage}>
         <OptimizedImage
           source={event.cover_image_url}
+          recyclingKey={event.cover_image_url ?? undefined}
           style={StyleSheet.absoluteFillObject}
           contentFit="cover"
           width={260}

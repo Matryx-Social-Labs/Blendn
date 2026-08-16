@@ -104,7 +104,7 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
 
       <View style={headerStyles.avatarWrap}>
         {avatarUrl ? (
-          <OptimizedImage source={avatarUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+          <OptimizedImage source={avatarUrl} recyclingKey={avatarUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarFallback]}>
             <Text style={headerStyles.avatarText}>{getInitials(name)}</Text>
