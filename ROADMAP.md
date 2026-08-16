@@ -693,6 +693,52 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **The bell, and five push kinds that went nowhere** (#178). `PulseTopBar`
+  drew only the wordmark because "a notifications centre is designed and not
+  built, and a bell that opens nothing is a dead control in the most-tapped
+  corner of the screen". `GET /notifications` exists now (blendn-admin #242),
+  so the frame's right glyph goes in.
+
+  Opening the sheet marks everything read rather than each row as you pass it:
+  the badge answers "is there something I have not seen", and looking at the
+  list is the act that answers it. No polling — a poll costs a request every
+  few seconds on the busiest screen for a number that changes a few times a
+  day.
+
+  **The real find was in the push handler.** Routing the bell through the
+  *existing* `navigateFromNotificationData`, rather than writing a second
+  switch, showed that five of the eleven kinds fell straight through it:
+  `message_request`, `message_request_response`, `waitlist_promoted`,
+  `reveal_request`, `reveal`. Every one is emitted by `sendPushNotification`,
+  so tapping any of those **pushes** opened the app and left you where you
+  were. Fixed at the switch, so pushes benefit too.
+
+  Neither new destination is a profile. A request from somebody you have not
+  accepted, and a reveal, must not deep-link past the gate the server enforces.
+
+  I overwrote `lib/notifications.ts` on the first pass — it already existed,
+  with that switch in it — and restored from git. The claim I had written on
+  the strength of the overwrite, that no push-tap handler existed, was wrong;
+  correcting it is what surfaced the five-kind bug.
+
+- **The simulator can be tapped from a script** (#179). Partial fix for the
+  standing blocker below.
+
+  `xcrun simctl` cannot tap or type, which is why every UI change here has been
+  verified through a `__preview` harness. `scripts/sim.sh` maps a device point
+  to a screen point — insets derived from the window's geometry, not hardcoded
+  — and clicks through Accessibility. **Taps and screenshots work**, verified
+  against the sign-in flow, so real screens can be reached from a script now.
+
+  **Text entry is still open**, and the script records why. `type` reloads a
+  dev build: the Expo dev client binds single letters as shortcuts (`r`
+  reload), and "tester@blendn.app" contains an `r` — every attempt bounced the
+  app to its intro, which looked like the tap failing rather than the typing
+  working too well. `paste` (pbcopy + ⌘V) survives, but the text does not land:
+  a synthetic click opens a *button* reliably and does not appear to give a
+  `TextInput` keyboard focus. Next thing to try is idb's real touch API, or a
+  release build with no dev client.
+
 - **The bottom of the screen stops fighting itself** (#171, #172, #173). Three
   floating things — the tab bar's centre button, the Scene's CTA and the event
   screen's action row — each designed as if it were the only one there.
