@@ -125,6 +125,28 @@ Medium 16/24, tracking 0.4.
 
 ---
 
+## The Connect sheet's copy — a rule, not a string
+
+The composer that sends a message request must name the other person with the
+**server-resolved display name** (`person.name`), never a real name the client
+assumed. Before a reveal that value *is* the pseudonym; after it, the real name.
+One variable, correct in both states, because the server already decided which.
+
+Getting this wrong is not a typo. Writing "Priya will see your name and photo"
+on a pseudonymous roster means treating an unrevealed person as having a
+knowable real name — the same mistake in prose that the identity gate exists to
+prevent in code.
+
+It also has to say what you do **not** get back, or "Connect" reads as a mutual
+reveal:
+
+> Cosmic Panda will see your name and photo. You'll still see them as Cosmic
+> Panda until they choose to reveal.
+
+The asymmetry is the design — you are making the unsolicited approach, so you
+are the one who is accountable — but an asymmetry nobody was told about is a
+surprise that lands on the wrong person, after the fact.
+
 ## Still open
 
 - **My Profile** (`1141:5633`) is not built yet. Same components; adds the 192pt
