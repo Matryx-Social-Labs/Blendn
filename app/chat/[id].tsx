@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Clipboard,
@@ -14,12 +14,16 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
+import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
+import { ChatBubble } from '../../components/chat/ChatBubble'
+import { ChatComposer } from '../../components/chat/ChatComposer'
+import { SystemNotice } from '../../components/chat/SystemNotice'
+import { TypingIndicator } from '../../components/chat/TypingIndicator'
 import OptimizedImage from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import queryCache from '../../lib/queryCache'
@@ -77,11 +81,6 @@ const formatTime = (iso: string) => {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-const getInitials = (name: string) => {
-  const parts = String(name || '?').trim().split(/\s+/)
-  return ((parts[0]?.[0] || '') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] || '') : '')).toUpperCase() || '?'
 }
 
 function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
@@ -456,87 +455,57 @@ function GroupChatInner(props?: {
     disconnectedIntervalMs: 15000,
   })
 
+  /*
+   * Long-press opens the message menu, and it is stable so `ChatBubble`'s memo
+   * can bite: a room being typed in re-renders on every keystroke, and an
+   * inline arrow here would re-render every mounted bubble each time.
+   */
+  const openMessageMenu = useCallback((message: Message) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    setSelectedMessage(message)
+    setShowMessageMenu(true)
+  }, [])
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.sender_id === currentUser?.id
-    const isSystem = item.sender_id === 'system'
 
-    if (isSystem) {
-      return (
-        <View style={styles.systemRow}>
-          <Text style={styles.systemText}>{item.message_text}</Text>
-        </View>
-      )
+    // The room narrating itself, not a person speaking. Same shape as a day
+    // separator, which is what `SystemNotice` exists to make true.
+    if (item.sender_id === 'system') {
+      return <SystemNotice label={item.message_text} />
     }
 
     if (item.message_type === 'announcement' || item.message_type === 'sponsored') {
-      const isSponsored = item.message_type === 'sponsored'
       return (
-        <View style={styles.bannerRow}>
-          <View style={[styles.bannerBubble, isSponsored && styles.bannerBubbleBlue]}>
-            <Text style={[styles.bannerLabel, isSponsored && styles.bannerLabelBlue]}>
-              {isSponsored ? '📣 Sponsored' : '📢 Announcement'}
-            </Text>
-            <Text style={styles.bannerText}>{item.message_text}</Text>
-            <Text style={styles.bannerTime}>{formatTime(item.created_at)}</Text>
-          </View>
-        </View>
+        <BroadcastNotice
+          kind={item.message_type}
+          text={item.message_text}
+          time={formatTime(item.created_at)}
+        />
       )
     }
 
     return (
-      <TouchableOpacity
-        style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}
-        onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setSelectedMessage(item); setShowMessageMenu(true) }}
-        delayLongPress={400}
-        activeOpacity={0.85}
-      >
-        {!isMe && (
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(item.sender_name)}</Text>
-          </View>
-        )}
-        <View style={[styles.msgContainer, isMe ? styles.myMsgContainer : styles.otherMsgContainer]}>
-          {!isMe && <Text style={styles.senderName}>{item.sender_name}</Text>}
-
-          {item.replyTo && (
-            <View style={styles.replyPreview}>
-              <View style={styles.replyLine} />
-              <Text style={styles.replyPreviewText} numberOfLines={2}>
-                {item.replyTo.sender_name}: {item.replyTo.message_text}
-              </Text>
-            </View>
-          )}
-
-          <View style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble]}>
-            <Text style={styles.bubbleText}>{item.message_text}</Text>
-            <View style={styles.bubbleMeta}>
-              <Text style={styles.bubbleTime}>{formatTime(item.created_at)}{item.is_edited ? ' · edited' : ''}</Text>
-            </View>
-          </View>
-
-          {item.reactions && Object.keys(item.reactions).length > 0 && (
-            <View style={[styles.reactionsRow, isMe ? styles.reactionsRowMe : styles.reactionsRowOther]}>
-              {Object.entries(item.reactions).map(([emoji, users]) => (
-                <View key={emoji} style={styles.reactionPill}>
-                  <Text style={styles.reactionEmoji}>{emoji}</Text>
-                  {users.length > 1 && <Text style={styles.reactionCount}>{users.length}</Text>}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
+      <ChatBubble
+        mine={isMe}
+        senderId={item.sender_id}
+        senderName={item.sender_name}
+        text={item.message_text}
+        time={formatTime(item.created_at)}
+        edited={item.is_edited}
+        reactions={item.reactions}
+        replyTo={
+          item.replyTo
+            ? { senderName: item.replyTo.sender_name, text: item.replyTo.message_text }
+            : null
+        }
+        onLongPress={() => openMessageMenu(item)}
+      />
     )
   }
 
   const renderChatItem = ({ item }: { item: ChatListItem }) => {
-    if (item.kind === 'separator') {
-      return (
-        <View style={styles.daySep}>
-          <Text style={styles.daySepText}>{item.label}</Text>
-        </View>
-      )
-    }
+    if (item.kind === 'separator') return <SystemNotice label={item.label} />
     return renderMessage({ item })
   }
 
@@ -584,6 +553,24 @@ function GroupChatInner(props?: {
           windowSize={10}
           initialNumToRender={25}
           ListHeaderComponent={ListHeader}
+          /*
+           * Typing lives at the end of the feed, not pinned above the composer.
+           * It is a thing happening *in the conversation*, and pinned it was
+           * equally present whether you were reading the newest message or two
+           * hundred messages back -- a note about right now, hovering over
+           * history.
+           */
+          ListFooterComponent={
+            typingUsers.size > 0 ? (
+              <TypingIndicator
+                label={
+                  typingUsers.size === 1
+                    ? `${Array.from(typingUsers.values())[0]} is typing...`
+                    : `${typingUsers.size} people are typing...`
+                }
+              />
+            ) : null
+          }
           ListEmptyComponent={!loading ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>Start the room conversation</Text>
@@ -608,14 +595,6 @@ function GroupChatInner(props?: {
           </TouchableOpacity>
         )}
 
-        {typingUsers.size > 0 && (
-          <View style={styles.typingRow}>
-            <Text style={styles.typingText}>
-              {Array.from(typingUsers.values()).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing…
-            </Text>
-          </View>
-        )}
-
         {replyingTo && (
           <View style={styles.replyBar}>
             <View style={styles.replyBarLine} />
@@ -629,41 +608,24 @@ function GroupChatInner(props?: {
           </View>
         )}
 
-        {/* Input bar */}
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={newMessage}
-            onChangeText={(text) => {
-              setNewMessage(text)
-              if (text.length > 0 && chatRoomId) {
-                if (!typingActiveSentRef.current) { startTyping(String(chatRoomId)); typingActiveSentRef.current = true }
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                typingTimeoutRef.current = setTimeout(() => { stopTyping(String(chatRoomId)); typingActiveSentRef.current = false }, 2000)
-              } else if (text.length === 0 && chatRoomId) {
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                stopTyping(String(chatRoomId))
-                typingActiveSentRef.current = false
-              }
-            }}
-            placeholder="Message"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            multiline
-            maxLength={1000}
-            onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-          />
-          <ScalePress
-            style={[styles.sendBtn, (!newMessage.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
-            pressedScale={0.94}
-          >
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="send" size={18} color="#fff" />
+        <ChatComposer
+          value={newMessage}
+          sending={sending}
+          onSend={sendMessage}
+          onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+          onChangeText={(text) => {
+            setNewMessage(text)
+            if (text.length > 0 && chatRoomId) {
+              if (!typingActiveSentRef.current) { startTyping(String(chatRoomId)); typingActiveSentRef.current = true }
+              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+              typingTimeoutRef.current = setTimeout(() => { stopTyping(String(chatRoomId)); typingActiveSentRef.current = false }, 2000)
+            } else if (text.length === 0 && chatRoomId) {
+              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+              stopTyping(String(chatRoomId))
+              typingActiveSentRef.current = false
             }
-          </ScalePress>
-        </View>
+          }}
+        />
       </KeyboardAvoidingView>
 
       {/* Message menu */}
@@ -732,79 +694,15 @@ const styles = StyleSheet.create({
   loadMoreText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
 
   // System / announcement messages
-  systemRow: { alignItems: 'center', marginVertical: 8 },
-  systemText: {
-    fontSize: 13, color: 'rgba(255,255,255,0.6)', fontStyle: 'italic',
-    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 6, textAlign: 'center',
-  },
-  bannerRow: { alignItems: 'center', marginVertical: 6, paddingHorizontal: 8 },
-  bannerBubble: {
-    width: '100%', borderRadius: 12,
-    backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)',
-    paddingHorizontal: 14, paddingVertical: 10,
-  },
-  bannerBubbleBlue: { backgroundColor: 'rgba(59,130,246,0.12)', borderColor: 'rgba(59,130,246,0.35)' },
-  bannerLabel: { fontSize: 11, fontWeight: '600', color: '#F59E0B', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  bannerLabelBlue: { color: '#60A5FA' },
-  bannerText: { fontSize: 14, color: '#FFFFFF', lineHeight: 20 },
-  bannerTime: { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 4, textAlign: 'right' },
 
   // Messages
-  messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginVertical: 2 },
-  myRow: { justifyContent: 'flex-end' },
-  otherRow: { justifyContent: 'flex-start' },
-  avatar: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 6, marginBottom: 2,
-  },
-  avatarText: { fontSize: 11, color: '#FFFFFF', fontWeight: '600' },
-  msgContainer: { maxWidth: '78%' },
-  myMsgContainer: { alignItems: 'flex-end' },
-  otherMsgContainer: { alignItems: 'flex-start' },
-  senderName: { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 3, marginLeft: 4 },
 
-  replyPreview: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 5, marginBottom: 4,
-  },
-  replyLine: { width: 2, height: 26, backgroundColor: APP_COLORS.accent, borderRadius: 1, marginRight: 8 },
-  replyPreviewText: { fontSize: 12, color: 'rgba(255,255,255,0.6)', flex: 1, fontStyle: 'italic' },
 
-  bubble: {
-    borderRadius: 18,
-    paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6,
-  },
-  myBubble: { backgroundColor: '#005C4B', borderBottomRightRadius: 4 },
-  otherBubble: { backgroundColor: '#1F2937', borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: 15, lineHeight: 21, color: '#FFFFFF' },
-  bubbleMeta: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 3 },
-  bubbleTime: { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
 
-  reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 },
-  reactionsRowMe: { justifyContent: 'flex-end' },
-  reactionsRowOther: { justifyContent: 'flex-start' },
-  reactionPill: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10,
-    paddingHorizontal: 7, paddingVertical: 2, gap: 3,
-  },
-  reactionEmoji: { fontSize: 13 },
-  reactionCount: { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '600' },
 
   // Day separator
-  daySep: { alignItems: 'center', marginVertical: 12 },
-  daySepText: {
-    fontSize: 12, color: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10,
-  },
 
   // Typing
-  typingRow: { paddingHorizontal: 16, paddingVertical: 6 },
-  typingText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontStyle: 'italic' },
 
   // Reply bar above input
   replyBar: {
@@ -821,24 +719,6 @@ const styles = StyleSheet.create({
   replyBarClose: { padding: 4 },
 
   // Input bar
-  inputRow: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: '#111214', gap: 8,
-  },
-  input: {
-    flex: 1, minHeight: 44, maxHeight: 120,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
-    paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 15, color: '#FFFFFF',
-  },
-  sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: APP_COLORS.accent, alignItems: 'center', justifyContent: 'center',
-  },
-  sendBtnDisabled: { backgroundColor: '#2C2C2E' },
 
   // Scroll to bottom
   scrollToBottomBtn: {
