@@ -1,84 +1,96 @@
-import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from './matchBand'
-
 /**
- * What a Grid card actually says about somebody.
+ * The one labelled block on a Grid card, and which of three things fills it.
  *
- * ## The problem this exists for
+ * ## The frame's model, which is two data sets and not one
  *
- * A card can be reduced to a name, a field of work and two buttons — and
- * "why would someone want to like someone else with no details shown" is the
- * right question to ask of it.
+ * Cards `1141:4978`, `1141:5020` and `1141:5049` differ only in this block, and
+ * the split is the point:
  *
- * It is also the **common** case rather than an edge one. `lib/matchBand.ts`
- * says so directly:
+ *   CORE EXPERTISE tags   their attributes
+ *   the labelled box      what you SHARE, or what they are doing right now
  *
- * > `user_interests` was empty in production for weeks, so this path is the
- * > live one until interest coverage climbs.
+ * Collapsing both onto `sharedInterests` is what made a card say the same thing
+ * twice — "You both picked Techno and Board games" directly above chips reading
+ * *Techno, Board games*.
  *
- * And the roster is small by design. `MatchCard` carries eight fields, of which
- * `workField` is null in any room under eight people and `sharedInterests` is
- * empty whenever the interest graph is thin. So the card has to be built out of
- * what is left, and it has to degrade in a defined order rather than by
- * accident.
+ * ## The box is a priority slot
  *
- * ## The chain
+ *   MUTUAL CONNECTIONS   `1141:5002`  the friend graph — deferred (#86)
+ *   SHARED INTERESTS     `1141:5038`  a comma-joined sentence, not chips
+ *   ATTENDING LIVE       `1141:5067`  what they are doing here
  *
- * Each rung is true or it is skipped. Nothing is invented, and no rung claims
- * an overlap that is not there:
+ * One at a time, strongest first, and each is a fact the server sent or it is
+ * skipped. Nothing is invented and no overlap is claimed that is not there.
  *
- *   1. shared interests   "You both picked Techno and Board games"
- *   2. shared intent      "Both here to network"
- *   3. the band           "Worth saying hello"
- *   4. presence           "Here now"
+ * ## No verdict chip
  *
- * The band is deliberately last-but-one rather than first: "Strong match" is a
- * verdict, and a verdict is worth less than the fact it was derived from. When
- * the facts are there, they speak; when they are not, the band is the honest
- * summary of a thin overlap rather than a silent card.
+ * An earlier version put "Strong match" above the box. With the box labelled it
+ * is a verdict derived from the line directly beneath it — and a verdict is
+ * worth less than the fact it came from. A card with nothing to share now says
+ * nothing rather than grading the silence.
  */
 
 export interface GridCardSource {
+  /** Names, already intersected by the server. */
   sharedInterests?: string[]
-  sharedIntents?: string[]
+  /** You are both in this field. Computed server-side for ranking already. */
+  sharedWorkField?: boolean
+  workField?: string | null
   insideNow?: boolean
 }
 
-export interface GridCardContent {
-  /** The chip above the name. Always present — the band always resolves. */
-  band: string
-  /** The sentence in the box, or null when there is nothing true to say. */
-  line: string | null
-  /** Whether the line came from a real overlap, for styling the box. */
-  kind: 'interests' | 'intent' | 'presence' | null
+export type GridBoxKind = 'interests' | 'field' | 'live'
+
+export interface GridBox {
+  /** The uppercase label. Frame: Manrope Bold 12/16, tracking 0.3, white. */
+  label: string
+  /** The line under it. Frame: Manrope Regular 14/20, `#AEAAAA`. */
+  value: string
+  kind: GridBoxKind
 }
 
-export function gridCardContent(source: GridCardSource): GridCardContent {
+/**
+ * What the box says, or `null` when there is nothing true to put in it.
+ *
+ * Null is a real answer: an empty room of strangers with no interest graph
+ * yields cards that are a name, a field of work and two buttons, and inventing
+ * a line to fill the space would be worse than the space.
+ */
+export function gridCardBox(source: GridCardSource): GridBox | null {
   const shared = source.sharedInterests ?? []
 
-  const band = matchBandLabel(
-    matchBand({ sharedInterests: shared, sharedIntents: (source.sharedIntents ?? []) as never })
-  )
-
-  const interests = sharedInterestSentence({ sharedInterests: shared })
-  if (interests) return { band, line: interests, kind: 'interests' }
+  /*
+   * Frame `1141:5038`: a comma-joined sentence rather than chips. Chips here
+   * would repeat the CORE EXPERTISE row's shape directly beneath it, and the
+   * eye reads two rows of pills as one list broken in half.
+   */
+  if (shared.length > 0) {
+    return { label: 'SHARED INTERESTS', value: shared.join(', '), kind: 'interests' }
+  }
 
   /*
-   * The shared *intent*, which is an overlap even when no interest is.
+   * Both in the same field.
    *
-   * Safe to say without qualification: the server sends only the intersection,
-   * never either person's own intents, and `dating` reaches this list only
-   * after compatibility has already been checked — so "Both open to dating"
-   * states a fact about the pair without ever stating anyone's gender.
+   * `lib/matching.ts` has always computed this — it moves the ranking — and has
+   * never shown it. "Design" under a name is an attribute; "You both work in
+   * Design" is a reason to walk over, and it is the same fact either way.
    */
-  const intent = intentSentence(source.sharedIntents)
-  if (intent) return { band, line: intent, kind: 'intent' }
+  if (source.sharedWorkField && source.workField) {
+    return {
+      label: 'SAME FIELD',
+      value: `You both work in ${source.workField}`,
+      kind: 'field',
+    }
+  }
 
   /*
-   * Standing in the room right now, which is the last thing the roster knows
-   * that is worth acting on — and on this screen it is a strong one, because
-   * the whole product is about walking over to somebody.
+   * Frame `1141:5067` reads "Currently in the Main Stage Lounge. Open for
+   * collaborations." We have neither a sub-venue nor a status line — only
+   * whether presence says they are inside — so this says the part that is true.
    */
-  if (source.insideNow) return { band, line: 'Here now', kind: 'presence' }
+  if (source.insideNow) {
+    return { label: 'ATTENDING LIVE', value: 'In the room right now', kind: 'live' }
+  }
 
-  return { band, line: null, kind: null }
+  return null
 }

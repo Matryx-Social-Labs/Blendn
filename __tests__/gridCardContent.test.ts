@@ -1,68 +1,79 @@
-import { gridCardContent } from '../lib/gridCardContent'
+import { gridCardBox } from '../lib/gridCardContent'
 
 /**
- * What a card says when it has almost nothing to say.
+ * The one labelled block on a Grid card.
  *
- * The thin card is the common case, not an edge one — `lib/matchBand.ts`:
- * "`user_interests` was empty in production for weeks, so this path is the live
- * one until interest coverage climbs." A card reduced to a name and two buttons
- * gives nobody a reason to tap either.
+ * The frame keeps two data sets apart — CORE EXPERTISE is *their* attributes,
+ * the box is what you SHARE. Collapsing them is what made a card read
+ * "You both picked Techno and Board games" directly above chips saying
+ * *Techno, Board games*.
  */
-describe('the chain always yields something true', () => {
-  it('prefers the overlap, named', () => {
-    // "You both picked Techno and Board games is the whole product."
-    const c = gridCardContent({ sharedInterests: ['Techno', 'Board games'] })
-    expect(c.line).toBe('You both picked Techno and Board games')
-    expect(c.kind).toBe('interests')
-    expect(c.band).toBe('Strong match')
+describe('the box holds one thing, strongest first', () => {
+  it('prefers shared interests, comma-joined', () => {
+    // Frame `1141:5045`: a sentence, not chips. Chips here would repeat the
+    // CORE EXPERTISE row's shape directly beneath it.
+    const b = gridCardBox({ sharedInterests: ['Techno', 'Board games'] })
+    expect(b).toEqual({
+      label: 'SHARED INTERESTS',
+      value: 'Techno, Board games',
+      kind: 'interests',
+    })
   })
 
-  it('falls to the shared intent when no interest overlaps', () => {
+  it('falls to the shared field when no interest overlaps', () => {
     /*
-     * Still an overlap, just a different one — and safe to state without
-     * qualification: the server sends only the intersection, and `dating`
-     * reaches it after compatibility is already checked, so the line never
-     * states anyone's gender.
+     * Already computed for ranking and never shown. The same fact reads as an
+     * attribute under a name and as a reason to walk over in the box.
      */
-    const c = gridCardContent({ sharedInterests: [], sharedIntents: ['networking'] })
-    expect(c.line).toBe('Both here to network')
-    expect(c.kind).toBe('intent')
+    const b = gridCardBox({ sharedInterests: [], sharedWorkField: true, workField: 'Design' })
+    expect(b?.label).toBe('SAME FIELD')
+    expect(b?.value).toBe('You both work in Design')
+  })
+
+  it('does not claim a shared field without the field itself', () => {
+    // `workField` is null in any room under eight people, and "You both work in
+    // null" is worse than saying nothing.
+    const b = gridCardBox({ sharedInterests: [], sharedWorkField: true, workField: null })
+    expect(b?.kind).not.toBe('field')
   })
 
   it('falls to presence when nothing is shared', () => {
-    // The last thing the roster knows that is worth acting on — and on a screen
-    // about walking over to somebody, a strong one.
-    const c = gridCardContent({ sharedInterests: [], insideNow: true })
-    expect(c.line).toBe('Here now')
-    expect(c.kind).toBe('presence')
+    const b = gridCardBox({ sharedInterests: [], insideNow: true })
+    expect(b).toEqual({
+      label: 'ATTENDING LIVE',
+      value: 'In the room right now',
+      kind: 'live',
+    })
   })
 
-  it('still names a band when there is nothing else at all', () => {
+  it('returns null rather than inventing a line', () => {
     /*
-     * The floor. "Worth saying hello" must not read as a failure: in a room
-     * with an empty interest graph everyone is this, and the copy has to be
-     * true rather than discouraging.
+     * A real answer. An empty room of strangers with no interest graph yields
+     * cards that are a name, a field of work and two buttons — and a line
+     * written to fill the space would be worse than the space.
      */
-    const c = gridCardContent({ sharedInterests: [] })
-    expect(c.line).toBeNull()
-    expect(c.kind).toBeNull()
-    expect(c.band).toBe('Worth saying hello')
+    expect(gridCardBox({ sharedInterests: [] })).toBeNull()
+    expect(gridCardBox({})).toBeNull()
   })
 
-  it('never invents an overlap', () => {
-    // Every rung is a fact the server sent or it is skipped.
-    const c = gridCardContent({})
-    expect(c.line).toBeNull()
-    expect(c.band).toBe('Worth saying hello')
+  it('shows one thing, never two', () => {
+    // Every rung is exclusive: the box is a slot, not a stack.
+    const b = gridCardBox({
+      sharedInterests: ['Techno'],
+      sharedWorkField: true,
+      workField: 'Design',
+      insideNow: true,
+    })
+    expect(b?.kind).toBe('interests')
   })
 
-  it('puts the facts before the verdict', () => {
+  it('carries no verdict chip', () => {
     /*
-     * The band always resolves, so ordering it first would mean no card ever
-     * reached the rungs below — and "Strong match" is worth less than the two
-     * interests it was derived from.
+     * "Strong match" above a labelled box is a verdict derived from the line
+     * beneath it. A card with nothing to share now says nothing rather than
+     * grading the silence.
      */
-    const rich = gridCardContent({ sharedInterests: ['Techno'], sharedIntents: ['networking'], insideNow: true })
-    expect(rich.kind).toBe('interests')
+    const b = gridCardBox({ sharedInterests: ['Techno'] })
+    expect(JSON.stringify(b)).not.toContain('match')
   })
 })

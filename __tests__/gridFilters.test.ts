@@ -3,7 +3,6 @@ import {
   availableWorkFields,
   emptyReason,
   hasActiveFilters,
-  maxSharedInterests,
   NO_GRID_FILTERS,
 } from '../lib/gridFilters'
 
@@ -56,7 +55,7 @@ describe('filtering shows fewer, never different', () => {
      * rejected: the ranking already accounts for shared interests, so a second
      * ordering would disagree with the first about the same list.
      */
-    const out = applyGridFilters(ROOM, { workFields: ['Design'], minShared: 0 })
+    const out = applyGridFilters(ROOM, { workFields: ['Design'] })
     expect(out).toEqual([ROOM[0], ROOM[1]])
   })
 
@@ -71,24 +70,12 @@ describe('filtering shows fewer, never different', () => {
      * Keeping unknowns in every result would let you infer suppressed values by
      * watching who never disappears, whatever you tick.
      */
-    const out = applyGridFilters(ROOM, { workFields: ['Design'], minShared: 0 })
+    const out = applyGridFilters(ROOM, { workFields: ['Design'] })
     expect(out.some((p) => p.workField === null)).toBe(false)
   })
 
-  it('filters on overlap size', () => {
-    const out = applyGridFilters(ROOM, { workFields: [], minShared: 2 })
-    expect(out).toEqual([ROOM[0], ROOM[2]])
-  })
 
-  it('combines both as AND', () => {
-    const out = applyGridFilters(ROOM, { workFields: ['Design'], minShared: 2 })
-    expect(out).toEqual([ROOM[0]])
-  })
 
-  it('reports the best overlap in the room', () => {
-    expect(maxSharedInterests(ROOM)).toBe(3)
-    expect(maxSharedInterests([])).toBe(0)
-  })
 })
 
 describe('an empty screen says which kind of empty it is', () => {
@@ -98,7 +85,7 @@ describe('an empty screen says which kind of empty it is', () => {
      * when they filtered it themselves is the kind of small lie that makes
      * people stop trusting a screen.
      */
-    expect(emptyReason(5, 0, { workFields: ['Finance'], minShared: 2 })).toBe('filtered-out')
+    expect(emptyReason(5, 0, { workFields: ['Finance'] })).toBe('filtered-out')
     expect(emptyReason(0, 0, NO_GRID_FILTERS)).toBe('room-empty')
     expect(emptyReason(5, 0, NO_GRID_FILTERS)).toBe('room-empty')
   })
@@ -109,8 +96,7 @@ describe('an empty screen says which kind of empty it is', () => {
 
   it('knows when a clear affordance is needed', () => {
     expect(hasActiveFilters(NO_GRID_FILTERS)).toBe(false)
-    expect(hasActiveFilters({ workFields: [], minShared: 1 })).toBe(true)
-    expect(hasActiveFilters({ workFields: ['Design'], minShared: 0 })).toBe(true)
+    expect(hasActiveFilters({ workFields: ['Design'] })).toBe(true)
   })
 })
 

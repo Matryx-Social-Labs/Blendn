@@ -45,7 +45,7 @@ const ROOM: GridPerson[] = [
     age: 27,
     workField: 'Finance',
     sharedInterests: [],
-    sharedIntents: ['networking'],
+    sharedWorkField: true,
   },
   {
     userId: '1',
@@ -115,12 +115,15 @@ export default function GridPreview() {
           style={styles.chipRail}
           contentContainerStyle={styles.chipRow}
         >
+          {/*
+            "All" as a chip, not as the absence of a selection. A filter row
+            whose off-state is "nothing looks pressed" gives no way to see that
+            you are unfiltered and no obvious way back.
+          */}
           <Chip
-            label={`2+ shared`}
-            selected={filters.minShared > 0}
-            onPress={() =>
-              setFilters((f) => ({ ...f, minShared: f.minShared > 0 ? 0 : 2 }))
-            }
+            label="All"
+            selected={filters.workFields.length === 0}
+            onPress={() => setFilters(NO_GRID_FILTERS)}
           />
           {fields.map((field) => (
             <Chip

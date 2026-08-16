@@ -102,6 +102,14 @@ interface AttendeeProfile {
   interests?: string[]
   /** The shared subset only — "Both here to network". Never their full intent. */
   sharedIntents?: string[]
+  /**
+   * You are both in this field.
+   *
+   * `lib/matching.ts` has always computed it — it moves the ranking — and never
+   * returned it. "Design" under a name is an attribute; "You both work in
+   * Design" is a reason to walk over, from the same fact.
+   */
+  sharedWorkField?: boolean
   /** A label like "Design". Null in rooms under 8, where it would identify. */
   workField?: string | null
   profile_photos?: string[]
@@ -713,7 +721,7 @@ export default function Match({
       age: a.age,
       workField: a.workField,
       sharedInterests: a.interests,
-      sharedIntents: a.sharedIntents,
+      sharedWorkField: a.sharedWorkField,
       photo: a.profile_photos?.[0] ?? null,
       insideNow: a.insideNow,
       liked: likeStatusFor(a.youLiked, likeState[a.user_id]) === 'matched'
@@ -823,10 +831,15 @@ export default function Match({
             style={styles.chipRail}
             contentContainerStyle={styles.chipRow}
           >
+            {/*
+              "All" as a chip, not as the absence of a selection. A filter row
+              whose off-state is "nothing looks pressed" gives no way to see
+              that you are unfiltered and no obvious way back.
+            */}
             <Chip
-              label="2+ shared"
-              selected={filters.minShared > 0}
-              onPress={() => setFilters((f) => ({ ...f, minShared: f.minShared > 0 ? 0 : 2 }))}
+              label="All"
+              selected={filters.workFields.length === 0}
+              onPress={() => setFilters(NO_GRID_FILTERS)}
             />
             {workFields.map((field) => (
               <Chip
