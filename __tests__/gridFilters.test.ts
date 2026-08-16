@@ -113,3 +113,73 @@ describe('an empty screen says which kind of empty it is', () => {
     expect(hasActiveFilters({ workFields: ['Design'], minShared: 0 })).toBe(true)
   })
 })
+
+/**
+ * The screen, after the rebuild. Source assertions: the roster needs a check-in,
+ * a live socket and people in a room, none of which decides whether a network
+ * failure is drawn as an empty room.
+ */
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+const SCREEN = () =>
+  readFileSync(join(__dirname, '..', 'components', 'screens', 'MatchScreen.tsx'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+
+describe('the rebuilt Grid kept what the frame has no slot for', () => {
+  it('still offers report and block from the card', () => {
+    /*
+     * The rebuild dropped this and the lint caught it. Safety cannot get
+     * quietly further away: without it the fastest route to "this person is
+     * making me uncomfortable" goes from one tap to opening a profile and
+     * finding a menu.
+     */
+    expect(SCREEN()).toContain('onSafety={() => onSafetyPress(')
+  })
+
+  it('tells a failed load from an empty room', () => {
+    /*
+     * Identical once the list is empty, and not the same thing: one is "nobody
+     * is here", the other is "we could not find out". Telling somebody the room
+     * is empty when the network dropped is a lie they will act on.
+     */
+    const src = SCREEN()
+    expect(src).toContain('{loadError ? (')
+    expect(src).toContain('Could not load the room')
+  })
+
+  it('still announces people arriving', () => {
+    // The roster updates over the socket, so without this the list grows under
+    // your thumb and a new card is indistinguishable from one you scrolled past.
+    expect(SCREEN()).toContain('{newJoinsCount} just arrived')
+  })
+
+  it('filters without re-ranking', () => {
+    expect(SCREEN()).toContain('applyGridFilters(attendees, filters)')
+  })
+
+  it('does not re-probe the event room', () => {
+    /*
+     * `room.tsx` owns the chat segment and resolves the group when you switch to
+     * it. The effect here called `getEventChat` on every mount for a button this
+     * screen no longer has.
+     */
+    expect(SCREEN()).not.toContain('getEventChat')
+  })
+
+  it('never sends a filter to the server', () => {
+    /*
+     * The whole reason `lib/gridFilters.ts` exists: a `?workField=` param would
+     * narrow on the real column while the response still suppressed it, so one
+     * result would name a suppressed attribute by elimination.
+     *
+     * Asserted as "no query parameter", not "the word never appears" — the
+     * screen holds `workFields` in local state, which is exactly the safe thing.
+     */
+    const src = SCREEN()
+    expect(src).not.toMatch(/workField[s]?\s*[=:]\s*[`'"]/)
+    const fetches = src.match(/apiClient\.\w+\([^)]*\)/g) ?? []
+    expect(fetches.filter((f) => /workField|minShared/.test(f))).toEqual([])
+  })
+})

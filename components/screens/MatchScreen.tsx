@@ -1,315 +1,86 @@
-import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
-import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as Haptics from 'expo-haptics'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
-  FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import OptimizedImage from '../OptimizedImage'
+
+import { ConnectSheet } from '../grid/ConnectSheet'
+import { GridCard, type GridPerson } from '../grid/GridCard'
 import { ConnectionSheet } from '../match/ConnectionSheet'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
+import { apiClient } from '../../lib/apiClient'
+import { useGradientOverlay } from '../../lib/gradientOverlay'
 import {
-  likeAccessibilityLabel,
+  applyGridFilters,
+  availableWorkFields,
+  emptyReason,
+  hasActiveFilters,
+  NO_GRID_FILTERS,
+  type GridFilters,
+} from '../../lib/gridFilters'
+import {
   likeStateAfter,
   likeStatusFor,
   shouldSendLike,
   type LikeStatus,
 } from '../../lib/likes'
-import { intentSentence, matchBand, matchBandLabel, sharedInterestSentence } from '../../lib/matchBand'
-import { revealChipLabel } from '../../lib/reveal'
-import { apiClient } from '../../lib/apiClient'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
-import { useAuth } from '../../lib/useAuth'
 import {
   subscribeToEventCheckIn,
   subscribeToEventCheckOut,
   EventCheckInCallback,
-  EventCheckOutCallback
+  EventCheckOutCallback,
 } from '../../lib/socketClient'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
-import { APP_COLORS, EMBER } from '../../lib/theme'
-const placeholderImg = require('../../assets/images/icon.png')
-
-const { width } = Dimensions.get('window')
-
-// Memoized card components to prevent re-renders
-/**
- * The button that was missing.
- *
- * Sits on the card rather than behind "View dossier", because the mechanic only
- * works if liking is cheaper than deciding — a like that costs a screen
- * transition is one people ration, and rationing is the hesitation the product
- * exists to remove.
- *
- * Four states and no spinner. `sending` dims the heart it has already filled in
- * rather than replacing it, so the thing you just chose stays on screen for the
- * length of the round trip. A spinner here reads as "did that work?" on exactly
- * the tap that must feel free.
- */
-const LikeButton = memo(({
-  name,
-  status,
-  onPress,
-  size,
-}: {
-  name: string
-  status: LikeStatus
-  onPress: () => void
-  size: number
-}) => {
-  const matched = status === 'matched'
-  const liked = status === 'liked' || status === 'sending'
-  return (
-    <TouchableOpacity
-      style={[
-        styles.likeButton,
-        { width: size, height: size, borderRadius: size / 2 },
-        (liked || matched) && styles.likeButtonOn,
-        status === 'sending' && styles.likeButtonSending,
-      ]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: liked || matched, busy: status === 'sending' }}
-      accessibilityLabel={likeAccessibilityLabel(name, status)}
-      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-    >
-      <Ionicons
-        name={matched ? 'chatbubble' : liked ? 'heart' : 'heart-outline'}
-        size={Math.round(size * 0.45)}
-        color={matched || liked ? EMBER.onGradientChip : '#FFFFFF'}
-      />
-    </TouchableOpacity>
-  )
-})
-
-LikeButton.displayName = 'LikeButton'
-
-const SimilarCard = memo(({
-  attendee,
-  onOpenProfile,
-  onSafetyPress,
-  reasonLabel,
-  likeStatus,
-  onLike,
-}: {
-  attendee: AttendeeProfile
-  onOpenProfile: () => void
-  onSafetyPress: () => void
-  reasonLabel?: string
-  likeStatus: LikeStatus
-  onLike: () => void
-}) => {
-  const rawUrl = attendee.profile_photos?.[0] || ''
-
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return ''
-    const diffMs = Date.now() - new Date(iso).getTime()
-    const minutes = Math.max(0, Math.floor(diffMs / 60000))
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes} mins ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  return (
-    <View style={styles.similarCardWrap}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.similarCard}
-        onPress={onOpenProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
-      >
-        {rawUrl ? (
-          <OptimizedImage
-            source={rawUrl as any}
-            recyclingKey={rawUrl}
-            style={styles.similarImage as any}
-            contentFit="cover"
-            width={SIMILAR_CARD_WIDTH}
-            height={SIMILAR_CARD_HEIGHT}
-            quality={70}
-          />
-        ) : (
-          <Image source={placeholderImg} style={styles.similarImage} contentFit="cover" />
-        )}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.6)']}
-          style={styles.similarGradient}
-        />
-        <View style={styles.similarInfo}>
-          <Text style={styles.similarName} numberOfLines={1}>
-            {getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}
-          </Text>
-          {!!reasonLabel && (
-            <View style={styles.reasonPill}>
-              <Text style={styles.reasonPillText} numberOfLines={1}>{reasonLabel}</Text>
-            </View>
-          )}
-          <View style={styles.timeChip}>
-            <Text style={styles.timeChipText}>{attendeePresenceLabel(attendee, formatTimeAgo)}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.cardSafety}
-          onPress={onSafetyPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
-        >
-          <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFF" />
-        </TouchableOpacity>
-        <LikeButton
-          name={getDisplayName(attendee.name)}
-          status={likeStatus}
-          onPress={onLike}
-          size={40}
-        />
-      </TouchableOpacity>
-    </View>
-  )
-})
-
-SimilarCard.displayName = 'SimilarCard'
-
-
-const StartupItem = memo(({
-  attendee,
-  onOpenProfile,
-  onSafetyPress,
-  isRightColumn,
-  statusLabel,
-  likeStatus,
-  onLike,
-}: {
-  attendee: AttendeeProfile
-  onOpenProfile: () => void
-  onSafetyPress: () => void
-  isRightColumn?: boolean
-  statusLabel?: string
-  likeStatus: LikeStatus
-  onLike: () => void
-}) => {
-  const rawUrl = attendee.profile_photos?.[0] || ''
-  const cardWidth = GRID_ITEM_WIDTH
-  const cardHeight = GRID_ITEM_HEIGHT
-
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return ''
-    const diffMs = Date.now() - new Date(iso).getTime()
-    const minutes = Math.max(0, Math.floor(diffMs / 60000))
-    if (minutes < 1) return 'Just now'
-    if (minutes < 60) return `${minutes} mins ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  return (
-    <View
-      style={[
-        styles.gridItem,
-        { width: cardWidth, height: cardHeight, marginRight: isRightColumn ? 0 : GRID_GAP },
-      ]}
-    >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.gridTouch}
-        onPress={onOpenProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${getDisplayName(attendee.name)} profile`}
-      >
-        {rawUrl ? (
-          <OptimizedImage
-            source={rawUrl as any}
-            recyclingKey={rawUrl}
-            style={styles.gridImage as any}
-            contentFit="cover"
-            width={cardWidth}
-            height={cardHeight}
-            quality={60}
-          />
-        ) : (
-          <Image source={placeholderImg} style={styles.gridImage} contentFit="cover" />
-        )}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.gridGradient} />
-        <View style={styles.gridInfo}>
-          <Text style={styles.gridName} numberOfLines={1}>{getDisplayName(attendee.name)}{attendee.age ? `, ${attendee.age}` : ''}</Text>
-          {!!statusLabel && (
-            <View style={styles.gridStatusPill}>
-              <Text style={styles.gridStatusPillText} numberOfLines={1}>{statusLabel}</Text>
-            </View>
-          )}
-          <View style={[styles.timeChip, styles.timeChipCompact]}>
-            <Text style={styles.timeChipText}>{attendeePresenceLabel(attendee, formatTimeAgo)}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.gridSafety}
-          onPress={onSafetyPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Safety options for ${getDisplayName(attendee.name)}`}
-        >
-          <Ionicons name="ellipsis-horizontal" size={14} color="#FFFFFF" />
-        </TouchableOpacity>
-        <LikeButton
-          name={getDisplayName(attendee.name)}
-          status={likeStatus}
-          onPress={onLike}
-          size={34}
-        />
-      </TouchableOpacity>
-    </View>
-  )
-})
-
-StartupItem.displayName = 'StartupItem'
-// Figma base frame width for iPhone 16
-const BASE_FRAME_WIDTH = 393
-
-// Similar Interests cards are 163x260 at 393 width
-const SIMILAR_CARD_WIDTH = Math.round(width * (163 / BASE_FRAME_WIDTH))
-const SIMILAR_CARD_HEIGHT = Math.round(SIMILAR_CARD_WIDTH * (260 / 163))
-
-// Content spacing + grid sizing (2 columns)
-const CONTENT_SIDE_PADDING = 18
-const GRID_GAP = 12
-const gridContentWidth = Math.max(0, width - CONTENT_SIDE_PADDING * 2)
-const GRID_ITEM_WIDTH = Math.floor((gridContentWidth - GRID_GAP) / 2)
-const GRID_ITEM_HEIGHT = 160
 
 /**
- * A person in the room, as the MATCH endpoint describes them.
+ * The Grid — the matchmaking roster, once you are checked in. Frame `1141:4951`.
  *
- * `name` is a pseudonym unless they revealed for this event, and
- * `profile_photos` is empty unless they did. That rule is enforced server-side
- * inside `rankMatches`, not here, so no screen can forget it.
+ * ## What this replaced
  *
- * `interests` are shared-interest NAMES, already intersected with yours by the
- * server -- "you both picked Techno and Board games" is the whole card. It is
- * not their full interest list.
+ * Two sections: **Recommended**, the top five in a horizontal carousel, and
+ * **Also Here**, everyone else in a two-column grid of 160pt tiles. The frame
+ * has one vertical list.
+ *
+ * Collapsing them is right — `rankMatches` already orders the roster, so
+ * "Recommended" was the head of the same list under a second heading, and the
+ * carousel showed two of those five at a time. What it costs is scanning
+ * density: at 420pt a card, a room of forty is sixteen screens rather than
+ * four. **The filters are what make that acceptable**, which is why they are
+ * not a later nicety — you narrow, then read.
+ *
+ * ## Two actions, and they are not the same thing
+ *
+ *   Like     private, symmetric, stays pseudonymous
+ *   Connect  a message request, and it reveals your name and photo
+ *
+ * Both are on the card; the profile opens from the card body. See `GridCard`.
+ *
+ * ## Filtering never becomes a request parameter
+ *
+ * `workField` is null in rooms below eight people. A server-side filter would
+ * narrow on the real column while the response still suppressed it, so one
+ * result would name a suppressed attribute by elimination. Filtering the
+ * payload the client already holds cannot do that. See `lib/gridFilters.ts`.
  */
+
 interface AttendeeProfile {
   user_id: string
   name?: string
@@ -328,41 +99,6 @@ interface AttendeeProfile {
   /** You already liked them. The reverse is never disclosed. */
   youLiked?: boolean
 }
-
-/**
- * What the chip on a match card says.
- *
- * "Still here" beats "checked in 40 mins ago" on this screen, because the
- * question the user is actually asking is whether they can walk over now.
- *
- * Match cards carry `insideNow` from presence but no check-in time, so the old
- * time chip rendered empty against the match endpoint. Attendees added live
- * over the socket still carry a timestamp and nothing else, so both are
- * handled here rather than at two call sites that could drift.
- */
-function attendeePresenceLabel(
-  attendee: { insideNow?: boolean; last_seen?: string },
-  formatTimeAgo: (iso?: string) => string
-): string {
-  if (attendee.insideNow === true) return 'Still here'
-  if (attendee.insideNow === false) return ''
-  return formatTimeAgo(attendee.last_seen)
-}
-
-interface RecommendedEntry {
-  attendee: AttendeeProfile
-  reasonLabel: string
-}
-
-type EventRoomStatus = 'idle' | 'checking' | 'available' | 'unavailable'
-
-/*
- * `parseTimestamp` and `extractEventIdFromCheckin` moved to `lib/activeRoom.ts`
- * along with the loop that used them. They were untestable here — the suite has
- * no React Native testing library, so nothing inside a component file is
- * reachable from a test, and the loop shipped a bug that abandoned every
- * remaining check-in after one failure.
- */
 
 const getDisplayName = (name?: string) => {
   const normalized = String(name || '').trim()
@@ -494,13 +230,24 @@ export default function Match() {
     you: string
   } | null>(null)
 
+  /** Client-side, always. See `lib/gridFilters.ts` for why that is not optional. */
+  const [filters, setFilters] = useState<GridFilters>(NO_GRID_FILTERS)
+  /** Who the request composer is open for, so the disclosure can name them. */
+  const [connectTo, setConnectTo] = useState<AttendeeProfile | null>(null)
+  const [connectSending, setConnectSending] = useState(false)
+  /**
+   * Requests already sent this session.
+   *
+   * Never reset on failure: `@@unique([sender_id, recipient_id])` means a send
+   * can fail *because one already exists*, and re-offering the button would
+   * invite an attempt that can never succeed.
+   */
+  const [requested, setRequested] = useState<Record<string, boolean>>({})
+
   const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
-  const [similarIndex, setSimilarIndex] = useState(0)
-  const lastSimilarIndex = useRef(0)
   const contentOpacity = useRef(new Animated.Value(0)).current
   const contentTranslate = useRef(new Animated.Value(8)).current
-  const similarScrollX = useRef(new Animated.Value(0)).current
   const attendeeLoadIdRef = useRef(0)
   const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -512,10 +259,7 @@ export default function Match() {
    * props or state is read through a ref rather than closed over.
    */
   const authUserNameRef = useRef<string | null>(null)
-  const [openRoomPending, setOpenRoomPending] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [eventRoomStatus, setEventRoomStatus] = useState<EventRoomStatus>('idle')
-  const [eventRoomId, setEventRoomId] = useState<string | null>(null)
   /*
    * Whether *you* are named in this room, and what you would be named.
    *
@@ -524,22 +268,19 @@ export default function Match() {
    * preferences. Defaults to anonymous, which is both the server's default and
    * the safe thing to claim if the read fails.
    */
-  const [myRevealed, setMyRevealed] = useState(false)
-  const [myName, setMyName] = useState<string | null>(null)
-  const getSimilarItemLayout = useCallback(
-    /*
-     * `unknown` because this reads nothing but `index` — every row is the same
-     * fixed width. Naming one row type made the helper unusable on the other
-     * two lists that have identical geometry: the skeleton list of numbers and
-     * the recommended list. Three call sites, one measurement, no data.
-     */
-    (_: ArrayLike<unknown> | null | undefined, index: number) => ({
-      length: SIMILAR_CARD_WIDTH + 16,
-      offset: (SIMILAR_CARD_WIDTH + 16) * index,
-      index,
-    }),
-    []
-  )
+  /*
+   * The reveal state moved to `room.tsx`, which renders `RoomVisibilityBanner`
+   * above both segments -- being named in the chat is the same exposure as
+   * being named here, so one banner serves both. The setters stay because the
+   * effect below still writes them; the values are simply read one level up.
+   */
+  const [, setMyRevealed] = useState(false)
+  const [, setMyName] = useState<string | null>(null)
+  /*
+   * `getSimilarItemLayout` and `getLiftStyle` lived here for the horizontal
+   * Recommended carousel. The frame has one vertical list, so both went with it
+   * rather than being kept alive by a constant nothing measures.
+   */
 
   useEffect(() => {
     if (loading) {
@@ -562,25 +303,6 @@ export default function Match() {
     ]).start()
   }, [loading, contentOpacity, contentTranslate])
 
-  const getLiftStyle = useCallback(
-    (index: number) => {
-      const cardSpan = SIMILAR_CARD_WIDTH + 16
-      const inputRange = [(index - 1) * cardSpan, index * cardSpan, (index + 1) * cardSpan]
-      const scale = similarScrollX.interpolate({
-        inputRange,
-        outputRange: [0.98, 1, 0.98],
-        extrapolate: 'clamp',
-      })
-      const translateY = similarScrollX.interpolate({
-        inputRange,
-        outputRange: [2, 0, 2],
-        extrapolate: 'clamp',
-      })
-
-      return { transform: [{ translateY }, { scale }] }
-    },
-    [similarScrollX]
-  )
 
   useEffect(() => {
     eventInfoRef.current = eventInfo
@@ -894,89 +616,21 @@ export default function Match() {
     maxDisconnectedIntervalMs: 45000,
   })
 
-  useEffect(() => {
-    let mounted = true
-    const resolveRoom = async () => {
-      if (!eventInfo?.id) {
-        if (!mounted) return
-        setEventRoomStatus('idle')
-        setEventRoomId(null)
-        return
-      }
-      setEventRoomStatus('checking')
-      try {
-        const result = await apiClient.getEventChat(eventInfo.id)
-        if (!mounted) return
-        if (result.success && result.data?.chatGroupId) {
-          setEventRoomStatus('available')
-          setEventRoomId(String(result.data.chatGroupId))
-        } else {
-          setEventRoomStatus('unavailable')
-          setEventRoomId(null)
-        }
-      } catch {
-        if (!mounted) return
-        setEventRoomStatus('unavailable')
-        setEventRoomId(null)
-      }
-    }
-    resolveRoom()
-    return () => {
-      mounted = false
-    }
-  }, [eventInfo?.id])
+  /*
+   * The room-probe effect that lived here is gone with the button it fed.
+   *
+   * It called `getEventChat` on every mount to decide whether an "Open room"
+   * control should light up. `room.tsx` owns the chat segment now and resolves
+   * the group itself when you switch to it -- so this was a second request for
+   * the same fact, on a screen that no longer had anywhere to put the answer.
+   */
 
-  const openEventRoom = useCallback(async () => {
-    if (!eventInfo?.id) return
-    if (eventRoomStatus !== 'available') return
-    void Haptics.selectionAsync()
-    if (eventRoomId) {
-      router.push({
-        pathname: '/chat/[id]',
-        params: {
-          id: eventRoomId,
-          roomName: eventInfo.title || 'Event Chat',
-          eventTitle: eventInfo.title || 'Event',
-        } as any,
-      })
-      return
-    }
-    if (openRoomPending) return
-    setOpenRoomPending(true)
-    try {
-      const result = await apiClient.getEventChat(eventInfo.id)
-      if (result.success && result.data?.chatGroupId) {
-        setEventRoomStatus('available')
-        setEventRoomId(String(result.data.chatGroupId))
-        router.push({
-          pathname: '/chat/[id]',
-          params: {
-            id: String(result.data.chatGroupId),
-            roomName: result.data.chatGroupName || eventInfo.title || 'Event Chat',
-            eventTitle: eventInfo.title || 'Event',
-          } as any,
-        })
-      } else {
-        setEventRoomStatus('unavailable')
-        setEventRoomId(null)
-      }
-    } catch {
-      setEventRoomStatus('unavailable')
-      setEventRoomId(null)
-    } finally {
-      setOpenRoomPending(false)
-    }
-  }, [eventInfo?.id, eventInfo?.title, eventRoomId, eventRoomStatus, openRoomPending])
 
   const openUserProfile = useCallback((userId: string) => {
     void Haptics.selectionAsync()
     router.push({ pathname: '/user/[id]', params: { id: userId } as any })
   }, [])
 
-  const onBrowseEvents = useCallback(() => {
-    void Haptics.selectionAsync()
-    router.push('/(tabs)/events' as any)
-  }, [])
 
   const removeAttendeeFromFeed = useCallback((userId: string) => {
     setAttendees((prev) => prev.filter((a) => a.user_id !== userId))
@@ -991,501 +645,232 @@ export default function Match() {
     [removeAttendeeFromFeed]
   )
 
-  const onHeaderRefreshPress = useCallback(async () => {
-    if (!authUser) return
-    void Haptics.selectionAsync()
-    await loadActiveEventAndAttendees(authUser.id, true)
-  }, [authUser, loadActiveEventAndAttendees])
-
-  const recommendedEntries = useMemo(() => {
-    /*
-     * The server's order, kept.
-     *
-     * This used to re-sort with a local score, and every term in it was wrong:
-     *
-     *   points += shared * 12
-     *   if (attendee.bio) points += 6
-     *   if (attendee.profile_photos?.length) points += 8      // <- the bad one
-     *   points += max(0, 30 - minutesSince(last_seen) / 30)
-     *
-     * **The photo term promoted people who had revealed themselves.** A photo
-     * only reaches the client when `revealed` is true — the ranking nulls it
-     * otherwise — so `+8 for having a photo` is `+8 for not being anonymous`,
-     * in the one screen whose entire premise is that staying anonymous costs
-     * you nothing. It quietly inverted rule 2.
-     *
-     * The `last_seen` term scored zero for everyone, because the match card has
-     * never carried that field. And `shared * 12` recomputed an overlap the
-     * server had already computed, by lowercasing names and intersecting them —
-     * so it double-counted, and produced a different answer whenever a category
-     * name did not survive the round trip identically.
-     *
-     * Meanwhile the real ranking — IDF-weighted rarity, so two people who both
-     * picked "Modular synths" outrank two who both picked "Music", plus intent,
-     * presence and arrival recency — was being thrown away four lines after it
-     * arrived. The comment at the fetch site already said "no client-side
-     * sort"; this is the place that was doing it anyway.
-     *
-     * `slice(0, 5)` stays: the top of the list is a shelf, not the whole room.
-     */
-    return attendees.slice(0, 5).map((attendee): RecommendedEntry => {
-      /*
-       * `interests` is the *shared* set, already computed by the server, so its
-       * length is the count — no intersection needed, and no chance of
-       * disagreeing with what the sentence below says.
-       */
-      const shared = attendee.interests ?? []
-      const band = matchBand({ sharedInterests: shared, sharedIntents: attendee.sharedIntents ?? [] })
-
-      /*
-       * What the card actually says, in order of how much it tells you:
-       *
-       *  1. the overlap, named        — "You both picked Techno and Board games"
-       *  2. the shared intent         — "Both here to network"
-       *  3. their field of work       — "Works in design"
-       *  4. the band                  — "Worth saying hello"
-       *
-       * The old fallback was `'Popular nearby'`, which was a fabrication: it
-       * fired whenever there was no overlap *and* `last_seen` was stale, and
-       * `last_seen` is never populated — so it fired on every card with nothing
-       * in common, claiming a popularity the app does not measure. The band is
-       * the honest version, and `matchBandLabel('some')` is deliberately
-       * "Worth saying hello" rather than anything that reads as a failure.
-       */
-      const reasonLabel =
-        sharedInterestSentence({ sharedInterests: shared }) ??
-        intentSentence(attendee.sharedIntents) ??
-        (attendee.workField ? `Works in ${attendee.workField}` : null) ??
-        matchBandLabel(band)
-
-      return { attendee, reasonLabel }
-    })
-  }, [attendees])
-
-  const recommendedIds = useMemo(
-    () => new Set(recommendedEntries.map((entry) => entry.attendee.user_id)),
-    [recommendedEntries]
-  )
-
-  const alsoHereAttendees = useMemo(
-    () => attendees.filter((a) => !recommendedIds.has(a.user_id)).slice(0, 12),
-    [attendees, recommendedIds]
-  )
-
-  const recommendedKeyExtractor = useCallback((entry: RecommendedEntry) => `similar_${entry.attendee.user_id}`, [])
-  const alsoHereKeyExtractor = useCallback((attendee: AttendeeProfile) => `grid_${attendee.user_id}`, [])
-
-  const renderRecommendedItem = useCallback(
-    ({ item, index }: { item: RecommendedEntry; index: number }) => (
-      <Animated.View style={getLiftStyle(index)}>
-        <SimilarCard
-          attendee={item.attendee}
-          reasonLabel={item.reasonLabel}
-          onSafetyPress={() => onSafetyPress(item.attendee.name || 'User', item.attendee.user_id)}
-          onOpenProfile={() => openUserProfile(item.attendee.user_id)}
-          likeStatus={likeStatusFor(item.attendee.youLiked, likeState[item.attendee.user_id])}
-          onLike={() => handleLike(item.attendee)}
-        />
-      </Animated.View>
-    ),
-    [getLiftStyle, onSafetyPress, openUserProfile, likeState, handleLike]
-  )
-
-  const renderAlsoHereItem = useCallback(
-    ({ item: attendee, index }: { item: AttendeeProfile; index: number }) => (
-      <StartupItem
-        attendee={attendee}
-        statusLabel="Here now"
-        onSafetyPress={() => onSafetyPress(attendee.name || 'User', attendee.user_id)}
-        onOpenProfile={() => openUserProfile(attendee.user_id)}
-        isRightColumn={(index + 1) % 2 === 0}
-        likeStatus={likeStatusFor(attendee.youLiked, likeState[attendee.user_id])}
-        onLike={() => handleLike(attendee)}
-      />
-    ),
-    [onSafetyPress, openUserProfile, likeState, handleLike]
-  )
-
-  /**
-   * Four states, four answers.
-   *
-   * This rendered "Not Checked In Yet" for every one of them — including to
-   * somebody standing in the venue whose request had just failed. Each branch
-   * below is a different thing to tell the user and a different next action.
-   */
-  const renderEmptyState = useCallback(() => {
-    if (!authInitialized) {
-      return (
-        <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={APP_COLORS.textTertiary} />
-        </View>
-      )
-    }
-
-    if (!authUser) {
-      return (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyGlyph}>
-            <Ionicons name="person-outline" size={40} color={APP_COLORS.textTertiary} />
-          </View>
-          <Text style={styles.emptyTitle}>Sign in to see the room</Text>
-          <Text style={styles.emptyText}>
-            Matches are tied to the event you are checked in to.
-          </Text>
-        </View>
-      )
-    }
-
-    if (loadError) {
-      return (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyGlyph}>
-            <Ionicons name="cloud-offline-outline" size={40} color={APP_COLORS.textTertiary} />
-          </View>
-          <Text style={styles.emptyTitle}>Could not load the room</Text>
-          <Text style={styles.emptyText}>{loadError}</Text>
-          <TouchableOpacity
-            style={styles.eventsButton}
-            onPress={onPullToRefresh}
-            accessibilityRole="button"
-          >
-            <Text style={styles.eventsButtonText}>Try again</Text>
-          </TouchableOpacity>
-        </View>
-      )
-    }
-
-    return (
-      <View style={styles.emptyContainer}>
-        <View style={styles.emptyGlyph}>
-          <Ionicons name="location-outline" size={40} color={APP_COLORS.textTertiary} />
-        </View>
-        <Text style={styles.emptyTitle}>Not Checked In Yet</Text>
-        <Text style={styles.emptyText}>
-          Check in to an event to unlock recommendations and nearby attendees.
-        </Text>
-        <TouchableOpacity style={styles.eventsButton} onPress={onBrowseEvents}>
-          <Text style={styles.eventsButtonText}>Browse Events</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }, [authInitialized, authUser, loadError, onBrowseEvents, onPullToRefresh])
 
   /*
-   * Auth still restoring counts as loading. Otherwise the screen flashes
-   * "Sign in to see the room" at somebody who is signed in, every cold start,
-   * for as long as SecureStore takes.
+   * The roster, narrowed. Order is preserved -- `rankMatches` ranked this and a
+   * filter must not re-rank it.
    */
-  const isLoading = loading || !authInitialized
+  const workFields = useMemo(() => availableWorkFields(attendees), [attendees])
+  const shown = useMemo(() => applyGridFilters(attendees, filters), [attendees, filters])
+  const empty = emptyReason(attendees.length, shown.length, filters)
+
+  const toPerson = useCallback(
+    (a: AttendeeProfile): GridPerson => ({
+      userId: a.user_id,
+      name: getDisplayName(a.name),
+      age: a.age,
+      workField: a.workField,
+      sharedInterests: a.interests,
+      photo: a.profile_photos?.[0] ?? null,
+      insideNow: a.insideNow,
+      liked: likeStatusFor(a.youLiked, likeState[a.user_id]) === 'matched'
+        || likeState[a.user_id] === 'liked',
+      requested: !!requested[a.user_id],
+      pending: likeState[a.user_id] === 'sending',
+    }),
+    [likeState, requested]
+  )
+
+  /*
+   * Sending a request, which is the action that reveals you.
+   *
+   * Optimistic like the like is, and for the same reason -- but it does NOT roll
+   * back to "not requested" on failure. `@@unique([sender_id, recipient_id])`
+   * means a request can fail *because one already exists*, and offering the
+   * button again would invite a second attempt that can never succeed.
+   */
+  const sendConnect = useCallback(
+    async (message: string) => {
+      const target = connectTo
+      if (!target) return
+      setConnectSending(true)
+      try {
+        const result = await apiClient.createMessageRequest(target.user_id, message)
+        if (!result.success) {
+          Logger.warn('match', 'connect request failed', { error: result.error })
+        }
+        setRequested((prev) => ({ ...prev, [target.user_id]: true }))
+      } catch (e) {
+        Logger.error('match', 'connect request error', { error: e })
+        setRequested((prev) => ({ ...prev, [target.user_id]: true }))
+      } finally {
+        setConnectSending(false)
+        setConnectTo(null)
+      }
+    },
+    [connectTo]
+  )
+
+  if (!authInitialized || (loading && attendees.length === 0)) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.list}>
+          {[0, 1].map((i) => (
+            <SkeletonBlock key={i} width="100%" height={280} borderRadius={32} />
+          ))}
+        </View>
+      </View>
+    )
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <StatusBar style="light" />
+
       <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollBody}
-        onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
+        /*
+          Feeds the shared gradient overlay, the same way the Pulse and the
+          Banter do. Clamped to 0..1 here rather than in the overlay, so a short
+          list that cannot scroll reports 0 instead of a NaN from dividing by a
+          zero-height content area.
+        */
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+          const scrollable = contentSize.height - layoutMeasurement.height
+          setScrollProgress(scrollable > 0 ? Math.min(1, Math.max(0, contentOffset.y / scrollable)) : 0)
+        }}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onPullToRefresh}
-            tintColor="#FFFFFF"
-            progressBackgroundColor={APP_COLORS.backgroundElevated}
+            tintColor={EMBER.accent}
           />
         }
       >
-        <View style={[styles.headerGradient, { paddingTop: insets.top }]}>
-          <LinearGradient
-            colors={['#111214', APP_COLORS.backgroundBase]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.headerTitleText}>Blend&apos;n Match</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.headerRight}
-              onPress={onHeaderRefreshPress}
-              accessibilityRole="button"
-              accessibilityLabel="Refresh"
-            >
-              <Ionicons name="refresh" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/*
-          * Your own state, in the room, at a glance.
-          *
-          * Not who else has revealed — that turns a personal choice into a
-          * count and makes the last holdout visible, which
-          * `PLACEHOLDER_SCREENS.md` rules out. But a person is entitled to know
-          * whether the room can currently see their name, and not knowing is
-          * the state that makes people close the app.
-          *
-          * Tapping opens the per-event screen, carrying the current value so it
-          * does not have to be fetched to be shown correctly.
-          */}
-        {!!eventInfo && (
-          <TouchableOpacity
-            style={styles.revealChip}
-            onPress={() =>
-              router.push({
-                pathname: '/event-preferences/[eventId]',
-                params: { eventId: eventInfo.id, revealed: myRevealed ? '1' : '0' },
-              })
-            }
-            accessibilityRole="button"
-            accessibilityLabel={revealChipLabel(myRevealed, myName)}
+          Frame `1141:4966`. Horizontal, because the number of professions in a
+          room is unbounded and a wrapping row would push the first card off the
+          screen in a mixed crowd.
+
+          Hidden entirely when there is nothing to filter -- a control that can
+          only narrow to nothing is worse than no control.
+        */}
+        {/*
+          Somebody walked in while you were reading. The roster updates itself
+          over the socket, so without this the list silently grows under your
+          thumb and the new card is indistinguishable from one you scrolled
+          past. Clears itself after four seconds -- it is an announcement, not
+          a status.
+        */}
+        {newJoinsCount > 0 ? (
+          <View style={styles.joins} accessibilityLiveRegion="polite">
+            <Text style={styles.joinsLabel} maxFontSizeMultiplier={1.3}>
+              {newJoinsCount} just arrived
+            </Text>
+          </View>
+        ) : null}
+
+        {(workFields.length > 0 || attendees.length > 1) && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRail}
+            contentContainerStyle={styles.chipRow}
           >
-            <Ionicons
-              name={myRevealed ? 'eye-outline' : 'eye-off-outline'}
-              size={14}
-              color={APP_COLORS.textSecondary}
+            <Chip
+              label="2+ shared"
+              selected={filters.minShared > 0}
+              onPress={() => setFilters((f) => ({ ...f, minShared: f.minShared > 0 ? 0 : 2 }))}
             />
-            <Text style={styles.revealChipText} numberOfLines={1}>
-              {revealChipLabel(myRevealed, myName)}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <RealtimeStatusBanner status={socketStatus} style={styles.socketBanner} />
-        {newJoinsCount > 0 && !!eventInfo && (
-          <View style={styles.newJoinsPill}>
-            <View style={styles.newJoinsDot} />
-            <Text style={styles.newJoinsText}>
-              {newJoinsCount} new {newJoinsCount === 1 ? 'person' : 'people'} joined
-            </Text>
-          </View>
-        )}
-
-        {!!eventInfo && (
-          <View style={styles.liveRow}>
-            <View style={styles.liveTextWrap}>
-              <View style={styles.liveLabelRow}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveLabel}>Live at</Text>
-              </View>
-              <Text style={styles.liveTitle} numberOfLines={1}>
-                {eventInfo.title || 'Current Event'}
-              </Text>
-              <View style={styles.liveMetaRow}>
-                <View style={styles.liveCountPill}>
-                  <Text style={styles.liveCountText}>
-                    {attendees.length} {attendees.length === 1 ? 'person' : 'people'} here
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[styles.chatButton, (openRoomPending || eventRoomStatus !== 'available') && styles.chatButtonDisabled]}
-              onPress={openEventRoom}
-              activeOpacity={0.9}
-              disabled={openRoomPending || eventRoomStatus !== 'available'}
-            >
-              <Text style={styles.chatButtonText}>
-                {openRoomPending
-                  ? 'Opening...'
-                  : eventRoomStatus === 'checking'
-                    ? 'Loading Room...'
-                    : eventRoomStatus === 'available'
-                      ? 'Event Room'
-                      : 'Room Unavailable'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {isLoading ? (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Recommended</Text>
-              <View style={styles.sectionCountPill}>
-                <Text style={styles.sectionCountText}>0</Text>
-              </View>
-            </View>
-            <View style={styles.sectionDivider} />
-            <View style={styles.similarList}>
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={[...Array(5)].map((_, i) => i)}
-                keyExtractor={(item) => `sk-sim-${item}`}
-                getItemLayout={getSimilarItemLayout}
-                renderItem={() => (
-                  <SkeletonBlock width={SIMILAR_CARD_WIDTH} height={SIMILAR_CARD_HEIGHT} borderRadius={24} style={{ marginRight: 16 }} />
-                )}
+            {workFields.map((field) => (
+              <Chip
+                key={field}
+                label={field}
+                selected={filters.workFields.includes(field)}
+                onPress={() =>
+                  setFilters((f) => ({
+                    ...f,
+                    workFields: f.workFields.includes(field)
+                      ? f.workFields.filter((x) => x !== field)
+                      : [...f.workFields, field],
+                  }))
+                }
               />
-            </View>
-            <View style={styles.dotsRow}>
-              <View style={styles.dotLong} />
-              <View style={styles.dotSmall} />
-              <View style={styles.dotSmall} />
-            </View>
+            ))}
+          </ScrollView>
+        )}
 
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Also Here</Text>
-              <View style={styles.sectionCountPill}>
-                <Text style={styles.sectionCountText}>0</Text>
-              </View>
-            </View>
-            <View style={styles.sectionDivider} />
-            <View style={styles.gridWrap}>
-              {[...Array(8)].map((_, i) => (
-                <SkeletonBlock
-                  key={`sk-g-${i}`}
-                  width={GRID_ITEM_WIDTH}
-                  height={GRID_ITEM_HEIGHT}
-                  borderRadius={24}
-                  style={{ marginRight: (i % 2 === 0 ? GRID_GAP : 0), marginBottom: GRID_GAP }}
-                />
-              ))}
-            </View>
-          </>
-        ) : (
-          <Animated.View
-            style={[
-              styles.contentReveal,
-              { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] },
-            ]}
-          >
-            {!eventInfo ? (
-              renderEmptyState()
-            ) : attendees.length === 0 ? (
-        <View style={styles.noMoreContainer}>
-            <View style={styles.emptyGlyph}>
-              <Ionicons name="time-outline" size={36} color={APP_COLORS.textTertiary} />
-            </View>
-            <Text style={styles.noMoreTitle}>You&apos;re early!</Text>
-            <Text style={styles.noMoreText}>No other active attendees yet. We&apos;ll refresh this automatically.</Text>
-            <TouchableOpacity
-              style={[styles.eventsButton, (openRoomPending || eventRoomStatus !== 'available') && styles.eventsButtonDisabled]}
-              onPress={openEventRoom}
-              disabled={openRoomPending || eventRoomStatus !== 'available'}
+        {loadError ? (
+          /*
+           * A failed request and an empty room look identical once the list is
+           * empty, and they are not the same thing: one is "nobody is here",
+           * the other is "we could not find out". Telling somebody the room is
+           * empty when the network dropped is a lie they will act on.
+           */
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+              Could not load the room
+            </Text>
+            <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+              {loadError}
+            </Text>
+            <Pressable
+              onPress={onPullToRefresh}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
             >
-              <Text style={styles.eventsButtonText}>
-                {openRoomPending
-                  ? 'Opening...'
-                  : eventRoomStatus === 'checking'
-                    ? 'Loading Room...'
-                    : eventRoomStatus === 'available'
-                      ? 'Open Event Room'
-                      : 'Room Unavailable'}
-              </Text>
-            </TouchableOpacity>
-            {eventRoomStatus !== 'available' && (
-              <TouchableOpacity
-                style={styles.secondaryGhostButton}
-                onPress={onBrowseEvents}
-              >
-                <Text style={styles.secondaryGhostText}>Browse Events</Text>
-              </TouchableOpacity>
-            )}
+              <Text style={styles.clearLabel}>Try again</Text>
+            </Pressable>
           </View>
-            ) : (
-              <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Recommended</Text>
-                  <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{recommendedEntries.length}</Text>
-                  </View>
-                </View>
-                <View style={styles.sectionDivider} />
-                <Animated.FlatList
-                  data={recommendedEntries}
-                  keyExtractor={recommendedKeyExtractor}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.similarList}
-                  snapToInterval={SIMILAR_CARD_WIDTH + 16}
-                  decelerationRate="fast"
-                  getItemLayout={getSimilarItemLayout}
-                  removeClippedSubviews
-                  initialNumToRender={3}
-                  maxToRenderPerBatch={4}
-                  windowSize={5}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: similarScrollX } } }],
-                    {
-                      useNativeDriver: true,
-                      // Typed explicitly: `Animated.event` widens its listener
-                      // parameter to `unknown`, so the offset read below is an
-                      // error without it.
-                      listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-                        const x = e.nativeEvent.contentOffset.x || 0
-                        const idx = Math.round(x / (SIMILAR_CARD_WIDTH + 16))
-                        if (idx !== lastSimilarIndex.current) {
-                          lastSimilarIndex.current = idx
-                          setSimilarIndex(Math.max(0, idx))
-                        }
-                      },
-                    }
-                  )}
-                  scrollEventThrottle={16}
-                  renderItem={renderRecommendedItem}
-                />
-                <View style={styles.dotsRow}>
-                  <View style={[styles.dotLong, (similarIndex % 3) === 0 && styles.dotActive]} />
-                  <View style={[styles.dotSmall, (similarIndex % 3) === 1 && styles.dotActive]} />
-                  <View style={[styles.dotSmall, (similarIndex % 3) === 2 && styles.dotActive]} />
-                </View>
+        ) : empty ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+              {empty === 'filtered-out' ? 'Nobody here matches' : 'Nobody here yet'}
+            </Text>
+            <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+              {empty === 'filtered-out'
+                ? 'Try widening the filters — the room has people in it.'
+                : 'When people check in, they show up here.'}
+            </Text>
+            {hasActiveFilters(filters) ? (
+              <Pressable
+                onPress={() => setFilters(NO_GRID_FILTERS)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
+              >
+                <Text style={styles.clearLabel}>Clear filters</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {shown.map((attendee) => (
+              <GridCard
+                key={attendee.user_id}
+                person={toPerson(attendee)}
+                onOpenProfile={() => openUserProfile(attendee.user_id)}
+                onLike={() => handleLike(attendee)}
+                onConnect={() => setConnectTo(attendee)}
+                onSafety={() => onSafetyPress(getDisplayName(attendee.name), attendee.user_id)}
+              />
+            ))}
 
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Also Here</Text>
-                  {/*
-                    * How many we are showing, not "of how many".
-                    *
-                    * `/matches` is ranked, not paginated — it returns the top N
-                    * and no room total, so a denominator was never available.
-                    * `attendeesTotalCount` was set to the length of the first
-                    * page and then never moved, so this read "20/20" forever
-                    * and the button below counted down to a negative number.
-                    */}
-                  <View style={styles.sectionCountPill}>
-                    <Text style={styles.sectionCountText}>{alsoHereAttendees.length}</Text>
-                  </View>
-                </View>
-                <View style={styles.sectionDivider} />
-                <FlatList
-                  data={alsoHereAttendees}
-                  keyExtractor={alsoHereKeyExtractor}
-                  numColumns={2}
-                  scrollEnabled={false}
-                  removeClippedSubviews
-                  windowSize={5}
-                  initialNumToRender={8}
-                  maxToRenderPerBatch={6}
-                  contentContainerStyle={styles.gridListContent}
-                  columnWrapperStyle={styles.gridColumn}
-                  renderItem={renderAlsoHereItem}
-                />
-                {attendeesHasMore && (
-                  <TouchableOpacity
-                    style={styles.loadMoreButton}
-                    onPress={loadMoreAttendees}
-                    disabled={loadingMoreAttendees}
-                    accessibilityRole="button"
-                    accessibilityLabel="Load more attendees"
-                  >
-                    {loadingMoreAttendees ? (
-                      <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
-                    ) : (
-                      <Text style={styles.loadMoreText}>Load More</Text>
-                    )}
-                  </TouchableOpacity>
+            {attendeesHasMore ? (
+              <Pressable
+                onPress={loadMoreAttendees}
+                disabled={loadingMoreAttendees}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.more, pressed && styles.pressed]}
+              >
+                {loadingMoreAttendees ? (
+                  <ActivityIndicator color={EMBER.accent} />
+                ) : (
+                  <Text style={styles.moreLabel}>Show more</Text>
                 )}
-              </>
-            )}
-          </Animated.View>
+              </Pressable>
+            ) : null}
+          </View>
         )}
       </ScrollView>
+
+      <RealtimeStatusBanner status={socketStatus} />
+
       {/*
-        Frame `1141:5389`, as a sheet. Pseudonymous by decision: at the instant
-        of a match neither person has a photo (`rankMatches` sends none for
-        anyone unrevealed) and neither has a real name.
+        The moment a like turns mutual. Both pseudonyms ride down with the like
+        response, so this paints without fetching the conversation first.
       */}
       <ConnectionSheet
         visible={!!connection}
@@ -1501,522 +886,137 @@ export default function Match() {
               conversationId: open.conversationId,
               otherUserName: open.them,
               otherUserId: open.userId,
-            } as any,
+            } as never,
           })
         }}
         onDismiss={() => setConnection(null)}
+      />
+
+      {/*
+        The request composer. `displayName` is whatever the roster calls them --
+        the pseudonym until they reveal -- because the sheet's disclosure names
+        them, and naming an unrevealed person with a real name is the identity
+        gate's mistake made in prose.
+      */}
+      <ConnectSheet
+        visible={!!connectTo}
+        displayName={connectTo ? getDisplayName(connectTo.name) : ''}
+        theyAreRevealed={!!connectTo?.profile_photos?.length}
+        sending={connectSending}
+        onSend={sendConnect}
+        onDismiss={() => setConnectTo(null)}
       />
     </SafeAreaView>
   )
 }
 
+/** One filter chip. Frame `1141:4969`: px24 py8, radius full. */
+function Chip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string
+  selected: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={() => {
+        void Haptics.selectionAsync()
+        onPress()
+      }}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${label} filter`}
+      style={({ pressed }) => [styles.chip, selected && styles.chipOn, pressed && styles.pressed]}
+    >
+      <Text style={[styles.chipLabel, selected && styles.chipLabelOn]} maxFontSizeMultiplier={1.3}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: APP_COLORS.backgroundBase,
-  },
-  headerGradient: {
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 14,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitleText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-    letterSpacing: 0.1,
-  },
-  headerRight: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
+  container: { flex: 1, backgroundColor: EMBER.bg },
+  scroll: { gap: 24, paddingTop: 16 },
+  pressed: { opacity: 0.7 },
+
+  chipRail: { marginHorizontal: -12 },
+  chipRow: { gap: 8, paddingHorizontal: 24 },
+  chip: {
+    paddingHorizontal: 24,
+    paddingVertical: 9,
+    borderRadius: 9999,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'transparent',
   },
-  scrollBody: {
-    paddingBottom: 40,
+  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.accent },
+  chipLabel: {
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textSecondary,
   },
-  contentReveal: {
-    paddingBottom: 4,
-  },
-  liveRow: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  revealChip: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    marginHorizontal: 16,
+  chipLabelOn: { color: EMBER.accent, fontFamily: EMBER_FONTS.bodyBold },
+
+  // Frame `1141:4977`: 12pt gutter, cards 24 apart.
+  list: { paddingHorizontal: 12, gap: 24 },
+
+  more: {
     marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  revealChipText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 13,
-  },
-  socketBanner: {
-    marginHorizontal: 18,
-    marginTop: 10,
-  },
-  newJoinsPill: {
-    marginHorizontal: 18,
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(52,199,89,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(52,199,89,0.3)',
-  },
-  newJoinsDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-    backgroundColor: '#34C759',
-  },
-  newJoinsText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  liveTextWrap: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  liveLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#34C759',
-  },
-  liveLabel: {
-    color: APP_COLORS.textTertiary,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  liveTitle: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  liveMetaRow: {
-    marginTop: 6,
-    flexDirection: 'row',
+    paddingVertical: 16,
+    borderRadius: 9999,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
   },
-  liveCountPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+  moreLabel: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textPrimary,
   },
-  liveCountText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  joins: {
+    alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    backgroundColor: EMBER.surface,
   },
-  chatButtonText: {
-    color: APP_COLORS.textPrimary,
+  joinsLabel: {
+    fontFamily: EMBER_FONTS.bodyBold,
     fontSize: 13,
-    fontWeight: '600',
+    lineHeight: 18,
+    color: EMBER.accent,
   },
-  chatButtonDisabled: {
-    opacity: 0.55,
-  },
-  sectionTitle: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 16,
-    marginBottom: 9,
-    letterSpacing: 0.1,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-  },
-  sectionCountPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  sectionCountText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  sectionDivider: {
-    height: 1,
-    marginHorizontal: 18,
-    backgroundColor: APP_COLORS.separator,
-    marginBottom: 6,
-  },
-  similarList: {
-    paddingHorizontal: 18,
-    paddingBottom: 8,
-  },
-  similarCardWrap: {
-    width: SIMILAR_CARD_WIDTH,
-    height: SIMILAR_CARD_HEIGHT,
-    marginRight: 16,
-  },
-  similarCard: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  similarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  similarGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
-  },
-  similarInfo: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 12,
-  },
-  reasonPill: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginBottom: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: 'rgba(10,132,255,0.2)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  reasonPillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  similarName: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  timeChip: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(28,28,30,0.74)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  timeChipCompact: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  timeChipText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  /*
-   * Bottom-right, opposite the safety control top-right.
-   *
-   * Deliberately far from it: one of these two is "I would like to meet this
-   * person" and the other is "report or block them", and a mis-tap between
-   * adjacent buttons would be the worst possible one in this app.
-   */
-  likeButton: {
-    position: 'absolute',
-    right: 10,
-    bottom: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  likeButtonOn: {
-    backgroundColor: EMBER.gradientFrom,
-    borderColor: EMBER.gradientTo,
-  },
-  // Dimmed, not replaced by a spinner. The heart is already filled in, and
-  // swapping it mid-write makes the thing you just chose disappear for the
-  // length of a round trip on the tap that most needs to feel free.
-  likeButtonSending: { opacity: 0.6 },
-  cardSafety: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.72)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  dotLong: {
-    width: Math.round(width * (60 / BASE_FRAME_WIDTH)),
-    height: 6,
-    borderRadius: 11,
-    backgroundColor: 'rgba(235,235,245,0.34)',
-    marginHorizontal: 7,
-  },
-  dotSmall: {
-    width: Math.round(width * (7 / BASE_FRAME_WIDTH)),
-    height: 6,
-    borderRadius: 9,
-    backgroundColor: 'rgba(235,235,245,0.34)',
-    marginHorizontal: 7,
-  },
-  dotActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  gridWrap: {
-    paddingHorizontal: CONTENT_SIDE_PADDING,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  gridListContent: {
-    paddingHorizontal: CONTENT_SIDE_PADDING,
-  },
-  gridColumn: {
-    justifyContent: 'space-between',
-  },
-  loadMoreButton: {
-    marginHorizontal: CONTENT_SIDE_PADDING,
-    marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-  },
-  loadMoreText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: APP_COLORS.textSecondary,
-  },
-  gridItem: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: GRID_GAP,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  gridTouch: {
-    flex: 1,
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gridGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
-  },
-  gridInfo: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    bottom: 8,
-  },
-  gridStatusPill: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginBottom: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(10,132,255,0.22)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.24)',
-  },
-  gridStatusPillText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  gridName: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  gridSafety: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.72)',
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-  },
-  noMoreContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  noMoreTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: APP_COLORS.textPrimary,
-    marginBottom: 12,
-    letterSpacing: 0.2,
-  },
-  noMoreText: {
-    fontSize: 16,
-    color: APP_COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 30,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyGlyph: {
-    width: 84,
-    height: 84,
-    borderRadius: 24,
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    marginBottom: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
+  empty: { paddingHorizontal: 24, paddingTop: 48, gap: 8, alignItems: 'flex-start' },
   emptyTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: APP_COLORS.textPrimary,
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 0.2,
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 20,
+    lineHeight: 28,
+    color: EMBER.textPrimary,
   },
-  emptyText: {
-    fontSize: 16,
-    color: APP_COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 40,
-  },
-  eventsButton: {
-    backgroundColor: APP_COLORS.accent,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  eventsButtonDisabled: {
-    opacity: 0.58,
-  },
-  eventsButtonText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryGhostButton: {
-    marginTop: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: APP_COLORS.separator,
-    backgroundColor: APP_COLORS.backgroundElevated,
-  },
-  secondaryGhostText: {
-    color: APP_COLORS.textSecondary,
+  emptyBody: {
+    fontFamily: EMBER_FONTS.bodyRegular,
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 20,
+    color: EMBER.textSecondary,
   },
-}) 
+  clear: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 9999,
+    backgroundColor: EMBER.surface,
+  },
+  clearLabel: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textPrimary,
+  },
+})

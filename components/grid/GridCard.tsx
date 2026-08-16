@@ -86,6 +86,7 @@ export function GridCard({
   onOpenProfile,
   onLike,
   onConnect,
+  onSafety,
 }: {
   person: GridPerson
   onOpenProfile: () => void
@@ -93,6 +94,8 @@ export function GridCard({
   onLike: () => void
   /** Opens the composer. Sending reveals you — see `ConnectSheet`. */
   onConnect: () => void
+  /** Report and block. Never optional — see below. */
+  onSafety: () => void
 }) {
   const mark = pseudonymAvatar(person.name)
   const shared = person.sharedInterests ?? []
@@ -112,6 +115,28 @@ export function GridCard({
       end={{ x: 0.85, y: 1 }}
       style={styles.card}
     >
+      {/*
+        Report and block.
+        
+        The frame puts "FEATURED" in this corner and nothing is featured, so the
+        slot was free. It is used for safety rather than left empty because the
+        rebuild otherwise dropped the old card's safety control, and the fastest
+        route to "this person is making me uncomfortable" would have gone from
+        one tap here to opening a profile and finding a menu.
+        
+        Low contrast on purpose: always reachable, never the thing your eye
+        lands on.
+      */}
+      <Pressable
+        onPress={onSafety}
+        accessibilityRole="button"
+        accessibilityLabel={`Report or block ${person.name}`}
+        hitSlop={12}
+        style={({ pressed }) => [styles.safety, pressed && styles.pressed]}
+      >
+        <MaterialIcons name="more-horiz" size={20} color={EMBER.textTertiary} />
+      </Pressable>
+
       <View style={styles.head}>
         <View>
           {person.photo ? (
@@ -274,6 +299,17 @@ const styles = StyleSheet.create({
 
   // Frame `1141:4978`: radius 32, p32.
   card: { borderRadius: 32, padding: 32, gap: 24, overflow: 'hidden' },
+  // Frame `1141:4979`'s corner, p16 from the edge.
+  safety: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
 
   // Frame `1141:4982`: gap 24.
   head: { flexDirection: 'row', gap: 24, alignItems: 'center' },

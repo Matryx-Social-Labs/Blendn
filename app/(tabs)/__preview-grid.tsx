@@ -142,6 +142,7 @@ export default function GridPreview() {
                 person={person}
                 onOpenProfile={() => {}}
                 onLike={() => {}}
+                onSafety={() => {}}
                 onConnect={() => setConnectTo(person)}
               />
             ))}
