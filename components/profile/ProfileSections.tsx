@@ -305,7 +305,7 @@ export function ProfileGallery({
 }
 
 /**
- * The action — frame `1141:5237`, but at the foot of the page rather than
+ * The two actions — frame `1141:5237`, at the foot of the page rather than
  * floating over it.
  *
  * ## Why it does not float
@@ -326,52 +326,107 @@ export function ProfileGallery({
  * like, so anyone who does not need to read can act without ever opening this.
  * Reaching the bottom of a profile *is* the signal that you read enough.
  *
- * ## One button, not the frame's two
+ * ## Two, but not the frame's two
  *
- * The frame has **Connect** and **Appreciate**. Nothing in the product
- * appreciates a profile, and the like that does exist is the match mechanic on
- * the grid — a different gesture with a different meaning. A second button that
- * does nothing, or that silently means "like", is worse than the gap.
- * See `docs/PROFILE.md`.
+ * The frame has **Connect** and **Appreciate**. Nothing appreciates a profile,
+ * so that one is not built (`docs/PROFILE.md`). What takes the second slot is
+ * the same pair the Grid card carries, because they are the same two things and
+ * arriving here should not change what they mean:
  *
- * The label is the relationship: Connect, Requested, or Message.
+ *   Like     private, symmetric, stays pseudonymous
+ *   Connect  a message request, and it reveals your name and photo
+ *
+ * Like keeps the gradient here too. The safe, reversible action is the easy one
+ * on every surface — a button that publishes your identity should not be the
+ * prettiest thing on two different screens.
+ *
+ * **Like needs an event.** `event_likes` is keyed on one, so it is offered only
+ * when the caller knows which room you met in. Opened from a notification or the
+ * Banter there is no such context, and the button is absent rather than broken.
  */
 export function ProfileActions({
+  name,
   label,
   onPress,
   disabled,
   hint,
+  liked,
+  likeBusy,
+  onLike,
   style,
 }: {
+  /** Theirs, as the server resolved it. Used in the spoken labels. */
+  name: string
+  /** Connect, Requested, or Message — the relationship. */
   label: string
   onPress: () => void
   disabled?: boolean
   /** The line under it — "Request pending", "You are connected". */
   hint?: string | null
+  liked?: boolean
+  likeBusy?: boolean
+  /** Absent when there is no event to like within. */
+  onLike?: () => void
   style?: StyleProp<ViewStyle>
 }) {
   return (
     <View style={[styles.actionsWrap, style]}>
       <View style={styles.actionsPill}>
+        {onLike ? (
+          <Pressable
+            onPress={onLike}
+            disabled={liked || likeBusy}
+            accessibilityRole="button"
+            accessibilityLabel={
+              liked
+                ? `You liked ${name}`
+                : `Like ${name}. They are only told if they like you back`
+            }
+            accessibilityState={{ disabled: !!(liked || likeBusy) }}
+            style={({ pressed }) => [
+              styles.actionButton,
+              liked && styles.actionLiked,
+              (pressed || likeBusy) && styles.pressed,
+            ]}
+          >
+            {liked ? (
+              <Text style={styles.actionLikedLabel} maxFontSizeMultiplier={1.3}>
+                Liked
+              </Text>
+            ) : (
+              <>
+                <LinearGradient
+                  colors={[...EMBER_GRADIENT.colors]}
+                  start={EMBER_GRADIENT.start}
+                  end={EMBER_GRADIENT.end}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Text style={styles.actionLabel} maxFontSizeMultiplier={1.3}>
+                  Like
+                </Text>
+              </>
+            )}
+          </Pressable>
+        ) : null}
+
         <Pressable
           onPress={onPress}
           disabled={disabled}
           accessibilityRole="button"
-          accessibilityLabel={label}
+          accessibilityLabel={
+            label === 'Connect'
+              ? `Connect with ${name}. Sends a message and shows them your name and photo`
+              : label
+          }
           accessibilityState={{ disabled: !!disabled }}
           accessibilityHint={hint ?? undefined}
           style={({ pressed }) => [
             styles.actionButton,
+            styles.actionSecondary,
             (pressed || disabled) && styles.pressed,
           ]}
         >
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={styles.actionLabel} maxFontSizeMultiplier={1.3}>
+          <Text style={styles.actionSecondaryLabel} maxFontSizeMultiplier={1.3}>
             {label}
           </Text>
         </Pressable>
@@ -498,6 +553,8 @@ const styles = StyleSheet.create({
   actionsPill: {
     flexDirection: 'row',
     gap: 12,
+    alignSelf: 'stretch',
+    marginHorizontal: PROFILE_GUTTER,
     padding: 8,
     borderRadius: 9999,
     backgroundColor: 'rgba(45,44,44,0.9)',
@@ -509,6 +566,7 @@ const styles = StyleSheet.create({
   },
   // Frame `1141:5239`: px32 py16.
   actionButton: {
+    flex: 1,
     minHeight: 60,
     paddingHorizontal: 32,
     paddingVertical: 16,
@@ -522,6 +580,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 28,
     color: EMBER.onGradient,
+    textAlign: 'center',
+  },
+  actionSecondary: { backgroundColor: EMBER.surface },
+  actionSecondaryLabel: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 18,
+    lineHeight: 28,
+    color: EMBER.textPrimary,
+    textAlign: 'center',
+  },
+  actionLiked: { backgroundColor: EMBER.surfaceSunken },
+  actionLikedLabel: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 18,
+    lineHeight: 28,
+    color: EMBER.accent,
     textAlign: 'center',
   },
 })
