@@ -77,10 +77,22 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
         end={EMBER_GRADIENT.end}
         style={styles.button}
       >
+        {/*
+          The label is capped because this button is a fixed
+          `EMBER_CONTROL_HEIGHT` box. React Native clips a glyph to its line
+          height rather than letting it overflow, so at Accessibility XXXL an
+          uncapped label renders as a row of sliced letterforms inside a button
+          that is still 64pt tall. 1.3 is the largest step that fits.
+
+          Text in a *growing* container is deliberately left alone — capping
+          everything would defeat the setting for the people who need it.
+        */}
         {busy ? (
           <ActivityIndicator color={EMBER.onGradient} />
         ) : (
-          <Text style={styles.buttonLabel}>{label}</Text>
+          <Text style={styles.buttonLabel} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+            {label}
+          </Text>
         )}
       </LinearGradient>
     </Pressable>
@@ -97,7 +109,9 @@ export function EmberSecondaryButton({ label, onPress, disabled }: ButtonProps) 
       accessibilityLabel={label}
       style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
     >
-      <Text style={styles.secondaryLabel}>{label}</Text>
+      <Text style={styles.secondaryLabel} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+        {label}
+      </Text>
     </Pressable>
   )
 }
@@ -298,6 +312,13 @@ export const EmberField = forwardRef<TextInput, FieldProps>(function EmberField(
       {compact ? null : <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text>}
       <TextInput
         ref={ref}
+        /*
+         * Capped for the same reason as the buttons: `styles.input` is a fixed
+         * `EMBER_CONTROL_HEIGHT` box, so scaled text is clipped rather than
+         * given room. A field whose value is half-visible is worse than one
+         * whose text is a size smaller — you cannot check what you typed.
+         */
+        maxFontSizeMultiplier={1.3}
         accessibilityLabel={label}
         placeholderTextColor={EMBER.textPlaceholder}
         style={[styles.input, compact ? styles.inputCompact : null, style]}

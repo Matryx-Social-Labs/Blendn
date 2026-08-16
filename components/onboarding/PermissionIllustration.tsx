@@ -49,7 +49,9 @@ const YOU_ART = require('../../assets/onboarding/you.jpg')
 /** The moon, with a sample notification laid over it. */
 export function NotificationIllustration() {
   return (
-    <View style={styles.card}>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants" style={styles.card}>
       <Image source={NOTIFICATION_ART} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
       {/* Bottom-to-top scrim so the card reads against a bright patch of art. */}
       <LinearGradient
@@ -90,7 +92,9 @@ export function NotificationIllustration() {
  */
 export function LocationIllustration() {
   return (
-    <View style={styles.card}>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants" style={styles.card}>
       {/*
         The map sits at 40% opacity in the frame, which is what stops it
         competing with the pins on top of it.

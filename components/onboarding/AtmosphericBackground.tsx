@@ -90,7 +90,20 @@ const COOL = { width: 117, height: 333.59 }
 
 export function AtmosphericBackground() {
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    /*
+      Hidden from the accessibility tree, not just from touches.
+
+      These are decorative glow shells behind every onboarding page —
+      `pointerEvents="none"` already keeps them out of the way of a finger, and
+      it does nothing at all for VoiceOver, which would otherwise walk a stack
+      of empty `View`s before reaching the question being asked.
+    */
+    <View
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       {/* Positioned exactly as the frame has them, bleeding off both edges. */}
       <View style={{ position: 'absolute', left: -42.9, top: -122.31, ...WARM }}>
         {shells(WARM, 60, EMBER.gradientFrom).map((s) => (
