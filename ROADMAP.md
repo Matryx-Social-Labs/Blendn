@@ -401,6 +401,31 @@ toggle, so the binding is less trivial.
 
 Only three cards, so the second matters less than it reads.
 
+### Next — why the Pulse's load cascade runs seventeen times
+
+`useWhyRender` and a `mounts` counter (#216) turned the vague "sixty commits"
+into a specific open question. **Six state objects change identity together,
+seventeen times in one visit** — `events`, `checkinStatuses`, `proximityData`,
+`interestStatuses`, `interestCounts`, `checkedInEvents`. Together because
+`fetchEvents` sets five of them after one `await` and React batches them; the
+sixth follows from the `[userLocation, events]` proximity effect.
+
+So the question is not which six things are wrong. It is why the cascade runs
+seventeen times when `fetchEvents` has four call sites and the fetch effect's
+own deps, probed directly, changed **once**.
+
+Five hypotheses are **disproved** and must not be re-tread — batched `setState`
+loops, the JS scroll handler, `setScrollProgress`, an unstable `filters` dep
+(it is `useState`), `useLiveSync` restarting on a new `onSync` (it refs the
+callback), and the screen remounting (`mounts=0`; every commit is an update).
+The remaining call sites are `onSync`'s poller, the location effect at
+`events.tsx:1552`, and the two retry buttons.
+
+**The 60/627ms baseline was two visits.** The recorded walk is
+`Pulse → Scene → Pulse → …`; a single visit is 27 commits / 257ms. It was read
+as a runaway loop and chased as one for an afternoon. `docs/PERFORMANCE.md`
+now says to compare a walk only against the same walk.
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",
