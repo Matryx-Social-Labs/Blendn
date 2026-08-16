@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
@@ -61,7 +62,7 @@ interface Props {
   onToggleFavorite?: () => void
 }
 
-export function UpcomingCard({
+function UpcomingCardImpl({
   title,
   category,
   imageUrl,
@@ -246,3 +247,15 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.7 },
 })
+
+/**
+ * Memoised, and the props it is given were made stable for it.
+ *
+ * Three of these sit under the Featured carousel, each with a 318x165 image.
+ *
+ * `memo` alone would have bought nothing: `renderItem` built a fresh
+ * `feedPlaylist(...)` array and a fresh `onPress` closure per card per render,
+ * so the shallow compare failed every time. `featuredCards` in
+ * `app/(tabs)/events.tsx` precomputes both, which is what makes this work.
+ */
+export const UpcomingCard = memo(UpcomingCardImpl)

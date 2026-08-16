@@ -380,6 +380,27 @@ They now assert per-field occurrences across both paths, plus a guard that there
 are still exactly two maps, since a third would quietly turn ">= 2" back into
 "somewhere".
 
+### Next — the Pulse's two remaining render costs
+
+Found by the render audit that produced the Featured carousel fix. Both are real
+and neither was done, because each is a bigger change than it looks:
+
+**`renderEventItem` re-renders the whole main list on any check-in change.** Its
+`useCallback` closes over `checkinStatuses`, `proximityData` and
+`interestStatuses` — three maps that change whenever anybody checks in, moves, or
+taps a heart. Every change gives `renderItem` a new identity, so `FlatList`
+re-renders every mounted row. The fix is to pass each row only its own slice, or
+to move the lookup inside a memoised row component, which means changing
+`EventCard`'s contract.
+
+**`UpcomingCard` is memoised and the memo cannot bite.** It is rendered from a
+plain `.map()` with inline `onPress` and `onToggleFavorite` closures, so the
+shallow compare fails every render. Same fix as the Featured carousel —
+precompute the props in a `useMemo` — but the callbacks take an event *and* a
+toggle, so the binding is less trivial.
+
+Only three cards, so the second matters less than it reads.
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",

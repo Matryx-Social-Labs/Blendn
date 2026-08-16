@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -217,7 +218,7 @@ interface Props {
   onPress: () => void
 }
 
-export function FeaturedCard({
+function FeaturedCardImpl({
   title,
   tag,
   playlist = [],
@@ -374,3 +375,16 @@ const styles = StyleSheet.create({
   metaItemFlexible: { flexShrink: 1 },
   metaText: { ...EMBER_TYPE.meta, flexShrink: 1 },
 })
+
+/**
+ * Memoised, and the props it is given were made stable for it.
+ *
+ * The most expensive component on the Pulse: a full-bleed hero carrying
+ * images and, when the organiser uploaded one, a video player.
+ *
+ * `memo` alone would have bought nothing: `renderItem` built a fresh
+ * `feedPlaylist(...)` array and a fresh `onPress` closure per card per render,
+ * so the shallow compare failed every time. `featuredCards` in
+ * `app/(tabs)/events.tsx` precomputes both, which is what makes this work.
+ */
+export const FeaturedCard = memo(FeaturedCardImpl)

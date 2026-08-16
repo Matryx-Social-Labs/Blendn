@@ -191,6 +191,10 @@ const normalizeEvent = (event: Event): Event => ({
   display_city: resolveDisplayCity(event),
 })
 
+/** Stable identities for the Featured carousel — see `featuredCards`. */
+const featuredKeyExtractor = (item: { id: string }) => `feat-${item.id}`
+const FeaturedSeparator = () => <View style={{ width: FEATURED_CARD_GAP }} />
+
 const getFirstName = (value?: string | null): string | null => {
   if (!value) return null
   const trimmed = value.trim()
@@ -1752,8 +1756,8 @@ export default function Events() {
         ) : (
           <FlatList
             horizontal
-            data={featuredItems}
-            keyExtractor={(item, idx) => `feat-${item.id}-${idx}`}
+            data={featuredCards}
+            keyExtractor={featuredKeyExtractor}
             showsHorizontalScrollIndicator={false}
             /*
               Full-bleed, then inset by the row's own 24.
@@ -1779,17 +1783,19 @@ export default function Events() {
             renderItem={({ item, index }) => (
               <FeaturedCard
                 title={item.title}
-                tag={item.category || null}
-                playlist={feedPlaylist(item.media, item.cover_image_url)}
+                tag={item.tag}
+                playlist={item.playlist}
                 isActive={index === featuredActiveIndex}
-                dateLabel={featuredDateLabel(item.start_time)}
-                placeLabel={placeLabel(item)}
-                accentIndex={index}
+                dateLabel={item.dateLabel}
+                placeLabel={item.placeLabel}
+                accentIndex={item.accentIndex}
                 width={featured.width}
-                onPress={() => handleEventPress(item)}
+                onPress={item.onPress}
               />
             )}
-            ItemSeparatorComponent={() => <View style={{ width: FEATURED_CARD_GAP }} />}
+            // Hoisted: an inline component is a new type every render, which
+            // remounts every separator rather than reusing them.
+            ItemSeparatorComponent={FeaturedSeparator}
           />
         )}
       </View>
@@ -1994,6 +2000,34 @@ export default function Events() {
     () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
     [upcomingItems]
   )
+  /*
+   * The Featured cards' props, computed once per data change.
+   *
+   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
+   * and a fresh `() => handleEventPress(item)` closure for **every card on
+   * every parent render**. Two allocations per card is not the cost -- the cost
+   * is that both are props, so a new identity defeats any memoisation the card
+   * could have, and these are the most expensive components on the screen:
+   * full-bleed heroes carrying images and a video player.
+   *
+   * `handleEventPress` is already a `useCallback` and `featuredItems` is
+   * already a `useMemo`, so binding here is stable for as long as the data is.
+   */
+  const featuredCards = useMemo(
+    () =>
+      featuredItems.map((item, index) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.category || null,
+        playlist: feedPlaylist(item.media, item.cover_image_url),
+        dateLabel: featuredDateLabel(item.start_time),
+        placeLabel: placeLabel(item),
+        accentIndex: index,
+        onPress: () => handleEventPress(item),
+      })),
+    [featuredItems, handleEventPress]
+  )
+
   const upcomingStackItems = useMemo(() => {
     const featuredIds = new Set(featuredItems.map(e => e.id))
     return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
