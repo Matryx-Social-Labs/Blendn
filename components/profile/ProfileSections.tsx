@@ -62,7 +62,6 @@ export function ProfileHero({
   pseudonym,
   blurred = false,
   onPressMedia,
-  bottomInset = 0,
 }: {
   width: number
   /** Empty when they have not revealed. Never a blurred stand-in — see below. */
@@ -73,18 +72,6 @@ export function ProfileHero({
   subtitle?: string | null
   /** Seeds the mark when there is no photo. */
   pseudonym: string
-  /**
-   * Extra clearance under the name.
-   *
-   * The name is anchored to the bottom of the hero, which is right on
-   * `app/user/[id].tsx` -- a full-screen route where the hero *is* the first
-   * screen. `app/(tabs)/profile.tsx` has a tab bar over that same edge, and
-   * the second line of "Sagar Kishore, 28" rendered underneath it.
-   *
-   * A prop rather than a lookup inside: the component has no idea which
-   * navigator it is in, and `TAB_BAR_CLEARANCE` is the caller's fact.
-   */
-  bottomInset?: number
   /**
    * Show the photo blurred rather than the generated mark.
    *
@@ -155,10 +142,7 @@ export function ProfileHero({
         pointerEvents="none"
       />
 
-      <View
-        style={[styles.heroText, bottomInset ? { paddingBottom: 32 + bottomInset } : null]}
-        pointerEvents="none"
-      >
+      <View style={styles.heroText} pointerEvents="none">
         {/* Frame `1141:5171`: Plus Jakarta Bold 60/60, tracking -3. */}
         <Text style={styles.heroTitle} maxFontSizeMultiplier={1.2} accessibilityRole="header">
           {title}
@@ -451,91 +435,8 @@ export function ProfileActions({
   )
 }
 
-/**
- * The own-profile close. Frame `1141:5734`.
- *
- * ## Why your own profile ends in a call to action at all
- *
- * An attendee's profile ends in *Connect* — there is somebody to reach. Your
- * own has nobody to reach, and the frame fills that with **"Expand Your
- * Circle"** over an **Edit profile** button, which is the honest thing to put
- * there: the only reason to look at your own profile is to change what other
- * people see.
- *
- * ## Black, not `surface`
- *
- * `1141:5734` is `bg-black` where every other card on this screen is
- * `#141313` or `#211F1F`. It is the one place the page goes darker than its own
- * background, and that inversion is what makes it read as the end of the
- * scroll rather than one more section.
- */
-export function ProfileOwnCta({ onEdit }: { onEdit: () => void }) {
-  return (
-    <View style={styles.ownCta}>
-      <Text style={styles.ownCtaTitle} maxFontSizeMultiplier={1.2}>
-        Expand Your <Text style={styles.ownCtaAccent}>Circle</Text>
-      </Text>
-
-      <Pressable
-        onPress={onEdit}
-        accessibilityRole="button"
-        accessibilityLabel="Edit profile"
-        style={({ pressed }) => [styles.ownCtaButton, pressed && styles.ownCtaPressed]}
-      >
-        <LinearGradient
-          colors={[EMBER.gradientFrom, EMBER.gradientTo]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.ownCtaFill}
-        >
-          <Text style={styles.ownCtaLabel} maxFontSizeMultiplier={1.2}>
-            EDIT PROFILE
-          </Text>
-        </LinearGradient>
-      </Pressable>
-    </View>
-  )
-}
 
 const styles = StyleSheet.create({
-  ownCta: {
-    backgroundColor: '#000000',
-    borderRadius: 48,
-    /*
-     * 80 in the frame. Kept, because the whole job of this block is to stop the
-     * scroll -- trimmed to a normal card padding it stops reading as an ending
-     * and starts reading as a section somebody forgot to fill.
-     */
-    paddingVertical: 80,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    gap: 24,
-  },
-  ownCtaTitle: {
-    fontFamily: EMBER_FONTS.displayExtraBold,
-    fontSize: 36,
-    lineHeight: 40,
-    letterSpacing: -1.8,
-    color: EMBER.textPrimary,
-    textAlign: 'center',
-  },
-  /*
-   * The frame sets "Circle" in gradient-filled text. React Native cannot fill
-   * glyphs with a gradient without masking the whole line, which costs a native
-   * view and breaks selection -- so the warm end of the gradient as a flat
-   * colour, which is what `EMBER.accent` is for.
-   */
-  ownCtaAccent: { color: EMBER.accent },
-  ownCtaButton: { borderRadius: 9999, overflow: 'hidden' },
-  ownCtaFill: { paddingHorizontal: 48, paddingVertical: 16, alignItems: 'center' },
-  ownCtaPressed: { opacity: 0.85 },
-  ownCtaLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 0.5,
-    color: EMBER.onGradient,
-  },
 
   pressed: { opacity: 0.75 },
 

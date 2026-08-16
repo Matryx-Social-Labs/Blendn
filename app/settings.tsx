@@ -238,7 +238,12 @@ export default function SettingsScreen() {
 
   const items = useMemo(() => ([
     { header: 'Account' },
-    { icon: 'person-outline', title: 'Edit profile', onPress: () => router.push('/edit-profile') },
+    /*
+     * "Edit profile" used to be the first row here and is not any more. The Me
+     * tab carries Edit profile and Settings side by side, so this was a second
+     * door to a screen already one tap away -- and the two disagreed about
+     * where editing lives.
+     */
     { icon: 'mail-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
     { icon: 'log-out-outline', title: 'Sign out', danger: true, onPress: async () => {
       try {
