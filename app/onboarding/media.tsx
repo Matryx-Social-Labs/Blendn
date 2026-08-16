@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
@@ -106,7 +107,7 @@ function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number 
   )
 }
 
-export default function MediaScreen() {
+function MediaScreenInner() {
   const { user } = useAuth()
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('media')
 
@@ -307,3 +308,16 @@ const styles = StyleSheet.create({
   },
   note: EMBER_TYPE.helper,
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function MediaScreen() {
+  return (
+    <ScreenProfiler id="onboard-media">
+      <MediaScreenInner />
+    </ScreenProfiler>
+  )
+}

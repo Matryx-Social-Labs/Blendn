@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
@@ -45,7 +46,7 @@ import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
  * both segments: being named in the chat is the same exposure as being named in
  * the Grid.
  */
-export default function Room() {
+function RoomInner() {
   const [chatState, setChatState] = useState<'idle' | 'loading' | 'missing'>('idle')
   const [eventId, setEventId] = useState<string | null>(null)
   const [eventTitle, setEventTitle] = useState<string | null>(null)
@@ -495,3 +496,16 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function Room() {
+  return (
+    <ScreenProfiler id="room-grid">
+      <RoomInner />
+    </ScreenProfiler>
+  )
+}

@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
@@ -154,7 +155,7 @@ const headerStyles = StyleSheet.create({
  * Props are optional so the route keeps working untouched — expo-router passes
  * none, so every default is the old behaviour.
  */
-export default function GroupChat(props?: {
+function GroupChatInner(props?: {
   chatRoomId?: string
   roomName?: string
   eventTitle?: string
@@ -868,3 +869,16 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   menuTextDestructive: { color: '#FF453A' },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function GroupChat() {
+  return (
+    <ScreenProfiler id="event-chat">
+      <GroupChatInner />
+    </ScreenProfiler>
+  )
+}

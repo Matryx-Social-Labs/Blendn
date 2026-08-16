@@ -1,3 +1,4 @@
+import { ScreenProfiler } from '../lib/perf'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -90,7 +91,7 @@ const INTENTS: { value: Intent; label: string; hint?: string }[] = [
 /** The rule the server enforces on every write path. Mirrored for the copy only. */
 const DATING_MIN_AGE = 18
 
-export default function AboutYou() {
+function AboutYouInner() {
   const { user } = useAuth()
 
   /*
@@ -568,3 +569,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 })
+
+
+/*
+ * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
+ * `ScreenProfiler` is the children untouched in production — see its header.
+ */
+export default function AboutYou() {
+  return (
+    <ScreenProfiler id="about-you">
+      <AboutYouInner />
+    </ScreenProfiler>
+  )
+}
