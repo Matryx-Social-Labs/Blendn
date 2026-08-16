@@ -99,8 +99,21 @@ seventeen cascades are not that effect refiring, and `fetchEvents` has only four
 call sites. That is where the next session starts.
 
 **Room/Grid — one 98ms commit.** Six frames dropped in a single hitch, against a
-13ms mount. Something after mount is doing bulk work in one commit; the roster
-arriving and rendering ~20 cards at once is the obvious candidate.
+13ms mount. The mount is cheap because the roster is not there yet; the 98ms is
+the *update* where it arrives.
+
+Confirmed by reading, and the arithmetic lands: `getEventMatches` asks for
+`limit: 20`, `MatchScreen.tsx:989` renders them with a plain `shown.map()`
+inside a `ScrollView`, and each `GridCard` draws **three `LinearGradient`s** —
+the card surface, the pseudonym avatar, and one more in the footer. Twenty
+cards is sixty native gradient views in one commit, ~5ms a card.
+
+Nothing here is virtualised, so the cost is linear in roster size: a 60-person
+event pays three times this. `GridCard` is also `export function GridCard`, not
+`memo`, and the parent hands it four inline arrows and a fresh `toPerson()`
+object per card — so no memo could bite even if it were there.
+
+**The fix is a fork, and it is not mine to pick** — see ROADMAP.
 
 ### Fine, leave alone
 
