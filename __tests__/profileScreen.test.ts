@@ -115,6 +115,64 @@ describe('the hero reuses the Scene’s pager rather than a second one', () => {
   })
 })
 
+describe('the profile carries the Grid\'s two actions', () => {
+  it('offers Like and Connect, with the same meanings', () => {
+    /*
+     * They are the same two things and arriving here should not change what
+     * they mean: Like is private until mutual and stays pseudonymous; Connect
+     * is a message request and reveals your name and photo.
+     *
+     * This also settles the collision that "Connect" had two meanings on
+     * adjacent screens -- the Grid's like and the profile's request.
+     */
+    const src = SECTIONS()
+    expect(src).toContain('onLike?: () => void')
+    expect(SCREEN()).toContain('onLike={eventId ? handleLike : undefined}')
+  })
+
+  it('hides Like when there is no event to like within', () => {
+    /*
+     * `event_likes` is keyed on an event. Opened from a notification, the
+     * Banter or a deep link there is no context, and a Like there would be
+     * broken rather than merely useless. Connect still works: the server gates
+     * a request on `haveSharedAnEvent` and resolves it itself.
+     */
+    expect(SCREEN()).toContain("useLocalSearchParams<{ id: string; eventId?: string }>")
+    expect(stripComments(read('components/screens/MatchScreen.tsx'))).toContain(
+      'eventInfo?.id ? { eventId: eventInfo.id } : {}'
+    )
+  })
+
+  it('keeps the like prominent here too', () => {
+    // The safe, reversible action is the easy one on every surface. A button
+    // that publishes your identity should not be the prettiest thing twice.
+    const src = SECTIONS()
+    const actions = src.slice(src.indexOf('export function ProfileActions'))
+    expect(actions.indexOf('onPress={onLike}')).toBeLessThan(actions.indexOf('onPress={onPress}'))
+    expect(actions.slice(0, actions.indexOf('onPress={onPress}'))).toContain('EMBER_GRADIENT')
+  })
+
+  it('rolls a failed like back, and never a failed request', () => {
+    /*
+     * A like that did not land can simply be sent again. A request cannot --
+     * `@@unique([sender_id, recipient_id])` means the failure may be *because*
+     * one exists, and re-offering would invite an attempt that can never
+     * succeed.
+     */
+    const src = SCREEN()
+    const like = src.slice(src.indexOf('const handleLike'), src.indexOf('const sendConnect'))
+    expect(like).toContain('setLiked(false)')
+    const connect = src.slice(src.indexOf('const sendConnect'), src.indexOf('const openSafety'))
+    expect(connect).not.toContain('setCtaMode(\'connect\')')
+  })
+
+  it('names them the way the server does in the sheet', () => {
+    // Same rule as the Grid: the disclosure uses the resolved display name, so
+    // an unrevealed person is named by their pseudonym.
+    expect(SCREEN()).toContain('displayName={heroTitle}')
+  })
+})
+
 describe('what the frame draws and the product cannot back', () => {
   it('ships no @handle and no PRO badge', () => {
     /*

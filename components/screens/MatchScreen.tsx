@@ -636,10 +636,25 @@ export default function Match({
    */
 
 
-  const openUserProfile = useCallback((userId: string) => {
-    void Haptics.selectionAsync()
-    router.push({ pathname: '/user/[id]', params: { id: userId } as any })
-  }, [])
+  const openUserProfile = useCallback(
+    (userId: string) => {
+      void Haptics.selectionAsync()
+      /*
+       * The event travels with the id.
+       *
+       * `event_likes` is keyed on one, so the profile can only offer Like when
+       * it knows which room you met in. Opened from a notification or the
+       * Banter there is no such context and the button is absent there — which
+       * is correct rather than a gap: you cannot like somebody outside the
+       * event you shared.
+       */
+      router.push({
+        pathname: '/user/[id]',
+        params: { id: userId, ...(eventInfo?.id ? { eventId: eventInfo.id } : {}) } as never,
+      })
+    },
+    [eventInfo?.id]
+  )
 
 
   const removeAttendeeFromFeed = useCallback((userId: string) => {

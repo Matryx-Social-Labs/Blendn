@@ -105,9 +105,11 @@ export default function ProfilePreview() {
         </View>
         <View style={styles.action}>
           <ProfileActions
+            name={revealed ? 'Julian Ember' : 'Cosmic Panda'}
             label="Connect"
             onPress={() => {}}
             hint="Send a request to start chatting."
+            onLike={() => {}}
           />
         </View>
       </ScrollView>

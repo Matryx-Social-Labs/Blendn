@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import {
   PROFILE_GUTTER,
   PROFILE_SECTION_GAP,
@@ -62,7 +63,16 @@ interface UserProfileView {
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
 
 export default function UserProfile() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  /*
+   * `eventId` arrives from the Grid, and only from there.
+   *
+   * `event_likes` is keyed on an event, so a like has to know which room you
+   * met in. Opened from a notification, the Banter or a deep link there is no
+   * such context — and rather than guess at one, the Like button is simply
+   * absent. Connect still works: a message request is gated on
+   * `haveSharedAnEvent`, which the server resolves itself.
+   */
+  const { id, eventId } = useLocalSearchParams<{ id: string; eventId?: string }>()
   const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
@@ -71,6 +81,10 @@ export default function UserProfile() {
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [liked, setLiked] = useState(false)
+  const [likeBusy, setLikeBusy] = useState(false)
+  const [connectOpen, setConnectOpen] = useState(false)
+  const [connectSending, setConnectSending] = useState(false)
 
   const hydrateCtaState = useCallback(async (targetUserId: string) => {
     if (!authUser) {
@@ -252,6 +266,62 @@ export default function UserProfile() {
     }
   }
 
+  /*
+   * The like, with the same meaning it has on the Grid: private until it is
+   * mutual, and the conversation it opens stays pseudonymous.
+   *
+   * Optimistic, and rolled back on failure — unlike Connect, a like that did not
+   * land can simply be sent again, so re-offering the button is the right
+   * answer rather than a trap.
+   */
+  const handleLike = useCallback(async () => {
+    if (!eventId || !profile || liked || likeBusy) return
+    setLikeBusy(true)
+    setLiked(true)
+    try {
+      const result = await apiClient.likeAtEvent(String(eventId), profile.user_id)
+      if (!result.success) {
+        setLiked(false)
+        return
+      }
+      if (result.data?.mutual && result.data.conversationId) {
+        setConversationId(result.data.conversationId)
+        setCtaMode('message')
+        setCtaMessage('You are connected. Open the chat.')
+      }
+    } catch (e) {
+      setLiked(false)
+      Logger.error('profile', 'like failed', { error: e })
+    } finally {
+      setLikeBusy(false)
+    }
+  }, [eventId, profile, liked, likeBusy])
+
+  /* Sending reveals you. `ConnectSheet` says so before anything is typed. */
+  const sendConnect = useCallback(async (message: string) => {
+    if (!profile) return
+    setConnectSending(true)
+    try {
+      const result = await apiClient.createMessageRequest(profile.user_id, message)
+      if (!result.success) {
+        Logger.warn('profile', 'connect request failed', { error: result.error })
+      }
+      /*
+       * Never rolled back: one request per pair for all time, so a failure can
+       * mean one already exists and re-offering would invite an attempt that
+       * can never succeed.
+       */
+      setCtaMode('requested')
+      setCtaMessage('Request pending. You can chat after acceptance.')
+    } catch (e) {
+      Logger.error('profile', 'connect request error', { error: e })
+      setCtaMode('requested')
+    } finally {
+      setConnectSending(false)
+      setConnectOpen(false)
+    }
+  }, [profile])
+
   const openSafety = () => {
     if (!profile) return
     showUserSafetyActions(profile.name || 'User', profile.user_id)
@@ -388,10 +458,15 @@ export default function UserProfile() {
 
               {!isLoading && profile && ctaMode !== 'self' ? (
                 <ProfileActions
+                  name={heroTitle}
                   label={ctaLabel}
-                  onPress={handleConnect}
+                  onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
                   disabled={ctaDisabled}
                   hint={ctaMessage || null}
+                  liked={liked}
+                  likeBusy={likeBusy}
+                  /* Absent without an event — see the param comment above. */
+                  onLike={eventId ? handleLike : undefined}
                 />
               ) : null}
 
@@ -412,6 +487,21 @@ export default function UserProfile() {
           </>
         )}
       </ScrollView>
+
+      {/*
+        `displayName` is whatever the screen calls them — the pseudonym until
+        they reveal — because the sheet's disclosure names them, and naming an
+        unrevealed person with a real name is the identity gate's mistake made
+        in prose.
+      */}
+      <ConnectSheet
+        visible={connectOpen}
+        displayName={heroTitle}
+        theyAreRevealed={revealed}
+        sending={connectSending}
+        onSend={sendConnect}
+        onDismiss={() => setConnectOpen(false)}
+      />
 
       {/* Frame `1141:5228`. Back, and the safety menu the frame draws at the right. */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
