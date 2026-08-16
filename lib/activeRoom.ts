@@ -43,6 +43,18 @@ export interface RoomAttendee {
   sharedInterests: string[]
   sharedIntents?: string[]
   workField?: string | null
+  /**
+   * Whether they work in *your* field.
+   *
+   * Server-decided, and it must stay that way. The obvious client-side version —
+   * compare their `workField` to your own — would be wrong in exactly the case
+   * the server is protecting: below eight people `workField` is suppressed to
+   * null for everyone, and a client that derived this from its own profile could
+   * reintroduce the attribute the floor withholds.
+   */
+  sharedWorkField?: boolean
+  /** Whole years. Not suppressed in a small room — it is already public. */
+  age?: number | null
   insideNow?: boolean
   youLiked?: boolean
 }

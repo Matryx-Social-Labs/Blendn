@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 import { gridCardBox } from '../lib/gridCardContent'
 
 /**
@@ -75,5 +78,57 @@ describe('the box holds one thing, strongest first', () => {
      */
     const b = gridCardBox({ sharedInterests: ['Techno'] })
     expect(JSON.stringify(b)).not.toContain('match')
+  })
+})
+
+describe('every field the card renders is actually read off the payload', () => {
+  /*
+   * The bug this exists for, which type-checked and shipped:
+   *
+   *   `AttendeeProfile` declared `age` and `sharedWorkField`. `GridPerson`
+   *   declared them. `gridCardBox` branched on one and the card title rendered
+   *   the other. And `MatchScreen`'s map from the API response set NEITHER — so
+   *   the title could never say "Priya, 29" and the SAME FIELD box could never
+   *   fire, on any card, ever.
+   *
+   * Nothing catches that. Both are optional, so the compiler is satisfied; both
+   * degrade to a card that merely says less, so no test failed and no screen
+   * looked broken. **A field is not wired because a type says it exists.**
+   */
+  const MATCH_SCREEN = readFileSync(
+    join(__dirname, '..', 'components/screens/MatchScreen.tsx'),
+    'utf8'
+  )
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  /** Every field the roster payload carries that a card can show. */
+  const CARRIED = [
+    'sharedIntents',
+    'workField',
+    'sharedWorkField',
+    'age',
+    'insideNow',
+    'youLiked',
+  ] as const
+
+  /*
+   * Asserted per field AND per path, in one test, because the two-way split
+   * that seems tidier is not: a test that only checks the field appears
+   * *somewhere* passes when the first load drops it and load-more keeps it.
+   * That was verified by deleting the first map's two lines -- the per-field
+   * checks stayed green and only the count caught it.
+   */
+  it.each(CARRIED)('reads %s on BOTH the first load and load-more', (field) => {
+    const src = stripComments(MATCH_SCREEN)
+    const occurrences = src.split(`${field}: m.${field}`).length - 1
+    expect(occurrences).toBeGreaterThanOrEqual(2)
+  })
+
+  it('has exactly the two payload maps these counts assume', () => {
+    // If a third map appears, ">= 2" stops meaning "both paths" and the suite
+    // above quietly weakens without failing.
+    const maps = stripComments(MATCH_SCREEN).split('.map((m) => ({')
+    expect(maps).toHaveLength(3)
   })
 })
