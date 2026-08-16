@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
+import { gridCardContent } from '../../lib/gridCardContent'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
 import OptimizedImage from '../OptimizedImage'
@@ -67,6 +68,12 @@ export interface GridPerson {
   workField?: string | null
   /** Names, already intersected by the server. Never their whole list. */
   sharedInterests?: string[]
+  /**
+   * The *overlap* only — "Both here to network". Never either person's own
+   * intents, and `dating` reaches it only after compatibility is checked, so it
+   * can be said without ever stating anyone's gender.
+   */
+  sharedIntents?: string[]
   /** Empty unless they have revealed. */
   photo?: string | null
   /** In the venue right now, as opposed to checked in earlier. */
@@ -98,8 +105,17 @@ export function GridCard({
   onSafety: () => void
 }) {
   const mark = pseudonymAvatar(person.name)
-  const shared = person.sharedInterests ?? []
   const title = person.age ? `${person.name}, ${person.age}` : person.name
+
+  /*
+   * What this card can honestly say, in a defined order.
+   *
+   * Most cards have no shared interests -- the interest graph is thin, and
+   * `workField` is null in any room under eight people. Without a chain a card
+   * reduces to a name and two buttons, and "why would somebody like a person
+   * with no details shown" is the right question to ask of that.
+   */
+  const content = gridCardContent(person)
 
   return (
     <Pressable
@@ -193,7 +209,16 @@ export function GridCard({
         </View>
       </View>
 
-      {shared.length > 0 ? (
+      {/*
+        The band, above the name. A verdict rather than a fact, so it is small
+        and quiet -- and it always resolves, which is what stops a thin card
+        being a blank one. "Worth saying hello" is the honest floor.
+      */}
+      <Text style={styles.band} maxFontSizeMultiplier={1.3}>
+        {content.band}
+      </Text>
+
+      {content.line ? (
         /*
           Frame `1141:5002` is "12 MUTUAL CONNECTIONS" over a stack of faces —
           the friend graph, which is deferred. The slot takes the interest
@@ -205,22 +230,39 @@ export function GridCard({
           "2 SHARED INTERESTS" — one fact, announced twice.
         */
         <View style={styles.overlap}>
-            <View style={styles.overlapHead}>
-              <MaterialIcons name="join-inner" size={14} color={EMBER.accent} />
-              <Text style={styles.overlapCount} maxFontSizeMultiplier={1.3}>
-                {shared.length} SHARED {shared.length === 1 ? 'INTEREST' : 'INTERESTS'}
-              </Text>
-            </View>
+          <View style={styles.overlapHead}>
+            <MaterialIcons
+              name={
+                content.kind === 'interests'
+                  ? 'join-inner'
+                  : content.kind === 'intent'
+                    ? 'handshake'
+                    : 'place'
+              }
+              size={14}
+              color={EMBER.accent}
+            />
+            <Text style={styles.overlapLine} maxFontSizeMultiplier={1.4}>
+              {content.line}
+            </Text>
+          </View>
 
+          {/*
+            The interests themselves, under the sentence that names them. Only
+            when there are any -- an intent or a presence line has nothing to
+            list, and an empty row of chips reads as something failing to load.
+          */}
+          {content.kind === 'interests' && (person.sharedInterests?.length ?? 0) > 0 ? (
             <View style={styles.tags}>
-              {shared.map((interest) => (
+              {person.sharedInterests!.map((interest) => (
                 <View key={interest} style={styles.tag}>
                   <Text style={styles.tagLabel} maxFontSizeMultiplier={1.3}>
                     {interest}
                   </Text>
                 </View>
               ))}
-          </View>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -356,12 +398,22 @@ const styles = StyleSheet.create({
   // Frame `1141:5002`: `#141313`, radius 32, p16, gap 8.
   overlap: { backgroundColor: EMBER.surfaceMedia, borderRadius: 32, padding: 16, gap: 12 },
   overlapHead: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  overlapCount: {
+  overlapLine: {
+    flex: 1,
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textPrimary,
+  },
+  // Frame `1141:4980`'s corner type, reused for the band: Manrope Bold 12/16,
+  // tracking 1.2, uppercase — quiet, because a verdict is worth less than a fact.
+  band: {
     fontFamily: EMBER_FONTS.bodyBold,
     fontSize: 12,
     lineHeight: 16,
-    letterSpacing: 0.3,
-    color: EMBER.textPrimary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: 'rgba(255,144,109,0.5)',
   },
 
   // Frame `1141:4998`: `#272525`, px12 py4, radius full.

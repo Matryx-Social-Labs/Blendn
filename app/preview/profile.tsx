@@ -18,7 +18,7 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
 /**
  * The attendee profile against fixtures — frame `1141:5163`.
  *
- * Deep-link `exp+blendn:///__preview-profile`.
+ * Deep-link `exp+blendn:///preview/profile`.
  *
  * The real screen needs a login, a match and a person who exists, and none of
  * those decides whether a chip wraps. What this one *does* need is the toggle:

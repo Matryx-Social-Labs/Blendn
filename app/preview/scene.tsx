@@ -34,7 +34,7 @@ import { highlightEntities } from '../../lib/entityHighlight'
 import { heroPillLabel } from '../../lib/scarcity'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER } from '../../lib/theme'
-import { TAB_BAR_CLEARANCE } from './_layout'
+import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
 
 /**
  * The Scene, rendered against fixtures — frame `1141:4853`.
@@ -46,7 +46,7 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * `/event/:id` while signed out bounces to sign-in, and a screenshot of that
  * looks enough like a dark screen to be measured by mistake. It was.
  *
- * Deep-link `exp+blendn:///__preview-scene`. Dev-only, allow-listed in
+ * Deep-link `exp+blendn:///preview/scene`. Dev-only, allow-listed in
  * `app/_layout.tsx` behind `__DEV__`.
  */
 

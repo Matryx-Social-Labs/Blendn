@@ -543,6 +543,12 @@ function RootLayout() {
           animation: 'slide_from_bottom',
         }}
       />
+      {/*
+        The fixture harnesses. Declared so the root stack does not draw a native
+        header over them — an undeclared route inherits one, which is how
+        `preview/profile` opened with a "< (tabs)" bar across its hero.
+      */}
+      <Stack.Screen name="preview" options={{ headerShown: false }} />
       <Stack.Screen
         name="nearby-events"
         options={{

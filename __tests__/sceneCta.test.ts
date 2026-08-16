@@ -13,7 +13,7 @@ const SRC = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
 
 const PREVIEW = () =>
-  readFileSync(join(__dirname, '..', 'app', '(tabs)', '__preview-scene.tsx'), 'utf8')
+  readFileSync(join(__dirname, '..', 'app', 'preview', 'scene.tsx'), 'utf8')
 
 describe('the CTA pays for its own height', () => {
   it('SCENE_CTA_HEIGHT is the sum of what is actually in the pill', () => {
