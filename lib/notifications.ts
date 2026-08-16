@@ -274,10 +274,32 @@ export function navigateFromNotificationData(data: Record<string, any> | undefin
         break
       }
       case 'match': {
-        // A match notification is about somebody in a room, so it opens the
-        // room. The Match tab it used to open no longer exists — that screen is
-        // now the Grid segment of `/room`.
-        router.push('/room')
+        /*
+         * The conversation, not the room.
+         *
+         * This pushed `/room` on the reasoning that "a match is about somebody
+         * in a room". That was true when the Grid was the only place a match
+         * existed. It is not any more: a mutual like opens the conversation
+         * server-side (`lib/matches.ts`) and it is in the Banter from that
+         * moment, with its own opener.
+         *
+         * `/room` is a *place*, and you stop being in it. Match at an event,
+         * leave, get checked out by the presence monitor — and the push about
+         * your match lands you on "Not Checked In Yet". The notification was
+         * about a person and it opened a venue you had left.
+         *
+         * `notifyMatch` has always sent the id (`push-notifications.ts`); this
+         * branch simply threw it away, while the `chat` case ten lines above
+         * did the right thing with the same field.
+         */
+        if (data.conversationId) {
+          router.push({
+            pathname: '/private-chat/[conversationId]',
+            params: { conversationId: String(data.conversationId) } as any,
+          })
+        } else {
+          router.push('/(tabs)/chat')
+        }
         break
       }
       /*
@@ -315,15 +337,26 @@ export function navigateFromNotificationData(data: Record<string, any> | undefin
       case 'reveal_request':
       case 'reveal': {
         /*
-         * Same destination as `match`: all three are about one pairing, and
-         * `/room` is where they are acted on.
+         * Same destination as `match`, and for the same reason: all three are
+         * about one pairing, and the pairing is the conversation. Reveal is the
+         * clearest case — it is the moment their name appears in that thread,
+         * so the thread is the only place the news means anything.
          *
-         * Deliberately **not** a profile route keyed on `senderId`. The reveal
-         * gate decides what you may see of somebody and is enforced by the
-         * screens that ask the server; deep-linking to a profile would be the
-         * app asserting an entitlement the server has not granted.
+         * Still deliberately **not** a profile route keyed on `senderId`. The
+         * reveal gate decides what you may see of somebody and is enforced by
+         * the screens that ask the server; deep-linking to a profile would be
+         * the app asserting an entitlement the server has not granted. The
+         * conversation has no such problem — it is gated server-side already,
+         * and the thread header resolves the name through the same rule.
          */
-        router.push('/room')
+        if (data.conversationId) {
+          router.push({
+            pathname: '/private-chat/[conversationId]',
+            params: { conversationId: String(data.conversationId) } as any,
+          })
+        } else {
+          router.push('/(tabs)/chat')
+        }
         break
       }
     }

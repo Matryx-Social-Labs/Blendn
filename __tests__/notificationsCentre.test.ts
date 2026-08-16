@@ -112,7 +112,12 @@ describe('every kind the server can send goes somewhere', () => {
     const block = codeOnly(reveal.slice(0, reveal.indexOf('break')))
     expect(block).not.toContain('/user/')
     expect(block).not.toContain('senderId')
-    expect(block).toContain("router.push('/room')")
+    /*
+     * The destination moved from the room to the conversation — see the block
+     * below. The guard above is the part that matters and does not change: the
+     * conversation is gated server-side, a profile is not.
+     */
+    expect(block).toContain("pathname: '/private-chat/[conversationId]'")
   })
 
   it('never deep-links a message request to the sender', () => {
@@ -155,5 +160,46 @@ describe('the bell reuses the push switch rather than copying it', () => {
     // a number that changes a handful of times a day.
     const bell = BELL()
     expect(bell).not.toContain('setInterval')
+  })
+})
+
+describe('a notification about a person opens the person, not a place', () => {
+  it('sends match, reveal and reveal_request to the conversation', () => {
+    /*
+     * These pushed `/room` on the reasoning that "a match is about somebody in
+     * a room". True when the Grid was the only place a match existed; false
+     * since a mutual like opens the conversation server-side and it appears in
+     * the Banter from that moment.
+     *
+     * `/room` is a *place*, and you stop being in it. Match at an event, leave,
+     * get checked out by the presence monitor — and the push about your match
+     * landed on "Not Checked In Yet". The notification was about a person and
+     * it opened a venue you had left.
+     */
+    const src = codeOnly(SRC())
+    for (const kind of ["case 'match'", "case 'reveal'"]) {
+      const branch = src.slice(src.indexOf(kind))
+      const body = branch.slice(0, branch.indexOf('break'))
+      expect(body).toContain("pathname: '/private-chat/[conversationId]'")
+      expect(body).not.toContain("router.push('/room')")
+    }
+  })
+
+  it('leaves no push routing to /room at all', () => {
+    // The centre button still opens it in the `live` state — that is a place,
+    // and you are in it. A notification is never about a place you might have
+    // left.
+    expect(codeOnly(SRC())).not.toContain("router.push('/room')")
+  })
+
+  it('falls back to the Banter, never to the Grid', () => {
+    /*
+     * An older payload without `conversationId` should land where the
+     * conversation is listed, not on a roster that requires a check-in the
+     * recipient may not have.
+     */
+    const src = codeOnly(SRC())
+    const branch = src.slice(src.indexOf("case 'match'"))
+    expect(branch.slice(0, branch.indexOf('break'))).toContain("router.push('/(tabs)/chat')")
   })
 })
