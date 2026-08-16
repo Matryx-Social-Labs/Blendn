@@ -98,22 +98,31 @@ The fetch effect's own deps were probed directly and changed **once**. So the
 seventeen cascades are not that effect refiring, and `fetchEvents` has only four
 call sites. That is where the next session starts.
 
-**Room/Grid — one 98ms commit.** Six frames dropped in a single hitch, against a
-13ms mount. The mount is cheap because the roster is not there yet; the 98ms is
-the *update* where it arrives.
+**Room/Grid — one 98ms commit. Fixed (#219).** Six frames dropped in a single
+hitch, against a 13ms mount. The mount was cheap because the roster was not
+there yet; the 98ms was the *update* where it arrived.
 
-Confirmed by reading, and the arithmetic lands: `getEventMatches` asks for
-`limit: 20`, `MatchScreen.tsx:989` renders them with a plain `shown.map()`
-inside a `ScrollView`, and each `GridCard` draws **three `LinearGradient`s** —
-the card surface, the pseudonym avatar, and one more in the footer. Twenty
-cards is sixty native gradient views in one commit, ~5ms a card.
+The arithmetic: `getEventMatches` asks for `limit: 20`, the roster was rendered
+by a plain `shown.map()` inside a `ScrollView`, and each `GridCard` draws
+**three `LinearGradient`s**. Twenty cards is sixty native gradient views in one
+commit, ~5ms a card — and a `GridCard` is a full-width card over 280pt tall, so
+**three fill the screen and seventeen were built where nobody could see them.**
+Nothing was virtualised, so the cost was linear in how busy the night was: a
+60-person event paid three times it.
 
-Nothing here is virtualised, so the cost is linear in roster size: a 60-person
-event pays three times this. `GridCard` is also `export function GridCard`, not
-`memo`, and the parent hands it four inline arrows and a fresh `toPerson()`
-object per card — so no memo could bite even if it were there.
+Now a `FlatList` with `initialNumToRender={4}`. One column and no `numColumns` —
+`styles.list` sets no `flexDirection`, so the Grid has always been full-width
+cards, and two columns would be a different design rather than a faster one.
 
-**The fix is a fork, and it is not mine to pick** — see ROADMAP.
+| | before | after |
+|---|---|---|
+| worst commit | **98ms** | **43ms** |
+| roster arrival | one 98ms commit | 39.9ms + 34.7ms |
+| mounts | 1 | 1 |
+
+`commits` and `total` are **not** comparable between those two runs — the
+after-run sat in the room for ~35s with a live socket where the baseline passed
+through. `worst` is the like-for-like number, and it is the one the defect was.
 
 ### Fine, leave alone
 

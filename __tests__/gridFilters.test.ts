@@ -131,8 +131,16 @@ describe('the rebuilt Grid kept what the frame has no slot for', () => {
      * is empty when the network dropped is a lie they will act on.
      */
     const src = SCREEN()
-    expect(src).toContain('{loadError ? (')
+    /*
+     * `loadError ? (`, not `{loadError ? (`. The brace was incidental to the
+     * roster living directly in a `ScrollView`; once it moved into
+     * `ListEmptyComponent` the same branch was still there and the test failed
+     * on the punctuation in front of it.
+     */
+    expect(src).toContain('loadError ? (')
     expect(src).toContain('Could not load the room')
+    // Both branches, because the whole point is that they say different things.
+    expect(src).toContain('Nobody here yet')
   })
 
   it('still announces people arriving', () => {
@@ -143,6 +151,42 @@ describe('the rebuilt Grid kept what the frame has no slot for', () => {
 
   it('filters without re-ranking', () => {
     expect(SCREEN()).toContain('applyGridFilters(attendees, filters)')
+  })
+
+  it('virtualises the roster instead of rendering all of it', () => {
+    /*
+     * The roster was a `shown.map()` inside a `ScrollView`. A `GridCard` is a
+     * full-width card over 280pt tall, so three fill the screen -- and the room
+     * asks for twenty. That was twenty cards and sixty `LinearGradient`s in one
+     * 98ms commit: six frames dropped, seventeen of them built where nobody
+     * could see them, and the cost linear in how busy the night was.
+     *
+     * The regression this guards is the easy one to make: a `.map()` reads as
+     * simpler than a `FlatList` and looks identical in a screenshot, because on
+     * a seed room of twenty it *is* identical -- just slower, and worse the
+     * fuller the room gets.
+     */
+    const src = SCREEN()
+    expect(src).toContain('<FlatList')
+    expect(src).toContain('renderItem={renderCard}')
+    expect(src).not.toContain('shown.map(')
+
+    /*
+     * `numColumns` would be wrong here and is worth pinning: `styles.list` sets
+     * no `flexDirection`, so the Grid is one column of full-width cards. A
+     * two-column grid is a different design, not a performance setting.
+     */
+    expect(src).not.toContain('numColumns')
+  })
+
+  it('does not offer "Show more" over an empty room', () => {
+    /*
+     * A `ListFooterComponent` renders even when the list is empty, which the
+     * old `.map()` branch could not do -- the button lived inside the same
+     * `else` as the cards. Ungarded, "Show more" sits under "Nobody here yet"
+     * and offers to fetch a second page of nobody.
+     */
+    expect(SCREEN()).toContain('attendeesHasMore && shown.length > 0')
   })
 
   it('does not re-probe the event room', () => {

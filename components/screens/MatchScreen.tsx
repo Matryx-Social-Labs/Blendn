@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -129,6 +130,15 @@ const getDisplayName = (name?: string) => {
   const normalized = String(name || '').trim()
   return normalized.length > 0 ? normalized : 'Guest'
 }
+
+/**
+ * One empty array, module-level, for the "show the empty state" case.
+ *
+ * A fresh `[]` in the render would be a new `data` identity every time and
+ * would defeat `FlatList`'s own bail-out — on a screen whose whole point is to
+ * stop doing work it does not need to do.
+ */
+const EMPTY_ROSTER: AttendeeProfile[] = []
 
 export default function Match({
   /**
@@ -845,6 +855,36 @@ export default function Match({
     [connectTo]
   )
 
+  /*
+   * The roster is virtualised, and the reason is arithmetic rather than taste.
+   *
+   * A `GridCard` is a full-width card better than 280pt tall, so three of them
+   * fill the screen -- and the room asks for twenty. Rendered from a `.map()`
+   * inside a `ScrollView` that was twenty cards, sixty `LinearGradient`s and one
+   * 98ms commit on the screen the whole product exists for: six frames dropped,
+   * with seventeen of the twenty cards built where nobody could see them.
+   *
+   * Worse, the cost was linear in how busy the room is. A sixty-person event
+   * paid three times it, which is exactly backwards -- the better the night, the
+   * worse the app.
+   *
+   * One column, so no `numColumns`. The cards are full-width by design.
+   */
+  const keyExtractor = useCallback((a: AttendeeProfile) => a.user_id, [])
+
+  const renderCard = useCallback(
+    ({ item }: { item: AttendeeProfile }) => (
+      <GridCard
+        person={toPerson(item)}
+        onOpenProfile={() => openUserProfile(item.user_id)}
+        onLike={() => handleLike(item)}
+        onConnect={() => setConnectTo(item)}
+        onSafety={() => onSafetyPress(getDisplayName(item.name), item.user_id)}
+      />
+    ),
+    [toPerson, openUserProfile, handleLike, onSafetyPress]
+  )
+
   if (!authInitialized || (loading && attendees.length === 0)) {
     return (
       <View style={styles.container}>
@@ -857,12 +897,26 @@ export default function Match({
     )
   }
 
+  const showChipRail = workFields.length > 0 || attendees.length > 1
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <StatusBar style="light" />
 
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+      <FlatList
+        data={loadError || empty ? EMPTY_ROSTER : shown}
+        keyExtractor={keyExtractor}
+        renderItem={renderCard}
+        /*
+         * Three cards fill the screen; four covers the tallest device and a
+         * short overscroll without building the other sixteen.
+         */
+        initialNumToRender={4}
+        contentContainerStyle={[
+          styles.scroll,
+          styles.list,
+          { paddingBottom: insets.bottom + 120 },
+        ]}
         showsVerticalScrollIndicator={false}
         /*
           Feeds the shared gradient overlay, the same way the Pulse and the
@@ -883,137 +937,142 @@ export default function Match({
             tintColor={EMBER.accent}
           />
         }
-      >
-        {/*
-          Frame `1141:4966`. Horizontal, because the number of professions in a
-          room is unbounded and a wrapping row would push the first card off the
-          screen in a mixed crowd.
+        /*
+         * `null` rather than an empty `<View>` when there is nothing to put up
+         * here. The content container carries `gap: 24`, and a zero-height
+         * header is still a child -- so an "empty" header would push the first
+         * card down by a gap that was never in the design.
+         */
+        ListHeaderComponent={
+          newJoinsCount > 0 || showChipRail ? (
+            <View style={styles.header}>
+              {/*
+                Somebody walked in while you were reading. The roster updates
+                itself over the socket, so without this the list silently grows
+                under your thumb and the new card is indistinguishable from one
+                you scrolled past. Clears itself after four seconds -- it is an
+                announcement, not a status.
+              */}
+              {newJoinsCount > 0 ? (
+                <View style={styles.joins} accessibilityLiveRegion="polite">
+                  <Text style={styles.joinsLabel} maxFontSizeMultiplier={1.3}>
+                    {newJoinsCount} just arrived
+                  </Text>
+                </View>
+              ) : null}
 
-          Hidden entirely when there is nothing to filter -- a control that can
-          only narrow to nothing is worse than no control.
-        */}
-        {/*
-          Somebody walked in while you were reading. The roster updates itself
-          over the socket, so without this the list silently grows under your
-          thumb and the new card is indistinguishable from one you scrolled
-          past. Clears itself after four seconds -- it is an announcement, not
-          a status.
-        */}
-        {newJoinsCount > 0 ? (
-          <View style={styles.joins} accessibilityLiveRegion="polite">
-            <Text style={styles.joinsLabel} maxFontSizeMultiplier={1.3}>
-              {newJoinsCount} just arrived
-            </Text>
-          </View>
-        ) : null}
+              {/*
+                Frame `1141:4966`. Horizontal, because the number of professions
+                in a room is unbounded and a wrapping row would push the first
+                card off the screen in a mixed crowd.
 
-        {(workFields.length > 0 || attendees.length > 1) && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRail}
-            contentContainerStyle={styles.chipRow}
-          >
-            {/*
-              "All" as a chip, not as the absence of a selection. A filter row
-              whose off-state is "nothing looks pressed" gives no way to see
-              that you are unfiltered and no obvious way back.
-            */}
-            <Chip
-              label="All"
-              selected={filters.workFields.length === 0}
-              onPress={() => setFilters(NO_GRID_FILTERS)}
-            />
-            {workFields.map((field) => (
-              <Chip
-                key={field}
-                label={field}
-                selected={filters.workFields.includes(field)}
-                onPress={() =>
-                  setFilters((f) => ({
-                    ...f,
-                    workFields: f.workFields.includes(field)
-                      ? f.workFields.filter((x) => x !== field)
-                      : [...f.workFields, field],
-                  }))
-                }
-              />
-            ))}
-          </ScrollView>
-        )}
-
-        {loadError ? (
-          /*
-           * A failed request and an empty room look identical once the list is
-           * empty, and they are not the same thing: one is "nobody is here",
-           * the other is "we could not find out". Telling somebody the room is
-           * empty when the network dropped is a lie they will act on.
-           */
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-              Could not load the room
-            </Text>
-            <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-              {loadError}
-            </Text>
-            <Pressable
-              onPress={onPullToRefresh}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
-            >
-              <Text style={styles.clearLabel}>Try again</Text>
-            </Pressable>
-          </View>
-        ) : empty ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-              {empty === 'filtered-out' ? 'Nobody here matches' : 'Nobody here yet'}
-            </Text>
-            <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-              {empty === 'filtered-out'
-                ? 'Try widening the filters — the room has people in it.'
-                : 'When people check in, they show up here.'}
-            </Text>
-            {hasActiveFilters(filters) ? (
+                Hidden entirely when there is nothing to filter -- a control that
+                can only narrow to nothing is worse than no control.
+              */}
+              {showChipRail ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipRail}
+                  contentContainerStyle={styles.chipRow}
+                >
+                  {/*
+                    "All" as a chip, not as the absence of a selection. A filter
+                    row whose off-state is "nothing looks pressed" gives no way
+                    to see that you are unfiltered and no obvious way back.
+                  */}
+                  <Chip
+                    label="All"
+                    selected={filters.workFields.length === 0}
+                    onPress={() => setFilters(NO_GRID_FILTERS)}
+                  />
+                  {workFields.map((field) => (
+                    <Chip
+                      key={field}
+                      label={field}
+                      selected={filters.workFields.includes(field)}
+                      onPress={() =>
+                        setFilters((f) => ({
+                          ...f,
+                          workFields: f.workFields.includes(field)
+                            ? f.workFields.filter((x) => x !== field)
+                            : [...f.workFields, field],
+                        }))
+                      }
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          loadError ? (
+            /*
+             * A failed request and an empty room look identical once the list is
+             * empty, and they are not the same thing: one is "nobody is here",
+             * the other is "we could not find out". Telling somebody the room is
+             * empty when the network dropped is a lie they will act on.
+             */
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+                Could not load the room
+              </Text>
+              <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+                {loadError}
+              </Text>
               <Pressable
-                onPress={() => setFilters(NO_GRID_FILTERS)}
+                onPress={onPullToRefresh}
                 accessibilityRole="button"
                 style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
               >
-                <Text style={styles.clearLabel}>Clear filters</Text>
+                <Text style={styles.clearLabel}>Try again</Text>
               </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {shown.map((attendee) => (
-              <GridCard
-                key={attendee.user_id}
-                person={toPerson(attendee)}
-                onOpenProfile={() => openUserProfile(attendee.user_id)}
-                onLike={() => handleLike(attendee)}
-                onConnect={() => setConnectTo(attendee)}
-                onSafety={() => onSafetyPress(getDisplayName(attendee.name), attendee.user_id)}
-              />
-            ))}
-
-            {attendeesHasMore ? (
-              <Pressable
-                onPress={loadMoreAttendees}
-                disabled={loadingMoreAttendees}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.more, pressed && styles.pressed]}
-              >
-                {loadingMoreAttendees ? (
-                  <ActivityIndicator color={EMBER.accent} />
-                ) : (
-                  <Text style={styles.moreLabel}>Show more</Text>
-                )}
-              </Pressable>
-            ) : null}
-          </View>
-        )}
-      </ScrollView>
+            </View>
+          ) : empty ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+                {empty === 'filtered-out' ? 'Nobody here matches' : 'Nobody here yet'}
+              </Text>
+              <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+                {empty === 'filtered-out'
+                  ? 'Try widening the filters — the room has people in it.'
+                  : 'When people check in, they show up here.'}
+              </Text>
+              {hasActiveFilters(filters) ? (
+                <Pressable
+                  onPress={() => setFilters(NO_GRID_FILTERS)}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
+                >
+                  <Text style={styles.clearLabel}>Clear filters</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null
+        }
+        /*
+         * Guarded on there being cards, because a footer renders even when the
+         * list is empty -- and "Show more" under "Nobody here yet" offers to
+         * fetch a second page of nobody.
+         */
+        ListFooterComponent={
+          attendeesHasMore && shown.length > 0 ? (
+            <Pressable
+              onPress={loadMoreAttendees}
+              disabled={loadingMoreAttendees}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.more, pressed && styles.pressed]}
+            >
+              {loadingMoreAttendees ? (
+                <ActivityIndicator color={EMBER.accent} />
+              ) : (
+                <Text style={styles.moreLabel}>Show more</Text>
+              )}
+            </Pressable>
+          ) : null
+        }
+      />
 
       <RealtimeStatusBanner status={socketStatus} />
 
@@ -1113,6 +1172,17 @@ const styles = StyleSheet.create({
 
   // Frame `1141:4977`: 12pt gutter, cards 24 apart.
   list: { paddingHorizontal: 12, gap: 24 },
+
+  /*
+   * Holds the gap the content container used to give these two directly.
+   *
+   * `marginHorizontal: -12` cancels the container's own `paddingHorizontal`,
+   * which the cards need and the header never had: as a direct child of the
+   * old `ScrollView` the chip rail measured its inset from the screen edge, and
+   * inheriting the cards' padding pushed it 12pt right of the cards it sits
+   * above. The centred "just arrived" pill is unaffected either way.
+   */
+  header: { gap: 24, marginHorizontal: -12 },
 
   more: {
     marginTop: 8,
