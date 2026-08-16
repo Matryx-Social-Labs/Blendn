@@ -207,10 +207,18 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      * old morph carried beside it has to be placed deliberately.
      */
     const detail = DETAIL()
-    // Check out: one tap, beside the CTA, only while checked in.
-    expect(detail).toContain('secondaryAction')
+    /*
+     * Check out and RSVP: one tap each, grouped below the CTA.
+     *
+     * Neither is in frame `1141:4853`, and both were briefly behind a "..." in
+     * the top bar -- a control the design never asked for, in the screen's most
+     * prominent slot. They sit together in the space the frame leaves empty.
+     */
+    expect(detail).toContain('secondaryRow')
     expect(detail).toContain('accessibilityLabel="Check out of event"')
-    expect(detail).toContain('{isCheckedIn && !isEnded ? (')
+    expect(detail).toContain('{isCheckedIn ? (')
+    // And no overflow in the bar: the top bar is back / heart / share, as drawn.
+    expect(detail).not.toContain('ellipsis-horizontal')
     // The in-flight states the morph used to show.
     expect(detail).toContain('checkingOut ? (')
     expect(detail).toContain('checkingIn || checkingOut ? (')
