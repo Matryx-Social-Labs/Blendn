@@ -94,7 +94,7 @@ const PLAYLIST: FeedMediaItem[] = [
      * video looks like here.
      *
      * Verified rather than assumed: 200, `video/mp4`, H.264 High, and `moov`
-     * at byte 36 — faststart, which `docs/MEDIA.md` calls non-optional. Three
+     * at byte 36 — faststart, which `blendn-admin/docs/MEDIA.md` calls non-optional. Three
      * other samples were tried first and every one failed *silently*, leaving
      * the hero on a still with nothing to say why: Google's
      * gtv-videos-bucket clips now 403, `samplelib` 301-redirects to an HTML

@@ -133,7 +133,7 @@ describe('what the button says', () => {
     expect(src).toContain("join: 'Blend in'")
     expect(src).toContain('"You\'re in"')
     /*
-     * `docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
+     * `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
      * event still takes people; `max_capacity` is a number the organiser
      * watches, not a door the app keeps. A capacity-disabled CTA would block an
      * interaction the product explicitly allows.

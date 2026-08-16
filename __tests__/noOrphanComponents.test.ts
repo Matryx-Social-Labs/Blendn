@@ -123,3 +123,39 @@ describe('the orphan ledger stays honest', () => {
     for (const file of Object.keys(KNOWN_ORPHANS)) expect(present.has(file)).toBe(true)
   })
 })
+
+describe('docs a comment points at actually exist', () => {
+  /*
+   * `docs/SCENE.md` was cited in four places for a week before it existed.
+   * Every reference sent a designer to a 404, which is worse than no reference:
+   * it reads as "the decision is written down somewhere" when it is not.
+   */
+  const sources = walk(join(ROOT, 'app'))
+    .concat(walk(join(ROOT, 'components')))
+    .concat(walk(join(ROOT, 'lib')))
+    .concat(walk(join(ROOT, '__tests__')))
+
+  it('every docs/*.md named in the codebase is a real file', () => {
+    const missing = new Set<string>()
+    for (const file of sources) {
+      const src = readFileSync(file, 'utf8')
+      /*
+       * `blendn-admin/docs/…` is skipped, not resolved.
+       *
+       * Three docs a comment here points at -- CHECKIN, MEDIA, DESIGN_HANDOFF
+       * -- live in the API repo, and the reference was bare `docs/…` so it read
+       * as a file in *this* repo. Qualifying them is the fix; checking them
+       * from here is not, because the sibling checkout may not exist on a given
+       * machine and a test that depends on that is a flake.
+       */
+      for (const m of src.matchAll(/(?<!blendn-admin\/)docs\/([A-Za-z0-9_.-]+\.md)/g)) {
+        try {
+          readFileSync(join(ROOT, 'docs', m[1]), 'utf8')
+        } catch {
+          missing.add(`${m[1]} (cited in ${file.replace(`${ROOT}/`, '')})`)
+        }
+      }
+    }
+    expect([...missing]).toEqual([])
+  })
+})

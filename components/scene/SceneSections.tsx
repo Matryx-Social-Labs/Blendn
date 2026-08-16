@@ -469,7 +469,7 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended'
 /**
  * What the button says, per state.
  *
- * **Capacity is deliberately absent.** `docs/CHECKIN.md:39` — "Check-in does not
+ * **Capacity is deliberately absent.** `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not
  * refuse at capacity" — so a full event still takes people. `max_capacity` is a
  * number the organiser watches, not a door the app keeps, and the hero pill
  * already reports it as information. A CTA that disabled itself on a full event

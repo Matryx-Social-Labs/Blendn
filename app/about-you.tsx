@@ -389,7 +389,7 @@ export default function AboutYou() {
           {wantsDating ? (
             <>
               {/*
-                Only here, and only while dating is ticked. `docs/DESIGN_HANDOFF.md`
+                Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
                 is explicit: a networking user is never asked their gender.
               */}
               <Text style={styles.section}>You are</Text>
