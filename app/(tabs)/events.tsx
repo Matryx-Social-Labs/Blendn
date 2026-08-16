@@ -2334,7 +2334,25 @@ export default function Events() {
           onScroll={onScroll}
           scrollEventThrottle={16}
           enableVirtualization={!isLoading && mainListData.length > 20}
-          initialNumToRender={10}
+          /*
+           * 4, not 10 — arithmetic, not a guess.
+           *
+           * A row here is an `UpcomingCard`: a 165pt image plus a 200pt body
+           * inside 24pt of padding, ~437pt, with `STACK_GAP` 32 between them.
+           * On a 956pt screen roughly **two** are ever visible at once.
+           *
+           * `initialNumToRender` is rendered *synchronously before first
+           * paint*. At 10 that is ~4,700pt of content — five screens — and ten
+           * image decodes, to show two cards. Four covers the fold with one
+           * row of slack either side; `maxToRenderPerBatch` fills the rest
+           * asynchronously, which is what it is for.
+           *
+           * `windowSize` is left at 10. It governs what stays *mounted*, not
+           * what blocks the first frame, and lowering it trades scroll
+           * smoothness for memory — a trade worth making against a measurement
+           * rather than against an estimate.
+           */
+          initialNumToRender={4}
           maxToRenderPerBatch={5}
           windowSize={10}
           ListHeaderComponent={(
