@@ -520,6 +520,25 @@ interest is special, and `ProfileInterests` already uses that treatment for
 *shared* interests, where it means something. On your own profile there is
 nobody to share with.
 
+### Next — two profile fields nothing reads
+
+`goals` and `looking_for` are collected, stored, and read by nobody.
+
+| field | collected in | displayed | used by matching |
+|---|---|---|---|
+| `looking_for` | onboarding preferences **and** edit-profile | only the onboarding summary | no |
+| `goals` | edit-profile only | nowhere at all | no |
+
+Checked rather than assumed: `lib/matching.ts` mentions neither, and they
+appear elsewhere only in `lib/openapi/schemas/profile.ts` and
+`lib/validations/profile.ts` — the API accepts them, the column holds them, and
+nothing ever asks.
+
+Not deleted, because that is a product call and real accounts already have
+values. Three ways out: **show them** on the profile (they were presumably meant
+to be a section), **feed them to matching**, or **drop the fields and the
+columns**. Whichever, `looking_for` should stop being asked twice.
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",

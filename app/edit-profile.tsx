@@ -25,7 +25,7 @@ import { apiClient, ProfileCache } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
 import queryCache from '../lib/queryCache'
-import { APP_COLORS } from '../lib/theme'
+import { EMBER, EMBER_FONTS } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
 
 interface UserProfile {
@@ -381,11 +381,11 @@ export default function EditProfile() {
           accessibilityLabel={`Remove ${item}`}
         >
           <Text style={styles.tagText}>{item}</Text>
-          <Ionicons name="close" size={14} color={APP_COLORS.textSecondary} />
+          <Ionicons name="close" size={14} color={EMBER.textSecondary} />
         </TouchableOpacity>
       ))}
       <TouchableOpacity style={styles.addTag} onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel}>
-        <Ionicons name="add" size={16} color={APP_COLORS.accent} />
+        <Ionicons name="add" size={16} color={EMBER.accent} />
         <Text style={styles.addTagText}>{addLabel}</Text>
       </TouchableOpacity>
     </View>
@@ -458,7 +458,7 @@ export default function EditProfile() {
                       if (nameError && value.trim()) setNameError(null)
                     }}
                     placeholder="Enter your name"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     maxLength={50}
                   />
                   {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
@@ -475,7 +475,7 @@ export default function EditProfile() {
                       if (ageError && sanitized) setAgeError(null)
                     }}
                     placeholder="Enter your age"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     keyboardType="numeric"
                     maxLength={3}
                   />
@@ -489,7 +489,7 @@ export default function EditProfile() {
                     value={location}
                     onChangeText={setLocation}
                     placeholder="City, State"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     maxLength={100}
                   />
                 </View>
@@ -501,7 +501,7 @@ export default function EditProfile() {
                     value={occupation}
                     onChangeText={setOccupation}
                     placeholder="e.g. Software Engineer"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     maxLength={100}
                   />
                 </View>
@@ -513,7 +513,7 @@ export default function EditProfile() {
                     value={education}
                     onChangeText={setEducation}
                     placeholder="e.g. University of California"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     maxLength={100}
                   />
                 </View>
@@ -525,7 +525,7 @@ export default function EditProfile() {
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="Phone number"
-                    placeholderTextColor={APP_COLORS.textTertiary}
+                    placeholderTextColor={EMBER.textTertiary}
                     keyboardType="phone-pad"
                     maxLength={20}
                   />
@@ -550,7 +550,7 @@ export default function EditProfile() {
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Tell people about yourself..."
-                  placeholderTextColor={APP_COLORS.textTertiary}
+                  placeholderTextColor={EMBER.textTertiary}
                   multiline
                   numberOfLines={4}
                   maxLength={500}
@@ -642,7 +642,7 @@ export default function EditProfile() {
                 value={tagInputValue}
                 onChangeText={setTagInputValue}
                 placeholder={tagInputPlaceholder}
-                placeholderTextColor={APP_COLORS.textTertiary}
+                placeholderTextColor={EMBER.textTertiary}
                 autoFocus
                 maxLength={60}
                 returnKeyType="done"
@@ -681,18 +681,20 @@ const styles = StyleSheet.create({
   },
 
   // Card sections
+  /* 32 and 24, the radii every rebuilt card in the app uses. */
   card: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: 32,
+    padding: 24,
     marginTop: 16,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: APP_COLORS.textSecondary,
-    letterSpacing: 0.5,
-    marginBottom: 12,
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 10,
+    lineHeight: 15,
+    letterSpacing: 1.6,
+    color: EMBER.accent,
+    marginBottom: 16,
   },
 
   // Form inputs
@@ -700,29 +702,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: APP_COLORS.textSecondary,
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.6,
     marginBottom: 8,
   },
   input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(73,71,71,0.3)',
+    /* 20, not 12: the app's inputs are softer than its cards, never squarer. */
+    borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    fontFamily: EMBER_FONTS.bodyRegular,
     fontSize: 16,
-    backgroundColor: APP_COLORS.backgroundCard,
-    color: APP_COLORS.textPrimary,
+    backgroundColor: EMBER.surfaceMedia,
+    color: EMBER.textPrimary,
   },
   inputError: {
-    borderColor: APP_COLORS.destructive,
+    borderColor: '#FF3B30',
   },
   errorText: {
     marginTop: 6,
-    color: APP_COLORS.destructive,
+    color: '#FF3B30',
     fontSize: 12,
     fontWeight: '500',
   },
@@ -733,7 +738,7 @@ const styles = StyleSheet.create({
   characterCount: {
     textAlign: 'right',
     fontSize: 12,
-    color: APP_COLORS.textSecondary,
+    color: EMBER.textSecondary,
     marginTop: 4,
   },
 
@@ -745,12 +750,13 @@ const styles = StyleSheet.create({
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundBase,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
+    backgroundColor: 'rgba(45,44,44,0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(73,71,71,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    /* Fully round, like every other chip in the app. */
+    borderRadius: 9999,
     marginRight: 8,
     marginBottom: 8,
     gap: 4,
@@ -758,17 +764,17 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 13,
     fontWeight: '600',
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
   },
   addTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderColor: APP_COLORS.accent,
+    borderColor: EMBER.accent,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     marginRight: 8,
     marginBottom: 8,
     gap: 4,
@@ -776,7 +782,7 @@ const styles = StyleSheet.create({
   addTagText: {
     fontSize: 13,
     fontWeight: '600',
-    color: APP_COLORS.accent,
+    color: EMBER.accent,
   },
 
   bottomPadding: {
@@ -791,27 +797,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalCard: {
-    borderRadius: 16,
+    borderRadius: 32,
     padding: 16,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(73,71,71,0.3)',
   },
   modalTitle: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 12,
   },
   modalInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(73,71,71,0.3)',
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: APP_COLORS.textPrimary,
-    backgroundColor: APP_COLORS.backgroundCard,
+    color: EMBER.textPrimary,
+    backgroundColor: EMBER.surfaceMedia,
   },
   modalActions: {
     flexDirection: 'row',
@@ -823,10 +829,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     marginRight: 8,
-    backgroundColor: APP_COLORS.backgroundCard,
+    backgroundColor: EMBER.surfaceMedia,
   },
   modalCancelText: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -834,13 +840,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
   },
   modalSubmitButtonDisabled: {
     opacity: 0.5,
   },
   modalSubmitText: {
-    color: APP_COLORS.textPrimary,
+    color: EMBER.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
