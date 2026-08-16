@@ -142,3 +142,46 @@ describe('the screen renders through the rebuilt components', () => {
     expect(SCREEN()).toMatch(/ListFooterComponent=\{[\s\S]{0,400}TypingIndicator/)
   })
 })
+
+describe('your own profile draws the same pieces as everybody else’s', () => {
+  /*
+   * `ProfileSections.tsx` was written for both frames and only the attendee
+   * half was ever wired -- the fifth time something here was built and never
+   * called. `noOrphanComponents` could not see it: the file *had* an importer,
+   * just not the second one it was written for.
+   */
+  const OWN = () => codeOnly(read('app/(tabs)/profile.tsx'))
+
+  it('renders through components/profile, not its own hero', () => {
+    const src = OWN()
+    for (const name of ['ProfileHero', 'ProfileBio', 'ProfileInterests', 'ProfileDetail', 'ProfileOwnCta']) {
+      expect(src).toContain(`<${name}`)
+    }
+  })
+
+  it('has left APP_COLORS behind', () => {
+    // It was the last screen in the app still on the old theme.
+    expect(OWN()).not.toContain('APP_COLORS.')
+  })
+
+  it('clears the tab bar under the hero name', () => {
+    /*
+     * The name is anchored to the hero's bottom, which is right on the
+     * full-screen attendee route and put "Kishore, 28" under the tab bar here.
+     */
+    expect(OWN()).toContain('bottomInset={TAB_BAR_CLEARANCE}')
+  })
+
+  it('does not invent a handle, a tier, or an event history', () => {
+    /*
+     * The frame draws `@blendn_julia`, a `PRO` badge and three attended-event
+     * cards. Nothing backs any of them -- there is no username field, no
+     * subscription, and no endpoint returning attended events. See
+     * `docs/PROFILE.md`.
+     */
+    const src = OWN()
+    expect(src).not.toMatch(/@blendn|handle|username/i)
+    expect(src).not.toMatch(/\bPRO\b/)
+    expect(src).not.toMatch(/CIRCLE PRESENCE/i)
+  })
+})

@@ -5,17 +5,26 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import OptimizedImage from '../../components/OptimizedImage'
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import Typography from '../../components/Typography'
+import {
+  PROFILE_GUTTER,
+  PROFILE_SECTION_GAP,
+  ProfileBio,
+  ProfileDetail,
+  ProfileGallery,
+  ProfileHeading,
+  ProfileHero,
+  ProfileInterests,
+  ProfileOwnCta,
+} from '../../components/profile/ProfileSections'
+import { TAB_BAR_CLEARANCE } from './_layout'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import queryCache from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
-import { APP_COLORS } from '../../lib/theme'
-const placeholderImg = require('../../assets/images/icon.png')
+import { EMBER } from '../../lib/theme'
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
@@ -64,27 +73,10 @@ function ProfileInner() {
   }, [profile?.photos])
 
   // Split photos: hero = first, interstitials = [1] and [2], gallery = [3+]
-  const heroPhoto = photoList[0] || null
-  const interstitialPhoto1 = photoList[1] || null
-  const interstitialPhoto2 = photoList[2] || null
-  const galleryPhotos = photoList.slice(3)
 
-  const hasDetails = !!(profile?.age || profile?.occupation || profile?.education || profile?.location)
-  const hasStats = !!(profile?.stats && (profile.stats.eventsAttended > 0 || profile.stats.eventsFavorited > 0 || profile.stats.eventsOrganized > 0))
 
   // Profile completion: check if bio, interests, or photos are incomplete
-  const isProfileIncomplete = useMemo(() => {
-    if (!profile) return false
-    const noBio = !profile.bio || profile.bio.trim() === ''
-    const noInterests = !profile.interests || profile.interests.length === 0
-    const noPhotos = photoList.length === 0
-    return noBio || noInterests || noPhotos
-  }, [profile, photoList])
 
-  const getOptimized = (uri: string, w: number, h: number) => {
-    const optimized = getOptimizedImageUrl(uri, { width: w, height: h, resize: 'cover', quality: 70 })
-    return optimized || uri
-  }
 
   const getUserAndProfile = useCallback(async (force = false) => {
     if (!user) return
@@ -218,282 +210,85 @@ function ProfileInner() {
     </>
   )
 
+  /*
+   * `1141:5633` -- the same pieces `app/user/[id].tsx` draws, because it is the
+   * same person seen from the other side.
+   *
+   * This screen was the last one still on `APP_COLORS`, and it was not for want
+   * of components: `components/profile/ProfileSections.tsx` was written for
+   * *both* frames -- `1141:5163` (attendee) and `1141:5633` (this one) -- and
+   * only the attendee half was ever wired. The own-profile half sat built and
+   * unreachable while this screen kept drawing the old hero, the old quick
+   * actions and the old stat tiles.
+   *
+   * Three differences from the attendee view, all following from it being you:
+   *
+   *   - nothing is gated, so `blurred` is never set and every photo is yours
+   *   - there is nobody to Connect to, so `ProfileActions` is replaced by
+   *     `ProfileOwnCta` -- the only reason to look at your own profile is to
+   *     change what other people see
+   *   - the top bar carries Settings, which no attendee profile has
+   */
   const renderContent = () => (
     <>
-      {/* Hero Photo */}
-      <View style={styles.heroContainer}>
-        {heroPhoto ? (
-          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(0)}>
-          <OptimizedImage
-            source={getOptimized(heroPhoto, WINDOW_WIDTH, HERO_HEIGHT) as any}
-            style={styles.heroImage as any}
-            contentFit="cover"
-            width={WINDOW_WIDTH}
-            height={HERO_HEIGHT}
-            quality={70}
-          />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.heroPlaceholder}>
-            <OptimizedImage
-              source={placeholderImg as any}
-              style={styles.heroImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH}
-              height={HERO_HEIGHT}
-              quality={60}
-            />
-            <View style={styles.heroPlaceholderOverlay}>
-              <Typography variant="h3" style={styles.heroPlaceholderTitle}>Add your first photo</Typography>
-              <Typography variant="body2" style={styles.heroPlaceholderSubtitle}>Profiles with photos get more matches</Typography>
-              <TouchableOpacity
-                onPress={() => router.push('/edit-profile')}
-                style={styles.heroPlaceholderCta}
-                accessibilityRole="button"
-                accessibilityLabel="Add profile photo"
-              >
-                <Typography variant="button" style={styles.heroPlaceholderCtaText}>Add Photo</Typography>
-              </TouchableOpacity>
-            </View>
+      <ProfileHero
+        width={WINDOW_WIDTH}
+        photos={photoList}
+        title={`${profile?.name || 'New User'}${profile?.age ? `, ${profile.age}` : ''}`}
+        subtitle={profile?.occupation || profile?.location || null}
+        pseudonym={profile?.name || 'You'}
+        bottomInset={TAB_BAR_CLEARANCE}
+        onPressMedia={() => openLightbox(0)}
+      />
+
+      <View style={styles.canvas}>
+        {profile?.bio ? (
+          <View style={styles.section}>
+            <ProfileHeading title="About" />
+            <ProfileBio text={profile.bio} />
           </View>
-        )}
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)']}
-          locations={[0.4, 0.75, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.heroGradient}
-        />
-        <View style={styles.heroOverlay}>
-          <Typography variant="h1" style={styles.heroName}>
-            {profile?.name || 'New User'}{profile?.age ? `, ${profile.age}` : ''}
-          </Typography>
-          {!!profile?.location && (
-            <View style={styles.heroLocationRow}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Typography variant="body2" style={styles.heroLocationText}>
-                {profile.location}
-              </Typography>
-            </View>
-          )}
-        </View>
+        ) : null}
+
+        {profile?.interests && profile.interests.length > 0 ? (
+          <View style={styles.section}>
+            <ProfileHeading title="Interests" />
+            <ProfileInterests interests={profile.interests} />
+          </View>
+        ) : null}
+
+        {/*
+          Occupation and education, asymmetric -- a filled card and a ruled
+          block. Both are real fields on the profile; the frame's `PRO` badge
+          and `@handle` are not, and are recorded in `docs/PROFILE.md` rather
+          than invented here.
+        */}
+        {profile?.occupation || profile?.education ? (
+          <View style={styles.details}>
+            {profile.occupation ? (
+              <ProfileDetail label="OCCUPATION" value={profile.occupation} />
+            ) : null}
+            {profile.education ? (
+              <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
+            ) : null}
+          </View>
+        ) : null}
+
+        {photoList.length > 1 ? (
+          <View style={styles.section}>
+            <ProfileHeading
+              title="Gallery"
+              trailing={`${photoList.length} photo${photoList.length === 1 ? '' : 's'}`}
+            />
+            <ProfileGallery
+              photos={photoList.slice(1)}
+              columnWidth={(WINDOW_WIDTH - PROFILE_GUTTER * 2 - 16) / 2}
+              onPressPhoto={(index) => openLightbox(index + 1)}
+            />
+          </View>
+        ) : null}
+
+        <ProfileOwnCta onEdit={() => router.push('/edit-profile')} />
       </View>
-
-      {/* Quick Actions Row */}
-      <View style={styles.quickActionsRow}>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => router.push('/edit-profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
-        >
-          <Ionicons name="create-outline" size={18} color={APP_COLORS.textPrimary} />
-          <Typography variant="button" style={styles.quickActionText}>Edit Profile</Typography>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.quickActionButton}
-          onPress={() => router.push('/settings')}
-          accessibilityRole="button"
-          accessibilityLabel="Open settings"
-        >
-          <Ionicons name="settings-outline" size={18} color={APP_COLORS.textPrimary} />
-          <Typography variant="button" style={styles.quickActionText}>Settings</Typography>
-        </TouchableOpacity>
-      </View>
-
-      {/* Details Card */}
-      {hasDetails && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Details</Typography>
-            <View style={styles.detailsList}>
-              {!!profile?.age && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.age} years old</Typography>
-                </View>
-              )}
-              {!!profile?.occupation && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="briefcase-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.occupation}</Typography>
-                </View>
-              )}
-              {!!profile?.education && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="school-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.education}</Typography>
-                </View>
-              )}
-              {!!profile?.location && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.location}</Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Interstitial Photo 1 */}
-      {interstitialPhoto1 && (
-        <View style={styles.interstitialContainer}>
-          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(1)}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto1, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* About Card */}
-      {!!profile?.bio && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>About</Typography>
-            <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-          </View>
-        </View>
-      )}
-
-      {/* Interstitial Photo 2 */}
-      {interstitialPhoto2 && (
-        <View style={styles.interstitialContainer}>
-          <TouchableOpacity activeOpacity={0.92} onPress={() => openLightbox(2)}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto2, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Interests Card */}
-      {profile?.interests && profile.interests.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Interests</Typography>
-            <View style={styles.tagsRow}>
-              {profile.interests.map((interest, idx) => (
-                <View key={`${interest}-${idx}`} style={styles.tag}>
-                  <Typography variant="caption" style={styles.tagText}>{interest}</Typography>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Stats Card */}
-      {hasStats && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Activity</Typography>
-            <View style={styles.statsRow}>
-              {(profile?.stats?.eventsAttended ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsAttended}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Attended</Typography>
-                </View>
-              )}
-              {(profile?.stats?.eventsFavorited ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="heart-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsFavorited}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Favorited</Typography>
-                </View>
-              )}
-              {(profile?.stats?.eventsOrganized ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="megaphone-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsOrganized}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Organized</Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Member Since */}
-      {!!profile?.memberSince && (
-        <View style={styles.memberSinceContainer}>
-          <Ionicons name="time-outline" size={14} color={APP_COLORS.textSecondary} />
-          <Typography variant="caption" style={styles.memberSinceText}>
-            Member since {new Date(profile.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Typography>
-        </View>
-      )}
-
-      {/* Gallery — photos 4+ in 2-column grid */}
-      {galleryPhotos.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>More Photos</Typography>
-            <View style={styles.galleryGrid}>
-              {galleryPhotos.map((uri, idx) => {
-                const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
-                return (
-                  <TouchableOpacity key={`gal_${idx}`} activeOpacity={0.85} onPress={() => openLightbox(3 + idx)}>
-                  <View style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
-                    <OptimizedImage
-                      source={getOptimized(uri, itemSize, itemSize) as any}
-                      style={styles.galleryImage as any}
-                      contentFit="cover"
-                      width={itemSize}
-                      height={itemSize}
-                      quality={60}
-                    />
-                  </View>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Profile Completion Card */}
-      {isProfileIncomplete && (
-        <View style={styles.cardContainer}>
-          <View style={[styles.card, styles.completionCard]}>
-            <View style={styles.completionHeader}>
-              <Ionicons name="sparkles" size={20} color={APP_COLORS.accent} />
-              <Typography variant="h3" style={styles.completionTitle}>Complete Your Profile</Typography>
-            </View>
-            <Typography variant="body2" style={styles.completionSubtitle}>
-              {!photoList.length ? 'Add photos to stand out.' : !profile?.bio ? 'Write a bio so others can learn about you.' : 'Add your interests to find better matches.'}
-            </Typography>
-            <TouchableOpacity
-              style={styles.completionCta}
-              onPress={() => router.push('/edit-profile')}
-              accessibilityRole="button"
-              accessibilityLabel="Complete your profile"
-            >
-              <Typography variant="button" style={styles.completionCtaText}>Complete Profile</Typography>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Bottom spacer */}
-      <View style={{ height: 40 }} />
 
       <PhotoLightbox
         photos={photoList}
@@ -503,6 +298,7 @@ function ProfileInner() {
       />
     </>
   )
+
 
   if (authLoading || loading) {
     return (
@@ -535,75 +331,25 @@ function ProfileInner() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
+  container: { flex: 1, backgroundColor: EMBER.bg },
+
+  /* The same three from `app/user/[id].tsx`, because it is the same page. */
+  canvas: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 32, gap: PROFILE_SECTION_GAP },
+  section: { gap: 24 },
+  details: { gap: 48 },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundBase,
+    backgroundColor: EMBER.bg,
     padding: 20,
   },
-  errorText: { fontSize: 16, color: APP_COLORS.destructive, textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: APP_COLORS.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  errorText: { fontSize: 16, // EMBER has no destructive token; this surface is the only one that needs one.
+    color: '#FF3B30', textAlign: 'center', marginBottom: 20 },
+  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   retryButtonText: { color: '#000', fontWeight: '600', fontSize: 16 },
 
   // Hero
-  heroContainer: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-    position: 'relative',
-  },
-  heroImage: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-  },
-  heroPlaceholder: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
-  heroPlaceholderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  heroPlaceholderTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
-  heroPlaceholderSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center', marginBottom: 14 },
-  heroPlaceholderCta: { backgroundColor: APP_COLORS.accent, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8 },
-  heroPlaceholderCtaText: { color: '#000', fontWeight: '800', fontSize: 14 },
-  heroGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: HERO_HEIGHT * 0.5,
-  },
-  heroOverlay: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
-  },
-  heroName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  heroLocationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  heroLocationText: {
-    color: 'rgba(255,255,255,0.85)',
-    marginLeft: 4,
-    fontSize: 14,
-  },
 
   // Quick Actions
   quickActionsRow: {
@@ -612,21 +358,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 12,
   },
-  quickActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 12,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  quickActionText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
 
   // Cards
   cardContainer: {
@@ -634,56 +365,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   card: {
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surface,
     borderRadius: CARD_BORDER_RADIUS,
     padding: 16,
   },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: APP_COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
 
   // Details
-  detailsList: {
-    gap: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  detailIcon: {
-    marginRight: 10,
-    width: 20,
-  },
-  detailText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 15,
-  },
 
   // Interstitial photos
-  interstitialContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  interstitialWrapper: {
-    borderRadius: PHOTO_BORDER_RADIUS,
-    overflow: 'hidden',
-  },
-  interstitialImage: {
-    width: WINDOW_WIDTH - 32,
-    height: INTERSTITIAL_HEIGHT,
-  },
 
   // About
-  aboutText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 15,
-    lineHeight: 22,
-  },
 
   // Tags / Interests
   tagsRow: {
@@ -691,19 +382,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   tag: {
-    backgroundColor: APP_COLORS.backgroundBase,
+    backgroundColor: EMBER.bg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(73,71,71,0.3)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
     marginRight: 8,
     marginBottom: 8,
-  },
-  tagText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
   },
 
   // Stats
@@ -715,79 +401,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: APP_COLORS.textSecondary,
-  },
 
   // Member since
-  memberSinceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    gap: 6,
-  },
-  memberSinceText: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 13,
-  },
 
   // Gallery
-  galleryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  galleryItem: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
-  galleryImage: {
-    width: '100%',
-    height: '100%',
-  },
 
   // Profile Completion
-  completionCard: {
-    borderWidth: 1,
-    borderColor: APP_COLORS.accent,
-    borderStyle: 'dashed',
-  },
-  completionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  completionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-  },
-  completionSubtitle: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  completionCta: {
-    backgroundColor: APP_COLORS.accent,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  completionCtaText: {
-    color: '#000',
-    fontWeight: '700',
-    fontSize: 14,
-  },
 })
 
 
