@@ -32,7 +32,7 @@ import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
-import { APP_COLORS } from '../../lib/theme'
+import { EMBER } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -510,7 +510,7 @@ function GroupChatInner(props?: {
   }
 
   const ListHeader = loading ? (
-    <ActivityIndicator style={styles.loadingIndicator} color={APP_COLORS.accent} />
+    <ActivityIndicator style={styles.loadingIndicator} color={EMBER.accent} />
   ) : hasMore ? (
     <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
       <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
@@ -526,7 +526,7 @@ function GroupChatInner(props?: {
       edges={embedded ? ['bottom'] : ['top', 'bottom']}
     >
       {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
-      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
+      <StatusBar style="light" backgroundColor={EMBER.bg} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {embedded ? null : (
@@ -682,7 +682,7 @@ function GroupChatInner(props?: {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
+  container: { flex: 1, backgroundColor: EMBER.bg },
   flex: { flex: 1 },
   banner: { marginHorizontal: 16, marginTop: 4, marginBottom: 2 },
 
@@ -712,9 +712,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)',
     gap: 10,
   },
-  replyBarLine: { width: 3, height: 32, backgroundColor: APP_COLORS.accent, borderRadius: 2 },
+  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.accent, borderRadius: 2 },
   replyBarContent: { flex: 1 },
-  replyBarLabel: { fontSize: 12, fontWeight: '600', color: APP_COLORS.accent },
+  replyBarLabel: { fontSize: 12, fontWeight: '600', color: EMBER.accent },
   replyBarMessage: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
   replyBarClose: { padding: 4 },
 
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   scrollToBottomBtn: {
     position: 'absolute', right: 16, bottom: 80,
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: APP_COLORS.accent, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: EMBER.accent, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
 
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
   emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
   emptyCta: {
-    marginTop: 16, backgroundColor: APP_COLORS.accent,
+    marginTop: 16, backgroundColor: EMBER.accent,
     borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10,
   },
   emptyCtaText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },

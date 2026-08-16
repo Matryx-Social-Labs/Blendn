@@ -53,6 +53,22 @@ export interface ChatBubbleProps {
   edited?: boolean
   /** Emoji → the ids that sent it. Only the count is ever shown. */
   reactions?: Record<string, string[]> | null
+  /**
+   * Which surface this is.
+   *
+   * `direct` drops the avatar and the sender's name. A DM has exactly one other
+   * person in it, so a disc and a name on every inbound row repeat the screen's
+   * title once per message and halve the width of the column to do it.
+   */
+  variant?: 'room' | 'direct'
+  /**
+   * Delivery state, on your own messages only. `null` in the room.
+   *
+   * A room has no meaningful "read" -- twenty people read at twenty different
+   * times, so a tick would either lie or need twenty answers. A DM has one
+   * reader and one answer.
+   */
+  receipt?: 'sent' | 'read' | null
   onLongPress?: () => void
 }
 
@@ -65,8 +81,11 @@ function ChatBubbleBase({
   replyTo,
   edited,
   reactions,
+  variant = 'room',
+  receipt = null,
   onLongPress,
 }: ChatBubbleProps) {
+  const direct = variant === 'direct'
   const mark = pseudonymAvatar(senderId)
   const reactionEntries = reactions ? Object.entries(reactions) : []
 
@@ -77,7 +96,7 @@ function ChatBubbleBase({
         native view and a busy room draws one of these per message; the Grid
         pays it for three cards on screen, a chat would pay it for thirty.
       */}
-      {mine ? null : (
+      {mine || direct ? null : (
         <View style={[styles.avatar, { backgroundColor: mark.colors[0] }]}>
           <Text style={styles.avatarGlyph} maxFontSizeMultiplier={1}>
             {mark.character}
@@ -92,7 +111,19 @@ function ChatBubbleBase({
             name nearest the bubble's own edge, so the eye lands on "who" in the
             same place relative to the message either way.
           */}
-          {mine ? (
+          {direct ? (
+            <>
+              <Text style={styles.time}>{time}</Text>
+              {mine && receipt ? (
+                <Text
+                  style={[styles.receipt, receipt === 'read' && styles.receiptRead]}
+                  accessibilityLabel={receipt === 'read' ? 'Read' : 'Sent'}
+                >
+                  {receipt === 'read' ? '✓✓' : '✓'}
+                </Text>
+              ) : null}
+            </>
+          ) : mine ? (
             <>
               <Text style={styles.time}>{time}</Text>
               <Text style={styles.nameMine}>Me</Text>
@@ -243,6 +274,14 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: EMBER.textPrimary,
   },
+  receipt: {
+    fontFamily: EMBER_FONTS.bodyMedium,
+    fontSize: 11,
+    lineHeight: 15,
+    color: 'rgba(174,170,170,0.6)',
+  },
+  /* Read is the accent, so "they saw it" is a colour change and not a glyph count. */
+  receiptRead: { color: EMBER.accent },
   edited: {
     fontFamily: EMBER_FONTS.bodyMedium,
     fontSize: 10,

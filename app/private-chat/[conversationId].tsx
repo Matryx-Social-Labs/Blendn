@@ -18,12 +18,15 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
+import { ChatBubble } from '../../components/chat/ChatBubble'
+import { ChatComposer } from '../../components/chat/ChatComposer'
+import { SystemNotice } from '../../components/chat/SystemNotice'
+import { TypingIndicator } from '../../components/chat/TypingIndicator'
 import OptimizedImage from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import { apiClient } from '../../lib/apiClient'
@@ -34,7 +37,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { matchOpener } from '../../lib/matchOpener'
-import { APP_COLORS, EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -192,7 +195,7 @@ function RevealBar({
         <Ionicons
           name={action.kind === 'reveal' ? 'eye-outline' : 'hand-left-outline'}
           size={16}
-          color={APP_COLORS.textPrimary}
+          color={EMBER.textPrimary}
         />
         <Text style={revealStyles.buttonText}>{action.label}</Text>
       </TouchableOpacity>
@@ -218,7 +221,7 @@ const revealStyles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  buttonText: { color: APP_COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
+  buttonText: { color: EMBER.textPrimary, fontSize: 14, fontWeight: '600' },
 })
 
 function PrivateChatInner() {
@@ -482,41 +485,54 @@ function PrivateChatInner() {
     return items
   }, [messages])
 
+  /*
+   * Stable, so `ChatBubble`'s memo can bite: a conversation being typed in
+   * re-renders on every keystroke, and an inline arrow would re-render every
+   * mounted bubble each time.
+   */
+  const reportMessage = useCallback((messageId: string) => {
+    showTray('Message options', 'What would you like to do?', [
+      { label: 'Cancel', onPress: closeTray },
+      {
+        label: 'Report',
+        variant: 'destructive',
+        onPress: () => {
+          closeTray()
+          showMessageReportOptions(messageId, 'private')
+        },
+      },
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const renderMessage = ({ item }: { item: PrivateMessage }) => {
     const isMe = item.senderId === authUser?.id
     return (
-      <TouchableOpacity
-        style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}
-        onLongPress={() => {
-          if (!isMe) {
-            showTray('Message options', 'What would you like to do?', [
-              { label: 'Cancel', onPress: closeTray },
-              { label: 'Report', variant: 'destructive', onPress: () => { closeTray(); showMessageReportOptions(item.id, 'private') } },
-            ])
-          }
-        }}
-        delayLongPress={400}
-        activeOpacity={0.85}
-      >
-        <View style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble]}>
-          <Text style={styles.bubbleText}>{item.text || ''}</Text>
-          <View style={styles.bubbleMeta}>
-            <Text style={styles.bubbleTime}>{formatTime(item.createdAt)}</Text>
-            {isMe && <Text style={[styles.tick, item.isRead && styles.tickSeen]}>{item.isRead ? ' ✓✓' : ' ✓'}</Text>}
-          </View>
-        </View>
-      </TouchableOpacity>
+      <ChatBubble
+        variant="direct"
+        mine={isMe}
+        senderId={item.senderId}
+        senderName={reveal?.displayName || 'Them'}
+        text={item.text || ''}
+        time={formatTime(item.createdAt)}
+        /*
+         * Only on your own, and only here. A room has twenty readers and twenty
+         * different answers, so a tick there would either lie or need twenty.
+         */
+        receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}
+        /*
+         * Reporting your own message is not a thing, so their messages get the
+         * long press and yours do not.
+         */
+        onLongPress={isMe ? undefined : () => reportMessage(item.id)}
+      />
     )
   }
 
   const renderChatItem = ({ item }: { item: ChatListItem }) => {
-    if (item.kind === 'separator') {
-      return (
-        <View style={styles.daySep}>
-          <Text style={styles.daySepText}>{item.label}</Text>
-        </View>
-      )
-    }
+    // Same centred pill the room uses -- a date is the conversation narrating
+    // itself, not something either person said.
+    if (item.kind === 'separator') return <SystemNotice label={item.label} />
     return renderMessage({ item })
   }
 
@@ -553,7 +569,7 @@ function PrivateChatInner() {
         </View>
       ) : null}
       {loading ? (
-        <ActivityIndicator style={styles.loadingIndicator} color={APP_COLORS.accent} />
+        <ActivityIndicator style={styles.loadingIndicator} color={EMBER.accent} />
       ) : hasMore ? (
         <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
           <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
@@ -565,7 +581,7 @@ function PrivateChatInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" backgroundColor={APP_COLORS.backgroundBase} />
+      <StatusBar style="light" backgroundColor={EMBER.bg} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ChatHeader
@@ -615,10 +631,21 @@ function PrivateChatInner() {
           windowSize={10}
           initialNumToRender={25}
           ListHeaderComponent={ListHeader}
+          /*
+           * At the end of the feed rather than pinned above the composer -- it
+           * is a thing happening in the conversation, and pinned it was equally
+           * present whether you were reading the newest message or scrolled
+           * back through a month of them.
+           */
+          ListFooterComponent={
+            isOtherTyping ? (
+              <TypingIndicator label={`${otherUserName || 'They'} are typing...`} />
+            ) : null
+          }
           ListEmptyComponent={!loading ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyGlyph}>
-                <Ionicons name="chatbubble-ellipses-outline" size={36} color={APP_COLORS.textTertiary} />
+                <Ionicons name="chatbubble-ellipses-outline" size={36} color={EMBER.textTertiary} />
               </View>
               <Text style={styles.emptyTitle}>Start the conversation!</Text>
               {/*
@@ -647,47 +674,24 @@ function PrivateChatInner() {
           </TouchableOpacity>
         )}
 
-        {isOtherTyping && (
-          <View style={styles.typingRow}>
-            <Text style={styles.typingText}>{otherUserName || 'User'} is typing…</Text>
-          </View>
-        )}
-
-        {/* Input bar */}
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={newMessage}
-            onChangeText={(text) => {
-              setNewMessage(text)
-              if (text.length > 0 && conversationId) {
-                if (!typingActiveSentRef.current) { startPrivateTyping(String(conversationId)); typingActiveSentRef.current = true }
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                typingTimeoutRef.current = setTimeout(() => { stopPrivateTyping(String(conversationId)); typingActiveSentRef.current = false }, 2000)
-              } else if (text.length === 0 && conversationId) {
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                stopPrivateTyping(String(conversationId))
-                typingActiveSentRef.current = false
-              }
-            }}
-            placeholder="Message"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            multiline
-            maxLength={1000}
-            onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-          />
-          <ScalePress
-            style={[styles.sendBtn, (!newMessage.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
-            pressedScale={0.94}
-          >
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="send" size={18} color="#fff" />
+        <ChatComposer
+          value={newMessage}
+          sending={sending}
+          onSend={sendMessage}
+          onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+          onChangeText={(text) => {
+            setNewMessage(text)
+            if (text.length > 0 && conversationId) {
+              if (!typingActiveSentRef.current) { startPrivateTyping(String(conversationId)); typingActiveSentRef.current = true }
+              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+              typingTimeoutRef.current = setTimeout(() => { stopPrivateTyping(String(conversationId)); typingActiveSentRef.current = false }, 2000)
+            } else if (text.length === 0 && conversationId) {
+              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+              stopPrivateTyping(String(conversationId))
+              typingActiveSentRef.current = false
             }
-          </ScalePress>
-        </View>
+          }}
+        />
       </KeyboardAvoidingView>
 
       <ActionTray visible={trayVisible} title={trayTitle} message={trayMessage} buttons={trayButtons} onClose={closeTray} />
@@ -696,7 +700,7 @@ function PrivateChatInner() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
+  container: { flex: 1, backgroundColor: EMBER.bg },
   flex: { flex: 1 },
   banner: { marginHorizontal: 16, marginTop: 4, marginBottom: 2 },
 
@@ -735,89 +739,13 @@ const styles = StyleSheet.create({
   loadMoreText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
 
   // Messages
-  messageRow: { flexDirection: 'row', marginVertical: 2 },
-  myRow: { justifyContent: 'flex-end' },
-  otherRow: { justifyContent: 'flex-start' },
 
-  bubble: {
-    maxWidth: '78%',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  myBubble: {
-    backgroundColor: '#005C4B',
-    borderBottomRightRadius: 4,
-  },
-  otherBubble: {
-    backgroundColor: '#1F2937',
-    borderBottomLeftRadius: 4,
-  },
-  bubbleText: {
-    fontSize: 15,
-    lineHeight: 21,
-    color: '#FFFFFF',
-  },
-  bubbleMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 3,
-    gap: 2,
-  },
-  bubbleTime: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
-  tick: { fontSize: 11, color: 'rgba(255,255,255,0.55)' },
-  tickSeen: { color: '#53BDEB' },
 
   // Day separator
-  daySep: { alignItems: 'center', marginVertical: 12 },
-  daySepText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
 
   // Typing
-  typingRow: { paddingHorizontal: 16, paddingVertical: 6 },
-  typingText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontStyle: 'italic' },
 
   // Input bar — WhatsApp style: simple, no icons
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: '#111214',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.14)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#FFFFFF',
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: APP_COLORS.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnDisabled: { backgroundColor: '#2C2C2E' },
 
   // Scroll to bottom
   scrollToBottomBtn: {
@@ -827,7 +755,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -843,9 +771,9 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 22,
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surface,
     borderWidth: 1,
-    borderColor: APP_COLORS.separator,
+    borderColor: 'rgba(73,71,71,0.3)',
     marginBottom: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -854,7 +782,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
   emptyCta: {
     marginTop: 16,
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: EMBER.accent,
     borderRadius: 999,
     paddingHorizontal: 20,
     paddingVertical: 10,
