@@ -1,33 +1,27 @@
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-    Alert,
-    Dimensions,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../../components/AppHeader'
-import OptimizedImage from '../../components/OptimizedImage'
+import { Alert, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
-import Typography from '../../components/Typography'
+import {
+  PROFILE_GUTTER,
+  PROFILE_SECTION_GAP,
+  ProfileActions,
+  ProfileBio,
+  ProfileDetail,
+  ProfileGallery,
+  ProfileHeading,
+  ProfileHero,
+  ProfileInterests,
+} from '../../components/profile/ProfileSections'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { APP_COLORS } from '../../lib/theme'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
-const placeholderImg = require('../../assets/images/icon.png')
-
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
-const HERO_HEIGHT = Math.round(WINDOW_WIDTH * 1.25)
-const INTERSTITIAL_HEIGHT = Math.round(WINDOW_WIDTH * 1.15)
-const CARD_BORDER_RADIUS = 16
-const PHOTO_BORDER_RADIUS = 20
 
 interface UserProfileView {
   user_id: string
@@ -38,6 +32,24 @@ interface UserProfileView {
   occupation?: string
   education?: string
   interests?: string[]
+  /** Coarse, and outside the identity gate on purpose. See the hero subtitle. */
+  workField?: string
+  /**
+   * The 40px derivative of their main photo, sent only when they have NOT
+   * revealed — the blurred half of "pseudonyms + blurred photos".
+   *
+   * Arrives *instead of* `photos`, never alongside it. That is the whole
+   * security property: there is no real URL on the device to un-blur.
+   */
+  blurPhoto?: string | null
+  /**
+   * The subset you both picked, already intersected by the server.
+   *
+   * Drives the frame's one gradient chip. On the artboard that accent is
+   * decoration; here it marks the reason you might talk to them, which is the
+   * most useful thing on the screen.
+   */
+  sharedInterests?: string[]
   photos?: string[]
   stats?: {
     eventsAttended: number
@@ -51,6 +63,7 @@ type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
 
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -140,6 +153,17 @@ export default function UserProfile() {
           education: data.education,
           interests,
           photos,
+          /*
+           * Both are optional on the payload and typed loosely upstream, so they
+           * are read defensively rather than asserted -- an older server build
+           * simply yields no shared chips and no subtitle, which degrades to the
+           * plain design rather than to a crash.
+           */
+          workField: (data as { work_field?: string }).work_field,
+          blurPhoto: (data as { blurPhoto?: string | null }).blurPhoto ?? null,
+          sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
+            ? (data as { sharedInterests?: string[] }).sharedInterests
+            : [],
           stats: data.stats,
           memberSince: data.memberSince,
         }
@@ -242,507 +266,234 @@ export default function UserProfile() {
     return 'Connect'
   }, [ctaMode, actionLoading])
   const ctaDisabled = actionLoading || ctaMode === 'self' || ctaMode === 'requested'
-  const ctaButtonStyle = [
-    styles.connectCta,
-    ctaMode === 'message' && styles.connectCtaMessage,
-    ctaMode === 'requested' && styles.connectCtaRequested,
-    ctaDisabled && styles.connectCtaDisabled,
-  ]
 
   if (!loading && !profile) {
     return (
-      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
-        <Typography variant="body2" style={styles.muted}>Profile not found</Typography>
-      </SafeAreaView>
+      <View style={styles.center}>
+        <Text style={styles.muted}>Profile not found</Text>
+      </View>
     )
   }
 
-  const photoList = (profile?.photos && profile.photos.length > 0)
-    ? profile.photos.filter((url): url is string => !!url && url.trim() !== '')
-    : []
+  const photos = (profile?.photos ?? []).filter((u): u is string => !!u && u.trim() !== '')
 
-  // Split photos: hero = first, interstitials = [1] and [2], gallery = [3+]
-  const heroPhoto = photoList[0] || null
-  const interstitialPhoto1 = photoList[1] || null
-  const interstitialPhoto2 = photoList[2] || null
-  const galleryPhotos = photoList.slice(3)
+  /*
+   * Revealed, inferred from what actually arrived rather than from a flag.
+   *
+   * `profiles/[userId]` withholds `bio`, `occupation`, `education` and `photos`
+   * behind `maySeeIdentity` and returns the literal name "Attendee" otherwise.
+   * There is no `revealed` boolean in the payload, and adding one would be a
+   * second source of truth for a rule that already has exactly one.
+   *
+   * A photo is the honest test: it is the field that cannot be absent for an
+   * innocent reason once someone has revealed, because `User.image` mirrors the
+   * primary and the gate is the only thing that empties it.
+   */
+  const revealed = photos.length > 0 || !!profile?.bio || !!profile?.occupation
 
-  const hasDetails = !!(profile?.age || profile?.occupation || profile?.education || profile?.location)
-  const hasStats = !!(profile?.stats && (profile.stats.eventsAttended > 0 || profile.stats.eventsFavorited > 0 || profile.stats.eventsOrganized > 0))
+  /*
+   * One still, blurred, when they have not revealed.
+   *
+   * `blurPhoto` arrives instead of `photos`, so this branch has a picture and
+   * the revealed branch has the real ones — they are never both present. Falls
+   * through to the generated mark when there is no derivative, which is every
+   * profile until people re-upload.
+   */
+  const blurHero = !revealed && profile?.blurPhoto ? [profile.blurPhoto] : []
 
-  const getOptimized = (uri: string, w: number, h: number) => {
-    const optimized = getOptimizedImageUrl(uri, { width: w, height: h, resize: 'cover', quality: 70 })
-    return optimized || uri
-  }
+  const heroTitle = revealed
+    ? [profile?.name, profile?.age].filter(Boolean).join(', ') || 'Someone'
+    : profile?.name || 'Attendee'
 
-  const renderSkeleton = () => (
-    <>
-      {/* Hero skeleton */}
-      <SkeletonBlock width={WINDOW_WIDTH} height={HERO_HEIGHT} borderRadius={0} />
-      {/* Card skeletons */}
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'60%'} style={{ marginBottom: 12 }} />
-          <SkeletonLine width={'40%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'50%'} style={{ marginBottom: 8 }} />
-          <SkeletonLine width={'35%'} />
-        </View>
-      </View>
-      <View style={styles.cardContainer}>
-        <SkeletonBlock width={WINDOW_WIDTH - 32} height={INTERSTITIAL_HEIGHT * 0.5} borderRadius={PHOTO_BORDER_RADIUS} />
-      </View>
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'25%'} style={{ marginBottom: 10 }} />
-          <SkeletonLine width={'90%'} style={{ marginBottom: 6 }} />
-          <SkeletonLine width={'70%'} />
-        </View>
-      </View>
-      <View style={styles.cardContainer}>
-        <View style={styles.card}>
-          <SkeletonLine width={'30%'} style={{ marginBottom: 10 }} />
-          <View style={styles.tagsRow}>
-            {[...Array(4)].map((_, i) => (
-              <SkeletonBlock key={`skt_${i}`} width={78} height={32} borderRadius={14} style={{ marginRight: 8, marginBottom: 8 }} />
-            ))}
-          </View>
-        </View>
-      </View>
-    </>
-  )
+  /*
+   * The frame's accent line is "PRO MEMBER • @blendn_julia". Neither exists --
+   * there is no membership tier and no username column -- so it carries what is
+   * real and, in an unrevealed profile, is the whole point of `work_field`
+   * living outside the identity gate: an attribute rather than an address.
+   */
+  const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' • ') || null
 
-  const renderContent = () => (
-    <>
-      {/* Hero Photo */}
-      <View style={styles.heroContainer}>
-        {heroPhoto ? (
-          <OptimizedImage
-            source={getOptimized(heroPhoto, WINDOW_WIDTH, HERO_HEIGHT) as any}
-            style={styles.heroImage as any}
-            contentFit="cover"
-            width={WINDOW_WIDTH}
-            height={HERO_HEIGHT}
-            quality={70}
-          />
-        ) : (
-          <View style={styles.heroPlaceholder}>
-            <OptimizedImage
-              source={placeholderImg as any}
-              style={styles.heroImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH}
-              height={HERO_HEIGHT}
-              quality={60}
-            />
-          </View>
-        )}
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.85)']}
-          locations={[0.4, 0.75, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.heroGradient}
-        />
-        <View style={styles.heroOverlay}>
-          <Typography variant="h1" style={styles.heroName}>
-            {profile?.name}{profile?.age ? `, ${profile.age}` : ''}
-          </Typography>
-          {!!profile?.location && (
-            <View style={styles.heroLocationRow}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Typography variant="body2" style={styles.heroLocationText}>
-                {profile.location}
-              </Typography>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Details Card */}
-      {hasDetails && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Details</Typography>
-            <View style={styles.detailsList}>
-              {!!profile?.age && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="calendar-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.age} years old</Typography>
-                </View>
-              )}
-              {!!profile?.occupation && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="briefcase-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.occupation}</Typography>
-                </View>
-              )}
-              {!!profile?.education && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="school-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.education}</Typography>
-                </View>
-              )}
-              {!!profile?.location && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="location-outline" size={16} color={APP_COLORS.textSecondary} style={styles.detailIcon} />
-                  <Typography variant="body1" style={styles.detailText}>{profile.location}</Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Interstitial Photo 2 */}
-      {interstitialPhoto1 && (
-        <View style={styles.interstitialContainer}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto1, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* About Card */}
-      {!!profile?.bio && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>About</Typography>
-            <Typography variant="body1" style={styles.aboutText}>{profile.bio}</Typography>
-          </View>
-        </View>
-      )}
-
-      {/* Interstitial Photo 3 */}
-      {interstitialPhoto2 && (
-        <View style={styles.interstitialContainer}>
-          <View style={styles.interstitialWrapper}>
-            <OptimizedImage
-              source={getOptimized(interstitialPhoto2, WINDOW_WIDTH - 32, INTERSTITIAL_HEIGHT) as any}
-              style={styles.interstitialImage as any}
-              contentFit="cover"
-              width={WINDOW_WIDTH - 32}
-              height={INTERSTITIAL_HEIGHT}
-              quality={70}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* Interests Card */}
-      {profile?.interests && profile.interests.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Interests</Typography>
-            <View style={styles.tagsRow}>
-              {profile.interests.map((interest, idx) => (
-                <View key={`${interest}-${idx}`} style={styles.tag}>
-                  <Typography variant="caption" style={styles.tagText}>{interest}</Typography>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Gallery — photos 4+ in 2-column grid */}
-      {galleryPhotos.length > 0 && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>More Photos</Typography>
-            <View style={styles.galleryGrid}>
-              {galleryPhotos.map((uri, idx) => {
-                const itemSize = Math.floor((WINDOW_WIDTH - 32 - 24 - 8) / 2)
-                return (
-                  <View key={`gal_${idx}`} style={[styles.galleryItem, { width: itemSize, height: itemSize }]}>
-                    <OptimizedImage
-                      source={getOptimized(uri, itemSize, itemSize) as any}
-                      style={styles.galleryImage as any}
-                      contentFit="cover"
-                      width={itemSize}
-                      height={itemSize}
-                      quality={60}
-                    />
-                  </View>
-                )
-              })}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Stats Card */}
-      {hasStats && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Typography variant="h3" style={styles.cardTitle}>Activity</Typography>
-            <View style={styles.statsRow}>
-              {(profile?.stats?.eventsAttended ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsAttended}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Attended</Typography>
-                </View>
-              )}
-              {(profile?.stats?.eventsFavorited ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="heart-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsFavorited}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Favorited</Typography>
-                </View>
-              )}
-              {(profile?.stats?.eventsOrganized ?? 0) > 0 && (
-                <View style={styles.statItem}>
-                  <Ionicons name="megaphone-outline" size={20} color={APP_COLORS.accent} />
-                  <Typography variant="h3" style={styles.statNumber}>{profile!.stats!.eventsOrganized}</Typography>
-                  <Typography variant="caption" style={styles.statLabel}>Organized</Typography>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Bottom spacer for CTA clearance */}
-      <View style={{ height: 100 }} />
-    </>
-  )
+  const columnWidth = (WINDOW_WIDTH - PROFILE_GUTTER * 2 - 16) / 2
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader
-        title="Profile"
-        onBack={() => router.back()}
-        rightIconButton={{ name: 'ellipsis-vertical', onPress: openSafety, accessibilityLabel: 'More options' }}
-        containerStyle={{ backgroundColor: 'transparent' }}
-      />
+    <View style={styles.container}>
+      <StatusBar style="light" />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {isLoading ? renderSkeleton() : renderContent()}
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {isLoading ? (
+          <ProfileSkeleton width={WINDOW_WIDTH} />
+        ) : (
+          <>
+            <ProfileHero
+              width={WINDOW_WIDTH}
+              photos={revealed ? photos : blurHero}
+              blurred={!revealed}
+              title={heroTitle}
+              subtitle={heroSubtitle}
+              pseudonym={profile?.name || 'Attendee'}
+            />
+
+            <View style={styles.canvas}>
+              {profile?.bio ? (
+                <View style={styles.section}>
+                  <ProfileHeading title="Bio" />
+                  <ProfileBio text={profile.bio} />
+                </View>
+              ) : null}
+
+              {profile?.interests && profile.interests.length > 0 ? (
+                <View style={styles.section}>
+                  <ProfileHeading title="Interests" />
+                  <ProfileInterests
+                    interests={profile.interests}
+                    sharedInterests={profile.sharedInterests}
+                  />
+                </View>
+              ) : null}
+
+              {/*
+                Occupation and education. Asymmetric by design -- a filled card
+                and a ruled block -- which is what stops two adjacent facts
+                reading as a table. Either can be absent; both are behind the
+                identity gate.
+              */}
+              {profile?.occupation || profile?.education ? (
+                <View style={styles.details}>
+                  {profile.occupation ? (
+                    <ProfileDetail label="OCCUPATION" value={profile.occupation} />
+                  ) : null}
+                  {profile.education ? (
+                    <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/*
+                The gallery is the photos beyond the hero's. The hero already
+                cycles all of them, so repeating the first here would show the
+                same picture twice on one screen.
+              */}
+              {photos.length > 1 ? (
+                <View style={styles.section}>
+                  <ProfileHeading
+                    title="Gallery"
+                    trailing={`${photos.length} photo${photos.length === 1 ? '' : 's'}`}
+                  />
+                  <ProfileGallery photos={photos.slice(1)} columnWidth={columnWidth} />
+                </View>
+              ) : null}
+
+              {!isLoading && profile && ctaMode !== 'self' ? (
+                <ProfileActions
+                  label={ctaLabel}
+                  onPress={handleConnect}
+                  disabled={ctaDisabled}
+                  hint={ctaMessage || null}
+                />
+              ) : null}
+
+              {!revealed ? (
+                <View style={styles.section}>
+                  {/*
+                    Said plainly rather than left as a screen that looks
+                    half-loaded. The absence IS the product working, and a person
+                    who does not know that reads it as a bug.
+                  */}
+                  <ProfileHeading title="Still anonymous" />
+                  <ProfileBio
+                    text={`${heroTitle} has not revealed who they are yet. Connect, talk, and either of you can reveal when you want to.`}
+                  />
+                </View>
+              ) : null}
+            </View>
+          </>
+        )}
       </ScrollView>
 
-      {!isLoading && (
-        <View style={styles.ctaBar} pointerEvents="box-none">
-          <TouchableOpacity
-            activeOpacity={0.92}
-            style={ctaButtonStyle}
-            disabled={ctaDisabled}
-            onPress={handleConnect}
+      {/* Frame `1141:5228`. Back, and the safety menu the frame draws at the right. */}
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={12}
+          style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
+        >
+          <Ionicons name="chevron-back" size={20} color={EMBER.textPrimary} />
+        </Pressable>
+        {ctaMode !== 'self' ? (
+          <Pressable
+            onPress={openSafety}
             accessibilityRole="button"
-            accessibilityLabel={ctaMode === 'message' ? 'Open chat' : 'Send connection request'}
+            accessibilityLabel="Report or block"
+            hitSlop={12}
+            style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
           >
-            <Typography variant="button" style={styles.connectCtaText}>
-              {ctaLabel}
-            </Typography>
-          </TouchableOpacity>
-          {!!ctaMessage && (
-            <Typography variant="caption" style={styles.ctaHintText}>{ctaMessage}</Typography>
-          )}
+            <Ionicons name="ellipsis-horizontal" size={20} color={EMBER.textPrimary} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
+/** The frame's shape while it loads, so the page does not jump when it lands. */
+function ProfileSkeleton({ width }: { width: number }) {
+  return (
+    <View>
+      <SkeletonBlock width={width} height={Math.round(width * 1.925)} borderRadius={0} />
+      <View style={styles.canvas}>
+        <View style={styles.section}>
+          <SkeletonLine width="30%" />
+          <SkeletonLine width="90%" />
+          <SkeletonLine width="75%" />
         </View>
-      )}
-    </SafeAreaView>
+        <View style={styles.section}>
+          <SkeletonLine width="40%" />
+          <SkeletonLine width="60%" />
+        </View>
+      </View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { marginTop: 8, color: APP_COLORS.textSecondary },
+  container: { flex: 1, backgroundColor: EMBER.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: EMBER.bg },
+  muted: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: EMBER.textSecondary,
+  },
+  scroll: { backgroundColor: EMBER.bg },
+  // Frame `1141:5177`: `px-[12px]`, `gap-[64px]`, 32 clear of the hero.
+  canvas: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 32, gap: PROFILE_SECTION_GAP },
+  // Frame `1141:5178`: heading and body are 24 apart, not 64.
+  section: { gap: 24 },
+  // Frame `1141:5198`: the two blocks are 48 apart.
+  details: { gap: 48 },
 
-  // Hero
-  heroContainer: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-    position: 'relative',
-  },
-  heroImage: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-  },
-  heroPlaceholder: {
-    width: WINDOW_WIDTH,
-    height: HERO_HEIGHT,
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
-  heroGradient: {
+  topBar: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
-    height: HERO_HEIGHT * 0.5,
-  },
-  heroOverlay: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
-  },
-  heroName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  heroLocationRow: {
+    top: 0,
+    paddingHorizontal: 24,
+    paddingBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'space-between',
   },
-  heroLocationText: {
-    color: 'rgba(255,255,255,0.85)',
-    marginLeft: 4,
-    fontSize: 14,
-  },
-
-  // Cards
-  cardContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  card: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: CARD_BORDER_RADIUS,
-    padding: 16,
-  },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: APP_COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-
-  // Details
-  detailsList: {
-    gap: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  detailIcon: {
-    marginRight: 10,
-    width: 20,
-  },
-  detailText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 15,
-  },
-
-  // Interstitial photos
-  interstitialContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  interstitialWrapper: {
-    borderRadius: PHOTO_BORDER_RADIUS,
-    overflow: 'hidden',
-  },
-  interstitialImage: {
-    width: WINDOW_WIDTH - 32,
-    height: INTERSTITIAL_HEIGHT,
-  },
-
-  // About
-  aboutText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-  // Tags / Interests
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  tag: {
-    backgroundColor: APP_COLORS.backgroundBase,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  tagText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  // Gallery
-  galleryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  galleryItem: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: APP_COLORS.backgroundCard,
-  },
-  galleryImage: {
-    width: '100%',
-    height: '100%',
-  },
-
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: APP_COLORS.textPrimary,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: APP_COLORS.textSecondary,
-  },
-
-  // CTA bar (preserved from original)
-  ctaBar: { position: 'absolute', left: 0, right: 0, bottom: 24, paddingHorizontal: 16 },
-  connectCta: {
-    minHeight: 52,
-    borderRadius: 16,
+  barButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: APP_COLORS.accent,
+    backgroundColor: 'rgba(15,14,14,0.55)',
   },
-  connectCtaMessage: {
-    backgroundColor: APP_COLORS.success,
-  },
-  connectCtaRequested: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-  },
-  connectCtaDisabled: {
-    opacity: 0.55,
-  },
-  connectCtaText: {
-    color: APP_COLORS.textPrimary,
-    fontWeight: '700',
-  },
-  ctaHintText: {
-    marginTop: 8,
-    textAlign: 'center',
-    color: APP_COLORS.textSecondary,
-  },
+  pressed: { opacity: 0.6 },
 })
