@@ -21,6 +21,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import OptimizedImage from '../OptimizedImage'
+import { ConnectionSheet } from '../match/ConnectionSheet'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
@@ -456,6 +457,23 @@ export default function Match() {
       if (result.success && result.data?.mutual && result.data.conversationId) {
         const conversationId = result.data.conversationId
         setMatchedConversations((prev) => ({ ...prev, [attendee.user_id]: conversationId }))
+        /*
+         * The moment, as a sheet rather than the frame's full screen.
+         *
+         * The like mechanic only works if liking feels free -- which is why the
+         * handler above is optimistic -- and a full-screen takeover after every
+         * mutual makes browsing expensive. A sheet dismisses back to the same
+         * scroll position.
+         *
+         * Both pseudonyms come down with the like (`pseudonyms`), so the sheet
+         * paints immediately instead of fetching the conversation first.
+         */
+        setConnection({
+          conversationId,
+          userId: attendee.user_id,
+          them: result.data.pseudonyms?.them || getDisplayName(attendee.name),
+          you: result.data.pseudonyms?.you || 'You',
+        })
       }
     } catch (e) {
       Logger.error('match', 'like failed', { error: e })
@@ -467,6 +485,14 @@ export default function Match() {
     }
   }, [likeState, matchedConversations])
 
+
+  /** The mutual just made, if its sheet is still up. */
+  const [connection, setConnection] = useState<{
+    conversationId: string
+    userId: string
+    them: string
+    you: string
+  } | null>(null)
 
   const [newJoinsCount, setNewJoinsCount] = useState(0)
   const { setScrollProgress } = useGradientOverlay()
@@ -1456,6 +1482,30 @@ export default function Match() {
           </Animated.View>
         )}
       </ScrollView>
+      {/*
+        Frame `1141:5389`, as a sheet. Pseudonymous by decision: at the instant
+        of a match neither person has a photo (`rankMatches` sends none for
+        anyone unrevealed) and neither has a real name.
+      */}
+      <ConnectionSheet
+        visible={!!connection}
+        pseudonym={connection?.them ?? ''}
+        youPseudonym={connection?.you ?? 'You'}
+        onSendMessage={() => {
+          const open = connection
+          setConnection(null)
+          if (!open) return
+          router.push({
+            pathname: '/private-chat/[conversationId]',
+            params: {
+              conversationId: open.conversationId,
+              otherUserName: open.them,
+              otherUserId: open.userId,
+            } as any,
+          })
+        }}
+        onDismiss={() => setConnection(null)}
+      />
     </SafeAreaView>
   )
 }

@@ -29,6 +29,7 @@ import {
   ROW_AVATAR,
   type ConversationItem,
 } from '../../components/banter/BanterSections'
+import { matchRowPreview } from '../../lib/matchOpener'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { apiClient } from '../../lib/apiClient'
@@ -42,7 +43,7 @@ import {
   subscribeToChatMessage,
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
-import { EMBER } from '../../lib/theme'
+import { EMBER, EMBER_FONTS } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -145,6 +146,8 @@ interface PersonalChat {
   they_revealed: boolean
   /** They have asked you to reveal. There is no "declined". */
   reveal_requested: boolean
+  /** Opened from a mutual like, not an accepted message request. */
+  from_match: boolean
 }
 
 interface MessageRequest {
@@ -267,7 +270,15 @@ export default function Chat() {
       ...personalChats.map((c) => ({
         id: `p:${c.conversation_id}`,
         title: c.other_user_name,
-        preview: displayPreview(c.last_message),
+        /*
+         * A match nobody has written in yet says why it exists, rather than the
+         * generic "Start chatting" that is true of any empty thread. The row
+         * arrived because two people chose each other; it should say so before
+         * it is opened.
+         */
+        preview: c.last_message?.trim()
+          ? c.last_message
+          : matchRowPreview({ fromMatch: c.from_match }) ?? displayPreview(undefined),
         timeLabel: c.last_message_time ? formatRelativeTime(c.last_message_time) : '',
         avatarUrl: c.other_user_avatar,
         kind: 'direct' as const,
@@ -653,6 +664,7 @@ export default function Chat() {
              * not happen). Failing "closed" here would mislabel real people as
              * anonymous, which is the worse error.
              */
+            from_match: conv.fromMatch === true,
             they_revealed: conv.theyRevealed !== false,
             reveal_requested: conv.revealRequested === true,
           }
@@ -908,13 +920,13 @@ const styles = StyleSheet.create({
 
   empty: { paddingVertical: 64, paddingHorizontal: 16, gap: 8 },
   emptyTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: EMBER_FONTS.displaySemiBold,
     fontSize: 18,
     lineHeight: 24,
     color: EMBER.textPrimary,
   },
   emptyBody: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontFamily: EMBER_FONTS.displayRegular,
     fontSize: 14,
     lineHeight: 21,
     color: EMBER.textSecondary,

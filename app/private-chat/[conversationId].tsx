@@ -32,7 +32,8 @@ import queryCache from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
-import { APP_COLORS } from '../../lib/theme'
+import { matchOpener } from '../../lib/matchOpener'
+import { APP_COLORS, EMBER, EMBER_FONTS } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -256,6 +257,12 @@ export default function PrivateChat() {
       youRevealed: r.data.youRevealed ?? false,
       theyRevealed: r.data.theyRevealed ?? false,
       revealRequested: r.data.revealRequested ?? false,
+      /*
+       * Server-supplied. Replaces the guess below for anything that needs to
+       * know "did this come from a match" rather than "is this pseudonymous" --
+       * a revealed match is no longer pseudonymous but is still a match.
+       */
+      fromMatch: r.data.fromMatch === true,
       // A conversation with no reveal fields at all is one from an accepted
       // message request: real names throughout, nothing to reveal.
       pseudonymous: r.data.youRevealed !== undefined,
@@ -520,13 +527,39 @@ export default function PrivateChat() {
     disconnectedIntervalMs: 15000,
   })
 
-  const ListHeader = loading ? (
-    <ActivityIndicator style={styles.loadingIndicator} color={APP_COLORS.accent} />
-  ) : hasMore ? (
-    <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
-      <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
-    </TouchableOpacity>
-  ) : null
+  /*
+   * The match header sits above the oldest message, permanently.
+   *
+   * Not an empty state. Tying it to "no messages yet" loses a race -- whoever
+   * liked first gets the push, and if the other person types before they open
+   * the app they arrive at an ordinary thread and never learn it came from a
+   * match. It also flashes during pagination, when "no messages" and "not
+   * loaded yet" look identical. As a header it is seen by both, whoever types
+   * first, and scrolls away on its own as the conversation grows.
+   */
+  const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
+
+  const ListHeader = (
+    <>
+      {opener ? (
+        <View style={styles.matchOpener}>
+          <Text style={styles.matchOpenerTitle} maxFontSizeMultiplier={1.4}>
+            {opener.title}
+          </Text>
+          <Text style={styles.matchOpenerBody} maxFontSizeMultiplier={1.4}>
+            {opener.body}
+          </Text>
+        </View>
+      ) : null}
+      {loading ? (
+        <ActivityIndicator style={styles.loadingIndicator} color={APP_COLORS.accent} />
+      ) : hasMore ? (
+        <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
+          <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </>
+  )
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -587,7 +620,12 @@ export default function PrivateChat() {
                 <Ionicons name="chatbubble-ellipses-outline" size={36} color={APP_COLORS.textTertiary} />
               </View>
               <Text style={styles.emptyTitle}>Start the conversation!</Text>
-              <Text style={styles.emptyText}>You matched with {otherUserName}. Say hi!</Text>
+              {/*
+                This said "You matched with X" for EVERY empty thread, including
+                an accepted message request, which was never a match. The header
+                above already says so when it is true, so this stays neutral.
+              */}
+              <Text style={styles.emptyText}>Say hi to {otherUserName}.</Text>
               <ScalePress style={styles.emptyCta} onPress={() => setNewMessage('Hey 👋')} pressedScale={0.97}>
                 <Text style={styles.emptyCtaText}>Send a wave 👋</Text>
               </ScalePress>
@@ -666,6 +704,33 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: 24 },
   loadMoreBtn: { alignItems: 'center', paddingVertical: 12 },
+  /*
+   * Frame-less by necessity -- the design has no thread header for this. Built
+   * from the Banter's own card idiom (radius 32, p16) so it reads as part of
+   * the product rather than a banner bolted on. Flagged in docs/BANTER.md for
+   * a designer pass.
+   */
+  matchOpener: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 32,
+    backgroundColor: EMBER.surfaceSunken,
+    gap: 4,
+  },
+  matchOpenerTitle: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 15,
+    lineHeight: 22,
+    color: EMBER.textPrimary,
+  },
+  matchOpenerBody: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: EMBER.textSecondary,
+  },
   loadMoreText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
 
   // Messages

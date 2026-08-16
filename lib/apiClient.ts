@@ -377,6 +377,15 @@ export interface LikeOutcome {
   mutual: boolean
   /** Present only on a mutual like -- the conversation it just opened. */
   conversationId?: string
+  /**
+   * Both pseudonyms, on a mutual like only.
+   *
+   * Connection Success draws a generated mark per person and `pseudonymAvatar`
+   * is seeded on the pseudonym, so without these the sheet could not paint
+   * without first fetching the conversation -- a round trip in the middle of
+   * the one moment that should feel instant.
+   */
+  pseudonyms?: { you: string; them: string }
 }
 
 export interface PresencePing {
@@ -1946,6 +1955,14 @@ class ApiClientClass {
      * whole rule lives in one place server-side so it cannot drift.
      */
     otherUser: { id: string; name: string | null; image: string | null }
+    /**
+     * Opened from a mutual like rather than an accepted message request.
+     *
+     * Server-supplied and not derivable here: `theyRevealed` is true for BOTH a
+     * never-pseudonymous conversation and a revealed match, so it cannot tell
+     * them apart. See `lib/matchOpener.ts`.
+     */
+    fromMatch?: boolean
     /** Whether you have shown them who you are. */
     youRevealed?: boolean
     /** Whether they have shown you. */
