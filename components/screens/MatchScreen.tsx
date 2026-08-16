@@ -22,6 +22,7 @@ import { ConnectionSheet } from '../match/ConnectionSheet'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
+import { recallRoster, rememberRoster } from '../../lib/rosterMemory'
 import { apiClient } from '../../lib/apiClient'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import {
@@ -81,7 +82,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
  * payload the client already holds cannot do that. See `lib/gridFilters.ts`.
  */
 
-interface AttendeeProfile {
+export interface AttendeeProfile {
   user_id: string
   name?: string
   /**
@@ -156,6 +157,15 @@ export default function Match({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [eventInfo, setEventInfo] = useState<{ id: string; title?: string } | null>(null)
   const [attendees, setAttendees] = useState<AttendeeProfile[]>([])
+  /*
+   * `attendees` in a ref, read by the seed above.
+   *
+   * The seed must not overwrite a roster the fetch has already delivered -- on
+   * a slow network the remembered one could otherwise land second and replace
+   * fresher data with staler.
+   */
+  const attendeesRef = useRef<AttendeeProfile[]>([])
+  attendeesRef.current = attendees
   const [attendeesHasMore, setAttendeesHasMore] = useState(false)
   const [attendeesPage, setAttendeesPage] = useState(1)
   const [loadingMoreAttendees, setLoadingMoreAttendees] = useState(false)
@@ -433,6 +443,35 @@ export default function Match({
       const activeCheckinsResult = await apiClient.getActiveCheckins({ force })
       if (superseded()) return
 
+      /*
+       * Paint the room we remember, the moment we know which room it is.
+       *
+       * The response cache removed the round trip; it did not remove the
+       * spinner, because `attendees` is component state and a remount starts it
+       * at `[]`. The gate below is `loading && attendees.length === 0`, so
+       * closing the room and reopening it still blanked the screen for as long
+       * as a cached promise takes to resolve and React to commit.
+       *
+       * Seeded here rather than at mount on purpose: at mount the event is not
+       * known yet, and painting the *last* room while finding out which room
+       * this is would flash somebody else's roster. Waiting for the check-in
+       * answer costs nothing now that it is cached, and it cannot show the
+       * wrong room.
+       */
+      const firstEventId = (() => {
+        const list = activeCheckinsResult.data?.checkIns
+        return Array.isArray(list) && list.length > 0
+          ? (list[0] as CheckinLike)?.event?.id ?? (list[0] as CheckinLike)?.eventId ?? null
+          : null
+      })()
+      const remembered = recallRoster(firstEventId)
+      if (remembered && attendeesRef.current.length === 0) {
+        setAttendees(remembered.attendees)
+        if (firstEventId) {
+          setEventInfo({ id: firstEventId, title: remembered.eventTitle })
+        }
+      }
+
       if (!activeCheckinsResult.success || !activeCheckinsResult.data?.checkIns) {
         /*
          * An honest error, not a frozen screen.
@@ -555,6 +594,9 @@ export default function Match({
        */
       setMyName(authUserNameRef.current)
       setAttendees(attendeeProfiles)
+      // So the next visit in this session paints instantly. Memory only --
+      // `lib/rosterMemory.ts` says why this must never reach disk.
+      rememberRoster(outcome.eventId, attendeeProfiles, outcome.eventTitle)
       setAttendeesHasMore(attendeeProfiles.length >= 20)
       setAttendeesPage(1)
     } catch (e) {

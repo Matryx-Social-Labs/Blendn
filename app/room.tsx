@@ -9,6 +9,7 @@ import { NotificationBell } from '../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
 import { apiClient } from '../lib/apiClient'
+import { forgetRoster } from '../lib/rosterMemory'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
 
@@ -188,7 +189,12 @@ export default function Room() {
     setCheckOutBusy(true)
     try {
       const result = await apiClient.checkOut(eventId)
-      if (result.success) router.back()
+      if (result.success) {
+        // Leaving the venue ends your claim on the roster, so the memory of it
+        // goes too -- otherwise reopening would repaint the room you just left.
+        forgetRoster(eventId)
+        router.back()
+      }
       else Logger.warn('presence', 'check out refused', { error: result.error })
     } catch (e) {
       Logger.error('presence', 'check out failed', { error: e })
