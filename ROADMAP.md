@@ -693,6 +693,35 @@ two answers to one question, and the client's is the one an attacker controls.
 
 ## Done
 
+- **Every image in a virtualised list gets a recycling key** (#184, #185).
+  `expo-image` reuses native views inside a `FlatList`, and without a key it
+  cannot know the view it just handed you was showing something else — so a row
+  scrolling into place paints the **previous** row's picture for a frame or two
+  and then dissolves into its own.
+
+  It reads as a flicker, it is worst on the fast scroll a feed invites, and **a
+  still capture never shows it**. That is how nine shipped unkeyed across eight
+  files.
+
+  Systemic rather than careless: `SceneHeroMedia` has had one from the start,
+  with a comment explaining exactly this, because it uses `expo-image`
+  directly. `OptimizedImage` — which everything else renders through — **did
+  not expose the prop at all**, so no card, avatar or chat row could pass one
+  even in principle. Fixing the component was the fix; the call sites were
+  mechanical afterwards. Forwarding matters as much as accepting: it renders up
+  to four `<Image>`s and a key on some of them leaves the rest free to flash.
+
+  Also `initialNumToRender` 10 → 4 on the Pulse. It renders synchronously
+  before first paint, a row is ~437pt, and two fit on a 956pt screen — so ten
+  was five screens and ten image decodes to show two cards. `windowSize` left
+  alone: it governs what stays mounted rather than what blocks the frame, and
+  that trade wants a measurement.
+
+  **The video half needed nothing.** `FeedVideo` already *is* the
+  single-active-player policy — the caller mounts it for the one card on screen
+  rather than pausing nine others, so a feed of ten costs one decoder. Checked
+  rather than assumed.
+
 - **The bell, and five push kinds that went nowhere** (#178). `PulseTopBar`
   drew only the wordmark because "a notifications centre is designed and not
   built, and a bell that opens nothing is a dead control in the most-tapped
