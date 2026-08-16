@@ -215,3 +215,51 @@ describe('a photo you can tap actually opens', () => {
     expect(codeOnly(read('app/user/[id].tsx'))).toContain('setLightboxIndex(i + 1)')
   })
 })
+
+describe('direct messages use the same bubble, minus what a DM does not need', () => {
+  const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
+
+  it('renders through components/chat', () => {
+    const src = DM()
+    expect(src).toContain('<ChatBubble')
+    expect(src).toContain('<ChatComposer')
+    expect(src).toContain('<SystemNotice')
+  })
+
+  it('drops the avatar and the name', () => {
+    /*
+     * A DM has exactly one other person in it. A disc and a name on every
+     * inbound row repeat the screen's title once per message, and halve the
+     * width of the column to do it.
+     */
+    expect(DM()).toContain('variant="direct"')
+    const bubble = codeOnly(read('components/chat/ChatBubble.tsx'))
+    expect(bubble).toContain('{mine || direct ? null : (')
+  })
+
+  it('shows a receipt only on your own messages', () => {
+    expect(DM()).toContain("receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}")
+  })
+
+  it('keeps receipts out of the room', () => {
+    /*
+     * Twenty people read at twenty different times, so a tick there would
+     * either lie or need twenty answers. The room passes no `receipt` at all.
+     */
+    expect(codeOnly(read('app/chat/[id].tsx'))).not.toContain('receipt=')
+  })
+
+  it('does not offer to report your own message', () => {
+    expect(DM()).toContain('onLongPress={isMe ? undefined :')
+  })
+})
+
+describe('both chat screens have left the old theme', () => {
+  it('uses EMBER throughout', () => {
+    // The messages were rebuilt first and the chrome around them was still
+    // `APP_COLORS` -- new bubbles in an old frame.
+    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+      expect(read(screen)).not.toContain('APP_COLORS')
+    }
+  })
+})

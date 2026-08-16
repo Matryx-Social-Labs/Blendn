@@ -1,9 +1,15 @@
-# The event room chat
+# Chat
 
 Frame `1141:5498` — "Event Community Chat", 390 wide, in the **Updates** canvas
 of `HO0UnAEV5djzo0h4q7Y2vi`.
 
-**Route:** `app/chat/[id].tsx`. **Presentation components:** `components/chat/`.
+**Routes:** `app/chat/[id].tsx` (the room) and
+`app/private-chat/[conversationId].tsx` (direct messages).
+**Presentation components:** `components/chat/`. **Harness:**
+`exp+blendn:///preview/chat`, fixtures only, dev-only.
+
+Both screens draw the same bubble. Everything below is about the room unless it
+says otherwise; the DM's differences are in *Direct messages* at the end.
 
 Reached from The Room's `Grid | Join Chat` toggle, which navigates here rather
 than swapping a pane — the chat is one place you are standing in, not a tab.
@@ -143,3 +149,46 @@ about right now, hovering over history.
 3. **The `+` and emoji buttons** — see delta 3.
 4. **Broadcasts have no frame at all.** `BroadcastNotice` was derived, not
    designed, and it is the one thing in the room that carries commercial weight.
+
+
+---
+
+## Direct messages
+
+`app/private-chat/[conversationId].tsx`, in **no frame** — the design covers the
+room and the conversation list, not the thread. It renders the same
+`components/chat/` pieces with `variant="direct"`.
+
+### Three things a DM does not need
+
+**No avatar and no name.** A DM has exactly one other person in it. A disc and a
+name on every inbound row repeat the screen's own title once per message, and
+halve the width of the column to do it. The meta row is just the time.
+
+**No broadcasts.** Nobody announces anything to a conversation of two.
+
+**No reactions or replies.** Both exist in the room and neither is in the DM's
+payload — `PrivateMessage` has no `reactions` and no `replyTo`. Not dropped;
+never there.
+
+### One thing only a DM has
+
+**Read receipts**, on your own messages. `sent` is a grey `✓`, `read` an accent
+`✓✓` — a colour change rather than a glyph you have to count.
+
+**The room deliberately has none.** Twenty people read at twenty different
+times, so a tick there would either lie or need twenty answers. A test pins
+that the room passes no `receipt` at all.
+
+### The reveal, and what it means for the bubble
+
+A DM is pseudonymous until both people reveal, except a message request, where
+real names apply throughout. The bubble does not decide any of that — it draws
+`reveal.displayName`, and the server decides what that is.
+
+### Long-press reports theirs, not yours
+
+Reporting your own message is not a thing, so `onLongPress` is `undefined` on
+your own rows. The old screen attached the handler to every row and checked
+`isMe` inside it, which meant a long press on your own message opened nothing
+and looked broken.

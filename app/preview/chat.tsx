@@ -78,6 +78,42 @@ export default function ChatPreview() {
         />
 
         <TypingIndicator label="Velvet Heron is typing..." />
+
+        {/*
+          The direct variant, below the room's. Same component, no avatar and no
+          name -- a DM has one other person in it, so a disc and a name on every
+          inbound row repeat the screen's title once per message.
+        */}
+        <SystemNotice label="Direct messages" />
+
+        <ChatBubble
+          variant="direct"
+          mine={false}
+          senderId="user-sarah"
+          senderName="Velvet Heron"
+          time="14:31"
+          text="That was a good night. Same again next month?"
+        />
+
+        <ChatBubble
+          variant="direct"
+          mine
+          senderId="me"
+          senderName="Me"
+          time="14:32"
+          receipt="sent"
+          text="Definitely. I'll watch for it on the Pulse."
+        />
+
+        <ChatBubble
+          variant="direct"
+          mine
+          senderId="me"
+          senderName="Me"
+          time="14:33"
+          receipt="read"
+          text="Read receipt on this one."
+        />
       </ScrollView>
 
       <View style={styles.composer}>
