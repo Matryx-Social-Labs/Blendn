@@ -23,6 +23,14 @@ export interface ConversationRevealState {
   revealRequested: boolean
   /** Null for a conversation that was never pseudonymous (a message request). */
   pseudonymous: boolean
+  /**
+   * Opened from a mutual like rather than an accepted message request.
+   *
+   * Distinct from `pseudonymous`, which this used to be inferred from: a match
+   * that has been revealed is no longer pseudonymous but is still a match. The
+   * thread header keys off this, so it survives the reveal.
+   */
+  fromMatch?: boolean
 }
 
 export type RevealAction =

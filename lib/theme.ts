@@ -231,6 +231,7 @@ export const EMBER_CONTROL_HEIGHT = 64
 export const EMBER_FONTS = {
   displayExtraBold: 'PlusJakartaSans_800ExtraBold',
   displayBold: 'PlusJakartaSans_700Bold',
+  displaySemiBold: 'PlusJakartaSans_600SemiBold',
   /*
    * Added for the Location card, which the frame sets entirely in Regular
    * (`1141:4903`, `1141:4905`). It was built Bold because Regular was not
@@ -253,6 +254,29 @@ export const EMBER_FONTS = {
  * screen from the design.
  */
 export const EMBER_TYPE = {
+  /*
+   * The two button labels on Connection Success (`1141:5401`, `1141:5403`).
+   *
+   * In the scale rather than hand-rolled on the component because the scale is
+   * what justifies a loaded weight -- `__tests__/fonts.test.ts` refuses any
+   * family the scale never asks for, on the grounds that an unused font is
+   * bundle weight downloaded on every cold start for nothing.
+   *
+   * The frame sets the primary Bold and the secondary SemiBold: the affirmative
+   * carries more weight than the way out.
+   */
+  actionPrimary: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 18,
+    lineHeight: 28,
+    color: EMBER.onGradient,
+  },
+  actionSecondary: {
+    fontFamily: EMBER_FONTS.displaySemiBold,
+    fontSize: 18,
+    lineHeight: 28,
+    color: EMBER.textPrimary,
+  },
   /** "The basics". One per screen, and it is the screen's whole identity. */
   display: {
     fontFamily: EMBER_FONTS.displayExtraBold,
