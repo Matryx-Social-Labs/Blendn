@@ -622,6 +622,22 @@ export interface UserProfileData {
   onboarded?: boolean
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
+    /*
+     * The five matching fields, declared because the editor needs to *show*
+     * them, not just write them.
+     *
+     * They were always in the payload for your own profile -- the route spreads
+     * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
+     * simply never typed or read, so `about-you` opened with every chip blank
+     * whatever you had already chosen. The route's "withheld from everyone"
+     * rule governs the *public* branch; self is the exception it is written
+     * against.
+     */
+    intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+    work_field?: string | null
+    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
+    orientations?: string[]
+    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
     id?: string
     phone?: string
     name?: string

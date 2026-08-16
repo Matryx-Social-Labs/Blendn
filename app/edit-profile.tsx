@@ -17,6 +17,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
+import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
@@ -76,6 +78,30 @@ export default function EditProfile() {
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
   const [photos, setPhotos] = useState<string[]>([])
+
+  /*
+   * The five fields matching runs on. They used to live on their own screen,
+   * reachable only from Settings -> Discovery -> "You and matching", so the app
+   * had two profile editors and one of them was three taps deep under a heading
+   * that did not name it.
+   */
+  const [intents, setIntents] = useState<Intent[]>([])
+  const [workField, setWorkField] = useState<string | null>(null)
+  const [workFields, setWorkFields] = useState<{ slug: string; label: string }[]>([])
+  const [gender, setGender] = useState<Gender | null>(null)
+  const [orientations, setOrientations] = useState<Orientation[]>([])
+  const [interestedIn, setInterestedIn] = useState<Gender[]>([])
+  /* What the server had, so the save can send only what actually moved. */
+  const [matchingAtLoad, setMatchingAtLoad] = useState<{
+    intents: Intent[]
+    workField: string | null
+    gender: Gender | null
+    orientations: Orientation[]
+    interestedIn: Gender[]
+  }>({ intents: [], workField: null, gender: null, orientations: [], interestedIn: [] })
+
+  const toggleIntent = (value: Intent) =>
+    setIntents((prev) => (prev.includes(value) ? prev.filter((i) => i !== value) : [...prev, value]))
   const [nameError, setNameError] = useState<string | null>(null)
   const [ageError, setAgeError] = useState<string | null>(null)
   const [tagModalVisible, setTagModalVisible] = useState(false)
@@ -153,6 +179,33 @@ export default function EditProfile() {
       setGoals(combinedProfile.goals || [])
       setLookingFor(combinedProfile.looking_for || [])
       setPhotos(combinedProfile.profile_photos || [])
+
+      /*
+       * Pre-filled, which the old screen never did: it read only name and age,
+       * so every chip opened blank and you could not tell "networking" from
+       * "nothing chosen".
+       */
+      const p2 = profileData.profile
+      const loadedIntents = (p2?.intent_default || []) as Intent[]
+      const loadedWorkField = p2?.work_field ?? null
+      const loadedGender = (p2?.gender ?? null) as Gender | null
+      const loadedOrientations = (p2?.orientations || []) as Orientation[]
+      const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
+      setIntents(loadedIntents)
+      setWorkField(loadedWorkField)
+      setGender(loadedGender)
+      setOrientations(loadedOrientations)
+      setInterestedIn(loadedInterestedIn)
+      setMatchingAtLoad({
+        intents: loadedIntents,
+        workField: loadedWorkField,
+        gender: loadedGender,
+        orientations: loadedOrientations,
+        interestedIn: loadedInterestedIn,
+      })
+
+      const fields = await apiClient.getWorkFields()
+      if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
 
     } catch (error) {
       Logger.error('profile', 'EditProfile: Load profile error', { error })
@@ -251,6 +304,25 @@ export default function EditProfile() {
       if (JSON.stringify(lookingFor) !== JSON.stringify(profile?.looking_for)) {
         updateData.looking_for = lookingFor
       }
+      /*
+       * Sent only when changed. A blanket send would write `intent_default: []`
+       * for anyone who opened this screen and saved without touching the chips,
+       * which is how you silently turn off somebody's matching.
+       */
+      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+      if (!same(intents, matchingAtLoad.intents)) updateData.intent_default = intents
+      if (workField !== matchingAtLoad.workField) updateData.work_field = workField
+      /*
+       * The dating three are sent only while dating is ticked -- untick it and
+       * they stop being asked, so continuing to write them would keep
+       * special-category data current for somebody who just opted out of it.
+       */
+      if (intents.includes('dating')) {
+        if (gender && gender !== matchingAtLoad.gender) updateData.gender = gender
+        if (!same(orientations, matchingAtLoad.orientations)) updateData.orientations = orientations
+        if (!same(interestedIn, matchingAtLoad.interestedIn)) updateData.interested_in = interestedIn
+      }
+
       const result = await apiClient.updateProfile(authUser.id, updateData)
 
       if (!result.success) {
@@ -500,6 +572,29 @@ export default function EditProfile() {
             ) : (
               <InterestPicker selected={interestIds} onChange={setInterestIds} />
             )}
+          </View>
+
+          {/*
+            You and matching. Its own card and not folded into ABOUT YOU,
+            because these are the only fields on this screen that nobody else
+            ever reads as text -- they feed `rankMatches` and surface as a tag
+            on a card, never as the values behind it.
+          */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>YOU AND MATCHING</Text>
+            <MatchingFields
+              intents={intents}
+              onToggleIntent={toggleIntent}
+              workField={workField}
+              onChangeWorkField={setWorkField}
+              workFields={workFields}
+              gender={gender}
+              onChangeGender={setGender}
+              orientations={orientations}
+              onChangeOrientations={setOrientations}
+              interestedIn={interestedIn}
+              onChangeInterestedIn={setInterestedIn}
+            />
           </View>
 
           {/* Goals Card */}

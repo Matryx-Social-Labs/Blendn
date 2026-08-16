@@ -5,9 +5,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AppHeader from '../components/AppHeader'
-import OptimizedImage from '../components/OptimizedImage'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
+import { EMBER } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
@@ -236,33 +236,22 @@ export default function SettingsScreen() {
     )
   }, [])
 
+  /*
+   * Five sections, each named after what is actually in it.
+   *
+   * What this replaced: an "Account" section holding Blocked users, Sign out
+   * and Delete account -- no account settings at all -- with the two
+   * destructive rows adjacent, both red, at the top of the screen where the
+   * thumb lands. Blocked users sat there while "Safety" held two web links.
+   * "Discovery" mixed a navigation row with three toggles, "Notifications" was
+   * a header over one switch, and Terms and Privacy were filed under Support.
+   *
+   * "You and matching" is gone from here entirely: those five fields are part
+   * of `edit-profile` now, because they are profile data and this was the app's
+   * second profile editor.
+   */
   const items = useMemo(() => ([
-    { header: 'Account' },
-    /*
-     * "Edit profile" used to be the first row here and is not any more. The Me
-     * tab carries Edit profile and Settings side by side, so this was a second
-     * door to a screen already one tap away -- and the two disagreed about
-     * where editing lives.
-     */
-    { icon: 'mail-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
-    { icon: 'log-out-outline', title: 'Sign out', danger: true, onPress: async () => {
-      try {
-        const result = await signOut()
-        if (!result.success) Alert.alert('Error', 'Failed to sign out')
-      } catch {
-        Alert.alert('Error', 'Failed to sign out')
-      }
-    } },
-    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, onPress: deletingAccount ? () => {} : handleDeleteAccount },
-
-    { header: 'Discovery' },
-    /*
-     * The way back to the five fields matching actually reads — intent, work
-     * field, and when dating is on, gender, orientation and interested_in.
-     * They were writable on the signup screen and nowhere else, so choosing
-     * "networking" once meant never seeing a dating match again.
-     */
-    { icon: 'sparkles-outline', title: 'You and matching', onPress: () => router.push('/about-you?edit=1') },
+    { header: 'Privacy' },
     { icon: 'eye-outline', title: 'Show online status', keyName: 'showOnlineStatus' as const },
     { icon: 'checkmark-done-outline', title: 'Read receipts', keyName: 'shareReadReceipts' as const },
     { icon: 'navigate-outline', title: 'Share location for nearby events', keyName: 'locationSharing' as const },
@@ -270,20 +259,53 @@ export default function SettingsScreen() {
     { header: 'Notifications' },
     { icon: 'notifications-outline', title: 'Push notifications', keyName: 'pushEnabled' as const },
 
+    /*
+     * Blocked users leads Safety. Blocking somebody is the most consequential
+     * safety action in the product and it used to be filed under "Account",
+     * further from Safety than two links to a web page.
+     */
     { header: 'Safety' },
+    { icon: 'ban-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
     { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => openExternal(BLENDN_LINKS.safety) },
     { icon: 'flag-outline', title: 'Community guidelines', onPress: () => openExternal(BLENDN_LINKS.guidelines) },
 
-    { header: 'Support' },
+    { header: 'About' },
     { icon: 'help-circle-outline', title: 'Help & support', onPress: () => openExternal(BLENDN_LINKS.help) },
     { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
     { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
+
+    { header: 'Account' },
+    { icon: 'log-out-outline', title: 'Sign out', onPress: async () => {
+      try {
+        const result = await signOut()
+        if (!result.success) Alert.alert('Error', 'Failed to sign out')
+      } catch {
+        Alert.alert('Error', 'Failed to sign out')
+      }
+    } },
+
+    /*
+     * Alone, at the bottom, under its own header and a gap.
+     *
+     * It used to sit one row under Sign out, both styled `danger`, both in the
+     * first section. One is routine and reversible and the other destroys the
+     * account -- identical in colour, a thumb's width apart, at the top of the
+     * screen. Sign out is no longer red either: reserving that colour for the
+     * single irreversible row is what makes it mean anything.
+     */
+    { header: 'Danger zone', spaced: true },
+    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, onPress: deletingAccount ? () => {} : handleDeleteAccount },
   ]), [openExternal, deletingAccount, handleDeleteAccount])
 
   const renderItem = (item: any, idx: number) => {
     if (item.header) {
       return (
-        <Text key={`h-${idx}`} style={styles.sectionHeader}>{item.header}</Text>
+        <Text
+          key={`h-${idx}`}
+          style={[styles.sectionHeader, item.spaced && styles.sectionHeaderSpaced]}
+        >
+          {item.header}
+        </Text>
       )
     }
     if (item.keyName) {
@@ -302,7 +324,12 @@ export default function SettingsScreen() {
               value={preferences[keyName]}
               onValueChange={() => onTogglePreference(keyName)}
               disabled={saving[keyName] || loadingPreferences}
-              trackColor={{ false: 'rgba(255,255,255,0.25)', true: '#7A2CF3' }}
+              /*
+               * `EMBER.accent`. The old `#7A2CF3` predates the ember palette and
+               * was the only purple left in the app -- on the one control whose
+               * whole job is to read as "on".
+               */
+              trackColor={{ false: 'rgba(255,255,255,0.25)', true: EMBER.accent }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -331,30 +358,16 @@ export default function SettingsScreen() {
       <AppHeader title="Settings" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity
-          style={styles.profileCard}
-          onPress={() => router.push('/(tabs)/profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Open About me"
-        >
-          {avatarUrl ? (
-            <OptimizedImage source={avatarUrl} style={styles.avatar as any} contentFit="cover" width={160} height={160} quality={60} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]} />
-          )}
-          <View style={{ marginLeft: 12 }}>
-            <Text style={styles.displayName}>{displayName}</Text>
-            <TouchableOpacity
-              onPress={() => router.push('/edit-profile')}
-              style={styles.editCta}
-              accessibilityRole="button"
-              accessibilityLabel="Edit profile"
-            >
-              <Text style={styles.editLink}>Edit profile</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+        {/*
+          There was a profile card here, and it was the third door to editing.
+          Worse than a duplicate: a `TouchableOpacity` whose outer press went to
+          `/(tabs)/profile` -- the screen you had just come from -- wrapping a
+          nested one that went to `/edit-profile`. Two overlapping targets, one
+          of them a round trip.
 
+          The Me tab carries the identity card and both doors now. Settings is
+          settings.
+        */}
         <View style={styles.card}>
           {items.map((it, i) => (
             <React.Fragment key={`it-${i}`}>
@@ -372,14 +385,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { padding: 16 },
-  profileCard: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#333' },
-  avatarFallback: { backgroundColor: '#333' },
-  displayName: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
-  editCta: { marginTop: 8, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
-  editLink: { color: '#D9ECFF', fontWeight: '700', fontSize: 12 },
   card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   sectionHeader: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
+  /*
+   * The gap that separates Delete account from everything above it. 40 rather
+   * than the usual 14, because the whole point is that the thumb has to travel
+   * to reach it -- it used to sit one row under Sign out.
+   */
+  sectionHeaderSpaced: { marginTop: 40 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14 },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   switchWrap: { flexDirection: 'row', alignItems: 'center' },
