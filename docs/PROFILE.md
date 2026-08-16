@@ -28,6 +28,67 @@ only sees whole files.
 
 ---
 
+## Where everything lives
+
+| surface | job |
+|---|---|
+| **Me tab** | identity card → Preview, three counts, **Edit profile**, **Settings** |
+| **Preview** (`/user/<own id>`) | how others see you — literally the attendee screen, in its `'self'` mode |
+| **Edit profile** | photos, name, age, occupation, education, bio, interests, **and the five matching fields** |
+| **Settings** | Privacy · Notifications · Safety · About · Account, then Danger zone |
+
+### There used to be two editors and three doors
+
+`edit-profile` owned your photos, bio and details. **`about-you` owned every
+field the matching engine reads** — intent, work field, gender, orientation,
+`interested_in` — and was reachable only from Settings → Discovery → "You and
+matching", three taps deep under a heading that did not name it.
+
+Three ways in, too: a row on the Me tab, a row at the top of Settings, and a
+card above that row whose *outer* press went back to the Me tab while a nested
+one inside went to the editor.
+
+Now: `components/profile/MatchingFields.tsx` is one block that both onboarding
+and the editor render, so the two cannot drift into asking differently.
+
+**It opened blank, and that was a client bug rather than an API limit.**
+`about-you` read only name and age, so every chip was unselected however you had
+answered — "networking" looked the same as "nothing chosen". The fields were
+always in the payload for your own profile: the route spreads
+`selfProfileFields`, the whole row minus `date_of_birth`. Its "withheld from
+everyone" rule governs the **public** branch; self is the exception it is
+written against. They simply were not typed or read.
+
+**Saving sends only what moved.** A blanket send would write
+`intent_default: []` for anyone who opened the screen and saved without touching
+the chips, which silently switches their matching off. And the dating three stop
+being written once dating is unticked — they are special-category data, so
+continuing to write them would keep it current for somebody who just opted out.
+
+---
+
+## Settings, reorganised
+
+Five sections, each named after what is under it:
+
+**Privacy** (online status, read receipts, location) · **Notifications** (push) ·
+**Safety** (blocked users, safety tips, guidelines) · **About** (help, terms,
+privacy policy) · **Account** (sign out) — then **Danger zone**, alone at the
+bottom behind a 40pt gap, holding Delete account.
+
+What that replaced: an "Account" section containing **no account settings** —
+Blocked users, Sign out, Delete account — with the two destructive rows adjacent
+and both red, at the top of the screen where the thumb lands. Blocked users sat
+there while "Safety" held two links to a web page. "Discovery" mixed a
+navigation row with three toggles. "Notifications" was a header over one switch.
+Terms and Privacy were filed under "Support".
+
+**Sign out is no longer red.** Reserving that colour for the single irreversible
+row is what makes it mean anything, and a test pins that exactly one row carries
+it.
+
+---
+
 ## Three differences from the attendee view
 
 All of them follow from it being you.

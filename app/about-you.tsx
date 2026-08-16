@@ -17,18 +17,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { InterestPicker } from '../components/InterestPicker'
+import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { apiClient } from '../lib/apiClient'
-import {
-  GENDERS,
-  GENDER_LABELS,
-  ORIENTATIONS,
-  ORIENTATION_LABELS,
-  needsInterestedInPicker,
-  orientationDisabled,
-  toggleOrientation,
-  type Gender,
-  type Orientation,
-} from '../lib/dating'
+import { needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
 import { Logger } from '../lib/logger'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
 
@@ -77,16 +68,7 @@ import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
  * will ask them at the moment it actually matters.
  */
 
-type Intent = 'dating' | 'networking' | 'friendship' | 'just_here'
 
-const INTENTS: { value: Intent; label: string; hint?: string }[] = [
-  { value: 'dating', label: 'Dating', hint: '18+' },
-  { value: 'networking', label: 'Networking' },
-  { value: 'friendship', label: 'Friendship' },
-  // A first-class answer, not a refusal to answer: the ranking damps it exactly
-  // as hard as silence, so choosing it honestly costs nothing.
-  { value: 'just_here', label: 'Just here for the event' },
-]
 
 /** The rule the server enforces on every write path. Mirrored for the copy only. */
 const DATING_MIN_AGE = 18
@@ -348,149 +330,38 @@ function AboutYouInner() {
             default.
           </Text>
 
-          <Text style={styles.section}>What are you open to?</Text>
-          <View style={styles.row}>
-            {INTENTS.map((intent) => {
-              const on = intents.includes(intent.value)
-              return (
-                <Pressable
-                  key={intent.value}
-                  onPress={() => toggleIntent(intent.value)}
-                  style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                    {intent.label}
-                    {intent.hint ? ` · ${intent.hint}` : ''}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
-
-          {needsAge ? (
-            <>
-              <Text style={styles.section}>How old are you?</Text>
-              <TextInput
-                value={age}
-                onChangeText={(t) => {
-                  setAge(t.replace(/[^0-9]/g, ''))
-                  setError(null)
-                }}
-                keyboardType="number-pad"
-                placeholder="Age"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                style={styles.input}
-                maxLength={3}
-              />
-            </>
-          ) : null}
-
-          {wantsDating ? (
-            <>
-              {/*
-                Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
-                is explicit: a networking user is never asked their gender.
-              */}
-              <Text style={styles.section}>You are</Text>
-              <View style={styles.row}>
-                {GENDERS.map((g) => (
-                  <Pressable
-                    key={g}
-                    onPress={() => setGender(g)}
-                    style={[styles.chip, gender === g ? styles.chipOn : styles.chipOff]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: gender === g }}
-                  >
-                    <Text style={[styles.chipText, gender === g && styles.chipTextOn]}>
-                      {GENDER_LABELS[g]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={styles.section}>You identify as</Text>
-              <Text style={styles.hint}>Select all that apply — up to three.</Text>
-              <View style={styles.row}>
-                {ORIENTATIONS.map((o) => {
-                  const selected = orientations.includes(o)
-                  // Dimmed rather than removed at the cap: the chips you cannot
-                  // reach are what tell you the limit exists.
-                  const disabled = orientationDisabled(orientations, o)
-                  return (
-                    <Pressable
-                      key={o}
-                      onPress={() => setOrientations(toggleOrientation(orientations, o))}
-                      disabled={disabled}
-                      style={[
-                        styles.chip,
-                        selected ? styles.chipOn : styles.chipOff,
-                        disabled && styles.chipDisabled,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected, disabled }}
-                    >
-                      <Text style={[styles.chipText, selected && styles.chipTextOn]}>
-                        {ORIENTATION_LABELS[o]}
-                      </Text>
-                    </Pressable>
-                  )
-                })}
-              </View>
-
-              {askInterestedIn ? (
+          <MatchingFields
+            intents={intents}
+            onToggleIntent={toggleIntent}
+            workField={workField}
+            onChangeWorkField={setWorkField}
+            workFields={workFields}
+            gender={gender}
+            onChangeGender={setGender}
+            orientations={orientations}
+            onChangeOrientations={setOrientations}
+            interestedIn={interestedIn}
+            onChangeInterestedIn={setInterestedIn}
+            afterIntents={
+              needsAge ? (
                 <>
-                  {/*
-                    Shown when the pair does not imply a target set — "straight"
-                    plus "non-binary", or "queer", which are identities rather
-                    than tables. Without this the server stores nothing and the
-                    dating tag never appears, with no explanation.
-                  */}
-                  <Text style={styles.section}>Interested in</Text>
-                  <View style={styles.row}>
-                    {GENDERS.map((g) => {
-                      const on = interestedIn.includes(g)
-                      return (
-                        <Pressable
-                          key={g}
-                          onPress={() =>
-                            setInterestedIn((prev) =>
-                              prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
-                            )
-                          }
-                          style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: on }}
-                        >
-                          <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                            {GENDER_LABELS[g]}
-                          </Text>
-                        </Pressable>
-                      )
-                    })}
-                  </View>
+                  <Text style={styles.section}>How old are you?</Text>
+                  <TextInput
+                    value={age}
+                    onChangeText={(t) => {
+                      setAge(t.replace(/[^0-9]/g, ''))
+                      setError(null)
+                    }}
+                    keyboardType="number-pad"
+                    placeholder="Age"
+                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    style={styles.input}
+                    maxLength={3}
+                  />
                 </>
-              ) : null}
-            </>
-          ) : null}
-
-          <Text style={styles.section}>What do you do?</Text>
-          <View style={styles.row}>
-            {workFields.map((f) => (
-              <Pressable
-                key={f.slug}
-                onPress={() => setWorkField(workField === f.slug ? null : f.slug)}
-                style={[styles.chip, workField === f.slug ? styles.chipOn : styles.chipOff]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: workField === f.slug }}
-              >
-                <Text style={[styles.chipText, workField === f.slug && styles.chipTextOn]}>
-                  {f.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+              ) : null
+            }
+          />
 
           <Text style={styles.section}>What are you into?</Text>
           <InterestPicker selected={interestIds} onChange={setInterestIds} />
