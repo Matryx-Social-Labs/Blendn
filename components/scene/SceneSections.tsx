@@ -118,12 +118,29 @@ export function SceneBodyAccent({ children }: { children: string }) {
  * Real faces come back only with the friend graph (deferred), where "people you
  * have matched with" is a set the viewer is already entitled to see.
  */
-export function SceneAttendees({ count, seed }: { count: number; seed: string }) {
+/**
+ * Who is here, or who says they will be.
+ *
+ * The heading is a prop because the number means two different things either
+ * side of the doors. Before an event nobody has checked in, so "Attendees: —"
+ * is the screen reporting emptiness for a night that has not happened; the
+ * honest figure then is how many people said they are coming. Once it starts,
+ * the interesting number is who actually turned up.
+ */
+export function SceneAttendees({
+  count,
+  seed,
+  label = 'Attendees',
+}: {
+  count: number
+  seed: string
+  label?: string
+}) {
   const { shown, remainder } = avatarStack(count)
   return (
     <View style={styles.attendeesSection}>
       <View style={styles.attendees}>
-        <SceneHeading>Attendees</SceneHeading>
+        <SceneHeading>{label}</SceneHeading>
         <Text style={styles.attendeeCount}>{count > 0 ? `${count}+` : '—'}</Text>
       </View>
       {shown > 0 ? (

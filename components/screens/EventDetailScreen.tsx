@@ -61,7 +61,6 @@ import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
-const placeholderImg = require('../../assets/images/icon.png');
 
 interface EventDetail {
   id: string
@@ -118,7 +117,6 @@ type EventDetailTrayState = {
 }
 
 const { width } = Dimensions.get('window')
-const TOP_BAR_EXTRA_TOP_PADDING = 0
 const TOP_BAR_INSET_REDUCTION = 24
 
 /*
@@ -181,9 +179,10 @@ export default function EventDetail() {
   // Don't show loading skeleton if we have params - show content immediately
   const [loading, setLoading] = useState(!hasParams)
   const [checkingIn, setCheckingIn] = useState(false)
-  const [checkingOut, setCheckingOut] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   // Initialize from params for instant display
+  const [checkInCount, setCheckInCount] = useState(0)
+  const [goingCount, setGoingCount] = useState(0)
   const [interestCount, setInterestCount] = useState<number>(() => {
     if (interestCountParam && typeof interestCountParam === 'string') {
       const parsed = parseInt(interestCountParam, 10)
@@ -191,8 +190,6 @@ export default function EventDetail() {
     }
     return 0
   })
-  const [averageRating, setAverageRating] = useState<number | null>(null)
-  const [ratingCount, setRatingCount] = useState<number>(0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
   /*
    * `waitlisted` is included because the server can return it.
@@ -206,8 +203,6 @@ export default function EventDetail() {
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
   const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
-  const [showHeroHighRes, setShowHeroHighRes] = useState(false)
-  const [mapFailed, setMapFailed] = useState(false)
   const [trayState, setTrayState] = useState<EventDetailTrayState>({
     visible: false,
     title: '',
@@ -268,8 +263,10 @@ export default function EventDetail() {
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
-          if (d.stats.averageRating != null) setAverageRating(d.stats.averageRating)
-          setRatingCount(d.stats.ratingCount || 0)
+          // Both, because the Attendees block reports a different one either
+          // side of the doors -- see `attendeeBlock` below.
+          setCheckInCount(d.stats.checkInCount || 0)
+          setGoingCount(d.stats.rsvpCount || 0)
         }
         if (d.userStatus) {
           setUserInterested(d.userStatus.isFavorited || false)
@@ -300,7 +297,6 @@ export default function EventDetail() {
   // Deferred loading for smoother navigation - reduced delays for faster perceived loading
   useEffect(() => {
     setShowMapImage(false)
-    setMapFailed(false)
     // Show map immediately after navigation completes
     const task = InteractionManager.runAfterInteractions(() => {
       setShowMapImage(true)
@@ -317,17 +313,14 @@ export default function EventDetail() {
     }
   }, [id])
 
-  useEffect(() => {
-    setShowHeroHighRes(false)
-    // Load high-res hero with minimal delay
-    const task = InteractionManager.runAfterInteractions(() => {
-      const t = setTimeout(() => setShowHeroHighRes(true), 100)
-      return () => clearTimeout(t)
-    })
-    return () => {
-      task?.cancel?.()
-    }
-  }, [id])
+  /*
+   * The progressive-hero effect is gone with the old render.
+   *
+   * It swapped a low-res cover for a high-res one after interactions settled.
+   * `SceneHero` hands its media to `expo-image` with `cachePolicy` and a
+   * transition, and `SceneHeroMedia` owns the pager -- so this was a second,
+   * cruder implementation of a thing the component already does.
+   */
 
   useEffect(() => {
     // Check proximity when user location changes
@@ -536,8 +529,6 @@ export default function EventDetail() {
         }
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
-          if (d.stats.averageRating != null) setAverageRating(d.stats.averageRating)
-          setRatingCount(d.stats.ratingCount || 0)
         }
         // Set chat group ID if available
         if (d.chatGroup?.id) {
@@ -991,13 +982,8 @@ export default function EventDetail() {
    */
 
   const isLoading = loading
-
-  const spotsLeft = event ? (event.max_capacity - event.current_capacity) : 0
   const isCheckedIn = checkInStatus?.checked_in || false
   const isEnded = event ? (new Date(event.end_time).getTime() < Date.now()) : false
-  const sharedEventId = String(event?.id || id || '')
-  const effectiveTopInset = Math.max(6, insets.top - TOP_BAR_INSET_REDUCTION)
-  const stickyBarHeight = effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING + 12 + 36
 
   const openEventChat = useCallback(async () => {
     try {
@@ -1061,9 +1047,9 @@ export default function EventDetail() {
   }, [isCheckedIn, actionMorph])
 
 
-  const primaryActionDisabled = checkingIn || checkingOut || actionStage === 'checked'
+  const primaryActionDisabled = checkingIn || actionStage === 'checked'
   const primaryActionPress = () => {
-    if (checkingIn || checkingOut) return
+    if (checkingIn) return
     // Before the doors, the button is the RSVP and its own off-switch.
     if (!isCheckedIn && !hasStarted) {
       void handleToggleRsvp()
@@ -1127,6 +1113,19 @@ export default function EventDetail() {
    */
   const hasStarted = event ? new Date(event.start_time).getTime() <= Date.now() : false
   const rsvpd = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+
+  /*
+   * The count means two different things either side of the doors.
+   *
+   * Before an event starts nobody has checked in, so an "Attendees" heading
+   * over a dash is the screen reporting emptiness for a night that has not
+   * happened yet. What is true then is how many people said they are coming --
+   * RSVPs, falling back to saves when nobody has RSVP'd, since a save is the
+   * weaker version of the same signal and a real number beats a dash.
+   */
+  const attendeeBlock = hasStarted
+    ? { label: 'Attendees', count: checkInCount }
+    : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
 
   const ctaState: SceneCTAState = isEnded
     ? 'ended'
@@ -1202,7 +1201,7 @@ export default function EventDetail() {
           about the same double-count from the other direction.
         */
         contentContainerStyle={{
-          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + SCENE_CTA_INSET + 24,
+          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + 10 + 16 + 24,
         }}
       >
         {isLoading && !event ? (
@@ -1210,9 +1209,19 @@ export default function EventDetail() {
         ) : (
           <SceneHero
             playlist={playlist}
-            source={
-              event?.cover_image_url ? { uri: event.cover_image_url } : placeholderImg
-            }
+            /*
+              Undefined, not the app icon.
+
+              `placeholderImg` is `assets/images/icon.png` -- a square app icon,
+              and `SceneHero` draws its source with `contentFit: 'cover'` into a
+              440x647 box. A coverless event therefore rendered the icon blown
+              up to fill two thirds of the screen, which is the "half the image
+              is behind the header" this looked like. `expo-image` draws nothing
+              for an undefined source, leaving the hero's own dark panel with
+              the title and gradient on it -- which is what a coverless event
+              should look like.
+            */
+            source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
             title={event?.title || ''}
             dateLabel={dateLabel}
             timeLabel={timeLabel}
@@ -1242,8 +1251,12 @@ export default function EventDetail() {
             <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
           ) : null}
 
-          {interestCount > 0 ? (
-            <SceneAttendees count={interestCount} seed={event?.id || 'scene'} />
+          {attendeeBlock.count > 0 ? (
+            <SceneAttendees
+              count={attendeeBlock.count}
+              label={attendeeBlock.label}
+              seed={event?.id || 'scene'}
+            />
           ) : null}
 
           {event?.venue_name ? (
@@ -1284,24 +1297,11 @@ export default function EventDetail() {
       */}
       <View style={styles.ctaDock} pointerEvents="box-none">
         <View style={styles.ctaDockInner} pointerEvents="box-none">
-          {/*
-            Check out, beside the CTA and only while you are in.
-
-            It was a visible button on the old screen and the first draft of
-            this rewrite put it two taps deep behind an overflow -- which
-            `sceneCta.test.ts` caught, having been written for exactly that
-            regression. Leaving a venue is the most time-sensitive action in
-            the app; it does not belong behind an ellipsis.
-
-            Frame `1141:4853` draws one CTA and has no home for this. Recorded
-            in `docs/SCENE.md` as a delta for the designer rather than resolved
-            by dropping the control.
-          */}
           <SceneCTA
             state={ctaState}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
             icon={
-              checkingIn || checkingOut ? (
+              checkingIn ? (
                 <ActivityIndicator size="small" color={EMBER.accent} />
               ) : (
                 <Ionicons
@@ -1476,13 +1476,21 @@ const styles = StyleSheet.create({
   },
   ctaDockInner: {
     paddingHorizontal: SCENE_CTA_INSET,
-    paddingBottom: SCENE_CTA_INSET,
-    gap: 10,
+    // 10, down from 12 — see SCENE_CTA_HEIGHT for the chrome arithmetic.
+    paddingTop: 10,
+    paddingBottom: 16,
+    /*
+     * Centres the content-width pill. Without this it stretches to the dock and
+     * `paddingHorizontal: 32` on the fill buys nothing — which is exactly what
+     * this screen shipped: a full-bleed slab instead of the frame's pill.
+     */
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   organiserBar: {
     position: 'absolute',
     right: 16,
-    bottom: SCENE_CTA_HEIGHT + SCENE_CTA_INSET + 72,
+    bottom: SCENE_CTA_HEIGHT + 16 + 10 + 24,
     gap: 12,
   },
   organiserButton: {

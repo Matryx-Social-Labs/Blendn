@@ -227,7 +227,11 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     expect(detail).not.toContain('ellipsis-horizontal')
 
     // The in-flight states the old morph showed.
-    expect(detail).toContain('checkingIn || checkingOut ? (')
+    /*
+     * Only check-in spins now: check out left this screen with the secondary
+     * row, so `checkingOut` was a state nothing could ever set.
+     */
+    expect(detail).toContain('checkingIn ? (')
   })
 
   it('check out really is where this screen says it moved to', () => {
