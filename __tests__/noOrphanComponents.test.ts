@@ -50,12 +50,13 @@ function walk(dir: string, out: string[] = []): string[] {
  * the Scene was in for a week while nobody knew.
  */
 const KNOWN_ORPHANS: Record<string, string> = {
-  'SceneHero.tsx':
-    'The Scene rebuild. `app/event/[id].tsx` still renders EventDetailScreen; ' +
-    'the render swap is its own PR because the old screen carries 13 handlers ' +
-    '(check-in, geofence, RSVP, share, announce, delete) that must survive it.',
-  'SceneSections.tsx': 'Same swap as SceneHero.',
-  'SceneLightbox.tsx': 'Same swap as SceneHero.',
+  /*
+   * Empty, and that is the point.
+   *
+   * It held the three Scene files while the event route still rendered
+   * the old screen. The render swap closed that, so the entries went with it —
+   * which is the lifecycle an entry here is supposed to have.
+   */
 }
 
 const sources = walk(join(ROOT, 'app'))

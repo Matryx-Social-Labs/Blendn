@@ -1,15 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { BlurView } from 'expo-blur';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import Reanimated from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   Animated as RNAnimated,
   Dimensions,
   Easing,
@@ -27,20 +24,41 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
-import ScalePress from '../motion/ScalePress';
-import { SkeletonBlock, SkeletonLine } from '../Skeleton';
+import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
-import { getOptimizedImageUrl } from '../../lib/photoUtils';
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient';
-import { APP_COLORS, EMBER } from '../../lib/theme';
+import { EMBER, EMBER_TYPE } from '../../lib/theme';
+import { PulseTopBar } from '../pulse/PulseTopBar';
+import { SceneHero } from '../scene/SceneHero';
+import { SceneLightbox } from '../scene/SceneLightbox';
+import {
+  SCENE_CTA_HEIGHT,
+  SCENE_CTA_ICON,
+  SCENE_CTA_INSET,
+  SCENE_PADDING_HORIZONTAL,
+  SCENE_SECTION_GAP,
+  SceneAttendees,
+  SceneBody,
+  SceneBodyAccent,
+  SceneCTA,
+  SceneGallery,
+  SceneHeading,
+  SceneLocationCard,
+  SceneMap,
+  type SceneCTAState,
+} from '../scene/SceneSections';
+import { TAB_BAR_CLEARANCE } from '../../app/(tabs)/_layout';
+import { feedPlaylist } from '../../lib/feedMedia';
+import { highlightEntities } from '../../lib/entityHighlight';
+import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
@@ -67,7 +85,16 @@ interface EventDetail {
   latitude: number
   longitude: number
   check_in_radius: number
-  images?: string[]
+  /**
+   * Everything the organiser uploaded, which the screen has always been sent
+   * and never read.
+   *
+   * `EventDetailSchema` returns `media: [{ id, url, type }]` and the fetch
+   * below mapped every other field and dropped this one -- so the Scene showed
+   * one cover image while the event had a gallery and, since #244, video. The
+   * hero and the gallery are the two things the frame is mostly made of.
+   */
+  media?: Array<{ id: string; url: string; type: string }>
 }
 
 interface CheckInStatus {
@@ -199,6 +226,8 @@ export default function EventDetail() {
   const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
   const [isOrganizer, setIsOrganizer] = useState(false)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
+  /** Which gallery item the lightbox is on, or null when it is closed. */
+  const [lightbox, setLightbox] = useState<number | null>(null)
   const [announcementText, setAnnouncementText] = useState('')
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
   const closeTray = useCallback(() => {
@@ -241,6 +270,7 @@ export default function EventDetail() {
           latitude: d.latitude ?? 0,
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
+          media: Array.isArray(d.media) ? d.media : [],
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -493,6 +523,7 @@ export default function EventDetail() {
           latitude: d.latitude ?? 0,
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
+          media: Array.isArray(d.media) ? d.media : [],
         })
         // Set interest info and check-in status from userStatus
         if (d.userStatus) {
@@ -948,28 +979,8 @@ export default function EventDetail() {
     } catch {}
   }
 
-  const formatPrice = (priceInCents: number) => {
-    if (priceInCents === 0) return 'Free'
-    return `₹${(priceInCents / 100).toFixed(0)}`
-  }
 
 
-  const formatDate = (dateString: string, tz?: string) => {
-    const date = new Date(dateString)
-    const opts: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      ...(tz ? { timeZone: tz, timeZoneName: 'short' } : {}),
-    }
-    try {
-      return date.toLocaleDateString('en-US', opts)
-    } catch {
-      return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    }
-  }
 
   /**
    * The hero's date, without the time.
@@ -978,14 +989,6 @@ export default function EventDetail() {
    * slots with their own icons — a calendar and a clock — and a single blob
    * under a calendar icon reads as the wrong label for half of what it says.
    */
-  const formatHeroDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
 
   /**
    * "21:00 — 02:00", or "21:00 — Late" when the end lands on another day.
@@ -996,16 +999,6 @@ export default function EventDetail() {
    * can carry. Rolling past midnight is the normal case for these events, so
    * this is the common path rather than an edge case.
    */
-  const formatHeroTimeRange = (startString: string, endString?: string | null) => {
-    const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false }
-    const start = new Date(startString)
-    const startLabel = start.toLocaleTimeString('en-GB', opts)
-    if (!endString) return startLabel
-    const end = new Date(endString)
-    if (Number.isNaN(end.getTime())) return startLabel
-    const sameDay = start.toDateString() === end.toDateString()
-    return `${startLabel} — ${sameDay ? end.toLocaleTimeString('en-GB', opts) : 'Late'}`
-  }
 
   const isLoading = loading
 
@@ -1077,21 +1070,6 @@ export default function EventDetail() {
     }
   }, [isCheckedIn, actionMorph])
 
-  const blendOpacity = actionMorph.interpolate({
-    inputRange: [0, 0.7, 1],
-    outputRange: [1, 0.15, 0],
-    extrapolate: 'clamp',
-  })
-  const checkedOpacity = actionMorph.interpolate({
-    inputRange: [0.6, 1, 1.4],
-    outputRange: [0, 1, 0],
-    extrapolate: 'clamp',
-  })
-  const chatOpacity = actionMorph.interpolate({
-    inputRange: [1.2, 2],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  })
 
   const primaryActionDisabled = checkingIn || checkingOut || actionStage === 'checked'
   const primaryActionPress = () => {
@@ -1105,6 +1083,39 @@ export default function EventDetail() {
     }
   }
 
+  /*
+   * RSVP and check out, which frame `1141:4853` has nowhere to put.
+   *
+   * The frame draws one CTA. The old screen had five controls -- check in,
+   * RSVP, check out, interest, share -- and the first three do not all fit one
+   * button. Interest and share moved to the top bar, check in *is* the CTA, and
+   * these two would otherwise have been dropped by the rewrite. Lint caught
+   * that they had become unreferenced, which is the same way two things went
+   * missing in the MatchScreen rebuild.
+   *
+   * A tray rather than invented chrome: it is the idiom the app already uses
+   * for secondary actions, and it keeps the frame's one-CTA composition intact.
+   * Raised for the designer in `docs/SCENE.md` -- the design needs a home for
+   * these or an explicit decision that they do not belong here.
+   */
+  const openMore = useCallback(() => {
+    const buttons: ActionTrayButton[] = []
+
+    if (!isEnded) {
+      const committed = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+      buttons.push({
+        label: committed ? "I'm not going" : 'Count me in',
+        onPress: () => {
+          closeTray()
+          void handleToggleRsvp()
+        },
+      })
+    }
+
+    buttons.push({ label: 'Close', variant: 'primary', onPress: closeTray })
+    showTray(event?.title || 'This event', '', buttons)
+  }, [isEnded, isCheckedIn, rsvpStatus, event?.title, handleToggleRsvp, handleCheckout, showTray, closeTray])
+
   if (!isLoading && !event) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
@@ -1116,505 +1127,265 @@ export default function EventDetail() {
     )
   }
 
-  return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/*
-        Flat #0F0E0E, which is what the frame specifies for the whole page.
+  /*
+   * Everything the organiser uploaded, as one list.
+   *
+   * `feedPlaylist` puts the cover first and then the rest, which is the same
+   * order the Pulse cards use -- so the picture somebody tapped on the feed is
+   * the first thing the hero shows, rather than a different one with nothing to
+   * explain the swap.
+   */
+  const playlist = feedPlaylist(event?.media, event?.cover_image_url)
 
-        This was a blurred copy of the cover at 58% opacity under a gradient
-        generated from a hash of the event id, so every event washed the screen
-        — chrome, surfaces and all — in its own hue. Measured on a test event it
-        was painting the top bar rgb(20,52,46): green. The frame's page is one
-        flat near-black with #141313 cards on it, and the colour in the design
-        comes from the accent and the photography, not from tinting the
-        furniture.
+  /*
+   * Accented mid-paragraph by exact match against things the payload already
+   * carries -- never by a model. See `lib/entityHighlight.ts`.
+   */
+  const entities = [event?.title, event?.venue_name, event?.city, event?.category].filter(
+    (e): e is string => !!e && e.length > 2
+  )
+
+  const ctaState: SceneCTAState = isEnded ? 'ended' : isCheckedIn ? 'going' : 'join'
+
+
+  const when = event ? new Date(event.start_time) : null
+  const dateLabel = when
+    ? when.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+    : ''
+  const timeLabel = when
+    ? when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    : ''
+
+  return (
+    <View style={styles.container}>
+      {/*
+        The Pulse's bar, not a second one that looks like it.
+
+        The Scene's header (`1141:4930`) and the Pulse's (`1141:4819`) are the
+        same component in the design -- same 64pt height, same 80% #0F0E0E, same
+        12pt backdrop blur, same accent wordmark. A lookalike here would be two
+        things to keep in sync, and they would drift the first time one of them
+        was touched.
       */}
-      {/* Sticky top bar */}
-      <View style={[styles.topBarSticky, { paddingTop: effectiveTopInset + TOP_BAR_EXTRA_TOP_PADDING }]}>
-        <TouchableOpacity style={styles.navButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.topBarTitle} numberOfLines={1}>{event?.title || ''}</Text>
-        <View style={styles.topBarActions}>
-          <TouchableOpacity
-            style={[styles.navButton, userInterested && styles.navButtonActive]}
-            onPress={handleToggleInterest}
+      <PulseTopBar
+        leading={
+          <Pressable
+            onPress={() => router.back()}
             accessibilityRole="button"
-            accessibilityLabel={userInterested ? 'Remove from interested events' : 'Mark as interested'}
+            accessibilityLabel="Back"
+            hitSlop={12}
           >
-            <Ionicons name={userInterested ? 'heart' : 'heart-outline'} size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share event">
-            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+            <Ionicons name="chevron-back" size={22} color={EMBER.textPrimary} />
+          </Pressable>
+        }
+        actions={
+          <>
+            <Pressable
+              onPress={handleToggleInterest}
+              accessibilityRole="button"
+              accessibilityLabel={
+                userInterested ? 'Remove from interested events' : 'Save this event'
+              }
+              hitSlop={12}
+            >
+              <Ionicons
+                name={userInterested ? 'heart' : 'heart-outline'}
+                size={22}
+                color={userInterested ? EMBER.accent : EMBER.textPrimary}
+              />
+            </Pressable>
+            <Pressable
+              onPress={handleShare}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
+              hitSlop={12}
+            >
+              <Ionicons name="share-outline" size={22} color={EMBER.textPrimary} />
+            </Pressable>
+            <Pressable
+              onPress={openMore}
+              accessibilityRole="button"
+              accessibilityLabel="More actions"
+              hitSlop={12}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={EMBER.textPrimary} />
+            </Pressable>
+          </>
+        }
+      />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 24,
+        }}
+      >
+        {isLoading && !event ? (
+          <SkeletonBlock width="100%" height={420} borderRadius={0} />
+        ) : (
+          <SceneHero
+            playlist={playlist}
+            source={
+              event?.cover_image_url ? { uri: event.cover_image_url } : placeholderImg
+            }
+            title={event?.title || ''}
+            dateLabel={dateLabel}
+            timeLabel={timeLabel}
+            scarcity={heroPillLabel({
+              maxCapacity: event?.max_capacity,
+              currentCapacity: event?.current_capacity,
+            })}
+            onPressMedia={(i) => setLightbox(i)}
+          />
+        )}
+
+        <View style={styles.content}>
+          {event?.description ? (
+            <View style={styles.section}>
+              <SceneHeading>The Experience</SceneHeading>
+              <SceneBody>
+                {highlightEntities(event.description, entities).map((seg, i) =>
+                  seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
+                )}
+              </SceneBody>
+            </View>
+          ) : null}
+
+          {/* Only when there is more than the cover -- a "gallery" of one is a
+              heading over the picture already at the top of the screen. */}
+          {playlist.length > 1 ? (
+            <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
+          ) : null}
+
+          {interestCount > 0 ? (
+            <SceneAttendees count={interestCount} seed={event?.id || 'scene'} />
+          ) : null}
+
+          {event?.venue_name ? (
+            <Pressable
+              onPress={openInMaps}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${event.venue_name} in Maps`}
+            >
+            <SceneLocationCard
+              venue={event.venue_name}
+              area={event.address || event.city || ''}
+              map={
+                showMapImage && event.latitude && event.longitude ? (
+                  <SceneMap
+                    latitude={event.latitude}
+                    longitude={event.longitude}
+                    width={width - 24}
+                  />
+                ) : null
+              }
+            />
+            </Pressable>
+          ) : null}
+
+          {/*
+            No amenities row. `#244` added them server-side and the mobile
+            payload does not carry them yet, so the frame's two tiles would be
+            the interface asserting two facts it has not been told. They appear
+            the day `EventDetailSchema` returns them.
+          */}
+        </View>
+      </ScrollView>
+
+      {/*
+        Outside the ScrollView, as frame `1227:2903` has it -- a sibling of
+        `Main`, not a child. `box-none` so the gap either side still scrolls the
+        page underneath; only the pill takes touches.
+      */}
+      <View style={styles.ctaDock} pointerEvents="box-none">
+        <View style={styles.ctaDockInner} pointerEvents="box-none">
+          {/*
+            Check out, beside the CTA and only while you are in.
+
+            It was a visible button on the old screen and the first draft of
+            this rewrite put it two taps deep behind an overflow -- which
+            `sceneCta.test.ts` caught, having been written for exactly that
+            regression. Leaving a venue is the most time-sensitive action in
+            the app; it does not belong behind an ellipsis.
+
+            Frame `1141:4853` draws one CTA and has no home for this. Recorded
+            in `docs/SCENE.md` as a delta for the designer rather than resolved
+            by dropping the control.
+          */}
+          {isCheckedIn && !isEnded ? (
+            <Pressable
+              onPress={handleCheckout}
+              disabled={checkingOut}
+              accessibilityRole="button"
+              accessibilityLabel="Check out of event"
+              accessibilityState={{ disabled: checkingOut }}
+              style={styles.secondaryAction}
+            >
+              {checkingOut ? (
+                <ActivityIndicator size="small" color={EMBER.textSecondary} />
+              ) : (
+                <Text style={styles.secondaryActionText}>Check out</Text>
+              )}
+            </Pressable>
+          ) : null}
+          <SceneCTA
+            state={ctaState}
+            onPress={primaryActionDisabled ? undefined : primaryActionPress}
+            icon={
+              checkingIn || checkingOut ? (
+                <ActivityIndicator size="small" color={EMBER.accent} />
+              ) : (
+                <Ionicons
+                  name={actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'}
+                  size={SCENE_CTA_ICON}
+                  color={EMBER.accent}
+                />
+              )
+            }
+          />
         </View>
       </View>
 
-      {/*
-        The content scrolls the page, not a sheet on top of it.
-
-        This was an absolutely-positioned panel pinned below the top bar with a
-        30pt radius, a light border and its own gradient — a bottom sheet the
-        hero peeked out from behind. The frame has no such object: the hero
-        dissolves into the page and the sections sit directly on it, which is
-        also why the hero can be full-bleed now. The sheet was what forced it to
-        be a card.
-      */}
-      <View style={styles.sectionBg}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          scrollEventThrottle={16}
-        >
-          {isLoading ? (
-            <SkeletonBlock width={'100%'} height={HERO_HEIGHT} borderRadius={0} />
-          ) : (
-            <View style={styles.heroCard}>
-              <Reanimated.View sharedTransitionTag={`event-image-${sharedEventId}`} style={styles.coverImage}>
-                <Image
-                  source={(() => {
-                    const coverUrl = event!.cover_image_url
-                    if (!coverUrl) return placeholderImg
-                    const opt = getOptimizedImageUrl(coverUrl, {
-                      width,
-                      height: HERO_HEIGHT,
-                      resize: 'cover',
-                      quality: showHeroHighRes ? 75 : 45,
-                      format: 'webp',
-                    })
-                    return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-                  })()}
-                  placeholder={placeholderImg}
-                  style={StyleSheet.absoluteFillObject}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  transition={200}
-                />
-              </Reanimated.View>
-              {/*
-                The photograph is not tinted. A second gradient used to sit here
-                in a hue derived from the event's id, so the organiser's image
-                was recoloured by a hash of its primary key. The frame has one
-                gradient over the hero and it is neutral.
-              */}
-              {/*
-                Transparent to the page's own background, not to black. The
-                frame ends this gradient on #0F0E0E so the photograph dissolves
-                into the screen rather than into a darker band sitting on it —
-                the same "nobody diffs two blacks" trap the launch overlay hit.
-              */}
-              <LinearGradient
-                colors={['rgba(15,14,14,0)', EMBER.bg]}
-                start={{ x: 0.5, y: 0.25 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.heroInfoGradient}
-              />
-              <View style={styles.heroInfo}>
-                {/*
-                  Driven by real capacity, not decoration. The frame draws this
-                  unconditionally, but an event with no cap is not limited
-                  access and saying so would be a lie the card tells on every
-                  event. `max_capacity` of 0 means uncapped.
-                */}
-                {event && event.max_capacity > 0 ? (
-                  <View style={styles.heroPill}>
-                    <Text style={styles.heroPillText}>LIMITED ACCESS</Text>
-                  </View>
-                ) : null}
-                <Reanimated.Text sharedTransitionTag={`event-title-${sharedEventId}`} style={styles.heroTitle} numberOfLines={2}>
-                  {event?.title || ''}
-                </Reanimated.Text>
-                {/*
-                  Date and time, side by side — the venue moved out of the hero
-                  and into the Location card, which is where the frame puts it
-                  and where the address it belongs with already lives.
-                */}
-                <View style={styles.heroMetaRow}>
-                  <View style={styles.heroMetaItem}>
-                    <Ionicons name="calendar-outline" size={18} color={EMBER.textSecondary} />
-                    <Reanimated.Text sharedTransitionTag={`event-date-${sharedEventId}`} style={styles.heroMetaText}>
-                      {event ? formatHeroDate(event.start_time) : ''}
-                    </Reanimated.Text>
-                  </View>
-                  <View style={styles.heroMetaItem}>
-                    <Ionicons name="time-outline" size={18} color={EMBER.textSecondary} />
-                    <Text style={styles.heroMetaText} numberOfLines={1}>
-                      {event ? formatHeroTimeRange(event.start_time, event.end_time) : ''}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          )}
-          
-          <View style={styles.content}>
-            <View style={styles.eventInfo} />
-            
-            {isLoading ? (
-              <View style={styles.metaRow}>
-                <SkeletonBlock width={90} height={28} borderRadius={16} />
-                <SkeletonLine width={60} />
-              </View>
-            ) : (
-              <View style={styles.metaRow}>
-                {event?.category ? (
-                  <View style={styles.categoryContainer}>
-                    <Text style={styles.categoryText}>{event.category}</Text>
-                  </View>
-                ) : null}
-                {!isEnded ? (
-                  <View style={styles.statusChip}>
-                    <Text style={styles.statusChipText}>{spotsLeft > 0 ? `${spotsLeft} spots left` : 'Full'}</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.statusChip, styles.statusChipMuted]}>
-                    <Text style={styles.statusChipText}>Ended</Text>
-                  </View>
-                )}
-                <Text style={styles.price}>{formatPrice(event!.price_cents)}</Text>
-              </View>
-            )}
-
-            {(isLoading || interestCount > 0) && (
-              <View style={styles.attendingRow}>
-                {isLoading ? (
-                <>
-                  <View style={styles.avatarsRow}>
-                    <View style={styles.avatarCircle} />
-                    <View style={[styles.avatarCircle, { left: 16 }]} />
-                    <View style={[styles.avatarCircle, { left: 32 }]} />
-                  </View>
-                  <SkeletonLine width={180} />
-                </>
-              ) : (
-                <>
-                  {/*
-                    Anonymous discs, not faces.
-
-                    This row used to render `interestedPreview` — real
-                    photographs of everyone who had favourited the event, from an
-                    endpoint that handed them to any authenticated caller with no
-                    identity gate. The server stopped sending them (blendn-admin
-                    #229) and this stops asking for them.
-
-                    Favouriting is a private act: unlike the roster it has no
-                    check-in, no pseudonym and no reveal, so nobody who used it
-                    consented to being shown. The count is the social proof the
-                    design actually asks for — the frame leads with "124+" and
-                    the faces were decoration on top of it.
-
-                    The discs stay because the composition needs a mass beside
-                    the number, and three grey circles say "several people"
-                    without saying which.
-                  */}
-                  {interestCount > 0 ? (
-                    <View
-                      style={[
-                        styles.avatarsRow,
-                        { width: 35 + (Math.min(interestCount, 3) - 1) * 16 },
-                      ]}
-                    >
-                      {Array.from({ length: Math.min(interestCount, 3) }).map((_, idx) => (
-                        <View
-                          key={`interested-${idx}`}
-                          style={[styles.avatarCircle, { left: idx * 16 }]}
-                        />
-                      ))}
-                    </View>
-                  ) : null}
-                  {interestCount > 0 ? (
-                    <Text style={styles.attendingText}>
-                      {interestCount === 1
-                        ? '1 person is interested'
-                        : `${interestCount} people are interested`}
-                    </Text>
-                  ) : null}
-                </>
-              )}
-              </View>
-            )}
-
-          {isLoading || !event?.description ? (
-            <View style={{ paddingHorizontal: 14, marginBottom: 12 }}>
-              <SkeletonLine width={160} style={{ marginBottom: 10 }} />
-              {[...Array(3)].map((_, i) => (
-                <SkeletonLine key={`ab-${i}`} width={`${90 - i * 10}%`} style={{ marginBottom: 6 }} />
-              ))}
-            </View>
-          ) : (
-            <>
-              <Text style={styles.sectionTitle}>About The Event</Text>
-              <View style={styles.aboutCard}>
-                <Text style={styles.description}>{event.description}</Text>
-              </View>
-            </>
-          )}
-
-            {/* Redesigned Event Details (clean 2-up) */}
-            {isLoading ? (
-              <View style={styles.detailsGrid}>
-                <SkeletonBlock width={(width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2} height={70} borderRadius={14} />
-                <SkeletonBlock width={(width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2} height={70} borderRadius={14} />
-              </View>
-            ) : (
-              <View style={styles.detailsGrid}>
-                <View style={styles.detailsCard}>
-                  <Text style={styles.detailsTitle}>Date & Time</Text>
-                  <Text style={styles.detailsValue}>{formatDate(event!.start_time, event!.timezone)}</Text>
-                </View>
-                <View style={styles.detailsCard}>
-                  <Text style={styles.detailsTitle}>Venue</Text>
-                  <Text style={styles.detailsValue} numberOfLines={1}>{event!.venue_name}</Text>
-                </View>
-                {averageRating != null && ratingCount > 0 && (
-                  <View style={styles.detailsCard}>
-                    <Text style={styles.detailsTitle}>Rating</Text>
-                    <Text style={styles.detailsValue}>
-                      {'★'.repeat(Math.round(averageRating))}{'☆'.repeat(5 - Math.round(averageRating))} {averageRating.toFixed(1)} ({ratingCount})
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {isLoading ? (
-              <>
-                <Text style={styles.sectionTitle}>Location</Text>
-                <SkeletonBlock width={'92%'} height={249} borderRadius={23} style={{ alignSelf: 'center', marginBottom: 16 }} />
-              </>
-            ) : (
-              <>
-                <Text style={styles.sectionTitle}>Location</Text>
-                <View style={styles.locationCardFrame}>
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.08)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.locationCardBorder}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.locationCard}>
-                    <TouchableOpacity onPress={openInMaps} activeOpacity={0.92}>
-                      {showMapImage ? (
-                        <Image
-                          source={(() => {
-                            const lat = event!.latitude
-                            const lon = event!.longitude
-                            const hasCoords =
-                              Number.isFinite(lat) &&
-                              Number.isFinite(lon) &&
-                              (Math.abs(lat) > 0.0001 || Math.abs(lon) > 0.0001)
-                            const mapHeight = 200
-                            if (!hasCoords || mapFailed) {
-                              const coverUrl = event!.cover_image_url
-                              if (!coverUrl) return placeholderImg
-                              const opt = getOptimizedImageUrl(coverUrl, { width, height: mapHeight, resize: 'cover', quality: 60 })
-                              return opt && opt !== coverUrl ? { uri: opt } : { uri: coverUrl }
-                            }
-                            const mapWidth = Math.min(1280, Math.max(300, Math.round(width - (CONTENT_HORIZONTAL_PADDING * 2))))
-                            const cacheKey = `${event!.id}:${mapWidth}x${mapHeight}:${lat},${lon}`
-                            const cachedUrl = getMapImageUrlCache(cacheKey)
-                            if (cachedUrl) {
-                              return { uri: cachedUrl }
-                            }
-                            const gmapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-                            const marker = `markers=${lat},${lon}`
-                            const darkStyle = 'style=feature:all|element:geometry|color:0x1f1f1f&style=feature:all|element:labels.text.fill|color:0xcfcfcf&style=feature:all|element:labels.text.stroke|color:0x1f1f1f&style=feature:road|element:geometry|color:0x2f2f2f&style=feature:road.highway|element:geometry|color:0x3a3a3a&style=feature:water|element:geometry|color:0x111827&style=feature:poi|element:geometry|color:0x252525'
-                            const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=15&size=${mapWidth}x${mapHeight}&scale=2&${marker}&${darkStyle}&key=${gmapsKey}`
-                            setMapImageUrlCache(cacheKey, url)
-                            return { uri: url }
-                          })()}
-                          placeholder={placeholderImg}
-                          style={styles.locationImage}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          transition={150}
-                          onError={() => setMapFailed(true)}
-                        />
-                      ) : (
-                        <View style={[styles.locationImage, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            )}
-
-
-            
-
-            <View style={styles.actionSection}>
-              {isLoading ? (
-                <SkeletonBlock width={'92%'} height={56} borderRadius={25} style={{ alignSelf: 'center' }} />
-              ) : null}
-            </View>
-
-            {isOrganizer && !isLoading && (
-              <View style={styles.organizerPanel}>
-                <Text style={styles.organizerPanelTitle}>Organizer Tools</Text>
-                <View style={styles.organizerButtonRow}>
-                  <TouchableOpacity
-                    style={[styles.organizerButton, styles.organizerButtonAnnounce]}
-                    onPress={handleSendAnnouncement}
-                    accessibilityRole="button"
-                    accessibilityLabel="Send announcement to attendees"
-                  >
-                    <Ionicons name="megaphone-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.organizerButtonText}>Announce</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.organizerButton, styles.organizerButtonDelete]}
-                    onPress={handleDeleteEvent}
-                    accessibilityRole="button"
-                    accessibilityLabel="Delete this event"
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.organizerButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-          </View>
-        </ScrollView>
-      </View>
-
-     
-      <View style={styles.tabBar}>
-        <ScalePress
-          style={[
-            styles.blendnButton,
-            isCheckedIn && styles.blendnButtonWithSecondary,
-            primaryActionDisabled && styles.checkInButtonDisabled
-          ]}
-          onPress={primaryActionPress}
-          disabled={primaryActionDisabled}
-          pressedScale={0.975}
-          accessibilityRole="button"
-          accessibilityLabel={isCheckedIn ? (actionStage === 'chat' ? 'Go to event chat' : 'Checked in') : 'Check in to event'}
-        >
-          <BlurView intensity={42} tint="dark" style={styles.glassButtonBlur} />
-          <LinearGradient
-            colors={['rgba(255,255,255,0.24)', 'rgba(255,255,255,0.06)']}
-            start={{ x: 0.1, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={styles.glassButtonSheen}
-            pointerEvents="none"
-          />
-          {(checkingIn || checkingOut) ? (
-            <View style={styles.actionRow}>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.blendnButtonText}>{checkingIn ? 'Checking in...' : 'Checking out...'}</Text>
-            </View>
-          ) : (
-            <View style={styles.actionLabelStack}>
-              {/*
-                "Blend in", not "Blend'n".
-
-                This button checks you in. It was labelled with the *brand* —
-                the noun — which names the product rather than the action, and
-                left the one control on the screen saying nothing about what
-                pressing it does. The name works here precisely because it is
-                also a verb, and the other two stages of this morph are already
-                verbs ("Go to Chat"), so the noun was the odd one out.
-
-                Same label the Scene's floating CTA uses; `SceneSections.tsx`
-                carries the reasoning. Pinned by `__tests__/sceneCta.test.ts` so
-                the two surfaces cannot drift apart again.
-              */}
-              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: blendOpacity }]}>
-                Blend in
-              </RNAnimated.Text>
-              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: checkedOpacity }]}>
-                Checked In
-              </RNAnimated.Text>
-              <RNAnimated.Text style={[styles.blendnButtonText, styles.actionLabelLayer, { opacity: chatOpacity }]}>
-                Go to Chat
-              </RNAnimated.Text>
-            </View>
-          )}
-        </ScalePress>
-        {isCheckedIn && (
-          <ScalePress
-            style={[styles.secondaryActionButton, checkingOut && styles.checkInButtonDisabled]}
-            onPress={handleCheckout}
-            disabled={checkingOut}
-            accessibilityRole="button"
-            accessibilityLabel="Check out of event"
-            pressedScale={0.96}
-          >
-            <BlurView intensity={36} tint="dark" style={styles.glassButtonBlur} />
-            <LinearGradient
-              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']}
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={styles.glassButtonSheen}
-              pointerEvents="none"
-            />
-            {checkingOut ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="exit-outline" size={20} color="#FFFFFF" />
-            )}
-          </ScalePress>
-        )}
-        {!isCheckedIn && !isLoading && (
-          <ScalePress
-            style={[
-              styles.secondaryActionButton,
-              (rsvpStatus === 'going' || rsvpStatus === 'waitlisted') && styles.rsvpButtonActive,
-            ]}
-            onPress={handleToggleRsvp}
-            accessibilityRole="button"
-            accessibilityLabel={
-              rsvpStatus === 'waitlisted'
-                ? 'On the waitlist. Tap to leave it'
-                : rsvpStatus === 'going'
-                  ? 'Cancel RSVP'
-                  : 'RSVP as going'
-            }
-            pressedScale={0.96}
-          >
-            <BlurView intensity={36} tint="dark" style={styles.glassButtonBlur} />
-            <LinearGradient
-              colors={
-                rsvpStatus === 'going'
-                  ? ['rgba(94,234,141,0.32)', 'rgba(34,197,94,0.12)']
-                  : rsvpStatus === 'waitlisted'
-                    // Amber, not green: on the list is not the same as in.
-                    ? ['rgba(251,191,36,0.32)', 'rgba(217,119,6,0.12)']
-                    : ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']
-              }
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={styles.glassButtonSheen}
-              pointerEvents="none"
-            />
-            <Ionicons
-              name={
-                rsvpStatus === 'going'
-                  ? 'checkmark-circle'
-                  : rsvpStatus === 'waitlisted'
-                    ? 'hourglass-outline'
-                    : 'calendar-outline'
-              }
-              size={20}
-              color={
-                rsvpStatus === 'going' ? '#4ade80' : rsvpStatus === 'waitlisted' ? '#fbbf24' : '#FFFFFF'
-              }
-            />
-          </ScalePress>
-        )}
-      </View>
-      <ActionTray
-        visible={trayState.visible}
-        title={trayState.title}
-        message={trayState.message}
-        buttons={trayState.buttons}
-        onClose={closeTray}
+      <SceneLightbox
+        items={playlist}
+        initialIndex={lightbox ?? 0}
+        visible={lightbox !== null}
+        onClose={() => setLightbox(null)}
       />
 
-      {/* Announcement modal for Android (iOS uses Alert.prompt) */}
+      {/*
+        The organiser's own controls, kept exactly as they were.
+        Not in any frame -- `1141:4853` is the attendee's Scene -- so they stay
+        a tray rather than being invented into the new layout.
+      */}
+      {isOrganizer ? (
+        <View style={styles.organiserBar} pointerEvents="box-none">
+          <Pressable
+            onPress={Platform.OS === 'android' ? handleSendAnnouncementAndroid : handleSendAnnouncement}
+            style={styles.organiserButton}
+            accessibilityRole="button"
+            accessibilityLabel="Send an announcement"
+          >
+            <Ionicons name="megaphone-outline" size={18} color={EMBER.textPrimary} />
+          </Pressable>
+          <Pressable
+            onPress={handleDeleteEvent}
+            style={styles.organiserButton}
+            accessibilityRole="button"
+            accessibilityLabel="Delete this event"
+          >
+            <Ionicons name="trash-outline" size={18} color={EMBER.textPrimary} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/*
+        Android's announcement composer.
+        `handleSendAnnouncement` uses `Alert.prompt` on iOS, which Android does
+        not have -- so this modal is the whole feature there, and dropping it in
+        the rewrite would have left the organiser's button setting a flag that
+        renders nothing. Restored as it was; it is not in any frame.
+      */}
       <Modal
         visible={showAnnouncementModal}
         transparent
@@ -1623,729 +1394,165 @@ export default function EventDetail() {
       >
         <View style={styles.announcementOverlay}>
           <View style={styles.announcementModal}>
-            <Text style={styles.announcementModalTitle}>Send Announcement</Text>
-            <Text style={styles.announcementModalSubtitle}>
-              This message will be broadcast to all event attendees.
+            <Text style={styles.announcementTitle}>Send announcement</Text>
+            <Text style={styles.announcementSubtitle}>
+              This message is broadcast to everyone in the event chat.
             </Text>
             <TextInput
               style={styles.announcementInput}
-              placeholder="Enter your announcement..."
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholder="Enter your announcement…"
+              placeholderTextColor={EMBER.textPlaceholder}
               value={announcementText}
               onChangeText={setAnnouncementText}
               multiline
               maxLength={1000}
               autoFocus
             />
-            <View style={styles.announcementModalButtons}>
-              <TouchableOpacity
-                style={[styles.announcementModalBtn, styles.announcementModalBtnCancel]}
-                onPress={() => { setShowAnnouncementModal(false); setAnnouncementText('') }}
+            <View style={styles.announcementButtons}>
+              <Pressable
+                style={styles.announcementCancel}
+                onPress={() => {
+                  setShowAnnouncementModal(false)
+                  setAnnouncementText('')
+                }}
+                accessibilityRole="button"
               >
-                <Text style={styles.announcementModalBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.announcementModalBtn, styles.announcementModalBtnSend, !announcementText.trim() && { opacity: 0.5 }]}
+                <Text style={styles.announcementCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.announcementSend,
+                  !announcementText.trim() && styles.announcementSendOff,
+                ]}
                 onPress={handleSendAnnouncementAndroid}
                 disabled={!announcementText.trim() || sendingAnnouncement}
+                accessibilityRole="button"
               >
                 {sendingAnnouncement ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={EMBER.onGradient} />
                 ) : (
-                  <Text style={styles.announcementModalBtnText}>Send</Text>
+                  <Text style={styles.announcementSendText}>Send</Text>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </View>
       </Modal>
 
-    </SafeAreaView>
+      <ActionTray
+        visible={trayState.visible}
+        title={trayState.title}
+        message={trayState.message}
+        buttons={trayState.buttons}
+        onClose={closeTray}
+      />
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: APP_COLORS.backgroundBase,
+  container: { flex: 1, backgroundColor: EMBER.bg },
+  content: {
+    paddingHorizontal: SCENE_PADDING_HORIZONTAL,
+    paddingTop: SCENE_SECTION_GAP,
+    gap: SCENE_SECTION_GAP,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: APP_COLORS.backgroundBase,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: APP_COLORS.textPrimary,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    color: APP_COLORS.textPrimary,
-    marginBottom: 20,
-  },
-  backButton: {
-    backgroundColor: APP_COLORS.destructive,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  coverImage: {
-    width: '100%',
-    height: HERO_HEIGHT,
-    backgroundColor: '#1A1A1A',
-  },
-  /*
-   * Full bleed, no card.
-   *
-   * This was inset 10pt with a 30pt radius and a hairline border — a card
-   * floating on the page. The frame runs the photograph edge to edge and
-   * dissolves its foot into the background, so the border and the radius are
-   * not smaller versions of the design, they are a different idea.
-   */
-  heroCard: {
-    height: HERO_HEIGHT,
-    overflow: 'hidden',
-  },
-  /*
-   * The full hero, not a 180pt band at its foot.
-   *
-   * The frame's gradient is `inset-0` — it spans the whole photograph. At 180
-   * it was sized for the old 430pt card; against a hero half again as tall the
-   * 48pt title would start above the gradient's top edge and sit on bare
-   * photograph, which is exactly the case the bloom shadow cannot rescue.
-   */
-  heroInfoGradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  /* 32pt inset on all sides, bottom-aligned, 16pt between the three blocks. */
-  heroInfo: {
+  section: { gap: 16 },
+  ctaDock: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    padding: 32,
-    gap: 16,
-    alignItems: 'flex-start',
   },
-  heroPill: {
-    backgroundColor: 'rgba(255,144,109,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,144,109,0.2)',
+  ctaDockInner: {
+    paddingHorizontal: SCENE_CTA_INSET,
+    paddingBottom: TAB_BAR_CLEARANCE,
+    gap: 10,
+  },
+  /* Quiet, because the CTA beside it is the thing to press. */
+  secondaryAction: {
+    alignSelf: 'center',
+    minHeight: 36,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 9999,
-    paddingHorizontal: 17,
-    paddingVertical: 7,
+    backgroundColor: EMBER.surfaceSunken,
   },
-  heroPillText: {
-    color: EMBER.accent,
-    fontSize: 16,
-    lineHeight: 24,
-    // Tracking on the real glyphs, so the string is uppercased rather than
-    // `textTransform`ed — same rule as EMBER_TYPE.eyebrow and link.
-    letterSpacing: 0.8,
-  },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 48,
-    lineHeight: 43.2,
-    letterSpacing: -2.4,
-    fontWeight: '800',
-    // The frame's 0 0 30px rgba(255,144,109,0.3) — the warm bloom that keeps
-    // 48pt of white legible over an arbitrary photograph.
-    textShadowColor: 'rgba(255,144,109,0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 30,
-  },
-  heroMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 32,
-  },
-  heroMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroMetaText: {
-    color: EMBER.textSecondary,
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '500',
-    flexShrink: 1,
-  },
-  content: {
-    flex: 1,
-    marginTop: 8,
-  },
-  // legacy header/back styles removed; using sticky top bar
-  eventInfo: {
-    paddingHorizontal: 14,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    paddingHorizontal: 14,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 10,
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  categoryContainer: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 100,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.42)',
-  },
-  categoryText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  price: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginLeft: 'auto',
-  },
-  statusChip: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.42)',
-    borderRadius: 100,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  statusChipMuted: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  statusChipText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  attendingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderColor: 'rgba(255,255,255,0.14)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    marginHorizontal: 14,
-    paddingVertical: 10,
-  },
-  avatarsRow: {
-    width: 70,
-    height: 35,
-    marginRight: 8,
-  },
-  avatarImage: {
+  secondaryActionText: { ...EMBER_TYPE.meta, color: EMBER.textSecondary },
+  organiserBar: {
     position: 'absolute',
-    width: 35,
-    height: 35,
-    borderRadius: 18,
-    backgroundColor: '#D9D9D9',
-    left: 0,
-    top: 0,
-    borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.35)'
-  },
-  avatarCircle: {
-    position: 'absolute',
-    width: 35,
-    height: 35,
-    borderRadius: 18,
-    backgroundColor: '#D9D9D9',
-    left: 0,
-    top: 0,
-  },
-  attendingText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    opacity: 0.9,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    color: '#FFFFFF',
-    marginBottom: 7,
-    paddingHorizontal: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  aboutCard: {
-    marginHorizontal: 14,
-    marginBottom: 16,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
-  description: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 22,
-    marginBottom: 0,
-    paddingHorizontal: 0,
-  },
-  locationCardFrame: {
-    marginBottom: 16,
-    marginHorizontal: 14,
-    borderRadius: 20,
-    overflow: 'hidden',
-    padding: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  locationCardBorder: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  locationCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(26,16,37,0.55)',
-  },
-  locationImage: {
-    width: '100%',
-    height: 200,
-  },
-  detailsSection: {
-    marginBottom: 24,
-  },
-  detailsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 14,
-  },
-  detailsCard: {
-    width: (width - (CONTENT_HORIZONTAL_PADDING * 2) - 12) / 2,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
-  detailsTitle: {
-    fontSize: 12,
-    color: '#AAAAAA',
-    marginBottom: 4,
-  },
-  detailsValue: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  detailIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    marginTop: 2,
-    color: '#FFFFFF',
-  },
-  detailTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#CCCCCC',
-  },
-  actionSection: {
-    paddingVertical: 20,
-    paddingHorizontal: 14,
-  },
-  actionsColumn: {
-    width: '100%',
-    flexDirection: 'column',
+    right: 16,
+    bottom: TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 32,
     gap: 12,
   },
-  swipeButton: {
-    backgroundColor: '#FF6B6B',
-    paddingVertical: 14,
-    borderRadius: 100,
-    width: '100%',
+  organiserButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: EMBER.surfaceSunken,
   },
-  swipeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  checkInButton: {
-    backgroundColor: '#E53A17',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    marginHorizontal: 14,
-  },
-  checkInButtonDisabled: {
-    opacity: 0.58,
-  },
-  checkInButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  checkInSubtext: {
-    color: '#fff',
-    fontSize: 12,
-    opacity: 0.9,
-  },
-  blendnButton: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.34)',
-    padding: 16,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    overflow: 'hidden',
-  },
-  blendnButtonWithSecondary: {
+  errorContainer: {
     flex: 1,
-    width: 'auto',
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  blendnButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  actionLabelStack: {
-    height: 24,
-    width: '100%',
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionLabelLayer: {
-    position: 'absolute',
-    textAlign: 'center',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  secondaryActionButton: {
-    width: 52,
-    height: 52,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    flexShrink: 0,
-  },
-  rsvpButtonActive: {
-    backgroundColor: 'rgba(74,222,128,0.12)',
-    borderColor: 'rgba(74,222,128,0.5)',
-  },
-  interestButton: {
-    backgroundColor: '#fde7ef',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    marginHorizontal: 14,
-  },
-  interestButtonActive: {
-    backgroundColor: '#f8cfe0',
-  },
-  interestButtonText: {
-    color: '#D81B60',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  proximityIndicator: {
-    marginTop: 8,
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: '#1A1A1A',
-  },
-  proximityText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  proximityGood: {
-    color: '#4CAF50',
-  },
-  proximityBad: {
-    color: '#FF9800',
-  },
-  distanceIndicator: {
-    fontSize: 10,
-    color: '#fff',
-    opacity: 0.8,
-    marginTop: 2,
-  },
-  quickDock: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 16,
-  },
-  quickButton: {
-    width: '32%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(18,18,18,1)',
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  quickIcon: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  quickText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-  },
-  scrollContent: {
-    paddingBottom: 120,
-  },
-  /* Just the page. See the note at its use site for what this used to be. */
-  sectionBg: {
-    ...StyleSheet.absoluteFillObject,
+    gap: 16,
     backgroundColor: EMBER.bg,
   },
-  topBarSticky: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 3,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  navButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
+  errorText: { ...EMBER_TYPE.cardTitle, fontSize: 18 },
+  backButton: {
+    minHeight: 44,
+    paddingHorizontal: 24,
     justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: EMBER.surfaceSunken,
   },
-  topBarTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 12,
-    maxWidth: '62%',
-  },
-  topBarActions: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  navButtonActive: {
-    backgroundColor: 'rgba(255, 79, 122, 0.42)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.32)',
-  },
-  /*
-   * Layout only. It used to be a second sheet of glass.
-   *
-   * This carried its own fill (`rgba(18,18,19,0.45)`), its own hairline border,
-   * its own 22pt radius and `overflow: 'hidden'` — a translucent tray holding
-   * two translucent buttons, each with a hairline of its own. Two nested sheets
-   * of glass do not read as depth, they read as a smudge with two outlines: the
-   * tray's edge and the pill's edge run parallel 8pt apart and neither one is
-   * the thing you are meant to press.
-   *
-   * The buttons already carry a `BlurView`, a sheen and a border each. They are
-   * the objects. This is the row they sit in.
-   *
-   * `left/right: 16` plus `paddingHorizontal: 8` puts the pill's edge at 24 —
-   * `SCENE_CTA_INSET`, the gutter the frame gives the floating CTA. Left as it
-   * was rather than collapsed into one number, because that is what it already
-   * measured and changing it would move the button for no reason.
-   */
-  tabBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  glassButtonBlur: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  glassButtonSheen: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  // Organizer tools panel
-  organizerPanel: {
-    marginHorizontal: 14,
-    marginTop: 8,
-    marginBottom: 16,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  organizerPanelTitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  organizerButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  organizerButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 11,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  organizerButtonAnnounce: {
-    backgroundColor: 'rgba(99,102,241,0.25)',
-    borderColor: 'rgba(99,102,241,0.5)',
-  },
-  organizerButtonDelete: {
-    backgroundColor: 'rgba(239,68,68,0.2)',
-    borderColor: 'rgba(239,68,68,0.4)',
-  },
-  organizerButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  // Announcement modal (Android)
+  backButtonText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
+
   announcementOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
   announcementModal: {
     width: '100%',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 32,
+    backgroundColor: EMBER.bg,
+    padding: 24,
+    gap: 12,
   },
-  announcementModalTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  announcementModalSubtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
-    marginBottom: 14,
-    lineHeight: 18,
-  },
+  announcementTitle: { ...EMBER_TYPE.cardTitle, fontSize: 20 },
+  announcementSubtitle: { ...EMBER_TYPE.meta },
   announcementInput: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-    color: '#FFFFFF',
-    fontSize: 15,
-    padding: 12,
-    minHeight: 90,
+    minHeight: 108,
+    borderRadius: 24,
+    backgroundColor: EMBER.surfaceSunken,
+    padding: 16,
+    color: EMBER.textPrimary,
     textAlignVertical: 'top',
-    marginBottom: 16,
   },
-  announcementModalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  announcementModalBtn: {
+  announcementButtons: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  announcementCancel: {
     flex: 1,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9999,
+    backgroundColor: EMBER.surface,
   },
-  announcementModalBtnCancel: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderColor: 'rgba(255,255,255,0.16)',
+  announcementCancelText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
+  announcementSend: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    backgroundColor: EMBER.accent,
   },
-  announcementModalBtnSend: {
-    backgroundColor: APP_COLORS.accent,
-    borderColor: 'transparent',
-  },
-  announcementModalBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  announcementSendOff: { opacity: 0.5 },
+  announcementSendText: { ...EMBER_TYPE.meta, color: EMBER.onGradient },
 })
