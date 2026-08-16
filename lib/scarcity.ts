@@ -56,7 +56,7 @@ export function scarcityLabel({ maxCapacity, currentCapacity }: ScarcityInput): 
   const left = max - taken
 
   // Over capacity is possible — check-in does not refuse, by design, see
-  // docs/CHECKIN.md — so this clamps rather than printing "-3 SPOTS LEFT".
+  // blendn-admin/docs/CHECKIN.md — so this clamps rather than printing "-3 SPOTS LEFT".
   if (left <= 0) return 'FULL'
 
   const urgent = left <= ABSOLUTE_THRESHOLD || left / max < PROPORTION_THRESHOLD

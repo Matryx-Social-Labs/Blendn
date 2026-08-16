@@ -37,7 +37,7 @@ export function FeedVideo({
   style,
   onEnded,
 }: {
-  /** A direct MP4 URL. See `docs/MEDIA.md` for what the pipeline guarantees. */
+  /** A direct MP4 URL. See `blendn-admin/docs/MEDIA.md` for what the pipeline guarantees. */
   source: string
   style?: StyleProp<ViewStyle>
   /**

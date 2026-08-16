@@ -39,7 +39,7 @@ describe('scarcityLabel', () => {
   })
 
   it('says FULL rather than a negative count when over capacity', () => {
-    // Check-in deliberately does not refuse (docs/CHECKIN.md), so occupancy can
+    // Check-in deliberately does not refuse (blendn-admin/docs/CHECKIN.md), so occupancy can
     // exceed capacity and "-3 SPOTS LEFT" is a reachable state, not a theory.
     expect(scarcityLabel({ maxCapacity: 50, currentCapacity: 50 })).toBe('FULL')
     expect(scarcityLabel({ maxCapacity: 50, currentCapacity: 53 })).toBe('FULL')

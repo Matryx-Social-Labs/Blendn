@@ -62,7 +62,7 @@ export default function ReadyScreen() {
            * `OptimizedImage`, not React Native's `<Image>`.
            *
            * This is a 96pt avatar drawing whatever the person uploaded — which
-           * `docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
+           * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
            * at its native size regardless of the box it is drawn in, so a
            * summary card was holding a four-megapixel bitmap to show a thumbnail,
            * and re-downloading it on every mount because RN's cache is separate

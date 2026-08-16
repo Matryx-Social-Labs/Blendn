@@ -45,7 +45,7 @@ const IMAGE_DWELL_MS = 4000
  * atom at the end. Every one of them was silent until the frames were diffed.
  *
  * 15s to reach `readyToPlay` covers a slow connection on a 12 MB clip, which is
- * the ceiling `docs/MEDIA.md` sets.
+ * the ceiling `blendn-admin/docs/MEDIA.md` sets.
  */
 const CLIP_READY_TIMEOUT_MS = 15_000
 
