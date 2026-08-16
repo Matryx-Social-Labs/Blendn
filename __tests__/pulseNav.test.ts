@@ -266,9 +266,18 @@ describe('the centre is the brand mark', () => {
     expect(NAV()).not.toContain('roomButtonLabel')
   })
 
-  it('uses the monogram the splash already ships, not a glyph', () => {
+  it('uses the monogram, in its bold cut, not a glyph', () => {
+    /*
+     * The bold cut is for *small* sizes only. `monogram-white.png` has strokes
+     * at 4.86% of the mark's width — 1.35pt at 32 — against roughly 2pt for
+     * every other glyph in this bar. The bold file is the same artwork dilated
+     * to 6.40%, which lands at 1.78pt with every counter still open.
+     *
+     * A genuinely *filled* variant was tried by flood-filling the enclosed
+     * regions: it turns the B into a blob. That ask stands with the designer.
+     */
     const src = NAV()
-    expect(src).toContain('monogram-white.png')
+    expect(src).toContain('monogram-white-bold.png')
     // Tinted dark-on-warm. The gradient monogram would be orange on orange.
     expect(src).not.toContain('monogram-gradient.png')
     expect(src).toContain('tintColor={BRAND_INK}')
