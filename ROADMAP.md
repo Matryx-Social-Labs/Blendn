@@ -426,6 +426,40 @@ The remaining call sites are `onSync`'s poller, the location effect at
 as a runaway loop and chased as one for an afternoon. `docs/PERFORMANCE.md`
 now says to compare a walk only against the same walk.
 
+### Next — the Grid paints twenty cards in one 98ms commit
+
+Diagnosed, not fixed. `getEventMatches` asks for `limit: 20`;
+`MatchScreen.tsx:989` renders them with a plain `shown.map()` inside a
+`ScrollView`; each `GridCard` draws three `LinearGradient`s. Sixty native
+gradient views in one commit, ~5ms a card, six frames dropped on the screen the
+whole product exists for. Nothing is virtualised, so a 60-person event pays
+three times this.
+
+Three ways out, and the choice is a product one:
+
+**A — `FlatList` with `numColumns={2}`.** The ScrollView becomes the list, the
+filter header becomes `ListHeaderComponent`, "Show more" becomes
+`ListFooterComponent`. Only what fits renders, so the cost stops scaling with
+the roster. Correct and the only one that survives a busy event — but it
+restructures the render of a 1000-line screen that is the core of the product.
+
+**B — cap the first paint, grow on the next frame.** ~5 lines, no
+restructuring: paint the four cards that fit, add the rest a frame later. Turns
+one 98ms hitch into ~40ms then ~58ms. The wait the user actually feels drops by
+half and the screen still does linear work.
+
+**C — fewer gradients per card.** ~5ms a card is the three `LinearGradient`s.
+Two of them could plausibly be flat fills at no visual cost — **but that is a
+design change and needs the designer, not me.**
+
+A is right, B is safe, C needs an answer first. Not started pending that call.
+
+Separately and regardless: `GridCard` is `export function`, not `memo`, and the
+parent hands it four inline arrows plus a fresh `toPerson()` object per card. A
+plain `memo()` would not bite until those are stabilised, and stabilising them
+does nothing for *first* paint — which is the measured problem. Worth doing
+after A or B, not instead of them.
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",
