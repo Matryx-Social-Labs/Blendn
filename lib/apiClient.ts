@@ -369,6 +369,26 @@ export interface MatchCard {
    * applies that floor; the client only renders what arrives.
    */
   workField: string | null
+  /**
+   * Whether they work in *your* field — the SAME FIELD box on the card.
+   *
+   * Server-decided, and deliberately not derivable here. The obvious client
+   * version — compare `workField` to your own profile — is wrong in exactly the
+   * case the server is protecting: below eight people every `workField` is
+   * suppressed to null, and a client deriving this from its own profile would
+   * put back the attribute the floor withholds.
+   *
+   * Optional because a client can outlive the deploy that added it.
+   */
+  sharedWorkField?: boolean
+  /**
+   * Whole years, or null.
+   *
+   * **Not** suppressed in a small room, unlike `workField`: it is already public
+   * on `/profiles/{userId}`, so withholding it here would only make the card
+   * disagree with the profile one tap away.
+   */
+  age?: number | null
   insideNow: boolean
   youLiked: boolean
 }

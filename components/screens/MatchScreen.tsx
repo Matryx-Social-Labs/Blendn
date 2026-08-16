@@ -530,6 +530,15 @@ export default function Match({
         interests: m.sharedInterests,
         sharedIntents: m.sharedIntents,
         workField: m.workField,
+        /*
+         * Both of these were declared on `AttendeeProfile`, forwarded to
+         * `GridPerson`, consumed by `gridCardBox` and the card title -- and
+         * never read off the payload here, so `age` was always undefined (the
+         * title could not render "Priya, 29") and the SAME FIELD box could not
+         * fire at all. A field is not wired because a type says it exists.
+         */
+        sharedWorkField: m.sharedWorkField,
+        age: m.age ?? undefined,
         insideNow: m.insideNow,
         youLiked: m.youLiked,
       }))
@@ -580,11 +589,26 @@ export default function Match({
 
       const profiles: AttendeeProfile[] = (result.data.matches ?? [])
         .filter((m) => m.userId !== authUser?.id)
+        /*
+         * The same fields as the first load, and that is a fix rather than
+         * tidying.
+         *
+         * This mapped five of nine, and `setAttendees` *replaces* the list
+         * rather than appending -- so tapping "Load more" stripped the
+         * occupation line, the shared-field box and the age off every card that
+         * already had them, and emptied the profession filter with them
+         * (`availableWorkFields` reads `workField`). The room visibly got worse
+         * for asking to see more of it.
+         */
         .map((m) => ({
           user_id: m.userId,
           name: m.displayName,
           profile_photos: m.photo ? [m.photo] : undefined,
           interests: m.sharedInterests,
+          sharedIntents: m.sharedIntents,
+          workField: m.workField,
+          sharedWorkField: m.sharedWorkField,
+          age: m.age ?? undefined,
           insideNow: m.insideNow,
           youLiked: m.youLiked,
         }))
