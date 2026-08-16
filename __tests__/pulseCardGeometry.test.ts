@@ -195,3 +195,35 @@ describe('the Upcoming card matches 1141:4709', () => {
     expect(SCREEN()).toContain('STACK_GAP = 32')
   })
 })
+
+describe('each section is drawn once', () => {
+  /*
+   * `renderUpcomingFigmaCarousel` bundled Featured with Upcoming, and the list
+   * already rendered Featured in the branch directly above it — so any city
+   * with at least one upcoming event drew the whole Featured carousel twice,
+   * the same hero one screen apart. Live from #130 until it was spotted on a
+   * device.
+   *
+   * Nothing catches a duplicate render: both copies are correct in isolation,
+   * the screen simply has two of them.
+   */
+  const SRC = () => read('app/(tabs)/events.tsx')
+  const codeOnly = (s: string) =>
+    s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  it('calls the Featured row from exactly one place', () => {
+    const calls = codeOnly(SRC()).split('renderFeaturedRow()').length - 1
+    expect(calls).toBe(1)
+  })
+
+  it('calls the Upcoming stack from exactly one place', () => {
+    const calls = codeOnly(SRC()).split('renderUpcomingStack()').length - 1
+    expect(calls).toBe(1)
+  })
+
+  it('has no wrapper bundling the two together', () => {
+    // The shape the bug lived in: a wrapper returning Featured AND Upcoming,
+    // called from a site that had already drawn Featured.
+    expect(codeOnly(SRC())).not.toContain('renderUpcomingFigmaCarousel')
+  })
+})
