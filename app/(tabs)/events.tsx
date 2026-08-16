@@ -30,6 +30,7 @@ import {
   FEATURED_CARD_GAP,
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
+import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
@@ -2297,7 +2298,7 @@ export default function Events() {
         yourself; settings is reached through it, as it already was from the
         profile screen; and the city picker had already moved into the headline.
       */}
-        <PulseTopBar />
+        <PulseTopBar actions={<NotificationBell />} />
 
         <VirtualizedList
           forwardedRef={listRef as any}

@@ -9,6 +9,7 @@ import { AppState, Platform } from 'react-native'
 import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
+import type { NotificationFeed } from './notificationFormat'
 import { markSessionExpired } from './sessionEvents'
 
 // API Configuration
@@ -1849,6 +1850,61 @@ class ApiClientClass {
   async removePushToken(token: string): Promise<ApiResponse<{ message: string }>> {
     return this.queuedRequest<{ message: string }>(
       `/api/mobile/notifications/token?token=${encodeURIComponent(token)}`,
+      { method: 'DELETE' },
+      true,
+      5
+    )
+  }
+
+  // === NOTIFICATIONS CENTRE ===
+
+  /**
+   * The bell's feed, newest first, with the unread count alongside.
+   *
+   * The count ships with the list so the bell costs **one** request rather than
+   * two — it is asked for on a screen somebody opens constantly, and a separate
+   * count endpoint would double that traffic for a number the feed already had
+   * to compute.
+   *
+   * Not cached. This is the one list where staleness is the bug: the whole
+   * point of the bell is that it knows about things that happened while the app
+   * was closed, and a cached read on open would show yesterday's badge.
+   */
+  async getNotifications(options?: {
+    cursor?: string
+    limit?: number
+    unreadOnly?: boolean
+  }): Promise<ApiResponse<NotificationFeed>> {
+    const params = new URLSearchParams()
+    if (options?.cursor) params.set('cursor', options.cursor)
+    if (options?.limit) params.set('limit', String(options.limit))
+    if (options?.unreadOnly) params.set('unread', 'true')
+    const query = params.toString()
+    return this.queuedRequest<NotificationFeed>(
+      `/api/mobile/notifications${query ? `?${query}` : ''}`
+    )
+  }
+
+  /**
+   * Mark read. No `ids` means all of them.
+   *
+   * The server keeps `user_id` in the filter either way, so this cannot reach
+   * somebody else's row even with a valid uuid.
+   */
+  async markNotificationsRead(
+    ids?: string[]
+  ): Promise<ApiResponse<{ marked: number; unreadCount: number }>> {
+    return this.queuedRequest<{ marked: number; unreadCount: number }>(
+      '/api/mobile/notifications/read',
+      { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) },
+      true,
+      4
+    )
+  }
+
+  async clearNotifications(): Promise<ApiResponse<{ deleted: number }>> {
+    return this.queuedRequest<{ deleted: number }>(
+      '/api/mobile/notifications',
       { method: 'DELETE' },
       true,
       5
