@@ -460,6 +460,66 @@ rows rather than twenty — so it is no longer the shape of a hitch. The third
 option from this entry, **fewer `LinearGradient`s per card, still needs the
 designer.**
 
+### Done — the event room chat, from its frame (#220)
+
+Frame `1141:5498`. Five components in `components/chat/`; the screen kept every
+piece of logic it had. The bubble tail is the load-bearing idea: every corner 24
+except one, which is 4 — bottom-left inbound, bottom-right outbound.
+
+`BroadcastNotice` is in **no frame** and had to exist anyway: organiser
+announcements and sponsored messages arrive down the same socket. Sponsored is
+labelled and deliberately cooler, because a paid message styled like an
+organiser's is an advert wearing the venue's voice. A test pins that the room's
+gradient is reachable from exactly one branch.
+
+Reply quotes, the edited flag and reactions are also in no frame and were
+carried across rather than redesigned — three features went missing that way on
+the Scene.
+
+**The event context banner (`1141:5504`) is deliberately not built.** It draws
+a countdown to doors (there is no pre-event chat — D34:D), a stack of three real
+attendee faces (in a room whose premise is anonymity), and "Join 124 others
+discussing the **upcoming** performance". All four open asks are in
+`docs/CHAT.md`.
+
+### Done — your own profile, from its frame (#221)
+
+Frame `1141:5633`. **The components already existed.**
+`components/profile/ProfileSections.tsx` was written for both frames and only
+the attendee half was ever wired, while `app/(tabs)/profile.tsx` stayed the last
+screen in the app on `APP_COLORS`.
+
+Fifth instance of build-and-never-call, and `noOrphanComponents` **could not see
+it**: the file had a non-preview importer, just not the second one it was
+written for. A file can be half-orphaned and the check only sees whole files —
+worth fixing in that test at some point.
+
+One real bug caught on the screenshot: `ProfileHero` anchors the name to the
+hero's bottom, which is right on the full-screen attendee route and put
+"Kishore, 28" under the tab bar here. `bottomInset` is a prop, not a lookup —
+the component has no idea which navigator it is in.
+
+804 lines to 420.
+
+### Next — four things the profile frame draws that nothing backs
+
+From `docs/PROFILE.md`, in order of how much work each needs:
+
+**`CIRCLE PRESENCE` needs an API.** Three attended-event cards with image, date,
+city and blurb. `stats.eventsAttended` is a *count*; nothing returns the list
+and `getEvents` has no "attended" filter. The most substantial thing on the
+frame and the only one needing backend work.
+
+**`@handle`** — no username exists anywhere. If it is real it belongs in
+onboarding, not just on this screen.
+
+**`PRO`** — no subscription or tier. A much larger decision than a badge.
+
+**One gradient-filled interest chip** among five outlined. Nothing says which
+interest is special, and `ProfileInterests` already uses that treatment for
+*shared* interests, where it means something. On your own profile there is
+nobody to share with.
+
 ### Next — CORE EXPERTISE, decided and not yet built
 
 The frame's card carries two specialism tags under the occupation ("Spatial Web",
