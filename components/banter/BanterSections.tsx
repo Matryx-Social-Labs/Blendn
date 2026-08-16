@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import OptimizedImage from '../OptimizedImage'
+import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /**
@@ -181,6 +182,15 @@ export interface ConversationItem {
   /** A room rather than a person: a `#211F1F` disc with a glyph. */
   kind?: 'direct' | 'event' | 'group'
   unread?: boolean
+  /**
+   * They have not revealed yet, so `title` is a pseudonym and there is no
+   * photograph to draw.
+   *
+   * Not the same as "has no photo". A revealed person with no picture gets the
+   * ordinary empty avatar; an unrevealed one gets the generated mark, because
+   * the absence is the product working rather than a gap.
+   */
+  pseudonymous?: boolean
 }
 
 /**
@@ -231,6 +241,22 @@ export function BanterConversation({
               color={EMBER.accent}
             />
           </View>
+        ) : item.pseudonymous ? (
+          /*
+           * A match who has not revealed.
+           *
+           * The server sends the pseudonym as the name and `null` for the
+           * photo, so drawing `avatarUrl` here renders an empty grey circle —
+           * which reads as a broken row rather than as anonymity working.
+           *
+           * `pseudonymAvatar` is the mark the Scene's attendee discs and the
+           * room already use, seeded on the **pseudonym**: the same person is
+           * the same colour and the same creature everywhere they appear under
+           * that name. Never seed it with a user id — that is stable forever
+           * and would rebuild the cross-surface identity the pseudonyms exist
+           * to prevent.
+           */
+          <PseudonymDisc pseudonym={item.title} />
         ) : (
           <OptimizedImage
             source={item.avatarUrl ?? ''}
@@ -388,7 +414,17 @@ const styles = StyleSheet.create({
     height: ROW_AVATAR,
     borderRadius: ROW_AVATAR / 2,
     backgroundColor: EMBER.surfaceSunken,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  /*
+   * Fixed against Dynamic Type — `maxFontSizeMultiplier={1}`.
+   *
+   * The disc is a fixed 56pt and RN clips a glyph to its `lineHeight`, so a
+   * scaled emoji is a cropped emoji rather than a bigger one. The name beside
+   * it scales, which is where the accessibility actually lives.
+   */
+  pseudonymGlyph: { fontSize: 26, lineHeight: 32 },
   // Frame `1141:5306`: a room has no face, so it gets a surface disc + glyph.
   roomAvatar: {
     width: ROW_AVATAR,
@@ -470,6 +506,18 @@ const styles = StyleSheet.create({
   },
   rowPreviewUnread: { fontFamily: EMBER_FONTS.bodySemiBold, color: EMBER.textPrimary },
 })
+
+/** The generated mark for an unrevealed match, at the row's avatar size. */
+function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
+  const { colors, character } = pseudonymAvatar(pseudonym)
+  return (
+    <LinearGradient colors={colors} style={styles.rowAvatar}>
+      <Text style={styles.pseudonymGlyph} maxFontSizeMultiplier={1}>
+        {character}
+      </Text>
+    </LinearGradient>
+  )
+}
 
 /**
  * A message request — someone who is not yet a conversation.

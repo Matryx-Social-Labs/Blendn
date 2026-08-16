@@ -125,6 +125,51 @@ three lines away in the same file. Both are pinned by tests.
 
 ---
 
+---
+
+## Anonymity in the inbox
+
+A DM that opens from a mutual like carries **the pseudonym the match card
+showed**. The real name appears only when that person reveals.
+
+The gate is entirely server-side (`lib/conversation-identity.ts` in
+blendn-admin): before a reveal, `name` *is* the pseudonym and `image` is `null`,
+so the inbox cannot leak a name it was never sent. Every surface that names a
+participant — the list, the thread, typing indicators, push titles — resolves
+through the same function.
+
+What the inbox can still get wrong is **drawing** that state. A null photo
+through the ordinary avatar is an empty grey circle, which reads as a broken row
+rather than as anonymity working. So an unrevealed match gets the generated
+mark: the same `pseudonymAvatar` the Scene's attendee discs and the room use,
+seeded on **the pseudonym**, so one person is one colour and one creature
+everywhere they appear under that name.
+
+Three states, and the middle one is the new drawing:
+
+| Conversation | Name shown | Avatar |
+|---|---|---|
+| Accepted message request — never pseudonymous | Real name | Photograph |
+| Match, not yet revealed | Pseudonym | **Generated disc** |
+| Match, revealed | Real name | Photograph |
+
+> **Never seed the mark with a user id.** That is stable forever and would
+> rebuild exactly the cross-surface identity the pseudonyms exist to prevent.
+
+### A question for you — `revealRequested` has nowhere to go
+
+The server tells the client when someone has **asked you to reveal**
+(`revealRequested`). The frame has no slot for it, so today you only find out by
+opening the thread — and a request you never see is a request that goes
+unanswered.
+
+The parts to build it already exist: the pinned rail's EVENT badge (`#F79EFF` on
+`#570066`, 10/15) is the established pill idiom, and it would sit naturally
+beside the name on the row.
+
+**Not built, because inventing a badge on a screen you have designed is the
+wrong way round.** Carried through the data layer and waiting for a decision.
+
 ## Still open
 
 - **Search does nothing.** The field is drawn and is not wired to a query.
