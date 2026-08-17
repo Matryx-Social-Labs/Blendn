@@ -65,3 +65,38 @@ describe('ApiResponse carries the machine-readable reason', () => {
     expect(apiSource).toMatch(/errorCode:\s*typeof parsed\.errorCode === 'string'/)
   })
 })
+
+/**
+ * Moderation events do not share a subscriber set.
+ *
+ * `chat:messageDeleted` and `chat:memberBanned` read from one
+ * `chatModerationSubscriptions` map, so every subscriber received BOTH
+ * payloads and each was cast to whichever callback type the emitting branch
+ * assumed. `app/chat/[id].tsx` registers a handler for each, so both ran on
+ * both events.
+ *
+ * It was benign only by accident: the delete handler filters on `messageId`,
+ * which is undefined on a ban and matches nothing, and the ban handler guards
+ * on `banned`, which is undefined on a delete. Either handler gaining a less
+ * careful guard turns it into "you have been removed from this chat" shown
+ * because somebody's message was deleted.
+ */
+const socketSource = readFileSync(join(__dirname, '..', 'lib', 'socketClient.ts'), 'utf8')
+
+describe('moderation events have separate subscriber sets', () => {
+  it('has one map per event', () => {
+    expect(socketSource).toContain('chatMessageDeletedSubscriptions')
+    expect(socketSource).toContain('chatMemberBannedSubscriptions')
+  })
+
+  it('no longer casts a callback to the other event type', () => {
+    // The cast was the tell: it asserted a shape the value did not have.
+    expect(socketSource).not.toMatch(/cb as ChatMessageDeletedCallback/)
+    expect(socketSource).not.toMatch(/cb as ChatMemberBannedCallback/)
+  })
+
+  it('clears both maps on teardown, so neither leaks across reconnects', () => {
+    expect(socketSource).toContain('chatMessageDeletedSubscriptions.clear()')
+    expect(socketSource).toContain('chatMemberBannedSubscriptions.clear()')
+  })
+})

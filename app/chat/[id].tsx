@@ -31,7 +31,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatModeration, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { EMBER } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
@@ -378,8 +378,8 @@ function GroupChatInner(props?: {
     const u1 = subscribeToChatMessage(String(chatRoomId), handleNewMessage)
     const u2 = subscribeToChatTyping(String(chatRoomId), handleTyping)
     const u3 = subscribeToChatReaction(String(chatRoomId), handleReaction)
-    const u4 = subscribeToChatModeration(String(chatRoomId), handleDeleted)
-    const u5 = subscribeToChatModeration(String(chatRoomId), handleBanned)
+    const u4 = subscribeToChatMessageDeleted(String(chatRoomId), handleDeleted)
+    const u5 = subscribeToChatMemberBanned(String(chatRoomId), handleBanned)
     return () => {
       u1(); u2(); u3(); u4(); u5()
       typingCleanupRefs.current.forEach(t => clearTimeout(t))

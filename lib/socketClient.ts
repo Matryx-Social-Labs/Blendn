@@ -195,7 +195,23 @@ const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
 const chatTypingSubscriptions = new Map<string, Set<ChatTypingCallback>>()
 const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
-const chatModerationSubscriptions = new Map<string, Set<ChatMessageDeletedCallback | ChatMemberBannedCallback>>()
+/*
+ * One map per event, matching every other subscription in this file.
+ *
+ * These used to share a single `chatModerationSubscriptions` map, so both
+ * handlers fired on both events and each was cast to whichever callback type
+ * the emitting branch assumed. A "message deleted" subscriber was invoked with
+ * a memberBanned payload and vice versa.
+ *
+ * It was benign only by accident: `handleDeleted` filters on `data.messageId`,
+ * which is `undefined` on a ban and matches nothing, and `handleBanned` guards
+ * on `data.banned`, which is `undefined` on a delete. Either handler gaining a
+ * less careful guard, or either payload gaining the other's field, turns it
+ * into a real one — a user shown "you have been removed from this chat"
+ * because somebody's message was deleted.
+ */
+const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCallback>>()
+const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 
@@ -392,7 +408,8 @@ export function disconnect(): void {
   chatMessageSubscriptions.clear()
   chatTypingSubscriptions.clear()
   chatReactionSubscriptions.clear()
-  chatModerationSubscriptions.clear()
+  chatMessageDeletedSubscriptions.clear()
+  chatMemberBannedSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
 }
@@ -526,13 +543,11 @@ function setupSocketHandlers(sock: TypedSocket): void {
   })
 
   sock.on("chat:messageDeleted", (data) => {
-    const callbacks = chatModerationSubscriptions.get(data.chatGroupId)
-    callbacks?.forEach((cb) => (cb as ChatMessageDeletedCallback)(data))
+    chatMessageDeletedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   sock.on("chat:memberBanned", (data) => {
-    const callbacks = chatModerationSubscriptions.get(data.chatGroupId)
-    callbacks?.forEach((cb) => (cb as ChatMemberBannedCallback)(data))
+    chatMemberBannedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   // Private messaging updates
@@ -751,24 +766,36 @@ export function subscribeToChat(
 /**
  * Subscribe to chat moderation events (message deleted, member banned)
  */
-export function subscribeToChatModeration(
+function subscribeIn<C>(
+  map: Map<string, Set<C>>,
   chatGroupId: string,
-  callback: ChatMessageDeletedCallback | ChatMemberBannedCallback
+  callback: C
 ): () => void {
-  if (!chatModerationSubscriptions.has(chatGroupId)) {
-    chatModerationSubscriptions.set(chatGroupId, new Set())
-  }
-  chatModerationSubscriptions.get(chatGroupId)!.add(callback)
+  if (!map.has(chatGroupId)) map.set(chatGroupId, new Set())
+  map.get(chatGroupId)!.add(callback)
 
   return () => {
-    const callbacks = chatModerationSubscriptions.get(chatGroupId)
-    if (callbacks) {
-      callbacks.delete(callback)
-      if (callbacks.size === 0) {
-        chatModerationSubscriptions.delete(chatGroupId)
-      }
-    }
+    const callbacks = map.get(chatGroupId)
+    if (!callbacks) return
+    callbacks.delete(callback)
+    if (callbacks.size === 0) map.delete(chatGroupId)
   }
+}
+
+/** A message was removed, by its author or by a moderator. */
+export function subscribeToChatMessageDeleted(
+  chatGroupId: string,
+  callback: ChatMessageDeletedCallback
+): () => void {
+  return subscribeIn(chatMessageDeletedSubscriptions, chatGroupId, callback)
+}
+
+/** A member was banned from, or unbanned in, this room. */
+export function subscribeToChatMemberBanned(
+  chatGroupId: string,
+  callback: ChatMemberBannedCallback
+): () => void {
+  return subscribeIn(chatMemberBannedSubscriptions, chatGroupId, callback)
 }
 
 /**
