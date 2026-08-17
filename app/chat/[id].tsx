@@ -424,13 +424,39 @@ function GroupChatInner(props?: {
       const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text')
       if (!result.success) throw new Error(result.error || 'Failed to send')
 
+      /*
+       * The server can accept a message and still withhold it.
+       *
+       * When moderation hides content it returns 200 with `content: null` and
+       * `moderation_hidden: true`. This branch only checked `result.success`,
+       * so the optimistic bubble stayed on screen showing the sender their own
+       * text while nobody else could see it — accidental shadowbanning, in the
+       * one surface the product's trust model rests on. On reload the same
+       * message rendered as an empty bubble, because the text was never stored.
+       */
+      const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
+      if (hidden) {
+        if (optimistic) {
+          setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
+        }
+        showTray('Not sent', 'That message was removed by moderation and was not delivered.')
+        return
+      }
+
       const newId = result.data?.id
       if (newId) setMessages(prev => prev.map(m => m.message_id === optimistic!.message_id ? { ...m, message_id: newId } : m))
       markDomainsDirty(['chat'])
-    } catch {
+    } catch (error) {
       if (optimistic) setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
       setNewMessage(messageText)
-      showTray('Error', 'Failed to send message.')
+      /*
+       * `catch {` discarded the binding, so every refusal the server took care
+       * to explain — muted, banned, room locked, chat window closed, spam —
+       * was flattened into "Failed to send message." and the user retried
+       * forever. The server writes a good sentence; one missing character
+       * threw it away.
+       */
+      showTray('Error', error instanceof Error ? error.message : 'Failed to send message.')
     } finally {
       setSending(false)
     }

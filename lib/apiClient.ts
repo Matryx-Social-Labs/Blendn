@@ -420,6 +420,16 @@ export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
+  /**
+   * The server's machine-readable reason, when it sends one.
+   *
+   * `lib/api-response.ts` on the server emits `USER_MUTED`, `CHAT_LOCKED`,
+   * `CHAT_CLOSED`, `SPAM_BLOCKED` and `RATE_LIMITED`, and this type had no
+   * field to carry any of them — so every refusal arrived as prose that the
+   * UI could only render as a generic failure. A muted user retried forever
+   * with no idea they were muted.
+   */
+  errorCode?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -807,6 +817,9 @@ class ApiClientClass {
     if (!response.ok) {
       return {
         success: false,
+        // Carried through so a screen can branch on the reason rather than
+        // guess from the sentence. See ApiResponse.errorCode.
+        errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
