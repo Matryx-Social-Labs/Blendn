@@ -858,7 +858,17 @@ class ApiClientClass {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const delay = Math.min(800 * Math.pow(2, attempt - 1), 6000)
+        /*
+         * Jittered, not deterministic.
+         *
+         * `800 * 2^(n-1)` alone means every client that got a 5xx retries at
+         * exactly +800ms and +2400ms — a synchronised herd arriving at a server
+         * that is already unwell, which is how a blip becomes an outage. The
+         * half-to-full-window spread breaks the lockstep without changing the
+         * shape of the backoff.
+         */
+        const ceiling = Math.min(800 * Math.pow(2, attempt - 1), 6000)
+        const delay = Math.round(ceiling * (0.5 + Math.random() * 0.5))
         Logger.debug('api', `Retry ${attempt}/${MAX_RETRIES} for ${endpoint} in ${delay}ms`)
         await new Promise<void>((resolve) => setTimeout(resolve, delay))
       }
