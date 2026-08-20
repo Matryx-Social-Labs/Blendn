@@ -5,6 +5,7 @@ import { Platform } from 'react-native'
 import { router } from 'expo-router'
 import { apiClient, TokenStorage } from './apiClient'
 import { Logger } from './logger'
+import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 
 // Configure how notifications are handled when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -102,36 +103,37 @@ export async function savePushTokenToProfile(token: string): Promise<boolean> {
   }
 }
 
-// Store current push token for removal on logout
-let currentPushToken: string | null = null
-
+// The token itself lives in lib/pushTokenRef.ts, because apiClient needs to
+// read it at sign-out and this module already imports apiClient. Kept under the
+// original name so existing call sites are unchanged.
 export function setCurrentPushToken(token: string | null) {
-  currentPushToken = token
+  setPushTokenRef(token)
 }
 
 // Remove push token when user logs out
 export async function removePushTokenFromProfile(): Promise<boolean> {
   try {
-    if (!currentPushToken) {
+    const token = getPushTokenRef()
+    if (!token) {
       Logger.debug('notifications', 'No push token to remove')
       return true
     }
 
-    const result = await apiClient.removePushToken(currentPushToken)
+    const result = await apiClient.removePushToken(token)
 
     if (result.success) {
       Logger.info('notifications', 'Push token removed successfully')
-      currentPushToken = null
+      setPushTokenRef(null)
       return true
     } else {
       Logger.warn('notifications', 'Failed to remove push token', { error: result.error })
       // Clear local reference anyway
-      currentPushToken = null
+      setPushTokenRef(null)
       return false
     }
   } catch (error) {
     Logger.error('notifications', 'Error removing push token', { error })
-    currentPushToken = null
+    setPushTokenRef(null)
     return false
   }
 }

@@ -11,6 +11,7 @@ import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import { markSessionExpired } from './sessionEvents'
+import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -1190,13 +1191,35 @@ class ApiClientClass {
     return result
   }
 
+  /**
+   * Sign out, and take the push token with it.
+   *
+   * `pushToken` rides along in this request rather than being removed by a
+   * separate call, because the separate call could never work: this method
+   * clears the access token below, so anything fired afterwards is
+   * unauthenticated and 401s. The row survived, and because the server's unique
+   * is `(user_id, token)` it simply co-existed with the next person to sign in
+   * on the phone — who then received the previous account's notifications, with
+   * message text in the body.
+   *
+   * One authenticated request, so there is no ordering to get wrong.
+   *
+   * If the token is null (a cold start loses the module-level ref) the server
+   * clears every token this user holds instead. That is the deliberate choice:
+   * a re-registration on their other device is cheaper than a stranger reading
+   * their DMs.
+   */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
     const refreshToken = await TokenStorage.getRefreshToken()
     const result = await this.request<void>('/api/mobile/auth/signout', {
       method: 'POST',
-      body: JSON.stringify({ refreshToken: revokeAll ? undefined : refreshToken }),
+      body: JSON.stringify({
+        refreshToken: revokeAll ? undefined : refreshToken,
+        pushToken: getPushTokenRef() ?? undefined,
+      }),
     })
 
+    setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
 
