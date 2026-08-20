@@ -24,9 +24,10 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
  * The frame draws photographs — "Julian Ember", "Sarah Chen" — because it was
  * drawn for a named community chat. **This room is pseudonymous until you
  * reveal yourself**, so a photo here would undo the thing `app/room.tsx` exists
- * to protect. `pseudonymAvatar` gives a colour and a creature from the sender's
- * id, stable for as long as they are that pseudonym, which is the same
- * treatment the Grid's discs get.
+ * to protect. `pseudonymAvatar` gives a colour and a creature seeded on the
+ * room *and* the sender, which is the same treatment the Grid's discs get. Not
+ * on the id alone, and not on the display name — see the note at the call site
+ * for why both of those are wrong.
  *
  * When somebody *has* revealed, the name is simply their real one — the server
  * decides that, not this component.
@@ -43,8 +44,10 @@ export interface ChatBubbleProps {
   mine: boolean
   /** Pseudonym, or a real name once they have revealed. */
   senderName: string
-  /** Stable per person — seeds the avatar, so it must not be the display name. */
+  /** Stable per person. Salted with `roomId` to seed the avatar. */
   senderId: string
+  /** The room or conversation this bubble is in. Salts the avatar seed. */
+  roomId: string
   text: string
   /** Already formatted, e.g. `14:02`. This component does no date maths. */
   time: string
@@ -76,6 +79,7 @@ function ChatBubbleBase({
   mine,
   senderName,
   senderId,
+  roomId,
   text,
   time,
   replyTo,
@@ -86,7 +90,26 @@ function ChatBubbleBase({
   onLongPress,
 }: ChatBubbleProps) {
   const direct = variant === 'direct'
-  const mark = pseudonymAvatar(senderId)
+  /*
+   * Seeded on the room *and* the sender, which is neither of the two things
+   * this was argued between.
+   *
+   * It used to be `senderId` alone, and `lib/pseudonymAvatar.ts` says why that
+   * is wrong in as many words: "Never feed it a user id: that is stable forever
+   * and would rebuild exactly the cross-event identity the pseudonyms exist to
+   * prevent." The same person carried the same colour and creature in every
+   * room, at every event, forever — a correlator handed to everyone they had
+   * ever shared a room with.
+   *
+   * `senderName` alone is wrong too, and a test already said so: two people
+   * both falling back to "Attendee" would share a mark, and somebody's disc
+   * would change the instant they revealed.
+   *
+   * Salting the id with the room satisfies both. Stable for the length of the
+   * room, unique per person inside it, different in the next room, and
+   * unaffected by a reveal.
+   */
+  const mark = pseudonymAvatar(`${roomId}:${senderId}`)
   const reactionEntries = reactions ? Object.entries(reactions) : []
 
   return (

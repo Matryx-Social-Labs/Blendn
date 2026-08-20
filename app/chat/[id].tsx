@@ -515,6 +515,7 @@ function GroupChatInner(props?: {
       <ChatBubble
         mine={isMe}
         senderId={item.sender_id}
+        roomId={String(params.id)}
         senderName={item.sender_name}
         text={item.message_text}
         time={formatTime(item.created_at)}
