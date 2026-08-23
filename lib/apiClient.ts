@@ -732,6 +732,21 @@ class ApiClientClass {
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
   private responseCache = new Map<string, { data: ApiResponse<unknown>; timestamp: number; ttl: number }>()
 
+  /**
+   * The ceiling on `responseCache`.
+   *
+   * It had none. Entries were added on every cached GET, never evicted -- an
+   * expired entry is still *returned* as stale-and-refresh rather than deleted,
+   * so nothing removed anything -- and `clearResponseCache()` had no callers. The map
+   * grew for the lifetime of the process, holding a full response body per
+   * distinct request key, and the keys include query strings, so browsing with
+   * filters mints a new one on every combination.
+   *
+   * 500, matching `lib/queryCache.ts` in this same directory, which has had a
+   * bound and an eviction pass since it was written. The fix was one file over.
+   */
+  private readonly MAX_CACHED_RESPONSES = 500
+
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
   }
@@ -750,7 +765,43 @@ class ApiClientClass {
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
+    if (this.responseCache.size >= this.MAX_CACHED_RESPONSES) this.evictExpiredOrOldest()
     this.responseCache.set(key, { data: data as ApiResponse<unknown>, timestamp: Date.now(), ttl })
+  }
+
+  /**
+   * Make room. Expired entries first, then the oldest.
+   *
+   * Expired-first matters because an expired entry is still *served* here (as
+   * stale, while a refresh runs), so the map is mostly entries nobody would
+   * miss. Dropping those before touching anything live means the common case
+   * costs a caller nothing.
+   *
+   * Map preserves insertion order, so the first key is the oldest inserted --
+   * the same property `queryCache.evictOldest` relies on. Insertion order, not
+   * access order: this is not an LRU, and a true one would need a re-insert on
+   * every read for a gain this does not need.
+   */
+  private evictExpiredOrOldest(): void {
+    const now = Date.now()
+    let freed = 0
+    for (const [key, entry] of this.responseCache) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.responseCache.delete(key)
+        freed++
+      }
+    }
+    if (freed > 0) return
+
+    // Nothing had expired, so drop a tenth of the oldest rather than one entry
+    // -- evicting a single key on a full cache means paying this scan on every
+    // subsequent write.
+    const drop = Math.max(1, Math.floor(this.MAX_CACHED_RESPONSES / 10))
+    let dropped = 0
+    for (const key of this.responseCache.keys()) {
+      this.responseCache.delete(key)
+      if (++dropped >= drop) break
+    }
   }
 
   private refreshCacheInBackground<T>(
@@ -1232,6 +1283,21 @@ class ApiClientClass {
     setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
+    /*
+     * Drop the cached responses too.
+     *
+     * `clearResponseCache` had no callers, so after signing out the map still
+     * held the previous user's response bodies -- their conversations, their
+     * matches, their profile -- in memory, keyed by endpoint. The next person to
+     * use the device signs in, hits the same endpoint, and `getCached` returns
+     * whatever is under that key.
+     *
+     * The TTL is not a defence: an expired entry is served as stale-while-
+     * revalidate rather than dropped, so it is returned first and corrected
+     * afterwards. Same shape as the push tokens above -- state that outlives the
+     * session it belongs to.
+     */
+    this.clearResponseCache()
 
     return result
   }
