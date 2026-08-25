@@ -4,6 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
 import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
@@ -433,6 +434,8 @@ export interface ApiResponse<T = unknown> {
   errorCode?: string
   errors?: Array<{ path: string; message: string }>
 }
+
+
 
 export interface AuthUser {
   id: string
@@ -1966,9 +1969,12 @@ class ApiClientClass {
   // === CATEGORIES ===
 
   async getCategories(): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    return this.cachedRequest<Array<Record<string, unknown>>>(
-      '/api/mobile/categories',
-      { ttl: CATEGORIES_SWR_TTL, swr: true }
+    return namedList(
+      await this.cachedRequest<NamedList<'categories'>>(
+        '/api/mobile/categories',
+        { ttl: CATEGORIES_SWR_TTL, swr: true }
+      ),
+      'categories'
     )
   }
 
@@ -2073,9 +2079,12 @@ class ApiClientClass {
   async getConversations(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
     const endpoint = '/api/mobile/conversations'
     if (options?.force) {
-      return this.queuedRequest<Array<Record<string, unknown>>>(endpoint)
+      return namedList(await this.queuedRequest<NamedList<'conversations'>>(endpoint), 'conversations')
     }
-    return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
+    return namedList(
+      await this.cachedRequest<NamedList<'conversations'>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true }),
+      'conversations'
+    )
   }
 
   async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{
