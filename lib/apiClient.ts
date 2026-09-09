@@ -562,6 +562,22 @@ export interface EventApiItem {
     title?: string | null
     order: number
   }>
+  /**
+   * Curated facilities. **Detail endpoint only** — the Pulse's cards draw none,
+   * and `/events` is the hottest endpoint in the product, so the join is not
+   * paid for on every list request.
+   *
+   * Already in the vocabulary's `sort_order`, which the server drops because
+   * the array carries it. Do not re-sort: two events with the same facilities
+   * must list them the same way.
+   */
+  amenities?: Array<{
+    id: string
+    name: string
+    slug?: string | null
+    subtitle?: string | null
+    icon?: string | null
+  }>
   chatGroup?: {
     id: string
     name: string

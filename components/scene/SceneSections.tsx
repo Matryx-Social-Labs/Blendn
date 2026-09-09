@@ -382,13 +382,32 @@ export function SceneGallery({
 /**
  * An amenity tile. Frame `1141:4918`: 2-up, 16pt gap, 32pt radius, 25pt pad.
  *
- * **Nothing populates these yet.** `events` has `house_rules`, which is free
- * text and a different thing — "Open Bar / Premium Spirits" is a curated
- * vocabulary an organiser picks from, and that is a small schema addition that
- * belongs with the category work rather than being invented per event. The
- * component exists so the frame can be rendered and reviewed; the screen should
- * not draw it until there is something true to put in it.
+ * **The vocabulary now exists**, so the screen draws these. This used to say
+ * "nothing populates these yet" and set the condition for drawing them: "not
+ * until there is something true to put in it". `amenities` is a curated table
+ * with `name`, `subtitle`, `icon` and `sort_order`, joined per event and
+ * serialised on the detail payload — so the condition is met and the comment
+ * that recorded it would otherwise have outlived the thing it described.
+ *
+ * `house_rules` is still free text and still a different thing.
  */
+/**
+ * The frame's two tile tints, in its order.
+ *
+ * `1141:4919` is `#F79EFF` and `1141:4925` is `#FF6D8D` — the violet and rose
+ * stops, deliberately not the orange end, so a pair of tiles reads as two
+ * things rather than one element repeated.
+ *
+ * Alternated by index rather than mapped per amenity: the vocabulary is
+ * curated and open-ended, and a per-slug colour map would leave every amenity
+ * added later with no colour, or send somebody to the client to add one.
+ *
+ * The rose is `EMBER.gradientTo` exactly. The violet has no token — it is the
+ * one literal here, and it stays a literal rather than being swapped for
+ * `gradientFrom`, which is the orange the frame specifically avoids.
+ */
+export const AMENITY_TINTS = ['#F79EFF', EMBER.gradientTo] as const
+
 export function SceneAmenity({
   icon,
   title,
