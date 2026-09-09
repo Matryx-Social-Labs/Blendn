@@ -18,6 +18,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ConnectSheet } from '../grid/ConnectSheet'
+import { useToast } from '../Toast'
+import { likeRefusal } from '../../lib/likeRefusal'
 import { GridCard, type GridPerson } from '../grid/GridCard'
 import { ConnectionSheet } from '../match/ConnectionSheet'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
@@ -162,6 +164,7 @@ export default function Match({
    * words.
    */
   const { user: authUser, initialized: authInitialized } = useAuth()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   // Distinct from "no room": something failed and we can say what.
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -244,6 +247,24 @@ export default function Match({
         return copy
       })
 
+      if (!result.success) {
+        const refusal = likeRefusal(result.errorCode, result.error)
+        showToast(refusal.message, refusal.variant)
+      }
+      /*
+       * A refused like used to say nothing at all.
+       *
+       * `likeStateAfter({ ok: false })` returns undefined, so the row was
+       * deleted and the heart reverted in silence — and the two refusals that
+       * actually happen are both invisible that way: a lapsed check-in (403,
+       * ordinary after auto-checkout) and the rate limiter in a busy room. The
+       * person taps again, and again.
+       *
+       * A toast rather than a tray, because liking has to feel free and a
+       * modal after every failed tap makes it expensive. Nothing it can say
+       * mentions the other person — see lib/likeRefusal.ts.
+       */
+
       if (result.success && result.data?.mutual && result.data.conversationId) {
         const conversationId = result.data.conversationId
         setMatchedConversations((prev) => ({ ...prev, [attendee.user_id]: conversationId }))
@@ -273,7 +294,7 @@ export default function Match({
         return copy
       })
     }
-  }, [likeState, matchedConversations])
+  }, [likeState, matchedConversations, showToast])
 
 
   /** The mutual just made, if its sheet is still up. */
