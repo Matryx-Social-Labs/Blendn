@@ -11,6 +11,8 @@ import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
 import { apiClient } from '../lib/apiClient'
 import { forgetRoster } from '../lib/rosterMemory'
+import { revealReadiness } from '../lib/reveal'
+import { useAuth } from '../lib/useAuth'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
 
@@ -51,6 +53,20 @@ function RoomInner() {
   const [eventId, setEventId] = useState<string | null>(null)
   const [eventTitle, setEventTitle] = useState<string | null>(null)
   const [rosterCount, setRosterCount] = useState(0)
+
+  /*
+   * Is there anything to reveal?
+   *
+   * `User.image` mirrors `photos[0]` and is written only by the profile PUT, so
+   * it is the same photo a reveal would show — the argument `events.tsx` already
+   * makes where it feeds the check-in warning. Without this the banner offered a
+   * switch that changed nothing anybody could see.
+   */
+  const { user } = useAuth()
+  const readiness = revealReadiness({
+    name: user?.name,
+    photos: user?.image ? [user.image] : [],
+  })
   const [revealed, setRevealed] = useState(false)
   const [revealBusy, setRevealBusy] = useState(false)
   const [checkOutBusy, setCheckOutBusy] = useState(false)
@@ -269,6 +285,36 @@ function RoomInner() {
                 )}
               </Pressable>
             ) : null}
+            {/*
+              The room's own settings. `NAVIGATION.md` calls
+              `event-preferences/[eventId]` "the room's own settings, reachable
+              from the Grid", and it has been reachable from nothing since it
+              was written — `DESIGN_HANDOFF.md` calls it "the single most
+              important new screen".
+
+              Here rather than on the banner below, deliberately. The banner's
+              rule is that "the action is the opposite state, not a settings
+              link"; hanging a second target off it would both break that and
+              put two controls for one concept in one row. A settings affordance
+              in the bar is the thing the banner is not.
+            */}
+            {eventId ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/event-preferences/[eventId]',
+                    params: { eventId } as any,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Settings for this room"
+                accessibilityHint="Set why you are here tonight, and whether people can see your name"
+                hitSlop={12}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Ionicons name="options-outline" size={20} color={EMBER.textPrimary} />
+              </Pressable>
+            ) : null}
             <NotificationBell />
           </>
         }
@@ -301,6 +347,8 @@ function RoomInner() {
           revealed={revealed}
           onToggle={() => void toggleReveal()}
           busy={revealBusy}
+          canReveal={readiness.ok}
+          missing={readiness.missing}
         />
       ) : null}
 
