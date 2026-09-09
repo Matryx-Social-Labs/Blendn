@@ -48,7 +48,7 @@ interface Message {
   is_edited: boolean
   created_at: string
   replyTo?: Message
-  reactions?: Record<string, string[]>
+  reactions?: { emoji: string; count: number; mine?: boolean }[]
 }
 
 type ChatListItem =
@@ -219,7 +219,7 @@ function GroupChatInner(props?: {
         is_edited: msg.is_edited || msg.isEdited || false,
         created_at: msg.created_at || msg.createdAt,
         replyTo: undefined as Message | undefined,
-        reactions: undefined as Record<string, string[]> | undefined,
+        reactions: undefined as { emoji: string; count: number; mine?: boolean }[] | undefined,
       }
     })
     return list.map(msg => ({
@@ -361,18 +361,18 @@ function GroupChatInner(props?: {
       }
     }
 
+    /*
+     * The server sends the whole tally, so this replaces rather than merges.
+     *
+     * It used to accumulate `data.userId` into a per-emoji array — building
+     * client-side the very map of who-reacted that the room forbids. Those
+     * fields are gone, so the old handler matched neither branch and merely
+     * re-rendered every message on every reaction, showing nothing.
+     */
     const handleReaction: ChatReactionCallback = (data) => {
-      setMessages(prev => prev.map(msg => {
-        if (msg.message_id !== data.messageId) return msg
-        const reactions = { ...(msg.reactions || {}) }
-        if (data.action === 'add') {
-          reactions[data.emoji] = [...new Set([...(reactions[data.emoji] || []), data.userId])]
-        } else {
-          const users = (reactions[data.emoji] || []).filter(uid => uid !== data.userId)
-          if (users.length === 0) delete reactions[data.emoji]; else reactions[data.emoji] = users
-        }
-        return { ...msg, reactions }
-      }))
+      setMessages(prev => prev.map(msg =>
+        msg.message_id === data.messageId ? { ...msg, reactions: data.tally } : msg
+      ))
     }
 
     const u1 = subscribeToChatMessage(String(chatRoomId), handleNewMessage)

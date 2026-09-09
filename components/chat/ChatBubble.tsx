@@ -55,7 +55,15 @@ export interface ChatBubbleProps {
   replyTo?: { senderName: string; text: string } | null
   edited?: boolean
   /** Emoji → the ids that sent it. Only the count is ever shown. */
-  reactions?: Record<string, string[]> | null
+  /*
+   * A tally, never a list of who.
+   *
+   * This was `Record<emoji, senderIds[]>` and the component used only
+   * `senders.length` — honouring the room's rule by convention while the
+   * prop carried the identities anyway. The server now sends counts, so the
+   * names are no longer in the payload to be leaked by the next reader.
+   */
+  reactions?: { emoji: string; count: number; mine?: boolean }[] | null
   /**
    * Which surface this is.
    *
@@ -110,7 +118,7 @@ function ChatBubbleBase({
    * unaffected by a reveal.
    */
   const mark = pseudonymAvatar(`${roomId}:${senderId}`)
-  const reactionEntries = reactions ? Object.entries(reactions) : []
+  const reactionEntries = reactions ?? []
 
   return (
     <View style={[styles.row, mine && styles.rowMine]}>
@@ -203,17 +211,18 @@ function ChatBubbleBase({
 
         {reactionEntries.length > 0 ? (
           <View style={[styles.reactions, mine && styles.reactionsMine]}>
-            {reactionEntries.map(([emoji, senders]) => (
+            {reactionEntries.map(({ emoji, count }) => (
               <View key={emoji} style={styles.reaction}>
                 <Text style={styles.reactionEmoji} maxFontSizeMultiplier={1.2}>
                   {emoji}
                 </Text>
                 {/*
                   The count only, never the names. Who reacted is exactly the
-                  kind of thing this room does not disclose.
+                  kind of thing this room does not disclose — and now the
+                  payload cannot answer it either.
                 */}
-                {senders.length > 1 ? (
-                  <Text style={styles.reactionCount}>{senders.length}</Text>
+                {count > 1 ? (
+                  <Text style={styles.reactionCount}>{count}</Text>
                 ) : null}
               </View>
             ))}

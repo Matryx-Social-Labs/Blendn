@@ -67,12 +67,28 @@ export interface ServerToClientEvents {
     userName: string
     isTyping: boolean
   }) => void
+  /*
+   * A tally, never a list of who.
+   *
+   * This declared `userId`, `emoji` and `action` — the shape the server sent
+   * until it stopped, because naming the reactor to every member of a
+   * pseudonymous room is the one thing `CHAT.md` says the room must never do.
+   * The server now emits a whole tally and the client replaces its copy with
+   * it; there is nobody to accumulate.
+   *
+   * The stale type was worse than useless. It compiled, so the room's handler
+   * read three fields that are now `undefined`, matched neither branch, and
+   * re-rendered every message on every reaction while displaying none of them
+   * — and it invited the next person to render exactly the identity the server
+   * had just withdrawn.
+   *
+   * No `mine` here, deliberately: one broadcast reaches every member, so it
+   * cannot say whether *you* reacted. The REST read carries that.
+   */
   "chat:reaction": (data: {
     chatGroupId: string
     messageId: string
-    userId: string
-    emoji: string
-    action: "add" | "remove"
+    tally: { emoji: string; count: number }[]
   }) => void
   // Private messaging
   "private:message": (data: {
