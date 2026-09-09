@@ -844,36 +844,25 @@ export default function EventDetail() {
 
   // === ORGANIZER ACTIONS ===
 
-  const handleSendAnnouncement = async () => {
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Send Announcement',
-        'Enter your announcement for all attendees:',
-        async (text) => {
-          if (!text || !text.trim()) return
-          try {
-            const result = await apiClient.sendAnnouncement(String(id), text.trim())
-            if (result.success) {
-              feedback.success()
-              showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
-            } else {
-              feedback.error()
-              showTray('Failed', result.error || 'Could not send announcement.')
-            }
-          } catch {
-            feedback.error()
-            showTray('Error', 'Failed to send announcement.')
-          }
-        },
-        'plain-text'
-      )
-    } else {
-      setAnnouncementText('')
-      setShowAnnouncementModal(true)
-    }
+  /*
+   * One composer, both platforms.
+   *
+   * iOS used `Alert.prompt` and Android this modal, for one action — and the
+   * iOS half was the worse of the two in three ways that all point the same
+   * direction: no character limit against the server's 1,000, no pending
+   * state, and **no disable while sending**, so a second tap sent a second
+   * announcement to every attendee in the room. A system dialog also cannot
+   * carry the app's design, which is the whole reason the modal was written.
+   *
+   * `Alert.prompt` is iOS-only, so the modal was already the general answer;
+   * it was simply never used where the shortcut existed.
+   */
+  const openAnnouncementComposer = () => {
+    setAnnouncementText('')
+    setShowAnnouncementModal(true)
   }
 
-  const handleSendAnnouncementAndroid = async () => {
+  const sendAnnouncement = async () => {
     if (!announcementText.trim()) return
     setSendingAnnouncement(true)
     try {
@@ -1328,7 +1317,7 @@ export default function EventDetail() {
       {isOrganizer ? (
         <View style={styles.organiserBar} pointerEvents="box-none">
           <Pressable
-            onPress={Platform.OS === 'android' ? handleSendAnnouncementAndroid : handleSendAnnouncement}
+            onPress={openAnnouncementComposer}
             style={styles.organiserButton}
             accessibilityRole="button"
             accessibilityLabel="Send an announcement"
@@ -1347,11 +1336,12 @@ export default function EventDetail() {
       ) : null}
 
       {/*
-        Android's announcement composer.
-        `handleSendAnnouncement` uses `Alert.prompt` on iOS, which Android does
-        not have -- so this modal is the whole feature there, and dropping it in
-        the rewrite would have left the organiser's button setting a flag that
-        renders nothing. Restored as it was; it is not in any frame.
+        The announcement composer, on both platforms.
+
+        It used to be Android's only: iOS took `Alert.prompt`, which has no
+        character counter, no pending state and no way to disable itself while
+        a send is in flight. Same action, two experiences, and the system one
+        could not carry the app's design. Not in any frame.
       */}
       <Modal
         visible={showAnnouncementModal}
@@ -1391,7 +1381,7 @@ export default function EventDetail() {
                   styles.announcementSend,
                   !announcementText.trim() && styles.announcementSendOff,
                 ]}
-                onPress={handleSendAnnouncementAndroid}
+                onPress={sendAnnouncement}
                 disabled={!announcementText.trim() || sendingAnnouncement}
                 accessibilityRole="button"
               >
