@@ -363,3 +363,93 @@ export const getReportTypeLabel = (reportType: ReportType | MessageReportType): 
     default: return 'Unknown'
   }
 } 
+/**
+ * Why somebody would report an **event**, which is not why they would report a
+ * person.
+ *
+ * `showReportOptions` offers "Fake Profile" and "Inappropriate Photos" — both
+ * meaningless about a listing — and omits every reason that matters here. The
+ * server's route names the three that do: an unsafe venue, a misleading
+ * listing, and a dangerous organiser. `event_reports.reason` is free text, so
+ * this list is the vocabulary.
+ *
+ * **"Doesn't look real" is separate from "misleading" on purpose.** A curated
+ * event is added by somebody who has never stood at the venue, so a listing
+ * that is simply wrong is a different failure from one written to deceive, and
+ * a moderator wants to tell them apart before deciding whether an organiser is
+ * the problem or the pin is.
+ */
+export type EventReportType =
+  | 'misleading_listing'
+  | 'unsafe_venue'
+  | 'organiser_conduct'
+  | 'not_real'
+  | 'other'
+
+export const reportEvent = async (
+  eventId: string,
+  reportType: EventReportType,
+  description?: string
+): Promise<SafetyActionResult> => {
+  try {
+    const result = await apiClient.reportEvent(eventId, reportType, description)
+    if (!result.success) {
+      Logger.error('general', 'Error reporting event', { error: result.error })
+      return { success: false, message: result.error || 'Failed to submit report' }
+    }
+    return { success: true, message: 'Report submitted' }
+  } catch (error) {
+    Logger.error('general', 'Error reporting event', { error })
+    return { success: false, message: 'Something went wrong' }
+  }
+}
+
+/**
+ * The reason list, straight from the control.
+ *
+ * `showUserSafetyActions` puts an extra step in front of this — a menu whose
+ * only options are Block and Report — because a person can be blocked. An event
+ * cannot, so the same shape here would be a one-item menu, which is a tap
+ * asking permission to show a list.
+ */
+export const showEventReportOptions = (
+  eventTitle: string,
+  eventId: string,
+  onComplete?: () => void
+): void => {
+  const options: { text: string; value?: EventReportType; style?: 'cancel' }[] = [
+    { text: 'Misleading or inaccurate listing', value: 'misleading_listing' },
+    { text: "The venue doesn't feel safe", value: 'unsafe_venue' },
+    { text: 'Concerns about the organiser', value: 'organiser_conduct' },
+    { text: "This doesn't look like a real event", value: 'not_real' },
+    { text: 'Something else', value: 'other' },
+    { text: 'Cancel', style: 'cancel' },
+  ]
+
+  Alert.alert(
+    'Report this event',
+    `Why are you reporting ${eventTitle}?`,
+    options.map((option) => ({
+      text: option.text,
+      style: option.style,
+      onPress: option.value
+        ? async () => {
+            const result = await reportEvent(eventId, option.value!)
+            Alert.alert(
+              result.success ? 'Thank you' : 'Error',
+              result.success
+                ? /*
+                   * No promise about what happens to the event. A report is
+                   * read by a human who may decide it is fine, and copy
+                   * implying removal would make every unchanged listing look
+                   * like the report was ignored.
+                   */
+                  'Your report has been submitted. Our team will review it.'
+                : result.message
+            )
+            if (result.success) onComplete?.()
+          }
+        : undefined,
+    }))
+  )
+}

@@ -2512,6 +2512,33 @@ class ApiClientClass {
     )
   }
 
+  /**
+   * Report the event itself.
+   *
+   * The third subject, and the one that had no path. A person could be
+   * reported and a message could be reported; the event — the thing somebody
+   * is being asked to physically turn up to — could not.
+   *
+   * No check-in required, matching the server: two of the three things worth
+   * reporting are visible from the listing, and the value is catching them
+   * *before* somebody travels to a venue.
+   */
+  async reportEvent(
+    eventId: string,
+    reason: string,
+    description?: string
+  ): Promise<ApiResponse<{ reported: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${eventId}/report`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason, description }),
+      },
+      true,
+      2
+    )
+  }
+
   async reportMessage(
     messageId: string,
     messageType: 'group' | 'private',
