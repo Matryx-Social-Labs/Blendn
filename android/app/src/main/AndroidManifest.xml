@@ -21,6 +21,27 @@
     <meta-data android:name="expo.modules.notifications.default_notification_color" android:resource="@color/notification_icon_color"/>
     <meta-data android:name="expo.modules.notifications.default_notification_icon" android:resource="@drawable/notification_icon"/>
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
+    <!--
+      Google Maps, for the Location card.
+
+      Committed on purpose. This key is restricted to an app identity — the
+      package name above plus the signing certificate's SHA-1 — and Google
+      enforces that server-side, so a key lifted out of the APK is useless
+      to anybody who cannot also sign as this app. That is what makes it a
+      different kind of value from a secret like SENTRY_AUTH_TOKEN, and it
+      is why Google documents putting it here.
+
+      It replaced a Static Maps key, which could NOT be restricted this way:
+      the Static Maps web service is a plain HTTPS GET and carries no app
+      identity for Google to check, so that key was usable by anyone who
+      extracted it and was billed per request. SDK map loads are free.
+
+      One fingerprint is registered, not two, because this project's EAS
+      upload key and its Play app-signing certificate are the same. If Play
+      ever generates a new app-signing key they diverge, and the symptom is
+      a blank grey map for Play users while internal builds are fine.
+    -->
+    <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyBcN3jJIX9EwsN_o9MhQGCTeJz6aBS7Sik"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">

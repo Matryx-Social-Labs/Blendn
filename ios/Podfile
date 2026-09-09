@@ -26,6 +26,24 @@ target 'blendn' do
   pod 'GoogleUtilities', :modular_headers => true
   pod 'RecaptchaInterop', :modular_headers => true
 
+  # Google Maps on iOS, so the Location card looks the same on both platforms.
+  #
+  # `react-native-maps` autolinks its Apple Maps pod on its own; the Google
+  # provider is a separate opt-in pod that is NOT autolinked, which is why this
+  # line is here by hand. It pulls GoogleMaps 8.4.0 and Google-Maps-iOS-Utils
+  # 5.0.0 with it.
+  #
+  # `:modular_headers` for the same reason as the two above rather than a
+  # different one: Google-Maps-iOS-Utils is Swift, and a Swift pod can only
+  # import a static-library dependency that defines a Clang module. Scoped here
+  # instead of `use_modular_headers!` globally, because global modular headers
+  # make CocoaPods generate a modulemap for every pod — and React-jsitooling and
+  # React-RuntimeCore both set `header_dir 'react_runtime'`, so both would
+  # declare `module react_runtime` and collide.
+  pod 'react-native-google-maps', :path => '../node_modules/react-native-maps'
+  pod 'GoogleMaps', :modular_headers => true
+  pod 'Google-Maps-iOS-Utils', :modular_headers => true
+
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else
