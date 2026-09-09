@@ -26,6 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
+import { checkInRefusal, CHECK_IN_CODES } from '../../lib/checkInRefusal'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
@@ -729,19 +730,44 @@ export default function EventDetail() {
       )
 
       if (!result.success) {
-        Logger.error('events', 'checkin:api:error', { error: result.error })
-        // Handle specific error codes
-        if (result.error?.includes('already checked in') || result.error?.includes('ALREADY_CHECKED_IN')) {
+        Logger.error('events', 'checkin:api:error', {
+          error: result.error,
+          code: result.errorCode,
+        })
+
+        /*
+         * Dispatch on the server's code, never on its sentence.
+         *
+         * This matched `'too far'` against a message that reads "outside the
+         * check-in area", so the one refusal a map can fix was the only one
+         * that never offered a map. See `lib/checkInRefusal.ts`.
+         */
+        const refusal = checkInRefusal(result.errorCode, result.error)
+
+        if (result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN) {
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
-          // User is already checked in - update state directly
           setCheckInStatus({ success: true, checked_in: true })
-          showTray('Already checked in', 'You are already checked in to this event.')
-        } else if (result.error?.includes('too far') || result.error?.includes('TOO_FAR')) {
-          handleCheckInError({ code: 'TOO_FAR', error: result.error })
         } else {
           feedback.error()
-          showTray('Check-in failed', result.error || 'We could not verify your check-in. Please try again.')
         }
+
+        showTray(
+          refusal.title,
+          refusal.message,
+          refusal.offerDirections
+            ? [
+                { label: 'Done', onPress: closeTray },
+                {
+                  label: 'Open Maps',
+                  variant: 'primary',
+                  onPress: () => {
+                    closeTray()
+                    openInMaps()
+                  },
+                },
+              ]
+            : undefined
+        )
       } else {
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
         feedback.success()
@@ -800,34 +826,6 @@ export default function EventDetail() {
       }
     } finally {
       setCheckingIn(false)
-    }
-  }
-
-  const handleCheckInError = (data: any) => {
-    switch (data.code) {
-      case 'TOO_FAR':
-        const distance = Math.round(data.distance_meters || 0)
-        const required = data.required_radius || event?.check_in_radius || 100
-        showTray(
-          'Too far from event',
-          `You need to be within ${required}m to check in. You are currently ${distance}m away.`,
-          [
-            { label: 'Done', onPress: closeTray },
-            { label: 'Open Maps', variant: 'primary', onPress: () => { closeTray(); openInMaps() } },
-          ]
-        )
-        break
-      case 'ALREADY_CHECKED_IN':
-        showTray('Already checked in', 'You have already checked in to this event.')
-        break
-      case 'EVENT_NOT_FOUND':
-        showTray('Event not found', 'This event is no longer available.')
-        break
-      case 'NO_LOCATION_DATA':
-        showTray('Location error', 'Event location data is not available.')
-        break
-      default:
-        showTray('Check-in failed', data.error || 'Unknown error occurred')
     }
   }
 
