@@ -75,10 +75,21 @@ describe('the bubble points at its sender', () => {
   })
 
   it('counts reactions without naming who left them', () => {
-    // Who reacted is exactly the kind of thing this room does not disclose.
+    /*
+     * Who reacted is exactly the kind of thing this room does not disclose.
+     *
+     * This used to assert `senders.length` — the component honouring the rule
+     * by convention while the prop was `Record<emoji, senderIds[]>` and carried
+     * the identities anyway. The server now sends a tally, so the names are not
+     * in the payload for the next reader to find, and the assertion moves to
+     * the shape rather than to one component's restraint.
+     */
     const src = codeOnly(BUBBLE())
-    expect(src).toContain('senders.length')
-    expect(src).not.toMatch(/senders\.(map|join)\(/)
+    expect(src).toContain('count > 1')
+    expect(src).toMatch(/reactions\?: Array<\{ emoji: string; count: number/)
+    // Nothing that could hold a person: no id list, no name list, no map of who.
+    expect(src).not.toMatch(/senders/)
+    expect(src).not.toMatch(/Record<string, string\[\]>/)
   })
 })
 

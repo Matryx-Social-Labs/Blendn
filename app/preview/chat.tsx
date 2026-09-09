@@ -62,7 +62,7 @@ export default function ChatPreview() {
           time="14:10"
           edited
           replyTo={{ senderName: 'Me', text: 'Are we still meeting at the lounge first?' }}
-          reactions={{ '🔥': ['a', 'b', 'c'], '👏': ['d'] }}
+          reactions={[{ emoji: '🔥', count: 3 }, { emoji: '👏', count: 1 }]}
           text="Lounge at nine, yes. I'll be by the back bar."
         />
 
