@@ -36,9 +36,12 @@ module.exports = {
    * environment to test `getDistanceMetres` is the definition of carrying
    * weight for nothing.
    *
-   * When component tests arrive they will need jsdom back — add it per-file
-   * with a `@jest-environment jsdom` docblock rather than globally, so the
-   * logic suites stay fast.
+   * Component tests arrived and did NOT need jsdom back — this comment used to
+   * predict they would. React Native renders through `react-test-renderer`,
+   * which is pure JavaScript, so there is no DOM to provide. What blocks a
+   * render here is a missing `await`: RNTL v14's `render` is async, and the
+   * Promise it returns has `undefined` for every query, which reads as a broken
+   * environment. See `__tests__/renderHarness.test.tsx`.
    */
   testEnvironment: "node",
   // Only `__tests__`. `jest-expo`'s default also sweeps `**/*.test.ts` anywhere,

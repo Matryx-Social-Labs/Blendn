@@ -177,7 +177,16 @@ function RootLayout() {
        * that lets a second signed-out screen exist at all.
        */
       /*
-       * `__preview` is the design screenshot harness — see `app/__preview.tsx`.
+       * `preview` is the design screenshot harness — see `app/preview/`.
+       *
+       * This allow-list read `/__preview` and named `app/__preview.tsx`, and
+       * neither has ever existed: the routes are `app/preview/*`, so every one
+       * of them resolved to `/preview/...`, missed the prefix, and was replaced
+       * with `/` on the next tick. The harness was unreachable in precisely the
+       * state it exists for — signed out, in dev — and the failure looked like
+       * the screen flashing and vanishing, which reads as a render bug rather
+       * than a routing one. `__tests__/previewAllowList.test.ts` now pins the
+       * prefix to the directory.
        *
        * Signed out on purpose, and behind `__DEV__` so it cannot be reached in
        * a shipped build. Reaching the real Pulse needs a login, a network, a
@@ -189,7 +198,7 @@ function RootLayout() {
         isIndex ||
         pathname === '/sign-in' ||
         pathname === '/forgot-password' ||
-        (__DEV__ && pathname.startsWith('/__preview'));
+        (__DEV__ && pathname.startsWith('/preview'));
 
       if (!user) {
         // Not authenticated → send to login index, unless already somewhere
