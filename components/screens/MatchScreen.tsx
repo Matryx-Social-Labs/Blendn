@@ -114,6 +114,10 @@ export interface AttendeeProfile {
    * Design" is a reason to walk over, from the same fact.
    */
   sharedWorkField?: boolean
+  /** Nights you were both at, before this one. 0 when suppressed. */
+  sharedEvents?: number
+  /** Future events you are both going to, excluding this one. */
+  sharedPlans?: number
   /** A label like "Design". Null in rooms under 8, where it would identify. */
   workField?: string | null
   profile_photos?: string[]
@@ -611,6 +615,8 @@ export default function Match({
          * fire at all. A field is not wired because a type says it exists.
          */
         sharedWorkField: m.sharedWorkField,
+        sharedEvents: m.sharedEvents,
+        sharedPlans: m.sharedPlans,
         age: m.age ?? undefined,
         insideNow: m.insideNow,
         youLiked: m.youLiked,
@@ -675,6 +681,8 @@ export default function Match({
           sharedIntents: m.sharedIntents,
           workField: m.workField,
           sharedWorkField: m.sharedWorkField,
+          sharedEvents: m.sharedEvents,
+          sharedPlans: m.sharedPlans,
           age: m.age ?? undefined,
           insideNow: m.insideNow,
           youLiked: m.youLiked,
@@ -830,6 +838,8 @@ export default function Match({
       workField: a.workField,
       sharedInterests: a.interests,
       sharedWorkField: a.sharedWorkField,
+      sharedEvents: a.sharedEvents,
+      sharedPlans: a.sharedPlans,
       photo: a.profile_photos?.[0] ?? null,
       insideNow: a.insideNow,
       liked: likeStatusFor(a.youLiked, likeState[a.user_id]) === 'matched'

@@ -16,11 +16,33 @@
  * ## The box is a priority slot
  *
  *   MUTUAL CONNECTIONS   `1141:5002`  the friend graph — deferred (#86)
+ *   ALSO GOING                         a future event you are both going to
+ *   SAME EVENTS                        nights you were both at, before this one
  *   SHARED INTERESTS     `1141:5038`  a comma-joined sentence, not chips
  *   ATTENDING LIVE       `1141:5067`  what they are doing here
  *
  * One at a time, strongest first, and each is a fact the server sent or it is
  * skipped. Nothing is invented and no overlap is claimed that is not there.
+ *
+ * ## The two the server has always sent and the card never drew
+ *
+ * `sharedEvents` and `sharedPlans` have been on the wire since matching learned
+ * to compute them, and nothing read either. They go **above** shared interests
+ * because the server's own reasoning ranks them there:
+ *
+ *   sharedPlans   "the rarest thing a room can offer: a reason to talk that has
+ *                  somewhere to go afterwards"
+ *   sharedEvents  "the one line here that could not be written by a product
+ *                  without verified attendance"
+ *
+ * Rarest and most actionable first. Plans fire seldom, so leading with them
+ * costs the interests line almost nothing, and when they do fire they are the
+ * best sentence on the card.
+ *
+ * **Both are already suppressed server-side** below the disclosure floor — a
+ * small room narrows "was at those specific nights" to a name — and arrive as
+ * `0`. The client renders what it is given and skips zero; it does not
+ * re-derive a floor it cannot see the room size for.
  *
  * ## No verdict chip
  *
@@ -37,9 +59,13 @@ export interface GridCardSource {
   sharedWorkField?: boolean
   workField?: string | null
   insideNow?: boolean
+  /** Nights you were both at, before this one. Zero when suppressed or none. */
+  sharedEvents?: number
+  /** Future events you are both going to, excluding this one. Same suppression. */
+  sharedPlans?: number
 }
 
-export type GridBoxKind = 'interests' | 'field' | 'live'
+export type GridBoxKind = 'interests' | 'field' | 'live' | 'plans' | 'history'
 
 export interface GridBox {
   /** The uppercase label. Frame: Manrope Bold 12/16, tracking 0.3, white. */
@@ -58,6 +84,41 @@ export interface GridBox {
  */
 export function gridCardBox(source: GridCardSource): GridBox | null {
   const shared = source.sharedInterests ?? []
+  const plans = source.sharedPlans ?? 0
+  const history = source.sharedEvents ?? 0
+
+  /*
+   * A reason to talk that has somewhere to go afterwards.
+   *
+   * "also" is load-bearing: both counts exclude the event you are currently at,
+   * and without it the line reads as though it were describing tonight.
+   */
+  if (plans > 0) {
+    return {
+      label: 'ALSO GOING',
+      value:
+        plans === 1
+          ? "You're both also going to the same event"
+          : `You're both also going to ${plans} of the same events`,
+      kind: 'plans',
+    }
+  }
+
+  /*
+   * The line no competitor can write, because nobody else verifies attendance.
+   * It says you were in the same rooms — never that you met, which is the thing
+   * this product exists because people do not do.
+   */
+  if (history > 0) {
+    return {
+      label: 'SAME EVENTS',
+      value:
+        history === 1
+          ? "You've both been to the same event before"
+          : `You've both been to ${history} of the same events`,
+      kind: 'history',
+    }
+  }
 
   /*
    * Frame `1141:5038`: a comma-joined sentence rather than chips. Chips here
