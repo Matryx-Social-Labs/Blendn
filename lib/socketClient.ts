@@ -16,7 +16,21 @@ const SOCKET_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:300
 
 // Event types from server
 export interface ServerToClientEvents {
+  /**
+   * A check-in happened. Carries no name, deliberately.
+   *
+   * `event:{id}` is joinable by anyone who opened the event, and it used to
+   * carry `{ real userId, pseudonym }` -- so anyone could sit in every public
+   * room and harvest the pseudonym-to-account mapping. The counter is all this
+   * room ever needed; the roster moved to `event:room:checkin`.
+   */
   "event:checkin": (data: {
+    eventId: string
+    userId: string
+    checkInTime: string
+  }) => void
+  /** Who arrived, by pseudonym. Only delivered to people who have checked in. */
+  "event:room:checkin": (data: {
     eventId: string
     userId: string
     userName: string
@@ -95,6 +109,8 @@ export interface ServerToClientEvents {
 
 interface ClientToServerEvents {
   "join:event": (eventId: string) => void
+  "join:event:room": (eventId: string) => void
+  "leave:event:room": (eventId: string) => void
   "leave:event": (eventId: string) => void
   "join:chat": (chatGroupId: string) => void
   "leave:chat": (chatGroupId: string) => void
@@ -122,6 +138,7 @@ interface SocketConnectionStatus {
 
 // Subscription callback types
 type EventCheckInCallback = (data: ServerToClientEvents["event:checkin"] extends (data: infer D) => void ? D : never) => void
+type EventRoomCheckInCallback = (data: ServerToClientEvents["event:room:checkin"] extends (data: infer D) => void ? D : never) => void
 type EventCheckOutCallback = (data: ServerToClientEvents["event:checkout"] extends (data: infer D) => void ? D : never) => void
 type EventInterestCallback = (data: ServerToClientEvents["event:interestUpdate"] extends (data: infer D) => void ? D : never) => void
 type ChatMessageCallback = (data: ServerToClientEvents["chat:message"] extends (data: infer D) => void ? D : never) => void
@@ -190,6 +207,7 @@ export function subscribeConnectionStatus(
 
 // Subscriptions
 const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
+const eventRoomCheckInSubscriptions = new Map<string, Set<EventRoomCheckInCallback>>()
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
@@ -403,6 +421,7 @@ export function disconnect(): void {
 
   // Clear subscriptions
   eventCheckInSubscriptions.clear()
+  eventRoomCheckInSubscriptions.clear()
   eventCheckOutSubscriptions.clear()
   eventInterestSubscriptions.clear()
   chatMessageSubscriptions.clear()
@@ -434,6 +453,9 @@ function rejoinAllRooms(): void {
     ...eventInterestSubscriptions.keys(),
   ])
   eventIds.forEach((id) => socket?.emit("join:event", id))
+  // The roster room is a separate join: it requires a check-in, where the room
+  // above only requires having opened the event.
+  eventRoomCheckInSubscriptions.forEach((_, id) => socket?.emit("join:event:room", id))
   const chatIds = new Set<string>([
     ...chatMessageSubscriptions.keys(),
     ...chatTypingSubscriptions.keys(),
@@ -513,6 +535,12 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("event:checkin", (data) => {
     markDomainsDirty(["events", "match"])
     const callbacks = eventCheckInSubscriptions.get(data.eventId)
+    callbacks?.forEach((cb) => cb(data))
+  })
+
+  sock.on("event:room:checkin", (data) => {
+    markDomainsDirty(["events", "match"])
+    const callbacks = eventRoomCheckInSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
   })
 
@@ -654,6 +682,45 @@ export function subscribeToEventCheckIn(
   callback: EventCheckInCallback
 ): () => void {
   return subscribeToEventMap(eventId, callback, eventCheckInSubscriptions)
+}
+
+/**
+ * Subscribe to the roster room: who arrived, by pseudonym.
+ *
+ * A separate room from `subscribeToEventCheckIn` because it carries identity.
+ * `event:{id}` is joinable by anyone who opened the event, so it used to hand
+ * `{ real userId, pseudonym }` to every stranger watching -- the cross-event
+ * correlation the pseudonyms exist to prevent. The server refuses this join
+ * until you have checked in, which is the same answer
+ * `GET /events/:id/checkins` has always given.
+ *
+ * A refused join is not an error to surface. Somebody browsing an event they
+ * have not checked into simply never receives roster traffic, which is correct.
+ */
+export function subscribeToEventRoomCheckIn(
+  eventId: string,
+  callback: EventRoomCheckInCallback
+): () => void {
+  if (!socket?.connected) {
+    connect()
+  } else {
+    socket.emit("join:event:room", eventId)
+  }
+
+  if (!eventRoomCheckInSubscriptions.has(eventId)) {
+    eventRoomCheckInSubscriptions.set(eventId, new Set())
+  }
+  eventRoomCheckInSubscriptions.get(eventId)!.add(callback)
+
+  return () => {
+    const callbacks = eventRoomCheckInSubscriptions.get(eventId)
+    if (!callbacks) return
+    callbacks.delete(callback)
+    if (callbacks.size === 0) {
+      eventRoomCheckInSubscriptions.delete(eventId)
+      socket?.emit("leave:event:room", eventId)
+    }
+  }
 }
 
 /**
@@ -951,6 +1018,7 @@ export function cleanup(): void {
 export type {
   SocketConnectionStatus,
   EventCheckInCallback,
+  EventRoomCheckInCallback,
   EventCheckOutCallback,
   EventInterestCallback,
   ChatMessageCallback,

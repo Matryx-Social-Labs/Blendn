@@ -43,9 +43,9 @@ import {
 import { Logger } from '../../lib/logger'
 import { getBlockedUsers, showUserSafetyActions } from '../../lib/safetyUtils'
 import {
-  subscribeToEventCheckIn,
+  subscribeToEventRoomCheckIn,
   subscribeToEventCheckOut,
-  EventCheckInCallback,
+  EventRoomCheckInCallback,
   EventCheckOutCallback,
 } from '../../lib/socketClient'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
@@ -388,7 +388,17 @@ export default function Match({
     Logger.debug('match', `Subscribing to event check-ins: ${eventInfo.id}`)
 
     // Handle when someone checks into the event
-    const handleCheckIn: EventCheckInCallback = (data) => {
+    /*
+     * The roster room, not the counter room.
+     *
+     * This read the pseudonym off `event:checkin`, which is broadcast to
+     * `event:{id}` -- a room any authenticated user may join for any public
+     * event. So the server was handing `{ real userId, pseudonym }` to every
+     * stranger watching, in order to feed this one screen. The name now comes
+     * from `event:room:{id}`, which the server refuses until you have checked
+     * in. This screen only renders when you have.
+     */
+    const handleCheckIn: EventRoomCheckInCallback = (data) => {
       if (data.userId === authUser.id) return // Ignore our own check-in
 
       Logger.debug('match', 'New check-in received', { userId: data.userId, userName: data.userName })
@@ -430,7 +440,7 @@ export default function Match({
       setAttendees(prev => prev.filter(a => a.user_id !== data.userId))
     }
 
-    const unsubCheckIn = subscribeToEventCheckIn(eventInfo.id, handleCheckIn)
+    const unsubCheckIn = subscribeToEventRoomCheckIn(eventInfo.id, handleCheckIn)
     const unsubCheckOut = subscribeToEventCheckOut(eventInfo.id, handleCheckOut)
 
     return () => {
