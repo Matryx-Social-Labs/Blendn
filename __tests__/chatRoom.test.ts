@@ -86,7 +86,7 @@ describe('the bubble points at its sender', () => {
      */
     const src = codeOnly(BUBBLE())
     expect(src).toContain('count > 1')
-    expect(src).toMatch(/reactions\?: Array<\{ emoji: string; count: number/)
+    expect(src).toMatch(/reactions\?: \{ emoji: string; count: number/)
     // Nothing that could hold a person: no id list, no name list, no map of who.
     expect(src).not.toMatch(/senders/)
     expect(src).not.toMatch(/Record<string, string\[\]>/)

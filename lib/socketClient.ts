@@ -88,7 +88,7 @@ export interface ServerToClientEvents {
   "chat:reaction": (data: {
     chatGroupId: string
     messageId: string
-    tally: Array<{ emoji: string; count: number }>
+    tally: { emoji: string; count: number }[]
   }) => void
   // Private messaging
   "private:message": (data: {

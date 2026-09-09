@@ -63,7 +63,7 @@ export interface ChatBubbleProps {
    * prop carried the identities anyway. The server now sends counts, so the
    * names are no longer in the payload to be leaked by the next reader.
    */
-  reactions?: Array<{ emoji: string; count: number; mine?: boolean }> | null
+  reactions?: { emoji: string; count: number; mine?: boolean }[] | null
   /**
    * Which surface this is.
    *

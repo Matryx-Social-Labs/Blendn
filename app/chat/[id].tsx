@@ -48,7 +48,7 @@ interface Message {
   is_edited: boolean
   created_at: string
   replyTo?: Message
-  reactions?: Array<{ emoji: string; count: number; mine?: boolean }>
+  reactions?: { emoji: string; count: number; mine?: boolean }[]
 }
 
 type ChatListItem =
@@ -219,7 +219,7 @@ function GroupChatInner(props?: {
         is_edited: msg.is_edited || msg.isEdited || false,
         created_at: msg.created_at || msg.createdAt,
         replyTo: undefined as Message | undefined,
-        reactions: undefined as Array<{ emoji: string; count: number; mine?: boolean }> | undefined,
+        reactions: undefined as { emoji: string; count: number; mine?: boolean }[] | undefined,
       }
     })
     return list.map(msg => ({
