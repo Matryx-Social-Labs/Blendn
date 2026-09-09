@@ -98,6 +98,16 @@ interface EventDetail {
 interface CheckInStatus {
   success: boolean
   checked_in: boolean
+  /**
+   * The raw status, which answers a different question from `checked_in`.
+   *
+   * `checked_in` is "are you inside now" and goes false at checkout — including
+   * the automatic one. Whether you *were* here is `status !== null`, and the
+   * server has been sending it as `userStatus.checkInStatus` the whole time
+   * with nothing reading it. Without it there is no way to tell somebody who
+   * attended from somebody who merely opened the page.
+   */
+  status?: string | null
   check_in_id?: string
   checked_in_at?: string
   distance_meters?: number
@@ -274,6 +284,7 @@ export default function EventDetail() {
           setCheckInStatus({
             success: true,
             checked_in: d.userStatus.isCheckedIn || false,
+            status: d.userStatus.checkInStatus ?? null,
             check_in_id: d.userStatus.checkInId,
           })
           setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
@@ -524,6 +535,7 @@ export default function EventDetail() {
           setCheckInStatus({
             success: true,
             checked_in: d.userStatus.isCheckedIn || false,
+            status: d.userStatus.checkInStatus ?? null,
             check_in_id: d.userStatus.checkInId,
           })
           setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
@@ -970,6 +982,12 @@ export default function EventDetail() {
 
   const isLoading = loading
   const isCheckedIn = checkInStatus?.checked_in || false
+  /*
+   * Were you here — not are you here now. A check-in row exists whatever the
+   * current status, and auto-checkout makes `checked_in` false for most people
+   * by the time the event ends.
+   */
+  const attended = !!checkInStatus?.status
   const isEnded = event ? (new Date(event.end_time).getTime() < Date.now()) : false
 
   const openEventChat = useCallback(async () => {
@@ -1034,8 +1052,27 @@ export default function EventDetail() {
   }, [isCheckedIn, actionMorph])
 
 
-  const primaryActionDisabled = checkingIn || actionStage === 'checked'
+  /*
+   * `rate` is never disabled. Every other post-doors state routes through
+   * `actionStage`, which is about checking in and is meaningless once the event
+   * is over — leaving it in charge here would disable the button for anyone who
+   * had checked in, which is precisely everyone this state exists for.
+   */
+  const primaryActionDisabled =
+    isEnded && attended ? false : checkingIn || actionStage === 'checked'
   const primaryActionPress = () => {
+    /*
+     * The night is over and you were here. `PLACEHOLDER_SCREENS.md` asks for
+     * "an entry point after an event ends"; the screen it opens has been built,
+     * tested and reachable from nowhere since it was written.
+     *
+     * First branch on purpose — every check below asks a question about
+     * checking in, which cannot happen any more.
+     */
+    if (isEnded && attended) {
+      router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
+      return
+    }
     if (checkingIn) return
     // Before the doors, the button is the RSVP and its own off-switch.
     if (!isCheckedIn && !hasStarted) {
@@ -1115,7 +1152,7 @@ export default function EventDetail() {
     : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
 
   const ctaState: SceneCTAState = isEnded
-    ? 'ended'
+    ? (attended ? 'rate' : 'ended')
     : isCheckedIn
       ? 'going'
       : !hasStarted
