@@ -27,6 +27,7 @@ import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { checkInRefusal, CHECK_IN_CODES } from '../../lib/checkInRefusal'
+import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
@@ -46,6 +47,8 @@ import {
   SCENE_CTA_INSET,
   SCENE_PADDING_HORIZONTAL,
   SCENE_SECTION_GAP,
+  AMENITY_TINTS,
+  SceneAmenity,
   SceneAttendees,
   SceneBody,
   SceneBodyAccent,
@@ -64,6 +67,8 @@ import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
 
 interface EventDetail {
+  /** Curated facilities, already in the vocabulary's `sort_order`. */
+  amenities?: EventAmenity[]
   id: string
   title: string
   description: string
@@ -94,6 +99,8 @@ interface EventDetail {
    */
   media?: Array<{ id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }>
 }
+
+type EventAmenity = ServerAmenity
 
 interface CheckInStatus {
   success: boolean
@@ -271,6 +278,7 @@ export default function EventDetail() {
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           media: Array.isArray(d.media) ? d.media : [],
+          amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -527,6 +535,7 @@ export default function EventDetail() {
           longitude: d.longitude ?? 0,
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           media: Array.isArray(d.media) ? d.media : [],
+          amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
         })
         // Set interest info and check-in status from userStatus
         if (d.userStatus) {
@@ -1147,6 +1156,8 @@ export default function EventDetail() {
    * RSVPs, falling back to saves when nobody has RSVP'd, since a save is the
    * weaker version of the same signal and a real number beats a dash.
    */
+  const amenities = amenityTiles(event?.amenities)
+
   const attendeeBlock = hasStarted
     ? { label: 'Attendees', count: checkInCount }
     : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
@@ -1266,6 +1277,34 @@ export default function EventDetail() {
                   seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
                 )}
               </SceneBody>
+            </View>
+          ) : null}
+
+          {/*
+            The facilities row. Frame `1141:4853` draws it two-up under the
+            description.
+
+            `SceneAmenity` was built to that frame and rendered nowhere, under a
+            docstring saying the screen "should not draw it until there is
+            something true to put in it" — the vocabulary now exists and is on
+            this payload, so it does.
+
+            Tints alternate rather than being mapped per amenity: the vocabulary
+            is curated and open-ended, and a per-slug colour would leave every
+            amenity added later without one.
+          */}
+          {amenities.length > 0 ? (
+            <View style={styles.amenityRow}>
+              {amenities.map((a, i) => (
+                <SceneAmenity
+                  key={a.id}
+                  icon={a.icon}
+                  title={a.title}
+                  subtitle={a.subtitle}
+                  color={AMENITY_TINTS[i % AMENITY_TINTS.length]}
+                  style={styles.amenityTile}
+                />
+              ))}
             </View>
           ) : null}
 
@@ -1476,6 +1515,10 @@ function SceneBarButton({
 }
 
 const styles = StyleSheet.create({
+  // Frame `1141:4918`: two-up, 16pt gap. `flexWrap` so a vocabulary longer
+  // than two runs on rather than squeezing every tile narrower.
+  amenityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  amenityTile: { flexGrow: 1, flexBasis: '45%' },
   container: { flex: 1, backgroundColor: EMBER.bg },
   barButton: {
     width: 36,
