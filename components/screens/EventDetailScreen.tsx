@@ -28,6 +28,7 @@ import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { checkInRefusal, CHECK_IN_CODES } from '../../lib/checkInRefusal'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
+import { showEventReportOptions } from '../../lib/safetyUtils'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
 import { NotificationHelpers } from '../../lib/notifications';
@@ -1220,6 +1221,22 @@ export default function EventDetail() {
               onPress={handleToggleInterest}
             />
             <SceneBarButton icon="share-outline" label="Share" onPress={handleShare} />
+            {/*
+              The third reportable subject, and the one that had no path.
+              `event_reports` sat with zero writers and zero readers, so
+              somebody looking at an unsafe venue or a listing that reads as a
+              lure could report a *person* or a *message* — but not the thing
+              they were being asked to physically turn up to.
+
+              No check-in gate, matching the server: two of the three reasons
+              are visible from the listing, and the value is catching them
+              before somebody travels to a venue.
+            */}
+            <SceneBarButton
+              icon="flag-outline"
+              label="Report this event"
+              onPress={() => showEventReportOptions(event?.title || 'this event', String(id))}
+            />
           </>
         }
       />
