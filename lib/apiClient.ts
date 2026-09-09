@@ -11,6 +11,7 @@ import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import { markSessionExpired } from './sessionEvents'
+import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -420,6 +421,16 @@ export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
+  /**
+   * The server's machine-readable reason, when it sends one.
+   *
+   * `lib/api-response.ts` on the server emits `USER_MUTED`, `CHAT_LOCKED`,
+   * `CHAT_CLOSED`, `SPAM_BLOCKED` and `RATE_LIMITED`, and this type had no
+   * field to carry any of them — so every refusal arrived as prose that the
+   * UI could only render as a generic failure. A muted user retried forever
+   * with no idea they were muted.
+   */
+  errorCode?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -807,6 +818,9 @@ class ApiClientClass {
     if (!response.ok) {
       return {
         success: false,
+        // Carried through so a screen can branch on the reason rather than
+        // guess from the sentence. See ApiResponse.errorCode.
+        errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -844,7 +858,17 @@ class ApiClientClass {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const delay = Math.min(800 * Math.pow(2, attempt - 1), 6000)
+        /*
+         * Jittered, not deterministic.
+         *
+         * `800 * 2^(n-1)` alone means every client that got a 5xx retries at
+         * exactly +800ms and +2400ms — a synchronised herd arriving at a server
+         * that is already unwell, which is how a blip becomes an outage. The
+         * half-to-full-window spread breaks the lockstep without changing the
+         * shape of the backoff.
+         */
+        const ceiling = Math.min(800 * Math.pow(2, attempt - 1), 6000)
+        const delay = Math.round(ceiling * (0.5 + Math.random() * 0.5))
         Logger.debug('api', `Retry ${attempt}/${MAX_RETRIES} for ${endpoint} in ${delay}ms`)
         await new Promise<void>((resolve) => setTimeout(resolve, delay))
       }
@@ -1177,13 +1201,35 @@ class ApiClientClass {
     return result
   }
 
+  /**
+   * Sign out, and take the push token with it.
+   *
+   * `pushToken` rides along in this request rather than being removed by a
+   * separate call, because the separate call could never work: this method
+   * clears the access token below, so anything fired afterwards is
+   * unauthenticated and 401s. The row survived, and because the server's unique
+   * is `(user_id, token)` it simply co-existed with the next person to sign in
+   * on the phone — who then received the previous account's notifications, with
+   * message text in the body.
+   *
+   * One authenticated request, so there is no ordering to get wrong.
+   *
+   * If the token is null (a cold start loses the module-level ref) the server
+   * clears every token this user holds instead. That is the deliberate choice:
+   * a re-registration on their other device is cheaper than a stranger reading
+   * their DMs.
+   */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
     const refreshToken = await TokenStorage.getRefreshToken()
     const result = await this.request<void>('/api/mobile/auth/signout', {
       method: 'POST',
-      body: JSON.stringify({ refreshToken: revokeAll ? undefined : refreshToken }),
+      body: JSON.stringify({
+        refreshToken: revokeAll ? undefined : refreshToken,
+        pushToken: getPushTokenRef() ?? undefined,
+      }),
     })
 
+    setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
 

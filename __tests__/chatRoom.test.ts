@@ -48,16 +48,30 @@ describe('the bubble points at its sender', () => {
      * `pseudonymAvatar` is the only avatar source allowed on this surface.
      */
     const src = codeOnly(BUBBLE())
-    expect(src).toContain('pseudonymAvatar(senderId)')
+    expect(src).toMatch(/pseudonymAvatar\(`\$\{roomId\}:\$\{senderId\}`\)/)
     expect(src).not.toMatch(/OptimizedImage|<Image|profile_photos/)
   })
 
-  it('seeds the avatar from the id, never the display name', () => {
+  it('seeds the avatar from the room and the id, never from either alone', () => {
     /*
-     * Seeding from the name would give two people called "Guest" the same
-     * creature, and would change somebody's mark the moment they revealed.
+     * Both single-seed options are wrong, in opposite directions.
+     *
+     * The display name would give two people falling back to "Attendee" the
+     * same creature, and would change somebody's mark the moment they revealed.
+     *
+     * The id alone is worse: `lib/pseudonymAvatar.ts` says "Never feed it a
+     * user id: that is stable forever and would rebuild exactly the cross-event
+     * identity the pseudonyms exist to prevent." It shipped that way, so every
+     * message anybody sent carried the same colour and creature in every room
+     * they had ever been in.
+     *
+     * Salting the id with the room is stable inside a room, unique per person
+     * in it, different in the next one, and unaffected by a reveal.
      */
-    expect(codeOnly(BUBBLE())).not.toContain('pseudonymAvatar(senderName)')
+    const src = codeOnly(BUBBLE())
+    expect(src).not.toContain('pseudonymAvatar(senderName)')
+    expect(src).not.toContain('pseudonymAvatar(senderId)')
+    expect(src).toMatch(/pseudonymAvatar\(`\$\{roomId\}:\$\{senderId\}`\)/)
   })
 
   it('counts reactions without naming who left them', () => {

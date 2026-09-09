@@ -38,6 +38,7 @@ export default function ChatPreview() {
         <ChatBubble
           mine={false}
           senderId="user-julian"
+          roomId="preview-room"
           senderName="Cosmic Panda"
           time="14:02"
           text="Hey everyone! Super excited for tonight. Just finished setting up the main stage. The visuals are looking absolutely mental. Who's bringing the film cameras? 📸"
@@ -46,6 +47,7 @@ export default function ChatPreview() {
         <ChatBubble
           mine
           senderId="me"
+          roomId="preview-room"
           senderName="Me"
           time="14:05"
           text="I'm coming straight from the studio with my Leica. Can't wait to see that lighting rig in action! Are we still meeting at the lounge first?"
@@ -55,6 +57,7 @@ export default function ChatPreview() {
         <ChatBubble
           mine={false}
           senderId="user-sarah"
+          roomId="preview-room"
           senderName="Velvet Heron"
           time="14:10"
           edited
@@ -90,6 +93,7 @@ export default function ChatPreview() {
           variant="direct"
           mine={false}
           senderId="user-sarah"
+          roomId="preview-room"
           senderName="Velvet Heron"
           time="14:31"
           text="That was a good night. Same again next month?"
@@ -99,6 +103,7 @@ export default function ChatPreview() {
           variant="direct"
           mine
           senderId="me"
+          roomId="preview-room"
           senderName="Me"
           time="14:32"
           receipt="sent"
@@ -109,6 +114,7 @@ export default function ChatPreview() {
           variant="direct"
           mine
           senderId="me"
+          roomId="preview-room"
           senderName="Me"
           time="14:33"
           receipt="read"

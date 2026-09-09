@@ -512,6 +512,7 @@ function PrivateChatInner() {
         variant="direct"
         mine={isMe}
         senderId={item.senderId}
+        roomId={String(conversationId)}
         senderName={reveal?.displayName || 'Them'}
         text={item.text || ''}
         time={formatTime(item.createdAt)}

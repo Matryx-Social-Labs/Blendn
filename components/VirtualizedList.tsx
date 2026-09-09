@@ -85,7 +85,24 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
     })
   }, [])
 
-  // Memory optimization: only render when enabled
+  /*
+   * The short-list branch still gets the tuning.
+   *
+   * It used to drop it. `windowSize`, `initialNumToRender`, `maxToRenderPerBatch`,
+   * `removeClippedSubviews` and `getItemLayout` are all destructured out of
+   * props above, and this branch passed only `restProps` — so none of them
+   * reached FlatList and it fell back to `initialNumToRender: 10`.
+   *
+   * That was backwards in exactly the wrong case. The Pulse computes
+   * `initialNumToRender={4}` from card geometry, with fifteen lines of
+   * arithmetic explaining why, and enables virtualization only above twenty
+   * items. A first load is twenty items or fewer — so the one case the number
+   * was calculated for is the one case it was thrown away, and the ten-image
+   * first paint it existed to prevent is what shipped.
+   *
+   * `enableVirtualization` never disabled virtualization anyway; FlatList is
+   * always virtualized. It only ever discarded the tuning.
+   */
   if (!enableVirtualization) {
     return (
       <FlatList
@@ -97,6 +114,13 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
         data={data}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        windowSize={windowSize}
+        initialNumToRender={initialNumToRender}
+        maxToRenderPerBatch={maxToRenderPerBatch}
+        updateCellsBatchingPeriod={updateCellsBatchingPeriod}
+        removeClippedSubviews={removeClippedSubviews}
+        onEndReachedThreshold={onEndReachedThreshold}
+        getItemLayout={getItemLayout}
         {...restProps}
       />
     )
