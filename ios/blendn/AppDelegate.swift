@@ -1,4 +1,5 @@
 import Expo
+import GoogleMaps
 import React
 import ReactAppDependencyProvider
 
@@ -13,6 +14,27 @@ public class AppDelegate: ExpoAppDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    /*
+     Google Maps, before React Native starts.
+
+     `GMSServices.provideAPIKey` must run before any GMSMapView is created, and
+     the first one can be created as soon as a screen mounts — so this belongs
+     ahead of `startReactNative` rather than beside it.
+
+     The key is committed on purpose. A Maps SDK key is restricted to an app
+     identity — this bundle identifier — and Google checks that server-side on
+     every request, so a key lifted out of the binary is useless to anybody who
+     cannot also sign as this app. Google documents embedding it for exactly
+     that reason: the restriction is the control, not secrecy. It is a
+     different kind of value from `SENTRY_AUTH_TOKEN`, which grants write
+     access to an account and is a secret.
+
+     Android's equivalent lives in `AndroidManifest.xml`, and needs a second
+     restriction entry because Google Play re-signs uploads with its own
+     certificate.
+     */
+    GMSServices.provideAPIKey("AIzaSyD2oworh1-Tl19j16BPiLOIb1Mxe6Otmag")
+
     let delegate = ReactNativeDelegate()
     let factory = ExpoReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()

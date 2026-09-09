@@ -15,7 +15,8 @@ import {
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { staticMapUrl } from '../../lib/staticMap'
+import MapView, { Marker } from 'react-native-maps'
+import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
 
 /**
@@ -212,16 +213,31 @@ export function SceneAttendees({
 }
 
 /**
- * The map inside the Location card — a Google Static Maps image.
+ * The map inside the Location card — a `MapView` with every gesture off.
  *
- * Static rather than `react-native-maps`, which is not installed: this slot
- * answers "roughly where is this", and an interactive map inside a scrolling
- * card is a gesture fight nobody asked for. Panning belongs in Hotspots'
- * "Explore the Grid", where it is the point.
+ * ## Why the SDK, and why it is still not interactive
  *
- * Draws a plain surface when there is no key or no coordinate, because a
- * broken image inside a card makes the card look broken, and the frame's map is
- * decorative enough that its absence costs nothing.
+ * This was a Google Static Maps image, which is billed per request and needs a
+ * key that ships in the bundle and cannot be restricted to this app: the Static
+ * Maps web service is a plain HTTPS GET and carries no app identity for Google
+ * to check. Mobile SDK map loads are free and their keys *are* restricted to a
+ * bundle identifier or a package plus signing certificate, so the same picture
+ * costs nothing and the key is bound to this app.
+ *
+ * The original objection stands and is honoured: "an interactive map inside a
+ * scrolling card is a gesture fight nobody asked for". Every gesture is
+ * disabled, so this is a static picture that happens to be drawn by the SDK —
+ * the tap still belongs to the card and still opens external maps. Panning
+ * belongs in Hotspots' "Explore the Grid", where it is the point, and the SDK
+ * being here is what makes that a component change rather than a project one.
+ *
+ * ## Absent is still a supported state
+ *
+ * No coordinate means a plain surface, exactly as before — a broken map inside
+ * a card makes the card look broken, and the frame's map is decorative enough
+ * that its absence costs nothing. That is also the no-key state: without a key
+ * the SDK draws an empty grid rather than throwing, and `liteMode` on Android
+ * keeps even that cheap.
  */
 export function SceneMap({
   latitude,
@@ -234,15 +250,51 @@ export function SceneMap({
   width: number
   onPress?: () => void
 }) {
-  const url = staticMapUrl({ latitude, longitude, width, height: MAP_HEIGHT })
-  const body = url ? (
-    <Image
-      source={{ uri: url }}
+  /*
+   * 0,0 is in the Gulf of Guinea and is what an unset coordinate looks like in
+   * this schema, so it is treated as absent rather than drawn — carried over
+   * from `staticMapUrl`, which made the same check.
+   */
+  const hasCoords = !!latitude && !!longitude
+
+  const body = hasCoords ? (
+    <MapView
       style={StyleSheet.absoluteFill}
-      contentFit="cover"
-      cachePolicy="memory-disk"
-      transition={150}
-    />
+      customMapStyle={DARK_MAP_STYLE}
+      initialRegion={{
+        latitude,
+        longitude,
+        latitudeDelta: LOCATION_CARD_DELTA,
+        longitudeDelta: LOCATION_CARD_DELTA,
+      }}
+      /*
+       * Every gesture off. This is a picture, not a map you steer — the tap
+       * belongs to the card, which opens external maps.
+       */
+      scrollEnabled={false}
+      zoomEnabled={false}
+      rotateEnabled={false}
+      pitchEnabled={false}
+      toolbarEnabled={false}
+      /*
+       * Android's lite mode renders a single bitmap instead of a live map
+       * surface. Cheaper, and correct here for the same reason the gestures are
+       * off: nothing about this slot needs a live map.
+       */
+      liteMode
+      pointerEvents="none"
+    >
+      <Marker
+        coordinate={{ latitude, longitude }}
+        /*
+         * The accent's flat end, as the static version used. The frame draws a
+         * 48pt gradient circle with a white glyph, which neither the static API
+         * nor a default marker can render; a flat accent pin reads as ours
+         * rather than as Google's default red, without shipping an icon.
+         */
+        pinColor={EMBER.gradientFrom}
+      />
+    </MapView>
   ) : null
 
   if (!onPress) return <View style={styles.map}>{body}</View>
