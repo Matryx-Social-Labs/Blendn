@@ -48,6 +48,7 @@ import {
   type EventFilters,
 } from '../../lib/eventFilters'
 import { feedPlaylist } from '../../lib/feedMedia'
+import { useLatest } from '../../lib/useLatest'
 import {
   awayNotice,
   cityOnResume,
@@ -228,6 +229,16 @@ function EventsInner() {
   const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
+
+  /*
+   * The five maps every action handler reads, held so they do not force the
+   * handlers to change identity. See lib/useLatest.ts for what that was costing.
+   */
+  const latestCheckinStatuses = useLatest(checkinStatuses)
+  const latestCheckedInEvents = useLatest(checkedInEvents)
+  const latestProximityData = useLatest(proximityData)
+  const latestInterestStatuses = useLatest(interestStatuses)
+  const latestInterestCounts = useLatest(interestCounts)
 
   const checkedInEventId =
     Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
@@ -455,10 +466,10 @@ function EventsInner() {
         end: event.end_time,
         category: event.category || '',
         description: event.description || '',
-        interestCount: String(interestCounts[event.id] ?? event.favorite_count ?? 0),
+        interestCount: String(latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0),
       } as any,
     })
-  }, [userLocation, interestCounts])
+  }, [userLocation, latestInterestCounts])
 
   const handleCheckIn = useCallback(async (event: Event) => {
     if (checkInFlightRef.current.has(event.id)) return
@@ -500,8 +511,8 @@ function EventsInner() {
       checkInFlightRef.current.add(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      previousStatus = checkinStatuses[event.id]
-      hadCheckedInEvent = checkedInEvents.some((e) => e.id === event.id)
+      previousStatus = latestCheckinStatuses.current[event.id]
+      hadCheckedInEvent = latestCheckedInEvents.current.some((e) => e.id === event.id)
 
       // Optimistic UI update
       setCheckinStatuses((prev) => ({
@@ -670,7 +681,7 @@ function EventsInner() {
       checkInFlightRef.current.delete(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, userLocation, checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
+  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -692,8 +703,8 @@ function EventsInner() {
       interestInFlightRef.current.add(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      prevInterested = !!interestStatuses[event.id]
-      prevCount = interestCounts[event.id] ?? event.favorite_count ?? 0
+      prevInterested = !!latestInterestStatuses.current[event.id]
+      prevCount = latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
       // Optimistic update
       setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
@@ -742,15 +753,15 @@ function EventsInner() {
       interestInFlightRef.current.delete(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, interestStatuses, interestCounts, feedback, showTray, closeTray])
+  }, [user, feedback, showTray, closeTray, latestInterestStatuses, latestInterestCounts])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
     feedback.tap()
 
-    const previousStatus = checkinStatuses[event.id]
-    const previousCheckedInEvents = checkedInEvents
+    const previousStatus = latestCheckinStatuses.current[event.id]
+    const previousCheckedInEvents = latestCheckedInEvents.current
 
     // Optimistic removal from checked-in state
     setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
@@ -803,15 +814,15 @@ function EventsInner() {
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [checkinStatuses, checkedInEvents, feedback, showTray, closeTray])
+  }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()
-    const checkinStatus = checkinStatuses[event.id]
-    const proximity = proximityData[event.id]
+    const checkinStatus = latestCheckinStatuses.current[event.id]
+    const proximity = latestProximityData.current[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
     const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!interestStatuses[event.id]
+    const interested = !!latestInterestStatuses.current[event.id]
     const summary = [
       formatCarouselCardDate(event.start_time),
       event.venue_name || event.display_city || 'Location TBA',
@@ -873,7 +884,7 @@ function EventsInner() {
       buttons,
       size: 'expanded',
     })
-  }, [checkinStatuses, proximityData, interestStatuses, closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen])
+  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatuses, latestProximityData, latestInterestStatuses])
 
   /*
    * NOT memoised, and that is the fix.

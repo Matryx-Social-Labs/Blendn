@@ -633,8 +633,37 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
 } 
 
 /**
- * Build an optimized Supabase render URL for a given public image URL.
- * Falls back to the original URL if it is not a Supabase public storage URL.
+ * Build an optimised Supabase render URL for a public image URL.
+ *
+ * ## This currently returns its input, every time
+ *
+ * Two independent reasons, either of which alone would be enough:
+ *
+ * 1. `EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED` is unset, so the first
+ *    branch returns early.
+ * 2. The transform only rewrites `/storage/v1/object/public/` paths — Supabase
+ *    — and uploads go to **Tigris** (see `lib/tigris.ts` in blendn-admin).
+ *    Tigris is S3-compatible and has no image-render service, so there is no
+ *    URL to rewrite to.
+ *
+ * So `OptimizedImage` optimises nothing: its `width`, `height`, `quality` and
+ * `enableWebP` props are accepted and discarded, and every card downloads its
+ * cover at full upload resolution and displays it at 400×200.
+ *
+ * **Not fixable here.** `events.cover_image_url` has no thumbnail counterpart
+ * server-side — `thumbnail_url` exists only on `event_media` rows, and it is a
+ * different picture from the cover, so substituting it would change what the
+ * card shows rather than how much it weighs. The real fix is generating a
+ * thumbnail for the cover, and because uploads go direct to Tigris through a
+ * presigned URL the server never sees the bytes: it has to happen client-side
+ * before upload, or in a worker that fetches and resizes afterwards. Either is
+ * a piece of work, not a line.
+ *
+ * Left in place and documented rather than deleted, because the function is
+ * correct for the Supabase case and the storage backend is not a settled
+ * decision. What is not acceptable is the name promising something the body
+ * cannot do — that is the failure this codebase's audit found seventeen times,
+ * and this is the eighteenth.
  */
 export const getOptimizedImageUrl = (
   photoUrl: string,
