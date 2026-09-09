@@ -464,7 +464,7 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended'
+export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rate'
 
 /**
  * What the button says, per state.
@@ -475,8 +475,15 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended'
  * already reports it as information. A CTA that disabled itself on a full event
  * would block an interaction the product explicitly allows.
  *
- * `ended` is the only state that disables, because it is the only one where
- * tapping cannot do anything at all.
+ * `ended` disables, because for somebody who was not there tapping cannot do
+ * anything at all.
+ *
+ * **`rate` is the exception, and it is why that sentence needed qualifying.**
+ * If you attended, the night leaves one thing to do afterwards — rate the
+ * people you met — so `ended` was a dead control for exactly the people with a
+ * reason to come back to this screen. `PLACEHOLDER_SCREENS.md` asks for "an
+ * entry point after an event ends" and this is it: the same slot, the same
+ * rule that its subject changes with the clock.
  *
  * ## "Blend in", not "Join the Experience"
  *
@@ -494,6 +501,7 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   join: 'Blend in',
   going: "You're in",
   ended: 'This event has ended',
+  rate: 'Rate the people you met',
 }
 
 /**
