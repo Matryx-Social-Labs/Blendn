@@ -53,6 +53,19 @@ export interface RoomAttendee {
    * reintroduce the attribute the floor withholds.
    */
   sharedWorkField?: boolean
+  /**
+   * Nights you were both at before this one, and future events you are both
+   * going to.
+   *
+   * Suppressed server-side by the same floor and for the same reason as
+   * `sharedWorkField`: in a small room "was at those specific nights" narrows
+   * the card to a handful of people, and with the age and city the roster
+   * already shows, that is a name. Both arrive as `0` when withheld, so the
+   * client renders what it is given and never re-derives a floor it cannot see
+   * the room size for.
+   */
+  sharedEvents?: number
+  sharedPlans?: number
   /** Whole years. Not suppressed in a small room — it is already public. */
   age?: number | null
   insideNow?: boolean

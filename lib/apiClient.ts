@@ -383,6 +383,10 @@ export interface MatchCard {
    * Optional because a client can outlive the deploy that added it.
    */
   sharedWorkField?: boolean
+  /** Nights you were both at, before this one. 0 when suppressed. */
+  sharedEvents?: number
+  /** Future events you are both going to, excluding this one. */
+  sharedPlans?: number
   /**
    * Whole years, or null.
    *

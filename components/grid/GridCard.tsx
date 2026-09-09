@@ -70,6 +70,10 @@ export interface GridPerson {
   sharedInterests?: string[]
   /** You are both in this field. Already computed server-side for ranking. */
   sharedWorkField?: boolean
+  /** Nights you were both at, before this one. 0 when suppressed. */
+  sharedEvents?: number
+  /** Future events you are both going to, excluding this one. */
+  sharedPlans?: number
   /** Empty unless they have revealed. */
   photo?: string | null
   /** In the venue right now, as opposed to checked in earlier. */
@@ -218,11 +222,15 @@ export function GridCard({
           <View style={styles.overlapHead}>
             <MaterialIcons
               name={
-                box.kind === 'interests'
-                  ? 'join-inner'
-                  : box.kind === 'field'
-                    ? 'work-outline'
-                    : 'place'
+                box.kind === 'plans'
+                  ? 'event-available'
+                  : box.kind === 'history'
+                    ? 'history'
+                    : box.kind === 'interests'
+                      ? 'join-inner'
+                      : box.kind === 'field'
+                        ? 'work-outline'
+                        : 'place'
               }
               size={14}
               color={EMBER.accent}
