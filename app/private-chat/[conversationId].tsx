@@ -458,16 +458,52 @@ function PrivateChatInner() {
 
     try {
       const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
-      if (result.success && result.data) {
+
+      if (!result.success) {
+        /*
+         * The server's sentence, not ours.
+         *
+         * Both this branch and the `catch` below flattened every refusal into
+         * "Failed to send message. Please try again." — including the one that
+         * needs explaining most, `SPAM_BLOCKED` (429), which arrives with a
+         * reason. `app/chat/[id].tsx` records the same bug and the same fix for
+         * the room: the server writes a good sentence and one discarded binding
+         * threw it away, so the user retried forever.
+         */
+        showTray('Not sent', result.error || 'Failed to send message. Please try again.')
+        setNewMessage(messageText)
+        return
+      }
+
+      /*
+       * The server can accept a message and still withhold it.
+       *
+       * Moderation returns 200 with `text: null` and `moderation_hidden: true`.
+       * This branch checked only `success`, so a withheld message was appended
+       * and the sender saw their own words while the recipient got nothing —
+       * accidental shadowbanning, in the *private* channel. `mapMessage` would
+       * also have rendered `text: null` as an empty bubble.
+       *
+       * The room was fixed for exactly this; DMs were not, because deterministic
+       * screening was added to them afterwards. Same shape, same answer.
+       */
+
+      const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
+      if (hidden) {
+        showTray('Not sent', 'That message was removed by moderation and was not delivered.')
+        return
+      }
+
+      if (result.data) {
         setMessages(prev => prev.some(m => m.id === result.data!.id) ? prev : [...prev, mapMessage(result.data)])
         markDomainsDirty(['chat'])
         setTimeout(() => scrollToBottom(true), 80)
-      } else {
-        showTray('Error', 'Failed to send message. Please try again.')
-        setNewMessage(messageText)
       }
-    } catch {
-      showTray('Error', 'Failed to send message. Please try again.')
+    } catch (error) {
+      showTray(
+        'Not sent',
+        error instanceof Error ? error.message : 'Failed to send message. Please try again.'
+      )
       setNewMessage(messageText)
     } finally {
       setSending(false)
