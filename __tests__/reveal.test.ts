@@ -1,4 +1,4 @@
-import { revealChipLabel, revealPromptText, revealReadiness } from '../lib/reveal'
+import { revealPromptText, revealReadiness } from '../lib/reveal'
 
 /**
  * The three pieces of copy that decide whether anonymity is legible.
@@ -54,30 +54,6 @@ describe('revealReadiness', () => {
     for (const input of [{ name: 'A' }, { photos: ['p'] }, {}]) {
       const { missing } = revealReadiness(input)
       expect(`Add ${missing} to your profile first`).toMatch(/^Add a [a-z ]+ to your profile first$/)
-    }
-  })
-})
-
-describe('revealChipLabel', () => {
-  it('says you are anonymous when you are', () => {
-    expect(revealChipLabel(false)).toBe("You're anonymous here")
-  })
-
-  it('names you when you are visible', () => {
-    expect(revealChipLabel(true, 'Priya Raman')).toBe("You're visible as Priya Raman")
-  })
-
-  it('stays true when someone revealed with no name', () => {
-    // Never "You're visible as " with nothing after it.
-    expect(revealChipLabel(true, null)).toBe("You're visible here")
-    expect(revealChipLabel(true, '  ')).toBe("You're visible here")
-  })
-
-  it('only ever describes you, never anyone else', () => {
-    // Showing who else revealed turns a personal choice into a count and makes
-    // the last holdout visible. The chip is first-person by construction.
-    for (const label of [revealChipLabel(true, 'X'), revealChipLabel(false)]) {
-      expect(label).toMatch(/^You're/)
     }
   })
 })

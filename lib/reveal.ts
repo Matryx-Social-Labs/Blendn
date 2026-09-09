@@ -37,23 +37,6 @@ export function revealReadiness(input: {
 }
 
 /**
- * What the chip says while you are in a room.
- *
- * Your **own** state, which is a different thing from showing anyone else's.
- * `PLACEHOLDER_SCREENS.md` forbids displaying who else has revealed — that
- * turns a personal choice into a count and makes the last holdout visible — but
- * a person is entitled to know, at a glance, whether the room can see their
- * name. Not knowing is the state that makes people close the app.
- */
-export function revealChipLabel(revealed: boolean, name?: string | null): string {
-  if (!revealed) return "You're anonymous here"
-  const trimmed = typeof name === 'string' ? name.trim() : ''
-  // Falls back rather than rendering "You're visible as " with nothing after
-  // it. Someone revealed with no name still sees a true sentence.
-  return trimmed ? `You're visible as ${trimmed}` : "You're visible here"
-}
-
-/**
  * The suggestion offered after check-in, when `reveal_by_default` is set.
  *
  * Phrased as a question about *this* room, because that is what it is. The

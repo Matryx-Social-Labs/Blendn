@@ -333,24 +333,21 @@ export default function Match({
    * would re-subscribe the poller on every render. So anything it needs from
    * props or state is read through a ref rather than closed over.
    */
-  const authUserNameRef = useRef<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   /*
-   * Whether *you* are named in this room, and what you would be named.
+   * Your own reveal state is NOT held here.
    *
-   * Read from the roster rather than a dedicated endpoint: the check-ins list
-   * already returns this user's own row, and there is no GET for per-event
-   * preferences. Defaults to anonymous, which is both the server's default and
-   * the safe thing to claim if the read fails.
+   * It moved to `room.tsx`, which renders `RoomVisibilityBanner` above both
+   * segments — being named in the chat is the same exposure as being named
+   * here, so one banner serves both.
+   *
+   * Two write-only `useState` pairs stayed behind, under a comment saying "the
+   * values are simply read one level up". They were not: a parent cannot read
+   * a child's `useState`, and `room.tsx` holds its own copy from its own
+   * source. So the roster load fired two setters nobody could read, each
+   * re-rendering this screen, and `revealChipLabel` — the function they fed —
+   * had no caller at all. Deleted with them.
    */
-  /*
-   * The reveal state moved to `room.tsx`, which renders `RoomVisibilityBanner`
-   * above both segments -- being named in the chat is the same exposure as
-   * being named here, so one banner serves both. The setters stay because the
-   * effect below still writes them; the values are simply read one level up.
-   */
-  const [, setMyRevealed] = useState(false)
-  const [, setMyName] = useState<string | null>(null)
   /*
    * `getSimilarItemLayout` and `getLiftStyle` lived here for the horizontal
    * Recommended carousel. The frame has one vertical list, so both went with it
@@ -382,10 +379,6 @@ export default function Match({
   useEffect(() => {
     eventInfoRef.current = eventInfo
   }, [eventInfo])
-
-  useEffect(() => {
-    authUserNameRef.current = authUser?.name ?? null
-  }, [authUser?.name])
 
   useEffect(() => {
     setNewJoinsCount(0)
@@ -625,15 +618,6 @@ export default function Match({
 
       currentEventIdRef.current = outcome.eventId
       setEventInfo({ id: outcome.eventId, title: outcome.eventTitle })
-      setMyRevealed(outcome.revealed)
-      /*
-       * Debris from #67: `setMyName` was declared and never called, so
-       * `revealChipLabel(true, myName)` always fell through to its no-name
-       * branch and the chip could only ever say "You're visible here" — never
-       * "You're visible as Sagar". The name is your own, already in the auth
-       * session, and needs no request.
-       */
-      setMyName(authUserNameRef.current)
       setAttendees(attendeeProfiles)
       // So the next visit in this session paints instantly. Memory only --
       // `lib/rosterMemory.ts` says why this must never reach disk.
