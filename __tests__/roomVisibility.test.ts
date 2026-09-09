@@ -22,6 +22,26 @@ describe('roomVisibility', () => {
 })
 
 describe('bannerText', () => {
+  it('only ever describes you, never anyone else', () => {
+    /*
+     * Carried here when `revealChipLabel` was deleted — it had no caller, and
+     * `bannerText` is what the room actually renders, so the rule had to move
+     * with the responsibility rather than be deleted alongside the dead code.
+     *
+     * `PLACEHOLDER_SCREENS.md`: showing who else has revealed "turns a personal
+     * choice into a count and makes the last holdout visible". The copy is
+     * first-person by construction, in both states.
+     */
+    for (const title of [
+      bannerText('named').title,
+      bannerText('anonymous').title,
+      bannerText('anonymous', 'Cosmic Panda').title,
+    ]) {
+      expect(title).not.toMatch(/\b\d+\s+(people|others|revealed)\b/i)
+      expect(title).toMatch(/^(You|People here)/)
+    }
+  })
+
   it('names the pseudonym when anonymous', () => {
     // The person can see their pseudonym on their own messages; the banner has
     // to obviously be talking about the same thing.
