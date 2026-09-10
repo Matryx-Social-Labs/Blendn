@@ -102,12 +102,51 @@ the fifteen-a-month EAS quota for the thing only EAS can do.
 **iOS on a real device** additionally needs them added to the Apple Developer
 team. The simulator does not.
 
-### Two files they will not have, and one that does not matter
+### ⚠️ Sentry fails a *release* build on a fresh clone, and it is not a warning
 
-`android/sentry.properties` and `ios/sentry.properties` are gitignored. They are
-**build-time source-map upload only** — the runtime DSN is
-`EXPO_PUBLIC_SENTRY_DSN` — so a build without them warns and carries on. Worth
-knowing before the warning reads as a break.
+`android/sentry.properties` and `ios/sentry.properties` are gitignored, so a new
+clone does not have them. This section previously said a build without them
+"warns and carries on". **That is wrong for release builds**, and it was
+corrected after a second developer hit exactly this.
+
+What actually happens, from `@sentry/react-native/sentry.gradle`:
+
+```groovy
+"--auth-token", sentryProps.get("auth.token") ?: System.getenv("SENTRY_AUTH_TOKEN")
+```
+
+With neither, `sentry-cli` is handed nothing, the upload task fails, and the
+**build fails with it**.
+
+**Which builds hit it, and which do not:**
+
+| | Bundles JS? | Sentry upload runs? |
+|---|---|---|
+| `npx expo run:android` / `run:ios` (debug) | no — Metro serves it | **no**, unaffected |
+| A local **release** build, or any APK/AAB | yes | **yes — fails without a token** |
+| EAS | yes | fine; the token is an EAS environment variable |
+
+So the documented testing path is genuinely unaffected, which is why this went
+unnoticed. `bundleInDebug` is not set in `android/app/build.gradle`, so React
+Native's default holds and bundling is release-only.
+
+**The escape hatch**, for a local release build when you do not want to upload
+source maps at all:
+
+```bash
+SENTRY_DISABLE_AUTO_UPLOAD=true npx expo run:android --variant release
+```
+
+`sentry.gradle` gates the upload task on that variable with an `onlyIf`, so it
+becomes a no-op rather than a failure. The alternative is `SENTRY_AUTH_TOKEN` in
+the environment, or being sent the two `sentry.properties` files — but a local
+release build has no reason to be publishing source maps to the shared Sentry
+project, so prefer disabling it.
+
+The runtime DSN is separate and unaffected: it is `EXPO_PUBLIC_SENTRY_DSN`, and
+crash reporting works without any of the above.
+
+### One file that does not matter
 
 There is no `google-services.json` or `GoogleService-Info.plist` in this repo and
 none is needed; push goes through Expo's service.
