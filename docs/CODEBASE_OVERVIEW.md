@@ -129,7 +129,6 @@ blendn/
 │   ├── queryCache.ts           # In-memory TTL/LRU cache
 │   ├── eventDetailCache.ts     # Event detail specific cache
 │   ├── chatListUpdates.ts      # Chat list update helpers
-│   ├── subscriptionManager.ts  # Socket subscription cleanup helper
 │   ├── notifications.ts        # Push notification setup
 │   ├── photoUtils.ts           # Image resize/upload helpers
 │   ├── networkStatus.ts        # Online/offline state
@@ -478,7 +477,6 @@ Easings: `entrance`, `exit`, `standard` (cubic-bezier arrays)
 | `lib/queryCache.ts` | In-memory TTL+LRU cache (max 500 entries, default 5 min TTL). Used independently of `apiClient`'s response cache. |
 | `lib/eventDetailCache.ts` | Dedicated cache for event detail data to prevent re-fetches when opening/closing the modal. |
 | `lib/chatListUpdates.ts` | Helpers for updating the chat list (group + DM) in response to socket messages without full refetch. |
-| `lib/subscriptionManager.ts` | Collects socket subscription cleanup functions and disposes them as a group (useful in `useEffect` returns). |
 | `lib/notifications.ts` | Expo push token registration, notification listeners, and deep-link handling from notification taps. |
 | `lib/photoUtils.ts` | Resize images with `expo-image-manipulator`, get presigned S3 URLs, and upload via PUT. |
 | `lib/networkStatus.ts` | Lightweight `isOnline` flag with `markOnline()` / `markOffline()` and subscriber callbacks. |

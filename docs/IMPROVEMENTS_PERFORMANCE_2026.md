@@ -40,7 +40,7 @@ Goal: reduce loading time, improve scroll smoothness, and cut unnecessary networ
 - [ ] Compress/preload critical assets and reduce large background images on initial route.
 
 ### Realtime & Background Work
-- [ ] Remove or replace Supabase realtime stub usage in `lib/subscriptionManager.ts`.
+- [x] Remove Supabase realtime stub usage — `lib/subscriptionManager.ts` had zero importers (real-time is Socket.io, see `lib/socketClient.ts`); deleted 2026-09-10.
 - [ ] Pause polling/refresh when app is backgrounded via `AppState`.
 
 ### Measurement & Guardrails
