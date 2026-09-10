@@ -18,6 +18,113 @@ Nobody downloads an `.ipa` or an `.aab`, and nobody opens Transporter.
 The two platforms are independent chains in each workflow. An iOS signing
 problem does not stop Android testers getting a build.
 
+## Second developer, from zero
+
+Getting someone else building on their own machine. The whole thing is about
+twenty minutes; the two items marked **⚠️** are what otherwise eat a morning,
+because both fail in ways that do not name themselves.
+
+### Do not share the Expo login
+
+`app.json` sets `owner: matryx-social-labs-private-limited`, which is an
+**organisation**, not a personal account. So the answer to "should I give them
+the account with the keystore on it" is no — **invite them to the org** (Expo
+dashboard → Organisation → Members) and they run their own `eas login`.
+
+Membership gets them, without anyone sending anything:
+
+| | |
+|---|---|
+| **The keystore** | EAS holds credentials server-side per project. A member builds with the upload key without the file ever reaching their laptop |
+| **Environment variables** | The `preview` and `production` EAS environments resolve for them the same way |
+| **Attribution** | Builds are theirs in the dashboard, and access is revocable in one click |
+
+A shared login technically works and costs you all three. It also means relaying
+2FA codes forever. And there is a specific reason to keep the number of people
+holding that account small: **the Android upload key has already been lost
+once** — see *The upload keystore* below, which is the only irreversible thing
+in this document.
+
+### Setup
+
+```bash
+git clone … && cd ashgabat
+npm install
+cp .env.example .env
+```
+
+**⚠️ Then edit `.env`.** `EXPO_PUBLIC_API_BASE_URL` is required, and without it
+the app **crashes before the first screen** — `lib/apiClient.ts` throws at module
+scope. It does not degrade, it shows no error, and the file is gitignored, so
+the symptom is a build that dies instantly for no visible reason. Point it at
+`https://staging-api.blendn.app` unless they are running the API locally.
+
+Nothing else in `.env.example` is a secret. Everything prefixed `EXPO_PUBLIC_`
+is compiled into the bundle — see *Environment variables* below for why that is
+not a leak and what the actual rule is.
+
+### ⚠️ Android needs JDK 17, and the JDK on the machine is probably wrong
+
+The React Native Gradle plugin cannot parse a Java version above the low
+twenties. **Android Studio currently ships JDK 25** and Homebrew's `openjdk` is
+26, so the obvious choices both fail — and the error names the plugin rather
+than the cause:
+
+```
+Error resolving plugin [id: 'com.facebook.react.settings']
+> 25.0.2
+```
+
+That trailing number is the Java version. Gradle usually has a 17 already
+provisioned:
+
+```bash
+export JAVA_HOME=$(find ~/.gradle/jdks -maxdepth 3 -name Home -type d | head -1)
+"$JAVA_HOME/bin/java" -version   # want 17.x
+```
+
+If that finds nothing, install any JDK 17 and point `JAVA_HOME` at it.
+
+They also need **`android-36`** in the SDK Manager. The app targets API 36, so
+35 alone will not configure.
+
+### Then build locally, not on EAS
+
+```bash
+npx expo run:android      # emulator or USB device
+npx expo run:ios --device
+```
+
+This is the whole workflow for testing. See *Testing does not need EAS at all*
+below — it is free, unlimited, and the same binary shape, and it is what keeps
+the fifteen-a-month EAS quota for the thing only EAS can do.
+
+**iOS on a real device** additionally needs them added to the Apple Developer
+team. The simulator does not.
+
+### Two files they will not have, and one that does not matter
+
+`android/sentry.properties` and `ios/sentry.properties` are gitignored. They are
+**build-time source-map upload only** — the runtime DSN is
+`EXPO_PUBLIC_SENTRY_DSN` — so a build without them warns and carries on. Worth
+knowing before the warning reads as a break.
+
+There is no `google-services.json` or `GoogleService-Info.plist` in this repo and
+none is needed; push goes through Expo's service.
+
+### Building a branch other than `stage` or `prod`
+
+**`dev` triggers no workflow.** Only `stage` and `prod` do, which is deliberate —
+see the workflow files. To put a `dev` build on someone's phone, run it by hand
+from a `dev` checkout:
+
+```bash
+eas build --profile preview --platform android
+```
+
+`preview` is `distribution: internal` against the staging API, so it installs
+directly and never touches Play.
+
 ## Nothing builds until the suite is green
 
 Both EAS workflows start with a `verify` job — typecheck against the baseline,
