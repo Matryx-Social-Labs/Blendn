@@ -238,6 +238,11 @@ export default function EventDetail() {
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [announcementText, setAnnouncementText] = useState('')
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editShortDescription, setEditShortDescription] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const closeTray = useCallback(() => {
     setTrayState((prev) => ({ ...prev, visible: false }))
   }, [])
@@ -908,6 +913,51 @@ export default function EventDetail() {
     }
   }
 
+  const openEditComposer = () => {
+    if (!event) return
+    setEditTitle(event.title)
+    setEditDescription(event.description)
+    setEditShortDescription(event.short_description)
+    setShowEditModal(true)
+  }
+
+  const saveEventEdit = async () => {
+    if (!editTitle.trim()) return
+    setSavingEdit(true)
+    try {
+      const result = await apiClient.updateEvent(String(id), {
+        title: editTitle.trim(),
+        description: editDescription.trim(),
+        shortDescription: editShortDescription.trim(),
+      })
+      if (result.success) {
+        feedback.success()
+        setShowEditModal(false)
+        setEvent((prev) =>
+          prev
+            ? {
+                ...prev,
+                title: editTitle.trim(),
+                description: editDescription.trim(),
+                short_description: editShortDescription.trim(),
+              }
+            : prev
+        )
+        showTray('Event updated', 'Your changes have been saved.')
+      } else {
+        feedback.error()
+        showTray('Failed', result.error || 'Could not update event.')
+        setShowEditModal(false)
+      }
+    } catch {
+      feedback.error()
+      showTray('Error', 'Failed to update event.')
+      setShowEditModal(false)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   const handleDeleteEvent = () => {
     Alert.alert(
       'Delete Event',
@@ -1410,6 +1460,14 @@ export default function EventDetail() {
       {isOrganizer ? (
         <View style={styles.organiserBar} pointerEvents="box-none">
           <Pressable
+            onPress={openEditComposer}
+            style={styles.organiserButton}
+            accessibilityRole="button"
+            accessibilityLabel="Edit event"
+          >
+            <Ionicons name="create-outline" size={18} color={EMBER.textPrimary} />
+          </Pressable>
+          <Pressable
             onPress={openAnnouncementComposer}
             style={styles.organiserButton}
             accessibilityRole="button"
@@ -1482,6 +1540,71 @@ export default function EventDetail() {
                   <ActivityIndicator size="small" color={EMBER.onGradient} />
                 ) : (
                   <Text style={styles.announcementSendText}>Send</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.announcementOverlay}>
+          <View style={styles.announcementModal}>
+            <Text style={styles.announcementTitle}>Edit event</Text>
+            <Text style={styles.announcementSubtitle}>
+              Changes are visible to everyone viewing this event.
+            </Text>
+            <TextInput
+              style={styles.editFieldInput}
+              placeholder="Title"
+              placeholderTextColor={EMBER.textPlaceholder}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              maxLength={120}
+            />
+            <TextInput
+              style={styles.editFieldInput}
+              placeholder="Short description"
+              placeholderTextColor={EMBER.textPlaceholder}
+              value={editShortDescription}
+              onChangeText={setEditShortDescription}
+              maxLength={200}
+            />
+            <TextInput
+              style={styles.announcementInput}
+              placeholder="Description"
+              placeholderTextColor={EMBER.textPlaceholder}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              multiline
+              maxLength={2000}
+            />
+            <View style={styles.announcementButtons}>
+              <Pressable
+                style={styles.announcementCancel}
+                onPress={() => setShowEditModal(false)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.announcementCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.announcementSend,
+                  !editTitle.trim() && styles.announcementSendOff,
+                ]}
+                onPress={saveEventEdit}
+                disabled={!editTitle.trim() || savingEdit}
+                accessibilityRole="button"
+              >
+                {savingEdit ? (
+                  <ActivityIndicator size="small" color={EMBER.onGradient} />
+                ) : (
+                  <Text style={styles.announcementSendText}>Save</Text>
                 )}
               </Pressable>
             </View>
@@ -1626,6 +1749,13 @@ const styles = StyleSheet.create({
     padding: 16,
     color: EMBER.textPrimary,
     textAlignVertical: 'top',
+  },
+  editFieldInput: {
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: EMBER.surfaceSunken,
+    paddingHorizontal: 16,
+    color: EMBER.textPrimary,
   },
   announcementButtons: { flexDirection: 'row', gap: 12, marginTop: 4 },
   announcementCancel: {
