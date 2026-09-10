@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { EMBER } from '../lib/theme'
+import { EMBER, EMBER_FONTS } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     ActivityIndicator,
@@ -121,7 +121,7 @@ export default function PhotoManager({
         await reorderPhotos(userId, newPhotoUrls)
         
         Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
-      } else if (result.error && result.error !== 'User cancelled') {
+      } else if (result.error && !result.cancelled) {
         Alert.alert('Upload Failed', result.error)
       }
     } catch (error) {
@@ -301,19 +301,26 @@ export default function PhotoManager({
       style={[styles.container, style]}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
-      <View style={styles.header}>
-        <Text style={styles.title}>Photos ({photos.length}/{maxPhotos})</Text>
-      </View>
+      {/*
+        One line, where there were four.
 
-      {photos.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="camera-outline" size={48} color={EMBER.textTertiary} />
-          <Text style={styles.emptyText}>No photos yet</Text>
-          {editable && (
-            <Text style={styles.emptyHint}>Add photos to make your profile stand out</Text>
-          )}
-        </View>
-      ) : (
+        The empty state used to be a camera icon, "No photos yet", "Add photos
+        to make your profile stand out", and a dashed **Add Photo** tile — four
+        elements saying the same thing, three of them restating the control's
+        own label. The tile is the empty state; it does not need to be
+        announced.
+
+        What is worth a line is the thing nobody could work out from the screen:
+        `GET /profiles/{id}` withholds `photos` entirely from a viewer who has
+        not been revealed to and returns a 40px stored derivative instead. So
+        the old copy was not just redundant, it was **wrong about the product** —
+        a photo cannot make you stand out in a room that cannot see it.
+      */}
+      <Text style={styles.caption}>
+        {photos.length}/{maxPhotos} · blurred until you both reveal
+      </Text>
+
+      {photos.length > 0 ? (
         <View style={[styles.photoGrid, styles.photoGridContent]}> 
           {photos.map((item, index) => (
             <React.Fragment key={item.id}>
@@ -321,7 +328,7 @@ export default function PhotoManager({
             </React.Fragment>
           ))}
         </View>
-      )}
+      ) : null}
 
       {renderAddPhoto()}
     </View>
@@ -348,33 +355,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: EMBER.textPrimary,
+  caption: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
+    marginBottom: 12,
   },
   hint: {
     fontSize: 12,
     color: EMBER.textSecondary,
     fontStyle: 'italic',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    minHeight: 200,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: EMBER.textSecondary,
-    marginTop: 12,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: EMBER.textTertiary,
-    marginTop: 4,
-    textAlign: 'center',
   },
   photoGrid: {
     flexDirection: 'row',

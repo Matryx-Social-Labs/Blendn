@@ -12,6 +12,19 @@ export interface PhotoUploadResult {
   url?: string
   path?: string
   error?: string
+  /**
+   * The person changed their mind. Not a failure, and never an alert.
+   *
+   * A flag rather than a sentinel string, because there are **two** ways to
+   * back out — dismissing the source sheet and dismissing the picker — and the
+   * caller only ever suppressed the first. It matched `error === 'User
+   * cancelled'`, so closing the photo library raised *"Upload Failed — No image
+   * selected"* at somebody who had just decided not to upload one.
+   *
+   * A third way to back out will be covered by this field without the caller
+   * changing; another string would not be.
+   */
+  cancelled?: true
   metadata?: {
     size: number
     width: number
@@ -586,13 +599,13 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     // Show source selection
     const source = await showPhotoSourceActionSheet()
     if (!source) {
-      return { success: false, error: 'User cancelled' }
+      return { success: false, cancelled: true, error: 'User cancelled' }
     }
 
     // Pick image
     const imageResult = await pickImage(source)
     if (!imageResult || imageResult.canceled) {
-      return { success: false, error: 'No image selected' }
+      return { success: false, cancelled: true, error: 'No image selected' }
     }
 
     const asset = imageResult.assets[0]

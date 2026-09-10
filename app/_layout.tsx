@@ -2,7 +2,7 @@ import { Asset } from 'expo-asset';
 import { router, Stack, usePathname } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
@@ -26,6 +26,30 @@ import { EMBER_FONT_MODULES } from '../lib/fonts';
 import { ONBOARDING_IMAGES, prefetchOnboardingImages } from '../lib/onboardingAssets';
 
 initSentry();
+
+/*
+ * Tell the OS what the app already is.
+ *
+ * There is no light theme: `EMBER` is a dark palette and all 73 stylesheets
+ * hardcode it. But `UIUserInterfaceStyle` is `Automatic` in the committed
+ * Info.plist and Android's `AppTheme` derives from a DayNight parent, so every
+ * surface iOS and Android draw *for* us followed the phone's setting instead —
+ * and on a phone set to light that means a white alert on a black screen.
+ *
+ * Seen on the profile screens: the "Select Photo" sheet and the "Profile
+ * Updated" confirmation both rendered as light system alerts, and so did the
+ * photo picker's chrome. Same defect the dashboard had when `<Toaster>` shipped
+ * without a pinned theme — a component inheriting a scheme the product does not
+ * have.
+ *
+ * Done here rather than in the native projects because it is one line, it
+ * covers both platforms, and it reaches the 44 `Alert.alert` call sites without
+ * replacing any of them. The native config still says "automatic"; this
+ * overrides it at startup, which is also why it sits above the component tree
+ * rather than inside an effect — an alert can be raised before the first render
+ * settles.
+ */
+Appearance.setColorScheme('dark');
 
 /*
  * Hold the native splash until the first screen has something to show.
