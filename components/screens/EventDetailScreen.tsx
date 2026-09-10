@@ -694,7 +694,29 @@ export default function EventDetail() {
 
       return {
         latitude: location.coords.latitude,
-        longitude: location.coords.longitude
+        longitude: location.coords.longitude,
+        /*
+         * The number the server has been asking for and never receiving.
+         *
+         * It is read six lines above to refuse a weak fix, and was then dropped
+         * at this return — so `deviceInfo.gpsAccuracy` was `undefined` on every
+         * check-in the app has ever sent, and four separate server mechanisms
+         * that read it saw nothing:
+         *
+         *   - `MAX_GPS_ACCURACY_METERS` (150m) — unreachable, so the ceiling is
+         *     whatever this file happens to enforce
+         *   - `evaluateCheckIn`'s allowance — every fix judged as the assumed
+         *     35m rather than as itself
+         *   - `check_in_refusals.accuracy_metres` — the column that exists to
+         *     tell a wrong pin from bad phones. Measured on staging: **zero**
+         *     rows written by the API carry one
+         *   - `presence_sessions.last_accuracy` — 37 sessions, none with a value
+         *
+         * `accuracy` is nullable on iOS and Android both, so it is passed
+         * through as-is rather than coerced; `accuracyAllowance` already treats
+         * null as "no information" and applies the assumed value.
+         */
+        accuracy: location.coords.accuracy ?? null,
       }
     } catch (error) {
       Logger.error('events', 'location:getCurrentLocation:error', { error: error as any })
@@ -769,7 +791,10 @@ export default function EventDetail() {
         apiClient.checkIn(String(id), {
           latitude: location.latitude,
           longitude: location.longitude,
-          deviceInfo: { platform: Platform.OS }
+          // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy`
+          // — not a top-level field. Sending it anywhere else is the same as
+          // not sending it.
+          deviceInfo: { platform: Platform.OS, gpsAccuracy: location.accuracy }
         }),
         12000
       )
