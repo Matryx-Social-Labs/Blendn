@@ -102,6 +102,30 @@ the fifteen-a-month EAS quota for the thing only EAS can do.
 **iOS on a real device** additionally needs them added to the Apple Developer
 team. The simulator does not.
 
+### The two `development` profiles, and why there are two
+
+`ios.simulator` is a boolean and the project needs both answers, so there are
+two profiles rather than one that gets flipped:
+
+| Profile | `ios.simulator` | For |
+|---|---|---|
+| `development` | `true` | The simulator. **The Maestro agents drive this one**, so it is the default |
+| `development-device` | `false` | Installing on a physical iPhone |
+
+```bash
+eas build --profile development         # simulator .app
+eas build --profile development-device  # installable on a real device
+```
+
+`development-device` is `extends: development`, so everything except that one
+boolean is inherited and the two cannot drift.
+
+This is written down because the flag was flipped to `false` once to fix device
+installs, which silently broke simulator builds for the test agents — a single
+boolean cannot serve both, and nothing in the repo recorded which case it was
+set for. Android needs no equivalent: a development APK installs on an emulator
+and a handset alike.
+
 ### ⚠️ Sentry fails a *release* build on a fresh clone, and it is not a warning
 
 `android/sentry.properties` and `ios/sentry.properties` are gitignored, so a new
