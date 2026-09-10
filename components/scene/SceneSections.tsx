@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { MaterialIcons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
@@ -13,6 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 
+import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import MapView, { Marker } from 'react-native-maps'
@@ -656,6 +658,79 @@ export function SceneCTA({
   )
 }
 
+/**
+ * What the organiser wrote about the event, under one heading per kind.
+ *
+ * `event_details` has been collected by the dashboard, stored, and served on
+ * this very payload since it existed — and drawn by nothing. Accessibility is
+ * the field that makes this worth building rather than deleting: an organiser
+ * writes "step-free entrance" and the person deciding whether they can come
+ * could not see it.
+ *
+ * The blocks arrive already ordered and already cleaned by
+ * `lib/eventDetails.ts`; this draws them and makes no decisions, so a JSON
+ * column holding something unexpected is that module's problem and never
+ * reaches a `<Text>`.
+ *
+ * Questions are expandable, and nothing else is. A FAQ is a list you scan for
+ * the one that is yours, so collapsing it is the difference between a section
+ * and a wall; house rules are three lines you should not have to ask for.
+ */
+export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  if (!blocks.length) return null
+
+  return (
+    <View style={styles.detailGroup}>
+      {blocks.map((block) => (
+        <View key={block.key} style={styles.detailBlock}>
+          <SceneHeading>{block.title}</SceneHeading>
+
+          {block.kind === 'prose' ? <SceneBody>{block.body}</SceneBody> : null}
+
+          {block.kind === 'pairs' ? (
+            <View style={styles.detailPairs}>
+              {block.pairs.map((p) => (
+                <View key={p.label} style={styles.detailPair}>
+                  <Text style={styles.detailPairLabel}>{p.label}</Text>
+                  <Text style={styles.detailPairValue}>{p.value}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {block.kind === 'faq'
+            ? block.items.map((item) => {
+                const id = `${block.key}:${item.question}`
+                const isOpen = open === id
+                return (
+                  <Pressable
+                    key={id}
+                    onPress={() => setOpen(isOpen ? null : id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: isOpen }}
+                    accessibilityLabel={item.question}
+                    style={styles.detailQuestion}
+                  >
+                    <View style={styles.detailQuestionRow}>
+                      <Text style={styles.detailQuestionText}>{item.question}</Text>
+                      <MaterialIcons
+                        name={isOpen ? 'expand-less' : 'expand-more'}
+                        size={22}
+                        color={EMBER.textSecondary}
+                      />
+                    </View>
+                    {isOpen ? <Text style={styles.detailAnswer}>{item.answer}</Text> : null}
+                  </Pressable>
+                )
+              })
+            : null}
+        </View>
+      ))}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   heading: {
     fontFamily: EMBER_FONTS.displayBold,
@@ -670,6 +745,48 @@ const styles = StyleSheet.create({
     color: EMBER.textSecondary,
   },
   bodyAccent: { color: EMBER.accent },
+
+  detailGroup: { gap: 32 },
+  detailBlock: { gap: 16 },
+  detailPairs: { gap: 10 },
+  detailPair: { gap: 2 },
+  detailPairLabel: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textPrimary,
+  },
+  detailPairValue: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 15,
+    lineHeight: 24,
+    color: EMBER.textSecondary,
+  },
+  /*
+   * 44pt minimum: this is the one control in the section, and a question people
+   * are trying to tap is the wrong place to be stingy with the target.
+   */
+  detailQuestion: { minHeight: 44, justifyContent: 'center', gap: 8 },
+  detailQuestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  detailQuestionText: {
+    flex: 1,
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 15,
+    lineHeight: 22,
+    color: EMBER.textPrimary,
+  },
+  detailAnswer: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 15,
+    lineHeight: 24,
+    color: EMBER.textSecondary,
+    paddingBottom: 4,
+  },
 
   attendees: {
     flexDirection: 'row',
