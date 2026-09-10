@@ -774,43 +774,79 @@ the save returns 200 and stores nothing.
 
 ## Next
 
-### Expo SDK 54, so the Play target is not a stopgap
+### The Expo SDK upgrade, sized
 
-**Why now.** Google Play rejected the 10 September staging submit:
-`Target SDK of artifact is too low`. The build was fine — `eas submit` was not.
-Nothing here had ever set a target: `android/app/build.gradle` reads
-`rootProject.ext.targetSdkVersion`, `ExpoRootProjectPlugin` fills it from the
-`expoLibs` catalogue, and that falls through to
-`react-native/gradle/libs.versions.toml` — `targetSdk = "35"`. That was the 2025
-bar. The deadline is 31 August every year.
+**The stopgap is verified, so this is hygiene rather than a blocker.** Google
+Play rejected the 10 September submit because the artifact targeted API 35 — the
+2025 bar, and the deadline is 31 August every year. `android/gradle.properties`
+now sets 36, and that was *confirmed by running Gradle*, not inferred:
 
-**What shipped instead** (`android/gradle.properties`): `targetSdkVersion=36`,
-`compileSdkVersion=36`, and `suppressUnsupportedCompileSdk=36`. That third line
-is the whole reason this is on `Next` — **AGP 8.8.2 tops out at compileSdk 35**,
-and the flag tells it to build against 36 anyway instead of failing. It works,
-it is the documented escape hatch, and it is running AGP outside the range it
-was tested in.
+```
+[ExpoRootProject] Using the following versions:
+  - compileSdk:  36
+  - targetSdk:   36
+```
 
-**What SDK 54 fixes.** It ships an AGP that knows about 36, so the suppression
-flag and both property overrides come back out and the version catalogue is
-correct on its own again.
+AGP 8.8.2 configured `:app` against 36 without complaint, so
+`android.suppressUnsupportedCompileSdk=36` is doing its job. The reason this is
+still on `Next` is that the flag exists to tell AGP to build against an SDK it
+does not know about — it works, and it is outside the range it was tested in.
 
-**Two things that make this smaller than it looks:**
+**Do not reach for `expo-build-properties`.** It looks like the tidier way to
+set these and would do **nothing**: `android/` is committed, so EAS builds that
+directory and never runs `prebuild`, which is the only thing that plugin writes
+during.
 
-- `expo.edgeToEdgeEnabled=true` is already set. Forced edge-to-edge is the
-  behavioural change targeting 36 imposes, and this app has already absorbed it.
-- The properties are additive. If 54 lands and sets 36 itself, deleting the
-  block is the whole migration.
+#### What the upgrade actually costs
 
-**One trap, written down because it is the obvious wrong move.** Do not reach
-for `expo-build-properties`. It looks like the tidier way to set these and it
-would do **nothing**: `android/` is committed, so EAS builds that directory and
-never runs `prebuild`, which is the only thing that plugin writes during.
+Measured against `expo@54`'s own `bundledNativeModules.json`, not estimated:
 
-**Not verified locally** — there is no Java runtime on the machine this was
-written on, so the property names were confirmed against the plugin source
-(`ExpoAutolinkingSettingsExtension.kt:105`, `ExpoRootProjectPlugin.kt:30`)
-rather than by a build. The staging pipeline is the first real test.
+| | |
+|---|---|
+| Dependencies needing a bump | **36 of 46** (exactly one is unchanged) |
+| React Native | 0.79.6 → **0.81.5**, two minors |
+| Majors crossed | `react-native-reanimated` 3→4, `expo-router` 5→6, `@sentry/react-native` 6→7, `expo-file-system` 18→19 |
+
+`expo-file-system` is the sharp one: SDK 54 rewrote the API and moved the old
+one to `expo-file-system/legacy`.
+
+**The JS side is smaller than that list suggests.** The breaking APIs are barely
+used here: `expo-file-system` in **one** file (`lib/photoUtils.ts`), Reanimated
+in **three** (`EventCard`, `FadeInUp`, `ScalePress`), Sentry in one, and all 29
+`expo-router` imports are shallow `from 'expo-router'` — no deep imports, which
+is the pattern that breaks across majors.
+
+#### The native directories are the real cost
+
+`android/` (53 tracked files) and `ios/` (25) are committed **and
+hand-maintained** — fifteen commits have touched them. Two that `prebuild
+--clean` would erase, and that nothing would tell you were gone:
+
+- **`ios/Podfile`** scopes `:modular_headers` to `GoogleUtilities` and
+  `RecaptchaInterop`. Without it, `React-jsitooling` and `React-RuntimeCore`
+  both set `header_dir 'react_runtime'` and collide. Fixed once in `7610992`.
+- **The Google Maps iOS provider pod is not autolinked** and is declared by
+  hand (#244), alongside the Maps API key and Firebase notification meta-data
+  in `AndroidManifest.xml`.
+
+So the upgrade is: bump 36 packages, then either regenerate the native projects
+and re-apply those edits from archaeology, or hand-reconcile the RN 0.79→0.81
+template changes across 78 tracked files. That is a piece of work with a release
+pipeline pointed at it, not an afternoon.
+
+#### Pick the target when it starts, not now
+
+**54 is already two majors behind** — 55 and 56 both shipped. Upgrading *to 54*
+would mean landing on a version that is itself out of date, so the first
+decision is 54 (smallest hop, still fixes AGP) versus current (one upgrade
+instead of three). Do not assume 54 because this entry used to say so.
+
+#### When it lands
+
+The three properties in `android/gradle.properties` are additive and come out
+together — deleting that block **is** the migration. `expo.edgeToEdgeEnabled` is
+already `true`, which is the behavioural change targeting 36 forces, so that
+part is already absorbed.
 
 ### The Banter's two loose ends
 
