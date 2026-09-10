@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
 import { Logger } from '../lib/logger'
+import { EMBER, EMBER_FONTS } from '../lib/theme'
 
 /**
  * Pick what you are into, from the server's taxonomy.
@@ -203,20 +204,38 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
+  /*
+   * The same chip as `profile/MatchingFields`, which is one card below this one
+   * on the same screen.
+   *
+   * They disagreed: work field filled with the accent when picked, interests
+   * went to a white outline — two answers to "what does chosen look like",
+   * a thumb-scroll apart. This file also carried six raw colour values and a
+   * `fontWeight: '600'`, where the other is on `EMBER` and `EMBER_FONTS`
+   * throughout, so aligning to it is the direction that removes literals rather
+   * than adding them.
+   *
+   * Not extracted into a shared `Chip` yet, deliberately: the client has no
+   * primitives layer, and the plan sequences tokens before primitives precisely
+   * so a shared component is not built on values still being resolved. When it
+   * is built, these two are its first callers.
+   */
   chipIdle: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(45,44,44,0.4)',
+    borderColor: 'rgba(73,71,71,0.1)',
   },
   chipSelected: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: '#FFFFFF',
+    backgroundColor: EMBER.accent,
+    borderColor: EMBER.accent,
   },
   chipText: {
-    color: 'rgba(255,255,255,0.85)',
+    fontFamily: EMBER_FONTS.bodyRegular,
     fontSize: 15,
+    color: EMBER.textPrimary,
   },
+  /* Dark on warm — white on the accent fails contrast. */
   chipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontFamily: EMBER_FONTS.bodyBold,
+    color: EMBER.onGradientChip,
   },
 })
