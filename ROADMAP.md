@@ -774,6 +774,44 @@ the save returns 200 and stores nothing.
 
 ## Next
 
+### Expo SDK 54, so the Play target is not a stopgap
+
+**Why now.** Google Play rejected the 10 September staging submit:
+`Target SDK of artifact is too low`. The build was fine — `eas submit` was not.
+Nothing here had ever set a target: `android/app/build.gradle` reads
+`rootProject.ext.targetSdkVersion`, `ExpoRootProjectPlugin` fills it from the
+`expoLibs` catalogue, and that falls through to
+`react-native/gradle/libs.versions.toml` — `targetSdk = "35"`. That was the 2025
+bar. The deadline is 31 August every year.
+
+**What shipped instead** (`android/gradle.properties`): `targetSdkVersion=36`,
+`compileSdkVersion=36`, and `suppressUnsupportedCompileSdk=36`. That third line
+is the whole reason this is on `Next` — **AGP 8.8.2 tops out at compileSdk 35**,
+and the flag tells it to build against 36 anyway instead of failing. It works,
+it is the documented escape hatch, and it is running AGP outside the range it
+was tested in.
+
+**What SDK 54 fixes.** It ships an AGP that knows about 36, so the suppression
+flag and both property overrides come back out and the version catalogue is
+correct on its own again.
+
+**Two things that make this smaller than it looks:**
+
+- `expo.edgeToEdgeEnabled=true` is already set. Forced edge-to-edge is the
+  behavioural change targeting 36 imposes, and this app has already absorbed it.
+- The properties are additive. If 54 lands and sets 36 itself, deleting the
+  block is the whole migration.
+
+**One trap, written down because it is the obvious wrong move.** Do not reach
+for `expo-build-properties`. It looks like the tidier way to set these and it
+would do **nothing**: `android/` is committed, so EAS builds that directory and
+never runs `prebuild`, which is the only thing that plugin writes during.
+
+**Not verified locally** — there is no Java runtime on the machine this was
+written on, so the property names were confirmed against the plugin source
+(`ExpoAutolinkingSettingsExtension.kt:105`, `ExpoRootProjectPlugin.kt:30`)
+rather than by a build. The staging pipeline is the first real test.
+
 ### The Banter's two loose ends
 
 - **Search is drawn and does nothing.** The field is built to the frame and is
