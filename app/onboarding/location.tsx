@@ -27,7 +27,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const SETTINGS_HINT = "Blend'n uses location to see who is around you, and check in to events."
 
 export default function LocationScreen() {
-  const { saving, commit, skip, goBack } = useOnboarding('location')
+  const { saving, commit, goBack } = useOnboarding('location')
   const [asking, setAsking] = useState(false)
 
   const ask = async () => {
@@ -79,7 +79,9 @@ export default function LocationScreen() {
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
-      onSecondary={() => void skip()}
+      // The same bug in the second of two places — see the note in
+      // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
+      onSecondary={() => void commit({ share_location: false })}
       onBack={goBack}
     >
       <LocationIllustration />

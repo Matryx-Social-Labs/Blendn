@@ -17,6 +17,7 @@ import {
 } from '../../lib/onboarding'
 import { EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
+import { useAuth } from '../../lib/useAuth'
 
 /**
  * Step one — a name, a gender, a birth date.
@@ -66,9 +67,24 @@ function BasicsScreenInner() {
 
   // Prefilled once storage has answered, not on every render — otherwise a
   // rehydrate landing mid-edit would overwrite what is being typed.
+  /*
+   * The draft first, then the account.
+   *
+   * Sign-up creates the account WITH a name — `User.name` and `profiles.name`
+   * both hold it — and this screen rendered the field empty, showing the
+   * placeholder "e.g. Julian Ember". So somebody typed their name, tapped
+   * Create account, and was asked for it again, blank, seconds later.
+   *
+   * The order matters and is not the obvious one: the draft wins, because a
+   * draft value is something this person typed HERE and may be a correction of
+   * the account name. The account is the seed for the first visit only, when
+   * there is no draft to prefer.
+   */
+  const { user } = useAuth()
+
   useEffect(() => {
     if (!loaded) return
-    setName(draft.name ?? '')
+    setName(draft.name ?? user?.name ?? '')
     setGender(draft.gender)
     setDob(splitDateOfBirth(draft.dateOfBirth))
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps

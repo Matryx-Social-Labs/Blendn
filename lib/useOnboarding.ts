@@ -179,6 +179,33 @@ export function useOnboarding(step: OnboardingStep) {
        * profile a few minutes late.
        */
       try {
+        /*
+         * The structured graph, before the profile write.
+         *
+         * Onboarding never wrote `user_interests` at all — it sent the free-text
+         * names and nothing else — so a person who finished it could not post on
+         * the pre-event board, which gates on `interestCount >= 2`, and matched
+         * weakly because ranking's dominant term is the graph.
+         *
+         * Ordered first for the reason `app/about-you.tsx` gives: this call is
+         * idempotent and re-runnable from edit-profile, so if the profile write
+         * below fails nothing is permanently lost.
+         *
+         * It lives here rather than in `details.tsx` so the final step re-sends
+         * it with everything else — that step is the backstop for every
+         * per-step save that failed on a bad connection, and interests need
+         * that backstop more than most, because their absence is silent.
+         */
+        if (merged.interestIds?.length) {
+          const added = await apiClient.addProfileInterests(userId, merged.interestIds)
+          if (!added.success) {
+            Logger.warn('auth', 'Onboarding could not save the interest graph', {
+              step,
+              error: added.error,
+            })
+          }
+        }
+
         const body = stepPayload(step, merged)
         if (Object.keys(body).length > 0) {
           const result = await apiClient.updateProfile(userId, body)

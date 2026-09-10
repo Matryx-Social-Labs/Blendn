@@ -22,7 +22,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wants to connect."
 
 export default function NotificationsScreen() {
-  const { saving, commit, skip, goBack } = useOnboarding('notifications')
+  const { saving, commit, goBack } = useOnboarding('notifications')
   const [asking, setAsking] = useState(false)
 
   const ask = async () => {
@@ -81,7 +81,21 @@ export default function NotificationsScreen() {
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
-      onSecondary={() => void skip()}
+      /*
+       * Records the refusal, rather than skipping.
+       *
+       * `skip()` writes progress and nothing else, so declining left
+       * `push_enabled` at its schema `@default(true)` — the profile said this
+       * person wants notifications when they had just said they did not. This
+       * screen's own docstring has always claimed otherwise: "push_enabled
+       * records the answer either way. Someone who declines has said something,
+       * and the profile should say it rather than keep the default."
+       *
+       * iOS will not deliver without OS permission, so the blast radius today
+       * is small. The STORED preference is what a settings screen, a digest or
+       * any re-prompt reads, and it currently says yes.
+       */
+      onSecondary={() => void commit({ push_enabled: false })}
       onBack={goBack}
     >
       <NotificationIllustration />
