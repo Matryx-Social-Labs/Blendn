@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
+import ScalePress from '../../components/motion/ScalePress'
 import {
   BANTER_PADDING_HORIZONTAL,
   BANTER_SECTION_GAP,
@@ -891,6 +892,9 @@ function InboxSkeleton() {
 function EmptyInbox() {
   return (
     <View style={styles.empty}>
+      <View style={styles.emptyGlyph}>
+        <Ionicons name="chatbubbles-outline" size={36} color={EMBER.textTertiary} />
+      </View>
       <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
         No conversations yet
       </Text>
@@ -898,6 +902,9 @@ function EmptyInbox() {
         Blend in to an event and its room appears here — or message someone you
         met there.
       </Text>
+      <ScalePress style={styles.emptyCta} onPress={() => router.push('/(tabs)/events' as any)} pressedScale={0.97}>
+        <Text style={styles.emptyCtaText}>Explore events</Text>
+      </ScalePress>
     </View>
   )
 }
@@ -919,18 +926,43 @@ const styles = StyleSheet.create({
   skeletonRow: { flexDirection: 'row', gap: 16, padding: 16, alignItems: 'center' },
   skeletonBody: { flex: 1, gap: 8 },
 
-  empty: { paddingVertical: 64, paddingHorizontal: 16, gap: 8 },
+  empty: { alignItems: 'center', paddingVertical: 64, paddingHorizontal: 16, gap: 8 },
+  emptyGlyph: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: EMBER.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
     fontFamily: EMBER_FONTS.displaySemiBold,
     fontSize: 18,
     lineHeight: 24,
     color: EMBER.textPrimary,
+    textAlign: 'center',
   },
   emptyBody: {
     fontFamily: EMBER_FONTS.displayRegular,
     fontSize: 14,
     lineHeight: 21,
     color: EMBER.textSecondary,
+    textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: 8,
+    backgroundColor: EMBER.accent,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  emptyCtaText: {
+    fontFamily: EMBER_FONTS.displaySemiBold,
+    color: '#FFFFFF',
+    fontSize: 14,
   },
 })
 
