@@ -1,0 +1,27 @@
+# Onboarding step 6 of 8 — bio and interests.
+#
+# Interests matter more than anything else here: they are the dominant term in
+# matching and MIN_INTERESTS_TO_RANK is 2, so a profile with fewer is unrankable
+# and every match card comes back empty.
+#
+# **Every chip is centred before it is tapped.** Maestro reports an element as
+# visible when it is anywhere in the hierarchy, including behind the sticky
+# header or the CTA band — and a tap then lands on whatever is drawn on top.
+# That silently pressed "Complete Profile" instead of a chip, twice, and the
+# only reason it was caught is that the database said zero interests.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "The finer details"
+- scrollUntilVisible:
+    element:
+      text: "Theatre"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Theatre"
+- scrollUntilVisible:
+    element:
+      text: "Film screenings"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Film screenings"
+- takeScreenshot: artifacts/22-details-interests

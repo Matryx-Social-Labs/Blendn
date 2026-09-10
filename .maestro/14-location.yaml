@@ -1,0 +1,7 @@
+# Onboarding step 3 of 8. Skippable. Declined, for the same reason as
+# notifications: the refusal branch is the one that proves the switch is wired.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "See who's around"
+- takeScreenshot: artifacts/15-location
+- tapOn: "Maybe later"

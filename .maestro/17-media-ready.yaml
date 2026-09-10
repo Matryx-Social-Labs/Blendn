@@ -1,0 +1,14 @@
+# Onboarding steps 7 and 8 — photo, then the summary.
+#
+# The photo is skipped: the simulator's library is empty and a photo is
+# deliberately meaningless while the room is pseudonymous. `ready` is the only
+# writer of `onboarded` in the whole app.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "Upload your identity"
+- takeScreenshot: artifacts/23-media
+- tapOn: "Skip for now"
+- extendedWaitUntil:
+    visible: "You're all set"
+    timeout: 30000
+- takeScreenshot: artifacts/24-ready

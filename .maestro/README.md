@@ -34,9 +34,29 @@ without writing is caught.
    the keyboard — tap it while the keyboard is up and the tap lands on a key,
    and the password is appended to whichever field still has focus.
 
-## Open blocker
+5. **A tap can land on something you cannot see.** Maestro reports an element
+   as visible when it is anywhere in the hierarchy — *including behind the
+   sticky header or the CTA band* — and the tap then hits whatever is drawn on
+   top. That silently pressed "Complete Profile" instead of an interest chip,
+   and produced a false `work_field: null` earlier. **Always
+   `scrollUntilVisible` with `centerElement: true` before tapping a chip in a
+   list.** Only the database assertion caught either one.
+6. **iOS AutoFill's "Use Strong Password?" sheet** opens over the password field
+   the moment typing starts, swallows the input, and is a native overlay
+   Maestro cannot traverse — so it cannot be waited for and has to be dismissed
+   by coordinate. The flow types the password twice: once to summon the sheet,
+   once for real.
+7. **Do not mix the Maestro MCP and the Maestro CLI in one session.** Each
+   spawns its own `simulator-server`, and the second steals the first's device
+   session — after which every MCP call returns `Device became unreachable
+   during deviceInfo` while `list_devices` still cheerfully reports
+   `connected: true`. Rebooting the simulator does the same thing. Pick one
+   driver and stay on it.
 
-iOS AutoFill's **"Use Strong Password?"** sheet intercepts the password field on
-sign-up, so the typed password never reaches it — the field reads `Automatic
-Strong Password cover view text`. A real user sees this sheet too, so the flow
-should dismiss it rather than the app being changed to suppress it.
+## Why the database assertion is not optional
+
+Three separate times in one run, a screen advanced and looked correct while
+writing nothing: `work_field` null after tapping a chip, zero interests after
+tapping two, and `push_enabled` unchanged after declining. Every one was
+invisible on screen. The screenshots are evidence that a value *rendered*; only
+the row is evidence that it was *stored*.

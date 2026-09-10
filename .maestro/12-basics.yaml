@@ -1,0 +1,21 @@
+# Onboarding step 1 of 8. The only non-skippable step besides `ready`, because
+# the age gate needs a birth date.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "The basics"
+# Prefill check: the account was just created with a name, so this field should
+# carry it. It does not — see the finding recorded against this run.
+- assertVisible: "e.g. Julian Ember"
+- tapOn: "e.g. Julian Ember"
+- inputText: ${NAME}
+- tapOn: "GENDER IDENTITY"
+- tapOn: ${GENDER}
+- tapOn: "DD"
+- inputText: ${DOB_D}
+- tapOn: "MM"
+- inputText: ${DOB_M}
+- tapOn: "YYYY"
+- inputText: ${DOB_Y}
+- tapOn: "DATE OF BIRTH"
+- takeScreenshot: artifacts/13-basics-filled
+- tapOn: "Continue Journey"

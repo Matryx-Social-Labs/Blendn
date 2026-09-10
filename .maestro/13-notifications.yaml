@@ -1,0 +1,11 @@
+# Onboarding step 2 of 8. Skippable.
+#
+# "Maybe later" on purpose. The standard says assert the specific value, never
+# truthiness — a field that always writes `true` passes a truthy check, so the
+# refusal branch is the one that proves the switch is wired. It also avoids the
+# iOS permission dialog, which is a native overlay Maestro cannot traverse.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "Never miss a spark."
+- takeScreenshot: artifacts/14-notifications
+- tapOn: "Maybe later"

@@ -1,0 +1,11 @@
+# Onboarding step 4 of 8. Skippable.
+#
+# Orientation is multi-select, capped at three. Anonymity defaults on and is
+# toggled off here deliberately, so the write is the non-default value — a
+# switch that always stores its default passes a truthy check either way.
+appId: com.matryxsociallabs.blendn
+---
+- assertVisible: "Your preferences"
+- tapOn: "Straight"
+- tapOn: "Stay anonymous at events"
+- takeScreenshot: artifacts/16-preferences

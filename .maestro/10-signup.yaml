@@ -31,7 +31,15 @@ appId: com.matryxsociallabs.blendn
 - inputText: ${EMAIL}
 - tapOn: ".*PLACEHOLDER DESIGN.*"
 - assertVisible: ${EMAIL}
+# iOS AutoFill's "Use Strong Password?" sheet opens over the password field the
+# moment typing starts, and — like the dev-client menu — it is a native overlay
+# Maestro cannot traverse, so it cannot be waited for or matched on and has to
+# be dismissed by coordinate. It swallows the first attempt, which is why the
+# password is typed twice: once to summon the sheet, once for real.
 - tapOn: "At least 12 characters"
+- inputText: ${PASSWORD}
+- tapOn:
+    point: "91%,58%"    # the sheet's close (X)
 - inputText: ${PASSWORD}
 - tapOn: ".*PLACEHOLDER DESIGN.*"
 - takeScreenshot: artifacts/11-signup-filled
