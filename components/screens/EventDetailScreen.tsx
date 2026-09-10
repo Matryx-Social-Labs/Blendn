@@ -28,6 +28,7 @@ import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { checkInRefusal, CHECK_IN_CODES } from '../../lib/checkInRefusal'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
+import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
@@ -58,6 +59,7 @@ import {
   SceneHeading,
   SceneLocationCard,
   SceneMap,
+  SceneDetails,
   type SceneCTAState,
 } from '../scene/SceneSections';
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
@@ -70,6 +72,8 @@ import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailC
 interface EventDetailData {
   /** Curated facilities, already in the vocabulary's `sort_order`. */
   amenities?: EventAmenity[]
+  /** What the organiser wrote: house rules, FAQ, accessibility, and the rest. */
+  details?: ServerEventDetails
   id: string
   title: string
   description: string
@@ -284,6 +288,7 @@ export default function EventDetail() {
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           media: Array.isArray(d.media) ? d.media : [],
           amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
+          details: (d.details ?? undefined) as ServerEventDetails | undefined,
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -551,6 +556,7 @@ export default function EventDetail() {
           check_in_radius: d.checkInRadius || d.check_in_radius || 100,
           media: Array.isArray(d.media) ? d.media : [],
           amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
+          details: (d.details ?? undefined) as ServerEventDetails | undefined,
         })
         // Set interest info and check-in status from userStatus
         if (d.userStatus) {
@@ -1220,6 +1226,7 @@ export default function EventDetail() {
    * weaker version of the same signal and a real number beats a dash.
    */
   const amenities = amenityTiles(event?.amenities)
+  const detailBlocks = eventDetailBlocks(event?.details)
 
   const attendeeBlock = hasStarted
     ? { label: 'Attendees', count: checkInCount }
@@ -1386,6 +1393,19 @@ export default function EventDetail() {
               ))}
             </View>
           ) : null}
+
+          {/*
+            What the organiser actually wrote. Six fields have been collected by
+            the dashboard, stored and served since they existed, and drawn by
+            nothing — including accessibility, which is the one somebody needs
+            *before* deciding whether they can come.
+
+            Below the facilities row because the tiles answer the same questions
+            in one glance where they can; this is where the answer needs a
+            sentence. `eventDetailBlocks` has already dropped anything malformed,
+            so an empty list means the organiser wrote nothing.
+          */}
+          <SceneDetails blocks={detailBlocks} />
 
           {/* Only when there is more than the cover -- a "gallery" of one is a
               heading over the picture already at the top of the screen. */}
