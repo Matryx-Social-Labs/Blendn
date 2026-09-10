@@ -471,6 +471,62 @@ function EventsInner() {
     })
   }, [userLocation, latestInterestCounts])
 
+  const loadCheckedInEvents = useCallback(async () => {
+    if (!user) return
+    try {
+      Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
+      const result = await apiClient.getActiveCheckins()
+      if (result.success && result.data?.checkIns) {
+        // Transform check-in data to Event format
+        const activeEvents: Event[] = result.data.checkIns
+          .filter((c: any) => c.event)
+          .map((c: any) => eventFromApi(c.event))
+          .map(normalizeEvent)
+        setCheckedInEvents(activeEvents)
+        Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
+      } else {
+        setCheckedInEvents([])
+        Logger.journey('checkin', 'loadActiveCheckins:done', { count: 0 })
+      }
+    } catch (e) {
+      Logger.error('events', 'Unexpected error', { error: e as any })
+      setCheckedInEvents([])
+    }
+  }, [user])
+
+  const loadCheckinStatusesBatch = useCallback(async () => {
+    if (!user || events.length === 0) return
+
+    try {
+      Logger.journey('checkin', 'statusBatch:start', { eventCount: events.length })
+      const eventIds = events.map(e => e.id)
+      const result = await apiClient.getBatchCheckinStatuses(eventIds)
+
+      if (result.success && result.data?.statuses) {
+        const statusMap: { [eventId: string]: any } = {}
+        Object.entries(result.data.statuses).forEach(([eventId, statusData]: [string, any]) => {
+          statusMap[eventId] = {
+            status: statusData.status === 'checked_in' ? 'checked_in' : 'not_checked_in',
+            checkInId: statusData.checkInId,
+            checkInTime: statusData.checkInTime,
+          }
+        })
+        setCheckinStatuses(statusMap)
+        Logger.journey('checkin', 'statusBatch:done', { count: Object.keys(statusMap).length })
+      } else {
+        // Fallback: set all as not checked in
+        const statusMap: { [eventId: string]: any } = {}
+        events.forEach((ev) => {
+          statusMap[ev.id] = { status: 'not_checked_in' }
+        })
+        setCheckinStatuses(statusMap)
+      }
+    } catch (error) {
+      Logger.error('events', 'Unexpected error', { error: error as any })
+      setCheckinStatuses({})
+    }
+  }, [user, events])
+
   const handleCheckIn = useCallback(async (event: Event) => {
     if (checkInFlightRef.current.has(event.id)) return
     let previousStatus: any = undefined
@@ -681,10 +737,7 @@ function EventsInner() {
       checkInFlightRef.current.delete(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
-    // loadCheckedInEvents/loadCheckinStatusesBatch/userFirstName are redefined
-    // every render; adding them here would recreate this callback on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
+  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -817,10 +870,7 @@ function EventsInner() {
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-    // loadCheckedInEvents/loadCheckinStatusesBatch are redefined every render;
-    // adding them here would recreate this callback on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
+  }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()
@@ -917,6 +967,42 @@ function EventsInner() {
     setRefreshing(false)
   }
 
+  const getCurrentLocationQuietly = useCallback(async () => {
+    try {
+      // Best-effort permission request with quick timeout; fallback if denied/unavailable
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        setUserLocation(null)
+        setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
+        Logger.warn('events', 'permission:notGranted', {})
+        showTray({
+          title: 'Turn on location',
+          message: 'We need your location to show nearby events and enable check-in.',
+          buttons: [
+            { label: 'Cancel', onPress: closeTray },
+            {
+              label: 'Open Settings',
+              variant: 'primary',
+              onPress: () => {
+                closeTray()
+                try { (Linking as any)?.openSettings?.() } catch {}
+              }
+            },
+          ],
+        })
+        return
+      }
+      setLocationStatus('granted')
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+      setUserLocation(coords)
+      Logger.journey('proximity', 'quietLocation:resolved', coords)
+    } catch (error) {
+      // Keep status as granted if permission was granted but position fetch failed
+      Logger.warn('events', 'quietLocation:error', { error: error as any })
+    }
+  }, [showTray, closeTray])
+
   const requestLocationIfNeeded = useCallback((force = false) => {
     if (userLocation) return
     if (locationRequestInFlight.current) return
@@ -927,10 +1013,7 @@ function EventsInner() {
       .finally(() => {
         locationRequestInFlight.current = false
       })
-    // getCurrentLocationQuietly is redefined every render; adding it here
-    // would recreate this callback on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation, locationStatus])
+  }, [userLocation, locationStatus, getCurrentLocationQuietly])
 
   const onScroll = useCallback((e: any) => {
     const y = e.nativeEvent.contentOffset.y
@@ -1024,8 +1107,10 @@ function EventsInner() {
       Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
       fetchEvents()
     }
-    // `fetchEvents` is redefined every render and is deliberately not a
-    // dependency — including it would refetch on every state change.
+    // fetchEvents is deliberately not a dependency here: it also changes
+    // identity when userLocation changes, and a userLocation-triggered fetch
+    // is already handled below (with its own lastFetchLocationRef dedupe) —
+    // including it here would fire that fetch a second, unguarded time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading, selectedCity, searchTerm, filters])
 
@@ -1060,29 +1145,6 @@ function EventsInner() {
     }
   }, [events])
 
-  const loadCheckedInEvents = async () => {
-    if (!user) return
-    try {
-      Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
-      const result = await apiClient.getActiveCheckins()
-      if (result.success && result.data?.checkIns) {
-        // Transform check-in data to Event format
-        const activeEvents: Event[] = result.data.checkIns
-          .filter((c: any) => c.event)
-          .map((c: any) => eventFromApi(c.event))
-          .map(normalizeEvent)
-        setCheckedInEvents(activeEvents)
-        Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
-      } else {
-        setCheckedInEvents([])
-        Logger.journey('checkin', 'loadActiveCheckins:done', { count: 0 })
-      }
-    } catch (e) {
-      Logger.error('events', 'Unexpected error', { error: e as any })
-      setCheckedInEvents([])
-    }
-  }
-
   /** Shared by the skeleton strips, which are all `CAROUSEL_ITEM_FULL` wide. */
   const getCarouselItemLayout = useCallback((_: any, index: number) => ({
     length: CAROUSEL_ITEM_FULL,
@@ -1110,90 +1172,12 @@ function EventsInner() {
    * below stays for the long-press action tray, which is the other caller.
    */
 
-  useEffect(() => {
-    if (userLocation && events.length > 0) {
-      checkEventProximity()
-    }
-    // checkEventProximity is redefined every render; only userLocation/events
-    // should trigger a proximity check.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation, events])
-
-  const loadCheckinStatusesBatch = async () => {
-    if (!user || events.length === 0) return
-
-    try {
-      Logger.journey('checkin', 'statusBatch:start', { eventCount: events.length })
-      const eventIds = events.map(e => e.id)
-      const result = await apiClient.getBatchCheckinStatuses(eventIds)
-
-      if (result.success && result.data?.statuses) {
-        const statusMap: { [eventId: string]: any } = {}
-        Object.entries(result.data.statuses).forEach(([eventId, statusData]: [string, any]) => {
-          statusMap[eventId] = {
-            status: statusData.status === 'checked_in' ? 'checked_in' : 'not_checked_in',
-            checkInId: statusData.checkInId,
-            checkInTime: statusData.checkInTime,
-          }
-        })
-        setCheckinStatuses(statusMap)
-        Logger.journey('checkin', 'statusBatch:done', { count: Object.keys(statusMap).length })
-      } else {
-        // Fallback: set all as not checked in
-        const statusMap: { [eventId: string]: any } = {}
-        events.forEach((ev) => {
-          statusMap[ev.id] = { status: 'not_checked_in' }
-        })
-        setCheckinStatuses(statusMap)
-      }
-    } catch (error) {
-      Logger.error('events', 'Unexpected error', { error: error as any })
-      setCheckinStatuses({})
-    }
-  }
-
-  const getCurrentLocationQuietly = async () => {
-    try {
-      // Best-effort permission request with quick timeout; fallback if denied/unavailable
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        setUserLocation(null)
-        setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
-        Logger.warn('events', 'permission:notGranted', {})
-        showTray({
-          title: 'Turn on location',
-          message: 'We need your location to show nearby events and enable check-in.',
-          buttons: [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Open Settings',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                try { (Linking as any)?.openSettings?.() } catch {}
-              }
-            },
-          ],
-        })
-        return
-      }
-      setLocationStatus('granted')
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
-      setUserLocation(coords)
-      Logger.journey('proximity', 'quietLocation:resolved', coords)
-    } catch (error) {
-      // Keep status as granted if permission was granted but position fetch failed
-      Logger.warn('events', 'quietLocation:error', { error: error as any })
-    }
-  }
-
-  const checkEventProximity = async () => {
+  const checkEventProximity = useCallback(async () => {
     if (!userLocation || !user) return
 
     try {
       Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
-      
+
       // Use the actual function that exists: check_user_proximity_status
       // TODO: Add API endpoint for proximity check
       // For now, calculate distance client-side
@@ -1222,7 +1206,7 @@ function EventsInner() {
 
       // Transform the response to match our expected format
       const proximityMap: { [eventId: string]: any } = {}
-      
+
       if (proximityData?.nearby_events) {
         proximityData.nearby_events.forEach((event: any) => {
           proximityMap[event.event_id] = {
@@ -1238,7 +1222,13 @@ function EventsInner() {
     } catch (error) {
       Logger.error('events', 'Proximity check failed', { error: error as any })
     }
-  }
+  }, [userLocation, user, events])
+
+  useEffect(() => {
+    if (userLocation && events.length > 0) {
+      checkEventProximity()
+    }
+  }, [userLocation, events, checkEventProximity])
 
   /*
    * Decide which city to browse, once, before the first fetch.
@@ -1420,7 +1410,7 @@ function EventsInner() {
    */
   const notLiveHere = cityOptions.length > 0 && !isServedCity(selectedCity, cityOptions)
 
-  const fetchEvents = async (options?: { silent?: boolean; force?: boolean }) => {
+  const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     try {
       const isInitial = !initialLoadedRef.current
       const shouldShowLoading = isInitial || !options?.silent
@@ -1521,7 +1511,7 @@ function EventsInner() {
         setLoading(false)
       }
     }
-  }
+  }, [userLocation, selectedCity, searchTerm, filters])
 
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
@@ -1548,10 +1538,7 @@ function EventsInner() {
       // with it, so there is nothing stale to force past.
       fetchEvents({ silent: true })
     }
-    // fetchEvents is redefined every render; only the listed values should
-    // trigger a fetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, userLocation, loading])
+  }, [user, authLoading, userLocation, loading, fetchEvents])
 
   // Basic pagination: fetch next page after current items
   const [page, setPage] = useState(0)
