@@ -1,18 +1,49 @@
 # AGENTS.md
 
-Guidance for any coding agent (Claude Code, Codex, or other) working in this repository. This is the source of truth — `CLAUDE.md` just points here.
+Guidance for any coding agent (Claude Code, Codex, or other) working in this repository. `CLAUDE.md` just points here.
 
-## Running the app — no local Xcode/Simulator
+## Which document owns what
 
-This machine does not keep Xcode/iOS Simulator installed (disk space). Do not run `npm run ios`, `xcodebuild`, or `xcrun simctl`/`devicectl` commands — they will fail or are not the intended workflow here.
+Four files, and they overlap enough to drift, so this is the split. **Do not
+copy content between them — link instead.** Everything in this file that was
+wrong on 10 September was wrong because it duplicated something rather than
+pointing at it.
+
+| | Audience | Owns |
+|---|---|---|
+| **`AGENTS.md`** (here) | agents | Commands, architecture, conventions. How the code is shaped |
+| **`README.md`** | a human arriving | The first ten minutes, and where to go next |
+| **[`docs/RELEASING.md`](docs/RELEASING.md)** | anyone building | Setup, credentials, environment variables, EAS, the stores. **The authority** — [Second developer, from zero](docs/RELEASING.md#second-developer-from-zero) |
+| **[`ROADMAP.md`](ROADMAP.md)** | everyone | What is being worked on. Nothing ships without it moving |
+
+Per-screen documents in `docs/` — `PULSE.md`, `SCENE.md`, `CHAT.md`,
+`PROFILE.md`, `BANTER.md`, `NAVIGATION.md` — each record the Figma frame a
+screen was built from, where the build deliberately departs from it, and what is
+still an open question. **Read the one for a screen before changing it**; they
+exist because the same mistakes were otherwise made twice.
+
+## Running the app
 
 ```bash
-npx expo start --dev-client   # start Metro; connect from the dev-client binary already installed on a physical iPhone
-npm run android                # Android emulator is fine locally if configured
+npx expo start --dev-client   # Metro, for a dev-client build already on a device
+npm run android                # emulator or USB device
+npm run ios                    # simulator
 npm run lint                   # ESLint
+npm test                       # Jest
+./scripts/typecheck.sh         # types, against the baseline
 ```
 
-No test runner is configured — there are no unit tests.
+**There is a test suite and it is not optional: 60 suites, 865 tests.** An
+earlier version of this file said "no test runner is configured — there are no
+unit tests", which was wrong, and an agent that believed it would skip the whole
+suite. `npm test` and `./scripts/typecheck.sh` are what EAS runs before any
+build; run both before proposing a change.
+
+**Simulator vs device is a per-machine fact, not a repo rule.** Some machines
+here keep Xcode and the iOS Simulator, some do not. If `xcrun simctl` works, use
+it — the Maestro flows in `.maestro/` are driven that way. If it does not,
+`npx expo start --dev-client` against a physical device is the alternative.
+Neither is "the intended workflow"; both are in use.
 
 The native shell (Google Sign-In, Apple Authentication, Sentry native modules) only needs rebuilding when a native dependency changes or `app.json` plugin config changes:
 
@@ -22,7 +53,7 @@ eas build --profile production --platform ios    # release build
 eas update                                        # OTA push of JS-only changes to an existing build, no App Store review
 ```
 
-For cross-device/OS QA before a release (devices/OS versions not owned locally): push to `stage` — `.eas/workflows/stage-testflight.yml` already builds and submits to TestFlight automatically, free (covered by the existing Apple Developer account, EAS free build tier). Install the TestFlight build on any device via the TestFlight app; no local Xcode, no paid device-farm service needed. `.github/workflows/ci.yml` also runs typecheck/test/lint on `ubuntu-latest`, free GitHub Actions minutes, before any of that.
+For cross-device/OS QA before a release (devices/OS versions not owned locally): push to `stage` — `.eas/workflows/stage-testflight.yml` already builds and submits to TestFlight automatically, free (covered by the existing Apple Developer account, EAS free build tier). Install the TestFlight build on any device via the TestFlight app; no local Xcode, no paid device-farm service needed. `.github/workflows/ci.yml` also runs typecheck/test/lint on `ubuntu-latest` before any of that. **Those minutes are not free** — this repository and `blendn-admin` are both private, so Actions time is billed. Do not add jobs or triggers casually; see `docs/RELEASING.md`.
 
 ## Concurrent agents / worktrees (cmux)
 
@@ -47,11 +78,11 @@ EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...            # injected into app.json as GIDC
 
 ```
 app/
-  index.tsx                         # Login screen (unauthenticated entry point)
+  index.tsx                         # Splash / intro animation, then the auth guard routes
   _layout.tsx                       # Root layout — auth guard, socket lifecycle, push notifications
-  (tabs)/                           # Main tab screens (Events, Match, Chat, Profile)
+  (tabs)/                           # Pulse · Going · [Blend'n] · Banter · Me — see docs/NAVIGATION.md
   onboarding/                       # Multi-step onboarding flow (8 screens)
-  event/[id].tsx                    # Event detail modal (slide_from_bottom)
+  event/[id].tsx                    # The Scene. presentation: 'card', full screen — see docs/SCENE.md
   chat/[id].tsx                     # Group chat screen
   private-chat/[conversationId].tsx # 1-on-1 DM screen
   user/[id].tsx                     # Public user profile
@@ -112,8 +143,20 @@ On every app foreground, `_layout.tsx` calls `queryCache.clear()` and `apiClient
 
 ### Theme System (`lib/theme.ts`)
 
-All styling uses constants from `lib/theme.ts` — **do not use raw hex values**:
-- `APP_COLORS` — background (`#000`), elevated (`#1C1C1E`), card (`#2C2C2E`), accent (`#0A84FF`), destructive, success
+All styling uses constants from `lib/theme.ts` — **do not use raw hex values**.
+
+**`EMBER` is the current palette. `APP_COLORS` is legacy and is being removed** —
+every rebuilt screen is on `EMBER`, and tests assert that specific files no
+longer mention `APP_COLORS`. New code uses `EMBER`; touching a screen that still
+uses `APP_COLORS` is an opportunity to move it.
+
+- `EMBER` — `bg` (`#0F0E0E`), `surface`, `surfaceSunken`, `surfaceMedia`,
+  `textPrimary/Secondary/Tertiary`, `accent` (`#FF906D`), `gradientFrom/To`,
+  `onGradient`
+- `EMBER_FONTS` / `EMBER_TYPE` — Plus Jakarta Sans for display, Manrope for body.
+  **A `fontFamily` naming an unloaded family renders the system font silently**
+- `EMBER_GRADIENT`, `EMBER_RADIUS`, `EMBER_GLOW`, `EMBER_CONTROL_HEIGHT`
+- `APP_COLORS` — legacy. `#000` background, `#0A84FF` accent. Not the design
 - `APP_SPACING` — xxs/xs/sm/md/lg/xl/2xl/3xl/4xl (4–48 px)
 - `APP_RADIUS` — xs/sm/md/lg/xl/pill
 - `APP_SIZE` — touch target (44 px), icon sizes

@@ -6,8 +6,12 @@ dashboard live in **`blendn-admin`**; the contract between them is mirrored into
 
 **New here?** Go straight to
 [**Second developer, from zero**](docs/RELEASING.md#second-developer-from-zero).
-It is the only page you need to get a build on a device, and it names the two
+It is the only page you need to get a build on a device, and it names the three
 things that will otherwise waste your morning.
+
+**Working with a coding agent?** [`AGENTS.md`](AGENTS.md) is the entry point for
+Claude Code, Codex or any other — commands, architecture and conventions, plus
+which document owns what.
 
 ## Get started
 
