@@ -1,50 +1,64 @@
-# Welcome to your Expo app 👋
+# Blend'n — the Expo app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The client for Blend'n, an event networking app. The API and the organiser
+dashboard live in **`blendn-admin`**; the contract between them is mirrored into
+[`docs/api/`](docs/api/) so you can read it without a second checkout.
+
+**New here?** Go straight to
+[**Second developer, from zero**](docs/RELEASING.md#second-developer-from-zero).
+It is the only page you need to get a build on a device, and it names the two
+things that will otherwise waste your morning.
 
 ## Get started
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env      # then set EXPO_PUBLIC_API_BASE_URL — see below
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+> **`.env` is not optional.** Without `EXPO_PUBLIC_API_BASE_URL` the app
+> **crashes before the first screen** — `lib/apiClient.ts` throws at module
+> scope. It does not degrade and it does not show an error, so a missing line in
+> a gitignored file looks exactly like a broken build.
 
-## Learn more
+To run on a real device or emulator — which is the only way to test push, GPS
+check-in or Google Sign-In:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npx expo run:android      # emulator or USB device
+npx expo run:ios --device
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+These compile locally, cost nothing, and are unlimited. The native directories
+are committed, so a local build is not a rehearsal for an EAS one — it is the
+same binary shape. **EAS builds are for handing something to someone else**, not
+for checking your own work; see
+[Releasing](docs/RELEASING.md#testing-does-not-need-eas-at-all-and-this-is-the-part-that-protects-the-quota).
 
-## Join the community
+## Where things are
 
-Join our community of developers creating universal apps.
+| | |
+|---|---|
+| [`ROADMAP.md`](ROADMAP.md) | The working ledger. Nothing ships without this file moving |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Local builds, EAS, credentials, environment variables, the stores |
+| [`docs/api/USER_JOURNEY.md`](docs/api/USER_JOURNEY.md) | What a user does, in order, as designed → built → served |
+| [`docs/api/`](docs/api/) | The API contract, mirrored from `blendn-admin` |
+| `app/` | Routes. [File-based routing](https://docs.expo.dev/router/introduction) |
+| `components/`, `lib/` | Presentation and logic |
+| `docs/` | One file per screen — `PULSE.md`, `SCENE.md`, `CHAT.md`, `PROFILE.md`, `BANTER.md` |
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Screen docs are worth reading before changing a screen. Each records the Figma
+frame it was built from, where the build deliberately departs from it, and what
+is still an open question for the designer.
+
+## Tests
+
+```bash
+npm test
+./scripts/typecheck.sh
+```
+
+Both run on EAS before any build, in the same checkout moments before it — not
+read off a GitHub check, because a green check is a fact about *a commit* and
+gating on one means trusting it is the commit about to be built.
