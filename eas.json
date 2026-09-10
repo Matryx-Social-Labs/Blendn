@@ -9,7 +9,7 @@
       "distribution": "internal",
       "environment": "development",
       "ios": {
-        "simulator": true
+        "simulator": false
       }
     },
     "preview": {
