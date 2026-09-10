@@ -48,8 +48,9 @@ Neither is "the intended workflow"; both are in use.
 The native shell (Google Sign-In, Apple Authentication, Sentry native modules) only needs rebuilding when a native dependency changes or `app.json` plugin config changes:
 
 ```bash
-eas build --profile development --platform ios   # cloud build (macos-sequoia-15.6-xcode-26.0), installs via QR to a physical device
-eas build --profile production --platform ios    # release build
+eas build --profile development --platform ios          # cloud build, simulator .app (what the Maestro agents build against)
+eas build --profile development-device --platform ios    # same, but for a physical device — installs via QR, needs the device UDID registered (`eas device:create`)
+eas build --profile production --platform ios            # release build
 eas update                                        # OTA push of JS-only changes to an existing build, no App Store review
 ```
 
