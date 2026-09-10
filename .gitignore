@@ -57,3 +57,6 @@ ios/sentry.properties
 # undo. They live in the design tool, not the app repo.
 *.fig
 Blendn.pdf
+
+# Maestro run output (screenshots), regenerated per run
+artifacts/
