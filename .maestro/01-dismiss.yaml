@@ -1,0 +1,9 @@
+# The dev-client menu is a separate native overlay Maestro cannot traverse, so
+# its close button is tapped by coordinate.
+appId: com.matryxsociallabs.blendn
+---
+- tapOn:
+    point: "94%,43%"
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 45000

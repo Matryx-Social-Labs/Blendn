@@ -1,0 +1,10 @@
+# Launch, and prove the app reaches its entry screen.
+#
+# Deliberately the smallest possible flow. Every other flow depends on the app
+# starting at all, so when something breaks it is worth knowing in one step
+# whether the app is down or the flow is wrong.
+appId: com.matryxsociallabs.blendn
+---
+- launchApp:
+    clearState: true
+- takeScreenshot: artifacts/00-launch

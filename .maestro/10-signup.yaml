@@ -1,0 +1,44 @@
+# Create a brand new account through the real sign-up form.
+#
+# Two things this flow learned the hard way, both worth keeping:
+#
+# `Create account` matches twice — the segmented control and the submit button
+# — so submit is taken by index. Tapping the text alone re-taps the segment and
+# the flow sits there passing.
+#
+# `hideKeyboard` is unsupported by these inputs, and the password field sits
+# below the keyboard, so a tap on it lands on a key and the password is
+# appended to whichever field still has focus. The form is a ScrollView with
+# keyboardShouldPersistTaps="handled", so tapping the static banner dismisses
+# the keyboard and puts the next field back in reach.
+appId: com.matryxsociallabs.blendn
+---
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 30000
+- takeScreenshot: artifacts/10-entry
+- tapOn: "Continue with email"
+- extendedWaitUntil:
+    visible: "Create account"
+    timeout: 20000
+- tapOn:
+    text: "Create account"
+    index: 0
+- tapOn: "What should we call you?"
+- inputText: ${NAME}
+- tapOn: ".*PLACEHOLDER DESIGN.*"
+- tapOn: "you@example.com"
+- inputText: ${EMAIL}
+- tapOn: ".*PLACEHOLDER DESIGN.*"
+- assertVisible: ${EMAIL}
+- tapOn: "At least 12 characters"
+- inputText: ${PASSWORD}
+- tapOn: ".*PLACEHOLDER DESIGN.*"
+- takeScreenshot: artifacts/11-signup-filled
+- tapOn:
+    text: "Create account"
+    index: 1
+- extendedWaitUntil:
+    visible: "The basics"
+    timeout: 45000
+- takeScreenshot: artifacts/12-basics

@@ -1,0 +1,8 @@
+# Cold start. `clearState` also wipes the dev client's saved Metro URL, so the
+# driver re-opens the bundle by deep link straight after this flow — the app
+# is a bare build and its scheme is `exp+blendn`, not the `blendn` in app.json,
+# which is inert because `ios/` is committed and prebuild never runs.
+appId: com.matryxsociallabs.blendn
+---
+- launchApp:
+    clearState: true

@@ -1,0 +1,12 @@
+# Reach the app's own entry screen from a cold start.
+#
+# The dev-client menu opens over the app on launch and is a separate native
+# overlay, so it has to be dismissed by coordinate: Maestro's iOS driver does
+# not traverse it, which is why a text selector for its buttons finds nothing.
+appId: com.matryxsociallabs.blendn
+---
+- tapOn:
+    point: "94%,43%"    # the dev menu's close (X)
+- extendedWaitUntil:
+    visible: "Email"
+    timeout: 30000
