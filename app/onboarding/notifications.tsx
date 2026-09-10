@@ -4,7 +4,6 @@ import { Alert, Linking } from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
-import { previousStep } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**

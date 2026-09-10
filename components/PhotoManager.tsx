@@ -13,14 +13,13 @@ import {
 import {
     cachePhoto,
     deletePhoto,
-    getOptimizedImageUrl,
     getUserPhotos,
     ProfilePhoto,
     reorderPhotos,
     selectAndUploadPhoto
 } from '../lib/photoUtils'
 import { Logger } from '../lib/logger'
-import OptimizedImage from './OptimizedImage'
+import { OptimizedImage } from './OptimizedImage'
 
 const { width } = Dimensions.get('window')
 
@@ -52,6 +51,8 @@ export default function PhotoManager({
 
   useEffect(() => {
     loadPhotos()
+    // loadPhotos is redefined every render; only userId should trigger a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
   // Keep a stable reference to onPhotosChange to avoid triggering effects due to identity changes
@@ -164,7 +165,7 @@ export default function PhotoManager({
     [editable, photos, userId]
   )
 
-  const handleRemovePhoto = (photoIndex: number) => {
+  const handleRemovePhoto = useCallback((photoIndex: number) => {
     if (!editable) return
 
     const photo = photos[photoIndex]
@@ -203,17 +204,13 @@ export default function PhotoManager({
         }
       ]
     )
-  }
+    // loadPhotos is redefined every render; only the listed values should
+    // recreate this callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable, photos, userId])
 
   const renderPhoto = useCallback(({ item, index }: { item: ProfilePhoto; index: number }) => {
     const cachedUrl = cachedUrls[item.url]
-    const optimizedUrl = getOptimizedImageUrl(item.url, {
-      width: Math.round(itemSize * 2), // 2x for retina
-      height: Math.round(itemSize * 2),
-      quality: 80,
-      resize: 'cover',
-      format: 'webp'
-    })
 
     return (
       <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}> 
@@ -267,7 +264,7 @@ export default function PhotoManager({
         </TouchableOpacity>
       </View>
     )
-  }, [cachedUrls, editable, handleRemovePhoto])
+  }, [cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize])
 
   const renderAddPhoto = () => {
     if (!editable || photos.length >= maxPhotos) return null

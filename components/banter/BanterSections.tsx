@@ -2,7 +2,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 
-import OptimizedImage from '../OptimizedImage'
+import { OptimizedImage } from '../OptimizedImage'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 

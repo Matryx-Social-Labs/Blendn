@@ -44,7 +44,6 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
     <Animated.View
       style={[
         styles.base,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { width, height, borderRadius, opacity, backgroundColor: color || 'rgba(255,255,255,0.12)' } as any,
         style,
       ]}

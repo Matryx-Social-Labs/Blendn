@@ -40,7 +40,7 @@ export default function ScalePress({
       }
       onPressIn?.(event)
     },
-    [onPressIn, pressedScale, reduceMotion, scale]
+    [haptic, onPressIn, pressedScale, reduceMotion, scale]
   )
 
   const handlePressOut: PressableProps['onPressOut'] = useCallback(

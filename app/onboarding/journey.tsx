@@ -8,7 +8,6 @@ import {
   EmberFieldGroup,
 } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { previousStep } from '../../lib/onboarding'
 import { Dimensions } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'

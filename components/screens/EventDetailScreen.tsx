@@ -67,7 +67,7 @@ import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
 
-interface EventDetail {
+interface EventDetailData {
   /** Curated facilities, already in the vocabulary's `sort_order`. */
   amenities?: EventAmenity[]
   id: string
@@ -98,7 +98,7 @@ interface EventDetail {
    * one cover image while the event had a gallery and, since #244, video. The
    * hero and the gallery are the two things the frame is mostly made of.
    */
-  media?: Array<{ id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }>
+  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
 }
 
 type EventAmenity = ServerAmenity
@@ -136,7 +136,6 @@ type EventDetailTrayState = {
 }
 
 const { width } = Dimensions.get('window')
-const TOP_BAR_INSET_REDUCTION = 24
 
 /*
  * The Scene — frame `1141:4853`, 390 wide. See `docs/SCENE.md`.
@@ -169,7 +168,7 @@ export default function EventDetail() {
 
   // Initialize event from params if available for instant display
   const hasParams = !!(title || cover || venue)
-  const [event, setEvent] = useState<EventDetail | null>(() => {
+  const [event, setEvent] = useState<EventDetailData | null>(() => {
     if (hasParams) {
       return {
         id: String(id || ''),
@@ -318,6 +317,10 @@ export default function EventDetail() {
       setLoading(false)
       Logger.error('events', 'detail:noValidId', { id })
     }
+    // fetchEventDetails is redefined every render, and `user` there is only
+    // read to set the organizer flag inside its own callback — adding either
+    // would refetch on every render/auth-object refresh instead of once per id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // Deferred loading for smoother navigation - reduced delays for faster perceived loading
@@ -353,6 +356,9 @@ export default function EventDetail() {
     if (userLocation && event) {
       checkProximityStatus()
     }
+    // checkProximityStatus is redefined every render; only the listed values
+    // should trigger a proximity check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, event])
 
   // Real-time event updates via Socket.io
@@ -391,6 +397,9 @@ export default function EventDetail() {
       unsubCheckIn()
       unsubInterest()
     }
+    // fetchEventDetails is redefined every render; only id/user should
+    // re-establish these subscriptions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user])
 
   const handleToggleInterest = useCallback(async () => {
@@ -516,7 +525,7 @@ export default function EventDetail() {
         Logger.error('events', 'detail:fetch:error', { error: result.error })
         showTray('Error', 'Failed to load event details.')
       } else {
-        // Map API response (camelCase) to EventDetail interface (snake_case)
+        // Map API response (camelCase) to EventDetailData interface (snake_case)
         const d = result.data
         lastFetchRef.current = Date.now()
         setEventDetailCache(String(id), d)
@@ -585,6 +594,9 @@ export default function EventDetail() {
           fetchEventDetails()
         }
       }
+      // fetchEventDetails is redefined every render; only id/loading should
+      // gate the on-focus refresh.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, loading])
   )
 

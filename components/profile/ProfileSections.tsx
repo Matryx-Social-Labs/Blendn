@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
-import OptimizedImage from '../OptimizedImage'
+import { OptimizedImage } from '../OptimizedImage'
 import { SceneHeroMedia } from '../scene/SceneHeroMedia'
 
 /**

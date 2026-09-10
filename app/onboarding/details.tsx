@@ -10,7 +10,6 @@ import {
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
-import { previousStep } from '../../lib/onboarding'
 import { EMBER_RADIUS } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 

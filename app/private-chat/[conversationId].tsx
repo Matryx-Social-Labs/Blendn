@@ -27,12 +27,12 @@ import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator } from '../../components/chat/TypingIndicator'
-import OptimizedImage from '../../components/OptimizedImage'
+import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showLeaveConversationActions, showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
-import queryCache from '../../lib/queryCache'
+import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
@@ -284,12 +284,12 @@ function PrivateChatInner() {
   const typingActiveSentRef = useRef(false)
   const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const closeTray = () => setTrayVisible(false)
-  const showTray = (title: string, message: string, buttons?: ActionTrayButton[]) => {
+  const closeTray = useCallback(() => setTrayVisible(false), [])
+  const showTray = useCallback((title: string, message: string, buttons?: ActionTrayButton[]) => {
     setTrayTitle(title); setTrayMessage(message)
     setTrayButtons(buttons?.length ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }])
     setTrayVisible(true)
-  }
+  }, [closeTray])
 
   /**
    * Revealing, or asking them to.
@@ -395,6 +395,9 @@ function PrivateChatInner() {
 
   useEffect(() => {
     if (authUser && conversationId) loadMessages()
+    // loadMessages is redefined every render; only the listed values should
+    // trigger a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, authUser])
 
   // Mark messages read when viewing

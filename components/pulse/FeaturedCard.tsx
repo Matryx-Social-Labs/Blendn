@@ -80,8 +80,6 @@ export const FEATURED_CARD_ASPECT = 450 / 331.5
 export const FEATURED_CARD_HEIGHT = Math.round(FEATURED_CARD_WIDTH * FEATURED_CARD_ASPECT)
 export const FEATURED_CARD_GAP = 24
 
-const SCREEN_HEIGHT = Dimensions.get('window').height
-
 /**
  * Everything between the top of the screen and the top of the card, summed.
  *

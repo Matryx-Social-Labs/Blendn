@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import OptimizedImage from '../OptimizedImage'
+import { OptimizedImage } from '../OptimizedImage'
 import { FeedVideo } from './FeedVideo'
 
 /**

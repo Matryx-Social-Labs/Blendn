@@ -38,7 +38,7 @@ import { apiClient } from '../../lib/apiClient'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
-import queryCache from '../../lib/queryCache'
+import { queryCache } from '../../lib/queryCache'
 import {
   ChatMessageCallback,
   PrivateMessageCallback,

@@ -6,8 +6,8 @@ import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity
 import Reanimated from 'react-native-reanimated'
 import { formatEventDateTime } from '../lib/time'
 import { APP_COLORS, EMBER } from '../lib/theme'
-import OptimizedImage from './OptimizedImage'
-import Typography from './Typography'
+import { OptimizedImage } from './OptimizedImage'
+import { Typography } from './Typography'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.

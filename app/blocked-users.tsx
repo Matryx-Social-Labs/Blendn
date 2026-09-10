@@ -12,7 +12,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../components/AppHeader'
+import { AppHeader } from '../components/AppHeader'
 import { Logger } from '../lib/logger'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
 

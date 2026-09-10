@@ -8,7 +8,6 @@ import {
     FlatList,
     ImageBackground,
     Linking,
-    Platform,
     Share,
     StyleSheet,
     Text,
@@ -86,7 +85,7 @@ function GoingScreenInner() {
       }))
 
       setEvents(rows)
-    } catch (e) {
+    } catch {
       setEvents([])
     } finally {
       setLoading(false)
@@ -121,7 +120,7 @@ function GoingScreenInner() {
       if (!result.data?.favorited) {
         setEvents(prev => prev.filter(e => e.id !== event.id))
       }
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to update interest')
     }
   }, [])

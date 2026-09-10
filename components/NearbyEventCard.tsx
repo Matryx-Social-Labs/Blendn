@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native'
-import { APP_COLORS, EMBER } from '../lib/theme'
+import { EMBER } from '../lib/theme'
 
 type NearbyEvent = {
   id: string
@@ -23,10 +23,11 @@ interface NearbyEventCardProps {
   locationLabel: string
 }
 
+const ASPECT_RATIO = 363 / 249
+
 // Responsive implementation of Figma node 710:5216
 export default function NearbyEventCard({ event, width, onPress, onLongPress, timeLabel, locationLabel }: NearbyEventCardProps) {
-  const aspectRatio = 363 / 249
-  const height = useMemo(() => width / aspectRatio, [width])
+  const height = useMemo(() => width / ASPECT_RATIO, [width])
 
   // Scale constants from Figma using width as base
   const scale = width / 363

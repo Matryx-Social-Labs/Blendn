@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { gridCardBox } from '../../lib/gridCardContent'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
-import OptimizedImage from '../OptimizedImage'
+import { OptimizedImage } from '../OptimizedImage'
 
 /**
  * One person in the room — frame `1141:4978`.

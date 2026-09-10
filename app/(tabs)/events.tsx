@@ -78,7 +78,7 @@ import {
   hasSeenPublicCheckInWarning,
   markPublicCheckInWarningSeen,
 } from '../../lib/roomVisibilityStorage'
-import { apiClient, ProfileCache } from '../../lib/apiClient'
+import { apiClient } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
@@ -681,6 +681,9 @@ function EventsInner() {
       checkInFlightRef.current.delete(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
+    // loadCheckedInEvents/loadCheckinStatusesBatch/userFirstName are redefined
+    // every render; adding them here would recreate this callback on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
@@ -814,6 +817,9 @@ function EventsInner() {
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
+    // loadCheckedInEvents/loadCheckinStatusesBatch are redefined every render;
+    // adding them here would recreate this callback on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents])
 
   const handleEventPreview = useCallback((event: Event) => {
@@ -921,6 +927,9 @@ function EventsInner() {
       .finally(() => {
         locationRequestInFlight.current = false
       })
+    // getCurrentLocationQuietly is redefined every render; adding it here
+    // would recreate this callback on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, locationStatus])
 
   const onScroll = useCallback((e: any) => {
@@ -931,39 +940,6 @@ function EventsInner() {
       requestLocationIfNeeded(false)
     }
   }, [setScrollProgress, requestLocationIfNeeded, scrollY])
-
-  // Single profile fetch for avatar and city - uses cached profile if available
-  const loadUserProfile = useCallback(async () => {
-    if (!user) return
-    try {
-      const authFirstName = getFirstName(user.name)
-      if (authFirstName) setUserFirstName(authFirstName)
-
-      // Check cache first. `_layout.tsx` used to populate this on every cold
-      // start for its onboarding gate; that gate is gone, so this is now a
-      // genuine miss on first load rather than a warm read.
-      const cached = ProfileCache.get(user.id)
-      const data = cached || (await apiClient.getProfile(user.id).then(r => r.success ? r.data : null))
-
-      if (data) {
-        const dataFirstName = getFirstName(data.profile?.name) || getFirstName(data.name)
-        if (dataFirstName) setUserFirstName(dataFirstName)
-
-        const profile = data.profile
-        if (profile) {
-          /*
-           * `profile.location` deliberately no longer sets the browse city.
-           *
-           * It is reverse-geocoded once at signup and never again, so it is
-           * stale for anyone who has travelled — and it was being shown as the
-           * header ("Bengaluru") above a query filtered to wherever the device
-           * actually was. Two different notions of "where you are" in one
-           * screen, and the reason this investigation started.
-           */
-        }
-      }
-    } catch {}
-  }, [user])
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -1138,6 +1114,9 @@ function EventsInner() {
     if (userLocation && events.length > 0) {
       checkEventProximity()
     }
+    // checkEventProximity is redefined every render; only userLocation/events
+    // should trigger a proximity check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, events])
 
   const loadCheckinStatusesBatch = async () => {
@@ -1569,6 +1548,9 @@ function EventsInner() {
       // with it, so there is nothing stale to force past.
       fetchEvents({ silent: true })
     }
+    // fetchEvents is redefined every render; only the listed values should
+    // trigger a fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading, userLocation, loading])
 
   // Basic pagination: fetch next page after current items
@@ -1623,40 +1605,6 @@ function EventsInner() {
       setCheckinStatuses((prev) => ({ ...prev, ...checkinMap }))
     } catch {}
   }, [loading, page, userLocation, selectedCity, searchTerm])
-
-  const loadInterestData = async () => {
-    try {
-      if (!user || events.length === 0) return
-      const eventIds = events.map(e => e.id)
-      const result = await apiClient.getBatchInterestStatuses(eventIds)
-
-      if (result.success && result.data?.interests) {
-        setInterestStatuses(result.data.interests)
-        Logger.info('events', 'loadInterestData: batch interest loaded', { count: Object.keys(result.data.interests).length })
-      }
-    } catch (e) {
-      Logger.warn('events', 'loadInterestData failed', { error: e })
-      setInterestStatuses({})
-    }
-  }
-
-  const loadInterestCounts = async () => {
-    try {
-      if (events.length === 0) return
-      const eventIds = events.map(e => e.id)
-      const result = await apiClient.getBatchInterestCounts(eventIds)
-
-      if (result.success && result.data?.counts) {
-        setInterestCounts(result.data.counts)
-        Logger.info('events', 'loadInterestCounts: batch counts loaded', { count: Object.keys(result.data.counts).length })
-      }
-    } catch (e) {
-      Logger.warn('events', 'loadInterestCounts failed', { error: e })
-      setInterestCounts({})
-    }
-  }
-
-  
 
   // Memoized render function for event items
   const renderEventItem = useCallback(({ item: event }: { item: Event }) => {

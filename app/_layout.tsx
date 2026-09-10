@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
 import { router, Stack, usePathname } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
@@ -15,7 +14,6 @@ import {
     setupNotificationListener,
     setupNotificationResponseListener
 } from '../lib/notifications';
-import { apiClient } from '../lib/apiClient';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
 import { readOnboarding } from '../lib/onboardingStorage';
@@ -313,7 +311,10 @@ function RootLayout() {
     };
 
     run();
-  }, [user, loading, pathname]);
+    // replaceIfNeeded is redefined every render; adding it here would rerun
+    // this effect (and its routing decisions) on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, pathname, isNewAccount]);
 
   // Normalize Android hardware back behavior
   useEffect(() => {

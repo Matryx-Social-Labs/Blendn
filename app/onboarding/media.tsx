@@ -14,7 +14,6 @@ import {
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
-import { previousStep } from '../../lib/onboarding'
 import { selectAndUploadPhoto } from '../../lib/photoUtils'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'

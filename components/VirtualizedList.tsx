@@ -29,7 +29,6 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
     data,
     renderItem,
     itemHeight,
-    estimatedItemSize = 100,
     windowSize = 7,              // Reduced from 10 for better memory usage
     initialNumToRender = 8,      // Reduced from 10 for faster initial render
     maxToRenderPerBatch = 8,     // Increased from 5 for smoother scrolling

@@ -316,7 +316,7 @@ const useOptimizedUrls = (
 
     resolveUrls()
     return () => { cancelled = true }
-  }, [source, width, height, quality, enableWebP, enableProgressive])
+  }, [source, width, height, quality, enableWebP, enableProgressive, disableOptimization])
 
   return urls
 }

@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
-import OptimizedImage from '../OptimizedImage'
+import { OptimizedImage } from '../OptimizedImage'
 
 // Frame: 165.38 in a 390pt frame.
 const IMAGE_HEIGHT = 165

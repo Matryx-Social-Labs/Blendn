@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../components/AppHeader'
+import { AppHeader } from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { type Gender, type Orientation } from '../lib/dating'
@@ -24,7 +24,7 @@ import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
-import queryCache from '../lib/queryCache'
+import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
 
@@ -77,7 +77,7 @@ export default function EditProfile() {
   const [interestsAtLoad, setInterestsAtLoad] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
-  const [photos, setPhotos] = useState<string[]>([])
+  const [, setPhotos] = useState<string[]>([])
 
   /*
    * The five fields matching runs on. They used to live on their own screen,
@@ -115,6 +115,8 @@ export default function EditProfile() {
     if (authUser) {
       loadProfile()
     }
+    // loadProfile is redefined every render; only authUser should trigger a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser])
 
   const loadProfile = async () => {
@@ -388,12 +390,6 @@ export default function EditProfile() {
         <Ionicons name="add" size={16} color={EMBER.accent} />
         <Text style={styles.addTagText}>{addLabel}</Text>
       </TouchableOpacity>
-    </View>
-  )
-
-  const renderSkeletonCard = (children: React.ReactNode) => (
-    <View style={styles.card}>
-      {children}
     </View>
   )
 

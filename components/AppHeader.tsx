@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
-import Typography from './Typography'
+import { Typography } from './Typography'
 
 interface ChatHeaderProps {
   groupName: string

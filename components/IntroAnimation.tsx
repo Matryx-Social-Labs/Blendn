@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import React, { useEffect, useRef, useState } from 'react'
-import { Animated, Easing, StyleSheet, View } from 'react-native'
+import { Animated, Easing, StyleSheet } from 'react-native'
 
 import { EMBER } from '../lib/theme'
 

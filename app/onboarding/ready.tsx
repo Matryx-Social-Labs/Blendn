@@ -4,7 +4,6 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { previousStep } from '../../lib/onboarding'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 

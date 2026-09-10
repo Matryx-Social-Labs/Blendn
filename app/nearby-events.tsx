@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     ActivityIndicator,
     Dimensions,
@@ -21,7 +21,6 @@ import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
 import { formatTimeRange } from '../lib/time'
-import { useAuth } from '../lib/useAuth'
 import { APP_COLORS } from '../lib/theme'
 
 /*
@@ -45,7 +44,6 @@ type Event = BlendnEvent
 const screenW = Dimensions.get('window').width
 
 export default function NearbyEventsScreen() {
-  const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<Event[]>([])
   const [refreshing, setRefreshing] = useState(false)

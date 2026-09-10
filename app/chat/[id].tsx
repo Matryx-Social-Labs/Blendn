@@ -24,9 +24,9 @@ import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator } from '../../components/chat/TypingIndicator'
-import OptimizedImage from '../../components/OptimizedImage'
+import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
-import queryCache from '../../lib/queryCache'
+import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient } from '../../lib/apiClient'
@@ -303,6 +303,9 @@ function GroupChatInner(props?: {
       setCurrentUser(authUser)
       loadMessages(false, true)
     }
+    // loadMessages is redefined every render; only the listed values should
+    // trigger a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, authUser, authLoading])
 
   const subscribeToMessages = () => {
@@ -390,6 +393,9 @@ function GroupChatInner(props?: {
   useEffect(() => {
     if (!chatRoomId || !currentUser) return
     return subscribeToMessages()
+    // subscribeToMessages is redefined every render; only the listed values
+    // should re-subscribe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, currentUser])
 
   const sendMessage = async () => {

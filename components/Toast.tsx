@@ -67,7 +67,11 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
     }, 3000)
 
     return () => clearTimeout(timer)
-  }, [])
+    // onHide is a fresh closure from the parent on every render; including it
+    // would restart the entrance animation and the 3s dismiss timer whenever
+    // the parent re-renders. This effect is intentionally mount-once per toast.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opacity, translateY])
 
   return (
     <Animated.View

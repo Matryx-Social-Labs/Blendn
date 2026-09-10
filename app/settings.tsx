@@ -4,7 +4,7 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import AppHeader from '../components/AppHeader'
+import { AppHeader } from '../components/AppHeader'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { EMBER } from '../lib/theme'
@@ -39,8 +39,8 @@ const BLENDN_LINKS = {
 
 export default function SettingsScreen() {
   const { user } = useAuth()
-  const [displayName, setDisplayName] = useState<string>('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [, setDisplayName] = useState<string>('')
+  const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
   const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
     pushEnabled: false,
