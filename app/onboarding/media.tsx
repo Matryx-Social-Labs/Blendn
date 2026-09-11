@@ -26,13 +26,13 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * people than the empty avatars cost.
  *
  * `selectAndUploadPhoto` is reused rather than reimplemented: it already does
- * the source sheet, the permission request, validation, a quality check, and
- * the presigned upload. Writing a second upload path here would be a second
+ * the source sheet, the camera permission (the library needs none — see
+ * `pickImage`), validation, a quality check, and the presigned upload. Writing a second upload path here would be a second
  * thing to keep in step with Tigris.
  *
  * **Photos only, not video.** The frame's caption offers "JPG, PNG and MP4 up
- * to 20MB", and the upload path is images end to end — `pickImage` requests
- * `MediaTypeOptions.Images`, and the server moderates profile photos through an
+ * to 20MB", and the upload path is images end to end — `pickImage` asks the picker for
+ * `['images']`, and the server moderates profile photos through an
  * image check that has nothing to say about a video. Offering MP4 would mean
  * either an unmoderated video on a profile or a rejection after the upload
  * finished. In `docs/ONBOARDING.md`.

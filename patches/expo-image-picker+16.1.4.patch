@@ -1,0 +1,94 @@
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+index a8a2547..a414b2e 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+@@ -30,10 +30,34 @@ internal fun createOutputFile(cacheDir: File, extension: String): File {
+   }
+ }
+ 
+-internal fun getType(contentResolver: ContentResolver, uri: Uri): String =
+-  contentResolver.getType(uri)
++// Blendn patch — ported from expo/expo f1f1f976 ("do not crash if
++// ContentProvider doesn't provide mime type"), which shipped in v17 and not
++// in this SDK 53 line. The Android 16 photo picker (and Samsung OneUI 8 for
++// edited media) answers getType() with null; the original threw an uncaught
++// FailedToDeduceTypeException on the main thread and took the whole app down
++// on every library pick. Three sources, then a default rather than a throw.
++internal fun getType(contentResolver: ContentResolver, uri: Uri): String? {
++  val mimeFromCursor: () -> String? = {
++    try {
++      contentResolver
++        .query(uri, arrayOf(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)
++        ?.use { cursor ->
++          if (cursor.moveToFirst()) {
++            val columnIndex = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
++            if (columnIndex != -1 && !cursor.isNull(columnIndex)) cursor.getString(columnIndex) else null
++          } else {
++            null
++          }
++        }
++    } catch (e: Exception) {
++      null
++    }
++  }
++
++  return contentResolver.getType(uri)
++    ?: mimeFromCursor()
+     ?: getTypeFromFileUrl(uri.toString())
+-    ?: throw FailedToDeduceTypeException()
++}
+ 
+ private fun getTypeFromFileUrl(url: String): String? {
+   val extension = MimeTypeMap.getFileExtensionFromUrl(url)
+@@ -79,9 +103,13 @@ internal fun String.toImageFileExtension(): String = when {
+ internal fun Uri.toMediaType(contentResolver: ContentResolver): MediaType {
+   val type = getType(contentResolver, this)
+   return when {
+-    type.contains("image/") -> MediaType.IMAGE
+-    type.contains("video/") -> MediaType.VIDEO
+-    else -> throw FailedToDeduceTypeException()
++    type?.contains("image/") == true -> MediaType.IMAGE
++    type?.contains("video/") == true -> MediaType.VIDEO
++    // Blendn patch: unknown is treated as an image. Every picker call in this
++    // app passes mediaTypes: ['images'], and the JS side re-encodes through
++    // ImageManipulator anyway, so a wrong guess costs nothing; the throw cost
++    // the process.
++    else -> MediaType.IMAGE
+   }
+ }
+ 
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
+index c863fb8..c23d88f 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
+@@ -47,7 +47,7 @@ internal class MediaHandler(
+     } else {
+       CompressionImageExporter(appContextProvider, options.quality)
+     }
+-    val mimeType = getType(context.contentResolver, sourceUri)
++    val mimeType = getType(context.contentResolver, sourceUri) ?: "image/jpeg"
+     val outputFile = createOutputFile(cacheDirectory, mimeType.toImageFileExtension())
+ 
+     val exportedImage = exporter.exportAsync(sourceUri, outputFile, context.contentResolver)
+@@ -99,7 +99,7 @@ internal class MediaHandler(
+       }
+ 
+       val fileData = getAdditionalFileData(sourceUri)
+-      val mimeType = getType(context.contentResolver, sourceUri)
++      val mimeType = getType(context.contentResolver, sourceUri) ?: "video/mp4"
+ 
+       return ImagePickerAsset(
+         type = MediaType.VIDEO,
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CropImageContract.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CropImageContract.kt
+index dd29b73..a9702c0 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CropImageContract.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CropImageContract.kt
+@@ -25,7 +25,7 @@ internal class CropImageContract(
+   private val appContextProvider: AppContextProvider
+ ) : AppContextActivityResultContract<CropImageContractOptions, ImagePickerContractResult> {
+   override fun createIntent(context: Context, input: CropImageContractOptions) = Intent(context, CropImageActivity::class.java).apply {
+-    val mediaType = expo.modules.imagepicker.getType(context.contentResolver, input.sourceUri.toUri())
++    val mediaType = expo.modules.imagepicker.getType(context.contentResolver, input.sourceUri.toUri()) ?: "image/jpeg"
+     val compressFormat = mediaType.toBitmapCompressFormat()
+     val cacheDirectory = appContextProvider.appContext.cacheDirectory
+     val outputUri = createOutputFile(cacheDirectory, compressFormat.toImageFileExtension()).toUri()

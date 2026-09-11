@@ -3,9 +3,11 @@ import * as FileSystem from 'expo-file-system'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { BLUR_WIDTH } from './conversationReveal'
 import * as ImagePicker from 'expo-image-picker'
-import { Alert } from 'react-native'
+import { Alert, Linking, Platform } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { queryCache } from './queryCache'
+import { refreshAuthUser } from './useAuth'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -80,31 +82,76 @@ const DEFAULT_PHOTO_OPTIONS: PhotoOptions = {
 }
 
 /**
- * Request camera and media library permissions
+ * Only the permission the SOURCE needs — and the library needs none.
+ *
+ * Both platforms pick photos out of process now: iOS presents
+ * `PHPickerViewController` and Android 13+ the system Photo Picker, and
+ * expo-image-picker's own module asks for nothing before either
+ * (`getMediaLibraryPermissions` is an empty array on API 33+, and the iOS
+ * `launchImageLibraryAsync` has no permission guard at all). The person picks
+ * one photo; the OS hands over that one photo.
+ *
+ * The first version of this file asked for camera AND library for EITHER
+ * source, and refused if either was declined. So "Photo Library" on an Android
+ * phone prompted for the camera — the only prompt it produced — and somebody
+ * who declined the camera could not add a photo from their gallery at all.
+ * Testers reported exactly that.
+ *
+ * `blocked` is a denial the OS will not re-ask about (Android "don't ask
+ * again"; iOS after the first refusal). Asking again does nothing there; the
+ * only way back is Settings, so the caller has to offer it.
  */
-export const requestPhotoPermissions = async (): Promise<boolean> => {
-  try {
-    // Request camera permission
-    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync()
-    
-    // Request media library permission
-    const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    
-    if (cameraPermission.status !== 'granted' || mediaPermission.status !== 'granted') {
-      Alert.alert(
-        'Permission Required',
-        'Sorry, we need camera and photo library permissions to upload profile photos.',
-        [{ text: 'OK' }]
-      )
-      return false
-    }
-    
-    return true
-  } catch (error) {
-    Logger.error('profile', 'Error requesting permissions', { error })
-    return false
-  }
+type PermissionOutcome = 'granted' | 'denied' | 'blocked'
+
+const ensureCameraPermission = async (): Promise<PermissionOutcome> => {
+  const r = await ImagePicker.requestCameraPermissionsAsync()
+  if (r.granted) return 'granted'
+  return r.canAskAgain ? 'denied' : 'blocked'
 }
+
+/**
+ * Alert buttons in the order each platform actually draws them.
+ *
+ * iOS draws the array in order and styles `cancel` itself. Android maps
+ * index 0 → neutral (far left), 1 → negative, 2 → positive (bold, far right)
+ * and ignores `style`, so an iOS-ordered `[action, action, Cancel]` renders
+ * on Android with the actions swapped and CANCEL as the bold primary. Found
+ * by the react pass, verified against react-native/Libraries/Alert/Alert.js.
+ * Cancel goes first on Android so it lands in the neutral slot.
+ */
+type AlertBtn = { text: string; onPress?: () => void; style?: 'cancel' | 'default' | 'destructive' }
+const alertButtons = (actions: AlertBtn[], cancel: AlertBtn): AlertBtn[] =>
+  Platform.OS === 'android' ? [cancel, ...actions] : [...actions, cancel]
+
+/**
+ * The camera is not available — refused, blocked, or absent — so say what
+ * still works. Resolves to the person's choice; the caller acts on it.
+ *
+ * "Choose from photos" is offered on every branch, because the thing they
+ * actually want is a photo on their profile and the gallery gets them there
+ * with no permission at all. Settings is offered only when it is the only way
+ * back — a button that opens Settings for a prompt the OS would have shown
+ * anyway teaches people to ignore it.
+ */
+const offerLibraryInstead = (
+  reason: PermissionOutcome | 'unavailable'
+): Promise<'library' | 'settings' | null> =>
+  new Promise((resolve) => {
+    const title = reason === 'unavailable' ? 'No camera here' : 'Camera access is off'
+    const body =
+      reason === 'unavailable'
+        ? 'This device has no camera to use. You can still add a photo from your library.'
+        : 'You can still add a photo from your library — that never needs the camera.'
+    const actions: AlertBtn[] = [
+      ...(reason === 'blocked'
+        ? [{ text: 'Open Settings', onPress: () => resolve('settings') }]
+        : []),
+      // Last, so it is the positive (bold) button on Android and the trailing
+      // one on iOS: the thing they actually want is a photo on the profile.
+      { text: 'Choose from photos', onPress: () => resolve('library') },
+    ]
+    Alert.alert(title, body, alertButtons(actions, { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }))
+  })
 
 /**
  * Show action sheet to choose photo source (camera or library)
@@ -114,52 +161,70 @@ export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | nul
     Alert.alert(
       'Select Photo',
       'Choose how you want to add a photo',
-      [
-        { text: 'Camera', onPress: () => resolve('camera') },
-        { text: 'Photo Library', onPress: () => resolve('library') },
+      alertButtons(
+        [
+          { text: 'Camera', onPress: () => resolve('camera') },
+          { text: 'Photo Library', onPress: () => resolve('library') },
+        ],
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }
-      ]
+      )
     )
   })
 }
 
+const pickerOptions = (o: PhotoOptions) => ({
+  // The string form; `MediaTypeOptions.Images` is deprecated in v16.
+  mediaTypes: ['images'] as ImagePicker.MediaType[],
+  allowsEditing: o.allowsEditing,
+  aspect: o.aspect,
+  quality: o.quality,
+})
+
 /**
- * Pick an image from camera or library
+ * Pick an image from camera or library.
+ *
+ * `null` means the person ended up with no photo AND was told why, or chose
+ * to stop — never "something was refused silently". A camera refusal is
+ * turned into an offer of the library inside this function, so a caller that
+ * asked for the camera may get a library photo back; that is the point.
  */
 export const pickImage = async (
   source: 'camera' | 'library',
   options: PhotoOptions = {}
 ): Promise<ImagePicker.ImagePickerResult | null> => {
-  try {
-    const hasPermission = await requestPhotoPermissions()
-    if (!hasPermission) return null
+  const finalOptions = { ...DEFAULT_PHOTO_OPTIONS, ...options }
 
-    const finalOptions = { ...DEFAULT_PHOTO_OPTIONS, ...options }
-    
-    let result: ImagePicker.ImagePickerResult
-
-    if (source === 'camera') {
-      result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: finalOptions.allowsEditing,
-        aspect: finalOptions.aspect,
-        quality: finalOptions.quality,
-      })
-    } else {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: finalOptions.allowsEditing,
-        aspect: finalOptions.aspect,
-        quality: finalOptions.quality,
-      })
+  if (source === 'library') {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions))
+      return result.canceled ? null : result
+    } catch (error) {
+      Logger.error('profile', 'Error picking image from library', { error })
+      Alert.alert('Error', 'Failed to open your photos. Please try again.')
+      return null
     }
-
-    return result.canceled ? null : result
-  } catch (error) {
-    Logger.error('profile', 'Error picking image', { error })
-    Alert.alert('Error', 'Failed to pick image. Please try again.')
-    return null
   }
+
+  let fallback: PermissionOutcome | 'unavailable' | null = null
+  try {
+    const permission = await ensureCameraPermission()
+    if (permission !== 'granted') {
+      fallback = permission
+    } else {
+      const result = await ImagePicker.launchCameraAsync(pickerOptions(finalOptions))
+      return result.canceled ? null : result
+    }
+  } catch (error) {
+    // No camera activity (emulators, some tablets), or the module refused
+    // after we were told granted. Either way the gallery still works.
+    Logger.warn('profile', 'Camera unavailable, offering the library', { error })
+    fallback = 'unavailable'
+  }
+
+  const next = await offerLibraryInstead(fallback)
+  if (next === 'library') return pickImage('library', options)
+  if (next === 'settings') void Linking.openSettings()
+  return null
 }
 
 /**
@@ -559,6 +624,12 @@ export const reorderPhotos = async (userId: string, photoUrls: string[]): Promis
       return false
     }
 
+    // The Me tab caches its view model under this key and refetches on focus
+    // only when it is gone. Every add, remove and make-primary comes through
+    // here, so this is the one place that has to say "the photos changed".
+    queryCache.invalidate(`profile_${userId}`)
+    // `user.image` mirrors photos[0] server-side; the in-memory user must follow.
+    void refreshAuthUser()
     Logger.info('profile', 'photoUtils: Photos reordered', { userId, count: photoUrls.length })
     return true
   } catch (error) {
