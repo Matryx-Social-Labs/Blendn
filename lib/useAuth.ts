@@ -458,20 +458,48 @@ export const signUp = async (
 }
 
 // Sign out
-export const signOut = async (revokeAll: boolean = false): Promise<{ success: boolean }> => {
+/**
+ * Local state is cleared whatever the server said — trapping somebody in a
+ * session they asked to leave is worse than a stale token. But the RESULT
+ * reports what the server did: `apiClient.signOut` returns `success: false`
+ * on failure and never throws, and the first version discarded it, so
+ * Settings' "Failed to sign out" branch could never fire. Offline, the
+ * refresh token stayed valid and the push token stayed registered, and the
+ * screen said nothing.
+ */
+export const signOut = async (
+  revokeAll: boolean = false
+): Promise<{ success: boolean; error?: string }> => {
   try {
     Logger.info('auth', 'Signing out...')
-
-    await apiClient.signOut(revokeAll)
+    const result = await apiClient.signOut(revokeAll)
     await clearAuthState()
-
+    if (!result.success) {
+      Logger.warn('auth', 'Signed out locally; the server did not confirm', { error: result.error })
+      return { success: false, error: result.error }
+    }
     Logger.info('auth', 'Sign out successful')
     return { success: true }
   } catch (error) {
     Logger.error('auth', 'Sign out exception', { error })
-    // Clear local state even if API call fails
     await clearAuthState()
-    return { success: true }
+    return { success: false, error: error instanceof Error ? error.message : 'Sign out failed' }
+  }
+}
+
+/**
+ * Re-read the session so `user.name` / `user.image` follow a profile edit.
+ *
+ * `globalAuthState.user` was set once at sign-in and never again; the
+ * 10-minute refresh only rotates tokens. So `lib/reveal.ts`, which reads
+ * `user.image` to decide whether reveal has a photo to show, said "add a
+ * photo first" to somebody who had just added one — until a relaunch.
+ */
+export const refreshAuthUser = async (): Promise<void> => {
+  const result = await apiClient.getSession()
+  if (result.success && result.data) {
+    updateAuthState({ session: { user: result.data }, user: result.data })
+    await TokenStorage.setUser(result.data)
   }
 }
 

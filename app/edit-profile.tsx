@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
+  AccessibilityInfo,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -26,7 +27,7 @@ import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
-import { useAuth } from '../lib/useAuth'
+import { useAuth, refreshAuthUser } from '../lib/useAuth'
 
 interface UserProfile {
   id: string
@@ -287,7 +288,13 @@ export default function EditProfile() {
 
     setNameError(trimmedName ? null : 'Name is required')
     setAgeError(invalidAge ? 'Enter a valid age between 18 and 120' : null)
-    if (!trimmedName || invalidAge) return
+    if (!trimmedName || invalidAge) {
+      // The red text under the field is silent to a screen reader; say it.
+      AccessibilityInfo.announceForAccessibility(
+        !trimmedName ? 'Name is required' : 'Enter a valid age between 18 and 120'
+      )
+      return
+    }
 
     setSaving(true)
     try {
@@ -339,13 +346,27 @@ export default function EditProfile() {
        */
       const added = interestIds.filter((id) => !interestsAtLoad.includes(id))
       const removed = interestsAtLoad.filter((id) => !interestIds.includes(id))
-      if (added.length > 0) await apiClient.addProfileInterests(authUser.id, added)
-      if (removed.length > 0) await apiClient.removeProfileInterests(authUser.id, removed)
+      /*
+       * Both results checked, and the baseline moves only if both held. The
+       * first version discarded them and moved `interestsAtLoad` anyway, so a
+       * rejected write still showed "Profile Updated" and the NEXT save
+       * diffed against a state the server never reached — the interest the
+       * person thought they had added was never sent again.
+       */
+      if (added.length > 0) {
+        const r = await apiClient.addProfileInterests(authUser.id, added)
+        if (!r.success) throw new Error(r.error || 'Could not save your interests')
+      }
+      if (removed.length > 0) {
+        const r = await apiClient.removeProfileInterests(authUser.id, removed)
+        if (!r.success) throw new Error(r.error || 'Could not save your interests')
+      }
       setInterestsAtLoad(interestIds)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
       queryCache.invalidate(`profile_${authUser.id}`)
+      void refreshAuthUser()
 
       Logger.info('profile', 'EditProfile: Profile updated successfully', { userId: authUser.id })
       Alert.alert(
@@ -374,9 +395,11 @@ export default function EditProfile() {
     addLabel: string
   ) => (
     <View style={styles.tagsContainer}>
-      {items.map((item, index) => (
+      {items.map((item) => (
+        // The item is the key: add is guarded against duplicates, and an
+        // index key hands the next chip the removed one's identity.
         <TouchableOpacity
-          key={index}
+          key={item}
           style={styles.tag}
           onPress={() => onRemove(item)}
           accessibilityRole="button"
@@ -399,7 +422,10 @@ export default function EditProfile() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // `undefined` on Android: the window already resizes for the keyboard
+        // (adjustResize), and 'height' on top of it double-compensated — the
+        // same fix components/onboarding/OnboardingScreen.tsx carries.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <AppHeader
           title="Edit Profile"
@@ -447,6 +473,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Name *</Text>
                   <TextInput
+                    accessibilityLabel="Name"
                     style={[styles.input, nameError && styles.inputError]}
                     value={name}
                     onChangeText={(value) => {
@@ -463,6 +490,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Age</Text>
                   <TextInput
+                    accessibilityLabel="Age"
                     style={[styles.input, ageError && styles.inputError]}
                     value={age}
                     onChangeText={(value) => {
@@ -481,6 +509,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Location</Text>
                   <TextInput
+                    accessibilityLabel="Location"
                     style={styles.input}
                     value={location}
                     onChangeText={setLocation}
@@ -493,6 +522,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Occupation</Text>
                   <TextInput
+                    accessibilityLabel="Occupation"
                     style={styles.input}
                     value={occupation}
                     onChangeText={setOccupation}
@@ -505,6 +535,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Education</Text>
                   <TextInput
+                    accessibilityLabel="Education"
                     style={styles.input}
                     value={education}
                     onChangeText={setEducation}
@@ -517,6 +548,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Phone</Text>
                   <TextInput
+                    accessibilityLabel="Phone"
                     style={styles.input}
                     value={phone}
                     onChangeText={setPhone}
@@ -542,6 +574,7 @@ export default function EditProfile() {
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Bio</Text>
                 <TextInput
+                  accessibilityLabel="Bio"
                   style={[styles.input, styles.bioInput]}
                   value={bio}
                   onChangeText={setBio}

@@ -1270,6 +1270,10 @@ class ApiClientClass {
     if (result.success) {
       await TokenStorage.clearAll()
       requestQueue.clear()
+      // Same reason as signOut(): the response cache is not per user, and a
+      // stale entry is served before it is corrected. Deletion is the more
+      // sensitive of the two exits and did not do this.
+      this.clearResponseCache()
     }
 
     return result
