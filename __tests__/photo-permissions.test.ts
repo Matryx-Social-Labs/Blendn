@@ -63,11 +63,19 @@ describe('the library never asks for a permission', () => {
     expect(alert).not.toHaveBeenCalled()
   })
 
-  it('asks the picker for images by the non-deprecated name', async () => {
+  it('asks the picker for images by the non-deprecated name, with no OS-level crop', async () => {
+    /*
+     * `allowsEditing: true` + `aspect: [1,1]` was two products: a full-screen
+     * cropper on Android, the legacy picker's small "Move and Scale" on iOS
+     * (which also dropped the privacy picker). And the square it forced is
+     * the wrong shape for the tall profile hero. Cropping is per surface at
+     * render, via contentFit="cover"; the picker just picks.
+     */
     await pickImage('library')
-    expect(picker.launchImageLibraryAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ mediaTypes: ['images'] })
-    )
+    const opts = picker.launchImageLibraryAsync.mock.calls[0][0] as Record<string, unknown>
+    expect(opts.mediaTypes).toEqual(['images'])
+    expect(opts.allowsEditing).toBe(false)
+    expect(opts).not.toHaveProperty('aspect')
   })
 })
 

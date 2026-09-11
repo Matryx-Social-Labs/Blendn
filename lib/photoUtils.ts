@@ -72,13 +72,31 @@ export interface PhotoOptions {
   aspect?: [number, number]
 }
 
-// Default photo settings optimized for dating app profiles
+/**
+ * No crop at pick time, ratio kept, 1080 wide.
+ *
+ * `allowsEditing: true` with `aspect: [1, 1]` shipped, and it was two
+ * different products: Android ran a full-screen cropper, iOS fell back to the
+ * legacy UIImagePickerController (losing the privacy picker) whose small
+ * "Move and Scale" step testers read as "no crop". Worse, the square it
+ * enforced is the wrong shape for where the photo is shown — the profile
+ * hero is `PROFILE_HERO_ASPECT = 751/390`, a tall portrait, so a square lost
+ * the height the main surface needs and `cover` then cropped the sides too.
+ *
+ * The reference apps auto-fit to their card ratio (Tinder: 4:5 portrait,
+ * 1080×1350 recommended) and, where they let you adjust, do it in-app after
+ * upload rather than in the OS picker. Every surface here already renders
+ * with `contentFit="cover"`, so the crop happens per surface at render;
+ * an in-app reposition step is the design task, not the picker's editor.
+ *
+ * `width` only: expo-image-manipulator keeps the ratio when one dimension is
+ * given and STRETCHES when both are — the old 800×800 squashed any photo
+ * that reached it un-cropped.
+ */
 const DEFAULT_PHOTO_OPTIONS: PhotoOptions = {
   quality: 0.8,
-  width: 800,
-  height: 800,
-  allowsEditing: true,
-  aspect: [1, 1] // Square aspect ratio
+  width: 1080,
+  allowsEditing: false,
 }
 
 /**
@@ -175,8 +193,10 @@ export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | nul
 const pickerOptions = (o: PhotoOptions) => ({
   // The string form; `MediaTypeOptions.Images` is deprecated in v16.
   mediaTypes: ['images'] as ImagePicker.MediaType[],
-  allowsEditing: o.allowsEditing,
-  aspect: o.aspect,
+  // `aspect` is only read when editing; neither is passed by default, so both
+  // platforms use their modern picker. See DEFAULT_PHOTO_OPTIONS.
+  allowsEditing: o.allowsEditing ?? false,
+  ...(o.allowsEditing && o.aspect ? { aspect: o.aspect } : {}),
   quality: o.quality,
 })
 
@@ -237,16 +257,14 @@ export const processImage = async (
   try {
     const finalOptions = { ...DEFAULT_PHOTO_OPTIONS, ...options }
     
+    // One dimension, never both: both would stretch the image to fit. The
+    // caller's own choice wins over the default width.
+    const resize = options.height && options.width === undefined
+      ? { height: options.height }
+      : { width: finalOptions.width }
     const processedImage = await ImageManipulator.manipulateAsync(
       uri,
-      [
-        {
-          resize: {
-            width: finalOptions.width,
-            height: finalOptions.height,
-          }
-        }
-      ],
+      [{ resize }],
       {
         compress: finalOptions.quality,
         format: ImageManipulator.SaveFormat.JPEG,
@@ -604,8 +622,9 @@ export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationRe
  */
 export const createBlurDerivative = async (uri: string): Promise<string | null> => {
   return processImage(uri, {
+    // Width only, so the derivative keeps the photo's shape; the hero shows
+    // it with `cover` at the same ratio as the real one.
     width: BLUR_WIDTH,
-    height: BLUR_WIDTH,
     // Low quality on a 40px image is inconsequential visually and keeps the
     // object comfortably under the server's ceiling for what counts as a blur.
     quality: 0.4,
@@ -615,13 +634,23 @@ export const createBlurDerivative = async (uri: string): Promise<string | null> 
 /**
  * Reorder profile photos via API
  */
-export const reorderPhotos = async (userId: string, photoUrls: string[]): Promise<boolean> => {
+export type PhotoWrite = { ok: true } | { ok: false; error: string }
+
+/**
+ * Write the photo list, and say why when it is refused.
+ *
+ * Returned as a result rather than a boolean because the server's refusals
+ * are the useful part — "That looks like a blank image. Pick a photo of
+ * yourself." tells a person what to do; "could not be added, try again"
+ * sends them round the same loop.
+ */
+export const reorderPhotos = async (userId: string, photoUrls: string[]): Promise<PhotoWrite> => {
   try {
     const result = await apiClient.updateProfile(userId, { photos: photoUrls })
 
     if (!result.success) {
       Logger.error('profile', 'photoUtils: Reorder failed', { error: result.error, userId })
-      return false
+      return { ok: false, error: result.error || 'Could not save your photos' }
     }
 
     // The Me tab caches its view model under this key and refetches on focus
@@ -631,10 +660,10 @@ export const reorderPhotos = async (userId: string, photoUrls: string[]): Promis
     // `user.image` mirrors photos[0] server-side; the in-memory user must follow.
     void refreshAuthUser()
     Logger.info('profile', 'photoUtils: Photos reordered', { userId, count: photoUrls.length })
-    return true
+    return { ok: true }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Reorder error', { error, userId })
-    return false
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not save your photos' }
   }
 }
 

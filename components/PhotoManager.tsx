@@ -127,9 +127,11 @@ export default function PhotoManager({
          */
         const newPhotoUrls = [...photos.map(p => p.url), result.url]
         const saved = await reorderPhotos(userId, newPhotoUrls)
-        if (!saved) {
+        if (!saved.ok) {
           setPhotos(prev => prev.filter(p => p.url !== result.url))
-          Alert.alert('Could not save', 'The photo uploaded but could not be added to your profile. Try again.')
+          // The server's sentence when it gave one -- "That looks like a
+          // blank image" says what to do; a generic retry does not.
+          Alert.alert('Could not add that photo', saved.error)
           return
         }
         AccessibilityInfo.announceForAccessibility('Photo added')
@@ -169,10 +171,10 @@ export default function PhotoManager({
       // puts it back rather than leaving the UI ahead of the server.
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
 
-      const ok = await reorderPhotos(userId, reordered.map((p) => p.url))
-      if (!ok) {
+      const saved = await reorderPhotos(userId, reordered.map((p) => p.url))
+      if (!saved.ok) {
         setPhotos(photos)
-        Alert.alert('Could not update', 'Your photo order was not saved. Try again.')
+        Alert.alert('Could not update', saved.error)
       }
     },
     [editable, photos, userId]
@@ -202,9 +204,9 @@ export default function PhotoManager({
               // URL left a broken image on every screen that shows this
               // person, and nothing had told them the removal failed.
               const saved = await reorderPhotos(userId, newPhotos.map(p => p.url))
-              if (!saved) {
+              if (!saved.ok) {
                 setPhotos(photos)
-                Alert.alert('Could not remove', 'Your photos were not changed. Try again.')
+                Alert.alert('Could not remove', saved.error)
                 return
               }
 

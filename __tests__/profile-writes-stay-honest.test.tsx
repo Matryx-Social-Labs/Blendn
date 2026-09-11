@@ -53,21 +53,22 @@ beforeEach(() => {
 describe('adding a photo', () => {
   it('drops the tile and says so when the profile write fails after the upload', async () => {
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: 'https://cdn/c.jpg' })
-    pu.reorderPhotos.mockResolvedValue(false)
+    pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
 
     await render(<PhotoManager userId="u" editable />)
     await screen.findByText('Add Photo')
     fireEvent.press(screen.getByText('Add Photo'))
 
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']))
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not save', expect.any(String)))
+    // The server's own sentence, not a generic retry.
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not add that photo', 'That looks like a blank image. Pick a photo of yourself.'))
     // Two tiles, not three: the one the server does not have is not shown.
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })
 
   it('keeps the tile and announces when the write holds', async () => {
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: 'https://cdn/c.jpg' })
-    pu.reorderPhotos.mockResolvedValue(true)
+    pu.reorderPhotos.mockResolvedValue({ ok: true })
 
     await render(<PhotoManager userId="u" editable />)
     await screen.findByText('Add Photo')
@@ -85,19 +86,19 @@ describe('removing a photo', () => {
   }
 
   it('does NOT delete the object when the profile write fails, and restores the grid', async () => {
-    pu.reorderPhotos.mockResolvedValue(false)
+    pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
     await render(<PhotoManager userId="u" editable />)
     await screen.findByLabelText('Remove photo 2')
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
 
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not remove', expect.any(String)))
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not remove', 'That looks like a blank image. Pick a photo of yourself.'))
     expect(pu.deletePhoto).not.toHaveBeenCalled()
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })
 
   it('deletes the object only after the profile no longer lists it', async () => {
-    pu.reorderPhotos.mockResolvedValue(true)
+    pu.reorderPhotos.mockResolvedValue({ ok: true })
     pu.deletePhoto.mockResolvedValue(true)
     await render(<PhotoManager userId="u" editable />)
     await screen.findByLabelText('Remove photo 2')
