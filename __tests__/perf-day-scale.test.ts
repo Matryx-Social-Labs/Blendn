@@ -126,4 +126,10 @@ describe("the response cache is bounded and does not outlive the session", () =>
     expect(signOut).not.toBeNull()
     expect(signOut![0]).toContain("this.clearResponseCache()")
   })
+
+  it("is emptied on account deletion, the more sensitive of the two exits", () => {
+    const del = /async deleteAccount\([\s\S]*?\n  \}/.exec(src)
+    expect(del).not.toBeNull()
+    expect(del![0]).toContain("this.clearResponseCache()")
+  })
 })

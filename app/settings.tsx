@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
@@ -51,6 +51,13 @@ export default function SettingsScreen() {
   const [, setDisplayName] = useState<string>('')
   const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
+  // What the screen currently shows, readable from an async callback. Two
+  // toggles can be in flight at once, and a rollback that spread the snapshot
+  // it was called with wrote the sibling's OLD value back into storage.
+  const preferencesRef = useRef(preferences)
+  useEffect(() => {
+    preferencesRef.current = preferences
+  }, [preferences])
   const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
     pushEnabled: false,
     showOnlineStatus: false,
@@ -191,10 +198,13 @@ export default function SettingsScreen() {
 
       await savePreferencesLocal(next)
     } catch {
-      // Roll back THIS key only. Restoring the whole snapshot undid a sibling
-      // toggle that had already been saved while this one was in flight.
-      setPreferences((current) => ({ ...current, [key]: previous[key] }))
-      await savePreferencesLocal({ ...next, [key]: previous[key] })
+      // Roll back THIS key only, from what is on screen NOW. Restoring the
+      // whole snapshot undid a sibling toggle that had already been saved
+      // while this one was in flight.
+      const rolled = { ...preferencesRef.current, [key]: previous[key] }
+      preferencesRef.current = rolled
+      setPreferences(rolled)
+      await savePreferencesLocal(rolled)
       Alert.alert('Update failed', `Could not save “${PREFERENCE_TITLES[key]}”. Please try again.`)
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
@@ -202,12 +212,13 @@ export default function SettingsScreen() {
   }, [user, savePreferencesLocal])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
-    const previous = preferences
+    const previous = preferencesRef.current
     const next = { ...previous, [key]: !previous[key] }
+    preferencesRef.current = next
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [preferences, persistPreference, savePreferencesLocal])
+  }, [persistPreference, savePreferencesLocal])
 
   const openExternal = useCallback(async (url: string) => {
     try {

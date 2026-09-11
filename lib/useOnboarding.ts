@@ -33,8 +33,9 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
   const held = await apiClient.getProfileInterests(userId)
   if (!held.success || !held.data) return false
   const heldIds = new Set(held.data.interests.map((i) => i.id))
-  const add = wanted.filter((id) => !heldIds.has(id))
-  const remove = [...heldIds].filter((id) => !wanted.includes(id))
+  const wantedIds = new Set(wanted)
+  const add = [...wantedIds].filter((id) => !heldIds.has(id))
+  const remove = [...heldIds].filter((id) => !wantedIds.has(id))
 
   let ok = true
   if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok

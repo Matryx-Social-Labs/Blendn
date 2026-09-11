@@ -151,6 +151,21 @@ describe('syncInterests makes the server match the picker', () => {
     await expect(syncInterests('u1', ['a'])).resolves.toBe(false)
   })
 
+  it('reports failure when the add held but the remove was refused', async () => {
+    mockApi.getProfileInterests.mockResolvedValue(held(['a']))
+    mockApi.addProfileInterests.mockResolvedValue({ success: true, data: {} })
+    mockApi.removeProfileInterests.mockResolvedValue({ success: false, error: 'nope' })
+    await expect(syncInterests('u1', ['b'])).resolves.toBe(false)
+    expect(mockApi.addProfileInterests).toHaveBeenCalledWith('u1', ['b'])
+  })
+
+  it('sends a duplicated pick once', async () => {
+    mockApi.getProfileInterests.mockResolvedValue(held([]))
+    mockApi.addProfileInterests.mockResolvedValue({ success: true, data: {} })
+    await syncInterests('u1', ['a', 'a'])
+    expect(mockApi.addProfileInterests).toHaveBeenCalledWith('u1', ['a'])
+  })
+
   it('reads the wrapped shape the server actually returns', async () => {
     // `getProfileInterests` was typed as a bare array for as long as nothing
     // called it. The route returns `{ interests: [...] }`.

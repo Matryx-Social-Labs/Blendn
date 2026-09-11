@@ -100,6 +100,23 @@ describe('every Settings heading describes what is under it', () => {
   })
 })
 
+describe('a failed toggle rolls back only itself', () => {
+  /*
+   * Two switches can be in flight at once. The rollback used to spread the
+   * snapshot it was called with — `{ ...next, [key]: previous[key] }` — so a
+   * sibling that had saved meanwhile was written back to its OLD value in
+   * storage. It reads what is on screen now, through a ref, instead.
+   */
+  it('rolls back from the current state, not the call-time snapshot', () => {
+    const src = read('app/settings.tsx')
+    const rollback = src.slice(src.indexOf('} catch {'), src.indexOf("Alert.alert('Update failed'"))
+    expect(rollback).toContain('const rolled = { ...preferencesRef.current, [key]: previous[key] }')
+    expect(rollback).toContain('savePreferencesLocal(rolled)')
+    expect(rollback).not.toMatch(/\.\.\.next,/)
+    expect(rollback).not.toMatch(/savePreferencesLocal\(previous\)/)
+  })
+})
+
 describe('the irreversible row is hard to hit by accident', () => {
   const SETTINGS = () => codeOnly(read('app/settings.tsx'))
 

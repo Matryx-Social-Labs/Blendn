@@ -496,10 +496,18 @@ export const signOut = async (
  * photo first" to somebody who had just added one — until a relaunch.
  */
 export const refreshAuthUser = async (): Promise<void> => {
-  const result = await apiClient.getSession()
-  if (result.success && result.data) {
+  try {
+    const result = await apiClient.getSession()
+    if (!result.success || !result.data) {
+      Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
+      return
+    }
     updateAuthState({ session: { user: result.data }, user: result.data })
     await TokenStorage.setUser(result.data)
+  } catch (error) {
+    // Called as `void refreshAuthUser()` after a photo write; a throw here
+    // would be an unhandled rejection with the photo already saved.
+    Logger.warn('auth', 'Session refresh failed', { error })
   }
 }
 

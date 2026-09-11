@@ -79,6 +79,33 @@ describe('adding a photo', () => {
   })
 })
 
+describe('making a photo the main one', () => {
+  it('reorders under the finger and keeps it when the write holds', async () => {
+    pu.reorderPhotos.mockResolvedValue({ ok: true })
+    await render(<PhotoManager userId="u" editable />)
+    await screen.findByLabelText('Photo 2 of 2')
+    fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
+
+    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/b.jpg', 'https://cdn/a.jpg']))
+    // b is now first and carries the main-photo label; nothing was alerted.
+    await screen.findByLabelText('Photo 1 of 2, main photo')
+    expect(alert).not.toHaveBeenCalled()
+  })
+
+  it('puts the order back and says why when the write is refused', async () => {
+    pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'Could not save your photos' })
+    await render(<PhotoManager userId="u" editable />)
+    await screen.findByLabelText('Photo 2 of 2')
+    fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not update', 'Could not save your photos'))
+    // The grid is back to what the server holds: a first, b second.
+    const tiles = screen.getAllByLabelText(/^Photo \d of 2/)
+    expect(tiles[0].props.accessibilityLabel).toBe('Photo 1 of 2, main photo')
+    expect(pu.reorderPhotos).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('removing a photo', () => {
   function confirmRemove() {
     const buttons = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[]

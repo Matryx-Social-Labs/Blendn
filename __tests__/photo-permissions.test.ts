@@ -28,14 +28,17 @@ jest.mock('../lib/useAuth', () => ({ refreshAuthUser: jest.fn() }))
 jest.mock('@react-native-async-storage/async-storage', () => ({}))
 jest.mock('expo-file-system', () => ({}))
 jest.mock('expo-image-manipulator', () => ({ SaveFormat: { JPEG: 'jpeg' } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { updateProfile: jest.fn() } }))
 jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 
 import * as ImagePicker from 'expo-image-picker'
 import { Alert, Linking } from 'react-native'
-import { pickImage } from '../lib/photoUtils'
+import { pickImage, reorderPhotos, showPhotoSourceActionSheet } from '../lib/photoUtils'
+import { apiClient } from '../lib/apiClient'
+import { queryCache } from '../lib/queryCache'
+import { refreshAuthUser } from '../lib/useAuth'
 
 const picker = ImagePicker as jest.Mocked<typeof ImagePicker>
 const alert = Alert.alert as jest.Mock
@@ -177,5 +180,49 @@ describe('button order follows the platform that draws it', () => {
     expect((alert.mock.calls[0][2] as { text: string }[]).at(-1)?.text).toBe('Cancel')
     pressAlertButton('Cancel')
     await expect(p).resolves.toBeNull()
+  })
+})
+
+describe('the source sheet follows the platform too', () => {
+  afterEach(() => {
+    platform.OS = 'ios'
+  })
+
+  it('on Android, Cancel is first and Photo Library is the bold last action', async () => {
+    platform.OS = 'android'
+    const p = showPhotoSourceActionSheet()
+    expect((alert.mock.calls[0][2] as { text: string }[]).map((b) => b.text)).toEqual(['Cancel', 'Camera', 'Photo Library'])
+    pressAlertButton('Photo Library')
+    await expect(p).resolves.toBe('library')
+  })
+
+  it('on iOS, Cancel is last', async () => {
+    const p = showPhotoSourceActionSheet()
+    expect((alert.mock.calls[0][2] as { text: string }[]).map((b) => b.text)).toEqual(['Camera', 'Photo Library', 'Cancel'])
+    pressAlertButton('Cancel')
+    await expect(p).resolves.toBeNull()
+  })
+})
+
+describe('reorderPhotos tells the rest of the app the photos changed', () => {
+  /*
+   * The Me tab caches its view model under `profile_<id>` and refetches on
+   * focus only when it is gone, and `user.image` mirrors photos[0]. Both
+   * followed the write once; the make-primary bug was that neither did.
+   */
+  const api = apiClient as jest.Mocked<typeof apiClient>
+
+  it('on success: invalidates the profile cache and refreshes the auth user', async () => {
+    api.updateProfile.mockResolvedValue({ success: true, data: {} } as never)
+    await expect(reorderPhotos('u1', ['https://cdn/b.jpg', 'https://cdn/a.jpg'])).resolves.toEqual({ ok: true })
+    expect(queryCache.invalidate).toHaveBeenCalledWith('profile_u1')
+    expect(refreshAuthUser).toHaveBeenCalledTimes(1)
+  })
+
+  it("on refusal: returns the server's sentence and touches neither", async () => {
+    api.updateProfile.mockResolvedValue({ success: false, error: 'That looks like a blank image.' } as never)
+    await expect(reorderPhotos('u1', ['https://cdn/x.jpg'])).resolves.toEqual({ ok: false, error: 'That looks like a blank image.' })
+    expect(queryCache.invalidate).not.toHaveBeenCalled()
+    expect(refreshAuthUser).not.toHaveBeenCalled()
   })
 })
