@@ -4,6 +4,35 @@ import { join } from 'path'
 const ROOT = join(__dirname, '..')
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
 
+// The hook's module reaches for the router, auth and storage at import time;
+// none loads under `testEnvironment: node` and `syncInterests` touches none.
+jest.mock('../lib/apiClient', () => ({
+  apiClient: {
+    getProfileInterests: jest.fn(),
+    addProfileInterests: jest.fn(),
+    removeProfileInterests: jest.fn(),
+  },
+}))
+jest.mock('../lib/logger', () => ({
+  Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
+}))
+jest.mock('expo-router', () => ({ router: {} }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }) }))
+jest.mock('../lib/onboardingStorage', () => ({}))
+
+import { syncInterests } from '../lib/useOnboarding'
+
+const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
+  'getProfileInterests' | 'addProfileInterests' | 'removeProfileInterests',
+  jest.Mock
+>
+
+beforeEach(() => {
+  mockApi.getProfileInterests.mockReset()
+  mockApi.addProfileInterests.mockReset()
+  mockApi.removeProfileInterests.mockReset()
+})
+
 /**
  * Onboarding writes the interest GRAPH, not just the names.
  *
@@ -52,38 +81,83 @@ describe('the details step carries category ids, not only names', () => {
 })
 
 describe('the hook writes the graph', () => {
-  it('calls addProfileInterests when the draft carries ids', () => {
+  it('syncs on the details step, and syncs again in finish()', () => {
+    /*
+     * `interestIds` is not a profile field: `updateProfileSchema` on the server
+     * has no such key and strips it. So the per-step profile PUT can never
+     * carry it, and "everything is re-sent on the final save" was false for the
+     * one field whose absence is silent. The first version of this file claimed
+     * the backstop and did not have it — the comment said `finish()` re-sent
+     * the graph, and `finish()` called `updateProfile` and nothing else.
+     */
     const src = read('lib/useOnboarding.ts')
-    expect(src).toMatch(/if \(merged\.interestIds\?\.length\) \{/)
-    expect(src).toMatch(/apiClient\.addProfileInterests\(userId, merged\.interestIds\)/)
+    expect(src).toMatch(/if \(step === 'details' && merged\.interestIds\) \{/)
+
+    const finishStart = src.indexOf('const finish = useCallback(')
+    const sync = src.indexOf('syncInterests(userId, draft.interestIds)', finishStart)
+    const profile = src.indexOf('apiClient.updateProfile(userId, { ...draft, onboarded: true })', finishStart)
+    expect(sync).toBeGreaterThan(finishStart)
+    expect(sync).toBeLessThan(profile)
   })
 
   it('writes the graph BEFORE the profile, and inside the try', () => {
-    /*
-     * Order, for the reason `app/about-you.tsx` argues: this call is idempotent
-     * and re-runnable from edit-profile, so if the profile write fails after it
-     * nothing is permanently lost.
-     *
-     * Inside the `try`, because that block is load-bearing here — the file's own
-     * rule is "a failed server save does not block anyone", and a throw outside
-     * it would leave the Continue button spinning with no way past.
-     */
+    // Order, for the reason `app/about-you.tsx` argues: idempotent and
+    // re-runnable, so a profile write failing after it loses nothing. Inside
+    // the `try` because that block is what stops a throw pinning the button.
     const src = read('lib/useOnboarding.ts')
     const tryStart = src.indexOf('      try {')
-    const interests = src.indexOf('apiClient.addProfileInterests')
+    const interests = src.indexOf('syncInterests(userId, merged.interestIds)')
     const profile = src.indexOf('apiClient.updateProfile(userId, body)')
 
     expect(tryStart).toBeGreaterThan(-1)
     expect(interests).toBeGreaterThan(tryStart)
     expect(interests).toBeLessThan(profile)
   })
+})
 
-  it('does not block anyone when the graph write fails', () => {
-    // A warning, not a throw. The last step re-sends the draft, so the recovery
-    // is automatic and the cost of failing here is a few minutes' delay.
-    const src = read('lib/useOnboarding.ts')
-    expect(src).toMatch(/Onboarding could not save the interest graph/)
-    expect(src).not.toMatch(/throw new Error\(added\.error/)
+describe('syncInterests makes the server match the picker', () => {
+  /*
+   * Behavioural, because the diff is logic and a structural pin on "calls
+   * addProfileInterests" passed against a version that never removed anything.
+   * POST is additive and DELETE removes; there is no replace, so un-ticking an
+   * interest and pressing Continue used to leave it on the server for ever.
+   */
+  const held = (ids: string[]) => ({
+    success: true,
+    data: { interests: ids.map((id) => ({ id, name: id, slug: id })) },
+  })
+
+  it('adds what is missing and removes what was un-ticked', async () => {
+    mockApi.getProfileInterests.mockResolvedValue(held(['a', 'b']))
+    mockApi.addProfileInterests.mockResolvedValue({ success: true, data: {} })
+    mockApi.removeProfileInterests.mockResolvedValue({ success: true })
+
+    await expect(syncInterests('u1', ['b', 'c'])).resolves.toBe(true)
+    expect(mockApi.addProfileInterests).toHaveBeenCalledWith('u1', ['c'])
+    expect(mockApi.removeProfileInterests).toHaveBeenCalledWith('u1', ['a'])
+  })
+
+  it('sends nothing when the server already matches', async () => {
+    mockApi.getProfileInterests.mockResolvedValue(held(['a', 'b']))
+    await expect(syncInterests('u1', ['a', 'b'])).resolves.toBe(true)
+    expect(mockApi.addProfileInterests).not.toHaveBeenCalled()
+    expect(mockApi.removeProfileInterests).not.toHaveBeenCalled()
+  })
+
+  it('reports failure rather than throwing when a write is refused', async () => {
+    // Both callers sit under "a failed server save does not block anyone".
+    mockApi.getProfileInterests.mockResolvedValue(held([]))
+    mockApi.addProfileInterests.mockResolvedValue({ success: false, error: 'nope' })
+    await expect(syncInterests('u1', ['a'])).resolves.toBe(false)
+  })
+
+  it('reads the wrapped shape the server actually returns', async () => {
+    // `getProfileInterests` was typed as a bare array for as long as nothing
+    // called it. The route returns `{ interests: [...] }`.
+    mockApi.getProfileInterests.mockResolvedValue(held(['a']))
+    mockApi.removeProfileInterests.mockResolvedValue({ success: true })
+    await syncInterests('u1', [])
+    expect(mockApi.removeProfileInterests).toHaveBeenCalledWith('u1', ['a'])
   })
 })
 

@@ -18,6 +18,31 @@ import { clearOnboarding, readOnboarding, writeOnboarding } from './onboardingSt
 import { useAuth } from './useAuth'
 
 /**
+ * Make the server's interest graph match what was picked.
+ *
+ * The server has no "replace": POST is additive (`skipDuplicates`) and DELETE
+ * removes. So "match" is a diff — read what is held, add what is missing,
+ * remove what was un-ticked. The first version only ever POSTed, which meant
+ * going back to the picker and deselecting something left it on the server for
+ * ever, and nothing anywhere called DELETE.
+ *
+ * Returns false on any failure so the caller can warn; never throws, because
+ * both callers sit under the "a failed server save does not block anyone" rule.
+ */
+export async function syncInterests(userId: string, wanted: string[]): Promise<boolean> {
+  const held = await apiClient.getProfileInterests(userId)
+  if (!held.success || !held.data) return false
+  const heldIds = new Set(held.data.interests.map((i) => i.id))
+  const add = wanted.filter((id) => !heldIds.has(id))
+  const remove = [...heldIds].filter((id) => !wanted.includes(id))
+
+  let ok = true
+  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
+  if (remove.length) ok = (await apiClient.removeProfileInterests(userId, remove)).success && ok
+  return ok
+}
+
+/**
  * The draft, and moving through the flow.
  *
  * One hook rather than a context provider, because expo-router gives each step
@@ -191,18 +216,15 @@ export function useOnboarding(step: OnboardingStep) {
          * idempotent and re-runnable from edit-profile, so if the profile write
          * below fails nothing is permanently lost.
          *
-         * It lives here rather than in `details.tsx` so the final step re-sends
-         * it with everything else — that step is the backstop for every
-         * per-step save that failed on a bad connection, and interests need
-         * that backstop more than most, because their absence is silent.
+         * Only on the step that owns the picker. `interestIds` is not a profile
+         * field — `updateProfileSchema` has no such key and strips it — so the
+         * per-step profile PUT below can never carry it, and `finish()` has to
+         * sync it explicitly to be the backstop this file promises.
          */
-        if (merged.interestIds?.length) {
-          const added = await apiClient.addProfileInterests(userId, merged.interestIds)
-          if (!added.success) {
-            Logger.warn('auth', 'Onboarding could not save the interest graph', {
-              step,
-              error: added.error,
-            })
+        if (step === 'details' && merged.interestIds) {
+          const synced = await syncInterests(userId, merged.interestIds)
+          if (!synced) {
+            Logger.warn('auth', 'Onboarding could not save the interest graph', { step })
           }
         }
 
@@ -266,6 +288,26 @@ export function useOnboarding(step: OnboardingStep) {
   const finish = useCallback(async () => {
     if (!userId) return
     setSaving(true)
+
+    /*
+     * The graph is NOT in the profile PUT — `updateProfileSchema` strips
+     * `interestIds` — so re-sending the draft below does not re-send it. This
+     * call is what makes the "everything is re-sent here" claim above true for
+     * the one field whose absence is silent. The first version of this file
+     * claimed the backstop and did not have it.
+     *
+     * `undefined` means the picker was never visited; syncing to `[]` would
+     * wipe a graph set elsewhere (edit-profile, `about-you`).
+     */
+    if (draft.interestIds) {
+      try {
+        const synced = await syncInterests(userId, draft.interestIds)
+        if (!synced) Logger.warn('auth', 'Finishing onboarding could not save the interest graph')
+      } catch (error) {
+        Logger.warn('auth', 'Finishing onboarding threw while saving the interest graph', { error })
+      }
+    }
+
     const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
     setSaving(false)
 

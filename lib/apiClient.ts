@@ -1721,8 +1721,17 @@ class ApiClientClass {
     return result
   }
 
-  async getProfileInterests(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/profiles/${userId}/interests`)
+  /**
+   * `{ interests: [...] }`, not a bare array — the server wraps it. The
+   * signature said `Array<...>` for as long as nothing called it; the first
+   * caller (onboarding's interest sync) would have read `.map` off an object.
+   */
+  async getProfileInterests(
+    userId: string
+  ): Promise<ApiResponse<{ interests: { id: string; name: string; slug: string }[] }>> {
+    return this.queuedRequest<{ interests: { id: string; name: string; slug: string }[] }>(
+      `/api/mobile/profiles/${userId}/interests`
+    )
   }
 
   /*
