@@ -213,6 +213,10 @@ const clearAuthState = async () => {
     user: null,
     loading: false,
     initialized: true,
+    // The flag belongs to the account that was just created, not the device.
+    // Left set, the next sign-in on this launch — an onboarded account — was
+    // routed back into onboarding step one.
+    isNewAccount: false,
   })
 }
 
@@ -398,6 +402,8 @@ export const signInWithEmail = async (
         user,
         loading: false,
         initialized: true,
+        // Signing in is never creating; say so rather than inherit the flag.
+        isNewAccount: false,
       })
 
       startSessionRefresh()

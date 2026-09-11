@@ -15,7 +15,7 @@ import {
   type OnboardingStep,
 } from './onboarding'
 import { clearOnboarding, readOnboarding, writeOnboarding } from './onboardingStorage'
-import { useAuth } from './useAuth'
+import { clearNewAccountFlag, useAuth } from './useAuth'
 
 /**
  * Make the server's interest graph match what was picked.
@@ -318,6 +318,8 @@ export function useOnboarding(step: OnboardingStep) {
     }
 
     await clearOnboarding(userId)
+    // The flow is over for this session too, not only on this device.
+    clearNewAccountFlag()
     return true
   }, [draft, userId])
 

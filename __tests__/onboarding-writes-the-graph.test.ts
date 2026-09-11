@@ -17,7 +17,7 @@ jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
 jest.mock('expo-router', () => ({ router: {} }))
-jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }) }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }), clearNewAccountFlag: jest.fn() }))
 jest.mock('../lib/onboardingStorage', () => ({}))
 
 import { syncInterests } from '../lib/useOnboarding'
@@ -98,6 +98,17 @@ describe('the hook writes the graph', () => {
     const profile = src.indexOf('apiClient.updateProfile(userId, { ...draft, onboarded: true })', finishStart)
     expect(sync).toBeGreaterThan(finishStart)
     expect(sync).toBeLessThan(profile)
+  })
+
+  it('finish() also closes the session-scoped new-account flag', () => {
+    // Otherwise sign-out → sign-in on the same launch re-enters onboarding;
+    // see onboarding-does-not-repeat.test.ts for the other half.
+    const src = read('lib/useOnboarding.ts')
+    const finishStart = src.indexOf('const finish = useCallback(')
+    const cleared = src.indexOf('await clearOnboarding(userId)', finishStart)
+    const flag = src.indexOf('clearNewAccountFlag()', finishStart)
+    expect(cleared).toBeGreaterThan(finishStart)
+    expect(flag).toBeGreaterThan(cleared)
   })
 
   it('writes the graph BEFORE the profile, and inside the try', () => {

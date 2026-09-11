@@ -302,11 +302,18 @@ export default function EditProfile() {
       const updateData: any = {}
       if (trimmedName !== profile?.name) updateData.name = trimmedName
       if (parsedAge !== undefined && parsedAge !== profile?.age) updateData.age = parsedAge
-      if (location !== profile?.location) updateData.location = location
-      if (phone !== profile?.phone) updateData.phone = phone
-      if (occupation !== (profile?.occupation || '')) updateData.occupation = occupation || null
-      if (education !== (profile?.education || '')) updateData.education = education || null
-      if (bio !== (profile?.bio || '')) updateData.bio = bio || null
+      // Trimmed like the name: a bio typed as "text " saved the space, and a
+      // field cleared to whitespace saved " " rather than null.
+      const trimmedLocation = location.trim()
+      const trimmedPhone = phone.trim()
+      const trimmedOccupation = occupation.trim()
+      const trimmedEducation = education.trim()
+      const trimmedBio = bio.trim()
+      if (trimmedLocation !== (profile?.location || '')) updateData.location = trimmedLocation || null
+      if (trimmedPhone !== (profile?.phone || '')) updateData.phone = trimmedPhone || null
+      if (trimmedOccupation !== (profile?.occupation || '')) updateData.occupation = trimmedOccupation || null
+      if (trimmedEducation !== (profile?.education || '')) updateData.education = trimmedEducation || null
+      if (trimmedBio !== (profile?.bio || '')) updateData.bio = trimmedBio || null
       if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
         updateData.goals = goals
       }

@@ -38,6 +38,9 @@ function PanelRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      // Without this the row's name is the two icon glyphs around the label —
+      // "\ueb94 Edit profile \ueb3c" in the accessibility tree.
+      accessibilityLabel={label}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <Ionicons name={icon} size={20} color={EMBER.textPrimary} />
