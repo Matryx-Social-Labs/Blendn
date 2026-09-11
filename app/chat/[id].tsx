@@ -10,7 +10,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -37,6 +36,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { showMessageReportOptions } from '../../lib/safetyUtils'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 interface Message {
   message_id: string
@@ -561,7 +561,7 @@ function GroupChatInner(props?: {
       {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
       <StatusBar style="light" backgroundColor={EMBER.bg} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         {embedded ? null : (
           <GroupChatHeader
             name={(roomName as string) || 'Event Chat'}

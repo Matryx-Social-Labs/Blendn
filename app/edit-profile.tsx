@@ -6,7 +6,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +27,7 @@ import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
 interface UserProfile {
   id: string
@@ -425,7 +425,7 @@ export default function EditProfile() {
         // `undefined` on Android: the window already resizes for the keyboard
         // (adjustResize), and 'height' on top of it double-compensated — the
         // same fix components/onboarding/OnboardingScreen.tsx carries.
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <AppHeader
           title="Edit Profile"

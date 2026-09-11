@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -42,6 +41,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 interface PrivateMessage {
   id: string
@@ -623,7 +623,7 @@ function PrivateChatInner() {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" backgroundColor={EMBER.bg} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param
           // only as a first paint before the fetch lands.

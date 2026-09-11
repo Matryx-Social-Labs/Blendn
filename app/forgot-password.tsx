@@ -4,7 +4,6 @@ import React, { useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
 /**
  * Request a password reset link.
@@ -85,7 +85,7 @@ export default function ForgotPassword() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Pressable
