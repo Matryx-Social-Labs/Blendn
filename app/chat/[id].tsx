@@ -218,7 +218,11 @@ function GroupChatInner(props?: {
         message_text: msg.message_text || msg.content || msg.text || '',
         // The server nulls the text and says why; an empty bubble said nothing.
         removed: Boolean(msg.moderation_hidden),
-        message_type: msg.message_type || msg.type || 'text',
+        // An ad's `type` is its media kind; the marker is in metadata. Without
+        // this it scrolled back as a peer's bubble from "Attendee" (K3.2).
+        message_type: msg.metadata?.sponsored_message_id
+          ? 'sponsored'
+          : msg.message_type || msg.type || 'text',
         reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
         is_edited: msg.is_edited || msg.isEdited || false,
         created_at: msg.created_at || msg.createdAt,
@@ -321,7 +325,7 @@ function GroupChatInner(props?: {
         sender_id: data.message.userId,
         sender_name: data.message.userId === currentUser?.id ? 'You' : (data.message.userName || 'Attendee'),
         message_text: data.message.content,
-        message_type: data.message.type || 'text',
+        message_type: data.message.kind === 'sponsored' ? 'sponsored' : data.message.type || 'text',
         reply_to_message_id: data.message.parentId || null,
         is_edited: false,
         created_at: data.message.createdAt,

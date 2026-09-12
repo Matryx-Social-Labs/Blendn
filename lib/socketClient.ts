@@ -54,6 +54,8 @@ export interface ServerToClientEvents {
       id: string
       content: string
       type: string
+      // A sponsored send keeps `type` for its media kind; this is the marker.
+      kind?: 'sponsored'
       userId: string
       userName: string
       userImage?: string

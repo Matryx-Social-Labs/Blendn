@@ -151,6 +151,20 @@ describe('the screen renders through the rebuilt components', () => {
     expect(SCREEN()).toContain("item.message_type === 'announcement'")
   })
 
+  it("recognises a sponsored send on both paths, because its `type` is its media kind", () => {
+    /*
+     * Driven on iOS: the scheduler's send rendered as a bubble from "Attendee"
+     * with a "📣 [Sponsored]" line, not as the SPONSORED notice. `type` on an
+     * ad is `text` or `image`; the marker is `metadata.sponsored_message_id`
+     * in history and `kind` on the wire. Either mapping missing reproduces it.
+     */
+    const src = SCREEN()
+    expect(src).toContain("msg.metadata?.sponsored_message_id")
+    expect(src).toContain("data.message.kind === 'sponsored'")
+    // And the label line is not printed twice under the SPONSORED label.
+    expect(codeOnly(read('components/chat/BroadcastNotice.tsx'))).toMatch(/text\.replace\(\/\^📣 \\\[Sponsored\\\]\\n\//)
+  })
+
   it('keeps day separators and system messages in one shape', () => {
     /*
      * Both are the room narrating rather than a person speaking. Drawn
