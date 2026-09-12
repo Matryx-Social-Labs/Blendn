@@ -1379,6 +1379,7 @@ export default function EventDetail() {
             scarcity={heroPillLabel({
               maxCapacity: event?.max_capacity,
               currentCapacity: event?.current_capacity,
+              goingCount,
             })}
             onPressMedia={(i) => setLightbox(i)}
           />
