@@ -65,7 +65,10 @@ function RoomInner() {
   const { user } = useAuth()
   const readiness = revealReadiness({
     name: user?.name,
-    photos: user?.image ? [user.image] : [],
+    // `image` is what /auth/session and (now) sign-in return; the stored copy
+    // from an older sign-in has only `profile.photos`. Either is the photo a
+    // reveal would show. Driven: a person with a photo was told to add one.
+    photos: user?.image ? [user.image] : user?.profile?.photos ?? [],
   })
   const [revealed, setRevealed] = useState(false)
   const [revealBusy, setRevealBusy] = useState(false)

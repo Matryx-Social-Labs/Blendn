@@ -455,6 +455,8 @@ export interface AuthUser {
     location: string | null
     interests: string[]
     onboarded: boolean
+    /** Present on the sign-in and session shapes; `image` mirrors `photos[0]`. */
+    photos?: string[]
   } | null
 }
 
