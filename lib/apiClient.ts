@@ -747,7 +747,18 @@ export interface AuthResult {
 
 // Token refresh state
 let isRefreshing = false
-let refreshPromise: Promise<boolean> | null = null
+let refreshPromise: Promise<RefreshOutcome> | null = null
+
+/**
+ * `rejected` is the server saying no; `failed` is the request not completing
+ * — a timeout or a dropped connection. They used to be one `false`, and the
+ * 401 path cleared the session on either. Driven on an emulator: one refresh
+ * timed out while the server had already rotated, and thirty minutes in the
+ * app was at the sign-in screen. A refresh that did not complete leaves the
+ * tokens alone; the next 401 tries again, and the server re-issues on a
+ * replay inside its grace window.
+ */
+type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 
 // API Client Class
 class ApiClientClass {
@@ -955,18 +966,22 @@ class ApiClientClass {
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
           const refreshed = await this.refreshTokens()
-          if (refreshed) {
+          if (refreshed === 'ok') {
             const newAccessToken = await TokenStorage.getAccessToken()
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
             const retryResponse = await fetchWithTimeout(url, { ...options, headers })
             return this.parseResponse<T>(retryResponse, endpoint)
-          } else {
-            await TokenStorage.clearAll()
-            markSessionExpired()
-            return { success: false, error: 'Session expired. Please sign in again.' }
           }
+          if (refreshed === 'failed') {
+            // Not signed out: the server never answered. Reported as the
+            // transport problem it is, and tried again on the next call.
+            return { success: false, error: TIMEOUT_MESSAGE }
+          }
+          await TokenStorage.clearAll()
+          markSessionExpired()
+          return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
         // Retry on 5xx server errors for GET requests only
@@ -1015,7 +1030,7 @@ class ApiClientClass {
     return { success: false, error: `Request failed after retries (${endpoint})` }
   }
 
-  private async refreshTokens(): Promise<boolean> {
+  private async refreshTokens(): Promise<RefreshOutcome> {
     // If a refresh is already in flight, join it — don't start a second one.
     // We return the existing promise so all concurrent callers share one result.
     if (isRefreshing && refreshPromise) {
@@ -1024,11 +1039,11 @@ class ApiClientClass {
 
     isRefreshing = true
     // Store promise BEFORE any await so concurrent callers see it immediately.
-    const p: Promise<boolean> = (async () => {
+    const p: Promise<RefreshOutcome> = (async () => {
       try {
         const refreshToken = await TokenStorage.getRefreshToken()
         if (!refreshToken) {
-          return false
+          return 'rejected'
         }
 
         // Deliberately on a deadline too. A hung refresh is the worst version
@@ -1042,7 +1057,8 @@ class ApiClientClass {
         })
 
         if (!response.ok) {
-          return false
+          // 5xx is the server being unwell, not the token being bad.
+          return response.status >= 500 ? 'failed' : 'rejected'
         }
 
         const data: ApiResponse<{ accessToken: string; refreshToken: string }> =
@@ -1050,13 +1066,13 @@ class ApiClientClass {
 
         if (data.success && data.data) {
           await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
-          return true
+          return 'ok'
         }
 
-        return false
+        return 'rejected'
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
-        return false
+        return 'failed'
       }
     })()
 
@@ -1334,7 +1350,7 @@ class ApiClientClass {
   }
 
   async refreshSession(): Promise<boolean> {
-    return this.refreshTokens()
+    return (await this.refreshTokens()) === 'ok'
   }
 
   // === EVENT ENDPOINTS ===
