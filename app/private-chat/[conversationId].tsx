@@ -410,7 +410,19 @@ function PrivateChatInner() {
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
 
+    /*
+     * One registry, three event kinds.
+     *
+     * `subscribeToConversation` keeps a single callback set per conversation
+     * and the socket layer calls every callback in it for `private:message`,
+     * `private:typing` AND `private:read`. So each handler here received the
+     * other two payloads as well — `handleRead` did `data.messageIds.includes`
+     * on a message payload and threw, which unmounted the screen the moment
+     * the other person's first message arrived (simulator, 2026-09-12). Each
+     * handler now checks the payload is its own before touching it.
+     */
     const handleNewMessage: PrivateMessageCallback = (data) => {
+      if (!('message' in data) || !data.message) return
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev
         return [...prev, mapMessage(data.message)]
@@ -421,6 +433,7 @@ function PrivateChatInner() {
     }
 
     const handleTyping: PrivateTypingCallback = (data) => {
+      if (typeof data.isTyping !== 'boolean') return
       if (data.userId === authUser?.id) return
       setIsOtherTyping(data.isTyping)
       if (data.isTyping) {
@@ -432,6 +445,7 @@ function PrivateChatInner() {
     }
 
     const handleRead: PrivateReadCallback = (data) => {
+      if (!Array.isArray(data.messageIds)) return
       if (data.readBy === authUser?.id) return
       setMessages(prev => prev.map(m => data.messageIds.includes(m.id) ? { ...m, isRead: true } : m))
     }
