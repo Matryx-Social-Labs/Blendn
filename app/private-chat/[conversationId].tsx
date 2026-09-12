@@ -269,9 +269,12 @@ function PrivateChatInner() {
        * a revealed match is no longer pseudonymous but is still a match.
        */
       fromMatch: r.data.fromMatch === true,
-      // A conversation with no reveal fields at all is one from an accepted
-      // message request: real names throughout, nothing to reveal.
-      pseudonymous: r.data.youRevealed !== undefined,
+      // Server-supplied. This used to be inferred from the reveal fields being
+      // absent, and the server always sent them — so an accepted message
+      // request drew "You can see their name. They can't see yours." and a
+      // reveal button the server refuses. An older server without the field
+      // falls back to the old inference.
+      pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
     })
   }, [conversationId])
 

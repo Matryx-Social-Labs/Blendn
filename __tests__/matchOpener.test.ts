@@ -73,6 +73,16 @@ describe('the header is a header, not an empty state', () => {
     expect(DM()).toContain('ListHeaderComponent={ListHeader}')
   })
 
+  it('takes pseudonymous from the server, not from which fields arrived', () => {
+    /*
+     * Driven on iOS: an accepted message request opened with "You can see
+     * their name. They can't see yours." and a reveal button the server
+     * refuses. The screen inferred "pseudonymous" from the reveal fields being
+     * absent, and the server always sent them.
+     */
+    expect(DM()).toContain('pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined')
+  })
+
   it('stops the empty state claiming a match that never happened', () => {
     /*
      * It said "You matched with X" for EVERY empty thread, including an

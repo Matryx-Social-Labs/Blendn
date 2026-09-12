@@ -2171,6 +2171,12 @@ class ApiClientClass {
      * them apart. See `lib/matchOpener.ts`.
      */
     fromMatch?: boolean
+    /**
+     * Whether there is anything left to reveal. False for an accepted message
+     * request — real names from the start. Server-supplied; inferring it from
+     * the reveal fields being absent drew the match header on a request.
+     */
+    pseudonymous?: boolean
     /** Whether you have shown them who you are. */
     youRevealed?: boolean
     /** Whether they have shown you. */
