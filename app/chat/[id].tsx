@@ -683,15 +683,21 @@ function GroupChatInner(props?: {
 
       {/* Message menu */}
       <Modal visible={showMessageMenu} transparent animationType="fade" onRequestClose={() => setShowMessageMenu(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMessageMenu(false)}>
+        {/*
+          accessible={false} on the scrim: a TouchableOpacity is accessible by
+          default and on iOS that collapses everything inside it into one node,
+          so VoiceOver (and Maestro) read the whole menu as "↩️ Reply 📋 Copy 🚩
+          Report" and could not pick Report on its own.
+        */}
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} accessible={false} onPress={() => setShowMessageMenu(false)}>
           <View style={styles.messageMenu}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Reply" onPress={() => {
               if (selectedMessage) { setReplyingTo(selectedMessage); setShowMessageMenu(false); setSelectedMessage(null) }
             }}>
               <Text style={styles.menuIcon}>↩️</Text>
               <Text style={styles.menuText}>Reply</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={async () => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Copy" onPress={async () => {
               if (selectedMessage) {
                 await Clipboard.setString(selectedMessage.message_text)
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -701,7 +707,7 @@ function GroupChatInner(props?: {
               <Text style={styles.menuIcon}>📋</Text>
               <Text style={styles.menuText}>Copy</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Report" onPress={() => {
               /*
                * Reuses the same flow the DM screen uses, rather than a second
                * confirmation tray.

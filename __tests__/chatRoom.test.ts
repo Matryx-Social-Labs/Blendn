@@ -165,6 +165,20 @@ describe('the screen renders through the rebuilt components', () => {
     expect(codeOnly(read('components/chat/BroadcastNotice.tsx'))).toMatch(/text\.replace\(\/\^📣 \\\[Sponsored\\\]\\n\//)
   })
 
+  it('lets VoiceOver pick Report on its own', () => {
+    /*
+     * Driven with Maestro on iOS: the long-press menu read as one node,
+     * "↩️ Reply 📋 Copy 🚩 Report", because the scrim TouchableOpacity is
+     * accessible by default and iOS collapses everything inside it. The
+     * safety action was unreachable to a screen reader.
+     */
+    const src = SCREEN()
+    expect(src).toMatch(/style=\{styles\.modalOverlay\}[^>]*accessible=\{false\}/)
+    for (const label of ['Reply', 'Copy', 'Report']) {
+      expect(src).toContain(`accessibilityRole="button" accessibilityLabel="${label}"`)
+    }
+  })
+
   it('keeps day separators and system messages in one shape', () => {
     /*
      * Both are the room narrating rather than a person speaking. Drawn
