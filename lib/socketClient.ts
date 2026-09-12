@@ -117,7 +117,8 @@ export interface ServerToClientEvents {
     readBy: string
   }) => void
   // Moderation events
-  "chat:messageDeleted": (data: { chatGroupId: string; messageId: string }) => void
+  /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
+  "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
   "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void

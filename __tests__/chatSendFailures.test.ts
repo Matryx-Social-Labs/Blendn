@@ -54,6 +54,31 @@ describe('the chat composer surfaces what the server actually did', () => {
   })
 })
 
+describe('a removed message is a placeholder, not a blank', () => {
+  /*
+   * The history serves a sender their own hidden messages with `content: null`
+   * and `moderation_hidden: true` so they know it happened; the screen mapped
+   * `content ?? ''` and drew an empty bubble — a column of blanks after a
+   * moderator removed three messages, seen on the simulator 2026-09-12.
+   */
+  const bubble = readFileSync(require.resolve('../components/chat/ChatBubble.tsx'), 'utf8')
+
+  it('carries moderation_hidden from the history into the message', () => {
+    expect(chatSource).toMatch(/removed: Boolean\(msg\.moderation_hidden\)/)
+  })
+
+  it('keeps your own live removal as a placeholder and drops everyone else's', () => {
+    expect(chatSource).toMatch(/const ownRemoval = data\.moderation && data\.userId && data\.userId === currentUser\?\.id/)
+    expect(chatSource).toMatch(/\{ \.\.\.m, removed: true, message_text: '' \}/)
+  })
+
+  it('the bubble says so, in its own style, with no actions', () => {
+    expect(bubble).toContain('This message was removed by moderation.')
+    expect(bubble).toMatch(/onLongPress=\{removed \? undefined : onLongPress\}/)
+    expect(bubble).toMatch(/bubbleRemoved: \{[\s\S]*?borderStyle: 'dashed'/)
+  })
+})
+
 describe('ApiResponse carries the machine-readable reason', () => {
   it('declares errorCode', () => {
     // Without a field to carry it, every coded refusal degrades to prose and

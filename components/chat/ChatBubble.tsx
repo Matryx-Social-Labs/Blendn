@@ -49,6 +49,16 @@ export interface ChatBubbleProps {
   /** The room or conversation this bubble is in. Salts the avatar seed. */
   roomId: string
   text: string
+  /**
+   * Moderation took this one down.
+   *
+   * The server serves a sender their own hidden messages with `content: null`
+   * so they know it happened; other members never receive them. Rendering
+   * `null` as an empty bubble was a blank the sender could not read — so this
+   * draws a quiet, dashed placeholder that says so, with no reply or copy
+   * actions, because there is nothing to act on.
+   */
+  removed?: boolean
   /** Already formatted, e.g. `14:02`. This component does no date maths. */
   time: string
   /** What this message answers, drawn as a quiet quote above it. */
@@ -96,6 +106,7 @@ function ChatBubbleBase({
   variant = 'room',
   receipt = null,
   onLongPress,
+  removed = false,
 }: ChatBubbleProps) {
   const direct = variant === 'direct'
   /*
@@ -170,14 +181,19 @@ function ChatBubbleBase({
         </View>
 
         <Pressable
-          onLongPress={onLongPress}
+          onLongPress={removed ? undefined : onLongPress}
           delayLongPress={250}
           accessibilityRole="text"
-          accessibilityLabel={`${mine ? 'You' : senderName} at ${time}: ${text}`}
+          accessibilityLabel={
+            removed
+              ? `${mine ? 'Your' : `${senderName}'s`} message at ${time} was removed by moderation`
+              : `${mine ? 'You' : senderName} at ${time}: ${text}`
+          }
           style={({ pressed }) => [
             styles.bubble,
             mine ? styles.bubbleMine : styles.bubbleTheirs,
-            pressed && onLongPress ? styles.pressed : null,
+            removed ? styles.bubbleRemoved : null,
+            pressed && onLongPress && !removed ? styles.pressed : null,
           ]}
         >
           {/*
@@ -199,7 +215,11 @@ function ChatBubbleBase({
             </View>
           ) : null}
 
-          <Text style={styles.text}>{text}</Text>
+          {removed ? (
+            <Text style={styles.removedText}>This message was removed by moderation.</Text>
+          ) : (
+            <Text style={styles.text}>{text}</Text>
+          )}
 
           {/*
             "edited" belongs on the bubble, not beside the timestamp in the
@@ -298,6 +318,22 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pressed: { opacity: 0.7 },
+  /* No fill, a dashed edge: the outline of a message that is not there. */
+  bubbleRemoved: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: EMBER.textTertiary,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  removedText: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: 'italic',
+    color: EMBER.textTertiary,
+  },
 
   text: {
     fontFamily: EMBER_FONTS.bodyRegular,

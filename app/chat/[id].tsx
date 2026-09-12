@@ -47,6 +47,8 @@ interface Message {
   reply_to_message_id: string | null
   is_edited: boolean
   created_at: string
+  /** Hidden by moderation. Only ever true on the sender's own messages. */
+  removed?: boolean
   replyTo?: Message
   reactions?: { emoji: string; count: number; mine?: boolean }[]
 }
@@ -214,6 +216,8 @@ function GroupChatInner(props?: {
         sender_id: senderId,
         sender_name: senderId === 'system' ? 'System' : senderId === userId ? 'You' : serverName,
         message_text: msg.message_text || msg.content || msg.text || '',
+        // The server nulls the text and says why; an empty bubble said nothing.
+        removed: Boolean(msg.moderation_hidden),
         message_type: msg.message_type || msg.type || 'text',
         reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
         is_edited: msg.is_edited || msg.isEdited || false,
@@ -352,7 +356,18 @@ function GroupChatInner(props?: {
     }
 
     const handleDeleted: ChatMessageDeletedCallback = (data) => {
-      setMessages(prev => prev.filter(m => m.message_id !== data.messageId))
+      /*
+       * A moderation removal of your own message becomes a placeholder rather
+       * than a disappearance — the same thing the history shows you on the
+       * next load, and the only way you learn it happened. Everyone else's
+       * copy simply goes.
+       */
+      const ownRemoval = data.moderation && data.userId && data.userId === currentUser?.id
+      setMessages(prev =>
+        ownRemoval
+          ? prev.map(m => (m.message_id === data.messageId ? { ...m, removed: true, message_text: '' } : m))
+          : prev.filter(m => m.message_id !== data.messageId)
+      )
     }
 
     const handleBanned: ChatMemberBannedCallback = (data) => {
@@ -524,6 +539,7 @@ function GroupChatInner(props?: {
         roomId={String(params.id)}
         senderName={item.sender_name}
         text={item.message_text}
+        removed={item.removed}
         time={formatTime(item.created_at)}
         edited={item.is_edited}
         reactions={item.reactions}
@@ -532,7 +548,7 @@ function GroupChatInner(props?: {
             ? { senderName: item.replyTo.sender_name, text: item.replyTo.message_text }
             : null
         }
-        onLongPress={() => openMessageMenu(item)}
+        onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
     )
   }
