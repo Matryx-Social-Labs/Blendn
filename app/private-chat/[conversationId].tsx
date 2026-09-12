@@ -127,7 +127,9 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
           * say and a permanent banner would just be noise.
           */}
         {!!subtitle && (
-          <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
+          // Two lines: the one-way state has two halves by design, and on a
+          // 402pt phone one line cut it at "You can't see the…".
+          <Text style={headerStyles.subtitle} numberOfLines={2}>{subtitle}</Text>
         )}
         {isTyping && <Text style={headerStyles.typing}>typing…</Text>}
       </View>
