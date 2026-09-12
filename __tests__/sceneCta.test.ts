@@ -222,6 +222,13 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     expect(detail).toContain("? (rsvpd ? 'rsvpd' : 'rsvp')")
     expect(detail).toContain('handleToggleRsvp')
 
+    // A thrown RSVP request puts the old status back. The optimistic
+    // "You're going" used to survive a timeout with no row behind it —
+    // `prevStatus` lived inside the `try`, so the `catch` could not reach it.
+    const handler = detail.slice(detail.indexOf('const handleToggleRsvp'), detail.indexOf('}, [id, user, rsvpStatus'))
+    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n\s*try \{/)
+    expect(handler).toMatch(/\} catch \{\s*setRsvpStatus\(prevStatus\)/)
+
     // No second control, and no overflow in the bar.
     expect(detail).not.toContain('secondaryRow')
     expect(detail).not.toContain('ellipsis-horizontal')

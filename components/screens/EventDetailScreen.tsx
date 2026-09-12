@@ -439,6 +439,11 @@ export default function EventDetail() {
   }, [id, user, userInterested, showTray, closeTray, feedback])
 
   const handleToggleRsvp = useCallback(async () => {
+    // Hoisted out of the `try` so the `catch` can put it back: a thrown
+    // request (timeout, no network) left the optimistic "You're going" on
+    // screen with no row behind it. Only the `!result.success` branches
+    // rolled back. Seen on the simulator when the RSVP call timed out.
+    const prevStatus = rsvpStatus
     try {
       if (!id) return
       if (!user) {
@@ -453,7 +458,6 @@ export default function EventDetail() {
       // the list, not try to RSVP again. Treating it as not-going would send a
       // second RSVP and leave the user unable to withdraw.
       const isCommitted = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-      const prevStatus = rsvpStatus
       setRsvpStatus(isCommitted ? null : 'going')
       if (isCommitted) {
         const result = await apiClient.cancelRsvp(String(id))
@@ -481,6 +485,7 @@ export default function EventDetail() {
         }
       }
     } catch {
+      setRsvpStatus(prevStatus)
       feedback.error()
       showTray('Error', 'Failed to update RSVP.')
     }
