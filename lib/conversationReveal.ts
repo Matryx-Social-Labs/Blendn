@@ -118,12 +118,20 @@ export function revealConfirmation(displayName: string): {
  */
 export function leaveConfirmation(
   displayName: string,
-  youRevealed: boolean
+  /**
+   * Whether they know who you are — a reveal, or a conversation that never
+   * was pseudonymous. An accepted message request showed them your name and
+   * photo in the request itself, and this sheet told the sender "They never
+   * saw your name." Driven on iOS; the caller passes the union.
+   */
+  theyKnowYou: boolean,
+  fromMatch = true
 ): { title: string; body: string } {
   return {
-    title: `Unmatch ${displayName}?`,
-    body: youRevealed
-      ? "The conversation closes for both of you and you won't see each other in rooms again. They already know your name and photos — unmatching doesn't undo that."
+    // "Unmatch" is the wrong verb for two people who never matched.
+    title: fromMatch ? `Unmatch ${displayName}?` : `End the conversation with ${displayName}?`,
+    body: theyKnowYou
+      ? `The conversation closes for both of you and you won't see each other in rooms again. They already know your name and photos — ${fromMatch ? 'unmatching' : 'ending it'} doesn't undo that.`
       : "The conversation closes for both of you and you won't see each other in rooms again. They never saw your name.",
   }
 }

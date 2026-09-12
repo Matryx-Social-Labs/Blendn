@@ -171,10 +171,12 @@ export const isUserBlocked = async (userId: string): Promise<boolean> => {
 export const showLeaveConversationActions = (
   conversationId: string,
   displayName: string,
-  youRevealed: boolean,
-  onLeft?: () => void
+  theyKnowYou: boolean,
+  onLeft?: () => void,
+  fromMatch = true
 ): void => {
-  const copy = leaveConfirmation(displayName, youRevealed)
+  const copy = leaveConfirmation(displayName, theyKnowYou, fromMatch)
+  const verb = fromMatch ? 'Unmatch' : 'End conversation'
 
   const leave = async (action: 'unmatch' | 'block', withReport: boolean) => {
     const result = await apiClient.leaveConversation(conversationId, {
@@ -189,8 +191,8 @@ export const showLeaveConversationActions = (
   }
 
   Alert.alert(copy.title, copy.body, [
-    { text: 'Unmatch', style: 'destructive', onPress: () => void leave('unmatch', false) },
-    { text: 'Unmatch and report', style: 'destructive', onPress: () => void leave('unmatch', true) },
+    { text: verb, style: 'destructive', onPress: () => void leave('unmatch', false) },
+    { text: `${verb} and report`, style: 'destructive', onPress: () => void leave('unmatch', true) },
     {
       // Block is the stronger option, surfaced here rather than buried,
       // because somebody who wants to be *unseen* rather than merely

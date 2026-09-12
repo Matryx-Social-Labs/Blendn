@@ -149,6 +149,19 @@ describe('leaveConfirmation', () => {
     expect(c.body).not.toContain('already know')
   })
 
+  it('does not claim they never saw your name on an accepted request', () => {
+    /*
+     * Driven on iOS: a conversation from an accepted message request — where
+     * the request itself showed them the name and photo — offered "Unmatch
+     * Rohan Desai? … They never saw your name." Two things wrong: the verb,
+     * and the claim.
+     */
+    const c = leaveConfirmation('Rohan Desai', true, false)
+    expect(c.title).toBe('End the conversation with Rohan Desai?')
+    expect(c.body).toContain('already know')
+    expect(c.body).not.toContain('unmatching')
+  })
+
   it('always says it closes for both of you', () => {
     // A one-sided hide would leave them writing into a conversation you left.
     for (const revealed of [true, false]) {

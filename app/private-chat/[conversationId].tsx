@@ -664,8 +664,11 @@ function PrivateChatInner() {
               showLeaveConversationActions(
                 conversationId as string,
                 reveal?.displayName || (otherUserName as string) || 'them',
-                reveal?.youRevealed ?? false,
-                () => router.back()
+                // They know you if you revealed, or if this never was
+                // pseudonymous — an accepted request showed them your name.
+                (reveal?.youRevealed ?? false) || reveal?.pseudonymous === false,
+                () => router.back(),
+                reveal?.fromMatch ?? true
               )
             } else if (otherUserId) {
               showUserSafetyActions((otherUserName as string) || 'User', otherUserId as string, () => router.back())
