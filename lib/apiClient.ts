@@ -455,6 +455,8 @@ export interface AuthUser {
     location: string | null
     interests: string[]
     onboarded: boolean
+    /** Present on the sign-in and session shapes; `image` mirrors `photos[0]`. */
+    photos?: string[]
   } | null
 }
 
@@ -747,7 +749,18 @@ export interface AuthResult {
 
 // Token refresh state
 let isRefreshing = false
-let refreshPromise: Promise<boolean> | null = null
+let refreshPromise: Promise<RefreshOutcome> | null = null
+
+/**
+ * `rejected` is the server saying no; `failed` is the request not completing
+ * — a timeout or a dropped connection. They used to be one `false`, and the
+ * 401 path cleared the session on either. Driven on an emulator: one refresh
+ * timed out while the server had already rotated, and thirty minutes in the
+ * app was at the sign-in screen. A refresh that did not complete leaves the
+ * tokens alone; the next 401 tries again, and the server re-issues on a
+ * replay inside its grace window.
+ */
+type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 
 // API Client Class
 class ApiClientClass {
@@ -955,18 +968,22 @@ class ApiClientClass {
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
           const refreshed = await this.refreshTokens()
-          if (refreshed) {
+          if (refreshed === 'ok') {
             const newAccessToken = await TokenStorage.getAccessToken()
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
             const retryResponse = await fetchWithTimeout(url, { ...options, headers })
             return this.parseResponse<T>(retryResponse, endpoint)
-          } else {
-            await TokenStorage.clearAll()
-            markSessionExpired()
-            return { success: false, error: 'Session expired. Please sign in again.' }
           }
+          if (refreshed === 'failed') {
+            // Not signed out: the server never answered. Reported as the
+            // transport problem it is, and tried again on the next call.
+            return { success: false, error: TIMEOUT_MESSAGE }
+          }
+          await TokenStorage.clearAll()
+          markSessionExpired()
+          return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
         // Retry on 5xx server errors for GET requests only
@@ -1015,7 +1032,7 @@ class ApiClientClass {
     return { success: false, error: `Request failed after retries (${endpoint})` }
   }
 
-  private async refreshTokens(): Promise<boolean> {
+  private async refreshTokens(): Promise<RefreshOutcome> {
     // If a refresh is already in flight, join it — don't start a second one.
     // We return the existing promise so all concurrent callers share one result.
     if (isRefreshing && refreshPromise) {
@@ -1024,11 +1041,11 @@ class ApiClientClass {
 
     isRefreshing = true
     // Store promise BEFORE any await so concurrent callers see it immediately.
-    const p: Promise<boolean> = (async () => {
+    const p: Promise<RefreshOutcome> = (async () => {
       try {
         const refreshToken = await TokenStorage.getRefreshToken()
         if (!refreshToken) {
-          return false
+          return 'rejected'
         }
 
         // Deliberately on a deadline too. A hung refresh is the worst version
@@ -1042,7 +1059,8 @@ class ApiClientClass {
         })
 
         if (!response.ok) {
-          return false
+          // 5xx is the server being unwell, not the token being bad.
+          return response.status >= 500 ? 'failed' : 'rejected'
         }
 
         const data: ApiResponse<{ accessToken: string; refreshToken: string }> =
@@ -1050,13 +1068,13 @@ class ApiClientClass {
 
         if (data.success && data.data) {
           await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
-          return true
+          return 'ok'
         }
 
-        return false
+        return 'rejected'
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
-        return false
+        return 'failed'
       }
     })()
 
@@ -1270,6 +1288,10 @@ class ApiClientClass {
     if (result.success) {
       await TokenStorage.clearAll()
       requestQueue.clear()
+      // Same reason as signOut(): the response cache is not per user, and a
+      // stale entry is served before it is corrected. Deletion is the more
+      // sensitive of the two exits and did not do this.
+      this.clearResponseCache()
     }
 
     return result
@@ -1330,7 +1352,7 @@ class ApiClientClass {
   }
 
   async refreshSession(): Promise<boolean> {
-    return this.refreshTokens()
+    return (await this.refreshTokens()) === 'ok'
   }
 
   // === EVENT ENDPOINTS ===
@@ -1721,8 +1743,17 @@ class ApiClientClass {
     return result
   }
 
-  async getProfileInterests(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/profiles/${userId}/interests`)
+  /**
+   * `{ interests: [...] }`, not a bare array — the server wraps it. The
+   * signature said `Array<...>` for as long as nothing called it; the first
+   * caller (onboarding's interest sync) would have read `.map` off an object.
+   */
+  async getProfileInterests(
+    userId: string
+  ): Promise<ApiResponse<{ interests: { id: string; name: string; slug: string }[] }>> {
+    return this.queuedRequest<{ interests: { id: string; name: string; slug: string }[] }>(
+      `/api/mobile/profiles/${userId}/interests`
+    )
   }
 
   /*
@@ -2140,6 +2171,12 @@ class ApiClientClass {
      * them apart. See `lib/matchOpener.ts`.
      */
     fromMatch?: boolean
+    /**
+     * Whether there is anything left to reveal. False for an accepted message
+     * request — real names from the start. Server-supplied; inferring it from
+     * the reveal fields being absent drew the match header on a request.
+     */
+    pseudonymous?: boolean
     /** Whether you have shown them who you are. */
     youRevealed?: boolean
     /** Whether they have shown you. */

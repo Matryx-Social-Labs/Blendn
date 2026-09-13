@@ -152,14 +152,19 @@ describe('the bell reuses the push switch rather than copying it', () => {
      * leaves a badge lit after you have read everything in it, which teaches
      * people to ignore the badge.
      */
-    expect(BELL()).toContain('apiClient.markNotificationsRead()')
+    expect(BELL()).toContain('.markNotificationsRead()')
+    // And reloads only once the mark-read has settled: fired together, the
+    // reload came back with the pre-read count and relit the badge.
+    expect(BELL()).toMatch(/\.markNotificationsRead\(\)[\s\S]{0,300}\.finally\(\(\) => void load\(\)\)/)
   })
 
-  it('does not poll', () => {
+  it('does not poll, but does look when you look', () => {
     // A poll costs a request every few seconds on the app's busiest screen for
-    // a number that changes a handful of times a day.
+    // a number that changes a handful of times a day. Once on mount was too
+    // little: the badge said 5 all session while three new rows landed.
     const bell = BELL()
     expect(bell).not.toContain('setInterval')
+    expect(bell).toContain('useFocusEffect(')
   })
 })
 

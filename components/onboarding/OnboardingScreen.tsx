@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { ReactNode } from 'react'
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +22,7 @@ import {
 } from '../../lib/theme'
 import { progressPercent, type OnboardingStep } from '../../lib/onboarding'
 import { EmberButton } from './EmberControls'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 /**
  * The frame every onboarding screen sits in.
@@ -121,7 +121,7 @@ export function OnboardingScreen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
         keyboardVerticalOffset={insets.top}
       >
         <ScrollView

@@ -37,8 +37,16 @@ const PROPORTION_THRESHOLD = 0.2
 export interface ScarcityInput {
   /** 0 or absent means uncapped. */
   maxCapacity?: number | null
-  /** How many places are already taken. */
+  /** How many places are already taken — attendance, so zero before doors. */
   currentCapacity?: number | null
+  /**
+   * How many have said they are going. Before doors this is the number that
+   * fills the room: the server waitlists the next RSVP once it reaches the
+   * cap, and a pill reading "1 SPOT LEFT" beside a Going button that would
+   * waitlist you is the lie this field exists to prevent. Driven on iOS with
+   * a one-seat event.
+   */
+  goingCount?: number | null
 }
 
 /**
@@ -47,12 +55,13 @@ export interface ScarcityInput {
  * Returns `null` rather than an empty string so a caller cannot render a pill
  * containing nothing, which is a bordered gap that looks like a failed load.
  */
-export function scarcityLabel({ maxCapacity, currentCapacity }: ScarcityInput): string | null {
+export function scarcityLabel({ maxCapacity, currentCapacity, goingCount }: ScarcityInput): string | null {
   const max = Number(maxCapacity) || 0
   // Uncapped: the overwhelmingly common case, and the one the frame gets wrong.
   if (max <= 0) return null
 
-  const taken = Math.max(Number(currentCapacity) || 0, 0)
+  // Whichever is larger: RSVPs fill the room before doors, bodies after.
+  const taken = Math.max(Number(currentCapacity) || 0, Number(goingCount) || 0, 0)
   const left = max - taken
 
   // Over capacity is possible — check-in does not refuse, by design, see
@@ -103,6 +112,7 @@ export function heroPillLabel({
   doorPolicy,
   maxCapacity,
   currentCapacity,
+  goingCount,
 }: ScarcityInput & { doorPolicy?: DoorPolicy | null }): string | null {
   if (doorPolicy && doorPolicy !== 'open') {
     // Unknown values fall through to capacity rather than rendering a raw enum
@@ -110,5 +120,5 @@ export function heroPillLabel({
     const label = DOOR_LABELS[doorPolicy as Exclude<DoorPolicy, 'open'>]
     if (label) return label
   }
-  return scarcityLabel({ maxCapacity, currentCapacity })
+  return scarcityLabel({ maxCapacity, currentCapacity, goingCount })
 }

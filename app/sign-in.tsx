@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
 const lockup = require('../assets/logo/lockup-white.png')
 /*
@@ -166,7 +167,7 @@ export default function SignIn() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}

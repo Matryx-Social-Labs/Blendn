@@ -44,6 +44,8 @@ interface OptimizedImageProps {
   testID?: string
   accessibilityLabel?: string
   accessibilityRole?: string
+  /** Make the wrapper an accessibility element (it is not by default). */
+  accessible?: boolean
 }
 
 interface ProgressiveLoadingState {
@@ -73,6 +75,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   recyclingKey,
   testID,
   accessibilityLabel,
+  accessible,
   accessibilityRole,
 }) => {
   const [loadingState, setLoadingState] = useState<ProgressiveLoadingState>({
@@ -236,6 +239,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     <View
       style={[styles.container, style]}
       testID={testID}
+      accessible={accessible}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole as any}
     >

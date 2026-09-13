@@ -43,6 +43,9 @@ export function BroadcastNotice({
   time: string
 }) {
   const sponsored = kind === 'sponsored'
+  // The server prefixes the content with its own label line; the SPONSORED
+  // label above the text already says it, so it would read twice.
+  const body = sponsored ? text.replace(/^📣 \[Sponsored\]\n/, '') : text
 
   return (
     <View style={styles.wrap}>
@@ -68,7 +71,7 @@ export function BroadcastNotice({
         >
           {sponsored ? 'SPONSORED' : 'ANNOUNCEMENT'}
         </Text>
-        <Text style={styles.text}>{text}</Text>
+        <Text style={styles.text}>{body}</Text>
         <Text style={styles.time}>{time}</Text>
       </View>
     </View>

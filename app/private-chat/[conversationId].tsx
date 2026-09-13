@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -42,6 +41,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 interface PrivateMessage {
   id: string
@@ -127,7 +127,9 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
           * say and a permanent banner would just be noise.
           */}
         {!!subtitle && (
-          <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
+          // Two lines: the one-way state has two halves by design, and on a
+          // 402pt phone one line cut it at "You can't see the…".
+          <Text style={headerStyles.subtitle} numberOfLines={2}>{subtitle}</Text>
         )}
         {isTyping && <Text style={headerStyles.typing}>typing…</Text>}
       </View>
@@ -267,9 +269,12 @@ function PrivateChatInner() {
        * a revealed match is no longer pseudonymous but is still a match.
        */
       fromMatch: r.data.fromMatch === true,
-      // A conversation with no reveal fields at all is one from an accepted
-      // message request: real names throughout, nothing to reveal.
-      pseudonymous: r.data.youRevealed !== undefined,
+      // Server-supplied. This used to be inferred from the reveal fields being
+      // absent, and the server always sent them — so an accepted message
+      // request drew "You can see their name. They can't see yours." and a
+      // reveal button the server refuses. An older server without the field
+      // falls back to the old inference.
+      pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
     })
   }, [conversationId])
 
@@ -410,7 +415,19 @@ function PrivateChatInner() {
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
 
+    /*
+     * One registry, three event kinds.
+     *
+     * `subscribeToConversation` keeps a single callback set per conversation
+     * and the socket layer calls every callback in it for `private:message`,
+     * `private:typing` AND `private:read`. So each handler here received the
+     * other two payloads as well — `handleRead` did `data.messageIds.includes`
+     * on a message payload and threw, which unmounted the screen the moment
+     * the other person's first message arrived (simulator, 2026-09-12). Each
+     * handler now checks the payload is its own before touching it.
+     */
     const handleNewMessage: PrivateMessageCallback = (data) => {
+      if (!('message' in data) || !data.message) return
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev
         return [...prev, mapMessage(data.message)]
@@ -421,6 +438,7 @@ function PrivateChatInner() {
     }
 
     const handleTyping: PrivateTypingCallback = (data) => {
+      if (typeof data.isTyping !== 'boolean') return
       if (data.userId === authUser?.id) return
       setIsOtherTyping(data.isTyping)
       if (data.isTyping) {
@@ -432,6 +450,7 @@ function PrivateChatInner() {
     }
 
     const handleRead: PrivateReadCallback = (data) => {
+      if (!Array.isArray(data.messageIds)) return
       if (data.readBy === authUser?.id) return
       setMessages(prev => prev.map(m => data.messageIds.includes(m.id) ? { ...m, isRead: true } : m))
     }
@@ -623,7 +642,7 @@ function PrivateChatInner() {
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" backgroundColor={EMBER.bg} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param
           // only as a first paint before the fetch lands.
@@ -645,8 +664,11 @@ function PrivateChatInner() {
               showLeaveConversationActions(
                 conversationId as string,
                 reveal?.displayName || (otherUserName as string) || 'them',
-                reveal?.youRevealed ?? false,
-                () => router.back()
+                // They know you if you revealed, or if this never was
+                // pseudonymous — an accepted request showed them your name.
+                (reveal?.youRevealed ?? false) || reveal?.pseudonymous === false,
+                () => router.back(),
+                reveal?.fromMatch ?? true
               )
             } else if (otherUserId) {
               showUserSafetyActions((otherUserName as string) || 'User', otherUserId as string, () => router.back())

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 /**
  * Sending a connection request — the message, and what it costs you.
@@ -95,7 +95,7 @@ export function ConnectSheet({
     >
       <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Cancel" />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.grabber} />
 

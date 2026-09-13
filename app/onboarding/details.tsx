@@ -34,12 +34,23 @@ export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
+  /*
+   * Names and ids, together.
+   *
+   * The picker has had `item.id` all along and this screen toggled on
+   * `item.name` alone — so onboarding wrote `profiles.interests` (the free-text
+   * array every surface renders) and never a single `user_interests` row (the
+   * graph every decision reads). Measured on staging: the two sets were
+   * disjoint, and nobody who completed onboarding could post on the board.
+   */
   const [interests, setInterests] = useState<string[]>([])
+  const [interestIds, setInterestIds] = useState<string[]>([])
   const [bio, setBio] = useState('')
 
   useEffect(() => {
     if (!loaded) return
     setInterests(draft.interests ?? [])
+    setInterestIds(draft.interestIds ?? [])
     setBio(draft.bio ?? '')
   }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -51,10 +62,14 @@ export default function DetailsScreen() {
     })
   }, [])
 
-  const toggle = (name: string) =>
+  const toggle = (id: string, name: string) => {
     setInterests((current) =>
       current.includes(name) ? current.filter((i) => i !== name) : [...current, name]
     )
+    setInterestIds((current) =>
+      current.includes(id) ? current.filter((i) => i !== id) : [...current, id]
+    )
+  }
 
   return (
     <OnboardingScreen
@@ -64,7 +79,7 @@ export default function DetailsScreen() {
       subtitle="Tell the circle who you are beyond the profile picture. Light up your presence."
       ctaLabel="Complete Profile"
       ctaBusy={saving}
-      onContinue={() => void commit({ interests, bio: bio.trim() })}
+      onContinue={() => void commit({ interests, interestIds, bio: bio.trim() })}
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
@@ -96,7 +111,7 @@ export default function DetailsScreen() {
                 key={item.id}
                 label={item.name}
                 selected={interests.includes(item.name)}
-                onPress={() => toggle(item.name)}
+                onPress={() => toggle(item.id, item.name)}
               />
             ))}
           </EmberChipRow>

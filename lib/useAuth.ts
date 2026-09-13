@@ -213,6 +213,10 @@ const clearAuthState = async () => {
     user: null,
     loading: false,
     initialized: true,
+    // The flag belongs to the account that was just created, not the device.
+    // Left set, the next sign-in on this launch — an onboarded account — was
+    // routed back into onboarding step one.
+    isNewAccount: false,
   })
 }
 
@@ -398,6 +402,8 @@ export const signInWithEmail = async (
         user,
         loading: false,
         initialized: true,
+        // Signing in is never creating; say so rather than inherit the flag.
+        isNewAccount: false,
       })
 
       startSessionRefresh()
@@ -458,20 +464,56 @@ export const signUp = async (
 }
 
 // Sign out
-export const signOut = async (revokeAll: boolean = false): Promise<{ success: boolean }> => {
+/**
+ * Local state is cleared whatever the server said — trapping somebody in a
+ * session they asked to leave is worse than a stale token. But the RESULT
+ * reports what the server did: `apiClient.signOut` returns `success: false`
+ * on failure and never throws, and the first version discarded it, so
+ * Settings' "Failed to sign out" branch could never fire. Offline, the
+ * refresh token stayed valid and the push token stayed registered, and the
+ * screen said nothing.
+ */
+export const signOut = async (
+  revokeAll: boolean = false
+): Promise<{ success: boolean; error?: string }> => {
   try {
     Logger.info('auth', 'Signing out...')
-
-    await apiClient.signOut(revokeAll)
+    const result = await apiClient.signOut(revokeAll)
     await clearAuthState()
-
+    if (!result.success) {
+      Logger.warn('auth', 'Signed out locally; the server did not confirm', { error: result.error })
+      return { success: false, error: result.error }
+    }
     Logger.info('auth', 'Sign out successful')
     return { success: true }
   } catch (error) {
     Logger.error('auth', 'Sign out exception', { error })
-    // Clear local state even if API call fails
     await clearAuthState()
-    return { success: true }
+    return { success: false, error: error instanceof Error ? error.message : 'Sign out failed' }
+  }
+}
+
+/**
+ * Re-read the session so `user.name` / `user.image` follow a profile edit.
+ *
+ * `globalAuthState.user` was set once at sign-in and never again; the
+ * 10-minute refresh only rotates tokens. So `lib/reveal.ts`, which reads
+ * `user.image` to decide whether reveal has a photo to show, said "add a
+ * photo first" to somebody who had just added one — until a relaunch.
+ */
+export const refreshAuthUser = async (): Promise<void> => {
+  try {
+    const result = await apiClient.getSession()
+    if (!result.success || !result.data) {
+      Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
+      return
+    }
+    updateAuthState({ session: { user: result.data }, user: result.data })
+    await TokenStorage.setUser(result.data)
+  } catch (error) {
+    // Called as `void refreshAuthUser()` after a photo write; a throw here
+    // would be an unhandled rejection with the photo already saved.
+    Logger.warn('auth', 'Session refresh failed', { error })
   }
 }
 

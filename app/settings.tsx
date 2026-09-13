@@ -1,16 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
+import { Logger } from '../lib/logger'
 import { EMBER } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
+
+/** The visible row title per key, so a failure can name the setting it lost. */
+const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
+  pushEnabled: 'Push notifications',
+  showOnlineStatus: 'Show online status',
+  shareReadReceipts: 'Read receipts',
+  locationSharing: 'Share location for nearby events',
+}
 
 interface PreferencesState {
   pushEnabled: boolean
@@ -42,6 +51,13 @@ export default function SettingsScreen() {
   const [, setDisplayName] = useState<string>('')
   const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
+  // What the screen currently shows, readable from an async callback. Two
+  // toggles can be in flight at once, and a rollback that spread the snapshot
+  // it was called with wrote the sibling's OLD value back into storage.
+  const preferencesRef = useRef(preferences)
+  useEffect(() => {
+    preferencesRef.current = preferences
+  }, [preferences])
   const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
     pushEnabled: false,
     showOnlineStatus: false,
@@ -49,6 +65,7 @@ export default function SettingsScreen() {
     locationSharing: false,
   })
   const [loadingPreferences, setLoadingPreferences] = useState(true)
+  const [preferencesError, setPreferencesError] = useState<string | null>(null)
   const [deletingAccount, setDeletingAccount] = useState(false)
 
   const settingsStorageKey = useMemo(() => (
@@ -115,7 +132,18 @@ export default function SettingsScreen() {
         }
 
         const result = await apiClient.getProfile(user.id)
+        if (!result.success || !result.data) {
+          /*
+           * Say so, rather than leave four switches reading ON. With nothing
+           * cached the defaults are all `true` and looked exactly like a
+           * server-confirmed answer — the same lie the naming bug below used
+           * to tell, arriving through a network failure instead.
+           */
+          Logger.warn('profile', 'Could not load preferences', { error: result.error })
+          setPreferencesError('Could not load your settings. Pull to retry or check your connection.')
+        }
         if (result.success && result.data) {
+          setPreferencesError(null)
           const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
           const name = profile.name || user.name || 'You'
           setDisplayName(name)
@@ -130,7 +158,10 @@ export default function SettingsScreen() {
           setPreferences(nextPrefs)
           savePreferencesLocal(nextPrefs)
         }
-      } catch {} finally {
+      } catch (error) {
+        Logger.warn('profile', 'Could not load preferences', { error })
+        setPreferencesError('Could not load your settings. Check your connection and try again.')
+      } finally {
         setLoadingPreferences(false)
       }
     }
@@ -167,21 +198,27 @@ export default function SettingsScreen() {
 
       await savePreferencesLocal(next)
     } catch {
-      setPreferences(previous)
-      await savePreferencesLocal(previous)
-      Alert.alert('Update failed', 'Could not save this setting. Please try again.')
+      // Roll back THIS key only, from what is on screen NOW. Restoring the
+      // whole snapshot undid a sibling toggle that had already been saved
+      // while this one was in flight.
+      const rolled = { ...preferencesRef.current, [key]: previous[key] }
+      preferencesRef.current = rolled
+      setPreferences(rolled)
+      await savePreferencesLocal(rolled)
+      Alert.alert('Update failed', `Could not save “${PREFERENCE_TITLES[key]}”. Please try again.`)
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
     }
   }, [user, savePreferencesLocal])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
-    const previous = preferences
+    const previous = preferencesRef.current
     const next = { ...previous, [key]: !previous[key] }
+    preferencesRef.current = next
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [preferences, persistPreference, savePreferencesLocal])
+  }, [persistPreference, savePreferencesLocal])
 
   const openExternal = useCallback(async (url: string) => {
     try {
@@ -278,7 +315,14 @@ export default function SettingsScreen() {
     { icon: 'log-out-outline', title: 'Sign out', onPress: async () => {
       try {
         const result = await signOut()
-        if (!result.success) Alert.alert('Error', 'Failed to sign out')
+        // Local state is gone either way; this is the honest version of what
+        // the server did, which used to be reported as success regardless.
+        if (!result.success) {
+          Alert.alert(
+            'Signed out on this phone',
+            'We could not reach the server, so this session may stay active elsewhere until it lapses.'
+          )
+        }
       } catch {
         Alert.alert('Error', 'Failed to sign out')
       }
@@ -294,7 +338,7 @@ export default function SettingsScreen() {
      * single irreversible row is what makes it mean anything.
      */
     { header: 'Danger zone', spaced: true },
-    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, onPress: deletingAccount ? () => {} : handleDeleteAccount },
+    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
   ]), [openExternal, deletingAccount, handleDeleteAccount])
 
   const renderItem = (item: any, idx: number) => {
@@ -323,6 +367,7 @@ export default function SettingsScreen() {
             <Switch
               value={preferences[keyName]}
               onValueChange={() => onTogglePreference(keyName)}
+              accessibilityLabel={item.title}
               disabled={saving[keyName] || loadingPreferences}
               /*
                * `EMBER.accent`. The old `#7A2CF3` predates the ember palette and
@@ -341,8 +386,10 @@ export default function SettingsScreen() {
         key={idx}
         style={styles.row}
         onPress={item.onPress}
+        disabled={item.disabled}
         accessibilityRole="button"
         accessibilityLabel={item.title}
+        accessibilityState={item.disabled ? { disabled: true, busy: true } : undefined}
       >
         <View style={styles.rowLeft}>
           <Ionicons name={item.icon} size={20} color={item.danger ? '#e74c3c' : '#FFFFFF'} />
@@ -369,6 +416,11 @@ export default function SettingsScreen() {
           settings.
         */}
         <View style={styles.card}>
+          {preferencesError ? (
+            <Text style={styles.prefsError} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {preferencesError}
+            </Text>
+          ) : null}
           {items.map((it, i) => (
             <React.Fragment key={`it-${i}`}>
               {renderItem(it, i)}
@@ -382,6 +434,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  prefsError: { color: '#e74c3c', fontSize: 13, paddingHorizontal: 16, paddingBottom: 8 },
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { padding: 16 },

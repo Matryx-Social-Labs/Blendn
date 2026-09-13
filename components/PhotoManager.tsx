@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
+    AccessibilityInfo,
     ActivityIndicator,
     Alert,
     Dimensions,
@@ -99,6 +100,7 @@ export default function PhotoManager({
     if (!editable) return
 
     setUploading(true)
+    AccessibilityInfo.announceForAccessibility('Uploading photo')
     try {
       const result = await selectAndUploadPhoto(userId)
 
@@ -116,10 +118,23 @@ export default function PhotoManager({
 
         setPhotos(prev => [...prev, newPhoto])
 
-        // Update database
+        /*
+         * The upload succeeded; THIS is the write that puts it on the profile,
+         * and `reorderPhotos` reports failure by returning false, never by
+         * throwing. The first version ignored the boolean and logged "Photo
+         * added" regardless — so a person saw the tile, and on the next load
+         * it was gone, with the object orphaned in storage.
+         */
         const newPhotoUrls = [...photos.map(p => p.url), result.url]
-        await reorderPhotos(userId, newPhotoUrls)
-        
+        const saved = await reorderPhotos(userId, newPhotoUrls)
+        if (!saved.ok) {
+          setPhotos(prev => prev.filter(p => p.url !== result.url))
+          // The server's sentence when it gave one -- "That looks like a
+          // blank image" says what to do; a generic retry does not.
+          Alert.alert('Could not add that photo', saved.error)
+          return
+        }
+        AccessibilityInfo.announceForAccessibility('Photo added')
         Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
       } else if (result.error && !result.cancelled) {
         Alert.alert('Upload Failed', result.error)
@@ -156,10 +171,10 @@ export default function PhotoManager({
       // puts it back rather than leaving the UI ahead of the server.
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
 
-      const ok = await reorderPhotos(userId, reordered.map((p) => p.url))
-      if (!ok) {
+      const saved = await reorderPhotos(userId, reordered.map((p) => p.url))
+      if (!saved.ok) {
         setPhotos(photos)
-        Alert.alert('Could not update', 'Your photo order was not saved. Try again.')
+        Alert.alert('Could not update', saved.error)
       }
     },
     [editable, photos, userId]
@@ -183,11 +198,18 @@ export default function PhotoManager({
               // Remove from state immediately for better UX
               const newPhotos = photos.filter((_, index) => index !== photoIndex)
               setPhotos(newPhotos)
-              
-              // Update database
-              const newPhotoUrls = newPhotos.map(p => p.url)
-              await reorderPhotos(userId, newPhotoUrls)
-              
+
+              // The profile write first, and the storage delete ONLY if it
+              // held. Deleting the object while the profile still lists the
+              // URL left a broken image on every screen that shows this
+              // person, and nothing had told them the removal failed.
+              const saved = await reorderPhotos(userId, newPhotos.map(p => p.url))
+              if (!saved.ok) {
+                setPhotos(photos)
+                Alert.alert('Could not remove', saved.error)
+                return
+              }
+
               // Delete from storage in background
               deletePhoto(photo.url).catch(error => {
                 Logger.error('profile', 'PhotoManager: Delete photo error', { error, url: photo.url })
@@ -214,13 +236,24 @@ export default function PhotoManager({
 
     return (
       <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}> 
+        {/*
+          `accessible={false}`: the wrapper has no action of its own, and as an
+          accessible element it swallowed the badge and both buttons into one
+          unlabelled stop — "Make main" and "Remove" were reachable by touch
+          exploration only. The tile's name lives on the image below; the
+          buttons stay independently focusable.
+        */}
         <TouchableOpacity
           style={[styles.photo, { width: itemSize, height: itemSize }]}
           activeOpacity={0.8}
+          accessible={false}
         >
           <OptimizedImage
             source={cachedUrl || item.url}
             style={styles.photoImage}
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={`Photo ${index + 1} of ${photos.length}${item.isPrimary ? ', main photo' : ''}`}
             contentFit="cover"
             placeholder={require('../assets/images/icon.png')}
             transition={200}
@@ -247,6 +280,7 @@ export default function PhotoManager({
                 onPress={() => handleMakePrimary(index)}
                 accessibilityRole="button"
                 accessibilityLabel="Make this my main photo"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.makePrimaryText}>Make main</Text>
               </TouchableOpacity>
@@ -257,6 +291,9 @@ export default function PhotoManager({
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => handleRemovePhoto(index)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove photo ${index + 1}`}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="close-circle" size={24} color="#FF3B30" />
             </TouchableOpacity>
@@ -264,7 +301,7 @@ export default function PhotoManager({
         </TouchableOpacity>
       </View>
     )
-  }, [cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize])
+  }, [cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
 
   const renderAddPhoto = () => {
     if (!editable || photos.length >= maxPhotos) return null

@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +21,7 @@ import { apiClient } from '../lib/apiClient'
 import { needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
 import { Logger } from '../lib/logger'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
 /**
  * The one screen that replaced eight.
@@ -305,7 +305,7 @@ function AboutYouInner() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>{isEdit ? 'You and matching' : 'A bit about you'}</Text>

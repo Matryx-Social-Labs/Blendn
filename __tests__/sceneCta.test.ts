@@ -222,6 +222,13 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     expect(detail).toContain("? (rsvpd ? 'rsvpd' : 'rsvp')")
     expect(detail).toContain('handleToggleRsvp')
 
+    // A thrown RSVP request puts the old status back. The optimistic
+    // "You're going" used to survive a timeout with no row behind it —
+    // `prevStatus` lived inside the `try`, so the `catch` could not reach it.
+    const handler = detail.slice(detail.indexOf('const handleToggleRsvp'), detail.indexOf('}, [id, user, rsvpStatus'))
+    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n\s*try \{/)
+    expect(handler).toMatch(/\} catch \{\s*setRsvpStatus\(prevStatus\)/)
+
     // No second control, and no overflow in the bar.
     expect(detail).not.toContain('secondaryRow')
     expect(detail).not.toContain('ellipsis-horizontal')
@@ -401,5 +408,22 @@ describe('the Scene is a full-screen route', () => {
     // Guards against someone "fixing" both together. The rule is per
     // presentation, not per screen.
     expect(read('app', 'room.tsx')).toContain('topInset={0}')
+  })
+})
+
+describe('the check-in position request has a deadline', () => {
+  it('rejects with E_LOCATION_TIMEOUT rather than spinning for ever', () => {
+    /*
+     * getCurrentPositionAsync has no timeout option and BestForNavigation
+     * waits for a fresh fix; on an emulator with no GPS stream the Blend in
+     * button spun for five minutes and the "Location timeout" tray, written
+     * for exactly this, could never show.
+     */
+    const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    expect(src).toContain("code: 'E_LOCATION_TIMEOUT'")
+    expect(src).toMatch(/const LOCATION_FIX_TIMEOUT_MS = 1[0-9]_000/)
+    expect(src).not.toContain('timeInterval: 12000')
   })
 })

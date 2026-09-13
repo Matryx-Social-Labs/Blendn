@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -63,31 +64,41 @@ export function NotificationBell() {
   }, [])
 
   /*
-   * The count on mount, so the badge is right before anybody taps.
+   * The count whenever the tab comes into view, so the badge is right before
+   * anybody taps.
    *
-   * One request, not a poll. A bell that polls is a bell that costs a request
-   * every few seconds on the app's busiest screen for a number that changes a
-   * handful of times a day; the socket already tells this app when something
-   * happens, and wiring the count to it is the upgrade if the badge ever feels
-   * stale. Deliberately not doing that yet — it is a second source of truth,
-   * and the cheap version has to be shown to be insufficient first.
+   * One request per focus, not a poll. This was once-on-mount, deliberately,
+   * with a note that the cheap version had to be shown insufficient first. It
+   * was: driven across two phones, the other person revealed and a rating
+   * opened, three new rows landed, and the badge kept saying 5 for the whole
+   * session. A bell that polls is still the wrong answer; a bell that looks
+   * when you look at it is the cheapest right one.
    */
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load])
+  )
 
   const openSheet = useCallback(() => {
     setOpen(true)
-    void load()
     if (unread > 0) {
       // Optimistic: the badge clears on tap rather than after a round trip,
       // because the round trip is the slowest part of an action whose whole
       // job is to feel like "seen".
       setUnread(0)
-      apiClient.markNotificationsRead().catch((error) => {
-        Logger.warn('notifications', 'markRead:failed', { error: error as never })
-      })
+      // Load *after* the mark-read settles. Firing both at once let the load
+      // come back with the pre-read count and put the badge straight back —
+      // the "5" that survived opening the sheet on the simulator.
+      apiClient
+        .markNotificationsRead()
+        .catch((error) => {
+          Logger.warn('notifications', 'markRead:failed', { error: error as never })
+        })
+        .finally(() => void load())
+      return
     }
+    void load()
   }, [load, unread])
 
   /*

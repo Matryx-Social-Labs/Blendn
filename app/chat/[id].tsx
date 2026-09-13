@@ -10,7 +10,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -37,6 +36,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { showMessageReportOptions } from '../../lib/safetyUtils'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
 interface Message {
   message_id: string
@@ -47,6 +47,8 @@ interface Message {
   reply_to_message_id: string | null
   is_edited: boolean
   created_at: string
+  /** Hidden by moderation. Only ever true on the sender's own messages. */
+  removed?: boolean
   replyTo?: Message
   reactions?: { emoji: string; count: number; mine?: boolean }[]
 }
@@ -214,7 +216,13 @@ function GroupChatInner(props?: {
         sender_id: senderId,
         sender_name: senderId === 'system' ? 'System' : senderId === userId ? 'You' : serverName,
         message_text: msg.message_text || msg.content || msg.text || '',
-        message_type: msg.message_type || msg.type || 'text',
+        // The server nulls the text and says why; an empty bubble said nothing.
+        removed: Boolean(msg.moderation_hidden),
+        // An ad's `type` is its media kind; the marker is in metadata. Without
+        // this it scrolled back as a peer's bubble from "Attendee" (K3.2).
+        message_type: msg.metadata?.sponsored_message_id
+          ? 'sponsored'
+          : msg.message_type || msg.type || 'text',
         reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
         is_edited: msg.is_edited || msg.isEdited || false,
         created_at: msg.created_at || msg.createdAt,
@@ -317,7 +325,7 @@ function GroupChatInner(props?: {
         sender_id: data.message.userId,
         sender_name: data.message.userId === currentUser?.id ? 'You' : (data.message.userName || 'Attendee'),
         message_text: data.message.content,
-        message_type: data.message.type || 'text',
+        message_type: data.message.kind === 'sponsored' ? 'sponsored' : data.message.type || 'text',
         reply_to_message_id: data.message.parentId || null,
         is_edited: false,
         created_at: data.message.createdAt,
@@ -352,7 +360,18 @@ function GroupChatInner(props?: {
     }
 
     const handleDeleted: ChatMessageDeletedCallback = (data) => {
-      setMessages(prev => prev.filter(m => m.message_id !== data.messageId))
+      /*
+       * A moderation removal of your own message becomes a placeholder rather
+       * than a disappearance — the same thing the history shows you on the
+       * next load, and the only way you learn it happened. Everyone else's
+       * copy simply goes.
+       */
+      const ownRemoval = data.moderation && data.userId && data.userId === currentUser?.id
+      setMessages(prev =>
+        ownRemoval
+          ? prev.map(m => (m.message_id === data.messageId ? { ...m, removed: true, message_text: '' } : m))
+          : prev.filter(m => m.message_id !== data.messageId)
+      )
     }
 
     const handleBanned: ChatMemberBannedCallback = (data) => {
@@ -524,6 +543,7 @@ function GroupChatInner(props?: {
         roomId={String(params.id)}
         senderName={item.sender_name}
         text={item.message_text}
+        removed={item.removed}
         time={formatTime(item.created_at)}
         edited={item.is_edited}
         reactions={item.reactions}
@@ -532,7 +552,7 @@ function GroupChatInner(props?: {
             ? { senderName: item.replyTo.sender_name, text: item.replyTo.message_text }
             : null
         }
-        onLongPress={() => openMessageMenu(item)}
+        onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
     )
   }
@@ -561,7 +581,7 @@ function GroupChatInner(props?: {
       {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
       <StatusBar style="light" backgroundColor={EMBER.bg} />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         {embedded ? null : (
           <GroupChatHeader
             name={(roomName as string) || 'Event Chat'}
@@ -663,15 +683,21 @@ function GroupChatInner(props?: {
 
       {/* Message menu */}
       <Modal visible={showMessageMenu} transparent animationType="fade" onRequestClose={() => setShowMessageMenu(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMessageMenu(false)}>
+        {/*
+          accessible={false} on the scrim: a TouchableOpacity is accessible by
+          default and on iOS that collapses everything inside it into one node,
+          so VoiceOver (and Maestro) read the whole menu as "↩️ Reply 📋 Copy 🚩
+          Report" and could not pick Report on its own.
+        */}
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} accessible={false} onPress={() => setShowMessageMenu(false)}>
           <View style={styles.messageMenu}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Reply" onPress={() => {
               if (selectedMessage) { setReplyingTo(selectedMessage); setShowMessageMenu(false); setSelectedMessage(null) }
             }}>
               <Text style={styles.menuIcon}>↩️</Text>
               <Text style={styles.menuText}>Reply</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={async () => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Copy" onPress={async () => {
               if (selectedMessage) {
                 await Clipboard.setString(selectedMessage.message_text)
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -681,7 +707,7 @@ function GroupChatInner(props?: {
               <Text style={styles.menuIcon}>📋</Text>
               <Text style={styles.menuText}>Copy</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => {
+            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Report" onPress={() => {
               /*
                * Reuses the same flow the DM screen uses, rather than a second
                * confirmation tray.

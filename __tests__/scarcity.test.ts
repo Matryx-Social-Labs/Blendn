@@ -38,6 +38,19 @@ describe('scarcityLabel', () => {
     expect(scarcityLabel({ maxCapacity: 50, currentCapacity: 49 })).toBe('1 SPOT LEFT')
   })
 
+  it('counts RSVPs before doors, when nobody has checked in yet', () => {
+    /*
+     * Driven on iOS: a one-seat event with one person going read "1 SPOT
+     * LEFT" — attendance is zero before doors — while the server would have
+     * waitlisted the next tap. Whichever of bodies and RSVPs is larger is
+     * what fills the room.
+     */
+    expect(scarcityLabel({ maxCapacity: 1, currentCapacity: 0, goingCount: 1 })).toBe('FULL')
+    expect(scarcityLabel({ maxCapacity: 10, currentCapacity: 0, goingCount: 9 })).toBe('1 SPOT LEFT')
+    // After doors, bodies can exceed RSVPs; the larger still wins.
+    expect(scarcityLabel({ maxCapacity: 10, currentCapacity: 10, goingCount: 3 })).toBe('FULL')
+  })
+
   it('says FULL rather than a negative count when over capacity', () => {
     // Check-in deliberately does not refuse (blendn-admin/docs/CHECKIN.md), so occupancy can
     // exceed capacity and "-3 SPOTS LEFT" is a reachable state, not a theory.

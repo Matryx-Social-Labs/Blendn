@@ -227,6 +227,23 @@ export interface OnboardingDraft {
   education?: string
   work_field?: string
   interests?: string[]
+  /**
+   * The structured graph — `user_interests` category ids, not the free-text
+   * names above.
+   *
+   * Both, because they are two different things and the product still reads
+   * both. `profiles.interests` is what every SURFACE renders — the onboarding
+   * summary, the admin Users list — and `user_interests` is what every
+   * DECISION reads: `lib/matching.ts` ranks on it, and `lib/board.ts` gates
+   * posting on `interestCount >= MIN_INTERESTS_TO_RANK`.
+   *
+   * Onboarding wrote only the names. Measured on staging: 36 profiles held
+   * free text, 29 held a graph, and the two sets were **disjoint** — every
+   * account that came through onboarding had an empty graph, so nobody who
+   * completed it could post on the pre-event board. It was invisible because
+   * both surfaces render the field that WAS being written.
+   */
+  interestIds?: string[]
   bio?: string
   photos?: string[]
   push_enabled?: boolean

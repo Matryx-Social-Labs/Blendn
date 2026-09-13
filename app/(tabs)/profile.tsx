@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { router, useFocusEffect } from 'expo-router'
+import React, { useCallback, useMemo, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { OptimizedImage } from '../../components/OptimizedImage'
@@ -38,6 +38,9 @@ function PanelRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      // Without this the row's name is the two icon glyphs around the label —
+      // "\ueb94 Edit profile \ueb3c" in the accessibility tree.
+      accessibilityLabel={label}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <Ionicons name={icon} size={20} color={EMBER.textPrimary} />
@@ -156,11 +159,21 @@ function ProfileInner() {
     }
   }, [user])
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      getUserAndProfile()
-    }
-  }, [user, authLoading, getUserAndProfile])
+  /*
+   * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
+   * once per session: change the primary photo in Edit profile, come back,
+   * and this screen still showed the old one — the report that found it.
+   * Cheap when nothing changed: `getUserAndProfile` serves the cached view
+   * model, and every profile writer (`updateProfile`, `reorderPhotos`)
+   * invalidates that cache, so a real change is the only time this fetches.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!authLoading && user) {
+        getUserAndProfile()
+      }
+    }, [user, authLoading, getUserAndProfile])
+  )
 
   /*
    * The Me tab is a control panel, not a showcase.

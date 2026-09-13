@@ -15,7 +15,33 @@ import {
   type OnboardingStep,
 } from './onboarding'
 import { clearOnboarding, readOnboarding, writeOnboarding } from './onboardingStorage'
-import { useAuth } from './useAuth'
+import { clearNewAccountFlag, useAuth } from './useAuth'
+
+/**
+ * Make the server's interest graph match what was picked.
+ *
+ * The server has no "replace": POST is additive (`skipDuplicates`) and DELETE
+ * removes. So "match" is a diff — read what is held, add what is missing,
+ * remove what was un-ticked. The first version only ever POSTed, which meant
+ * going back to the picker and deselecting something left it on the server for
+ * ever, and nothing anywhere called DELETE.
+ *
+ * Returns false on any failure so the caller can warn; never throws, because
+ * both callers sit under the "a failed server save does not block anyone" rule.
+ */
+export async function syncInterests(userId: string, wanted: string[]): Promise<boolean> {
+  const held = await apiClient.getProfileInterests(userId)
+  if (!held.success || !held.data) return false
+  const heldIds = new Set(held.data.interests.map((i) => i.id))
+  const wantedIds = new Set(wanted)
+  const add = [...wantedIds].filter((id) => !heldIds.has(id))
+  const remove = [...heldIds].filter((id) => !wantedIds.has(id))
+
+  let ok = true
+  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
+  if (remove.length) ok = (await apiClient.removeProfileInterests(userId, remove)).success && ok
+  return ok
+}
 
 /**
  * The draft, and moving through the flow.
@@ -179,6 +205,30 @@ export function useOnboarding(step: OnboardingStep) {
        * profile a few minutes late.
        */
       try {
+        /*
+         * The structured graph, before the profile write.
+         *
+         * Onboarding never wrote `user_interests` at all — it sent the free-text
+         * names and nothing else — so a person who finished it could not post on
+         * the pre-event board, which gates on `interestCount >= 2`, and matched
+         * weakly because ranking's dominant term is the graph.
+         *
+         * Ordered first for the reason `app/about-you.tsx` gives: this call is
+         * idempotent and re-runnable from edit-profile, so if the profile write
+         * below fails nothing is permanently lost.
+         *
+         * Only on the step that owns the picker. `interestIds` is not a profile
+         * field — `updateProfileSchema` has no such key and strips it — so the
+         * per-step profile PUT below can never carry it, and `finish()` has to
+         * sync it explicitly to be the backstop this file promises.
+         */
+        if (step === 'details' && merged.interestIds) {
+          const synced = await syncInterests(userId, merged.interestIds)
+          if (!synced) {
+            Logger.warn('auth', 'Onboarding could not save the interest graph', { step })
+          }
+        }
+
         const body = stepPayload(step, merged)
         if (Object.keys(body).length > 0) {
           const result = await apiClient.updateProfile(userId, body)
@@ -239,6 +289,26 @@ export function useOnboarding(step: OnboardingStep) {
   const finish = useCallback(async () => {
     if (!userId) return
     setSaving(true)
+
+    /*
+     * The graph is NOT in the profile PUT — `updateProfileSchema` strips
+     * `interestIds` — so re-sending the draft below does not re-send it. This
+     * call is what makes the "everything is re-sent here" claim above true for
+     * the one field whose absence is silent. The first version of this file
+     * claimed the backstop and did not have it.
+     *
+     * `undefined` means the picker was never visited; syncing to `[]` would
+     * wipe a graph set elsewhere (edit-profile, `about-you`).
+     */
+    if (draft.interestIds) {
+      try {
+        const synced = await syncInterests(userId, draft.interestIds)
+        if (!synced) Logger.warn('auth', 'Finishing onboarding could not save the interest graph')
+      } catch (error) {
+        Logger.warn('auth', 'Finishing onboarding threw while saving the interest graph', { error })
+      }
+    }
+
     const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
     setSaving(false)
 
@@ -248,6 +318,8 @@ export function useOnboarding(step: OnboardingStep) {
     }
 
     await clearOnboarding(userId)
+    // The flow is over for this session too, not only on this device.
+    clearNewAccountFlag()
     return true
   }, [draft, userId])
 
