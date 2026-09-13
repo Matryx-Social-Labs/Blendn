@@ -410,3 +410,20 @@ describe('the Scene is a full-screen route', () => {
     expect(read('app', 'room.tsx')).toContain('topInset={0}')
   })
 })
+
+describe('the check-in position request has a deadline', () => {
+  it('rejects with E_LOCATION_TIMEOUT rather than spinning for ever', () => {
+    /*
+     * getCurrentPositionAsync has no timeout option and BestForNavigation
+     * waits for a fresh fix; on an emulator with no GPS stream the Blend in
+     * button spun for five minutes and the "Location timeout" tray, written
+     * for exactly this, could never show.
+     */
+    const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    expect(src).toContain("code: 'E_LOCATION_TIMEOUT'")
+    expect(src).toMatch(/const LOCATION_FIX_TIMEOUT_MS = 1[0-9]_000/)
+    expect(src).not.toContain('timeInterval: 12000')
+  })
+})

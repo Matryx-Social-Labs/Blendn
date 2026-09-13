@@ -65,6 +65,9 @@ import {
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
 import { highlightEntities } from '../../lib/entityHighlight';
 import { heroPillLabel } from '../../lib/scarcity';
+
+/** How long a check-in waits for a GPS fix before saying so. */
+const LOCATION_FIX_TIMEOUT_MS = 15_000
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
@@ -667,12 +670,26 @@ export default function EventDetail() {
         return null
       }
 
-      // Get high-accuracy location for production
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 12000,
-        distanceInterval: 1,
-        mayShowUserSettingsDialog: true,
+      /*
+       * A deadline of our own. `getCurrentPositionAsync` has no timeout
+       * option (`timeInterval` is a watch setting and does nothing here), and
+       * BestForNavigation waits for a fresh GNSS fix — on a phone that cannot
+       * get one the promise never settles, the button spins for ever, and the
+       * "Location timeout" tray below was unreachable. Driven on an emulator
+       * with no GPS stream: five minutes of spinner. Fifteen seconds is
+       * longer than any fix worth waiting for at a venue door.
+       */
+      const location = await new Promise<Location.LocationObject>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })),
+          LOCATION_FIX_TIMEOUT_MS
+        )
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+          mayShowUserSettingsDialog: true,
+        })
+          .then((fix) => { clearTimeout(timer); resolve(fix) })
+          .catch((err) => { clearTimeout(timer); reject(err) })
       })
 
       // Validate GPS accuracy for production
