@@ -133,7 +133,15 @@ function RoomInner() {
       const id = result.data?.chatGroupId ?? result.data?.id
       if (result.success && id) {
         setChatState('idle')
-        router.push({
+        /*
+         * `replace`, not `push`. This screen is presented as a modal, and on
+         * iOS a card pushed after a modal goes onto the stack *underneath* it:
+         * the chat mounted, fetched its history, and stayed hidden behind the
+         * Grid, so Join Chat read as a dead button and closing the room then
+         * took two taps. Driven 2026-09-13. Replacing dismisses the room and
+         * shows the chat; the room is one tap away on the centre button.
+         */
+        router.replace({
           pathname: '/chat/[id]',
           params: {
             id: String(id),

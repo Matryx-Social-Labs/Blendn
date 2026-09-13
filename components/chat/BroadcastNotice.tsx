@@ -43,9 +43,15 @@ export function BroadcastNotice({
   time: string
 }) {
   const sponsored = kind === 'sponsored'
-  // The server prefixes the content with its own label line; the SPONSORED
-  // label above the text already says it, so it would read twice.
-  const body = sponsored ? text.replace(/^📣 \[Sponsored\]\n/, '') : text
+  // The server prefixes the content with its own label line; the label above
+  // the text already says it, so it would read twice. An announcement's line
+  // also names the organisation, which is worth keeping -- it moves up into
+  // the label rather than sitting under it as "📢 [Announcement from …]".
+  const from = sponsored ? null : /^📢 \[Announcement from ([^\]]+)\]\n/.exec(text)
+  const body = sponsored
+    ? text.replace(/^📣 \[Sponsored\]\n/, '')
+    : from ? text.slice(from[0].length) : text
+  const label = sponsored ? 'SPONSORED' : from ? `ANNOUNCEMENT · ${from[1].toUpperCase()}` : 'ANNOUNCEMENT'
 
   return (
     <View style={styles.wrap}>
@@ -69,7 +75,7 @@ export function BroadcastNotice({
           style={[styles.label, sponsored && styles.labelSponsored]}
           maxFontSizeMultiplier={1.3}
         >
-          {sponsored ? 'SPONSORED' : 'ANNOUNCEMENT'}
+          {label}
         </Text>
         <Text style={styles.text}>{body}</Text>
         <Text style={styles.time}>{time}</Text>

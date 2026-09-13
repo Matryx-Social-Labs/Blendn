@@ -1825,13 +1825,19 @@ class ApiClientClass {
     chatGroupId: string,
     content: string,
     type: 'text' | 'image' | 'video' = 'text',
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    /**
+     * The message being replied to. The room screen drew the quote on the
+     * optimistic bubble and never sent this, so every reply arrived on the
+     * other phones -- and came back on reload -- as a plain message.
+     */
+    parentId?: string
   ): Promise<ApiResponse<ChatMessageData>> {
     return this.queuedRequest<ChatMessageData>(
       `/api/mobile/chat/groups/${chatGroupId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ content, type, metadata }),
+        body: JSON.stringify({ content, type, metadata, ...(parentId && { parentId }) }),
       },
       true,
       2
