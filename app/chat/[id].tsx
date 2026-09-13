@@ -190,6 +190,15 @@ function GroupChatInner(props?: {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
+  /*
+   * Whether the list should keep following its end as content lays out.
+   * Distinct from `isAtBottomRef`: that one is derived from scroll geometry,
+   * and during the first layout a programmatic scrollToEnd is followed by the
+   * content growing again, so the geometry read "not at the bottom" and the
+   * next size change was ignored -- the room opened one message short, the
+   * newest bubble under the composer. This flips only on a real drag.
+   */
+  const followEndRef = useRef(true)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -223,16 +232,31 @@ function GroupChatInner(props?: {
         message_type: msg.metadata?.sponsored_message_id
           ? 'sponsored'
           : msg.message_type || msg.type || 'text',
-        reply_to_message_id: msg.reply_to_message_id || msg.replyToMessageId || null,
+        // The server's field is `parent_id`; the two names before it belong to
+        // nothing this app has ever received, so a reply lost its quote on reload.
+        reply_to_message_id: msg.parent_id || msg.reply_to_message_id || msg.replyToMessageId || null,
         is_edited: msg.is_edited || msg.isEdited || false,
         created_at: msg.created_at || msg.createdAt,
-        replyTo: undefined as Message | undefined,
+        // `parent_message` rides along on history, so a quote survives the
+        // parent scrolling out of the loaded page.
+        replyTo: (msg.parent_message
+          ? {
+              message_id: msg.parent_message.id,
+              sender_id: msg.parent_message.user?.id ?? '',
+              sender_name: msg.parent_message.user?.id === userId ? 'You' : msg.parent_message.user?.name || 'Attendee',
+              message_text: msg.parent_message.content ?? '',
+              message_type: 'text',
+              reply_to_message_id: null,
+              is_edited: false,
+              created_at: msg.parent_message.created_at ?? '',
+            }
+          : undefined) as Message | undefined,
         reactions: undefined as { emoji: string; count: number; mine?: boolean }[] | undefined,
       }
     })
     return list.map(msg => ({
       ...msg,
-      replyTo: msg.reply_to_message_id ? list.find(m => m.message_id === msg.reply_to_message_id) : undefined,
+      replyTo: msg.reply_to_message_id ? list.find(m => m.message_id === msg.reply_to_message_id) ?? msg.replyTo : undefined,
     }))
   }
 
@@ -330,7 +354,13 @@ function GroupChatInner(props?: {
         is_edited: false,
         created_at: data.message.createdAt,
       }
-      setMessages(prev => prev.some(m => m.message_id === newMsg.message_id) ? prev : [...prev, newMsg])
+      setMessages(prev =>
+        prev.some(m => m.message_id === newMsg.message_id)
+          ? prev
+          // Resolve the quote here, not in render: the parent is already in
+          // the list, and a live reply used to arrive without it.
+          : [...prev, { ...newMsg, replyTo: newMsg.reply_to_message_id ? prev.find(m => m.message_id === newMsg.reply_to_message_id) : undefined }]
+      )
       setTypingUsers(prev => {
         if (!prev.has(data.message.userId)) return prev
         const next = new Map(prev); next.delete(data.message.userId); return next
@@ -446,7 +476,7 @@ function GroupChatInner(props?: {
       if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
       emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
 
-      const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text')
+      const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
       if (!result.success) throw new Error(result.error || 'Failed to send')
 
       /*
@@ -469,7 +499,18 @@ function GroupChatInner(props?: {
       }
 
       const newId = result.data?.id
-      if (newId) setMessages(prev => prev.map(m => m.message_id === optimistic!.message_id ? { ...m, message_id: newId } : m))
+      /*
+       * The room echoes the sender's own message over the socket, and it can
+       * land before this response does. Renaming the optimistic bubble then
+       * produced two rows with one id -- "Encountered two children with the
+       * same key" on the phone, and the message drawn twice. If the echo is
+       * already in the list, the optimistic copy is the one to drop.
+       */
+      if (newId) setMessages(prev =>
+        prev.some(m => m.message_id === newId)
+          ? prev.filter(m => m.message_id !== optimistic!.message_id)
+          : prev.map(m => m.message_id === optimistic!.message_id ? { ...m, message_id: newId } : m)
+      )
       markDomainsDirty(['chat'])
     } catch (error) {
       if (optimistic) setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
@@ -633,10 +674,23 @@ function GroupChatInner(props?: {
               </ScalePress>
             </View>
           ) : null}
+          /*
+           * Follow the end while the reader is at it. A `scrollToEnd` fired
+           * 50ms after `setMessages` measured a list that had laid out
+           * `initialNumToRender` rows and none of the sponsored notices'
+           * heights, so opening the room landed on yesterday's messages with
+           * "Today" pinned to the bottom edge and everything under it hidden.
+           * Driven 2026-09-13, twice. Content growing while you are reading
+           * older messages leaves you where you are.
+           */
+          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
+          onScrollBeginDrag={() => { followEndRef.current = false }}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
+            // Back at the end by hand: follow again.
+            if (atBottom) followEndRef.current = true
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}

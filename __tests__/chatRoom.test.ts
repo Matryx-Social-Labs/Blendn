@@ -102,6 +102,19 @@ describe('a paid message cannot be mistaken for the room’s own voice', () => {
     expect(codeOnly(BROADCAST())).toContain("'SPONSORED'")
   })
 
+  it('lifts the organisation out of the announcement’s label line', () => {
+    /*
+     * Driven on Android: an organiser's announcement rendered as the
+     * ANNOUNCEMENT notice with "📢 [Announcement from Nightshift Collective]"
+     * as its first line -- the label twice, the emoji once. The name is the
+     * part worth keeping; it becomes "ANNOUNCEMENT · NIGHTSHIFT COLLECTIVE".
+     */
+    const src = codeOnly(read('components/chat/BroadcastNotice.tsx'))
+    expect(src).toMatch(/\/\^📢 \\\[Announcement from \(\[\^\\\]\]\+\)\\\]\\n\//)
+    expect(src).toContain('`ANNOUNCEMENT · ${from[1].toUpperCase()}`')
+    expect(src).toContain('text.slice(from[0].length)')
+  })
+
   it('keeps the room’s gradient off sponsored content', () => {
     /*
      * The warm rail is the room's own colour and marks an organiser speaking.
@@ -193,6 +206,63 @@ describe('the screen renders through the rebuilt components', () => {
     // Pinned, it was equally present whether you were reading the newest
     // message or two hundred back -- a note about right now, over history.
     expect(SCREEN()).toMatch(/ListFooterComponent=\{[\s\S]{0,400}TypingIndicator/)
+  })
+
+  it('sends the reply’s parent, and reads it back under the server’s name', () => {
+    /*
+     * Driven on two phones: a reply drew its quote on the sender's optimistic
+     * bubble and nowhere else. `sendChatMessage` never carried `parentId`, the
+     * history mapper read two field names the server has never sent
+     * (`parent_id` and `parent_message` are what arrive), and a live reply was
+     * appended without resolving its quote. Three halves of one feature.
+     */
+    const src = codeOnly(SCREEN())
+    expect(src).toMatch(/sendChatMessage\([^)]*optimistic\.reply_to_message_id/)
+    expect(src).toContain('reply_to_message_id: msg.parent_id ||')
+    expect(src).toContain('msg.parent_message')
+    expect(src).toMatch(/replyTo: newMsg\.reply_to_message_id \? prev\.find/)
+    expect(codeOnly(read('lib/apiClient.ts'))).toContain('...(parentId && { parentId })')
+  })
+
+  it('keeps the end in view as the list finishes laying out', () => {
+    /*
+     * Opening the room landed above the newest messages: `scrollToEnd` ran
+     * on a timer before the list had measured its later rows, so "Today"
+     * sat on the bottom edge with the day's messages beneath it, unseen.
+     */
+    const src = codeOnly(SCREEN())
+    expect(src).toMatch(/onContentSizeChange=\{\(\) => \{ if \(followEndRef\.current\) scrollToBottom\(false\) \}\}/)
+    // Following stops on a real drag, not on the geometry of a programmatic
+    // scroll: the first fix keyed off `isAtBottomRef`, and the content growing
+    // once more after scrollToEnd read as "not at the bottom", so the room
+    // still opened with the newest bubble under the composer.
+    expect(src).toMatch(/onScrollBeginDrag=\{\(\) => \{ followEndRef\.current = false \}\}/)
+    expect(src).toMatch(/if \(atBottom\) followEndRef\.current = true/)
+  })
+
+  it('drops the optimistic bubble when the socket echo beat the response', () => {
+    /*
+     * Seen on the phone as a LogBox "two children with the same key" and the
+     * reply drawn twice: the server echoes the sender's own message to the
+     * room, and on a slow send it arrived before the POST returned, so the
+     * optimistic row was renamed to an id already in the list.
+     */
+    const src = codeOnly(SCREEN())
+    expect(src).toMatch(/prev\.some\(m => m\.message_id === newId\)\s*\? prev\.filter\(m => m\.message_id !== optimistic!\.message_id\)/)
+  })
+})
+
+describe('the room opens the chat in front of itself', () => {
+  it('replaces the modal rather than pushing beneath it', () => {
+    /*
+     * `app/room.tsx` is `presentation: 'modal'`. On iOS a card pushed after a
+     * modal lands on the stack under it: Join Chat fetched the room and
+     * showed nothing, and closing the room then took two taps. Driven
+     * 2026-09-13 on the simulator, from a fresh launch.
+     */
+    const src = codeOnly(read('app/room.tsx'))
+    expect(src).toMatch(/router\.replace\(\{\s*pathname: '\/chat\/\[id\]'/)
+    expect(src).not.toMatch(/router\.push\(\{\s*pathname: '\/chat\/\[id\]'/)
   })
 })
 
