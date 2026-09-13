@@ -190,6 +190,15 @@ function GroupChatInner(props?: {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
+  /*
+   * Whether the list should keep following its end as content lays out.
+   * Distinct from `isAtBottomRef`: that one is derived from scroll geometry,
+   * and during the first layout a programmatic scrollToEnd is followed by the
+   * content growing again, so the geometry read "not at the bottom" and the
+   * next size change was ignored -- the room opened one message short, the
+   * newest bubble under the composer. This flips only on a real drag.
+   */
+  const followEndRef = useRef(true)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -674,11 +683,14 @@ function GroupChatInner(props?: {
            * Driven 2026-09-13, twice. Content growing while you are reading
            * older messages leaves you where you are.
            */
-          onContentSizeChange={() => { if (isAtBottomRef.current) scrollToBottom(false) }}
+          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
+          onScrollBeginDrag={() => { followEndRef.current = false }}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
+            // Back at the end by hand: follow again.
+            if (atBottom) followEndRef.current = true
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}

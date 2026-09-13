@@ -230,7 +230,14 @@ describe('the screen renders through the rebuilt components', () => {
      * on a timer before the list had measured its later rows, so "Today"
      * sat on the bottom edge with the day's messages beneath it, unseen.
      */
-    expect(codeOnly(SCREEN())).toMatch(/onContentSizeChange=\{\(\) => \{ if \(isAtBottomRef\.current\) scrollToBottom\(false\) \}\}/)
+    const src = codeOnly(SCREEN())
+    expect(src).toMatch(/onContentSizeChange=\{\(\) => \{ if \(followEndRef\.current\) scrollToBottom\(false\) \}\}/)
+    // Following stops on a real drag, not on the geometry of a programmatic
+    // scroll: the first fix keyed off `isAtBottomRef`, and the content growing
+    // once more after scrollToEnd read as "not at the bottom", so the room
+    // still opened with the newest bubble under the composer.
+    expect(src).toMatch(/onScrollBeginDrag=\{\(\) => \{ followEndRef\.current = false \}\}/)
+    expect(src).toMatch(/if \(atBottom\) followEndRef\.current = true/)
   })
 
   it('drops the optimistic bubble when the socket echo beat the response', () => {
