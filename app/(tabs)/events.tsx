@@ -1326,6 +1326,19 @@ function EventsInner() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return
+      /*
+       * Re-check permission, not only coordinates. The mount effect reads the
+       * permission once; the "Enable location" banner is keyed off
+       * `locationStatus`, so somebody who granted location in Settings (or in
+       * the OS dialog after the app was backgrounded) came back to a banner
+       * that stayed pinned for ever — the app never looked again. Refresh the
+       * status on every foreground so a grant elsewhere clears it.
+       */
+      Location.getForegroundPermissionsAsync()
+        .then(({ status }) => {
+          setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
+        })
+        .catch(() => {})
       Location.getLastKnownPositionAsync()
         .then((position) => {
           if (!position) return
