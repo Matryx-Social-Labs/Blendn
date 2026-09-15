@@ -26,7 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
 import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator } from '../../components/chat/TypingIndicator'
@@ -276,6 +276,13 @@ function PrivateChatInner() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  /*
+   * Not a send-in-flight state: `sending` above still guards the double tap.
+   * This is the composer lock, and it is set only when the server says the
+   * user may not post right now -- see ComposerLock.
+   */
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
@@ -602,6 +609,12 @@ function PrivateChatInner() {
          * the room: the server writes a good sentence and one discarded binding
          * threw it away, so the user retried forever.
          */
+        if (result.errorCode === 'RATE_LIMITED' || result.errorCode === 'SPAM_BLOCKED') {
+          setComposerLock('rate_limited')
+          if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+          const ms = Math.min(Math.max(result.retryAfter ?? 5, 1), 120) * 1000
+          lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        }
         markFailed(result.error || 'Failed to send message. Please try again.')
         return
       }
@@ -968,7 +981,7 @@ function PrivateChatInner() {
 
         <ChatComposer
           value={newMessage}
-          sending={sending}
+          lock={composerLock}
           onSend={sendMessage}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {

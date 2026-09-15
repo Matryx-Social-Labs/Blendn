@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, TextInput, View } from 'react-native'
 
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { Text } from '../ui/Text'
 
 /**
  * The composer. Frame `1141:5582`.
@@ -33,11 +34,35 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../l
  * dropped — see `docs/CHAT.md`.
  */
 
+/**
+ * Why the composer will not take a message right now.
+ *
+ * There is deliberately no `sending` member, and the send button has no
+ * spinner. Sending is not a reason to lock anybody out: `sendMessage` draws
+ * the optimistic bubble and clears this field in the same tick that it starts
+ * the request, so by the time an "in flight" state could paint, the room has
+ * already shown the message as sent. A spinner there promised that something
+ * was still happening when nothing was — and it was the only thing on screen
+ * claiming the send had not landed.
+ *
+ * A disabled control must say why it is disabled, so every member of this
+ * union has a sentence in LOCK_COPY.
+ */
+export type ComposerLock = 'muted' | 'locked' | 'closed' | 'rate_limited'
+
+const LOCK_COPY: Record<ComposerLock, string> = {
+  muted: "You're muted in this room.",
+  locked: 'You can read this room, but not post in it.',
+  closed: 'This room is closed.',
+  rate_limited: 'Slow down a moment — too many messages.',
+}
+
 export interface ChatComposerProps {
   value: string
   onChangeText: (text: string) => void
   onSend: () => void
-  sending: boolean
+  /** Set only when the user genuinely may not post; never for a send in flight. */
+  lock?: ComposerLock | null
   /** Focus scrolls the feed to the newest message. */
   onFocus?: () => void
 }
@@ -46,20 +71,30 @@ export function ChatComposer({
   value,
   onChangeText,
   onSend,
-  sending,
+  lock,
   onFocus,
 }: ChatComposerProps) {
-  const canSend = value.trim().length > 0 && !sending
+  const canSend = value.trim().length > 0 && !lock
 
   return (
     <View style={styles.shell}>
+      {lock ? (
+        <Text variant="meta" color={EMBER.textSecondary} style={styles.lockNote} accessibilityRole="alert">
+          {LOCK_COPY[lock]}
+        </Text>
+      ) : null}
       <View style={styles.pill}>
         <TextInput
           style={styles.input}
           value={value}
           onChangeText={onChangeText}
           onFocus={onFocus}
-          placeholder="Share your thoughts..."
+          /*
+           * Read-only rather than merely un-sendable: a locked room should not
+           * let somebody type a message they will never be allowed to send.
+           */
+          editable={!lock}
+          placeholder={lock ? LOCK_COPY[lock] : 'Share your thoughts...'}
           placeholderTextColor={EMBER.textPlaceholder}
           multiline
           /*
@@ -80,11 +115,7 @@ export function ChatComposer({
           style={({ pressed }) => [styles.send, pressed && styles.pressed]}
         >
           <View style={[styles.sendFill, !canSend && styles.sendIdle]}>
-            {sending ? (
-              <ActivityIndicator size="small" color={EMBER.onGradient} />
-            ) : (
-              <Ionicons name="send" size={ICON.sm} color={EMBER.onGradient} />
-            )}
+            <Ionicons name="send" size={ICON.sm} color={EMBER.onGradient} />
           </View>
         </Pressable>
       </View>
@@ -94,6 +125,7 @@ export function ChatComposer({
 
 const styles = StyleSheet.create({
   shell: { paddingHorizontal: GUTTER },
+  lockNote: { paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
   pill: {
     flexDirection: 'row',
     alignItems: 'flex-end',

@@ -494,6 +494,13 @@ export interface ApiResponse<T = unknown> {
    * with no idea they were muted.
    */
   errorCode?: string
+  /**
+   * Seconds until a `RATE_LIMITED` refusal lifts. `lib/rate-limit.ts` on the
+   * server computes it and sends it both in the body and as `Retry-After`;
+   * without it a screen that wants to disable a control has to guess how long
+   * for, and a guess that is too short just earns another refusal.
+   */
+  retryAfter?: number
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -1022,6 +1029,11 @@ class ApiClientClass {
         // Carried through so a screen can branch on the reason rather than
         // guess from the sentence. See ApiResponse.errorCode.
         errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+        // Body first, then the header, because only the body survives a proxy
+        // that strips Retry-After.
+        retryAfter: typeof parsed.retryAfter === 'number'
+          ? parsed.retryAfter
+          : Number(response.headers.get('Retry-After')) || undefined,
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }

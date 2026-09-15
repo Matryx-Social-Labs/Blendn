@@ -21,7 +21,7 @@ import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
 import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
@@ -203,7 +203,15 @@ function GroupChatInner(props?: {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
+  /*
+   * `sending` no longer reaches the composer -- see ComposerLock. It is kept
+   * only as the in-flight guard against a double tap landing in the same frame
+   * as the first, before `setNewMessage('')` has flushed. A ref, not state,
+   * because nothing renders from it.
+   */
+  const sendInFlightRef = useRef(false)
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
@@ -506,6 +514,43 @@ function GroupChatInner(props?: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, currentUser])
 
+  /**
+   * Turn the server's refusal into a locked composer.
+   *
+   * `lib/api-response.ts` has emitted USER_MUTED / CHAT_LOCKED / CHAT_CLOSED /
+   * RATE_LIMITED all along. The failed bubble and the toast say this message
+   * did not go; the lock says the next one will not either, and why -- so a
+   * muted user is not left typing messages they will never be allowed to
+   * send. A rate limit lifts on its own, so that one is timed from the
+   * server's own `retryAfter` rather than guessed; the rest persist until a
+   * send gets through.
+   */
+  const applyComposerLock = (errorCode?: string, retryAfter?: number) => {
+    if (lockTimerRef.current) { clearTimeout(lockTimerRef.current); lockTimerRef.current = null }
+    switch (errorCode) {
+      case 'USER_MUTED':
+        setComposerLock('muted'); return
+      case 'CHAT_LOCKED':
+        setComposerLock('locked'); return
+      case 'CHAT_CLOSED':
+        setComposerLock('closed'); return
+      case 'RATE_LIMITED': {
+        setComposerLock('rate_limited')
+        const ms = Math.min(Math.max((retryAfter ?? 5), 1), 120) * 1000
+        lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        return
+      }
+      default:
+        // A send that landed, or a one-off failure (network, spam heuristic):
+        // not a lock. The failed bubble's "Tap to retry" is the way back.
+        setComposerLock(null)
+    }
+  }
+
+  useEffect(() => () => {
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+  }, [])
+
   /*
    * One send of one message, first time or retry. The bubble is already on
    * screen; this decides whether it stays as sent, goes (moderation), or is
@@ -514,6 +559,13 @@ function GroupChatInner(props?: {
   const deliver = async (optimistic: Message) => {
     try {
       const result = await apiClient.sendChatMessage(chatRoomId as string, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
+      /*
+       * Every answer re-decides the lock: a refusal sets it, and a send that
+       * got through lifts it. A mute ends on the server only when a send is
+       * tried (auto-unmute), and with the field read-only a retry of a failed
+       * bubble is the one send left -- so its success has to unlock the field.
+       */
+      applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
       if (!result.success) throw new Error(result.error || 'Failed to send')
 
       /*
@@ -567,10 +619,11 @@ function GroupChatInner(props?: {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUser) return
+    if (sendInFlightRef.current) return
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     if (chatRoomId) stopTyping(String(chatRoomId))
 
-    setSending(true)
+    sendInFlightRef.current = true
     const messageText = newMessage.trim()
     const optimistic: Message = {
       message_id: 'temp-' + (++_tempIdCounter),
@@ -591,8 +644,9 @@ function GroupChatInner(props?: {
     if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
     emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
 
+    // `deliver` catches its own failures, so this always runs.
     await deliver(optimistic)
-    setSending(false)
+    sendInFlightRef.current = false
   }
 
   const retrySend = (message: Message) => {
@@ -928,7 +982,7 @@ function GroupChatInner(props?: {
 
         <ChatComposer
           value={newMessage}
-          sending={sending}
+          lock={composerLock}
           onSend={sendMessage}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {
