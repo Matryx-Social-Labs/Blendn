@@ -61,6 +61,21 @@ compares metres to kilometres.
 
 ## Now
 
+### The door asks, the room says, the session explains — **Done** (SCRUM-77, SCRUM-141, SCRUM-142)
+
+Three findings from driving the staging build end to end, all landed together
+because they share the check-in flow. Server halves: blendn-admin #367, #373.
+
+| # | What | State |
+|---|---|---|
+| SCRUM-77 | Onboarding never wrote `intent_default`, so a finished profile was refused the board for "why you go out". Check-in returns `intentNeeded`; after the post-check-in tray the preferences screen opens with the intent leading, saves it with `rememberIntent: true`, never offers Dating to a minor, and shows the server's sentence on a refusal. Re-entering a room already answered for does not ask | **Done** |
+| SCRUM-141 | "Show online status" honoured (server: roster and grid leave you out, you still count). The room banner has a third state — *"You're not listed here — Show online status is off"*, "Turn it on" → Settings — and the Settings row says what off does | **Done** |
+| SCRUM-142 | A refresh that never completed is retried in the background at 2 s, 5 s, 10 s (the server re-issues inside its grace window); a session the server ended is recorded durably and the entry screen says *"You were signed out. Sign in again…"* instead of landing there silently | **Done** |
+
+Not in a build yet: the next client build carries it. Verified by source
+tests (`first-door-intent`, `roomVisibility`, `refreshOutcome`); the
+acceptance drive on a device is on the tickets.
+
 **The homepage nobody could see.** A device build in Germany showed a
 full-screen *"No events nearby"* with a Refresh button that did nothing. Every
 section of the home screen was already built and wired; all of them were

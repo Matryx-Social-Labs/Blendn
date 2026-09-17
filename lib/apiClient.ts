@@ -688,6 +688,12 @@ export interface UserProfileData {
     onboarded?: boolean
     goals?: string[]
     looking_for?: string[]
+    /**
+     * Returned to the owner only. Off means counted and not listed in any
+     * room — the roster and the grid leave you out — and the room banner
+     * says so (SCRUM-141).
+     */
+    show_online?: boolean
     created_at?: string
     updated_at?: string
   }
@@ -722,6 +728,16 @@ export interface CheckInResult {
    * including killing the app, leaves them anonymous.
    */
   revealSuggestion?: boolean
+  /**
+   * Ask "why do you go out?" now, and save the answer as the default.
+   *
+   * True while `profiles.intent_default` is empty and this room has no answer
+   * of its own. Onboarding never wrote the default, so every account that came
+   * through it was refused the board for a field it was never asked. The app
+   * asks at the first door and sends the answer with `rememberIntent: true`;
+   * after that this is false everywhere.
+   */
+  intentNeeded?: boolean
   [key: string]: unknown
 }
 
@@ -761,6 +777,21 @@ let refreshPromise: Promise<RefreshOutcome> | null = null
  * replay inside its grace window.
  */
 type RefreshOutcome = 'ok' | 'rejected' | 'failed'
+
+/**
+ * After a refresh that never completed: try again at 2 s, 5 s and 10 s, in
+ * the background, then stop until the next 401.
+ *
+ * A lost response is the case the server's grace window exists for — it
+ * re-issues on a replay of the old token for twenty minutes, provided the
+ * successor was never used. Waiting for the next tap to present that token
+ * (which could be an hour later, on the walk home) is what left a phone at
+ * the sign-in screen overnight. The caller that hit the failure is told the
+ * transport failed, as before; the recovery just no longer waits for them.
+ */
+export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
+let refreshRetryAttempt = 0
+let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 
 // API Client Class
 class ApiClientClass {
@@ -1084,6 +1115,25 @@ class ApiClientClass {
     p.finally(() => {
       isRefreshing = false
       refreshPromise = null
+    })
+
+    p.then((outcome) => {
+      if (outcome !== 'failed') {
+        refreshRetryAttempt = 0
+        return
+      }
+      const delay = REFRESH_RETRY_DELAYS_MS[refreshRetryAttempt]
+      if (delay === undefined) {
+        refreshRetryAttempt = 0
+        return
+      }
+      refreshRetryAttempt += 1
+      if (refreshRetryTimer) clearTimeout(refreshRetryTimer)
+      Logger.info('api', `Refresh did not complete; retrying in ${delay}ms`)
+      refreshRetryTimer = setTimeout(() => {
+        refreshRetryTimer = null
+        void this.refreshTokens()
+      }, delay)
     })
 
     return p

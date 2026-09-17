@@ -72,6 +72,26 @@ function RoomInner() {
   })
   const [revealed, setRevealed] = useState(false)
   const [revealBusy, setRevealBusy] = useState(false)
+  /*
+   * "Show online status" off means counted and not listed (SCRUM-141) — the
+   * roster and the grid leave you out. Read from the profile, which returns
+   * the setting to its owner only, so the banner can say so rather than
+   * leaving someone to wonder why nobody likes them.
+   */
+  const [listed, setListed] = useState(true)
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    apiClient
+      .getProfile(user.id)
+      .then((r) => {
+        if (!cancelled && r.success) setListed(r.data?.profile?.show_online !== false)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
   const [checkOutBusy, setCheckOutBusy] = useState(false)
 
   /*
@@ -360,6 +380,8 @@ function RoomInner() {
           busy={revealBusy}
           canReveal={readiness.ok}
           missing={readiness.missing}
+          listed={listed}
+          onUnhide={() => router.push('/settings')}
         />
       ) : null}
 

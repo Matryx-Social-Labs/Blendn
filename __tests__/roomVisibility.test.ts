@@ -19,6 +19,22 @@ describe('roomVisibility', () => {
     expect(roomVisibility(true)).toBe('named')
     expect(roomVisibility(false)).toBe('anonymous')
   })
+
+  it('"Show online status" off outranks reveal — a name nobody is shown is not a state', () => {
+    // SCRUM-141: off means counted and not listed, on the roster and the grid.
+    expect(roomVisibility(true, false)).toBe('hidden')
+    expect(roomVisibility(false, false)).toBe('hidden')
+    expect(roomVisibility(false, true)).toBe('anonymous')
+  })
+})
+
+describe('the hidden banner', () => {
+  it('names the setting and offers the way to it, in the first person', () => {
+    const text = bannerText('hidden')
+    expect(text.title).toMatch(/^You're not listed here/)
+    expect(text.title).toContain('Show online status')
+    expect(text.action).toMatch(/turn it on/i)
+  })
 })
 
 describe('bannerText', () => {
@@ -36,6 +52,7 @@ describe('bannerText', () => {
       bannerText('named').title,
       bannerText('anonymous').title,
       bannerText('anonymous', 'Cosmic Panda').title,
+      bannerText('hidden').title,
     ]) {
       expect(title).not.toMatch(/\b\d+\s+(people|others|revealed)\b/i)
       expect(title).toMatch(/^(You|People here)/)
