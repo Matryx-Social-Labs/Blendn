@@ -36,9 +36,11 @@ A test asserts the two lists match. If they diverge, the harness stops being
 evidence — which is how the rebuilt Scene sat unwired behind the old screen for
 a week while its preview looked correct.
 
-`SceneAmenity` is in the harness and **not** on the real screen: `#244` added
-amenities server-side and the mobile payload does not carry them. Rendering the
-frame's two tiles would be the interface asserting facts it has not been told.
+`SceneAmenity` is **now on the real screen** (`EventDetailScreen.tsx:1362-1387`).
+This used to say otherwise — the mobile payload didn't carry amenities and
+rendering the frame's tiles would have been the interface asserting facts it
+hadn't been told. The payload caught up; the code's own comment says so: "the
+vocabulary now exists and is on this payload, so it does."
 
 ---
 
@@ -166,7 +168,8 @@ creatures every panda would be the same blue.
 | before the doors, going | You're going | cancels it |
 | running, not checked in | Blend in | checks in |
 | checked in | You're in | opens the room |
-| over | This event has ended | disabled |
+| over, attended | Rate the people you met | opens rating |
+| over, did not attend | This event has ended | disabled |
 
 **"Blend in" before the event was a dead button.** A check-in needs the event to
 be running — `pickInsideEvent` requires `start <= now` and the server

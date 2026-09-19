@@ -12,19 +12,27 @@ Two screens, one set of pieces.
 
 ---
 
-## The own-profile half was built and never wired
+## The Me tab does not render `ProfileSections` directly, on purpose
 
-`ProfileSections.tsx` says at the top that it serves *both* frames, and it
-always did. Only `app/user/[id].tsx` ever imported it. `app/(tabs)/profile.tsx`
-went on drawing its own hero, its own quick-action row and its own stat tiles in
-`APP_COLORS` — the last screen in the app still on the old theme — while the
-components for its frame sat finished a directory away.
+This section used to say the own-profile half was built and never wired —
+`app/(tabs)/profile.tsx` drawing its own hero in `APP_COLORS` while
+`ProfileSections.tsx` sat finished a directory away. That has since been
+resolved, but not by making the Me tab import `ProfileSections` the way
+`app/user/[id].tsx` does.
 
-That is the fifth time this exact thing has happened here, and it is why
-`__tests__/noOrphanComponents.test.ts` exists. **The test did not catch this
-one**, because `ProfileSections.tsx` *had* a non-preview importer — just not
-the second one it was written for. A file can be half-orphaned and the check
-only sees whole files.
+Instead `app/(tabs)/profile.tsx` was re-themed onto `EMBER` and rebuilt as a
+compact **control panel**: avatar and name leading to a "Preview" action,
+three stat counts, **Edit profile**, **Settings**. Tapping the identity card
+routes to `/user/<own id>`, which renders `ProfileSections` in its `'self'`
+mode — the same component the attendee view uses. There is still exactly one
+implementation of the full profile layout; the Me tab is a launcher in front
+of it, not a second copy of it.
+
+`__tests__/noOrphanComponents.test.ts` still does its job here — it exists
+because this app has had the "component built, nothing imports it" mistake
+happen four times before, and this is not a fifth: `ProfileSections.tsx` has
+its intended importer, reached through a navigation hop rather than a direct
+render.
 
 ---
 
@@ -89,17 +97,21 @@ it.
 
 ---
 
-## Three differences from the attendee view
+## Two differences from the attendee view
 
-All of them follow from it being you.
+Both follow from it being you. (A third difference used to be listed here —
+"the top bar carries Settings" — but Settings now lives one level up, on the
+Me tab itself, never on this screen in either mode. See the section above.)
 
 1. **Nothing is gated.** `blurred` is never set and every photo is yours, so
    there is no reveal state to render.
 2. **There is nobody to Connect to.** `ProfileActions` — Connect / Message /
-   Like — is replaced by `ProfileOwnCta`. The only reason to look at your own
-   profile is to change what other people see, so the screen ends in
-   **Edit profile**.
-3. **The top bar carries Settings**, which no attendee profile has.
+   Like — is simply omitted in `'self'` mode rather than swapped for a
+   dedicated own-profile CTA component. (An earlier draft of this doc named
+   that component `ProfileOwnCta`; it was never built — the omission is the
+   whole story.) The only reason to look at your own profile from here is to
+   change what other people see, and that action — **Edit profile** — lives
+   on the Me tab that got you here, not on this screen.
 
 ---
 

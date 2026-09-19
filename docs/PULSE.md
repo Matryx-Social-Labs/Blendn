@@ -151,12 +151,12 @@ Jakarta **Bold 16/24**, `#FF906D`, `letterSpacing: -0.8`. Accent rather than
 white, which is what makes it read as a mark and not as a second heading above
 "The Pulse" in 48pt.
 
-**The frame's two glyphs are not rendered, and neither is a placeholder.**
+**Of the frame's two glyphs, one is built and one is not.**
 
-| Glyph | Why it is absent |
+| Glyph | Status |
 |---|---|
-| hamburger, 18×12, left | There is no drawer in this app. Inventing one to justify a glyph is the tail wagging the dog |
-| bell, 16×20, right | A notifications centre is designed and **not built** — no endpoint returns a notification. A bell that opens nothing is a dead control in the most-tapped corner of the screen |
+| hamburger, 18×12, left | Absent. There is no drawer in this app. Inventing one to justify a glyph is the tail wagging the dog |
+| bell, 16×20, right | **Built.** `GET /notifications` shipped (admin #242), and `NotificationBell` is passed into `PulseTopBar`'s `actions` slot from `app/(tabs)/events.tsx`. This line used to say the endpoint didn't exist — it does now, and the bell is live, not a placeholder |
 
 An earlier draft of this component put a **Pulse / Hotspots** feed switch in the
 hamburger's place, on the reading that Hotspots is "a replica of the Pulse page
