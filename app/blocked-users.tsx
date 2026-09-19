@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import { Logger } from '../lib/logger'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
+import { APP_COLORS } from '../lib/theme'
 
 export default function BlockedUsers() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
@@ -110,7 +111,7 @@ export default function BlockedUsers() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="shield-checkmark-outline" size={64} color="#ccc" />
+      <Ionicons name="shield-checkmark-outline" size={64} color={APP_COLORS.textTertiary} />
       <Text style={styles.emptyTitle}>No Blocked Users</Text>
       <Text style={styles.emptyText}>
         You haven&apos;t blocked anyone yet. Users you block will appear here.
@@ -124,7 +125,7 @@ export default function BlockedUsers() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
+          <ActivityIndicator size="large" color={APP_COLORS.destructive} />
           <Text style={styles.loadingText}>Loading blocked users...</Text>
         </View>
       ) : (
@@ -158,7 +159,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
   },
   list: {
     flex: 1,
@@ -177,13 +178,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: APP_COLORS.textPrimary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: APP_COLORS.separator,
   },
   userInfo: {
     flexDirection: 'row',
@@ -213,14 +214,14 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.destructive,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
   },
   userDetails: {
     flex: 1,
@@ -228,27 +229,27 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: APP_COLORS.textPrimary,
     marginBottom: 4,
   },
   blockDate: {
     fontSize: 14,
-    color: '#666',
+    color: APP_COLORS.textSecondary,
     marginBottom: 2,
   },
   blockReason: {
     fontSize: 12,
-    color: '#999',
+    color: APP_COLORS.textTertiary,
     fontStyle: 'italic',
   },
   unblockButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.destructive,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 16,
   },
   unblockButtonText: {
-    color: '#fff',
+    color: APP_COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },

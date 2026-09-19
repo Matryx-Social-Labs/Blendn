@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { formatEventDateTime } from '../../lib/time'
+import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 interface EventRow {
@@ -174,19 +175,19 @@ function GoingScreenInner() {
       </ImageBackground>
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionChip} onPress={() => toggleInterest(item)}>
-          <Ionicons name="heart-dislike" size={16} color="#D81B60" />
+          <Ionicons name="heart-dislike" size={16} color={APP_COLORS.destructive} />
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)}>
-          <Ionicons name="navigate" size={16} color="#007AFF" />
+          <Ionicons name="navigate" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Open in Maps</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)}>
-          <Ionicons name="calendar" size={16} color="#4C7CFB" />
+          <Ionicons name="calendar" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Add to calendar</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)}>
-          <Ionicons name="share-social" size={16} color="#4C7CFB" />
+          <Ionicons name="share-social" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
@@ -208,7 +209,7 @@ function GoingScreenInner() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={APP_COLORS.textPrimary} />
         </View>
       ) : events.length === 0 ? (
         <View style={styles.empty}>
@@ -240,22 +241,22 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   backBtn: { padding: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  headerTitle: { color: APP_COLORS.textPrimary, fontSize: 20, fontWeight: '800' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  emptyTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
-  emptySub: { color: '#CCCCCC', fontSize: 14, textAlign: 'center' },
-  card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: '#111', borderRadius: 12, overflow: 'hidden' },
+  emptyTitle: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  emptySub: { color: APP_COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
+  card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: APP_COLORS.backgroundElevated, borderRadius: 12, overflow: 'hidden' },
   image: { height: 180, width: '100%' },
   imageRadius: { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
   imageOverlay: { backgroundColor: 'rgba(0,0,0,0.4)' },
   overlayContent: { position: 'absolute', left: 12, right: 12, bottom: 12 },
-  title: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  venue: { color: '#EEEEEE', marginTop: 2 },
-  time: { color: '#CCCCCC', marginTop: 2, fontSize: 12 },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#1a1a1a' },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#242424', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16 },
-  actionText: { color: '#FFFFFF', fontSize: 12 },
+  title: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '800' },
+  venue: { color: APP_COLORS.textPrimary, marginTop: 2 },
+  time: { color: APP_COLORS.textSecondary, marginTop: 2, fontSize: 12 },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: APP_COLORS.backgroundElevated },
+  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16 },
+  actionText: { color: APP_COLORS.textPrimary, fontSize: 12 },
 })
 
 
