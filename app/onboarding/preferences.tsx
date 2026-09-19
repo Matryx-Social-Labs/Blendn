@@ -56,7 +56,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * ## How you enter a room
  *
- * The last block on this screen, and the one with the sharpest consequence.
+ * The Anonymity block, and the one with the sharpest consequence.
  *
  * It is a *suggestion*, not a setting that acts at a distance: the server
  * creates every check-in row `revealed: false` whatever this says, so being

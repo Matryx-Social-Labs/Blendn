@@ -261,9 +261,65 @@ on a plain view — `expo-blur` blurs what is *behind* a view, which is the wron
 tool for a soft-edged shape. Large, heavily-rounded, 5%-opacity blocks read the
 same and cost nothing.
 
-The permission screens' centre illustrations have no exported asset. They are
-absent rather than invented — those screens are headline, explanation and two
-buttons, which is a normal permission screen.
+~~The permission screens' centre illustrations have no exported asset.~~ No
+longer true — see #9. Left here because the surrounding blur/atmosphere
+substitution is still accurate.
+
+### 9. What a 2026-09-19 pass against Figma found, and fixed
+
+A frame-by-frame comparison (not a re-read of this document — an actual
+`get_design_context` call per screen) turned up drift this file never recorded.
+Fixed in code; recorded here so the next pass does not rediscover it:
+
+- **`basics`** was missing the "Dynamic Visual Anchor" curation card — a 192px
+  amber-toned preview card ("CURATION PHASE / Personalizing your bioluminescent
+  feed...") between the date-of-birth field and the footer. The frame's asset
+  is now committed at `assets/onboarding/curation.png` and rendered the same
+  way the permission illustrations are: real view, hidden from screen readers,
+  decorative only.
+- **`location`** was missing the frame's reassurance line under "Maybe
+  later" — *"Your precise location is never shared with strangers."* Added as
+  a `footerNote` prop on `OnboardingScreen`, available to any screen that needs
+  one (none of the other seven currently do).
+- **`details`**'s bio counter read `0/500`; the frame's is `0/300`.
+  `BIO_LIMIT` corrected to 300.
+- **`details`** was also missing the frame's three bio-writing prompts
+  ("A perfect Sunday involves...", etc.) — static, non-interactive cards
+  shown below the bio field to unstick a blank textarea. Added.
+- **`details`** renders bio before interests; the frame draws interests
+  first. This is deliberate (see the file's own comment: the interest wall is
+  long, and the bio question gets answered while attention is fresh) — not a
+  bug, just never written down here until now.
+- **`preferences`** has an "Anonymity" section — the room-visibility default
+  — that does not exist in frame `1141:4192` at all. Also deliberate: it is
+  "the only screen that gets to teach" the anonymous-by-default concept
+  before someone meets it at a check-in (see the file's own comment). Not
+  drawn in the frame, kept in the build, now written down here rather than
+  only in the file's own header comment.
+- **`journey`**'s secondary link read "Skip"; the frame's is "Save as Draft".
+  Relabelled — the underlying action was already save-and-leave (every
+  onboarding step persists a local draft on every keystroke), so this was a
+  copy mismatch, not a behavior one.
+- **`media`**'s grid gap was 12px against the frame's 16px, and the empty-slot
+  "+" was two bare rectangles with no background — the frame wraps it in a
+  48px circular `EMBER.surface` chip. Both corrected.
+- **`ready`** was the largest gap: a single flat summary card next to the
+  frame's finished "profile preview" bento — 128px avatar in a gradient ring
+  with a checkmark badge, a divider before the bio quote, an Interests card
+  with individual chips (one accent-highlighted), and icon-fronted Primary Hub
+  / Looking For cards. Rebuilt to match, using real draft data rather than the
+  frame's placeholder ("Julia Ember"). **Not** rebuilt: the frame's duplicate
+  "PROFILE STATUS 100%" progress header (the shared `OnboardingScreen` header
+  already shows this on every step, so a second one on the last step alone
+  would be redundant) and the frame's decorative slide-icon CTA button
+  (`EmberButton` is shared across all eight screens; changing it for one frame
+  would break the consistency the shared component exists to guarantee).
+
+**One thing this pass did not check**: whether the shared unified header
+(back arrow + progress bar + percentage, described in #7) itself counts as a
+frame departure worth a line here. It's a deliberate consistency call over
+each frame's own bespoke header treatment, and it predates this pass — noted
+so nobody re-flags it as new drift.
 
 ---
 

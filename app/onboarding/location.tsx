@@ -82,6 +82,7 @@ export default function LocationScreen() {
       // The same bug in the second of two places — see the note in
       // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
       onSecondary={() => void commit({ share_location: false })}
+      footerNote="Your precise location is never shared with strangers."
       onBack={goBack}
     >
       <LocationIllustration />

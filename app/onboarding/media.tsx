@@ -57,7 +57,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
 
 const SLOTS = 6
 
-const GRID_GAP = 12
+const GRID_GAP = 16
 const SLOT = Math.floor((Dimensions.get('window').width - 24 * 2 - GRID_GAP) / 2)
 
 /**
@@ -97,9 +97,20 @@ function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number 
      */
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-          <View style={[bar, { width: size, height: thickness }]} />
-          <View style={[bar, { width: thickness, height: size }]} />
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: EMBER.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={[bar, { width: size, height: thickness }]} />
+            <View style={[bar, { width: thickness, height: size }]} />
+          </View>
         </View>
       </View>
     </View>

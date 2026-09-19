@@ -58,6 +58,13 @@ interface Props {
   secondaryLabel?: string
   onSecondary?: () => void
 
+  /**
+   * A reassurance line under the secondary button — e.g. location's "your
+   * precise location is never shared with strangers." Optional: most screens
+   * have nothing sensitive enough to need one.
+   */
+  footerNote?: string
+
   onBack?: () => void
 }
 
@@ -73,6 +80,7 @@ export function OnboardingScreen({
   ctaBusy,
   secondaryLabel,
   onSecondary,
+  footerNote,
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
@@ -176,6 +184,12 @@ export function OnboardingScreen({
             <Text style={styles.secondary}>{secondaryLabel}</Text>
           </Pressable>
         ) : null}
+        {footerNote ? (
+          <View style={styles.footerNoteRow}>
+            <Ionicons name="lock-closed" size={11} color={EMBER.textTertiary} />
+            <Text style={styles.footerNote}>{footerNote}</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   )
@@ -229,5 +243,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: EMBER.textTertiary,
     paddingVertical: 4,
+  },
+  footerNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  footerNote: {
+    ...EMBER_TYPE.helper,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: EMBER.textTertiary,
+    textTransform: 'uppercase',
   },
 })

@@ -1,5 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { useEffect, useRef, useState } from 'react'
+import { Image } from 'expo-image'
+import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
 
 import {
@@ -15,9 +17,11 @@ import {
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
-import { EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { useAuth } from '../../lib/useAuth'
+
+const CURATION_ART = require('../../assets/onboarding/curation.png')
 
 /**
  * Step one — a name, a gender, a birth date.
@@ -203,6 +207,34 @@ function BasicsScreenInner() {
           <Text style={styles.error}>That is not a date we recognise.</Text>
         ) : null}
       </EmberFieldGroup>
+
+      {/*
+        Purely decorative — a preview of the feed personalization the app does
+        after onboarding, not a control. Hidden from screen readers for that
+        reason, same as the permission-screen illustrations.
+      */}
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={styles.curationCard}
+      >
+        <Image
+          source={CURATION_ART}
+          style={styles.curationArt}
+          contentFit="cover"
+          transition={180}
+          cachePolicy="memory-disk"
+        />
+        <LinearGradient
+          colors={['rgba(15,14,14,0)', '#0F0E0E']}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={styles.curationText}>
+          <Text style={styles.curationEyebrow}>CURATION PHASE</Text>
+          <Text style={styles.curationCaption}>Personalizing your bioluminescent feed...</Text>
+        </View>
+      </View>
     </OnboardingScreen>
   )
 }
@@ -223,6 +255,26 @@ const styles = StyleSheet.create({
   dateSmall: { flex: 1 },
   dateLarge: { flex: 1.5 },
   error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
+
+  curationCard: {
+    width: '100%',
+    height: 192,
+    borderRadius: EMBER_RADIUS.card,
+    overflow: 'hidden',
+    backgroundColor: EMBER.surfaceMedia,
+    justifyContent: 'flex-end',
+  },
+  curationArt: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.6 },
+  curationText: { padding: 24, gap: 4 },
+  curationEyebrow: {
+    ...EMBER_TYPE.helper,
+    fontSize: 10,
+    letterSpacing: 3,
+    fontWeight: '700',
+    color: EMBER.accent,
+    textTransform: 'uppercase',
+  },
+  curationCaption: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textSecondary },
 })
 
 
