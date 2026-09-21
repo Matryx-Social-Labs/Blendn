@@ -198,10 +198,6 @@ export default function SignIn() {
             importantForAccessibility="no-hide-descendants"
           />
 
-          <Text style={styles.placeholderBanner}>
-            PLACEHOLDER DESIGN — logic is final, layout is not
-          </Text>
-
           <View style={styles.segmented}>
             {(['signin', 'signup'] as const).map((m) => (
               <Pressable
@@ -368,12 +364,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  placeholderBanner: {
-    color: APP_COLORS.destructive,
-    fontSize: 11,
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
   segmented: {
     flexDirection: 'row',
     backgroundColor: APP_COLORS.backgroundElevated,
