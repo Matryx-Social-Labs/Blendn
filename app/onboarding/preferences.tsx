@@ -17,7 +17,7 @@ import {
   toggleOrientation,
   type Orientation,
 } from '../../lib/dating'
-import { anonymousByDefault, orientationConsent } from '../../lib/onboarding'
+import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -116,6 +116,10 @@ export default function PreferencesScreen() {
    * the build instead of breaking somebody's anonymity.
    */
   const [anonymous, setAnonymous] = useState(() => anonymousByDefault({}))
+  // Orientation is for dating, and dating is 18+: a minor is not asked, and
+  // nothing is written for them (SCRUM-200). Read from the draft's birth date
+  // — `basics` is not skippable, so it is there.
+  const under18 = loaded && isUnder18(draft.dateOfBirth)
 
   useEffect(() => {
     if (!loaded) return
@@ -140,10 +144,14 @@ export default function PreferencesScreen() {
       ctaBusy={saving}
       onContinue={() =>
         void commit({
-          orientations,
-          // Clearing the last one clears the consent with it — see
-          // `orientationConsent` for why that is not just tidiness.
-          show_orientation: orientationConsent(orientations, showOrientation),
+          ...(under18
+            ? {}
+            : {
+                orientations,
+                // Clearing the last one clears the consent with it — see
+                // `orientationConsent` for why that is not just tidiness.
+                show_orientation: orientationConsent(orientations, showOrientation),
+              }),
           looking_for: lookingFor,
           reveal_by_default: !anonymous,
         })
@@ -152,6 +160,7 @@ export default function PreferencesScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
+      {under18 ? null : (
       <EmberSection
         title="Orientation"
         /*
@@ -214,6 +223,7 @@ export default function PreferencesScreen() {
           ))}
         </EmberChipRow>
       </EmberSection>
+      )}
 
       {/*
         Named "Anonymity" rather than "At an event", and the toggle is phrased
