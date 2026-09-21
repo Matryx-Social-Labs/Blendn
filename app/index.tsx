@@ -94,7 +94,7 @@ function IndexInner() {
   useEffect(() => {
     if (user || loading) return
     consumeSessionEndedNotice().then((ended) => {
-      if (ended) setNotice(SESSION_ENDED_NOTICE)
+      if (ended) setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)
     })
   }, [user, loading])
 

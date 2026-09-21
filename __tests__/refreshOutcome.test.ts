@@ -39,8 +39,8 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
   const entry = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8')
 
   it('is recorded durably when the refresh is rejected, and read once by the entry screen', () => {
-    expect(events).toMatch(/export function markSessionExpired\(\) \{\s*storage\(\)\s*\.then\(\(s\) => s\.setItem\(ENDED_KEY, '1'\)\)/)
-    expect(events).toMatch(/if \(ended\) await s\.removeItem\(ENDED_KEY\)/)
+    expect(events).toMatch(/export function markSessionExpired\(reason\?: string\) \{\s*storage\(\)\s*\.then\(\(s\) => s\.setItem\(ENDED_KEY, reason && reason\.trim\(\) \? reason\.trim\(\) : '1'\)\)/)
+    expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
     expect(entry).toContain('consumeSessionEndedNotice().then((ended) => {')
     expect(entry).toMatch(/\{!error && notice && \(\s*<Text style=\{styles\.notice\} accessibilityRole="alert">/)
   })
@@ -53,7 +53,8 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
 describe('a refresh distinguishes rejected from failed', () => {
   it('reports a timeout or dropped connection as failed, not rejected', () => {
     expect(src).toMatch(/catch \(error\) \{\s*Logger\.error\('api', 'Token refresh failed'[^}]*\}\)\s*return 'failed'/)
-    expect(src).toContain("return response.status >= 500 ? 'failed' : 'rejected'")
+    expect(src).toContain("if (response.status >= 500) return 'failed'")
+    expect(src).toMatch(/if \(response\.status === 403\) \{[\s\S]*?\}\s*return 'rejected'/)
   })
 
   it('keeps the session on a failed refresh and clears it only when rejected', () => {
@@ -62,5 +63,20 @@ describe('a refresh distinguishes rejected from failed', () => {
     expect(failedBranch).toContain('return { success: false, error: TIMEOUT_MESSAGE }')
     expect(failedBranch).not.toContain('clearAll')
     expect(failedBranch).not.toContain('markSessionExpired')
+  })
+})
+
+describe('the reason travels with the sign-out (SCRUM-93)', () => {
+  const events = readFileSync(join(__dirname, '..', 'lib', 'sessionEvents.ts'), 'utf8')
+  const entry = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8')
+
+  it("keeps the server's 403 sentence from the refresh and shows it on the entry screen", () => {
+    // Driven on Android: a suspended account was signed out within seconds and
+    // told only "You were signed out" — the server had said why at refresh.
+    const refresh = src.slice(src.indexOf('private async refreshTokens'))
+    expect(refresh).toMatch(/if \(response\.status === 403\) \{[\s\S]*rejectedReason = body\.error/)
+    expect(src).toContain('markSessionExpired(rejectedReason)')
+    expect(events).toMatch(/return stored === '1' \? true : stored/)
+    expect(entry).toContain("setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)")
   })
 })
