@@ -12,6 +12,7 @@ import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
 import { APP_COLORS, EMBER } from '../lib/theme'
+import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
@@ -81,6 +82,21 @@ function IndexInner() {
     if (Platform.OS !== 'ios') return
     AppleAuthentication.isAvailableAsync().then(setAppleSignInAvailable).catch(() => {})
   }, [])
+
+  /*
+   * Why they are looking at this screen, when the server put them here.
+   *
+   * A refresh token the server refused clears the session from a background
+   * call, and the phone is at this screen the next morning with no
+   * explanation. Same slot as a sign-in failure — it is the same kind of news.
+   */
+  const [notice, setNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (user || loading) return
+    consumeSessionEndedNotice().then((ended) => {
+      if (ended) setNotice(SESSION_ENDED_NOTICE)
+    })
+  }, [user, loading])
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
@@ -240,6 +256,11 @@ function IndexInner() {
               {error}
             </Text>
           )}
+          {!error && notice && (
+            <Text style={styles.notice} accessibilityRole="alert">
+              {notice}
+            </Text>
+          )}
 
           {/*
             * "Continue with Google", not "Get Started".
@@ -368,6 +389,13 @@ const styles = StyleSheet.create({
   },
   error: {
     color: APP_COLORS.destructive,
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  notice: {
+    color: EMBER.textSecondary,
     fontSize: 14,
     lineHeight: 19,
     textAlign: 'center',

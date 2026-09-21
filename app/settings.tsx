@@ -289,7 +289,13 @@ export default function SettingsScreen() {
    */
   const items = useMemo(() => ([
     { header: 'Privacy' },
-    { icon: 'eye-outline', title: 'Show online status', keyName: 'showOnlineStatus' as const },
+    // What it does, in the row: the switch was a promise for a year (SCRUM-141).
+    {
+      icon: 'eye-outline',
+      title: 'Show online status',
+      hint: "Off: you're counted at events but not listed to other people there.",
+      keyName: 'showOnlineStatus' as const,
+    },
     { icon: 'checkmark-done-outline', title: 'Read receipts', keyName: 'shareReadReceipts' as const },
     { icon: 'navigate-outline', title: 'Share location for nearby events', keyName: 'locationSharing' as const },
 
@@ -358,7 +364,10 @@ export default function SettingsScreen() {
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name={item.icon} size={20} color={APP_COLORS.textPrimary} />
-            <Text style={styles.rowTitle}>{item.title}</Text>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              {item.hint ? <Text style={styles.rowHint}>{item.hint}</Text> : null}
+            </View>
           </View>
           <View style={styles.switchWrap}>
             {saving[keyName] && (
@@ -449,9 +458,11 @@ const styles = StyleSheet.create({
    */
   sectionHeaderSpaced: { marginTop: 40 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14 },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, paddingRight: 12 },
   switchWrap: { flexDirection: 'row', alignItems: 'center' },
   switchLoader: { marginRight: 6 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: APP_COLORS.textPrimary },
+  rowText: { flexShrink: 1, gap: 2 },
+  rowHint: { fontSize: 13, lineHeight: 18, color: APP_COLORS.textSecondary },
   divider: { height: 1, backgroundColor: APP_COLORS.separator, marginLeft: 44 },
 })

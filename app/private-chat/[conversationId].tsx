@@ -230,6 +230,14 @@ function PrivateChatInner() {
   const { conversationId, otherUserName, otherUserId, otherUserAvatar } = useLocalSearchParams()
   const { user: authUser } = useAuth()
   const [messages, setMessages] = useState<PrivateMessage[]>([])
+  /*
+   * The thread is gone — closed by the other side, or they blocked you; the
+   * server answers "not found" for both and never says which. This opened as
+   * "Start the conversation! Say hi to Sneha · Send a wave", drawn from an
+   * empty list, for a thread that had a week of messages an hour earlier
+   * (SCRUM-165). Nothing to wave at.
+   */
+  const [ended, setEnded] = useState(false)
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -366,6 +374,10 @@ function PrivateChatInner() {
   const loadMessages = async (cursor?: string) => {
     try {
       const result = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
+      if (!result.success && result.errorCode === 'NOT_FOUND') {
+        setEnded(true)
+        return
+      }
       if (result.success && result.data) {
         const msgs = result.data.messages.map(mapMessage).reverse()
         if (cursor) {
@@ -704,7 +716,15 @@ function PrivateChatInner() {
               <TypingIndicator label={`${otherUserName || 'They'} are typing...`} />
             ) : null
           }
-          ListEmptyComponent={!loading ? (
+          ListEmptyComponent={!loading && ended ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyGlyph}>
+                <Ionicons name="chatbubble-ellipses-outline" size={36} color={EMBER.textTertiary} />
+              </View>
+              <Text style={styles.emptyTitle}>This conversation has ended</Text>
+              <Text style={styles.emptyText}>It is no longer available to either of you.</Text>
+            </View>
+          ) : !loading ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyGlyph}>
                 <Ionicons name="chatbubble-ellipses-outline" size={36} color={EMBER.textTertiary} />

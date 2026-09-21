@@ -47,22 +47,29 @@ export function RoomVisibilityBanner({
   busy,
   canReveal = true,
   missing,
+  listed = true,
+  onUnhide,
 }: {
   revealed: boolean
   pseudonym?: string | null
   onToggle: () => void
   busy?: boolean
+  /** "Show online status". Off: counted, not listed anywhere; the banner says so. */
+  listed?: boolean
+  /** Where "Turn it on" goes — the setting lives on the settings screen. */
+  onUnhide?: () => void
   /** Whether there is anything to reveal. Defaults open, so a caller that has
    *  not loaded the profile yet never blocks the control on a guess. */
   canReveal?: boolean
   /** What is absent, in the words the copy uses: "a photo", "a name and a photo". */
   missing?: string
 }) {
-  const visibility = roomVisibility(revealed)
+  const visibility = roomVisibility(revealed, listed)
   const text = bannerText(visibility, pseudonym)
   const named = visibility === 'named'
+  const hidden = visibility === 'hidden'
   // One-directional: see above. Leaving is never gated.
-  const blocked = !named && !canReveal
+  const blocked = !named && !hidden && !canReveal
 
   return (
     <View
@@ -71,7 +78,7 @@ export function RoomVisibilityBanner({
       accessibilityLabel={text.title}
     >
       <Ionicons
-        name={named ? 'eye-outline' : 'eye-off-outline'}
+        name={hidden ? 'cloud-offline-outline' : named ? 'eye-outline' : 'eye-off-outline'}
         size={18}
         color={named ? EMBER.accent : EMBER.textSecondary}
       />
@@ -91,7 +98,7 @@ export function RoomVisibilityBanner({
         ) : null}
       </View>
       <Pressable
-        onPress={onToggle}
+        onPress={hidden ? onUnhide : onToggle}
         disabled={busy || blocked}
         hitSlop={8}
         accessibilityRole="button"

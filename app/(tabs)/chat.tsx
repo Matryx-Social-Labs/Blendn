@@ -738,7 +738,10 @@ function ChatInner() {
         })
       }
 
-      await loadChats(false, true)
+      // `force`: the cached requests list still holds the card that was just
+      // animated away, and the un-forced load put it straight back on screen
+      // until a pull-to-refresh (SCRUM-165).
+      await loadChats(true, true)
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
       await loadChats(true, true)
