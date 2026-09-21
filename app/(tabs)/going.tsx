@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
+import { router, useFocusEffect } from 'expo-router'
+import React, { useCallback, useState } from 'react'
 import {
     ActivityIndicator,
     Alert,
@@ -71,17 +71,27 @@ function GoingScreenInner() {
     }
   }, [authUser])
 
-  useEffect(() => {
-    if (authUser) {
-      loadInterestedEvents()
-    }
-  }, [authUser, loadInterestedEvents])
+  /*
+   * Reload every time the tab is focused, not once per mount.
+   *
+   * The comment below promised a focus refresh; there was none — one
+   * `useEffect` on mount. Driven on iOS the day the list first rendered
+   * (SCRUM-175): open Going (empty), save an event from the Pulse, come back
+   * — still "No saved events yet", and the empty state has no list to pull
+   * on, so the only way out was a cold launch. A tab is a place you return
+   * to; what it shows must be what is true when you arrive.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (authUser) void loadInterestedEvents()
+    }, [authUser, loadInterestedEvents])
+  )
 
   // Note: Real-time interest updates work per-event (when viewing event details).
-  // For the favorites list, we rely on pull-to-refresh and focus refresh.
-  // Subscribing to all favorited events would be expensive and unnecessary
-  // since the list is already refreshed on screen focus via useFocusEffect.
-  // To implement: would need server to emit to user's personal room on favorite changes.
+  // For the favorites list, we rely on pull-to-refresh and the focus refresh
+  // above. Subscribing to all favorited events would be expensive and
+  // unnecessary. To implement: would need server to emit to user's personal
+  // room on favorite changes.
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
