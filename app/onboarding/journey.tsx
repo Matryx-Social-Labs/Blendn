@@ -75,7 +75,11 @@ export default function JourneyScreen() {
       ctaLabel="Continue Exploration"
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
-      secondaryLabel="Save as Draft"
+      // "Skip", because that is what `skip()` does: it advances and persists the
+      // draft as it stands — nothing typed on this screen goes with it. The
+      // frame's "Save as Draft" promised the one thing this button cannot do
+      // (SCRUM-185). If a draft-save is wanted, it is a new hook function.
+      secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
     >

@@ -38,7 +38,14 @@ const BIO_PROMPTS = [
  * contribute itself or a whole branch silently disappears from the picker.
  */
 
-const BIO_LIMIT = 300
+/**
+ * 500, the server's cap (`lib/validations/profile.ts` on the API) and
+ * `edit-profile.tsx`'s. This was 300 for a while to match a frame, with the
+ * other two left at 500 — so a bio written on the profile screen opened here
+ * reading "412/300" and was cut on the first keystroke (SCRUM-185). One
+ * number, and the server owns it.
+ */
+const BIO_LIMIT = 500
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
