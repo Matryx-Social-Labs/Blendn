@@ -63,6 +63,49 @@ Nothing else in `.env.example` is a secret. Everything prefixed `EXPO_PUBLIC_`
 is compiled into the bundle — see *Environment variables* below for why that is
 not a leak and what the actual rule is.
 
+### ⚠️ Xcode 27: `expo run:ios` cannot find the Simulator, and the Pods are too old for it
+
+Two things that cost an afternoon on 2026-09-21, both on a stock Xcode 27.0
+install:
+
+1. **There is no `Simulator.app` any more.** The simulator window lives in
+   `Xcode.app/Contents/Applications/DeviceHub.app`. Expo looks the old app up
+   by name and stops with *"Can't determine id of Simulator app; the Simulator
+   is most likely not installed"* — after it has installed the Pods. Devices
+   still boot headless (`xcrun simctl boot <udid>`); open DeviceHub to see
+   them. A Simulator process left over from the previous Xcode may still be
+   running from a path that no longer exists — kill it, it is what makes
+   `open -a Simulator` look half-alive.
+2. **Xcode 27's minimum deployment target is 15.0**, and several Pods
+   (`GoogleUtilities`, `PromisesObjC`, `GoogleSignIn`, the `react-native-maps`
+   privacy target) still declare 9.0–12.0. The build fails in the Pods project
+   before a line of app code compiles.
+
+So build the simulator app with `xcodebuild` directly and pass the floor on
+the command line — the Podfile is untouched, and the binary is the same one
+`expo run:ios` would have produced:
+
+```bash
+xcrun simctl boot <udid>                       # e.g. iPhone 17 Pro, iOS 26.5
+SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild \
+  -workspace ios/blendn.xcworkspace -scheme blendn \
+  -configuration Release -sdk iphonesimulator \
+  -destination "id=<udid>" -derivedDataPath ios/build -quiet \
+  IPHONEOS_DEPLOYMENT_TARGET=15.1 build
+xcrun simctl install <udid> ios/build/Build/Products/Release-iphonesimulator/blendn.app
+xcrun simctl launch  <udid> com.matryxsociallabs.blendn
+```
+
+`Release` bundles the JS, so no Metro is needed and the app reads `.env` —
+which points at **staging**. A `Debug` configuration needs `npx expo start`
+running alongside.
+
+Driving it: the Maestro **CLI** (2.10, needs JDK 17 on `PATH`) with one batched
+flow per journey; the MCP's embedded driver stalls on the first XCUITest
+snapshot when the host load is high. `hideKeyboard` does not work on iOS —
+tap a static label to dismiss, and tap the eye icon before typing a password
+(a secure field swallows `inputText` otherwise).
+
 ### ⚠️ Android needs JDK 17, and the JDK on the machine is probably wrong
 
 The React Native Gradle plugin cannot parse a Java version above the low
