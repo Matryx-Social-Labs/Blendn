@@ -17,20 +17,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
+import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedEvents'
 import { formatEventDateTime } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
-
-interface EventRow {
-  id: string
-  title: string
-  venue_name: string
-  address: string
-  start_time: string
-  end_time: string
-  cover_image_url: string | null
-  latitude: number
-  longitude: number
-}
 
 /**
  * Going — the events that are yours.
@@ -71,20 +60,9 @@ function GoingScreenInner() {
         return
       }
 
-      // Map API response to EventRow format
-      const rows: EventRow[] = (result.data || []).map((e: any) => ({
-        id: e.id,
-        title: e.title,
-        venue_name: e.venueName || e.venue_name || '',
-        address: e.address || '',
-        start_time: e.startTime || e.start_time,
-        end_time: e.endTime || e.end_time,
-        cover_image_url: e.coverImageUrl || e.cover_image_url,
-        latitude: e.latitude,
-        longitude: e.longitude,
-      }))
-
-      setEvents(rows)
+      // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
+      // mapped inline any more.
+      setEvents(savedEventRows(result.data))
     } catch {
       setEvents([])
     } finally {
@@ -110,18 +88,18 @@ function GoingScreenInner() {
     setRefreshing(false)
   }, [loadInterestedEvents])
 
-  const toggleInterest = useCallback(async (event: EventRow) => {
+  const removeSave = useCallback(async (event: EventRow) => {
     try {
-      const result = await apiClient.toggleFavorite(event.id)
+      // DELETE, not the POST upsert this used to send — that one never
+      // removed anything, and the card came back on the next refresh.
+      const result = await apiClient.removeFavorite(event.id)
       if (!result.success) {
-        Alert.alert('Error', 'Failed to update interest')
+        Alert.alert("Couldn't remove", result.error || 'Try again in a moment.')
         return
       }
-      if (!result.data?.favorited) {
-        setEvents(prev => prev.filter(e => e.id !== event.id))
-      }
+      setEvents(prev => prev.filter(e => e.id !== event.id))
     } catch {
-      Alert.alert('Error', 'Failed to update interest')
+      Alert.alert("Couldn't remove", 'Try again in a moment.')
     }
   }, [])
 
@@ -170,10 +148,13 @@ function GoingScreenInner() {
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
           <Text style={styles.time}>{formatEventDateTime(item.start_time)}</Text>
+          {item.status === 'cancelled' ? (
+            <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">Cancelled</Text>
+          ) : null}
         </View>
       </ImageBackground>
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.actionChip} onPress={() => toggleInterest(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel="Remove from saved">
           <Ionicons name="heart-dislike" size={16} color="#D81B60" />
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
@@ -191,7 +172,7 @@ function GoingScreenInner() {
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
-  ), [toggleInterest, openInMaps, addToCalendar, shareEvent])
+  ), [removeSave, openInMaps, addToCalendar, shareEvent])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
 
@@ -253,6 +234,7 @@ const styles = StyleSheet.create({
   title: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
   venue: { color: '#EEEEEE', marginTop: 2 },
   time: { color: '#CCCCCC', marginTop: 2, fontSize: 12 },
+  cancelled: { color: '#FF8A80', marginTop: 4, fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#1a1a1a' },
   actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#242424', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16 },
   actionText: { color: '#FFFFFF', fontSize: 12 },

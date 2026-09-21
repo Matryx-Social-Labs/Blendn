@@ -4,6 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { SavedEventsPayload } from './savedEvents'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
@@ -1544,11 +1545,30 @@ class ApiClientClass {
     return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
   }
 
-  async toggleFavorite(eventId: string): Promise<ApiResponse<{ favorited: boolean }>> {
-    return this.queuedRequest<{ favorited: boolean }>(
+  /**
+   * `POST /favorite` is an upsert — it saves, and saving twice is a no-op. It
+   * never removes; the Going tab's Remove chip called this and then read a
+   * `favorited` field the server does not send (it says `isFavorited`), so the
+   * card vanished and the row stayed (SCRUM-175). Use `removeFavorite` to
+   * remove, or `toggleInterest` to flip.
+   */
+  async addFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
+    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
       `/api/mobile/events/${eventId}/favorite`,
       {
         method: 'POST',
+      },
+      true,
+      3
+    )
+  }
+
+  /** Never refused — not on age, not on status (API: SCRUM-176). */
+  async removeFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
+    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+      `/api/mobile/events/${eventId}/favorite`,
+      {
+        method: 'DELETE',
       },
       true,
       3
@@ -1853,8 +1873,13 @@ class ApiClientClass {
     return this.queuedRequest<UserProfileData>(`/api/mobile/users/${userId}`)
   }
 
-  async getUserFavorites(userId: string): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    return this.queuedRequest<Array<Record<string, unknown>>>(`/api/mobile/users/${userId}/favorites`)
+  /**
+   * `{ events, pagination }`, not a bare array — the server wraps it, the same
+   * way `getProfileInterests` is wrapped. This was typed as the array and the
+   * Going tab mapped over the envelope (SCRUM-175).
+   */
+  async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
   }
 
   // === CHAT ENDPOINTS ===
