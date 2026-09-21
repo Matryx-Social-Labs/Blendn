@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
 import { Typography } from './Typography'
+import { APP_COLORS } from '../lib/theme'
 
 interface ChatHeaderProps {
   groupName: string
@@ -82,8 +83,6 @@ function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHea
   )
 }
 
-type HeaderVariant = 'light' | 'darkTransparent'
-
 interface RightIconButton {
   name: keyof typeof Ionicons.glyphMap
   onPress: () => void
@@ -103,12 +102,17 @@ interface AppHeaderProps {
   onBack?: () => void
   rightIconButton?: RightIconButton
   rightTextButton?: RightTextButton
-  variant?: HeaderVariant
-  showBottomBorder?: boolean
   centerTitle?: boolean
   containerStyle?: StyleProp<ViewStyle>
 }
 
+/**
+ * Only ever rendered one way — transparent, over the root's gradient
+ * background, light text. There used to be a `variant` prop with a light-mode
+ * branch (`#FFFFFF` background, dark text); nothing in the app renders it and
+ * there's no dark-mode toggle to reach it, so it was dead code pretending to
+ * be a feature.
+ */
 export function AppHeader(props: AppHeaderProps) {
   const {
     title,
@@ -116,16 +120,9 @@ export function AppHeader(props: AppHeaderProps) {
     onBack,
     rightIconButton,
     rightTextButton,
-    variant = 'darkTransparent',
-    showBottomBorder = false,
     centerTitle = false,
     containerStyle,
   } = props
-
-  const isDark = variant === 'darkTransparent'
-  const iconColor = isDark ? '#FFFFFF' : '#333333'
-  const titleColor = isDark ? '#FFFFFF' : '#333333'
-  const subtitleColor = isDark ? '#E6E6E6' : '#666666'
 
   return (
     <View style={[
@@ -133,12 +130,9 @@ export function AppHeader(props: AppHeaderProps) {
         paddingHorizontal: 14,
         paddingTop: 8,
         paddingBottom: 12,
-        // Let background gradient from root show through on darkTransparent
-        backgroundColor: isDark ? 'transparent' : '#FFFFFF',
+        backgroundColor: 'transparent',
         shadowOpacity: 0,
         elevation: 0,
-        borderBottomWidth: showBottomBorder && !isDark ? StyleSheet.hairlineWidth : 0,
-        borderBottomColor: '#f0f0f0',
       },
       containerStyle,
     ]}>
@@ -151,7 +145,7 @@ export function AppHeader(props: AppHeaderProps) {
             onPress={onBack}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name="chevron-back" size={24} color={iconColor} />
+            <Ionicons name="chevron-back" size={24} color={APP_COLORS.textPrimary} />
           </Pressable>
         ) : null}
 
@@ -159,7 +153,7 @@ export function AppHeader(props: AppHeaderProps) {
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
           <Typography
             variant="h2"
-            style={[styles.title, { color: titleColor }]}
+            style={[styles.title, { color: APP_COLORS.textPrimary }]}
             numberOfLines={1}
           >
             {title}
@@ -167,7 +161,7 @@ export function AppHeader(props: AppHeaderProps) {
           {!!subtitle && (
             <Typography
               variant="caption"
-              style={[styles.subtitle, { color: subtitleColor }]}
+              style={[styles.subtitle, { color: '#E6E6E6' }]}
               numberOfLines={1}
             >
               {subtitle}
@@ -183,7 +177,7 @@ export function AppHeader(props: AppHeaderProps) {
             style={({ pressed }) => [styles.ctaBtn, (rightTextButton.disabled || rightTextButton.loading) && styles.ctaDisabled, pressed && styles.pressed]}
           >
             {rightTextButton.loading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
             ) : (
               <Typography variant="button" uppercaseButton style={styles.ctaText}>{rightTextButton.label}</Typography>
             )}
@@ -195,7 +189,7 @@ export function AppHeader(props: AppHeaderProps) {
             onPress={rightIconButton.onPress}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name={rightIconButton.name} size={24} color={iconColor} />
+            <Ionicons name={rightIconButton.name} size={24} color={APP_COLORS.textPrimary} />
           </Pressable>
         ) : null}
       </View>
@@ -311,7 +305,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   ctaBtn: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: APP_COLORS.accent,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
@@ -322,7 +316,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   ctaText: {
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },

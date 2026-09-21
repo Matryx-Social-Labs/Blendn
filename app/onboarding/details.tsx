@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StyleSheet } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import {
   EmberChip,
@@ -10,8 +10,18 @@ import {
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
-import { EMBER_RADIUS } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
+
+/**
+ * Writing prompts, not a feature — they exist to unstick a blank textarea,
+ * so tapping one is not wired to anything. Copy is the frame's own.
+ */
+const BIO_PROMPTS = [
+  'A perfect Sunday involves curated playlists and vintage bookstore hopping.',
+  'Currently mastering the art of the perfect pour-over coffee.',
+  'I thrive at the intersection of technology and human connection.',
+]
 
 /**
  * Step six — interests, and a few sentences about yourself.
@@ -28,7 +38,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * contribute itself or a whole branch silently disappears from the picker.
  */
 
-const BIO_LIMIT = 500
+const BIO_LIMIT = 300
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
@@ -103,6 +113,14 @@ export default function DetailsScreen() {
         style={styles.bio}
       />
 
+      <View style={styles.prompts}>
+        {BIO_PROMPTS.map((prompt) => (
+          <View key={prompt} style={styles.promptCard}>
+            <Text style={styles.promptText}>&ldquo;{prompt}&rdquo;</Text>
+          </View>
+        ))}
+      </View>
+
       {groups.map((group) => (
         <EmberFieldGroup key={group.id} label={group.name}>
           <EmberChipRow pack>
@@ -131,4 +149,14 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     textAlignVertical: 'top',
   },
+  prompts: { gap: 12 },
+  promptCard: {
+    backgroundColor: EMBER.surfaceMedia,
+    borderLeftWidth: 4,
+    borderLeftColor: 'rgba(255,144,109,0.4)',
+    borderRadius: EMBER_RADIUS.card,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  promptText: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textSecondary, lineHeight: 22 },
 })

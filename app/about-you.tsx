@@ -20,6 +20,7 @@ import { MatchingFields, type Intent } from '../components/profile/MatchingField
 import { apiClient } from '../lib/apiClient'
 import { needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
 import { Logger } from '../lib/logger'
+import { APP_COLORS } from '../lib/theme'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
@@ -295,7 +296,7 @@ function AboutYouInner() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={APP_COLORS.textPrimary} />
         </View>
       </SafeAreaView>
     )
@@ -320,7 +321,7 @@ function AboutYouInner() {
             value={name}
             onChangeText={setName}
             placeholder="Your name"
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholderTextColor={APP_COLORS.textTertiary}
             style={styles.input}
             maxLength={100}
             autoCapitalize="words"
@@ -354,7 +355,7 @@ function AboutYouInner() {
                     }}
                     keyboardType="number-pad"
                     placeholder="Age"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    placeholderTextColor={APP_COLORS.textTertiary}
                     style={styles.input}
                     maxLength={3}
                   />
@@ -396,45 +397,54 @@ function AboutYouInner() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
+  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 48, gap: 4 },
-  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700', marginTop: 24 },
-  subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 15, marginTop: 6, marginBottom: 8 },
-  section: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', marginTop: 24, marginBottom: 10 },
+  title: { color: APP_COLORS.textPrimary, fontSize: 28, fontWeight: '700', marginTop: 24 },
+  subtitle: { color: APP_COLORS.textSecondary, fontSize: 15, marginTop: 6, marginBottom: 8 },
+  section: { color: APP_COLORS.textPrimary, fontSize: 16, fontWeight: '600', marginTop: 24, marginBottom: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
-  chipOff: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.14)' },
-  chipOn: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: '#FFFFFF' },
+  // Translucent-white overlay surfaces, not opaque card tokens — kept as literals
+  // rather than backgroundElevated/backgroundCard, which would flatten them into
+  // solid grey instead of a tint over whatever sits behind this row.
+  chipOff: { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: APP_COLORS.separator },
+  chipOn: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: APP_COLORS.textPrimary },
   // Opacity only, so a chip that becomes unreachable keeps its width and the
   // row does not re-wrap under the finger that just filled the set.
   chipDisabled: { opacity: 0.35 },
+  // 85% white has no matching step in APP_COLORS (0.14 / 0.30 / 0.60) — left
+  // as a literal rather than rounding to a token that would visibly dim it.
   chipText: { color: 'rgba(255,255,255,0.85)', fontSize: 15 },
-  chipTextOn: { color: '#FFFFFF', fontWeight: '600' },
+  chipTextOn: { color: APP_COLORS.textPrimary, fontWeight: '600' },
   input: {
     backgroundColor: 'rgba(255,255,255,0.06)',
-    borderColor: 'rgba(255,255,255,0.14)',
+    borderColor: APP_COLORS.separator,
     borderRadius: 12,
     borderWidth: 1,
-    color: '#FFFFFF',
+    color: APP_COLORS.textPrimary,
     fontSize: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  hint: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 },
-  error: { color: '#FF6B6B', fontSize: 14, marginTop: 20 },
+  hint: { color: APP_COLORS.textSecondary, fontSize: 13, marginTop: 8 },
+  error: { color: APP_COLORS.destructive, fontSize: 14, marginTop: 20 },
   primary: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    // Inverted CTA (white fill, black text) — a deliberate different
+    // treatment from the app's usual accent button, not a token gap. Reusing
+    // textPrimary/backgroundBase here because the *values* match exactly
+    // (#FFFFFF / #000000), even though the semantic names don't.
+    backgroundColor: APP_COLORS.textPrimary,
     borderRadius: 14,
     marginTop: 28,
     paddingVertical: 16,
   },
   primaryBusy: { opacity: 0.6 },
-  primaryText: { color: '#000000', fontSize: 16, fontWeight: '700' },
+  primaryText: { color: APP_COLORS.backgroundBase, fontSize: 16, fontWeight: '700' },
   skip: {
-    color: 'rgba(255,255,255,0.6)',
+    color: APP_COLORS.textSecondary,
     fontSize: 15,
     marginTop: 18,
     textAlign: 'center',

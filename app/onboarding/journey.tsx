@@ -75,7 +75,7 @@ export default function JourneyScreen() {
       ctaLabel="Continue Exploration"
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
-      secondaryLabel="Skip"
+      secondaryLabel="Save as Draft"
       onSecondary={() => void skip()}
       onBack={goBack}
     >

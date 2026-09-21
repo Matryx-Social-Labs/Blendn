@@ -8,7 +8,7 @@ import { AppHeader } from '../components/AppHeader'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { Logger } from '../lib/logger'
-import { EMBER } from '../lib/theme'
+import { APP_COLORS, EMBER } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
@@ -363,7 +363,7 @@ export default function SettingsScreen() {
       return (
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name={item.icon} size={20} color="#FFFFFF" />
+            <Ionicons name={item.icon} size={20} color={APP_COLORS.textPrimary} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.title}</Text>
               {item.hint ? <Text style={styles.rowHint}>{item.hint}</Text> : null}
@@ -371,7 +371,7 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.switchWrap}>
             {saving[keyName] && (
-              <ActivityIndicator size="small" color="#FFFFFFAA" style={styles.switchLoader} />
+              <ActivityIndicator size="small" color={APP_COLORS.textSecondary} style={styles.switchLoader} />
             )}
             <Switch
               value={preferences[keyName]}
@@ -383,8 +383,8 @@ export default function SettingsScreen() {
                * was the only purple left in the app -- on the one control whose
                * whole job is to read as "on".
                */
-              trackColor={{ false: 'rgba(255,255,255,0.25)', true: EMBER.accent }}
-              thumbColor="#FFFFFF"
+              trackColor={{ false: APP_COLORS.textTertiary, true: EMBER.accent }}
+              thumbColor={APP_COLORS.textPrimary}
             />
           </View>
         </View>
@@ -401,10 +401,10 @@ export default function SettingsScreen() {
         accessibilityState={item.disabled ? { disabled: true, busy: true } : undefined}
       >
         <View style={styles.rowLeft}>
-          <Ionicons name={item.icon} size={20} color={item.danger ? '#e74c3c' : '#FFFFFF'} />
-          <Text style={[styles.rowTitle, item.danger && { color: '#e74c3c' }]}>{item.title}</Text>
+          <Ionicons name={item.icon} size={20} color={item.danger ? APP_COLORS.destructive : APP_COLORS.textPrimary} />
+          <Text style={[styles.rowTitle, item.danger && { color: APP_COLORS.destructive }]}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#FFFFFF99" />
+        <Ionicons name="chevron-forward" size={18} color={APP_COLORS.textSecondary} />
       </TouchableOpacity>
     )
   }
@@ -447,8 +447,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { padding: 16 },
-  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  sectionHeader: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
+  // Translucent-white overlay, not an opaque card token — kept as a literal;
+  // see the same note in about-you.tsx.
+  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: APP_COLORS.separator },
+  sectionHeader: { fontSize: 14, fontWeight: '700', color: APP_COLORS.textSecondary, marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
   /*
    * The gap that separates Delete account from everything above it. 40 rather
    * than the usual 14, because the whole point is that the thumb has to travel
@@ -459,8 +461,8 @@ const styles = StyleSheet.create({
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, paddingRight: 12 },
   switchWrap: { flexDirection: 'row', alignItems: 'center' },
   switchLoader: { marginRight: 6 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  rowTitle: { fontSize: 16, fontWeight: '600', color: APP_COLORS.textPrimary },
   rowText: { flexShrink: 1, gap: 2 },
-  rowHint: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.6)' },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 44 },
+  rowHint: { fontSize: 13, lineHeight: 18, color: APP_COLORS.textSecondary },
+  divider: { height: 1, backgroundColor: APP_COLORS.separator, marginLeft: 44 },
 })

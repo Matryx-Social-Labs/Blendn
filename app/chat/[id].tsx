@@ -95,7 +95,7 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
   return (
     <View style={headerStyles.container}>
       <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="chevron-back" size={24} color="#fff" />
+        <Ionicons name="chevron-back" size={24} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
@@ -103,7 +103,7 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
           <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
-            <Ionicons name="people" size={18} color="#fff" />
+            <Ionicons name="people" size={18} color={EMBER.textPrimary} />
           </View>
         )}
       </View>
@@ -136,7 +136,7 @@ const headerStyles = StyleSheet.create({
   avatar: { width: 38, height: 38, borderRadius: 19 },
   avatarGroupFallback: { backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  name: { fontSize: 16, fontWeight: '600', color: EMBER.textPrimary },
   typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
   subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
 })
@@ -698,7 +698,7 @@ function GroupChatInner(props?: {
 
         {showScrollToBottom && (
           <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color="#fff" />
+            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
           </TouchableOpacity>
         )}
 
@@ -843,24 +843,29 @@ const styles = StyleSheet.create({
 
   // Empty
   emptyContainer: { alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: EMBER.textPrimary, marginBottom: 8 },
   emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
   emptyCta: {
     marginTop: 16, backgroundColor: EMBER.accent,
     borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10,
   },
-  emptyCtaText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
+  // `lib/theme.ts` is explicit that white fails contrast there.
+  emptyCtaText: { color: EMBER.onGradient, fontSize: 14, fontWeight: '600' },
 
   // Message menu modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   messageMenu: {
-    backgroundColor: '#1C1C1E', borderRadius: 14, padding: 8, minWidth: 200,
+    backgroundColor: EMBER.surface, borderRadius: 14, padding: 8, minWidth: 200,
     borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)',
   },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8 },
   menuIcon: { fontSize: 18, marginRight: 12 },
-  menuText: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
-  menuTextDestructive: { color: '#FF453A' },
+  menuText: { fontSize: 16, color: EMBER.textPrimary, fontWeight: '500' },
+  // `gradientTo`, not an arbitrary red — the same flat colour onboarding's
+  // error text uses for the same reason: no dedicated destructive token
+  // exists in EMBER yet, and this converges on the one already in use.
+  menuTextDestructive: { color: EMBER.gradientTo },
 })
 
 

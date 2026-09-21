@@ -1,10 +1,12 @@
+import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -56,43 +58,92 @@ export default function ReadyScreen() {
       onBack={goBack}
     >
       <View style={styles.card}>
-        {primaryPhoto ? (
-          /*
-           * `OptimizedImage`, not React Native's `<Image>`.
-           *
-           * This is a 96pt avatar drawing whatever the person uploaded — which
-           * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
-           * at its native size regardless of the box it is drawn in, so a
-           * summary card was holding a four-megapixel bitmap to show a thumbnail,
-           * and re-downloading it on every mount because RN's cache is separate
-           * from the one the rest of the app warms.
-           *
-           * `width`/`height` are the decode hint, so the bitmap is the size of
-           * the thing on screen.
-           */
-          <OptimizedImage
-            source={primaryPhoto}
-            style={styles.avatar}
-            width={AVATAR}
-            height={AVATAR}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={[styles.avatar, styles.avatarEmpty]} />
-        )}
+        {/*
+         * The frame's checkmark badge in the top-right corner — a completion
+         * marker, not a control. Hidden from screen readers for that reason.
+         */}
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.badge}
+        >
+          <Ionicons name="checkmark" size={20} color={EMBER.accent} />
+        </View>
+
+        {/*
+         * `OptimizedImage`, not React Native's `<Image>`.
+         *
+         * This is a 128pt avatar drawing whatever the person uploaded — which
+         * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
+         * at its native size regardless of the box it is drawn in, so a
+         * summary card was holding a four-megapixel bitmap to show a thumbnail,
+         * and re-downloading it on every mount because RN's cache is separate
+         * from the one the rest of the app warms.
+         *
+         * `width`/`height` are the decode hint, so the bitmap is the size of
+         * the thing on screen.
+         */}
+        <LinearGradient
+          colors={[...EMBER_GRADIENT.colors]}
+          start={EMBER_GRADIENT.start}
+          end={EMBER_GRADIENT.end}
+          style={styles.avatarRing}
+        >
+          <View style={styles.avatarBorder}>
+            {primaryPhoto ? (
+              <OptimizedImage
+                source={primaryPhoto}
+                style={styles.avatar}
+                width={AVATAR}
+                height={AVATAR}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarEmpty]} />
+            )}
+          </View>
+        </LinearGradient>
+
         <Text style={styles.name}>{name || 'Your name'}</Text>
         {draft.occupation ? <Text style={styles.role}>{draft.occupation}</Text> : null}
-        {draft.bio ? <Text style={styles.bio}>{draft.bio}</Text> : null}
+
+        {draft.bio ? (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.bio}>&ldquo;{draft.bio}&rdquo;</Text>
+          </>
+        ) : null}
       </View>
 
       {/* Only what was actually answered. Empty rows labelled "Interests" and
           "Primary hub" would read as data we lost rather than as skipped. */}
       {draft.interests?.length ? (
-        <Summary label="Interests" value={draft.interests.join(' · ')} />
+        <View style={styles.interestsCard}>
+          <Text style={styles.interestsHeading}>Interests</Text>
+          <View style={styles.interestsRow}>
+            {draft.interests.map((interest, index) => (
+              <View key={interest} style={styles.chip}>
+                {index === 0 ? (
+                  <LinearGradient
+                    colors={[...EMBER_GRADIENT.colors]}
+                    start={EMBER_GRADIENT.start}
+                    end={EMBER_GRADIENT.end}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
+                <Text style={index === 0 ? styles.chipAccentText : styles.chipText}>
+                  {interest}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
       ) : null}
-      {draft.location ? <Summary label="Primary hub" value={draft.location} /> : null}
+      {draft.location ? (
+        <Summary icon="location" label="Primary Hub" value={draft.location} />
+      ) : null}
       {draft.looking_for?.length ? (
-        <Summary label="Looking for" value={draft.looking_for.join(' · ')} />
+        <Summary icon="people" label="Looking For" value={draft.looking_for.join(' · ')} />
       ) : null}
 
       {failed ? (
@@ -105,40 +156,111 @@ export default function ReadyScreen() {
   )
 }
 
-function Summary({ label, value }: { label: string; value: string }) {
+function Summary({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap
+  label: string
+  value: string
+}) {
   return (
     <View style={styles.summary}>
-      <Text style={styles.summaryLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
+      <View style={styles.summaryIcon}>
+        <Ionicons name={icon} size={22} color={EMBER.textSecondary} />
+      </View>
+      <View style={styles.summaryText}>
+        <Text style={styles.summaryLabel}>{label}</Text>
+        <Text style={styles.summaryValue}>{value}</Text>
+      </View>
     </View>
   )
 }
 
 /** One number, so the box and the decode hint cannot drift apart. */
-const AVATAR = 96
+const AVATAR = 128
+/** The gradient ring's own thickness plus the gap between it and the photo. */
+const RING = 8
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
     padding: 24,
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill },
+  badge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: 'rgba(45,44,44,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRing: {
+    width: AVATAR + RING,
+    height: AVATAR + RING,
+    borderRadius: EMBER_RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBorder: {
+    width: AVATAR,
+    height: AVATAR,
+    borderRadius: EMBER_RADIUS.pill,
+    borderWidth: 4,
+    borderColor: EMBER.surfaceMedia,
+    overflow: 'hidden',
+  },
+  avatar: { width: '100%', height: '100%' },
   avatarEmpty: { backgroundColor: EMBER.surfaceSunken },
-  name: { ...EMBER_TYPE.subtitle, fontSize: 24, lineHeight: 32, color: EMBER.textPrimary },
-  role: { ...EMBER_TYPE.subtitle, color: EMBER.accent },
-  bio: { ...EMBER_TYPE.subtitle, textAlign: 'center' },
+  name: { ...EMBER_TYPE.subtitle, fontSize: 28, lineHeight: 34, color: EMBER.textPrimary },
+  role: { ...EMBER_TYPE.subtitle, fontSize: 18, color: EMBER.accent },
+  divider: { width: 96, height: 1, backgroundColor: 'rgba(238,131,97,0.2)' },
+  bio: { ...EMBER_TYPE.subtitle, color: EMBER.textSecondary },
 
-  summary: {
+  interestsCard: {
     backgroundColor: EMBER.surfaceSunken,
     borderRadius: EMBER_RADIUS.card,
-    padding: 20,
-    gap: 6,
+    padding: 24,
+    gap: 16,
   },
-  summaryLabel: EMBER_TYPE.fieldLabel,
-  summaryValue: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
+  interestsHeading: { ...EMBER_TYPE.subtitle, fontSize: 18, color: EMBER.textPrimary },
+  interestsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    overflow: 'hidden',
+  },
+  chipText: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textPrimary },
+  chipAccentText: { ...EMBER_TYPE.helper, fontSize: 14, fontWeight: '700', color: EMBER.onGradientChip },
+
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: EMBER.surfaceMedia,
+    borderRadius: EMBER_RADIUS.card,
+    padding: 20,
+  },
+  summaryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryText: { flex: 1, gap: 2 },
+  summaryLabel: { ...EMBER_TYPE.helper, fontSize: 13, color: EMBER.textSecondary },
+  summaryValue: { ...EMBER_TYPE.subtitle, fontSize: 17, color: EMBER.textPrimary },
 
   error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
 })

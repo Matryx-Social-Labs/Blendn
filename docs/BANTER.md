@@ -4,8 +4,8 @@ Frame `1141:5247` on the **Updates** canvas. The screen the app shipped before
 this was a different design entirely; it was deleted rather than adapted.
 
 Components live in `components/banter/BanterSections.tsx`. The screen is
-`app/(tabs)/chat.tsx`. `app/(tabs)/__preview-banter.tsx` renders the pieces
-against fixtures — deep-link `exp+blendn:///__preview-banter` — so layout can be
+`app/(tabs)/chat.tsx`. `app/preview/banter.tsx` renders the pieces
+against fixtures — deep-link `exp+blendn:///preview/banter` — so layout can be
 looked at without a login, a socket or a conversation that exists.
 
 ---

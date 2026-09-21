@@ -104,7 +104,7 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
   return (
     <View style={headerStyles.container}>
       <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="chevron-back" size={24} color="#fff" />
+        <Ionicons name="chevron-back" size={24} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
@@ -135,7 +135,7 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
       </View>
 
       <Pressable onPress={onOptions} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+        <Ionicons name="ellipsis-vertical" size={22} color={EMBER.textPrimary} />
       </Pressable>
     </View>
   )
@@ -156,9 +156,9 @@ const headerStyles = StyleSheet.create({
   avatarWrap: { position: 'relative' },
   avatar: { width: 38, height: 38, borderRadius: 19 },
   avatarFallback: { backgroundColor: '#2C4A3E', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  avatarText: { fontSize: 14, fontWeight: '700', color: EMBER.textPrimary },
   titleArea: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  name: { fontSize: 16, fontWeight: '600', color: EMBER.textPrimary },
   subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
   typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
 })
@@ -752,7 +752,7 @@ function PrivateChatInner() {
 
         {showScrollToBottom && (
           <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color="#fff" />
+            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
           </TouchableOpacity>
         )}
 
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: EMBER.textPrimary, marginBottom: 8 },
   emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
   emptyCta: {
     marginTop: 16,
@@ -869,7 +869,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  emptyCtaText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
+  // `lib/theme.ts` is explicit that white fails contrast there.
+  emptyCtaText: { color: EMBER.onGradient, fontSize: 14, fontWeight: '600' },
 })
 
 
