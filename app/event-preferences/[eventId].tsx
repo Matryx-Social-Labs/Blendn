@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -9,6 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+// The library one, like every other screen: react-native's own SafeAreaView
+// left the Save button under the home indicator on an iPhone 17 Pro, where
+// taps on its centre are the system's, not ours (SCRUM-201).
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
