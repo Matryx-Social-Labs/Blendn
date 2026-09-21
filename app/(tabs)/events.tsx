@@ -615,6 +615,28 @@ function EventsInner() {
       feedback.success()
 
       /*
+       * "Why do you go out?" — asked at the door of the first room.
+       *
+       * Onboarding never wrote `intent_default` (SCRUM-77), so every account
+       * that came through it was refused the board for a field it was never
+       * asked. The server says `intentNeeded` while there is no default; the
+       * question is the preferences screen with the intent leading, and the
+       * answer is saved as the default. Asked after whatever tray follows the
+       * check-in, not instead of it — the reveal warning is the more
+       * important sentence and goes first.
+       */
+      const askIntent = result.data?.intentNeeded === true
+      const closeAndAsk = () => {
+        closeTray()
+        if (askIntent) {
+          router.push({
+            pathname: '/event-preferences/[eventId]',
+            params: { eventId: event.id, revealed: '0', askIntent: '1' },
+          })
+        }
+      }
+
+      /*
        * The reveal suggestion, offered rather than applied.
        *
        * `revealSuggestion` is true when this person has `reveal_by_default`
@@ -661,7 +683,7 @@ function EventsInner() {
               label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
               variant: 'primary',
               onPress: () => {
-                closeTray()
+                closeAndAsk()
                 apiClient
                   .setMatchPreferences(event.id, { revealed: true })
                   .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
@@ -669,7 +691,7 @@ function EventsInner() {
             },
             // Deliberately not "No" — nothing is being refused. Staying
             // anonymous is the state they are already in.
-            { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeTray },
+            { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeAndAsk },
           ],
         })
         return
@@ -700,16 +722,18 @@ function EventsInner() {
                     eventTitle: event.title,
                   } as any,
                 })
+                // On top of the chat, so saving lands them in the room.
+                if (askIntent) closeAndAsk()
               },
             },
-            { label: 'Stay here', onPress: closeTray },
+            { label: 'Stay here', onPress: closeAndAsk },
           ],
         })
       } else {
         showTray({
           title: 'Checked in',
           message: 'You have been checked in.',
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          buttons: [{ label: 'Done', variant: 'primary', onPress: closeAndAsk }],
         })
       }
 
@@ -2072,11 +2096,12 @@ function EventsInner() {
               the page does not use. Chat, private chat and the room keep both,
               because there a dead socket means messages you will not see.
 
-              No status dot replaces it either. `profiles.show_online` already
-              means "other attendees can see you're here", so a green dot on your
-              own avatar reads as exactly that — and wiring it to socket health
-              would show green while `show_online: false` made you invisible to
-              everyone. A lie in both directions, and unexplainable in support.
+              No status dot replaces it either. `profiles.show_online` means
+              "other attendees can see you're in the room" — since SCRUM-141 the
+              roster and the grid honour it — so a green dot on your own avatar
+              reads as exactly that, and wiring it to socket health would show
+              green while `show_online: false` kept you off every list. A lie
+              in both directions, and unexplainable in support.
             */}
             <RealtimeStatusBanner
               status={socketStatus}

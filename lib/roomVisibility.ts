@@ -20,10 +20,18 @@
  * first public entry, and the banner that runs for as long as you are inside.
  */
 
-/** What the room currently knows. */
-export type RoomVisibility = 'anonymous' | 'named'
+/**
+ * What the room currently knows.
+ *
+ * `hidden` is "Show online status" off (SCRUM-141): counted in the room's
+ * numbers and listed nowhere — not on the roster, not on the grid, so nobody
+ * can like you either. It outranks reveal: a name nobody is shown is not a
+ * state worth describing.
+ */
+export type RoomVisibility = 'anonymous' | 'named' | 'hidden'
 
-export function roomVisibility(revealed: boolean): RoomVisibility {
+export function roomVisibility(revealed: boolean, listed = true): RoomVisibility {
+  if (!listed) return 'hidden'
   return revealed ? 'named' : 'anonymous'
 }
 
@@ -43,6 +51,12 @@ export function bannerText(
   visibility: RoomVisibility,
   pseudonym?: string | null
 ): { title: string; action: string } {
+  if (visibility === 'hidden') {
+    return {
+      title: "You're not listed here — Show online status is off",
+      action: 'Turn it on',
+    }
+  }
   if (visibility === 'named') {
     return {
       title: 'People here can see your name and photo',

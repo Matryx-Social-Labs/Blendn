@@ -63,10 +63,21 @@ export default function EventPreferences() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
-  const { eventId, revealed: initialRevealed } = useLocalSearchParams<{
+  const { eventId, revealed: initialRevealed, askIntent: askIntentParam } = useLocalSearchParams<{
     eventId: string
     revealed?: string
+    askIntent?: string
   }>()
+  /*
+   * "Why do you go out?" — asked at the door of the first room.
+   *
+   * Onboarding never wrote `intent_default`, so every account that came
+   * through it was refused the board ("add … why you go out") for a field the
+   * flow never asked for. Check-in says `intentNeeded` while there is no
+   * default; the events tab sends people here with this flag, the intent
+   * leads, and the answer is saved as the default in the same write.
+   */
+  const askIntent = askIntentParam === '1'
   const { showToast } = useToast()
   const { user } = useAuth()
 
@@ -92,6 +103,10 @@ export default function EventPreferences() {
    * feature is broken rather than that their profile is empty.
    */
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
+  // Dating is 18+. The server refuses it (403) on this write as everywhere
+  // else; hiding the card for a minor turns that refusal into a card they
+  // never see rather than an error on the way into their first room.
+  const [under18, setUnder18] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -100,6 +115,8 @@ export default function EventPreferences() {
       .getProfile(user.id)
       .then((res) => {
         if (cancelled || !res.success || !res.data) return
+        const age = res.data.profile?.age
+        setUnder18(typeof age === 'number' && age < 18)
         setCanReveal(
           revealReadiness({
             name: res.data.profile?.name || res.data.name,
@@ -138,6 +155,8 @@ export default function EventPreferences() {
       const res = await apiClient.setMatchPreferences(String(eventId), {
         // Only when they actually chose something here. See `intentTouched`.
         intent: intentTouched ? intent : undefined,
+        // The first-door answer is the default from now on; that is the point.
+        ...(askIntent && intentTouched ? { rememberIntent: true } : {}),
         revealed,
         /*
          * `rememberReveal`, not `remember`. The old flag wrote the intent
@@ -148,7 +167,9 @@ export default function EventPreferences() {
         rememberReveal,
       })
       if (!res.success) {
-        showToast('Could not save. Try again.', 'error')
+        // The server's sentence when it has one — "Dating is for 18+" is
+        // actionable; "could not save" is not.
+        showToast(res.error || 'Could not save. Try again.', 'error')
         return
       }
       router.back()
@@ -158,7 +179,78 @@ export default function EventPreferences() {
     } finally {
       setSaving(false)
     }
-  }, [eventId, intent, intentTouched, rememberReveal, revealed, saving, showToast])
+  }, [askIntent, eventId, intent, intentTouched, rememberReveal, revealed, saving, showToast])
+
+  const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
+
+  const revealBlock = (
+    <>
+      <Text style={styles.h1}>Can people see who you are?</Text>
+      <Text style={styles.body}>
+        By default you appear as a made-up name, and people see what you have in common
+        rather than who you are. Turning this on shows your real name and photo to people
+        in this room.
+      </Text>
+      <Text style={styles.bodyEmphasis}>
+        This is for this event only. It does not change anything anywhere else.
+      </Text>
+
+      <View style={styles.switchRow}>
+        <Text style={styles.optionText}>Show my name and photo here</Text>
+        <Switch
+          value={revealed}
+          onValueChange={setRevealed}
+          disabled={canReveal ? !canReveal.ok : false}
+          accessibilityLabel="Show my real name and photo at this event"
+        />
+      </View>
+
+      {canReveal && !canReveal.ok && (
+        /*
+         * Names what is missing, because "disabled" on its own is the least
+         * useful state in an interface. `matching.ts` shows the real name and
+         * photo and nothing else, so these two fields are literally all that
+         * revealing exposes — and with neither, turning it on would show
+         * nothing at all.
+         */
+        <Text style={styles.bodyEmphasis}>
+          Add {canReveal.missing} to your profile first — that&apos;s what other people
+          would see.
+        </Text>
+      )}
+
+      {revealed && (
+        <View style={styles.switchRow}>
+          <Text style={styles.optionText}>Do this at future events too</Text>
+          <Switch value={rememberReveal} onValueChange={setRememberReveal} />
+        </View>
+      )}
+    </>
+  )
+
+  const intentBlock = (
+    <>
+      <Text style={styles.h1}>{askIntent ? 'Why do you go out?' : 'Why are you here tonight?'}</Text>
+      <Text style={styles.body}>
+        {askIntent
+          ? "It shapes who you're introduced to. We'll remember this for future events — change it any time from your profile."
+          : 'Just for this event. It overrides your usual answer for tonight without changing it.'}
+      </Text>
+
+      {intents.map((opt) => (
+        <TouchableOpacity
+          key={opt.value}
+          style={[styles.option, intent.includes(opt.value) && styles.optionSelected]}
+          onPress={() => toggleIntent(opt.value)}
+          accessibilityRole="button"
+          accessibilityState={{ selected: intent.includes(opt.value) }}
+        >
+          <Text style={styles.optionText}>{opt.label}</Text>
+          <Text style={styles.optionHint}>{opt.hint}</Text>
+        </TouchableOpacity>
+      ))}
+    </>
+  )
 
   return (
     <SafeAreaView style={styles.container}>
@@ -181,72 +273,20 @@ export default function EventPreferences() {
           * deliberately decided per room, every room, because being visible at
           * a work meetup is not being visible at a club.
           */}
-        <Text style={styles.h1}>Can people see who you are?</Text>
-        <Text style={styles.body}>
-          By default you appear as a made-up name, and people see what you have in common
-          rather than who you are. Turning this on shows your real name and photo to people
-          in this room.
-        </Text>
-        <Text style={styles.bodyEmphasis}>
-          This is for this event only. It does not change anything anywhere else.
-        </Text>
-
-        <View style={styles.switchRow}>
-          <Text style={styles.optionText}>Show my name and photo here</Text>
-          <Switch
-            value={revealed}
-            onValueChange={setRevealed}
-            disabled={canReveal ? !canReveal.ok : false}
-            accessibilityLabel="Show my real name and photo at this event"
-          />
-        </View>
-
-        {canReveal && !canReveal.ok && (
-          /*
-           * Names what is missing, because "disabled" on its own is the least
-           * useful state in an interface. `matching.ts` shows the real name and
-           * photo and nothing else, so these two fields are literally all that
-           * revealing exposes — and with neither, turning it on would show
-           * nothing at all.
-           */
-          <Text style={styles.bodyEmphasis}>
-            Add {canReveal.missing} to your profile first — that&apos;s what other people
-            would see.
-          </Text>
-        )}
-
-        {revealed && (
-          <View style={styles.switchRow}>
-            <Text style={styles.optionText}>Do this at future events too</Text>
-            <Switch value={rememberReveal} onValueChange={setRememberReveal} />
-          </View>
-        )}
-
+        {/*
+          * Reveal leads, intent follows — unless intent is the question that
+          * brought them here. See `askIntent`.
+          */}
+        {askIntent ? intentBlock : revealBlock}
         <View style={styles.divider} />
-
-        <Text style={styles.h1}>Why are you here tonight?</Text>
-        <Text style={styles.body}>
-          Just for this event. You set a general answer when you signed up, and this
-          overrides it for tonight without changing it.
-        </Text>
-
-        {INTENTS.map((opt) => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.option, intent.includes(opt.value) && styles.optionSelected]}
-            onPress={() => toggleIntent(opt.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: intent.includes(opt.value) }}
-          >
-            <Text style={styles.optionText}>{opt.label}</Text>
-            <Text style={styles.optionHint}>{opt.hint}</Text>
-          </TouchableOpacity>
-        ))}
+        {askIntent ? revealBlock : intentBlock}
 
         <TouchableOpacity
-          style={[styles.primaryButton, saving && styles.buttonDisabled]}
+          style={[styles.primaryButton, (saving || (askIntent && intent.length === 0)) && styles.buttonDisabled]}
           onPress={save}
-          disabled={saving}
+          // The first-door answer cannot be nothing: an empty save would write
+          // an empty default and the board would still refuse them.
+          disabled={saving || (askIntent && intent.length === 0)}
         >
           <Text style={styles.primaryButtonText}>{saving ? 'Saving…' : 'Save'}</Text>
         </TouchableOpacity>
