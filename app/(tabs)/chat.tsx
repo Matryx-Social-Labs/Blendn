@@ -33,6 +33,7 @@ import {
 } from '../../components/banter/BanterSections'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
+import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { apiClient } from '../../lib/apiClient'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
@@ -127,6 +128,8 @@ interface GroupChat {
   last_sender_name?: string
   /** Standing in it right now: the room is live and anonymous. */
   is_checked_in: boolean
+  /** Readable but not postable — the list says why (SCRUM-178). */
+  room_state: RoomState
 }
 
 interface PersonalChat {
@@ -292,7 +295,7 @@ function ChatInner() {
       ...groupChats.filter((c) => !c.is_checked_in).map((c) => ({
         id: `g:${c.chat_room_id}`,
         title: c.event_title,
-        preview: displayPreview(c.last_message, 'No messages yet'),
+        preview: roomStateLine(c.room_state) ?? displayPreview(c.last_message, 'No messages yet'),
         timeLabel: c.last_message_time ? formatRelativeTime(c.last_message_time) : '',
         kind: 'event' as const,
         sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
@@ -611,6 +614,7 @@ function ChatInner() {
             last_message_time: preview.time,
             last_sender_name: undefined,
             is_checked_in: room.isCheckedIn === true,
+            room_state: roomStateFrom(room),
           }
         })
         .filter((chat) => chat.chat_room_id)
