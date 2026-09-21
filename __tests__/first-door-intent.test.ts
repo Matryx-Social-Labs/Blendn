@@ -46,3 +46,20 @@ describe('the question', () => {
     expect(prefs).toContain("showToast(res.error || 'Could not save. Try again.', 'error')")
   })
 })
+
+describe('both doors ask', () => {
+  // Driven on iOS 2026-09-21: the event-detail door ("Blend in") checked a
+  // fresh account in with no "Why do you go out?", while the Pulse tray asked.
+  // Two doors, one rule (SCRUM-77 / SCRUM-188).
+  const { readFileSync } = require('fs') as typeof import('fs')
+  const { join } = require('path') as typeof import('path')
+  it.each([
+    'app/(tabs)/events.tsx',
+    'components/screens/EventDetailScreen.tsx',
+  ])('%s routes to the intent screen when the server says intentNeeded', (file) => {
+    const src = readFileSync(join(__dirname, '..', file), 'utf8')
+    expect(src).toContain('intentNeeded === true')
+    expect(src).toContain("askIntent: '1'")
+    expect(src).toContain('revealSuggestion')
+  })
+})
