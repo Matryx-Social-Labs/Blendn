@@ -2,6 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
+import { revealPromptText, revealReadiness } from '../../lib/reveal'
+import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from '../../lib/roomVisibility'
+import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from '../../lib/roomVisibilityStorage'
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -864,25 +867,78 @@ export default function EventDetail() {
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
         feedback.success()
 
-        // Keep user in context and offer next step instead of forcing a full-screen jump.
-        showTray(
-          'Checked in',
-          'You are now checked in. Join the event chat now, or stay on this screen.',
-          [
-            {
-              label: 'Stay here',
-              onPress: closeTray,
-            },
-            {
-              label: 'Go to Chat',
-              variant: 'primary',
-              onPress: async () => {
-                closeTray()
-                await openEventChat()
+        /*
+         * The same two questions the Pulse door asks, because this is the
+         * commoner door — tap a card, "Blend in" — and it asked neither
+         * (driven on iOS 2026-09-21: a fresh account with no intent was
+         * checked in here with no "Why do you go out?", while the Pulse
+         * tray asked). The Pulse's version lives in app/(tabs)/events.tsx
+         * `handleCheckIn`; the two should become one helper, and until then
+         * they must say the same thing (SCRUM-77, SCRUM-188).
+         */
+        const askIntent = result.data?.intentNeeded === true
+        const closeAndAsk = () => {
+          closeTray()
+          if (askIntent) {
+            router.push({
+              pathname: '/event-preferences/[eventId]',
+              params: { eventId: String(id), revealed: '0', askIntent: '1' },
+            } as any)
+          }
+        }
+
+        if (result.data?.revealSuggestion && user?.id) {
+          const firstTime = shouldWarnBeforePublicCheckIn({
+            revealByDefault: true,
+            hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
+            canReveal: revealReadiness({
+              name: user.name?.trim().split(/\s+/)[0] ?? null,
+              photos: user.image ? [user.image] : [],
+            }).ok,
+          })
+          if (firstTime) await markPublicCheckInWarningSeen(user.id)
+          showTray(
+            firstTime ? PUBLIC_CHECKIN_WARNING.title : 'Show your name here?',
+            firstTime ? PUBLIC_CHECKIN_WARNING.body : revealPromptText(user.name?.trim().split(/\s+/)[0] ?? null),
+            [
+              { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeAndAsk },
+              {
+                label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
+                variant: 'primary',
+                onPress: () => {
+                  closeAndAsk()
+                  apiClient
+                    .setMatchPreferences(String(id), { revealed: true })
+                    .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
+                },
+              },
+            ]
+          )
+        } else {
+          // Keep user in context and offer next step instead of forcing a full-screen jump.
+          showTray(
+            'Checked in',
+            'You are now checked in. Join the event chat now, or stay on this screen.',
+            [
+              {
+                label: 'Stay here',
+                onPress: closeAndAsk,
+              },
+              {
+                label: 'Go to Chat',
+                variant: 'primary',
+                onPress: async () => {
+                  if (askIntent) {
+                    closeAndAsk()
+                    return
+                  }
+                  closeTray()
+                  await openEventChat()
+                }
               }
-            }
-          ]
-        )
+            ]
+          )
+        }
 
         // Send check-in success notification to the user
         try {
