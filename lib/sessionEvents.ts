@@ -18,9 +18,16 @@ const _listeners = new Set<() => void>()
 const ENDED_KEY = 'blendn.session.endedByServer'
 const storage = () => import('@react-native-async-storage/async-storage').then((m) => m.default)
 
-export function markSessionExpired() {
+/**
+ * `reason` is the server's own sentence when it gave one — a 403 at refresh
+ * carries "This account has been suspended…" or "This app is for attendees…"
+ * — and the entry screen shows that instead of the generic notice. Driven on
+ * Android (SCRUM-93): a suspended account was signed out within seconds and
+ * told only "You were signed out", which reads as a glitch, not a decision.
+ */
+export function markSessionExpired(reason?: string) {
   storage()
-    .then((s) => s.setItem(ENDED_KEY, '1'))
+    .then((s) => s.setItem(ENDED_KEY, reason && reason.trim() ? reason.trim() : '1'))
     .catch(() => {})
   _listeners.forEach((fn) => {
     try { fn() } catch {}
@@ -32,13 +39,17 @@ export function subscribeSessionExpired(fn: () => void): () => void {
   return () => _listeners.delete(fn)
 }
 
-/** True once, for the visit that follows a session the server ended. */
-export async function consumeSessionEndedNotice(): Promise<boolean> {
+/**
+ * Once, for the visit that follows a session the server ended: the server's
+ * sentence when there was one, `true` for the generic case, `false` otherwise.
+ */
+export async function consumeSessionEndedNotice(): Promise<string | boolean> {
   try {
     const s = await storage()
-    const ended = (await s.getItem(ENDED_KEY)) === '1'
-    if (ended) await s.removeItem(ENDED_KEY)
-    return ended
+    const stored = await s.getItem(ENDED_KEY)
+    if (stored === null) return false
+    await s.removeItem(ENDED_KEY)
+    return stored === '1' ? true : stored
   } catch {
     return false
   }

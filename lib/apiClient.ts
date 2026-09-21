@@ -793,6 +793,8 @@ type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
+/** The server's sentence from the last rejected refresh, if it gave one. */
+let rejectedReason: string | undefined
 
 // API Client Class
 class ApiClientClass {
@@ -1014,7 +1016,8 @@ class ApiClientClass {
             return { success: false, error: TIMEOUT_MESSAGE }
           }
           await TokenStorage.clearAll()
-          markSessionExpired()
+          markSessionExpired(rejectedReason)
+          rejectedReason = undefined
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1092,7 +1095,16 @@ class ApiClientClass {
 
         if (!response.ok) {
           // 5xx is the server being unwell, not the token being bad.
-          return response.status >= 500 ? 'failed' : 'rejected'
+          if (response.status >= 500) return 'failed'
+          // A 403 is the server saying why — suspended, or a staff account
+          // in the attendee app. Keep the sentence for the entry screen.
+          if (response.status === 403) {
+            try {
+              const body = (await response.json()) as { error?: unknown }
+              if (typeof body?.error === 'string') rejectedReason = body.error
+            } catch {}
+          }
+          return 'rejected'
         }
 
         const data: ApiResponse<{ accessToken: string; refreshToken: string }> =
