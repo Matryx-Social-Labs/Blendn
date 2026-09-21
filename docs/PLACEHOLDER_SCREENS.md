@@ -7,7 +7,10 @@ the copy meaning, the API calls and the rules are decided. The layout, type,
 colour, spacing and motion are not, and are meant to be replaced wholesale.
 
 Each carries a red `PLACEHOLDER DESIGN` banner on screen so nobody mistakes one
-for finished work in a demo.
+for finished work in a demo — except `app/sign-in.tsx` (sign in / create
+account), whose banner was removed on 2026-09-21 at the product owner's
+request; the screen is still provisional in layout, the label just no longer
+says so to testers.
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
