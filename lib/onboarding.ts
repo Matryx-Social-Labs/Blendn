@@ -462,3 +462,24 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
     return null
   }
 }
+
+/**
+ * Whether the birth date on the draft makes this person under 18 today.
+ *
+ * Orientation exists for dating, and dating is 18+, so the preferences step
+ * does not ask a minor for it (SCRUM-200). Unknown or unparseable is treated
+ * as under 18: `basics` is not skippable, so a missing date here is a bug
+ * rather than a choice, and the question that must not be asked of a child
+ * is the one to withhold when in doubt. `now` is a parameter so the boundary
+ * can be tested on a fixed day.
+ */
+export function isUnder18(dateOfBirth: string | undefined, now: Date = new Date()): boolean {
+  if (!dateOfBirth) return true
+  const dob = new Date(dateOfBirth)
+  if (Number.isNaN(dob.getTime())) return true
+  let years = now.getFullYear() - dob.getFullYear()
+  const beforeBirthday =
+    now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())
+  if (beforeBirthday) years -= 1
+  return years < 18
+}
