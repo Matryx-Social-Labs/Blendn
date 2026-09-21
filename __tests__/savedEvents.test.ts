@@ -63,3 +63,15 @@ describe('savedEventRows', () => {
     expect(savedEventRows([] as unknown as typeof payload)).toEqual([])
   })
 })
+
+describe('the Going tab', () => {
+  it('reloads on focus, not once per mount', () => {
+    // Driven on iOS: save from the Pulse, return to Going — still empty until a
+    // cold launch, because the only load was a mount effect (SCRUM-175).
+    const { readFileSync } = require('fs') as typeof import('fs')
+    const { join } = require('path') as typeof import('path')
+    const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
+    expect(src).toContain('useFocusEffect(')
+    expect(src).not.toMatch(/useEffect\(\(\) => \{\s*if \(authUser\) \{\s*loadInterestedEvents\(\)/)
+  })
+})
