@@ -6,7 +6,6 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
-    ImageBackground,
     Linking,
     Share,
     StyleSheet,
@@ -15,6 +14,7 @@ import {
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { EventCover } from '../../components/EventCover'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedEvents'
@@ -41,6 +41,8 @@ function GoingScreenInner() {
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  // Pull-to-refresh also retries a cover that failed to load (EventCover).
+  const [refreshCount, setRefreshCount] = useState(0)
 
   const loadInterestedEvents = useCallback(async () => {
     try {
@@ -95,6 +97,7 @@ function GoingScreenInner() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
+    setRefreshCount((n) => n + 1)
     await loadInterestedEvents()
     setRefreshing(false)
   }, [loadInterestedEvents])
@@ -153,8 +156,7 @@ function GoingScreenInner() {
 
   const renderItem = useCallback(({ item }: { item: EventRow }) => (
     <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}>
-      <ImageBackground source={{ uri: (item.cover_image_url || '') as string }} style={styles.image} imageStyle={styles.imageRadius} resizeMode="cover">
-        <View style={[StyleSheet.absoluteFill, styles.imageOverlay]} />
+      <EventCover uri={item.cover_image_url} height={180} retry={refreshCount}>
         <View style={styles.overlayContent}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
@@ -163,7 +165,7 @@ function GoingScreenInner() {
             <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">Cancelled</Text>
           ) : null}
         </View>
-      </ImageBackground>
+      </EventCover>
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel="Remove from saved">
           <Ionicons name="heart-dislike" size={16} color={APP_COLORS.destructive} />
@@ -183,7 +185,7 @@ function GoingScreenInner() {
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
-  ), [removeSave, openInMaps, addToCalendar, shareEvent])
+  ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
 
@@ -238,9 +240,6 @@ const styles = StyleSheet.create({
   emptyTitle: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
   emptySub: { color: APP_COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
   card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: APP_COLORS.backgroundElevated, borderRadius: 12, overflow: 'hidden' },
-  image: { height: 180, width: '100%' },
-  imageRadius: { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
-  imageOverlay: { backgroundColor: 'rgba(0,0,0,0.4)' },
   overlayContent: { position: 'absolute', left: 12, right: 12, bottom: 12 },
   title: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '800' },
   venue: { color: APP_COLORS.textPrimary, marginTop: 2 },
