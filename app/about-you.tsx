@@ -123,8 +123,6 @@ function AboutYouInner() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const wantsDating = intents.includes('dating')
-  const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   useEffect(() => {
     let cancelled = false
@@ -185,6 +183,20 @@ function AboutYouInner() {
     }
     return knownAge
   }
+
+  /*
+   * Offered unless the age typed here is under 18; an unknown age is still
+   * offered, and the check below asks for it. A Dating tick made before the
+   * age was typed does not survive the chip being hidden — otherwise Continue
+   * refused with no chip left to untick (SCRUM-294 review).
+   */
+  const offerDating = (): boolean => {
+    const years = effectiveAge()
+    return years === null || mayDate(years)
+  }
+  const chosenIntents = (): Intent[] => (offerDating() ? intents : intents.filter((i) => i !== 'dating'))
+  const wantsDating = chosenIntents().includes('dating')
+  const askInterestedIn = needsInterestedInPicker(gender, orientations, chosenIntents())
 
   const validate = (): string | null => {
     const years = effectiveAge()
@@ -253,7 +265,7 @@ function AboutYouInner() {
       const result = await apiClient.updateProfile(user.id, {
         ...(name.trim() ? { name: name.trim() } : {}),
         ...(years !== null && needsAge ? { age: years } : {}),
-        ...(intents.length > 0 ? { intent_default: intents } : {}),
+        ...(chosenIntents().length > 0 ? { intent_default: chosenIntents() } : {}),
         ...(workField ? { work_field: workField } : {}),
         ...(wantsDating && gender ? { gender } : {}),
         ...(wantsDating && orientations.length ? { orientations } : {}),
@@ -340,10 +352,7 @@ function AboutYouInner() {
             onChangeOrientations={setOrientations}
             interestedIn={interestedIn}
             onChangeInterestedIn={setInterestedIn}
-            // Offered unless the age typed here is under 18. An unknown age is
-            // still offered: this screen asks for it, and the check on save
-            // says "Add your age before choosing dating".
-            offerDating={effectiveAge() === null || mayDate(effectiveAge())}
+            offerDating={offerDating()}
             afterIntents={
               needsAge ? (
                 <>

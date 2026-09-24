@@ -79,8 +79,13 @@ describe('What are you open to?', () => {
 describe('every screen asks', () => {
   const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 
-  it('Edit profile decides from the age the server holds', () => {
-    expect(read('app/edit-profile.tsx')).toMatch(/offerDating=\{mayDate\(profile\?\.age\)\}/)
+  it('Edit profile decides from the age being typed, else the one the server holds, and does not send a hidden Dating', () => {
+    const src = read('app/edit-profile.tsx')
+    expect(src).toMatch(/const liveAge = age\.trim\(\) && Number\.isInteger\(typedAge\) \? typedAge : profile\?\.age/)
+    expect(src).toMatch(/offerDating=\{mayDate\(liveAge\)\}/)
+    expect(src).toMatch(/const savedIntents = mayDate\(liveAge\) \? intents : intents\.filter\(\(i\) => i !== 'dating'\)/)
+    expect(src).toMatch(/updateData\.intent_default = savedIntents/)
+    expect(src).toMatch(/if \(savedIntents\.includes\('dating'\)\)/)
   })
 
   it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
@@ -89,7 +94,12 @@ describe('every screen asks', () => {
     expect(src).toMatch(/looking_for: under18 \? withoutDatingChoice\(lookingFor\) : lookingFor/)
   })
 
-  it('About you offers it unless the age typed there is under 18', () => {
-    expect(read('app/about-you.tsx')).toMatch(/offerDating=\{/)
+  it('About you offers it unless the age typed there is under 18, and a hidden tick is neither checked nor sent', () => {
+    const src = read('app/about-you.tsx')
+    expect(src).toMatch(/return years === null \|\| mayDate\(years\)/)
+    expect(src).toMatch(/const chosenIntents = \(\): Intent\[\] => \(offerDating\(\) \? intents : intents\.filter\(\(i\) => i !== 'dating'\)\)/)
+    expect(src).toMatch(/const wantsDating = chosenIntents\(\)\.includes\('dating'\)/)
+    expect(src).toMatch(/intent_default: chosenIntents\(\)/)
+    expect(src).toMatch(/offerDating=\{offerDating\(\)\}/)
   })
 })
