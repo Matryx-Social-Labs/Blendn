@@ -74,6 +74,7 @@ describe('one age rule for every form that takes an age', () => {
 
   it('saves the age the form checked, not a second parse of the same text', () => {
     const src = read('app/edit-profile.tsx')
+    expect(src).toContain('const errors = profileFormErrors({ name, age })')
     expect(src).toContain('const parsedAge = errors.years')
     expect(src).not.toMatch(/parseInt\(trimmedAge/)
   })
