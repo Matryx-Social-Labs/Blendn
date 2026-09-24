@@ -15,6 +15,7 @@ import {
   ORIENTATION_LABELS,
   orientationDisabled,
   toggleOrientation,
+  withoutDatingChoice,
   type Orientation,
 } from '../../lib/dating'
 import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onboarding'
@@ -152,7 +153,8 @@ export default function PreferencesScreen() {
                 // `orientationConsent` for why that is not just tidiness.
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
-          looking_for: lookingFor,
+          // A draft written before the birth date said otherwise can hold it.
+          looking_for: under18 ? withoutDatingChoice(lookingFor) : lookingFor,
           reveal_by_default: !anonymous,
         })
       }
@@ -245,7 +247,7 @@ export default function PreferencesScreen() {
       </EmberSection>
 
       <EmberSection title="Looking For" caption="What brings you to Blend'n today?">
-        <LookingForCards selected={lookingFor} onToggle={toggle} />
+        <LookingForCards selected={lookingFor} onToggle={toggle} withoutDating={under18} />
       </EmberSection>
     </OnboardingScreen>
   )

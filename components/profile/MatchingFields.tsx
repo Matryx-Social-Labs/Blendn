@@ -79,6 +79,12 @@ export interface MatchingFieldsProps {
    * component never has to know which host it is in.
    */
   afterIntents?: ReactNode
+  /**
+   * Whether this person may be offered dating (`mayDate`). Required, so every
+   * host decides: when false, neither the Dating chip nor the gender and
+   * orientation questions it opens are shown (SCRUM-294).
+   */
+  offerDating: boolean
 }
 
 export function MatchingFields({
@@ -94,15 +100,17 @@ export function MatchingFields({
   interestedIn,
   onChangeInterestedIn,
   afterIntents,
+  offerDating,
 }: MatchingFieldsProps) {
-  const wantsDating = intents.includes('dating')
+  const wantsDating = offerDating && intents.includes('dating')
+  const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
   const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   return (
     <>
       <Text style={styles.section}>What are you open to?</Text>
       <View style={styles.row}>
-        {INTENTS.map((intent) => {
+        {offered.map((intent) => {
           const on = intents.includes(intent.value)
           return (
             <Pressable

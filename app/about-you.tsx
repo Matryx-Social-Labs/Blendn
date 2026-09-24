@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { InterestPicker } from '../components/InterestPicker'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { apiClient } from '../lib/apiClient'
-import { needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
+import { DATING_MIN_AGE, mayDate, needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
 import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
@@ -70,9 +70,6 @@ import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
  */
 
 
-
-/** The rule the server enforces on every write path. Mirrored for the copy only. */
-const DATING_MIN_AGE = 18
 
 function AboutYouInner() {
   const { user } = useAuth()
@@ -343,6 +340,10 @@ function AboutYouInner() {
             onChangeOrientations={setOrientations}
             interestedIn={interestedIn}
             onChangeInterestedIn={setInterestedIn}
+            // Offered unless the age typed here is under 18. An unknown age is
+            // still offered: this screen asks for it, and the check on save
+            // says "Add your age before choosing dating".
+            offerDating={effectiveAge() === null || mayDate(effectiveAge())}
             afterIntents={
               needsAge ? (
                 <>

@@ -50,13 +50,19 @@ export const LOOKING_FOR_OPTIONS = [
 export function LookingForCards({
   selected,
   onToggle,
+  withoutDating = false,
 }: {
   selected: readonly string[]
   onToggle: (value: string) => void
+  /** Under 18: dating is refused, so it is not offered (SCRUM-294). */
+  withoutDating?: boolean
 }) {
+  const options = withoutDating
+    ? LOOKING_FOR_OPTIONS.filter((option) => option.value !== 'Dating')
+    : LOOKING_FOR_OPTIONS
   return (
     <View style={styles.grid}>
-      {LOOKING_FOR_OPTIONS.map((option) => {
+      {options.map((option) => {
         const isOn = selected.includes(option.value)
         return (
           <Pressable

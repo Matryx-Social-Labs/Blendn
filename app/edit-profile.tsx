@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
-import { type Gender, type Orientation } from '../lib/dating'
+import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
@@ -630,6 +630,7 @@ export default function EditProfile() {
               onChangeOrientations={setOrientations}
               interestedIn={interestedIn}
               onChangeInterestedIn={setInterestedIn}
+              offerDating={mayDate(profile?.age)}
             />
           </View>
 
