@@ -39,7 +39,8 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
   const entry = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8')
 
   it('is recorded durably when the refresh is rejected, and read once by the entry screen', () => {
-    expect(events).toMatch(/export function markSessionExpired\(reason\?: string\) \{\s*storage\(\)\s*\.then\(\(s\) => s\.setItem\(ENDED_KEY, reason && reason\.trim\(\) \? reason\.trim\(\) : '1'\)\)/)
+    // What is written, and when a later call may not overwrite it, is driven
+    // for real in session-end-reason.test.ts (SCRUM-292).
     expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
     expect(entry).toContain('consumeSessionEndedNotice().then((ended) => {')
     expect(entry).toMatch(/\{!error && notice && \(\s*<Text style=\{styles\.notice\} accessibilityRole="alert">/)

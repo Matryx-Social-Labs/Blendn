@@ -11,12 +11,26 @@
  * AsyncStorage is loaded at call time, not import time: `useAuth` imports
  * this module, and under jest's node environment the native module is null
  * the moment it is imported — every suite that touches auth would fall over
- * for a flag it never reads.
+ * for a flag it never reads. A `require`, not `import()`: jest here does not
+ * transform a dynamic import, so every read and write fell into the catch and
+ * the notice could be tested only by its source text (SCRUM-292).
  */
 
 const _listeners = new Set<() => void>()
 const ENDED_KEY = 'blendn.session.endedByServer'
-const storage = () => import('@react-native-async-storage/async-storage').then((m) => m.default)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const storage = async (): Promise<typeof import('@react-native-async-storage/async-storage').default> =>
+  require('@react-native-async-storage/async-storage').default
+
+/**
+ * Whether this session's end is already recorded. The first word stands, and
+ * only the server's sentence may replace it. SCRUM-292: the refresh's 403
+ * recorded "This account has been suspended…", then the sign-out it caused
+ * fired calls with no session left — the push-token DELETE, the other callers
+ * waiting on that refresh — and each 401 recorded the generic marker over it.
+ * Every phone with a push token lost the sentence; the iOS simulator has none.
+ */
+let endRecorded = false
 
 /**
  * `reason` is the server's own sentence when it gave one — a 403 at refresh
@@ -26,12 +40,21 @@ const storage = () => import('@react-native-async-storage/async-storage').then((
  * told only "You were signed out", which reads as a glitch, not a decision.
  */
 export function markSessionExpired(reason?: string) {
-  storage()
-    .then((s) => s.setItem(ENDED_KEY, reason && reason.trim() ? reason.trim() : '1'))
-    .catch(() => {})
+  const sentence = reason?.trim()
+  if (sentence || !endRecorded) {
+    storage()
+      .then((s) => s.setItem(ENDED_KEY, sentence || '1'))
+      .catch(() => {})
+  }
+  endRecorded = true
   _listeners.forEach((fn) => {
     try { fn() } catch {}
   })
+}
+
+/** Tokens were stored: this session's end, when it comes, is news again. */
+export function markSessionStarted() {
+  endRecorded = false
 }
 
 export function subscribeSessionExpired(fn: () => void): () => void {
