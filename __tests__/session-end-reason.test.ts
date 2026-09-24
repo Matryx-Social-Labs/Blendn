@@ -26,6 +26,13 @@ jest.mock('expo-secure-store', () => ({
     mockSecure.delete(k)
   },
 }))
+// apiClient registers an AppState listener on a 1 s module-level timer; with the
+// real module that fires after teardown and imports react-native into a dead
+// environment. Plain objects keep it harmless.
+jest.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+}))
 jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
@@ -110,6 +117,18 @@ describe('the notice belongs to one session end', () => {
     markSessionExpired()
     await settle()
     expect(await consumeSessionEndedNotice()).toBe(false)
+  })
+
+  it('is recorded on a cold start, before this process has seen any sign-in', async () => {
+    // A phone relaunched with a stored session: nothing has called
+    // markSessionStarted, and the first end may carry no sentence at all.
+    let fresh!: typeof import('../lib/sessionEvents')
+    jest.isolateModules(() => {
+      fresh = require('../lib/sessionEvents')
+    })
+    fresh.markSessionExpired()
+    await settle()
+    expect(await fresh.consumeSessionEndedNotice()).toBe(true)
   })
 
   it('is news again once a new session has begun', async () => {
