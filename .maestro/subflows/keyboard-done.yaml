@@ -1,0 +1,18 @@
+# The keyboard's bottom-right key (return / done / next), after every typed
+# field. Maestro's hideKeyboard sends BACK on Android when no keyboard is up,
+# which leaves the app; this doesn't. Points measured on the iPhone 17 Pro
+# simulator and the Pixel-class Blendn_A34 emulator.
+appId: com.matryxsociallabs.blendn
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          point: "87%, 88%"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          point: "92%, 91%"

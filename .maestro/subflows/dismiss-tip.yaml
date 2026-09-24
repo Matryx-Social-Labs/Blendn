@@ -1,0 +1,10 @@
+# The Pulse's first-run tip and RN's dev LogBox both sit over the tab bar and
+# eat taps.
+appId: com.matryxsociallabs.blendn
+---
+- tapOn:
+    text: "Got it"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true

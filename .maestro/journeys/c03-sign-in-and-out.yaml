@@ -1,0 +1,18 @@
+# TQ-C03 (SCRUM-223). Sign in as your lane's attendee, reach the Pulse, sign
+# out. Env: EMAIL, PASSWORD.
+# Read back after sign-out: SELECT count(*) FROM push_tokens WHERE user_id = … → 0
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c03
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../subflows/sign-in.yaml
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- takeScreenshot: c03-pulse
+- runFlow: ../subflows/sign-out.yaml
+- takeScreenshot: c03-signed-out

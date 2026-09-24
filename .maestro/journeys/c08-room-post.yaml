@@ -1,0 +1,36 @@
+# TQ-C08 (SCRUM-228). Signed in and checked in: open the live room from the
+# Banter rail and post. Env: EMAIL, PASSWORD, ROOM (a regex for the room's
+# title, e.g. ".*Founders.*"), MESSAGE.
+# Prove the other phone heard it with a socket probe, not a screenshot:
+#   npm run -s qa probe <chatGroupId> <other-attendee> 30
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c08
+  - needs-live-event
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../subflows/sign-in.yaml
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Banter tab"
+- extendedWaitUntil:
+    visible: ${ROOM}
+    timeout: 30000
+- tapOn: ${ROOM}
+- extendedWaitUntil:
+    visible: ".*(Share your thoughts|Start the room).*"
+    timeout: 20000
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*${MESSAGE}.*"
+    timeout: 15000
+- takeScreenshot: c08-posted
