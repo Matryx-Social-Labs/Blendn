@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
 import { APP_COLORS, EMBER } from '../lib/theme'
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
+import { socialSignInMessage } from '../lib/signInRefusal'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
@@ -123,8 +124,11 @@ function IndexInner() {
         const result = await signInWithGoogle(userInfo.data.idToken, deviceInfo)
 
         if (!result.success) {
-          Logger.error('auth', 'Backend auth error', { error: result.error })
-          throw new Error(result.error || 'Sign in failed')
+          // The server's reason when it refused the account (SCRUM-289);
+          // thrown into the catch below it became the generic line.
+          Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
+          setError(socialSignInMessage('Google', result))
+          return
         }
 
         Logger.info('auth', 'Google Sign In successful', { isNewUser: result.isNewUser })
@@ -187,8 +191,9 @@ function IndexInner() {
       )
 
       if (!result.success) {
-        Logger.error('auth', 'Backend auth error', { error: result.error })
-        throw new Error(result.error || 'Sign in failed')
+        Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
+        setError(socialSignInMessage('Apple', result))
+        return
       }
 
       Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
