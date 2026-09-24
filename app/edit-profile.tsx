@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
   Alert,
@@ -28,6 +28,7 @@ import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { profileFormErrors } from '../lib/onboarding'
 
 interface UserProfile {
   id: string
@@ -111,6 +112,7 @@ export default function EditProfile() {
   const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
   const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
   const { setScrollProgress } = useGradientOverlay()
+  const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => {
     if (authUser) {
@@ -284,15 +286,16 @@ export default function EditProfile() {
     const trimmedName = name.trim()
     const trimmedAge = age.trim()
     const parsedAge = trimmedAge ? parseInt(trimmedAge, 10) : undefined
-    const invalidAge = !!trimmedAge && (Number.isNaN(parsedAge) || (parsedAge as number) < 18 || (parsedAge as number) > 120)
+    const errors = profileFormErrors({ name, age })
 
-    setNameError(trimmedName ? null : 'Name is required')
-    setAgeError(invalidAge ? 'Enter a valid age between 18 and 120' : null)
-    if (!trimmedName || invalidAge) {
+    setNameError(errors.name)
+    setAgeError(errors.age)
+    if (errors.name || errors.age) {
+      // Both fields are at the top. From anywhere lower down a refused Save
+      // looked like a dead button, so bring the reason into view.
+      scrollRef.current?.scrollTo({ y: 0, animated: true })
       // The red text under the field is silent to a screen reader; say it.
-      AccessibilityInfo.announceForAccessibility(
-        !trimmedName ? 'Name is required' : 'Enter a valid age between 18 and 120'
-      )
+      AccessibilityInfo.announceForAccessibility((errors.name ?? errors.age) as string)
       return
     }
 
@@ -441,6 +444,7 @@ export default function EditProfile() {
         />
 
         <ScrollView
+          ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
           onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}

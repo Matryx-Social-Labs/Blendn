@@ -355,6 +355,40 @@ export function canContinue(step: OnboardingStep, draft: OnboardingDraft): boole
 }
 
 /**
+ * The ages the product admits: the API's own rule, `age.min(13).max(120)`.
+ *
+ * Every form that takes an age asks `isAccountAge` rather than writing the
+ * numbers itself. Edit profile wrote 18 — the dating age, not the account age —
+ * and no 13–17-year-old could save any change to their profile (SCRUM-293).
+ * Dating's own floor is a separate rule and lives with dating.
+ */
+export const ACCOUNT_MIN_AGE = 13
+export const ACCOUNT_MAX_AGE = 120
+
+export function isAccountAge(years: number | null | undefined): boolean {
+  return (
+    typeof years === 'number' &&
+    Number.isInteger(years) &&
+    years >= ACCOUNT_MIN_AGE &&
+    years <= ACCOUNT_MAX_AGE
+  )
+}
+
+/** Edit profile's required checks, as the sentences it shows under the fields. */
+export function profileFormErrors(input: { name: string; age: string }): {
+  name: string | null
+  age: string | null
+} {
+  const age = input.age.trim()
+  return {
+    name: input.name.trim() ? null : 'Name is required',
+    age: !age || isAccountAge(Number(age))
+      ? null
+      : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`,
+  }
+}
+
+/**
  * `YYYY-MM-DD`, a real calendar date, in the past, and at least 13 years ago.
  *
  * The same rule the server applies in `parseDateOfBirth`, checked here so the
@@ -385,7 +419,7 @@ export function isCompleteDateOfBirth(value: string | undefined): boolean {
   const monthDiff = now.getUTCMonth() - (month - 1)
   const dayDiff = now.getUTCDate() - day
   if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1
-  return age >= 13 && age <= 120
+  return isAccountAge(age)
 }
 
 /**

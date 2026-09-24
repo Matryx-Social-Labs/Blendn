@@ -20,6 +20,7 @@ import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { isAccountAge } from '../lib/onboarding'
 
 const lockup = require('../assets/logo/lockup-white.png')
 /*
@@ -104,7 +105,7 @@ export default function SignIn() {
     if (isSignup && !name.trim()) return 'Enter your name.'
     if (isSignup && age.trim()) {
       const years = Number.parseInt(age, 10)
-      if (!Number.isFinite(years) || years < 13 || years > 120) return 'Enter a valid age.'
+      if (!isAccountAge(years)) return 'Enter a valid age.'
     }
     if (!password) return 'Enter your password.'
     if (isSignup && password.length < MIN_PASSWORD_LENGTH) {
