@@ -124,6 +124,17 @@ describe('the notice belongs to one session end', () => {
     expect(await consumeSessionEndedNotice()).toBe(true)
   })
 
+  it('is not inherited by the next sign-in when nobody read it', async () => {
+    // One person's "suspended" must never greet whoever signs in next on the phone.
+    markSessionStarted()
+    markSessionExpired(SUSPENDED)
+    await settle()
+
+    await TokenStorage.setTokens('access-3', 'refresh-3')
+    await settle()
+    expect(await consumeSessionEndedNotice()).toBe(false)
+  })
+
   it("lets the server's sentence replace a generic marker for the same end", async () => {
     markSessionStarted()
     markSessionExpired()

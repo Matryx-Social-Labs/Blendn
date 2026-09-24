@@ -52,9 +52,16 @@ export function markSessionExpired(reason?: string) {
   })
 }
 
-/** Tokens were stored: this session's end, when it comes, is news again. */
+/**
+ * Tokens were stored: this session's end, when it comes, is news again — and
+ * a notice nobody read belongs to a session that is over, possibly someone
+ * else's. Dropped, so one person's "suspended" never greets the next.
+ */
 export function markSessionStarted() {
   endRecorded = false
+  storage()
+    .then((s) => s.removeItem(ENDED_KEY))
+    .catch(() => {})
 }
 
 export function subscribeSessionExpired(fn: () => void): () => void {
