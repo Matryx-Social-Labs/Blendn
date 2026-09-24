@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Image, ImageBackground, StyleSheet, View } from 'react-native'
 
 import { EMBER } from '../lib/theme'
@@ -11,6 +11,12 @@ interface EventCoverProps {
   height: number
   /** Top corners only: the card's action row sits underneath. */
   radius?: number
+  /**
+   * Bump to try a failed picture again (pull-to-refresh). A failure is
+   * remembered for one URI and one attempt, so a new URI or a new attempt
+   * loads afresh — with no frame of stale placeholder in between.
+   */
+  retry?: number
   children: React.ReactNode
 }
 
@@ -24,20 +30,22 @@ interface EventCoverProps {
  * Either way this draws the brand mark on the surface colour instead, and the
  * title, venue and time stay readable over it.
  */
-export function EventCover({ uri, height, radius = 12, children }: EventCoverProps) {
-  const [failed, setFailed] = useState(false)
-  // A recycled row gets a new URI; a failure belongs to the old one.
-  useEffect(() => setFailed(false), [uri])
+export function EventCover({ uri, height, radius = 12, retry = 0, children }: EventCoverProps) {
+  const attempt = `${uri}#${retry}`
+  const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
   const corners = { borderTopLeftRadius: radius, borderTopRightRadius: radius }
   const overlay = <View style={[StyleSheet.absoluteFill, styles.overlay, corners]} />
 
-  if (uri && !failed) {
+  if (uri && failedAttempt !== attempt) {
     return (
       <ImageBackground
         testID="event-cover-image"
+        // Remounted per attempt: the native view does not reload a source it
+        // already failed on just because it rendered again.
+        key={attempt}
         source={{ uri }}
-        onError={() => setFailed(true)}
+        onError={() => setFailedAttempt(attempt)}
         style={{ height, width: '100%' }}
         imageStyle={corners}
         resizeMode="cover"
@@ -50,7 +58,7 @@ export function EventCover({ uri, height, radius = 12, children }: EventCoverPro
 
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
-      <Image source={monogram} style={styles.mark} resizeMode="contain" accessibilityIgnoresInvertColors />
+      <Image source={monogram} style={styles.mark} resizeMode="contain" accessible={false} accessibilityIgnoresInvertColors />
       {overlay}
       {children}
     </View>

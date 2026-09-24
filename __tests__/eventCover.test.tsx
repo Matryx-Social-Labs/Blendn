@@ -29,4 +29,27 @@ describe('EventCover', () => {
     expect(await screen.findByTestId('event-cover-placeholder')).toBeTruthy()
     expect(screen.getByText('Title')).toBeTruthy()
   })
+
+  it('tries again when the same card is handed a new photograph', async () => {
+    // A recycled list row, or a refetch that fixed the URL: the failure
+    // belonged to the old URI and must not pin the card to the placeholder.
+    const card = (uri: string) => <EventCover uri={uri} height={180}><Text>Title</Text></EventCover>
+    const { rerender } = await render(card('https://dead.test/c.jpg'))
+    fireEvent(screen.getByTestId('event-cover-image'), 'error', { nativeEvent: { error: '401' } })
+    expect(await screen.findByTestId('event-cover-placeholder')).toBeTruthy()
+    await rerender(card('https://alive.test/c.jpg'))
+    expect(await screen.findByTestId('event-cover-image')).toBeTruthy()
+  })
+
+  it('tries the same photograph again after a pull-to-refresh', async () => {
+    // The host that failed may be back; the URL string has not changed.
+    const card = (retry: number) => (
+      <EventCover uri="https://flaky.test/c.jpg" height={180} retry={retry}><Text>Title</Text></EventCover>
+    )
+    const { rerender } = await render(card(0))
+    fireEvent(screen.getByTestId('event-cover-image'), 'error', { nativeEvent: { error: '401' } })
+    expect(await screen.findByTestId('event-cover-placeholder')).toBeTruthy()
+    await rerender(card(1))
+    expect(await screen.findByTestId('event-cover-image')).toBeTruthy()
+  })
 })

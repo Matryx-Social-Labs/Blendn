@@ -41,6 +41,8 @@ function GoingScreenInner() {
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  // Pull-to-refresh also retries a cover that failed to load (EventCover).
+  const [refreshCount, setRefreshCount] = useState(0)
 
   const loadInterestedEvents = useCallback(async () => {
     try {
@@ -95,6 +97,7 @@ function GoingScreenInner() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
+    setRefreshCount((n) => n + 1)
     await loadInterestedEvents()
     setRefreshing(false)
   }, [loadInterestedEvents])
@@ -153,7 +156,7 @@ function GoingScreenInner() {
 
   const renderItem = useCallback(({ item }: { item: EventRow }) => (
     <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}>
-      <EventCover uri={item.cover_image_url} height={180}>
+      <EventCover uri={item.cover_image_url} height={180} retry={refreshCount}>
         <View style={styles.overlayContent}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
@@ -182,7 +185,7 @@ function GoingScreenInner() {
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
-  ), [removeSave, openInMaps, addToCalendar, shareEvent])
+  ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
 
