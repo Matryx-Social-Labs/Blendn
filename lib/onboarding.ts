@@ -374,17 +374,23 @@ export function isAccountAge(years: number | null | undefined): boolean {
   )
 }
 
-/** Edit profile's required checks, as the sentences it shows under the fields. */
+/**
+ * Edit profile's required checks, as the sentences it shows under the fields,
+ * and the age they validated. The screen saves `years`, not a second parse of
+ * the same string: one parse means what was checked is what is sent.
+ */
 export function profileFormErrors(input: { name: string; age: string }): {
   name: string | null
   age: string | null
+  years: number | undefined
 } {
   const age = input.age.trim()
+  const years = age ? Number(age) : undefined
+  const valid = years === undefined || isAccountAge(years)
   return {
     name: input.name.trim() ? null : 'Name is required',
-    age: !age || isAccountAge(Number(age))
-      ? null
-      : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`,
+    age: valid ? null : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`,
+    years: valid ? years : undefined,
   }
 }
 
