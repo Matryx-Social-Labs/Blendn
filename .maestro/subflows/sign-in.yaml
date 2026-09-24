@@ -1,0 +1,22 @@
+# Email sign-in from a signed-out entry screen. Env: EMAIL, PASSWORD.
+# PASSWORD is SEED_PASSWORD from Railway staging for every seeded person —
+# pass it with -e, never write it here.
+appId: com.matryxsociallabs.blendn
+---
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 60000
+- tapOn: "Continue with email"
+- extendedWaitUntil:
+    visible: "you@example.com"
+    timeout: 20000
+- tapOn: "you@example.com"
+- inputText: ${EMAIL}
+- runFlow: keyboard-done.yaml
+- tapOn: "Your password"
+- inputText: ${PASSWORD}
+- runFlow: keyboard-done.yaml
+- tapOn:
+    text: "Sign in"
+    index: 1
+    optional: true

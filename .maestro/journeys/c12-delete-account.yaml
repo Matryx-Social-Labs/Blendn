@@ -1,0 +1,40 @@
+# TQ-C12 (SCRUM-232). DESTRUCTIVE — only ever a person your session created
+# (qa.<tag>.<n>@blendn.app), never a lane attendee. The two-step confirm, then
+# the entry screen. Env: EMAIL, PASSWORD.
+# Read back: SELECT "deletedAt" FROM "User" WHERE email = '<EMAIL>'
+#            SELECT status FROM chat_group_members WHERE user_id = … → left
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c12
+  - destructive
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../subflows/sign-in.yaml
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Me tab"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 20000
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element: "Delete account"
+    direction: DOWN
+    timeout: 15000
+- tapOn: "Delete account"
+- extendedWaitUntil:
+    visible: "Delete"
+    timeout: 10000
+- tapOn: "Delete"
+- extendedWaitUntil:
+    visible: "Are you absolutely sure?"
+    timeout: 10000
+- tapOn: "Delete My Account"
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 45000
+- takeScreenshot: c12-deleted

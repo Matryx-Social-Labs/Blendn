@@ -1,0 +1,18 @@
+# TQ-C03 / SCRUM-198. A staff account (organizer@, venue.owner@, sponsor@,
+# admin@) signs in with the right password and is refused with the sentence
+# that sends them to the dashboard. Env: STAFF_EMAIL, PASSWORD.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c03
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${STAFF_EMAIL}
+- extendedWaitUntil:
+    visible: ".*app is for attendees.*"
+    timeout: 30000
+- assertNotVisible: "The Pulse"
+- takeScreenshot: c03-staff-refused

@@ -1,0 +1,100 @@
+# TQ-C01 + TQ-C02 (SCRUM-221, SCRUM-222). A new person through sign-up and all
+# eight onboarding steps, taking "Maybe later" on notifications AND location —
+# the branch that once stored push_enabled = true for someone who said no.
+#
+# Env: NEW_NAME, NEW_EMAIL (qa.<tag>.<n>@blendn.app — a person your session
+# owns), NEW_PASSWORD (a passphrase: the strength rule refuses common ones),
+# AGE, DOB_DD, DOB_MM, DOB_YYYY. For the minor path use AGE < 18: the
+# Orientation step must not appear (SCRUM-200) — the flow asserts it.
+#
+# Read back afterwards (npm run -s qa sq in blendn-admin):
+#   SELECT onboarded, push_enabled, share_location, orientations FROM profiles
+#     WHERE id = (SELECT id FROM "User" WHERE email = '<NEW_EMAIL>')
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c01
+  - tq-c02
+  - destructive
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 60000
+- tapOn: "Continue with email"
+- extendedWaitUntil:
+    visible: "Create account"
+    timeout: 20000
+- tapOn:
+    text: "Create account"
+    index: 0
+- tapOn: "What should we call you?"
+- inputText: ${NEW_NAME}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "Used for age-restricted events"
+- inputText: ${AGE}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "you@example.com"
+- inputText: ${NEW_EMAIL}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "At least 12 characters"
+- inputText: ${NEW_PASSWORD}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn:
+    text: "Create account"
+    index: 1
+    optional: true
+- extendedWaitUntil:
+    visible: "The basics"
+    timeout: 45000
+- takeScreenshot: c02-basics
+- tapOn: "Woman"
+- tapOn: "DD"
+- inputText: ${DOB_DD}
+- tapOn: "MM"
+- inputText: ${DOB_MM}
+- tapOn: "YYYY"
+- inputText: ${DOB_YYYY}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "Continue Journey"
+- extendedWaitUntil:
+    visible: "Maybe later"
+    timeout: 20000
+- takeScreenshot: c02-notifications
+- tapOn: "Maybe later"
+- extendedWaitUntil:
+    visible: "Allow Location"
+    timeout: 20000
+- takeScreenshot: c02-location
+- tapOn: "Maybe later"
+# Adults see Orientation here; a minor must not (SCRUM-200).
+- runFlow:
+    when:
+      visible: "Straight"
+    commands:
+      - takeScreenshot: c02-preferences-adult
+      - tapOn: "Straight"
+      - tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Continue Exploration"
+    timeout: 20000
+- takeScreenshot: c02-journey
+- tapOn: "Search city"
+- inputText: "Bengaluru"
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "e.g. Creative Director"
+- inputText: "Product designer"
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn: "Continue Exploration"
+- extendedWaitUntil:
+    visible: "Skip"
+    timeout: 20000
+- tapOn: "Skip"
+- extendedWaitUntil:
+    visible: "Skip for now"
+    timeout: 20000
+- tapOn: "Skip for now"
+- extendedWaitUntil:
+    visible: "Edit my details"
+    timeout: 20000
+- takeScreenshot: c02-ready

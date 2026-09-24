@@ -1,0 +1,20 @@
+# Me → Settings → Sign out, back to the entry screen.
+appId: com.matryxsociallabs.blendn
+---
+- runFlow: dismiss-tip.yaml
+- tapOn: "Me tab"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 20000
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element: ".*[Ss]ign out.*"
+    direction: DOWN
+    timeout: 15000
+- tapOn: ".*[Ss]ign out.*"
+- tapOn:
+    text: ".*[Ss]ign out.*"
+    optional: true
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 30000

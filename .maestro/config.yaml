@@ -1,0 +1,4 @@
+# Maestro workspace. `maestro test .maestro` runs every journey; subflows are
+# only ever called from journeys. See .maestro/README.md.
+flows:
+  - "journeys/*"
