@@ -8,6 +8,8 @@
  * is read, and the test feeds it the real payload.
  */
 
+import { feedPoster, type EventMediaItem } from './feedMedia'
+
 export interface SavedEventRow {
   id: string
   title: string
@@ -15,6 +17,10 @@ export interface SavedEventRow {
   address: string
   start_time: string
   end_time: string
+  /**
+   * What the card draws: the cover, else the event's first media item as the
+   * Pulse would poster it (SCRUM-286). Null means the placeholder.
+   */
   cover_image_url: string | null
   latitude: number
   longitude: number
@@ -31,6 +37,8 @@ export interface SavedEventsPayload {
     startTime: string
     endTime: string
     coverImageUrl?: string | null
+    /** The event's first `event_media` row, or null. */
+    coverImage?: EventMediaItem | null
     latitude?: number | null
     longitude?: number | null
     status: SavedEventRow['status']
@@ -47,7 +55,7 @@ export function savedEventRows(data: SavedEventsPayload | undefined | null): Sav
     address: e.address ?? '',
     start_time: e.startTime,
     end_time: e.endTime,
-    cover_image_url: e.coverImageUrl ?? null,
+    cover_image_url: feedPoster(e.coverImage ? [e.coverImage] : null, e.coverImageUrl),
     latitude: e.latitude ?? NaN,
     longitude: e.longitude ?? NaN,
     status: e.status,

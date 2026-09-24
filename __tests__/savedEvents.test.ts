@@ -75,3 +75,34 @@ describe('the Going tab', () => {
     expect(src).not.toMatch(/useEffect\(\(\) => \{\s*if \(authUser\) \{\s*loadInterestedEvents\(\)/)
   })
 })
+
+/*
+ * SCRUM-286. A Going card with no cover was an empty dark block, while the
+ * event detail for the same event showed its clip — the favourites route sends
+ * the first media item as `coverImage`, and the mapper dropped it. The card
+ * now falls back the way the Pulse does (`feedPoster`): the cover, then an
+ * image in the media, then a clip's poster.
+ */
+describe('the Going card poster', () => {
+  const base = {
+    id: 'x', title: 'No Cover Night', startTime: '2026-09-26T12:00:00Z', endTime: '2026-09-26T15:00:00Z',
+    status: 'published' as const, coverImageUrl: null,
+  }
+  const poster = (coverImage: unknown) =>
+    savedEventRows({ events: [{ ...base, coverImage } as never] })[0].cover_image_url
+
+  it("uses a clip's poster when the event has no cover", () => {
+    expect(poster({ type: 'video', url: 'https://x.test/c.mp4', thumbnail_url: 'https://x.test/c.jpg', order: 0 })).toBe(
+      'https://x.test/c.jpg'
+    )
+  })
+
+  it('uses an image from the media when the event has no cover', () => {
+    expect(poster({ type: 'image', url: 'https://x.test/i.jpg', order: 0 })).toBe('https://x.test/i.jpg')
+  })
+
+  it('is null — the placeholder — when there is nothing to show', () => {
+    expect(poster(null)).toBeNull()
+    expect(poster({ type: 'document', url: 'https://x.test/menu.pdf', order: 0 })).toBeNull()
+  })
+})
