@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
   Alert,
@@ -28,6 +28,7 @@ import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { profileFormErrors } from '../lib/onboarding'
 
 interface UserProfile {
   id: string
@@ -120,6 +121,10 @@ export default function EditProfile() {
   const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
   const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
   const { setScrollProgress } = useGradientOverlay()
+  const scrollRef = useRef<ScrollView>(null)
+  const basicInfoY = useRef(0)
+  const nameInputRef = useRef<TextInput>(null)
+  const ageInputRef = useRef<TextInput>(null)
 
   useEffect(() => {
     if (authUser) {
@@ -291,17 +296,20 @@ export default function EditProfile() {
     if (!authUser) return
 
     const trimmedName = name.trim()
-    const trimmedAge = age.trim()
-    const parsedAge = trimmedAge ? parseInt(trimmedAge, 10) : undefined
-    const invalidAge = !!trimmedAge && (Number.isNaN(parsedAge) || (parsedAge as number) < 18 || (parsedAge as number) > 120)
+    const errors = profileFormErrors({ name, age })
+    const parsedAge = errors.years
 
-    setNameError(trimmedName ? null : 'Name is required')
-    setAgeError(invalidAge ? 'Enter a valid age between 18 and 120' : null)
-    if (!trimmedName || invalidAge) {
-      // The red text under the field is silent to a screen reader; say it.
-      AccessibilityInfo.announceForAccessibility(
-        !trimmedName ? 'Name is required' : 'Enter a valid age between 18 and 120'
-      )
+    setNameError(errors.name)
+    setAgeError(errors.age)
+    if (errors.name || errors.age) {
+      // Both fields are in the Basic Information card. From anywhere lower down
+      // a refused Save looked like a dead button, so bring the card into view —
+      // its own offset, not 0, which is the photo grid for anyone with photos.
+      scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: true })
+      // The red text under the field is silent to a screen reader; say it, and
+      // put focus on the field that needs fixing rather than leaving it on Save.
+      AccessibilityInfo.announceForAccessibility((errors.name ?? errors.age) as string)
+      ;(errors.name ? nameInputRef : ageInputRef).current?.focus()
       return
     }
 
@@ -452,6 +460,7 @@ export default function EditProfile() {
         />
 
         <ScrollView
+          ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
           onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
@@ -473,7 +482,7 @@ export default function EditProfile() {
           </View>
 
           {/* Basic Info Card */}
-          <View style={styles.card}>
+          <View style={styles.card} onLayout={(e) => { basicInfoY.current = e.nativeEvent.layout.y }}>
             <Text style={styles.cardTitle}>BASIC INFORMATION</Text>
             {isLoading ? (
               <>
@@ -491,6 +500,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Name *</Text>
                   <TextInput
+                    ref={nameInputRef}
                     accessibilityLabel="Name"
                     style={[styles.input, nameError && styles.inputError]}
                     value={name}
@@ -508,6 +518,7 @@ export default function EditProfile() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Age</Text>
                   <TextInput
+                    ref={ageInputRef}
                     accessibilityLabel="Age"
                     style={[styles.input, ageError && styles.inputError]}
                     value={age}

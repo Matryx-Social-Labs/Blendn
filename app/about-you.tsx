@@ -23,6 +23,7 @@ import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { isAccountAge } from '../lib/onboarding'
 
 /**
  * The one screen that replaced eight.
@@ -200,7 +201,7 @@ function AboutYouInner() {
 
   const validate = (): string | null => {
     const years = effectiveAge()
-    if (needsAge && age.trim() && (years === null || years < 13 || years > 120)) {
+    if (needsAge && age.trim() && !isAccountAge(years)) {
       return 'Enter a valid age.'
     }
     if (wantsDating) {
