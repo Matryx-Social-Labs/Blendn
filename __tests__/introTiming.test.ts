@@ -114,6 +114,13 @@ describe('the intro asset and the component agree', () => {
     expect(Number(travel![1]) - Number(travel![2])).toBeLessThan(0)
   })
 
+  it('still ends when the OS will not say whether motion is reduced', () => {
+    // Nothing is scheduled until `isReduceMotionEnabled` answers, and iOS
+    // rejects it when the accessibility module is missing. Unhandled, that
+    // left the black overlay up with no timer to lift it.
+    expect(source).toMatch(/isReduceMotionEnabled\(\)\s*\.catch\(\(\) => false\)/)
+  })
+
   it('splash and overlay agree on which black they are', () => {
     // The overlay paints EMBER.bg. The splash used to paint #000000, so the
     // hold between them stepped from pure black to a warmer near-black at
