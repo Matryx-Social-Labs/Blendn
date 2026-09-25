@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
@@ -46,6 +46,13 @@ interface Props {
   onSubmitQuery?: () => void
   placeholder?: string
   /**
+   * A search or filter refetch is in flight, quietly, against a list already
+   * on screen — see `events.tsx`'s `refining`. Swaps the search glyph for a
+   * spinner so typing and being ignored do not look identical; nothing else
+   * on the screen moves, because that fetch is deliberately silent.
+   */
+  searching?: boolean
+  /**
    * Opens the filter sheet. The count is drawn beside the label so an active
    * filter is visible without opening anything — a filter you cannot see is one
    * you forget you set, and then the app looks like it has no events.
@@ -63,6 +70,7 @@ export function PulseHeader({
   onChangeQuery,
   onSubmitQuery,
   placeholder = 'Search experiences...',
+  searching = false,
   onPressFilter,
   activeFilterCount = 0,
 }: Props) {
@@ -125,12 +133,20 @@ export function PulseHeader({
       */}
       <View style={styles.searchRow}>
         <View style={[styles.searchBox, styles.searchBoxFlex]}>
-        <Ionicons
-          name="search"
-          size={18}
-          color={EMBER.textPlaceholder}
-          style={styles.searchIcon}
-        />
+        {searching ? (
+          <ActivityIndicator
+            size="small"
+            color={EMBER.textPlaceholder}
+            style={styles.searchIcon}
+          />
+        ) : (
+          <Ionicons
+            name="search"
+            size={18}
+            color={EMBER.textPlaceholder}
+            style={styles.searchIcon}
+          />
+        )}
         <TextInput
           value={query}
           onChangeText={onChangeQuery}

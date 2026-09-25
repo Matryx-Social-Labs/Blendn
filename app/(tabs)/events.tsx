@@ -90,7 +90,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /*
  * Distance in METRES, not kilometres.
@@ -124,10 +124,6 @@ type EventsTrayState = {
 
 const COORDINATE_PATTERN = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
-const CAROUSEL_CARD_WIDTH = Math.max(260, SCREEN_WIDTH - 62)
-const CAROUSEL_CARD_HEIGHT = Math.round(CAROUSEL_CARD_WIDTH * 1.55)
-const CAROUSEL_ITEM_SPACING = 14
-const CAROUSEL_ITEM_FULL = CAROUSEL_CARD_WIDTH + CAROUSEL_ITEM_SPACING
 /**
  * Frame `1141:4643` — `Main`, and the two gaps its children use.
  *
@@ -1126,10 +1122,43 @@ function EventsInner() {
     }
   }, [])
 
+  /*
+   * Which of the four dependencies actually changed, so a search keystroke
+   * or a filter change can be told apart from a city switch.
+   *
+   * A city change swaps the whole list and earns the full skeleton. Search
+   * and filters are refinements of what is already on screen — the old
+   * behaviour ran all four through one non-silent `fetchEvents()`, so typing
+   * a query dropped the *entire* screen (including the Featured/Upcoming
+   * rails a search hides anyway) into skeleton for at least the 720ms
+   * `useMinimumVisible` floor, every time the debounce settled. Refs rather
+   * than state because this only needs to be read inside the effect below,
+   * once, the render after each of these actually changes.
+   */
+  const prevSelectedCityRef = useRef(selectedCity)
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevFiltersRef = useRef(filters)
+  const [refining, setRefining] = useState(false)
+
   useEffect(() => {
     if (!authLoading && user) {
+      const cityChanged = prevSelectedCityRef.current !== selectedCity
+      const refinementChanged =
+        prevSearchTermRef.current !== searchTerm || prevFiltersRef.current !== filters
+      prevSelectedCityRef.current = selectedCity
+      prevSearchTermRef.current = searchTerm
+      prevFiltersRef.current = filters
+
+      // Only silent once there is something on screen to refine, and only
+      // when a city change is not also in play — a city switch is a real
+      // reload and should look like one.
+      const silent = initialLoadedRef.current && !cityChanged && refinementChanged
+
       Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
-      fetchEvents()
+      if (silent) setRefining(true)
+      fetchEvents({ silent }).finally(() => {
+        if (silent) setRefining(false)
+      })
     }
     // fetchEvents is deliberately not a dependency here: it also changes
     // identity when userLocation changes, and a userLocation-triggered fetch
@@ -1168,13 +1197,6 @@ function EventsInner() {
       preloadImages(urls, 'normal').catch(() => {})
     }
   }, [events])
-
-  /** Shared by the skeleton strips, which are all `CAROUSEL_ITEM_FULL` wide. */
-  const getCarouselItemLayout = useCallback((_: any, index: number) => ({
-    length: CAROUSEL_ITEM_FULL,
-    offset: CAROUSEL_ITEM_FULL * index,
-    index,
-  }), [])
 
   /*
    * The checked-in strip used to be here.
@@ -1660,12 +1682,6 @@ function EventsInner() {
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
-
-  const UPCOMING_ITEM_WIDTH = CAROUSEL_CARD_WIDTH
-  const UPCOMING_ITEM_HEIGHT = CAROUSEL_CARD_HEIGHT
-  const UPCOMING_ITEM_FULL = CAROUSEL_ITEM_FULL
-  // Compensate item spacing so the snapped card centers visually.
-  const UPCOMING_SIDE_PADDING = ((SCREEN_WIDTH - UPCOMING_ITEM_WIDTH) / 2) - (CAROUSEL_ITEM_SPACING / 2)
 
   /*
    * Featured, then Upcoming — the frame's two sections, from one sorted list.
@@ -2189,6 +2205,7 @@ function EventsInner() {
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
       onChangeQuery={setSearchInput}
+      searching={refining}
       activeFilterCount={activeFilterCount(filters)}
       onPressFilter={() => {
         setFilterDraft(filters)
@@ -2196,6 +2213,16 @@ function EventsInner() {
       }}
     />
   )
+
+  /**
+   * Shared with `renderFeaturedRow`'s own copy of this calculation, so the
+   * loading skeleton's hero card is the same size as the real one rather than
+   * an unrelated guess. Kept as a second call rather than a shared variable —
+   * `featuredCardLayout` is pure and cheap, and threading the result through
+   * as a prop would couple two render paths that would otherwise stay
+   * independent.
+   */
+  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
 
   const sectionLiftY = scrollY.interpolate({
     inputRange: [0, 300],
@@ -2309,58 +2336,84 @@ function EventsInner() {
                 */}
                 {banners}
                 {pulseHeader}
-                <View style={styles.sectionHeaderRow}>
-                  <SkeletonLine width={160} />
-                  <SkeletonLine width={80} />
-                </View>
-                <FlatList
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  data={[...Array(5)].map((_, i) => i)}
-                  keyExtractor={(item) => `s-int-${item}`}
-                  getItemLayout={getCarouselItemLayout}
-                  renderItem={() => (
-                    <SkeletonBlock width={260} height={120} borderRadius={12} style={{ marginHorizontal: 4 }} />
-                  )}
-                />
-                <View style={styles.sectionHeaderRow}>
-                  <SkeletonLine width={200} />
-                </View>
-                <View style={{ paddingVertical: 12, height: UPCOMING_ITEM_HEIGHT + 24 }}>
-                  <FlatList
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: UPCOMING_SIDE_PADDING }}
-                    data={[...Array(3)].map((_, i) => i)}
-                    keyExtractor={(item) => `s-up-${item}`}
-                    getItemLayout={(_, index) => ({
-                      length: UPCOMING_ITEM_FULL,
-                      offset: UPCOMING_ITEM_FULL * index,
-                      index,
-                    })}
-                    renderItem={() => (
-                      <SkeletonBlock width={UPCOMING_ITEM_WIDTH} height={UPCOMING_ITEM_HEIGHT} borderRadius={24} style={{ marginRight: CAROUSEL_ITEM_SPACING }} />
-                    )}
-                  />
-                </View>
-                <View style={styles.sectionHeaderRow}>
-                  <SkeletonLine width={180} />
-                </View>
-                {[...Array(4)].map((_, i) => (
-                  <SkeletonBlock key={`s-near-${i}`} width={'96%'} height={249} borderRadius={23} style={{ alignSelf: 'center', marginBottom: 16 }} />
-                ))}
-                <View style={{ paddingHorizontal: 23, paddingTop: 8 }}>
-                  <SkeletonBlock width={'100%'} height={474} borderRadius={20} />
-                </View>
-                {[...Array(6)].map((_, i) => (
-                  <View key={`s-card-${i}`} style={{ paddingHorizontal: 8, marginTop: 16 }}>
-                    <SkeletonBlock width={'100%'} height={200} borderRadius={12} />
-                    <View style={{ marginTop: 10, paddingHorizontal: 6 }}>
-                      <SkeletonLine width={'60%'} />
-                      <SkeletonLine width={'40%'} style={{ marginTop: 6 }} />
+                {/*
+                  Shaped like the screen it stands in for, not like a generic
+                  loading state.
+
+                  This used to be a horizontal row of five 260x120 thumbnails
+                  (an "Interested" rail this screen no longer has), then a
+                  horizontal Upcoming carousel (Upcoming is a vertical stack —
+                  `pulseStack` — and has been since the restyle), then a lone
+                  474pt block and six generic cards belonging to sections
+                  ("Nightlife", a fancy carousel) that were removed from this
+                  screen entirely. None of it echoed what was about to appear,
+                  so the swap from skeleton to content was itself a layout
+                  jump. `isNarrowed` is checked the same way the loaded branch
+                  checks it, so a search or filter loading for the first time
+                  does not skeleton three sections it is about to hide.
+                */}
+                {isNarrowed ? (
+                  [...Array(4)].map((_, i) => (
+                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? 24 : STACK_GAP }}>
+                      <SkeletonBlock width={'100%'} height={200} borderRadius={20} />
+                      <View style={{ marginTop: 10, gap: 6 }}>
+                        <SkeletonLine width={'60%'} />
+                        <SkeletonLine width={'40%'} />
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  ))
+                ) : (
+                  <>
+                    {/* Featured — one hero card at the real card's own size, with the next peeking. */}
+                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
+                      <View style={styles.sectionHeaderRow}>
+                        <SkeletonLine width={100} />
+                        <SkeletonLine width={64} />
+                      </View>
+                      <View style={[styles.featuredBleed, { flexDirection: 'row', paddingHorizontal: featuredSkeleton.inset, gap: FEATURED_CARD_GAP }]}>
+                        <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.height} borderRadius={32} />
+                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.height} borderRadius={32} />
+                      </View>
+                    </View>
+
+                    {/* Upcoming — a vertical stack, matching `pulseStack` and `UpcomingCard`'s own image-plus-body shape. */}
+                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
+                      <View style={styles.sectionHeaderRow}>
+                        <SkeletonLine width={120} />
+                      </View>
+                      <View style={{ gap: STACK_GAP }}>
+                        {[...Array(2)].map((_, i) => (
+                          <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
+                            <SkeletonBlock width={'100%'} height={165} borderRadius={20} />
+                            <View style={{ gap: 10 }}>
+                              <SkeletonLine width={'70%'} />
+                              <SkeletonLine width={'45%'} />
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Nearby — image cards at their real aspect ratio (363:249), full content width. */}
+                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
+                      <View style={styles.sectionHeaderRow}>
+                        <SkeletonLine width={90} />
+                        <SkeletonLine width={64} />
+                      </View>
+                      <SkeletonLine width={140} />
+                      <View style={{ gap: STACK_GAP }}>
+                        {[...Array(3)].map((_, i) => (
+                          <SkeletonBlock
+                            key={`s-near-${i}`}
+                            width={'100%'}
+                            height={(SCREEN_WIDTH - MAIN_PADDING_HORIZONTAL * 2) * (249 / 363)}
+                            borderRadius={24}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </>
+                )}
                 <View style={{ height: 8 }} />
               </View>
             ) : (
@@ -2747,6 +2800,18 @@ const styles = StyleSheet.create({
   /** A vertical column of cards inside a section — Upcoming, Nearby. */
   pulseStack: {
     gap: STACK_GAP,
+  },
+  /**
+   * The loading skeleton's Upcoming card — `UpcomingCard`'s own `card` style
+   * (`surfaceMedia`, `EMBER_RADIUS.card`, 24 padding, 24 gap), so the
+   * placeholder is the same box the real card fades into rather than a
+   * differently-shaped one it has to replace.
+   */
+  upcomingSkeletonCard: {
+    backgroundColor: EMBER.surfaceMedia,
+    borderRadius: EMBER_RADIUS.card,
+    padding: 24,
+    gap: 24,
   },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
