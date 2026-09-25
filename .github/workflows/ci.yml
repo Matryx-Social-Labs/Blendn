@@ -12,20 +12,24 @@ on:
     branches: [dev, main, stage, prod]
     paths-ignore: ["**.md", "docs/**"]
   push:
-    # `stage` and `prod` are here because pushing to them ships: each one has an
-    # EAS workflow that builds and submits to TestFlight and Play. They were
+    # `stage` and `prod` are here because pushing to them ships. They were
     # absent, so the two branches that reach real testers were the two nothing
     # checked.
     #
-    # The EAS workflows now verify for themselves as well — see
-    # `.eas/workflows/`. That is the gate that cannot be bypassed; this is the
-    # one that reports in the pull request, before the merge rather than after.
+    # `stage` ships from here: the `ship` job below starts the EAS build and
+    # submit only after `verify` passes on the pushed commit. `prod` still has
+    # an EAS workflow that triggers itself and runs its own tests first
+    # (`.eas/workflows/prod-appstore.yml`).
     branches: [dev, stage, prod]
     paths-ignore: ["**.md", "docs/**"]
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancelled on `stage`, where the run ends in `ship`, waiting on EAS.
+  # Cancelling would not stop the build, which EAS finishes regardless. It would
+  # only mark a deploy "cancelled" that then lands. A second push waits for the
+  # first to finish; a third replaces the second.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/stage' }}
 
 jobs:
   verify:
@@ -70,3 +74,52 @@ jobs:
         # its lint *was* a gate and nobody ran it locally first. Here the
         # failure was quieter: a warning nobody reads is a check nobody has.
         run: npx expo lint
+
+  ship:
+    # `stage` → TestFlight + Play internal, on exactly the commit `verify` just
+    # passed. `--ref` makes EAS build that SHA from GitHub rather than an
+    # upload, so the tested commit and the shipped one cannot differ.
+    #
+    # Each step is its own line on this check: the token, the start (with the
+    # EAS link in the summary at once), then the wait. The wait logs every job
+    # state change with a timestamp, prints the logs of any job that failed,
+    # and ends with a job table in the summary. A failed deploy is red here, on
+    # the commit that caused it, and says which of the four jobs broke.
+    #
+    # A docs-only push to `stage` runs no CI (`paths-ignore` above), so it ships
+    # nothing, which spares a build from the free tier's fifteen a month.
+    name: ship to TestFlight + Play internal
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
+    runs-on: ubuntu-latest
+    # The free tier queues each build and submit for a slot, sometimes 90+
+    # minutes each. Public repository: waiting costs no Actions minutes.
+    timeout-minutes: 360
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS: npx --yes eas-cli@24.8.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        # eas-cli reads the app config, whose plugins resolve from node_modules.
+        run: npm ci
+
+      - name: Expo account
+        # A missing or revoked EXPO_TOKEN fails here, by name.
+        run: $EAS whoami
+
+      - name: Start the EAS workflow on this commit
+        id: start
+        run: |
+          run=$($EAS workflow:run .eas/workflows/stage-testflight.yml --ref "$GITHUB_SHA" --non-interactive --json)
+          echo "id=$(jq -r .id <<<"$run")" >>"$GITHUB_OUTPUT"
+          echo "EAS run for \`${GITHUB_SHA:0:7}\`: $(jq -r .url <<<"$run")" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for the builds and submits
+        run: ./scripts/eas-await-run.sh "${{ steps.start.outputs.id }}"

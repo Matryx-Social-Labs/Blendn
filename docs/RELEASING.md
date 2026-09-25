@@ -233,26 +233,49 @@ directly and never touches Play.
 
 ## Nothing builds until the suite is green
 
-Both EAS workflows start with a `verify` job — typecheck against the baseline,
-then the full test suite — and both `build_ios` and `build_android` declare
-`needs: [verify]`. A red suite stops the build before an EAS credit is spent,
-and long before anything reaches a tester.
+**`stage`.** A push runs `.github/workflows/ci.yml`. Its `verify` job runs the
+typecheck against the baseline, the full test suite and lint. Only if that
+passes does its `ship` job run
+`eas workflow:run .eas/workflows/stage-testflight.yml --ref <that sha>`.
+The EAS workflow has no trigger of its own and no test job. It is the two
+build → submit chains and nothing else.
 
-That gap was real and quiet. `ci.yml` fires on pull requests into `dev` and
-pushes to `dev`; a push to `stage` or `prod` matched neither, so **the two
-branches that actually ship were the two nothing checked.** They are on the
-GitHub triggers now as well.
+**`prod`.** Unchanged. `.eas/workflows/prod-appstore.yml` triggers itself on
+the push and starts with its own `verify` job, which both builds `need`.
 
-**Why the gate lives in the EAS workflow rather than reading a GitHub check.** A
-green check is a fact about *a commit*. Gating on one means trusting that the
-commit it describes is the commit about to be built — across two systems, one of
-which can be down or slow. The `verify` job runs on the same machine, against
-the same checkout, moments before the build. The GitHub run still happens; its
-job is to report in the pull request, before the merge rather than after.
+**Why `stage` moved the gate to GitHub.** We are on the free tier, and every EAS
+job waits for the one worker slot. The old `verify` job on EAS meant queueing
+just to repeat what GitHub was already running, and then queueing again for
+each build and each submit. The build credit was never at risk. The hours were.
 
-**The two platform chains stay independent of each other.** Both wait on
-`verify` and neither waits on the other, so an iOS signing problem still cannot
-stop Android testers getting a build.
+**Why this is not "reading a GitHub check".** The old objection holds: a green
+check is a fact about *a commit*, and gating on one means trusting that commit
+is the one about to be built. Here nothing reads a check. The run that tested
+the SHA is the run that hands that same SHA to EAS, and `--ref` builds it from
+GitHub rather than from an upload. The commit EAS records is the one `verify`
+passed.
+
+**Where to look when a `stage` deploy fails.** On the `stage` commit's checks,
+open **ship to TestFlight + Play internal**. Each part is its own step:
+
+| Step | A failure here means |
+|---|---|
+| Expo account | `EXPO_TOKEN` is missing or revoked. Replace the repo secret. |
+| Start the EAS workflow | EAS refused the run. The step log has its message. |
+| Wait for the builds and submits | A build or submit job failed. The log shows each job's state changes with timestamps, then the last 200 lines of every failed job. The run summary has the job table and the EAS link. |
+| … "EAS run is ACTION_REQUIRED" | EAS stopped for a person, for example Apple needs an agreement accepted. Nothing is broken; finish it on the linked EAS page. |
+| … "EAS run unreadable" | Ten minutes of failed status reads: the token, the run id, or the network. |
+
+A red `verify` means `ship` never ran and nothing was built.
+
+**Retrying without a new push.** Use `eas workflow:run
+.eas/workflows/stage-testflight.yml --ref <sha>`, or re-run it from the EAS
+dashboard. This skips GitHub, so only do it for a commit whose `verify` already
+passed.
+
+**The two platform chains stay independent of each other.** Neither waits on
+the other, so an iOS signing problem still cannot stop Android testers getting
+a build.
 
 ## What the app's tests actually cover
 
@@ -274,13 +297,15 @@ and not a nicety.
 
 ## Why EAS Workflows and not GitHub Actions
 
-The workflow YAML lives in `.eas/workflows/`, and Expo's GitHub App watches
-branch pushes. The build runs on Expo's infrastructure and reads its
-environment from EAS.
+The workflow YAML lives in `.eas/workflows/`. The build runs on Expo's
+infrastructure and reads its environment from EAS. For `prod`, Expo's GitHub App
+watches the branch push. For `stage`, GitHub Actions starts the workflow after
+CI passes (above).
 
-**No secret is stored in GitHub — not even `EXPO_TOKEN`.** The previous setup
-(`.github/workflows/deploy-ios.yml`, now deleted) needed one. This repository is
-public today and may go private later; neither changes anything here.
+**`EXPO_TOKEN` is a GitHub secret again, for `stage` only.** Only the `ship`
+job reads it, and that job runs only on a push to `stage`. Pull requests from
+forks never receive repository secrets. The build still reads its own
+environment from EAS; the token only starts the run and reads its status.
 
 That file also triggered on `v*.*.*` tags with `--profile production`, so a tag
 cut from `stage` would have pushed a staging build at the App Store record. Two
