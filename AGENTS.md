@@ -54,7 +54,7 @@ eas build --profile production --platform ios            # release build
 eas update                                        # OTA push of JS-only changes to an existing build, no App Store review
 ```
 
-For cross-device/OS QA before a release (devices/OS versions not owned locally): push to `stage` — `.eas/workflows/stage-testflight.yml` already builds and submits to TestFlight automatically, free (covered by the existing Apple Developer account, EAS free build tier). Install the TestFlight build on any device via the TestFlight app; no local Xcode, no paid device-farm service needed. `.github/workflows/ci.yml` also runs typecheck/test/lint on `ubuntu-latest` before any of that. **Those minutes are not free** — this repository and `blendn-admin` are both private, so Actions time is billed. Do not add jobs or triggers casually; see `docs/RELEASING.md`.
+For cross-device/OS QA before a release (devices/OS versions not owned locally): push to `stage`. `.github/workflows/ci.yml` runs typecheck/test/lint on that commit, and if it passes, its `ship` job starts `.eas/workflows/stage-testflight.yml` on the same SHA. That workflow builds and submits to TestFlight and Play internal, free: the existing Apple Developer account covers it, on the EAS free build tier. Install the TestFlight build on any device through the TestFlight app. No local Xcode and no paid device-farm service are needed. When a stage deploy fails, the `ship` check on the commit says which step and which EAS job; see `docs/RELEASING.md`. The EAS free tier allows 15 builds a month per platform, so do not add triggers casually.
 
 ## Concurrent agents / worktrees (cmux)
 

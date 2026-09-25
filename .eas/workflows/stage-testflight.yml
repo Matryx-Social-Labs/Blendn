@@ -18,39 +18,26 @@
 
 name: stage -> TestFlight + Play internal
 
-on:
-  push:
-    branches: ['stage']
-
+# No `on:` trigger, on purpose. GitHub starts this, from the `ship` job in
+# `.github/workflows/ci.yml`, once `verify` has passed on the same commit that
+# was pushed to `stage`, and it passes `--ref <that sha>`, so EAS builds exactly
+# the commit GitHub tested.
+#
+# This workflow used to trigger itself on the push and run typecheck + test on
+# an EAS worker first. On the free tier that meant waiting for a worker slot
+# just to repeat what GitHub had already checked, and then waiting again for
+# each build and each submit. The test gate is now GitHub's `verify` check on
+# the `stage` commit: red means no build.
+#
+# The one way around it is by hand: `eas workflow:run` or a dashboard re-run
+# skips GitHub. Use that to retry a commit that already passed, never to ship
+# one that did not.
+#
 # The two platforms are independent chains on purpose: an iOS signing problem
 # should not stop Android testers getting a build, and vice versa. They fan out
 # in parallel and neither waits on the other.
-
-# Nothing builds until the suite is green.
-#
-# Both platforms used to fan out straight off the push, so a merge to this
-# branch shipped to TestFlight and Play internal whatever the tests said. The
-# GitHub workflow does not cover it either: `ci.yml` fires on pull requests into
-# `dev` and pushes to `dev`, and a push to this branch matches neither.
-#
-# It runs here rather than being read off a GitHub check on purpose. A green
-# check is a fact about *a commit*, and gating on one means trusting that the
-# commit it describes is the commit about to be built — across two systems, one
-# of which can be down. This runs on the same machine, against the same
-# checkout, moments before the build.
 jobs:
-  verify:
-    name: typecheck + test
-    steps:
-      - uses: eas/checkout
-      - uses: eas/install_node_modules
-      - name: Typecheck against baseline
-        run: ./scripts/typecheck.sh
-      - name: Test
-        run: npm test -- --ci
-
   build_ios:
-    needs: [verify]
     type: build
     params:
       platform: ios
@@ -64,7 +51,6 @@ jobs:
       profile: staging
 
   build_android:
-    needs: [verify]
     type: build
     params:
       platform: android
