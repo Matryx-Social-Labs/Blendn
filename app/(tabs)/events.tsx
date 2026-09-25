@@ -1126,10 +1126,43 @@ function EventsInner() {
     }
   }, [])
 
+  /*
+   * Which of the four dependencies actually changed, so a search keystroke
+   * or a filter change can be told apart from a city switch.
+   *
+   * A city change swaps the whole list and earns the full skeleton. Search
+   * and filters are refinements of what is already on screen — the old
+   * behaviour ran all four through one non-silent `fetchEvents()`, so typing
+   * a query dropped the *entire* screen (including the Featured/Upcoming
+   * rails a search hides anyway) into skeleton for at least the 720ms
+   * `useMinimumVisible` floor, every time the debounce settled. Refs rather
+   * than state because this only needs to be read inside the effect below,
+   * once, the render after each of these actually changes.
+   */
+  const prevSelectedCityRef = useRef(selectedCity)
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevFiltersRef = useRef(filters)
+  const [refining, setRefining] = useState(false)
+
   useEffect(() => {
     if (!authLoading && user) {
+      const cityChanged = prevSelectedCityRef.current !== selectedCity
+      const refinementChanged =
+        prevSearchTermRef.current !== searchTerm || prevFiltersRef.current !== filters
+      prevSelectedCityRef.current = selectedCity
+      prevSearchTermRef.current = searchTerm
+      prevFiltersRef.current = filters
+
+      // Only silent once there is something on screen to refine, and only
+      // when a city change is not also in play — a city switch is a real
+      // reload and should look like one.
+      const silent = initialLoadedRef.current && !cityChanged && refinementChanged
+
       Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
-      fetchEvents()
+      if (silent) setRefining(true)
+      fetchEvents({ silent }).finally(() => {
+        if (silent) setRefining(false)
+      })
     }
     // fetchEvents is deliberately not a dependency here: it also changes
     // identity when userLocation changes, and a userLocation-triggered fetch
@@ -2189,6 +2222,7 @@ function EventsInner() {
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
       onChangeQuery={setSearchInput}
+      searching={refining}
       activeFilterCount={activeFilterCount(filters)}
       onPressFilter={() => {
         setFilterDraft(filters)
