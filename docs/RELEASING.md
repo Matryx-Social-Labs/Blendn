@@ -263,6 +263,8 @@ open **ship to TestFlight + Play internal**. Each part is its own step:
 | Expo account | `EXPO_TOKEN` is missing or revoked. Replace the repo secret. |
 | Start the EAS workflow | EAS refused the run. The step log has its message. |
 | Wait for the builds and submits | A build or submit job failed. The log shows each job's state changes with timestamps, then the last 200 lines of every failed job. The run summary has the job table and the EAS link. |
+| … "EAS run is ACTION_REQUIRED" | EAS stopped for a person, for example Apple needs an agreement accepted. Nothing is broken; finish it on the linked EAS page. |
+| … "EAS run unreadable" | Ten minutes of failed status reads: the token, the run id, or the network. |
 
 A red `verify` means `ship` never ran and nothing was built.
 

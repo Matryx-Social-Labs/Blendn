@@ -15,22 +15,33 @@ run_id="${1:?usage: eas-await-run.sh <workflow-run-id>}"
 eas="${EAS:-npx --yes eas-cli@24.8.0}"
 poll="${EAS_POLL_SECONDS:-60}"
 
+# Consecutive failed reads before giving up. One failed read is a blip; ten
+# minutes of them is a bad run id, token or network, and not worth six hours.
+max_misses=10
+
 prev=""
+misses=0
 while :; do
   if ! view=$($eas workflow:view "$run_id" --json 2>/dev/null); then
-    # One failed read is not a failed deploy. The job's timeout bounds this.
-    echo "$(date -u +%H:%M:%SZ) could not read the run; retrying"
+    misses=$((misses + 1))
+    if [ "$misses" -ge "$max_misses" ]; then
+      echo "::error title=EAS run unreadable::workflow:view failed $max_misses times in a row for run $run_id"
+      exit 1
+    fi
+    echo "$(date -u +%H:%M:%SZ) could not read the run ($misses/$max_misses); retrying"
     sleep "$poll"
     continue
   fi
+  misses=0
   status=$(jq -r .status <<<"$view")
   line=$(jq -r '[.jobs[] | "\(.key)=\(.status)"] | join("  ")' <<<"$view")
   if [ "$status $line" != "$prev" ]; then
     echo "$(date -u +%H:%M:%SZ) $status  $line"
     prev="$status $line"
   fi
-  case "$status" in SUCCESS | FAILURE | CANCELED) break ;; esac
-  sleep "$poll"
+  # Queued (NEW, WAITING) or running: keep waiting. Anything else is a state
+  # this job cannot move, ACTION_REQUIRED included, so stop and say so.
+  case "$status" in NEW | WAITING | IN_PROGRESS) sleep "$poll" ;; *) break ;; esac
 done
 
 url=$(jq -r .logURL <<<"$view")
@@ -43,6 +54,12 @@ for job_id in $(jq -r '.jobs[] | select(.status == "FAILURE") | .id' <<<"$view")
   echo "::endgroup::"
   echo "::error title=EAS job $key failed::$url"
 done
+
+case "$status" in
+  SUCCESS | FAILURE) ;;
+  CANCELED) echo "::error title=EAS run was cancelled::$url" ;;
+  *) echo "::error title=EAS run is $status::It will not finish without someone on the EAS page: $url" ;;
+esac
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
