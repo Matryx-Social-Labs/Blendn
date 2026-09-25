@@ -12,7 +12,7 @@ import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeou
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
-import { markSessionExpired } from './sessionEvents'
+import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
 // API Configuration
@@ -299,6 +299,7 @@ class TokenStorage {
 
   static async setTokens(accessToken: string, refreshToken: string): Promise<void> {
     await Promise.all([this.setAccessToken(accessToken), this.setRefreshToken(refreshToken)])
+    markSessionStarted()
   }
 }
 
