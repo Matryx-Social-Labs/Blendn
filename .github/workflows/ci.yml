@@ -75,6 +75,11 @@ jobs:
         # failure was quieter: a warning nobody reads is a check nobody has.
         run: npx expo lint
 
+      - name: TEMP — is the EXPO_TOKEN secret alive (removed before merge)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@24.8.0 whoami
+
   ship:
     # `stage` → TestFlight + Play internal, on exactly the commit `verify` just
     # passed. `--ref` makes EAS build that SHA from GitHub rather than an
