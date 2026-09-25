@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import React, { useEffect, useRef, useState } from 'react'
-import { Animated, Easing, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet } from 'react-native'
 
 import { EMBER } from '../lib/theme'
 
@@ -76,6 +76,19 @@ const FADE_MS = 260
  */
 const BLACK_MS = 180
 
+/**
+ * The beat between the draw-on finishing and the fade starting.
+ *
+ * Without this, `finish` fired the instant the WebP's last frame landed —
+ * the wordmark completed and was gone in the same tick, which is what read as
+ * "too fast": there was never a moment where the finished mark was simply
+ * looked at. This does not touch the draw-on itself (that rate is baked into
+ * `intro.webp`'s frame delays and can only change by re-encoding the asset —
+ * see `scripts/build-intro-animation.sh`); it only holds the last frame
+ * longer before the handoff.
+ */
+const HOLD_MS = 350
+
 /*
  * Where the intro has to *arrive*, so the mark does not jump on handover.
  *
@@ -120,12 +133,16 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   // instead would let `expo-image` start playing behind an opacity of 0, and
   // the beat would silently buy nothing.
   const [drawing, setDrawing] = useState(false)
+  // Unknown until the OS answers. Nothing is scheduled while this is null —
+  // see the effect below — so a reduce-motion device never starts a travel
+  // it would have to cancel mid-flight.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null)
   const opacity = useRef(new Animated.Value(1)).current
   const travel = useRef(new Animated.Value(0)).current
   const finished = useRef(false)
 
   // One shot. `onDone` is called exactly once however this ends — timer, error,
-  // or unmount — so a caller can treat it as "the intro is over, for good".
+  // tap, or unmount — so a caller can treat it as "the intro is over, for good".
   const finish = useRef(() => {
     if (finished.current) return
     finished.current = true
@@ -140,6 +157,28 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   }).current
 
   useEffect(() => {
+    let cancelled = false
+    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (!cancelled) setReduceMotion(enabled)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    // Still waiting on the OS. Render nothing scheduled yet — see `reduceMotion`.
+    if (reduceMotion === null) return
+
+    // The draw-on and travel are the motion "prefers reduced motion" exists
+    // for — a mark sliding, scaling and re-drawing itself. Skip straight to
+    // the plain opacity fade every unmount already uses; a short crossfade
+    // is not the kind of motion that setting targets.
+    if (reduceMotion) {
+      finish()
+      return
+    }
+
     /*
      * Eased so it stays put and then moves, rather than drifting throughout.
      *
@@ -167,34 +206,38 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
       setDrawing(true)
       travelling.start()
     }, BLACK_MS)
-    const timer = setTimeout(finish, BLACK_MS + DURATION_MS)
+    // HOLD_MS lands after the draw-on so the finished mark is on screen for a
+    // beat before the fade — see its definition.
+    const timer = setTimeout(finish, BLACK_MS + DURATION_MS + HOLD_MS)
 
     return () => {
       clearTimeout(start)
       travelling.stop()
       clearTimeout(timer)
     }
-  }, [finish, travel])
+  }, [finish, reduceMotion, travel])
 
   if (!visible) return null
 
   return (
     /*
-      Invisible to VoiceOver, and deliberately not labelled "loading".
+      Tappable, but invisible to VoiceOver and deliberately not labelled
+      "loading".
 
       This is the brand mark drawing itself over a black screen for under two
-      seconds. It carries no information: there is nothing to act on, nothing
-      to read, and the screen it hands off to announces itself. Left visible to
-      the accessibility tree it becomes a focus stop that says nothing, on the
-      very first thing anybody meets.
+      seconds. It carries no information: there is nothing to read, and the
+      screen it hands off to announces itself. Left visible to the
+      accessibility tree it becomes a focus stop that says nothing, on the
+      very first thing anybody meets — so it stays hidden there even though a
+      sighted user can tap through it.
 
       `accessibilityElementsHidden` is the iOS half and
       `importantForAccessibility="no-hide-descendants"` the Android half —
       both are needed, and neither implies the other.
     */
-    <Animated.View
+    <AnimatedPressable
       style={[styles.overlay, { opacity }]}
-      pointerEvents="none"
+      onPress={finish}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
@@ -226,9 +269,11 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
           />
         ) : null}
       </Animated.View>
-    </Animated.View>
+    </AnimatedPressable>
   )
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
 const styles = StyleSheet.create({
   overlay: {
