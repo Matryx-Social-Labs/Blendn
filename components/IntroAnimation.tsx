@@ -158,9 +158,13 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     let cancelled = false
-    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (!cancelled) setReduceMotion(enabled)
-    })
+    // A refusal reads as "motion is fine": left unhandled, `reduceMotion`
+    // stays null and nothing would ever end the intro.
+    AccessibilityInfo.isReduceMotionEnabled()
+      .catch(() => false)
+      .then((enabled) => {
+        if (!cancelled) setReduceMotion(enabled)
+      })
     return () => {
       cancelled = true
     }
