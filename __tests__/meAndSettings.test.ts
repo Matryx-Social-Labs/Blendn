@@ -48,7 +48,7 @@ describe('there is one profile editor', () => {
      * their matching.
      */
     const src = codeOnly(read('app/edit-profile.tsx'))
-    expect(src).toContain('if (!same(intents, matchingAtLoad.intents))')
+    expect(src).toContain('if (!same(savedIntents, matchingAtLoad.intents))')
   })
 
   it('stops writing the dating fields once dating is unticked', () => {
@@ -57,7 +57,7 @@ describe('there is one profile editor', () => {
      * stop being asked, so continuing to write them would keep that data
      * current for somebody who just opted out of it.
      */
-    expect(codeOnly(read('app/edit-profile.tsx'))).toContain("if (intents.includes('dating'))")
+    expect(codeOnly(read('app/edit-profile.tsx'))).toContain("if (savedIntents.includes('dating'))")
   })
 
   it('shares one field block with onboarding', () => {

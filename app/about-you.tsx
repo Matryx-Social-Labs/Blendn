@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { InterestPicker } from '../components/InterestPicker'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { apiClient } from '../lib/apiClient'
-import { needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
+import { DATING_MIN_AGE, mayDate, needsInterestedInPicker, type Gender, type Orientation } from '../lib/dating'
 import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
@@ -72,9 +72,6 @@ import { isAccountAge } from '../lib/onboarding'
 
 
 
-/** The rule the server enforces on every write path. Mirrored for the copy only. */
-const DATING_MIN_AGE = 18
-
 function AboutYouInner() {
   const { user } = useAuth()
 
@@ -127,8 +124,6 @@ function AboutYouInner() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const wantsDating = intents.includes('dating')
-  const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   useEffect(() => {
     let cancelled = false
@@ -189,6 +184,20 @@ function AboutYouInner() {
     }
     return knownAge
   }
+
+  /*
+   * Offered unless the age typed here is under 18; an unknown age is still
+   * offered, and the check below asks for it. A Dating tick made before the
+   * age was typed does not survive the chip being hidden — otherwise Continue
+   * refused with no chip left to untick (SCRUM-294 review).
+   */
+  const offerDating = (): boolean => {
+    const years = effectiveAge()
+    return years === null || mayDate(years)
+  }
+  const chosenIntents = (): Intent[] => (offerDating() ? intents : intents.filter((i) => i !== 'dating'))
+  const wantsDating = chosenIntents().includes('dating')
+  const askInterestedIn = needsInterestedInPicker(gender, orientations, chosenIntents())
 
   const validate = (): string | null => {
     const years = effectiveAge()
@@ -257,7 +266,7 @@ function AboutYouInner() {
       const result = await apiClient.updateProfile(user.id, {
         ...(name.trim() ? { name: name.trim() } : {}),
         ...(years !== null && needsAge ? { age: years } : {}),
-        ...(intents.length > 0 ? { intent_default: intents } : {}),
+        ...(chosenIntents().length > 0 ? { intent_default: chosenIntents() } : {}),
         ...(workField ? { work_field: workField } : {}),
         ...(wantsDating && gender ? { gender } : {}),
         ...(wantsDating && orientations.length ? { orientations } : {}),
@@ -344,6 +353,7 @@ function AboutYouInner() {
             onChangeOrientations={setOrientations}
             interestedIn={interestedIn}
             onChangeInterestedIn={setInterestedIn}
+            offerDating={offerDating()}
             afterIntents={
               needsAge ? (
                 <>

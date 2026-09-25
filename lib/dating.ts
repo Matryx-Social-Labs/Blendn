@@ -164,3 +164,23 @@ export function orientationDisabled(
   if (current.includes(value) || value === 'prefer_not_to_say') return false
   return current.filter((o) => o !== 'prefer_not_to_say').length >= MAX_ORIENTATIONS
 }
+
+/**
+ * Dating is 18+, as on the server (`blendn-admin lib/age.ts mayDate`). An
+ * unknown age is not old enough: the server refuses it with "Add your age…",
+ * so offering the choice would only lead to that refusal.
+ *
+ * Every screen that offers dating asks this. Two did not — onboarding's
+ * "Looking for" and Edit profile's "What are you open to?" — and a
+ * 17-year-old was offered Dating and then the orientation questions (SCRUM-294).
+ */
+export const DATING_MIN_AGE = 18
+
+export function mayDate(years: number | null | undefined): boolean {
+  return typeof years === 'number' && years >= DATING_MIN_AGE
+}
+
+/** "Looking for" without the dating choice, however it was written. */
+export function withoutDatingChoice(values: readonly string[]): string[] {
+  return values.filter((v) => v.trim().toLowerCase() !== 'dating')
+}

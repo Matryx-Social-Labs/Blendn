@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
-import { type Gender, type Orientation } from '../lib/dating'
+import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
@@ -101,6 +101,15 @@ export default function EditProfile() {
     orientations: Orientation[]
     interestedIn: Gender[]
   }>({ intents: [], workField: null, gender: null, orientations: [], interestedIn: [] })
+
+  /*
+   * The age dating is offered on: the one being typed in this form when it is a
+   * whole number, else the one the server holds. Reading only the loaded age
+   * kept Dating on screen after someone corrected their age to 17, and hid it
+   * from someone adding an adult age for the first time (SCRUM-294 review).
+   */
+  const typedAge = Number(age)
+  const liveAge = age.trim() && Number.isInteger(typedAge) ? typedAge : profile?.age
 
   const toggleIntent = (value: Intent) =>
     setIntents((prev) => (prev.includes(value) ? prev.filter((i) => i !== value) : [...prev, value]))
@@ -334,14 +343,16 @@ export default function EditProfile() {
        * which is how you silently turn off somebody's matching.
        */
       const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-      if (!same(intents, matchingAtLoad.intents)) updateData.intent_default = intents
+      // A Dating intent this age may not hold is not sent (the chip is hidden).
+      const savedIntents = mayDate(liveAge) ? intents : intents.filter((i) => i !== 'dating')
+      if (!same(savedIntents, matchingAtLoad.intents)) updateData.intent_default = savedIntents
       if (workField !== matchingAtLoad.workField) updateData.work_field = workField
       /*
        * The dating three are sent only while dating is ticked -- untick it and
        * they stop being asked, so continuing to write them would keep
        * special-category data current for somebody who just opted out of it.
        */
-      if (intents.includes('dating')) {
+      if (savedIntents.includes('dating')) {
         if (gender && gender !== matchingAtLoad.gender) updateData.gender = gender
         if (!same(orientations, matchingAtLoad.orientations)) updateData.orientations = orientations
         if (!same(interestedIn, matchingAtLoad.interestedIn)) updateData.interested_in = interestedIn
@@ -641,6 +652,7 @@ export default function EditProfile() {
               onChangeOrientations={setOrientations}
               interestedIn={interestedIn}
               onChangeInterestedIn={setInterestedIn}
+              offerDating={mayDate(liveAge)}
             />
           </View>
 
