@@ -15,7 +15,7 @@ import {
     setupNotificationResponseListener
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
-import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
+import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
@@ -319,13 +319,13 @@ function RootLayout() {
          */
         const stored = user?.id ? await readOnboarding(user.id) : null;
         const resume = resumeStep({
-          // Only what this device knows. Reading `profiles.onboarded` would be
-          // the network call the note above says this path no longer makes —
-          // and a finished flow deletes its local record, so its absence
-          // already means "nothing to resume".
-          finishedOnServer: false,
+          // Both server facts come on the user object the session call already
+          // returned, so reading them costs no request. `mayParticipate` is
+          // what catches an account that quit onboarding on another install.
+          finishedOnServer: user.profile?.onboarded === true,
           stored: stored?.progress ?? null,
           isNewAccount,
+          mayParticipate: mayParticipate(user.profile),
         });
         replaceIfNeeded(resume ? ONBOARDING_ROUTES[resume] : '/(tabs)/events');
       } else {

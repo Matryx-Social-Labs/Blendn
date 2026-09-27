@@ -15,7 +15,7 @@ import {
   type OnboardingStep,
 } from './onboarding'
 import { clearOnboarding, readOnboarding, writeOnboarding } from './onboardingStorage'
-import { clearNewAccountFlag, useAuth } from './useAuth'
+import { clearNewAccountFlag, refreshAuthUser, useAuth } from './useAuth'
 
 /**
  * Make the server's interest graph match what was picked.
@@ -320,6 +320,10 @@ export function useOnboarding(step: OnboardingStep) {
     await clearOnboarding(userId)
     // The flow is over for this session too, not only on this device.
     clearNewAccountFlag()
+    // The in-memory user still says `onboarded: false` with no age, and the
+    // root guard's `mayParticipate` reads it; refreshed, it agrees with the
+    // server before anything asks it again.
+    void refreshAuthUser()
     return true
   }, [draft, userId])
 

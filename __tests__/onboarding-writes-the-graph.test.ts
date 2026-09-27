@@ -17,7 +17,7 @@ jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
 jest.mock('expo-router', () => ({ router: {} }))
-jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }), clearNewAccountFlag: jest.fn() }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }), clearNewAccountFlag: jest.fn(), refreshAuthUser: jest.fn() }))
 jest.mock('../lib/onboardingStorage', () => ({}))
 
 import { syncInterests } from '../lib/useOnboarding'
