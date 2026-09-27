@@ -27,6 +27,8 @@ const SOURCE = readFileSync(
   join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'),
   'utf8'
 )
+// The request itself moved to `lib/checkIn.ts`, shared with the Pulse.
+const HELPER = readFileSync(join(__dirname, '..', 'lib', 'checkIn.ts'), 'utf8')
 
 /**
  * The contents of the `deviceInfo: { … }` literal, brace-matched.
@@ -41,22 +43,24 @@ const SOURCE = readFileSync(
  * the first nested `}` and this project has shipped four guards that did.
  */
 function deviceInfoLiteral(): string {
-  const at = SOURCE.indexOf('deviceInfo: {')
+  const at = HELPER.indexOf('deviceInfo: {')
   if (at === -1) return ''
   let i = at + 'deviceInfo: {'.length
   let depth = 1
-  while (i < SOURCE.length && depth > 0) {
-    if (SOURCE[i] === '{') depth++
-    else if (SOURCE[i] === '}') depth--
+  while (i < HELPER.length && depth > 0) {
+    if (HELPER[i] === '{') depth++
+    else if (HELPER[i] === '}') depth--
     i++
   }
-  return SOURCE.slice(at, i)
+  return HELPER.slice(at, i)
 }
 
 describe('check-in sends the accuracy it already measured', () => {
   it('found the file, so the assertions below are not vacuous', () => {
     expect(SOURCE).toContain('location.coords.accuracy')
-    expect(SOURCE).toContain('apiClient.checkIn(')
+    expect(HELPER).toContain('apiClient.checkIn(')
+    // The screen hands the whole location, accuracy included, to the helper.
+    expect(SOURCE).toContain('submitCheckIn(String(id), location)')
   })
 
   it('returns the accuracy from getCurrentLocation rather than dropping it', () => {
@@ -71,7 +75,7 @@ describe('check-in sends the accuracy it already measured', () => {
      */
     const literal = deviceInfoLiteral()
     expect(literal).toContain('platform')
-    expect(literal).toContain('gpsAccuracy: location.accuracy')
+    expect(literal).toContain('gpsAccuracy: at.accuracy ?? undefined')
   })
 
   it('still refuses a weak fix before it gets that far', () => {

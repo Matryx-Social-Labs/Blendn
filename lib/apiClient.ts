@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { SavedEventsPayload } from './savedEvents'
+import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
@@ -833,6 +833,19 @@ class ApiClientClass {
     if (!entry) return null
     const age = Date.now() - entry.timestamp
     return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl }
+  }
+
+  /**
+   * Drop the cached `/checkins/active`, so the next read asks the server.
+   *
+   * Called after a check-in or check-out (`lib/checkIn.ts`). The list is SWR-
+   * cached for 30s, so without this the tab bar's re-read right after leaving a
+   * room was answered from the cache that still had you in it.
+   */
+  forgetActiveCheckins(): void {
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(':/api/mobile/checkins/active:')) this.responseCache.delete(key)
+    }
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
@@ -1893,6 +1906,20 @@ class ApiClientClass {
    */
   async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
     return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
+  }
+
+  /**
+   * Your upcoming `going` and `waitlisted` RSVPs, soonest first. `/me`-scoped:
+   * there is no way to ask for somebody else's. A server older than this route
+   * answers 404, which the Going tab reads as "no section", not as a failure.
+   */
+  async getMyRsvps(): Promise<ApiResponse<RsvpEventsPayload>> {
+    return this.queuedRequest<RsvpEventsPayload>('/api/mobile/me/rsvps?limit=50')
+  }
+
+  /** The events you attended, most recent first. `/me`-scoped, like the above. */
+  async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
+    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
   }
 
   // === CHAT ENDPOINTS ===

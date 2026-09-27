@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Linking,
@@ -17,11 +17,21 @@ import { EventCover } from '../../components/EventCover'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedEvents'
+import {
+  goingItems,
+  rsvpEventRows,
+  savedEventRows,
+  type AttendancePayload,
+  type GoingItem,
+  type PastEventRow,
+  type RsvpEventRow,
+  type SavedEventRow as EventRow,
+} from '../../lib/savedEvents'
 import { formatEventDateTime } from '../../lib/time'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
+import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -34,14 +44,18 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * category on a one-city catalogue and reads as broken. See
  * `docs/NAVIGATION.md`.
  *
- * Saved events today. Attending and past-with-rating are the next two sections;
- * `rate/[eventId]` is built and currently linked from nowhere, and this is where
- * it belongs.
+ * Three sections, from `goingItems` (lib/savedEvents.ts): **Going** — your
+ * RSVPs, from `/me/rsvps`; **Saved** — hearts not already under Going;
+ * **Past** — events you attended, each with the way in to rating the people
+ * you met there, which had no entry point but reopening an old event.
  */
 function GoingScreenInner() {
   const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
+  // `events` is the Saved section — the only one this screen edits in place.
   const [events, setEvents] = useState<EventRow[]>([])
+  const [going, setGoing] = useState<RsvpEventRow[]>([])
+  const [attended, setAttended] = useState<AttendancePayload['events']>([])
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const { showToast } = useToast()
@@ -57,23 +71,34 @@ function GoingScreenInner() {
     try {
       if (!authUser) {
         setEvents([])
+        setGoing([])
+        setAttended([])
         setLoading(false)
         return
       }
 
-      // Get user's favorites/interested events via API
-      const result = await apiClient.getUserFavorites(authUser.id)
-
-      if (!result.success || !result.data) {
-        Logger.debug('interested', 'Failed to load favorites', { error: result.error })
-        setLoadFailed(true)
-        return
-      }
+      /*
+       * Three lists, loaded together and kept apart. Each section updates only
+       * when its own request succeeds, so one slow or refused route does not
+       * blank the other two — and a server that predates `/me/rsvps` (404)
+       * simply has no Going section. Only all three failing is "couldn't load".
+       */
+      const [saved, rsvps, past] = await Promise.all([
+        apiClient.getUserFavorites(authUser.id),
+        apiClient.getMyRsvps(),
+        apiClient.getMyAttendance(),
+      ])
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
-      setEvents(savedEventRows(result.data))
-      setLoadFailed(false)
+      if (saved.success && saved.data) setEvents(savedEventRows(saved.data))
+      else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
+      if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
+      else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
+      if (past.success && past.data) setAttended(past.data.events ?? [])
+      else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
+
+      setLoadFailed(!saved.success && !rsvps.success && !past.success)
     } catch {
       // Keep whatever is already on screen; a failed refresh is not an empty list.
       setLoadFailed(true)
@@ -161,16 +186,8 @@ function GoingScreenInner() {
     })
   }, [events, restoreRow, showToast])
 
-  const openInMaps = useCallback(async (event: EventRow) => {
-    const lat = event.latitude
-    const lon = event.longitude
-    const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
-    const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
-    const googleScheme = 'comgooglemaps://'
-    const googleAppUrl = hasCoords ? `${googleScheme}?q=${lat},${lon}` : `${googleScheme}?q=${addressQuery}`
-    const googleWebUrl = hasCoords ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-    try { if (await Linking.canOpenURL(googleScheme)) return Linking.openURL(googleAppUrl) } catch {}
-    return Linking.openURL(googleWebUrl)
+  const openInMaps = useCallback((event: EventRow) => {
+    void openPlaceInMaps(event)
   }, [])
 
   const shareEvent = useCallback(async (event: EventRow) => {
@@ -198,62 +215,127 @@ function GoingScreenInner() {
     } catch {}
   }, [])
 
-  const renderItem = useCallback(({ item }: { item: EventRow }) => (
-    // The cover is the "open" target and the chips are its siblings: a card that
-    // was itself a touchable made VoiceOver read it as one element, so the four
-    // actions inside it could not be reached.
-    //
-    // `exiting` on every row; `entering` only on the one Undo just put back —
-    // an entrance on every row would replay as the list virtualises.
-    <Animated.View
-      style={styles.card}
-      exiting={reduceMotion ? undefined : ROW_OUT}
-      entering={!reduceMotion && item.id === restoredId ? ROW_BACK : undefined}
+  const openEvent = useCallback((id: string) => {
+    router.push({ pathname: '/event/[id]', params: { id } as any })
+  }, [])
+
+  /** The cover, as the "open" target. Its chips are siblings, not children. */
+  const cover = useCallback((item: EventRow | PastEventRow, opts: { height: number; note?: string | null; cancelled?: boolean }) => (
+    // A card that was itself a touchable made VoiceOver read it as one element,
+    // so the actions inside it could not be reached.
+    <TouchableOpacity
+      onPress={() => openEvent(item.id)}
+      accessibilityRole="button"
+      accessibilityLabel={[
+        item.title,
+        item.venue_name,
+        formatEventDateTime(item.start_time),
+        opts.note,
+        opts.cancelled ? 'Cancelled by the organiser' : null,
+      ].filter(Boolean).join(', ')}
+      accessibilityHint="Opens the event"
     >
-      <TouchableOpacity
-        onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}
-        accessibilityRole="button"
-        accessibilityLabel={[
-          item.title,
-          item.venue_name,
-          formatEventDateTime(item.start_time),
-          item.status === 'cancelled' ? 'Cancelled by the organiser' : null,
-        ].filter(Boolean).join(', ')}
-        accessibilityHint="Opens the event"
-      >
-      <EventCover uri={item.cover_image_url} height={180} retry={refreshCount}>
+      <EventCover uri={item.cover_image_url} height={opts.height} retry={refreshCount}>
         <View style={styles.overlayContent}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
           <Text style={styles.time}>{formatEventDateTime(item.start_time)}</Text>
-          {item.status === 'cancelled' ? (
+          {opts.cancelled ? (
             <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">CANCELLED</Text>
+          ) : opts.note ? (
+            <Text style={styles.note}>{opts.note.toUpperCase()}</Text>
           ) : null}
         </View>
       </EventCover>
-      </TouchableOpacity>
-      <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel={`Remove ${item.title} from saved`}>
-          <Ionicons name="heart-dislike" size={ICON.sm} color={EMBER.destructive} />
-          <Text style={styles.actionText}>Remove</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
-          <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
-          <Text style={styles.actionText}>Open in Maps</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
-          <Ionicons name="calendar" size={ICON.sm} color={EMBER.textSecondary} />
-          <Text style={styles.actionText}>Add to calendar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
-          <Ionicons name="share-social" size={ICON.sm} color={EMBER.textSecondary} />
-          <Text style={styles.actionText}>Share</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount, reduceMotion, restoredId])
+    </TouchableOpacity>
+  ), [openEvent, refreshCount])
 
-  const keyExtractor = useCallback((item: EventRow) => item.id, [])
+  const plannedChips = useCallback((item: EventRow) => (
+    <>
+      <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
+        <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
+        <Text style={styles.actionText}>Open in Maps</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
+        <Ionicons name="calendar" size={ICON.sm} color={EMBER.textSecondary} />
+        <Text style={styles.actionText}>Add to calendar</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
+        <Ionicons name="share-social" size={ICON.sm} color={EMBER.textSecondary} />
+        <Text style={styles.actionText}>Share</Text>
+      </TouchableOpacity>
+    </>
+  ), [openInMaps, addToCalendar, shareEvent])
+
+  const renderItem = useCallback(({ item }: { item: GoingItem }) => {
+    if (item.kind === 'header') {
+      return (
+        <Text style={styles.sectionHeader} accessibilityRole="header">
+          {item.title}
+        </Text>
+      )
+    }
+
+    if (item.kind === 'going') {
+      // No Remove here: leaving an RSVP is a decision about the event, and the
+      // event screen is where its consequences (the waitlist) are explained.
+      const row = item.row
+      return (
+        <View style={styles.card}>
+          {cover(row, {
+            height: 180,
+            note: row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null,
+            cancelled: row.status === 'cancelled',
+          })}
+          <View style={styles.actionsRow}>{plannedChips(row)}</View>
+        </View>
+      )
+    }
+
+    if (item.kind === 'past') {
+      const row = item.row
+      return (
+        <View style={styles.card}>
+          {cover(row, { height: 120 })}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.actionChip}
+              onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
+              accessibilityRole="button"
+              accessibilityLabel={`Rate the people you met at ${row.title}`}
+            >
+              <Ionicons name="star" size={ICON.sm} color={EMBER.textSecondary} />
+              <Text style={styles.actionText}>Rate people you met</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )
+    }
+
+    // Saved. `exiting` on every row; `entering` only on the one Undo just put
+    // back — an entrance on every row would replay as the list virtualises.
+    const row = item.row
+    return (
+      <Animated.View
+        style={styles.card}
+        exiting={reduceMotion ? undefined : ROW_OUT}
+        entering={!reduceMotion && row.id === restoredId ? ROW_BACK : undefined}
+      >
+        {cover(row, { height: 180, cancelled: row.status === 'cancelled' })}
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(row)} accessibilityRole="button" accessibilityLabel={`Remove ${row.title} from saved`}>
+            <Ionicons name="heart-dislike" size={ICON.sm} color={EMBER.destructive} />
+            <Text style={styles.actionText}>Remove</Text>
+          </TouchableOpacity>
+          {plannedChips(row)}
+        </View>
+      </Animated.View>
+    )
+  }, [cover, plannedChips, removeSave, reduceMotion, restoredId])
+
+  const items = useMemo(() => goingItems(going, events, attended), [going, events, attended])
+
+  const keyExtractor = useCallback((item: GoingItem) => item.key, [])
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -270,7 +352,7 @@ function GoingScreenInner() {
         <View style={styles.center}>
           <ActivityIndicator color={EMBER.textPrimary} />
         </View>
-      ) : events.length === 0 && loadFailed ? (
+      ) : items.length === 0 && loadFailed ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Couldn&apos;t load your events</Text>
           <Text style={styles.emptySub}>Check your connection and try again.</Text>
@@ -285,10 +367,10 @@ function GoingScreenInner() {
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : events.length === 0 ? (
+      ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No saved events yet</Text>
-          <Text style={styles.emptySub}>Tap the heart on events to save them here.</Text>
+          <Text style={styles.emptyTitle}>Nothing here yet</Text>
+          <Text style={styles.emptySub}>Tap &quot;I&apos;m going&quot; or the heart on an event and it shows up here.</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => router.navigate('/(tabs)/events' as any)}
@@ -299,7 +381,7 @@ function GoingScreenInner() {
         </View>
       ) : (
         <Animated.FlatList
-          data={events}
+          data={items}
           itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
@@ -356,6 +438,8 @@ const styles = StyleSheet.create({
   venue: { ...TYPE.meta, color: EMBER.textPrimary, marginTop: SPACE.xxs },
   time: { ...TYPE.meta, marginTop: SPACE.xxs },
   cancelled: { ...TYPE.label, color: EMBER.destructive, marginTop: SPACE.xs },
+  note: { ...TYPE.label, color: EMBER.accent, marginTop: SPACE.xs },
+  sectionHeader: { ...TYPE.label, color: EMBER.textSecondary, paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.md },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, padding: SPACE.md, backgroundColor: EMBER.surfaceSunken },
   actionChip: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, backgroundColor: EMBER.surface, paddingHorizontal: SPACE.md, height: CONTROL.md, borderRadius: EMBER_RADIUS.pill },
   actionText: { ...TYPE.bodyStrong },

@@ -3,7 +3,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, Tabs } from 'expo-router'
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import Animated, { FadeIn } from 'react-native-reanimated'
@@ -18,6 +18,7 @@ import {
   type RoomButtonTarget,
 } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
+import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { MOTION_DURATION } from '../../lib/motion'
 import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
@@ -355,10 +356,23 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     void read()
     const id = setInterval(read, 30_000)
     const unsubscribe = subscribeRoomSignal(recompute)
+    /*
+     * The poll is the fallback, not the news. Checking in or out anywhere in
+     * the app says so (`lib/checkIn.ts`, which also drops the cached list), so
+     * the button changes the moment you walk in or leave rather than up to a
+     * poll later. And a phone left in a pocket comes back to a button that
+     * re-reads rather than one that waits out the interval.
+     */
+    const unsubscribeCheckIn = subscribeCheckInChanged(() => void read())
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void read()
+    })
     return () => {
       cancelled = true
       clearInterval(id)
       unsubscribe()
+      unsubscribeCheckIn()
+      appState.remove()
     }
   }, [])
 

@@ -5,9 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
-import { revealPromptText, revealReadiness } from '../../lib/reveal'
-import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from '../../lib/roomVisibility'
-import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from '../../lib/roomVisibilityStorage'
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +14,6 @@ import {
   InteractionManager,
   Linking,
   Modal,
-  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -30,13 +26,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
-import { checkInRefusal, CHECK_IN_CODES } from '../../lib/checkInRefusal'
+import { askIntentRoute, revealOffer, submitCheckIn } from '../../lib/checkIn'
+import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
-import { NotificationHelpers } from '../../lib/notifications';
+import { NotificationHelpers, syncEventReminder } from '../../lib/notifications';
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
@@ -442,6 +439,22 @@ export default function EventDetail() {
     }
   }, [id, user, userInterested, showTray, closeTray, feedback])
 
+  /*
+   * The reminder follows what this screen shows: interested, going or
+   * waitlisted means remind me. Driven from state rather than from the two
+   * handlers so an optimistic flip, its rollback and a waitlist answer all
+   * land in the same place — and so opening an event you RSVP'd to before
+   * reminders followed RSVPs schedules the one you are owed.
+   */
+  const reminderWanted = userInterested || rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
+  useEffect(() => {
+    if (!event?.id || !event.start_time) return
+    syncEventReminder(
+      { id: event.id, title: event.title, start_time: event.start_time, venue_name: event.venue_name },
+      reminderWanted
+    )
+  }, [event?.id, event?.title, event?.start_time, event?.venue_name, reminderWanted])
+
   const handleToggleRsvp = useCallback(async () => {
     // Hoisted out of the `try` so the `catch` can put it back: a thrown
     // request (timeout, no network) left the optimistic "You're going" on
@@ -794,50 +807,25 @@ export default function EventDetail() {
 
       setUserLocation(location)
 
-      // Call check-in API with timeout for better UX
-      const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
-        return new Promise((resolve, reject) => {
-          const t = setTimeout(() => reject(new Error('CHECKIN_TIMEOUT')), ms)
-          promise
-            .then((res) => {
-              clearTimeout(t)
-              resolve(res)
-            })
-            .catch((err) => {
-              clearTimeout(t)
-              reject(err)
-            })
-        })
-      }
+      const outcome = await submitCheckIn(String(id), location)
 
-      const result = await withTimeout(
-        apiClient.checkIn(String(id), {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy`
-          // — not a top-level field. Sending it anywhere else is the same as
-          // not sending it.
-          deviceInfo: { platform: Platform.OS, gpsAccuracy: location.accuracy }
-        }),
-        12000
-      )
-
-      if (!result.success) {
-        Logger.error('events', 'checkin:api:error', {
-          error: result.error,
-          code: result.errorCode,
-        })
-
-        /*
-         * Dispatch on the server's code, never on its sentence.
-         *
-         * This matched `'too far'` against a message that reads "outside the
-         * check-in area", so the one refusal a map can fix was the only one
-         * that never offered a map. See `lib/checkInRefusal.ts`.
-         */
-        const refusal = checkInRefusal(result.errorCode, result.error)
-
-        if (result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN) {
+      if (outcome.kind === 'timeout') {
+        Logger.warn('events', 'checkin:timeout')
+        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
+          { label: 'Cancel', onPress: closeTray },
+          {
+            label: 'Retry',
+            variant: 'primary',
+            onPress: () => {
+              closeTray()
+              handleCheckIn(true)
+            }
+          }
+        ])
+      } else if (outcome.kind === 'refused') {
+        Logger.error('events', 'checkin:api:error', { title: outcome.refusal.title })
+        const { refusal } = outcome
+        if (outcome.alreadyCheckedIn) {
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
           setCheckInStatus({ success: true, checked_in: true })
         } else {
@@ -865,53 +853,33 @@ export default function EventDetail() {
         Logger.journey('checkin', 'detail:success', { eventId: String(id) })
         feedback.success()
 
-        /*
-         * The same two questions the Pulse door asks, because this is the
-         * commoner door — tap a card, "Blend in" — and it asked neither
-         * (driven on iOS 2026-09-21: a fresh account with no intent was
-         * checked in here with no "Why do you go out?", while the Pulse
-         * tray asked). The Pulse's version lives in app/(tabs)/events.tsx
-         * `handleCheckIn`; the two should become one helper, and until then
-         * they must say the same thing (SCRUM-77, SCRUM-188).
-         */
-        const askIntent = result.data?.intentNeeded === true
+        // What follows a check-in is decided in `lib/checkIn.ts`, the same for
+        // this door and the Pulse's; only the trays are this screen's.
+        const { askIntent } = outcome
         const closeAndAsk = () => {
           closeTray()
-          if (askIntent) {
-            router.push({
-              pathname: '/event-preferences/[eventId]',
-              params: { eventId: String(id), revealed: '0', askIntent: '1' },
-            } as any)
-          }
+          if (askIntent) router.push(askIntentRoute(String(id)))
         }
 
-        if (result.data?.revealSuggestion && user?.id) {
-          const firstTime = shouldWarnBeforePublicCheckIn({
-            revealByDefault: true,
-            hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-            canReveal: revealReadiness({
-              name: user.name?.trim().split(/\s+/)[0] ?? null,
-              photos: user.image ? [user.image] : [],
-            }).ok,
+        if (outcome.revealSuggestion) {
+          const offer = await revealOffer({
+            id: user.id,
+            firstName: user.name?.trim().split(/\s+/)[0] ?? null,
+            image: user.image,
           })
-          if (firstTime) await markPublicCheckInWarningSeen(user.id)
-          showTray(
-            firstTime ? PUBLIC_CHECKIN_WARNING.title : 'Show your name here?',
-            firstTime ? PUBLIC_CHECKIN_WARNING.body : revealPromptText(user.name?.trim().split(/\s+/)[0] ?? null),
-            [
-              { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeAndAsk },
-              {
-                label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
-                variant: 'primary',
-                onPress: () => {
-                  closeAndAsk()
-                  apiClient
-                    .setMatchPreferences(String(id), { revealed: true })
-                    .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-                },
+          showTray(offer.title, offer.message, [
+            { label: offer.cancel, onPress: closeAndAsk },
+            {
+              label: offer.confirm,
+              variant: 'primary',
+              onPress: () => {
+                closeAndAsk()
+                apiClient
+                  .setMatchPreferences(String(id), { revealed: true })
+                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
               },
-            ]
-          )
+            },
+          ])
         } else {
           // Keep user in context and offer next step instead of forcing a full-screen jump.
           showTray(
@@ -950,26 +918,12 @@ export default function EventDetail() {
         }
 
         // Update check-in status directly - no need for another API call
-        setCheckInStatus({ success: true, checked_in: true, check_in_id: result.data?.checkInId })
+        setCheckInStatus({ success: true, checked_in: true, check_in_id: outcome.checkInId })
       }
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
-      if ((error as any)?.message === 'CHECKIN_TIMEOUT') {
-        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Retry',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              handleCheckIn(true)
-            }
-          }
-        ])
-      } else {
-        feedback.error()
-        showTray('Check-in failed', 'Something went wrong. Please try again.')
-      }
+      feedback.error()
+      showTray('Check-in failed', 'Something went wrong. Please try again.')
     } finally {
       setCheckingIn(false)
     }
@@ -1106,26 +1060,8 @@ export default function EventDetail() {
     )
   }
 
-  const openInMaps = async () => {
-    if (!event) return
-    const lat = event.latitude
-    const lon = event.longitude
-    const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
-    const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
-
-    const googleScheme = 'comgooglemaps://'
-    const googleAppUrl = hasCoords
-      ? `${googleScheme}?q=${lat},${lon}`
-      : `${googleScheme}?q=${addressQuery}`
-    const googleWebUrl = hasCoords
-      ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
-      : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-
-    try {
-      const canOpenApp = await Linking.canOpenURL(googleScheme)
-      if (canOpenApp) return Linking.openURL(googleAppUrl)
-    } catch {}
-    return Linking.openURL(googleWebUrl)
+  const openInMaps = () => {
+    if (event) void openPlaceInMaps(event)
   }
 
   const handleShare = async () => {

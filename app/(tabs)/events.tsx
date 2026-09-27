@@ -68,15 +68,8 @@ import {
   placeLabel,
   upcomingDayLabel,
 } from '../../lib/pulse'
-import { revealPromptText, revealReadiness } from '../../lib/reveal'
-import {
-  PUBLIC_CHECKIN_WARNING,
-  shouldWarnBeforePublicCheckIn,
-} from '../../lib/roomVisibility'
-import {
-  hasSeenPublicCheckInWarning,
-  markPublicCheckInWarningSeen,
-} from '../../lib/roomVisibilityStorage'
+import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
+import { openInMaps } from '../../lib/openInMaps'
 import { apiClient } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { Logger } from '../../lib/logger'
@@ -204,7 +197,7 @@ function EventsInner() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
   const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
 
@@ -573,32 +566,62 @@ function EventsInner() {
         setCheckedInEvents((prev) => [event, ...prev])
       }
       
-      // Call standardized production check-in RPC
       Logger.journey('checkin', 'api:checkIn:call', { eventId: event.id })
-      const result = await apiClient.checkIn(event.id, {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        deviceInfo: { gpsAccuracy: 50 },
-      })
+      const outcome = await submitCheckIn(event.id, userLocation)
 
-      if (!result.success) {
-        // Rollback optimistic update
-        setCheckinStatuses((prev) => {
-          const next = { ...prev }
-          if (previousStatus) next[event.id] = previousStatus
-          else delete next[event.id]
-          return next
-        })
-        if (!hadCheckedInEvent) {
-          setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+      if (outcome.kind !== 'checkedIn') {
+        const alreadyIn = outcome.kind === 'refused' && outcome.alreadyCheckedIn
+        if (!alreadyIn) {
+          // Rollback optimistic update
+          setCheckinStatuses((prev) => {
+            const next = { ...prev }
+            if (previousStatus) next[event.id] = previousStatus
+            else delete next[event.id]
+            return next
+          })
+          if (!hadCheckedInEvent) {
+            setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+          }
+          feedback.error()
         }
-        Logger.error('events', 'Check-in error', { error: result.error })
-        feedback.error()
+        if (outcome.kind === 'timeout') {
+          Logger.warn('events', 'Check-in timed out', { eventId: event.id })
+          showTray({
+            title: 'Still checking you in',
+            message: 'This is taking longer than expected. Please try again.',
+            buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          })
+          return
+        }
+        /*
+         * The server's refusal, named — the same words and the same map the
+         * event screen offers (lib/checkInRefusal.ts). This tray used to say
+         * "Check-in failed" over the raw sentence for every refusal, and never
+         * offered directions to somebody standing in the wrong place.
+         */
+        const { refusal } = outcome
+        Logger.error('events', 'Check-in refused', { title: refusal.title })
         showTray({
-          title: 'Check-in failed',
-          message: result.error || 'Unknown error',
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          title: refusal.title,
+          message: refusal.message,
+          buttons: refusal.offerDirections
+            ? [
+                { label: 'Done', onPress: closeTray },
+                {
+                  label: 'Open Maps',
+                  variant: 'primary',
+                  onPress: () => {
+                    closeTray()
+                    void openInMaps(event)
+                  },
+                },
+              ]
+            : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
         })
+        if (alreadyIn) {
+          loadCheckinStatusesBatch()
+          loadCheckedInEvents()
+        }
         return
       }
 
@@ -616,15 +639,10 @@ function EventsInner() {
        * check-in, not instead of it — the reveal warning is the more
        * important sentence and goes first.
        */
-      const askIntent = result.data?.intentNeeded === true
+      const { askIntent } = outcome
       const closeAndAsk = () => {
         closeTray()
-        if (askIntent) {
-          router.push({
-            pathname: '/event-preferences/[eventId]',
-            params: { eventId: event.id, revealed: '0', askIntent: '1' },
-          })
-        }
+        if (askIntent) router.push(askIntentRoute(event.id))
       }
 
       /*
@@ -635,43 +653,17 @@ function EventsInner() {
        * you, and someone visible at a work meetup in March was visible at a
        * club in August without touching anything. The server now always creates
        * `revealed: false` and hands the preference back for the app to ask
-       * about.
-       *
-       * Asking rather than undoing is the point: there is no moment at which
-       * they are named before answering. Dismissing writes nothing, because the
-       * row is already false — and so does killing the app mid-prompt, which is
-       * the right way for this to fail.
-       *
-       * **The first one explains; the rest just ask.** Someone who set this in
-       * onboarding has agreed to a sentence on a settings screen, which is not
-       * the same as picturing their name and face in a room full of strangers.
-       * The first prompt spells out what becomes visible and to whom; after
-       * that the banner carries it, continuously, which is the better teacher
-       * anyway. `shouldWarnBeforePublicCheckIn` holds the three conditions.
+       * about. Dismissing writes nothing, because the row is already false.
+       * `revealOffer` decides whether this is the first, explaining, one.
        */
-      if (result.data?.revealSuggestion) {
-        const firstTime =
-          !!user?.id &&
-          shouldWarnBeforePublicCheckIn({
-            revealByDefault: true,
-            hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-            // Nothing to reveal means nothing to warn about — the same check
-            // the reveal switch makes before it offers itself.
-            // `User.image` is a mirror of `photos[0]`, written only by the
-            // profile PUT — so it is the same photo a reveal would show.
-            canReveal: revealReadiness({
-              name: userFirstName,
-              photos: user?.image ? [user.image] : [],
-            }).ok,
-          })
-        if (firstTime && user?.id) await markPublicCheckInWarningSeen(user.id)
-
+      if (outcome.revealSuggestion && user?.id) {
+        const offer = await revealOffer({ id: user.id, firstName: userFirstName, image: user.image })
         showTray({
-          title: firstTime ? PUBLIC_CHECKIN_WARNING.title : 'Show your name here?',
-          message: firstTime ? PUBLIC_CHECKIN_WARNING.body : revealPromptText(userFirstName),
+          title: offer.title,
+          message: offer.message,
           buttons: [
             {
-              label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
+              label: offer.confirm,
               variant: 'primary',
               onPress: () => {
                 closeAndAsk()
@@ -680,11 +672,11 @@ function EventsInner() {
                   .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
               },
             },
-            // Deliberately not "No" — nothing is being refused. Staying
-            // anonymous is the state they are already in.
-            { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeAndAsk },
+            { label: offer.cancel, onPress: closeAndAsk },
           ],
         })
+        loadCheckinStatusesBatch()
+        loadCheckedInEvents()
         return
       }
 
@@ -839,7 +831,7 @@ function EventsInner() {
     setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
 
     try {
-      const result = await apiClient.checkOut(String(event.id))
+      const result = await checkOutOf(String(event.id))
       if (result.success) {
         feedback.success()
         showTray({
@@ -1009,7 +1001,7 @@ function EventsInner() {
       }
       setLocationStatus('granted')
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
@@ -1048,7 +1040,7 @@ function EventsInner() {
           try {
             const lastKnown = await Location.getLastKnownPositionAsync()
             if (lastKnown?.coords) {
-              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude })
+              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude, accuracy: lastKnown.coords.accuracy })
             }
           } catch {}
           // Defer live GPS to avoid blocking startup render

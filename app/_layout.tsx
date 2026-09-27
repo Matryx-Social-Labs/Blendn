@@ -15,7 +15,8 @@ import {
     setupNotificationResponseListener
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
-import { ONBOARDING_ROUTES, resumeStep } from '../lib/onboarding';
+import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
+import { setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
@@ -186,7 +187,17 @@ function RootLayout() {
   }, [user, loading]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) {
+      setRouteReady(false);
+      return;
+    }
+    /*
+     * Set when this effect is superseded. `run` awaits `readOnboarding`, and a
+     * notification tapped on a cold start pushes its screen during that await;
+     * the stale run then went on to `replace('/(tabs)/events')` over it, with
+     * `pathname` still the '/' it closed over. A newer run owns routing now.
+     */
+    let superseded = false;
     const run = async () => {
       const isIndex = pathname === '/' || pathname === '/index';
       /*
@@ -223,6 +234,7 @@ function RootLayout() {
         (__DEV__ && pathname.startsWith('/preview'));
 
       if (!user) {
+        setRouteReady(false);
         // Not authenticated → send to login index, unless already somewhere
         // a signed-out user is meant to be
         if (!isAuthRoute) {
@@ -317,24 +329,41 @@ function RootLayout() {
          * Routing has one owner. The screens now record *what happened*
          * (`isNewAccount`) and this decides where that leads.
          */
+        setRouteReady(false);
         const stored = user?.id ? await readOnboarding(user.id) : null;
+        if (superseded) return;
         const resume = resumeStep({
-          // Only what this device knows. Reading `profiles.onboarded` would be
-          // the network call the note above says this path no longer makes —
-          // and a finished flow deletes its local record, so its absence
-          // already means "nothing to resume".
-          finishedOnServer: false,
+          // Both server facts come on the user object the session call already
+          // returned, so reading them costs no request. `mayParticipate` is
+          // what catches an account that quit onboarding on another install.
+          finishedOnServer: user.profile?.onboarded === true,
           stored: stored?.progress ?? null,
           isNewAccount,
+          mayParticipate: mayParticipate(user.profile),
         });
         replaceIfNeeded(resume ? ONBOARDING_ROUTES[resume] : '/(tabs)/events');
       } else {
         // Clear last target if user navigated to a normal screen
         lastRedirectRef.current = null;
+        /*
+         * Signed in and on an ordinary screen: the one moment a waiting
+         * notification target can open. Reached after the redirect to the
+         * events tab and after onboarding's last step alike, so neither has
+         * to know about it. Not during onboarding, which is not finished.
+         */
+        const inOnboarding = pathname.startsWith('/onboarding');
+        setRouteReady(!inOnboarding);
+        if (!inOnboarding) {
+          const waiting = takePendingRoute();
+          if (waiting) router.push(waiting);
+        }
       }
     };
 
     run();
+    return () => {
+      superseded = true;
+    };
     // replaceIfNeeded is redefined every render; adding it here would rerun
     // this effect (and its routing decisions) on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -474,22 +503,6 @@ function RootLayout() {
           animation: 'fade',
           gestureEnabled: false // Prevent swipe back to login
         }} 
-      />
-      <Stack.Screen
-        name="about-you"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-          /*
-           * Back is disabled, and "Skip for now" is the way out.
-           *
-           * Not the hard gate onboarding was: skipping writes nothing and lands
-           * on the events tab. What this prevents is swiping back to the signup
-           * form of an account that now exists, which would offer to create it
-           * again and fail with "that email is already registered".
-           */
-          gestureEnabled: false,
-        }}
       />
       <Stack.Screen
         name="onboarding"

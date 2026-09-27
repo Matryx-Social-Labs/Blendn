@@ -167,10 +167,17 @@ Nearby, Nightlife and search.
 Going is about **your** events rather than the catalogue, so it is useful from
 the first day and grows on its own.
 
-Today it is the old `app/interested.tsx`, moved into the tab and stripped of the
-back chevron it carried as a pushed route. Attending and past-with-rating are
-the next two sections, and **`rate/[eventId]` — built, linked from nowhere —
-belongs in the third.**
+It has three sections (`goingItems` in `lib/savedEvents.ts`):
+
+- **Going** — your `going` and `waitlisted` RSVPs, from `GET /me/rsvps`, soonest
+  first; a waitlist place says so on the card.
+- **Saved** — your hearts, minus anything already under Going.
+- **Past** — events you attended that have ended, from `GET /me/attendance`,
+  each with **Rate people you met** → `rate/[eventId]`. The event screen's CTA
+  also opens it once an event you attended is over.
+
+A server that predates `/me/rsvps` answers 404 and the tab simply has no Going
+section.
 
 When the catalogue justifies Explore, **Going moves into Me** — it is your data —
 and Explore takes the slot. No re-drawing.

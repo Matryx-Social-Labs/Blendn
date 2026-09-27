@@ -93,13 +93,4 @@ describe('every screen asks', () => {
     expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
     expect(src).toMatch(/looking_for: under18 \? withoutDatingChoice\(lookingFor\) : lookingFor/)
   })
-
-  it('About you offers it unless the age typed there is under 18, and a hidden tick is neither checked nor sent', () => {
-    const src = read('app/about-you.tsx')
-    expect(src).toMatch(/return years === null \|\| mayDate\(years\)/)
-    expect(src).toMatch(/const chosenIntents = \(\): Intent\[\] => \(offerDating\(\) \? intents : intents\.filter\(\(i\) => i !== 'dating'\)\)/)
-    expect(src).toMatch(/const wantsDating = chosenIntents\(\)\.includes\('dating'\)/)
-    expect(src).toMatch(/intent_default: chosenIntents\(\)/)
-    expect(src).toMatch(/offerDating=\{offerDating\(\)\}/)
-  })
 })

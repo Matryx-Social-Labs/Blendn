@@ -169,31 +169,7 @@ export async function getEvent(eventId: string, params?: { lat?: number; lon?: n
 
 // ============== CHECK-IN ==============
 
-export async function checkInToEvent(
-  eventId: string,
-  _userId: string,
-  latitude: number,
-  longitude: number,
-  gpsAccuracy?: number
-) {
-  const result = await apiClient.checkIn(eventId, {
-    latitude,
-    longitude,
-    deviceInfo: { gpsAccuracy },
-  })
-  if (result.success) {
-    return { data: { success: true, message: 'Checked in successfully' }, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Check-in failed' } }
-}
-
-export async function checkOutFromEvent(eventId: string) {
-  const result = await apiClient.checkOut(eventId)
-  if (result.success) {
-    return { success: true, message: 'Checked out successfully' }
-  }
-  return { success: false, message: result.error || 'Checkout failed' }
-}
+// Checking in and out lives in lib/checkIn.ts.
 
 export async function getCheckinStatus(eventId: string) {
   // Get check-in status from batch endpoint
