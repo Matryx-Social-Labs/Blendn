@@ -43,6 +43,8 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import Animated from 'react-native-reanimated'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface PrivateMessage {
   id: string
@@ -758,9 +760,18 @@ function PrivateChatInner() {
         />
 
         {showScrollToBottom && (
-          <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
-          </TouchableOpacity>
+          <Animated.View entering={popIn} exiting={popOut} style={styles.scrollToBottomBtn}>
+            <TouchableOpacity
+              style={styles.scrollToBottomHit}
+              onPress={() => scrollToBottom(true)}
+              activeOpacity={0.8}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to the newest message"
+            >
+              <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
         <ChatComposer
@@ -837,6 +848,7 @@ const styles = StyleSheet.create({
   // Input bar — WhatsApp style: simple, no icons
 
   // Scroll to bottom
+  scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
     position: 'absolute',
     right: 16,

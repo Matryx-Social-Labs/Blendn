@@ -90,6 +90,8 @@ import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { RisingSheet } from '../../components/motion/RisingSheet'
+import Animated from 'react-native-reanimated'
+import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
 
 /*
  * Distance in METRES, not kilometres.
@@ -2083,7 +2085,7 @@ function EventsInner() {
   const banners = (
           <View style={styles.filtersBar}>
             {showPreviewHint && (
-              <View style={styles.bannerInfo}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
                   Tip: Long-press any event card for quick actions.
                 </Text>
@@ -2095,7 +2097,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Got it</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {/*
               Offline is worth saying here. A dead socket is not.
@@ -2118,7 +2120,7 @@ function EventsInner() {
               showSocketIssues={false}
             />
             {switchSuggestion && (
-              <View style={styles.bannerInfo}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
                   You&apos;re in {switchSuggestion}. Browse events here?
                 </Text>
@@ -2130,7 +2132,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Switch</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {/*
               Where you are, when there is nothing to be done about it.
@@ -2152,19 +2154,19 @@ function EventsInner() {
               every combination rather than leaving it to inspection.
             */}
             {away && (
-              <View style={styles.bannerNeutral}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerNeutral}>
                 <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
                 <Text style={styles.bannerNeutralText}>
                   You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
                 </Text>
-              </View>
+              </Animated.View>
             )}
             {/*
               Not while the Nearby section is showing its own "Open Settings"
               prompt (unnarrowed, no location): one ask, not two on one screen.
             */}
             {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
-              <View style={styles.bannerWarn}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerWarn}>
                 <Text style={styles.bannerText}>
                   Enable Location to show nearby events and check-in.
                 </Text>
@@ -2176,10 +2178,10 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Enable</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {!!netError && (
-              <View style={styles.bannerError}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerError}>
                 <Text style={styles.bannerText}>{netError}</Text>
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -2189,7 +2191,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Retry</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
           </View>
   )
