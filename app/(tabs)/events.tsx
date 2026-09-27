@@ -5,7 +5,6 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated as RNAnimated,
   Dimensions,
   AppState,
   FlatList,
@@ -80,7 +79,6 @@ import {
 } from '../../lib/roomVisibilityStorage'
 import { apiClient } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -279,9 +277,7 @@ function EventsInner() {
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
-  const { setScrollProgress } = useGradientOverlay()
   const listRef = useRef<any>(null)
-  const scrollY = useRef(new RNAnimated.Value(0)).current
   const [netError, setNetError] = useState<string | null>(null)
 
   /*
@@ -1037,12 +1033,10 @@ function EventsInner() {
 
   const onScroll = useCallback((e: any) => {
     const y = e.nativeEvent.contentOffset.y
-    scrollY.setValue(y)
-    setScrollProgress(y, 320)
     if (!locationRequestedRef.current && y > 180) {
       requestLocationIfNeeded(false)
     }
-  }, [setScrollProgress, requestLocationIfNeeded, scrollY])
+  }, [requestLocationIfNeeded])
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -2226,17 +2220,6 @@ function EventsInner() {
    */
   const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
 
-  const sectionLiftY = scrollY.interpolate({
-    inputRange: [0, 300],
-    outputRange: [0, -8],
-    extrapolate: 'clamp',
-  })
-  const sectionOpacity = scrollY.interpolate({
-    inputRange: [0, 320],
-    outputRange: [1, 0.94],
-    extrapolate: 'clamp',
-  })
-
   return (
     /*
      * A plain `View`, not a `SafeAreaView`.
@@ -2547,37 +2530,29 @@ function EventsInner() {
                   comes back as a section the day it has a frame.
                 */}
                 {!isNarrowed ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
-                      {renderFeaturedRow()}
-                    </FadeInUp>
-                  </RNAnimated.View>
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
+                    {renderFeaturedRow()}
+                  </FadeInUp>
                 ) : null}
 
                 {!isNarrowed && upcomingItems.length > 0 ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
-                      {renderUpcomingStack()}
-                    </FadeInUp>
-                  </RNAnimated.View>
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
+                    {renderUpcomingStack()}
+                  </FadeInUp>
                 ) : null}
 
                 {isNarrowed
                   ? null
                   : userLocation
                   ? (nearbyItems.length > 0 ? (
-                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                        {renderNearbyList(nearbyItems.slice(0, 4))}
-                      </FadeInUp>
-                    </RNAnimated.View>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                      {renderNearbyList(nearbyItems.slice(0, 4))}
+                    </FadeInUp>
                   ) : null)
                   : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? (
-                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                        {renderNearbyPrompt()}
-                      </FadeInUp>
-                    </RNAnimated.View>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                      {renderNearbyPrompt()}
+                    </FadeInUp>
                   ) : null)}
                 <View style={{ height: 8 }} />
               </View>

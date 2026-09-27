@@ -133,7 +133,6 @@ blendn/
 │   ├── photoUtils.ts           # Image resize/upload helpers
 │   ├── networkStatus.ts        # Online/offline state
 │   ├── globalText.ts           # Global Text component overrides
-│   ├── gradientOverlay.tsx     # Gradient context provider
 │   ├── logger.ts               # Structured logger
 │   ├── motion.ts               # Animation presets
 │   ├── safetyUtils.ts          # User blocking/safety helpers

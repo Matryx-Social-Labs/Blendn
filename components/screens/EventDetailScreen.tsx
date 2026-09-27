@@ -10,9 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  Animated as RNAnimated,
   Dimensions,
-  Easing,
   InteractionManager,
   Linking,
   Modal,
@@ -238,7 +236,6 @@ export default function EventDetail() {
     buttons: [],
   })
   const lastFetchRef = React.useRef<number>(0)
-  const actionMorph = React.useRef(new RNAnimated.Value(0)).current
   const checkedInMorphTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
   const [isOrganizer, setIsOrganizer] = useState(false)
@@ -1197,15 +1194,6 @@ export default function EventDetail() {
   }, [eventChatGroupId, event?.title, id])
 
   useEffect(() => {
-    const animateTo = (toValue: number, duration: number) => {
-      RNAnimated.timing(actionMorph, {
-        toValue,
-        duration,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start()
-    }
-
     if (checkedInMorphTimeoutRef.current) {
       clearTimeout(checkedInMorphTimeoutRef.current)
       checkedInMorphTimeoutRef.current = null
@@ -1213,15 +1201,12 @@ export default function EventDetail() {
 
     if (!isCheckedIn) {
       setActionStage('blend')
-      animateTo(0, 220)
       return
     }
 
     setActionStage('checked')
-    animateTo(1, 220)
     checkedInMorphTimeoutRef.current = setTimeout(() => {
       setActionStage('chat')
-      animateTo(2, 260)
     }, 900)
 
     return () => {
@@ -1230,7 +1215,7 @@ export default function EventDetail() {
         checkedInMorphTimeoutRef.current = null
       }
     }
-  }, [isCheckedIn, actionMorph])
+  }, [isCheckedIn])
 
 
   /*

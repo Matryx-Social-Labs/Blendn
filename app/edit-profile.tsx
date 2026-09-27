@@ -22,7 +22,6 @@ import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
 import { EMBER, EMBER_FONTS } from '../lib/theme'
@@ -120,7 +119,6 @@ export default function EditProfile() {
   const [tagInputTitle, setTagInputTitle] = useState('')
   const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
   const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
-  const { setScrollProgress } = useGradientOverlay()
   const scrollRef = useRef<ScrollView>(null)
   const basicInfoY = useRef(0)
   const nameInputRef = useRef<TextInput>(null)
@@ -463,8 +461,6 @@ export default function EditProfile() {
           ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
-          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
-          scrollEventThrottle={16}
         >
           {/* Photos Card */}
           <View style={styles.card}>

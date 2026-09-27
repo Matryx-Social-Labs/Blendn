@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   Modal,
   Pressable,
   StyleSheet,
@@ -9,6 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { useReducedMotion } from 'react-native-reanimated'
+import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
 import { APP_COLORS, APP_CTA, APP_RADIUS, APP_SIZE, APP_SPACING } from '../lib/theme'
 import { TRAY_SPECS, type TraySize } from '../lib/uxStandards'
 
@@ -65,16 +68,24 @@ export default function ActionTray({
   const config = TRAY_SPECS[size]
   const opacity = useRef(new Animated.Value(0)).current
   const translateY = useRef(new Animated.Value(40)).current
+  const reduceMotion = useReducedMotion()
 
+  /*
+   * Arrives on an ease-out: fast at the start, where the eye is, settling at
+   * the end. Core Animated's default is ease-in-out, which spends the first
+   * frames barely moving. Reduce Motion keeps the fade and drops the 40pt rise.
+   * The exit is the Modal's own fade.
+   */
   useEffect(() => {
     if (!visible) return
+    const easing = Easing.bezier(...MOTION_EASING.entrance)
     opacity.setValue(0)
-    translateY.setValue(40)
+    translateY.setValue(reduceMotion ? 0 : 40)
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: MOTION_DURATION.fast, easing, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: MOTION_DURATION.normal, easing, useNativeDriver: true }),
     ]).start()
-  }, [visible, opacity, translateY])
+  }, [visible, opacity, translateY, reduceMotion])
 
   const canDismiss = dismissible && !buttons.some((button) => button.loading)
 

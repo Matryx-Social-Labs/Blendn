@@ -15,6 +15,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "CADisableMinimumFrameDurationOnPhone": true,
         "GIDClientID": "689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6.apps.googleusercontent.com",
         "NSLocationWhenInUseUsageDescription": "Blend'n uses your location to show nearby events and validate on-site check-ins.",
         "NSCameraUsageDescription": "Blend'n uses your camera to let you take photos for your profile.",
