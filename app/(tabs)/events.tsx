@@ -1936,6 +1936,12 @@ function EventsInner() {
             requestLocationIfNeeded(true)
           }
         }}
+        accessibilityRole="button"
+        accessibilityHint={
+          locationStatus === 'denied'
+            ? 'Opens Settings so you can allow location'
+            : 'Asks for your location to show events near you'
+        }
       >
         <Text style={styles.nearbyCtaText}>
           {locationStatus === 'denied' ? 'Open Settings' : 'Enable Location'}
@@ -2600,13 +2606,19 @@ function EventsInner() {
         transparent
         onRequestClose={() => setCityPickerOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.cityPickerBackdrop}
-          activeOpacity={1}
-          onPress={() => setCityPickerOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close city picker"
-        >
+        {/*
+          The dismiss target is a sibling behind the sheet, not its parent.
+          Wrapping the sheet made it one accessible element (VoiceOver could
+          not reach a single city) and closed it on any tap on its padding.
+        */}
+        <View style={styles.cityPickerBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setCityPickerOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close city picker"
+          />
           <View style={styles.cityPickerSheet}>
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
@@ -2681,7 +2693,7 @@ function EventsInner() {
               />
             )}
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       <FilterSheet

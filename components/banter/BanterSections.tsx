@@ -105,7 +105,13 @@ export function BanterHeading({
         {title}
       </Text>
       {action ? (
-        <Pressable onPress={onAction} accessibilityRole="button" hitSlop={8}>
+        // 24pt of text + 10 above and below is the 44pt minimum, without
+        // growing the heading row the frame draws at 24.
+        <Pressable
+          onPress={onAction}
+          accessibilityRole="button"
+          hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+        >
           <Text style={styles.headingAction} maxFontSizeMultiplier={1.4}>
             {action}
           </Text>

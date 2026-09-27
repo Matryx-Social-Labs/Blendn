@@ -159,7 +159,21 @@ function GoingScreenInner() {
   }, [])
 
   const renderItem = useCallback(({ item }: { item: EventRow }) => (
-    <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}>
+    // The cover is the "open" target and the chips are its siblings: a card that
+    // was itself a touchable made VoiceOver read it as one element, so the four
+    // actions inside it could not be reached.
+    <View style={styles.card}>
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}
+        accessibilityRole="button"
+        accessibilityLabel={[
+          item.title,
+          item.venue_name,
+          formatEventDateTime(item.start_time),
+          item.status === 'cancelled' ? 'Cancelled by the organiser' : null,
+        ].filter(Boolean).join(', ')}
+        accessibilityHint="Opens the event"
+      >
       <EventCover uri={item.cover_image_url} height={180} retry={refreshCount}>
         <View style={styles.overlayContent}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
@@ -170,25 +184,26 @@ function GoingScreenInner() {
           ) : null}
         </View>
       </EventCover>
+      </TouchableOpacity>
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel="Remove from saved">
+        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel={`Remove ${item.title} from saved`}>
           <Ionicons name="heart-dislike" size={16} color={APP_COLORS.destructive} />
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
           <Ionicons name="navigate" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Open in Maps</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
           <Ionicons name="calendar" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Add to calendar</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
           <Ionicons name="share-social" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
@@ -276,7 +291,7 @@ const styles = StyleSheet.create({
   time: { color: APP_COLORS.textSecondary, marginTop: 2, fontSize: 12 },
   cancelled: { color: APP_COLORS.destructive, marginTop: 4, fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: APP_COLORS.backgroundElevated },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16 },
+  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 12, minHeight: 44, borderRadius: 22 },
   actionText: { color: APP_COLORS.textPrimary, fontSize: 12 },
 })
 

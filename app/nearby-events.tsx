@@ -196,11 +196,17 @@ export default function NearbyEventsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nearby Events</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle} accessibilityRole="header">Nearby Events</Text>
+        {/* The back button's width less its -6 margin, so the title stays centred. */}
+        <View style={{ width: 38 }} />
       </View>
 
       {loading ? (
@@ -265,7 +271,9 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 10,
   },
-  backBtn: { padding: 4 },
+  // 44pt target; the negative margin keeps the chevron where the old 4pt
+  // padding put it.
+  backBtn: { width: 44, height: 44, marginLeft: -6, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
