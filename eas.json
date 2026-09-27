@@ -29,7 +29,8 @@
         "image": "macos-sequoia-15.6-xcode-26.0"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"]
       }
     },
     "production": {
@@ -39,7 +40,8 @@
         "image": "macos-sequoia-15.6-xcode-26.0"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"]
       }
     }
   },

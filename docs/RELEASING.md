@@ -701,6 +701,107 @@ Do **not** put the JSON path in `eas.json`. A path only works on the machine
 holding the file, which is the opposite of what a workflow needs — and unlike
 the `EXPO_PUBLIC_*` values, this one is a real secret.
 
+### R8 is on for release builds, and it can break a build that compiles
+
+Play Console scored bundle 15 **"DEX code optimisation: Low"**: 2% obfuscated,
+no optimisation, no shrinking, 31.2 MB of uncompressed DEX. R8 had never run.
+`android/app/build.gradle` reads `android.enableProguardInReleaseBuilds` and
+`android.enableShrinkResourcesInReleaseBuilds`, nothing set either, and both
+fell through to `false`. They are now set in `android/gradle.properties` (not
+through `expo-build-properties`: see "The native directories are committed"),
+and the release build type uses `proguard-android-optimize.txt`. Plain
+`proguard-android.txt` carries `-dontoptimize`.
+
+Play's figures for bundle 15, against a local R8 build of `dev` at 5390f5b
+(`r8.json` in the bundle, below):
+
+| | bundle 15 | R8 on |
+|---|---|---|
+| Uncompressed DEX | 31.2 MB | 9.1 MB |
+| Obfuscated | 2% | 86% |
+| Optimised | – | 66% |
+| Shrunk | – | 85% |
+
+**The first R8 build crashed before its first screen, and the error pointed at
+the wrong thing.** The crash read:
+
+```
+TypeError: Cannot read property 'ErrorBoundary' of undefined
+    at ContextNavigator … at ExpoRoot
+```
+
+That is expo-router finding `app/_layout.tsx` undefined. Metro reports a
+module that throws while loading to the global error handler and hands back
+`undefined`; Sentry's handler takes that first error, so it never reaches
+logcat, and the `ErrorBoundary` line is only the aftermath. With the Sentry DSN
+blanked the real error showed:
+
+```
+Call to function 'ExpoSplashScreen.setOptions' has been rejected.
+→ The 1st argument cannot be cast to type expo.modules.splashscreen.SplashScreenOptions
+→ java.lang.NullPointerException
+```
+
+Every JS object passed to an Expo module becomes a Kotlin `Record` through
+kotlin-reflect (`property.javaField!!`). R8's optimiser rewrote kotlin-reflect's
+internals and `javaField` came back null. This is expo/expo#28010, whose answer
+was `-dontoptimize` for the whole app. `android/app/proguard-rules.pro` instead
+keeps the optimiser off `kotlin.reflect.jvm.internal.**` and
+`kotlin.jvm.internal.**` only. Those are still shrunk and obfuscated; everything
+else is optimised. That rule costs 0.7 MB of DEX and is why "Optimised" reads
+66% rather than 83%.
+
+**So an R8 change, or a new native dependency, is tested by launching a release
+build, never by it compiling:**
+
+```bash
+cd android
+SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew bundleRelease assembleRelease \
+  -PreactNativeArchitectures=arm64-v8a      # one ABI: R8 does not care, and it is 4x faster
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+Then drive it, because a class R8 broke fails only when something first calls
+it. If it crashes:
+
+- **Build a control without R8** from the same checkout:
+  `-Pandroid.enableProguardInReleaseBuilds=false -Pandroid.enableShrinkResourcesInReleaseBuilds=false`
+  on the same command. It launches → R8 is the cause. It crashes too → R8 is not.
+- **Blank `EXPO_PUBLIC_SENTRY_DSN`** in `.env.local` and delete
+  `android/app/build/generated/assets/createBundleReleaseJsAndAssets` so the JS
+  re-bundles without Sentry. The first error then reaches logcat. Put the DSN
+  back afterwards.
+- **Bisect** with `proguard-android.txt` (optimiser off). If that launches, the
+  optimiser is the cause and a keep rule scoped to the affected package is the fix.
+
+**Checking a build without Play Console:**
+
+```bash
+AAB=android/app/build/outputs/bundle/release/app-release.aab
+unzip -l $AAB | grep -E '\.dex$' | awk '{s+=$1} END {print s}'      # DEX bytes
+unzip -p $AAB BUNDLE-METADATA/com.android.tools/r8.json              # the percentages Play shows
+unzip -l $AAB | grep obfuscation/proguard.map                        # the mapping Play reads
+```
+
+**Resources.** The resource shrinker cannot see JS asking for an image or a font
+by name, but React Native's bundle step writes `res/raw/keep.xml` listing every
+JS asset, so none are removed. `mapping/release/resources.txt` ends with the
+"Unused resources are:" list if that is ever in doubt.
+
+**Crash reports.** Play reads the R8 mapping from inside the bundle, so Android
+vitals stays readable with no upload. Sentry does not: a *native Java* crash in
+Sentry shows obfuscated names. JS errors are unaffected (Hermes bytecode, not
+R8). EAS keeps each store build's `mapping.txt` as a build artifact
+(`buildArtifactPaths` in `eas.json`); download it from the build page and
+retrace with it. Uploading it automatically needs the Sentry Android Gradle
+plugin, which is not installed.
+
+**Rollback** is both properties back to `false`. The next build is the old one.
+
+**Not fixable here:** Play's "R8 configuration: upgrade to AGP 9.0" row. Expo
+SDK 53 pins AGP 8.8.2, so that row stays "–" until an SDK upgrade. iOS has no
+equivalent score; Xcode's Release defaults already optimise and strip.
+
 ## One-time setup
 
 1. **App Store Connect API key.** Users and Access → Integrations → App Store
