@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { SavedEventsPayload } from './savedEvents'
+import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
@@ -1906,6 +1906,20 @@ class ApiClientClass {
    */
   async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
     return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
+  }
+
+  /**
+   * Your upcoming `going` and `waitlisted` RSVPs, soonest first. `/me`-scoped:
+   * there is no way to ask for somebody else's. A server older than this route
+   * answers 404, which the Going tab reads as "no section", not as a failure.
+   */
+  async getMyRsvps(): Promise<ApiResponse<RsvpEventsPayload>> {
+    return this.queuedRequest<RsvpEventsPayload>('/api/mobile/me/rsvps?limit=50')
+  }
+
+  /** The events you attended, most recent first. `/me`-scoped, like the above. */
+  async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
+    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
   }
 
   // === CHAT ENDPOINTS ===
