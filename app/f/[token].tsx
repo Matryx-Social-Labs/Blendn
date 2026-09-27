@@ -104,13 +104,16 @@ export default function InviteScreen() {
           <ActivityIndicator color={EMBER.textSecondary} />
         ) : (
           <>
-            {person.photo ? (
-              <OptimizedImage source={person.photo} style={styles.photo} width={PHOTO} height={PHOTO} contentFit="cover" />
-            ) : (
-              <View style={[styles.photo, styles.photoEmpty]}>
-                <Text variant="display">{(person.name[0] ?? '?').toUpperCase()}</Text>
-              </View>
-            )}
+            {/* Decorative: the name under it says who this is. */}
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {person.photo ? (
+                <OptimizedImage source={person.photo} style={styles.photo} width={PHOTO} height={PHOTO} contentFit="cover" />
+              ) : (
+                <View style={[styles.photo, styles.photoEmpty]}>
+                  <Text variant="display">{(person.name[0] ?? '?').toUpperCase()}</Text>
+                </View>
+              )}
+            </View>
             <Text variant="title" style={styles.centerText} accessibilityRole="header">{person.name}</Text>
             <Text variant="body" color={EMBER.textSecondary} style={styles.centerText}>
               {state ? inviteLine(state) : null}

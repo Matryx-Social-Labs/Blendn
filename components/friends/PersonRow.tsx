@@ -31,13 +31,16 @@ export function PersonRow({
 }) {
   const body = (
     <>
-      {person.photo ? (
-        <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
-      ) : (
-        <View style={[styles.avatar, styles.avatarEmpty]}>
-          <Text variant="heading">{(person.name[0] ?? '?').toUpperCase()}</Text>
-        </View>
-      )}
+      {/* Decorative: the name beside it says who this is. */}
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {person.photo ? (
+          <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
+        ) : (
+          <View style={[styles.avatar, styles.avatarEmpty]}>
+            <Text variant="heading">{(person.name[0] ?? '?').toUpperCase()}</Text>
+          </View>
+        )}
+      </View>
       <View style={styles.text}>
         <Text variant="bodyStrong" numberOfLines={1} maxFontSizeMultiplier={1.4}>{person.name}</Text>
         {detail ? <Text variant="meta" numberOfLines={1} maxFontSizeMultiplier={1.3}>{detail}</Text> : null}

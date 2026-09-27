@@ -32,7 +32,23 @@ describe('after onboarding', () => {
   })
 })
 
+describe('after "Bring your friends"', () => {
+  it('cannot go back into the finished onboarding steps', () => {
+    // The steps push forward, so they are still on the stack underneath.
+    expect(read('app/onboarding/_layout.tsx')).toContain('<Stack.Screen name="friends" options={{ gestureEnabled: false }} />')
+    const intro = read('app/onboarding/friends.tsx')
+    expect(intro).toContain("BackHandler.addEventListener('hardwareBackPress'")
+    expect(intro).toMatch(/hardwareBackPress', \(\) => \{\s*router\.replace\('\/\(tabs\)\/events'\)\s*return true/)
+  })
+})
+
 describe('an invite link', () => {
+  it('opened by an account that has not finished onboarding waits for it', () => {
+    const layout = read('app/_layout.tsx')
+    const signedIn = layout.slice(layout.indexOf("if (pathname.startsWith('/f/')) {"))
+    expect(signedIn).toMatch(/resumeStep\(\{[\s\S]*?\}\);\s*if \(resume\) \{\s*setRouteReady\(false\);\s*openWhenReady\(pathname as Href\);\s*replaceIfNeeded\(ONBOARDING_ROUTES\[resume\]\);/)
+  })
+
   it('opened while signed out is held and opened once they are in', () => {
     const layout = read('app/_layout.tsx')
     const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))

@@ -1,5 +1,6 @@
-import { router } from 'expo-router'
-import { useState } from 'react'
+import { router, useFocusEffect } from 'expo-router'
+import { useCallback, useState } from 'react'
+import { BackHandler } from 'react-native'
 
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
@@ -24,6 +25,22 @@ export default function FriendsIntroScreen() {
   const [shared, setShared] = useState(false)
 
   const enterApp = () => router.replace('/(tabs)/events')
+
+  /*
+   * Onboarding is finished by the time this shows, but its steps are still on
+   * the stack underneath (they push forward). Back must not reopen one: on
+   * Android the hardware back goes into the app instead, and on iOS the
+   * swipe is off for this screen (app/onboarding/_layout.tsx).
+   */
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.replace('/(tabs)/events')
+        return true
+      })
+      return () => sub.remove()
+    }, [])
+  )
 
   const shareLink = async () => {
     if (await share()) setShared(true)

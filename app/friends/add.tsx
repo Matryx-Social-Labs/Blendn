@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -31,7 +31,25 @@ export default function AddFriendsScreen() {
   const { showToast } = useToast()
   const [incoming, setIncoming] = useState<FriendRequest[]>([])
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([])
-  const [busy, setBusy] = useState<string | null>(null)
+  /*
+   * Per row, and checked synchronously. One shared id let a tap on another row
+   * re-enable this one mid-request; and state alone is read from the render
+   * the tap happened in, so a quick second tap before the re-render sent a
+   * second answer. The ref decides; the state only greys the buttons.
+   */
+  const inFlight = useRef(new Set<string>())
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
+  const once = async (id: string, work: () => Promise<void>) => {
+    if (inFlight.current.has(id)) return
+    inFlight.current.add(id)
+    setBusy(new Set(inFlight.current))
+    try {
+      await work()
+    } finally {
+      inFlight.current.delete(id)
+      setBusy(new Set(inFlight.current))
+    }
+  }
   const [refreshing, setRefreshing] = useState(false)
 
   const loadRequests = useCallback(async () => {
@@ -54,25 +72,23 @@ export default function AddFriendsScreen() {
     setRefreshing(false)
   }
 
-  const respond = async (request: FriendRequest, action: 'accept' | 'dismiss') => {
-    setBusy(request.id)
-    const result = await apiClient.respondToFriendRequest(request.id, action)
-    setBusy(null)
-    if (!result.success) {
-      showToast("That didn't go through. Try again.", 'error')
-      return
-    }
-    setIncoming((list) => list.filter((r) => r.id !== request.id))
-    if (action === 'accept') showToast(`You and ${request.person.name} are friends`, 'success')
-  }
+  const respond = (request: FriendRequest, action: 'accept' | 'dismiss') =>
+    once(request.id, async () => {
+      const result = await apiClient.respondToFriendRequest(request.id, action)
+      if (!result.success) {
+        showToast("That didn't go through. Try again.", 'error')
+        return
+      }
+      setIncoming((list) => list.filter((r) => r.id !== request.id))
+      if (action === 'accept') showToast(`You and ${request.person.name} are friends`, 'success')
+    })
 
-  const withdraw = async (request: FriendRequest) => {
-    setBusy(request.id)
-    const result = await apiClient.withdrawFriendRequest(request.id)
-    setBusy(null)
-    if (result.success) setOutgoing((list) => list.filter((r) => r.id !== request.id))
-    else showToast("That didn't go through. Try again.", 'error')
-  }
+  const withdraw = (request: FriendRequest) =>
+    once(request.id, async () => {
+      const result = await apiClient.withdrawFriendRequest(request.id)
+      if (result.success) setOutgoing((list) => list.filter((r) => r.id !== request.id))
+      else showToast("That didn't go through. Try again.", 'error')
+    })
 
   const confirmReset = () =>
     Alert.alert(
@@ -126,12 +142,11 @@ export default function AddFriendsScreen() {
               <PersonRow
                 key={request.id}
                 person={request.person}
-                detail="Wants to be friends"
                 trailing={
                   <View style={styles.actions}>
                     <ScalePress
                       onPress={() => void respond(request, 'dismiss')}
-                      disabled={busy === request.id}
+                      disabled={busy.has(request.id)}
                       haptic={false}
                       accessibilityRole="button"
                       accessibilityLabel={`Not now, ${request.person.name}`}
@@ -141,7 +156,7 @@ export default function AddFriendsScreen() {
                     </ScalePress>
                     <ScalePress
                       onPress={() => void respond(request, 'accept')}
-                      disabled={busy === request.id}
+                      disabled={busy.has(request.id)}
                       accessibilityRole="button"
                       accessibilityLabel={`Accept ${request.person.name}`}
                       style={[styles.pill, styles.accept]}
@@ -166,7 +181,7 @@ export default function AddFriendsScreen() {
                 trailing={
                   <ScalePress
                     onPress={() => void withdraw(request)}
-                    disabled={busy === request.id}
+                    disabled={busy.has(request.id)}
                     haptic={false}
                     accessibilityRole="button"
                     accessibilityLabel={`Withdraw request to ${request.person.name}`}

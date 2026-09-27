@@ -353,6 +353,28 @@ function RootLayout() {
         });
         replaceIfNeeded(resume ? ONBOARDING_ROUTES[resume] : '/(tabs)/events');
       } else {
+        /*
+         * An invite link opened by a signed-in account that has not finished
+         * onboarding: hold it and finish onboarding first, exactly as a
+         * signed-out tap is held until sign-in. The link opens once they are
+         * through. Other deep links keep the behaviour below.
+         */
+        if (pathname.startsWith('/f/')) {
+          const stored = user?.id ? await readOnboarding(user.id) : null;
+          if (superseded) return;
+          const resume = resumeStep({
+            finishedOnServer: user.profile?.onboarded === true,
+            stored: stored?.progress ?? null,
+            isNewAccount,
+            mayParticipate: mayParticipate(user.profile),
+          });
+          if (resume) {
+            setRouteReady(false);
+            openWhenReady(pathname as Href);
+            replaceIfNeeded(ONBOARDING_ROUTES[resume]);
+            return;
+          }
+        }
         // Clear last target if user navigated to a normal screen
         lastRedirectRef.current = null;
         /*
