@@ -4,17 +4,17 @@ import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import {
     Linking,
-    Pressable,
     Share,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View,
 } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import FadeInUp from '../../components/motion/FadeInUp'
+import ScalePress from '../../components/motion/ScalePress'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { DayHeading } from '../../components/ui/DayHeading'
@@ -239,8 +239,11 @@ function GoingScreenInner() {
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
     return (
       <View style={styles.hero}>
-        <Pressable
+        {/* Shrinks under the finger, no haptic: it sits at the top of a scroll. */}
+        <ScalePress
           onPress={() => openEvent(row.id)}
+          pressedScale={0.98}
+          haptic={false}
           accessibilityRole="button"
           accessibilityLabel={[
             row.title,
@@ -249,7 +252,6 @@ function GoingScreenInner() {
             cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : null,
           ].filter(Boolean).join(', ')}
           accessibilityHint="Opens the event"
-          style={({ pressed }) => pressed && styles.pressed}
         >
           <View style={styles.heroPhoto}>
             <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={EMBER_RADIUS.sm} retry={refreshCount} />
@@ -278,40 +280,48 @@ function GoingScreenInner() {
               </View>
             ) : null}
           </View>
-        </Pressable>
+        </ScalePress>
 
         {/*
           Directions carries its word; Calendar and Share are icons. Three
           labelled pills do not fit the 310pt inside the card at the body size —
           "Directions" alone needs ~120 of a third's ~98 — and the type scale has
           no smaller button label. No check-in here: that lives on the event.
+          They shrink under the finger but stay silent, as the buttons they
+          replaced were: no haptic on a card you pass while scrolling.
         */}
         <View style={styles.heroActions}>
-          <Pressable
-            style={({ pressed }) => [styles.heroAction, styles.heroActionWide, pressed && styles.pressed]}
+          <ScalePress
+            style={[styles.heroAction, styles.heroActionWide]}
+            pressedScale={0.95}
+            haptic={false}
             onPress={() => openInMaps(row)}
             accessibilityRole="button"
             accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
           >
             <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textPrimary} />
             <Text style={styles.heroActionText} numberOfLines={1}>Directions</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.heroAction, styles.heroActionIcon, pressed && styles.pressed]}
+          </ScalePress>
+          <ScalePress
+            style={[styles.heroAction, styles.heroActionIcon]}
+            pressedScale={0.95}
+            haptic={false}
             onPress={() => addToCalendar(row)}
             accessibilityRole="button"
             accessibilityLabel={`Add ${row.title} to calendar`}
           >
             <Ionicons name="calendar-outline" size={ICON.sm} color={EMBER.textPrimary} />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.heroAction, styles.heroActionIcon, pressed && styles.pressed]}
+          </ScalePress>
+          <ScalePress
+            style={[styles.heroAction, styles.heroActionIcon]}
+            pressedScale={0.95}
+            haptic={false}
             onPress={() => shareEvent(row)}
             accessibilityRole="button"
             accessibilityLabel={`Share ${row.title}`}
           >
             <Ionicons name="share-outline" size={ICON.sm} color={EMBER.textPrimary} />
-          </Pressable>
+          </ScalePress>
         </View>
       </View>
     )
@@ -447,10 +457,10 @@ function GoingScreenInner() {
           ))}
         </View>
       ) : items.length === 0 && loadFailed ? (
-        <View style={styles.empty}>
+        <FadeInUp style={styles.empty}>
           <Text style={styles.emptyTitle}>Couldn&apos;t load your events</Text>
           <Text style={styles.emptySub}>Check your connection and try again.</Text>
-          <TouchableOpacity
+          <ScalePress
             style={styles.retryButton}
             onPress={() => {
               setLoading(true)
@@ -459,32 +469,40 @@ function GoingScreenInner() {
             accessibilityRole="button"
           >
             <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+          </ScalePress>
+        </FadeInUp>
       ) : items.length === 0 ? (
-        <View style={styles.empty}>
+        <FadeInUp style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptySub}>Tap &quot;I&apos;m going&quot; or the heart on an event and it shows up here.</Text>
-          <TouchableOpacity
+          <ScalePress
             style={styles.retryButton}
             onPress={() => router.navigate('/(tabs)/events' as any)}
             accessibilityRole="button"
           >
             <Text style={styles.retryText}>Browse events</Text>
-          </TouchableOpacity>
-        </View>
+          </ScalePress>
+        </FadeInUp>
       ) : (
-        <Animated.FlatList
-          data={items}
-          itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          // The container already insets the home indicator; this clears the
-          // absolutely positioned tab bar on top of that.
-          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
-        />
+        /*
+         * The list fades up over the skeleton's place as one piece, instead of
+         * cutting in. One wrapper, not a stagger per row: the saved rows already
+         * own their `entering`/`exiting` and the reflow, and a wrapper mounted
+         * with the list can't replay on a focus refresh or a pull.
+         */
+        <FadeInUp style={styles.list}>
+          <Animated.FlatList
+            data={items}
+            itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // The container already insets the home indicator; this clears the
+            // absolutely positioned tab bar on top of that.
+            contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
+          />
+        </FadeInUp>
       )}
     </SafeAreaView>
   )
@@ -529,7 +547,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.accent,
   },
   retryText: { ...TYPE.button, color: EMBER.onGradient },
-  pressed: { opacity: 0.7 },
+  list: { flex: 1 },
 
   inset: { marginHorizontal: GUTTER },
   row: { marginHorizontal: GUTTER, marginTop: SPACE.md },

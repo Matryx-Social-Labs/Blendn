@@ -1,12 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useReducedMotion, withDelay, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
-import { RisingSheet } from '../motion/RisingSheet'
+import { RisingSheet, SheetModal } from '../motion/RisingSheet'
 
 /**
  * "A new spark." — frame `1141:5389`, *Connection Success*.
@@ -112,10 +112,8 @@ export function ConnectionSheet({
   const reduceMotion = useReducedMotion()
 
   return (
-    <Modal
+    <SheetModal
       visible={visible}
-      animationType="fade"
-      transparent
       onRequestClose={onDismiss}
       accessibilityViewIsModal
     >
@@ -183,7 +181,7 @@ export function ConnectionSheet({
           </Pressable>
         </View>
       </RisingSheet>
-    </Modal>
+    </SheetModal>
   )
 }
 
@@ -211,7 +209,8 @@ function Disc({
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: EMBER.backdrop },
+  // Transparent: `SheetModal` draws the dim and fades it on its own.
+  scrim: { flex: 1 },
   sheet: {
     backgroundColor: EMBER.bg,
     borderTopLeftRadius: EMBER_RADIUS.lg,

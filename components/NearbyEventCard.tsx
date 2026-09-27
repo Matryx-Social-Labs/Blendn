@@ -26,6 +26,8 @@ interface NearbyEventCardProps {
 }
 
 const ASPECT_RATIO = 363 / 249
+/** For placeholders that have to be this card's shape (nearby-events loading). */
+export const NEARBY_CARD_ASPECT = ASPECT_RATIO
 
 // Responsive implementation of Figma node 710:5216
 export default function NearbyEventCard({ event, width, onPress, onLongPress, timeLabel, locationLabel }: NearbyEventCardProps) {

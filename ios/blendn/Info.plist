@@ -60,6 +60,8 @@
 	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Blend'n uses your location to show nearby events and validate on-site check-ins.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Blend'n doesn't use motion or fitness data. A location component the app includes requires this description; Blend'n never asks for this permission.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Blend'n uses your photo library to let you choose photos for your profile.</string>
 	<key>NSUserActivityTypes</key>

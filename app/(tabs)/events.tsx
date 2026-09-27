@@ -10,7 +10,6 @@ import {
   FlatList,
   type LayoutChangeEvent,
   Linking,
-  Modal,
   RefreshControl,
   StyleSheet,
   Text,
@@ -85,7 +84,8 @@ import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
 import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
-import { RisingSheet } from '../../components/motion/RisingSheet'
+import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
+import { Grabber } from '../../components/ui/Grabber'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
 
@@ -138,6 +138,39 @@ const STACK_GAP = SPACE.xl
 
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
+/**
+ * Main-list rows that rise in on the first reveal: `initialNumToRender`'s worth,
+ * the rows that mount with the content. Later batches mount off-screen, where
+ * an entrance is invisible work.
+ */
+const MAIN_REVEAL_ROWS = 4
+
+/*
+ * A main-list row, rising in after the sections above it — once.
+ *
+ * The decision is taken at mount and frozen: flipping between a wrapper and no
+ * wrapper on a later render would remount the card and re-decode its photo.
+ * Only rows mounted by the first skeleton → content swap animate; a refetch
+ * keeps its rows mounted, and a row the list mounts later while scrolling
+ * finds the flag already cleared.
+ */
+function RevealRow({
+  index,
+  pending,
+  children,
+}: {
+  index: number
+  pending: React.RefObject<boolean>
+  children: React.ReactNode
+}) {
+  const [animate] = useState(() => pending.current && index < MAIN_REVEAL_ROWS)
+  if (!animate) return <>{children}</>
+  return (
+    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER * (4 + index)} distance={8}>
+      {children}
+    </FadeInUp>
+  )
+}
 
 const formatCarouselCardDate = (iso: string) => {
   try {
@@ -1663,8 +1696,11 @@ function EventsInner() {
     } catch {}
   }, [loading, page, userLocation, selectedCity, searchTerm])
 
+  // Cleared once the first content has committed; see `RevealRow`.
+  const mainRowsRevealPending = useRef(true)
+
   // Memoized render function for event items
-  const renderEventItem = useCallback(({ item: event }: { item: Event }) => {
+  const renderEventItem = useCallback(({ item: event, index }: { item: Event; index: number }) => {
     const checkinStatus = checkinStatuses[event.id]
     const proximity = proximityData[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
@@ -1673,21 +1709,23 @@ function EventsInner() {
     const isEnded = new Date(event.end_time).getTime() < Date.now()
 
     return (
-      <EventCard
-        event={event}
-        isCheckedIn={isCheckedIn}
-        canCheckIn={canCheckIn}
-        interested={interested}
-        isEnded={isEnded}
-        proximity={proximity}
-        interestCount={interestCounts[event.id]}
-        checkInLoading={!!checkInPending[event.id]}
-        interestLoading={!!interestPending[event.id]}
-        onPress={handleEventPress}
-        onLongPress={handleEventPreview}
-        onCheckIn={handleCheckIn}
-        onToggleInterest={toggleInterest}
-      />
+      <RevealRow index={index} pending={mainRowsRevealPending}>
+        <EventCard
+          event={event}
+          isCheckedIn={isCheckedIn}
+          canCheckIn={canCheckIn}
+          interested={interested}
+          isEnded={isEnded}
+          proximity={proximity}
+          interestCount={interestCounts[event.id]}
+          checkInLoading={!!checkInPending[event.id]}
+          interestLoading={!!interestPending[event.id]}
+          onPress={handleEventPress}
+          onLongPress={handleEventPreview}
+          onCheckIn={handleCheckIn}
+          onToggleInterest={toggleInterest}
+        />
+      </RevealRow>
     )
   }, [checkinStatuses, proximityData, interestStatuses, interestCounts, checkInPending, interestPending, handleEventPress, handleEventPreview, handleCheckIn, toggleInterest])
 
@@ -2086,6 +2124,9 @@ function EventsInner() {
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
+  useEffect(() => {
+    if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
+  }, [showLoadingSkeleton, mainListData.length])
 
   /*
    * The Pulse's headline, city line and search field.
@@ -2604,10 +2645,8 @@ function EventsInner() {
         Design is a placeholder, like the interest picker before it. See
         `docs/PLACEHOLDER_SCREENS.md`.
       */}
-      <Modal
+      <SheetModal
         visible={cityPickerOpen}
-        animationType="fade"
-        transparent
         onRequestClose={() => setCityPickerOpen(false)}
       >
         {/*
@@ -2624,6 +2663,7 @@ function EventsInner() {
             accessibilityLabel="Close city picker"
           />
           <RisingSheet style={styles.cityPickerSheet}>
+            <Grabber style={styles.cityPickerGrabber} />
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
             </Text>
@@ -2667,7 +2707,7 @@ function EventsInner() {
                   : 'No cities have published events yet. Turn on location to browse where you are.'}
               </Text>
             ) : (
-              <FlatList
+              <SheetFlatList
                 data={cityOptions}
                 keyExtractor={(item) => item.city}
                 renderItem={({ item }) => {
@@ -2698,7 +2738,7 @@ function EventsInner() {
             )}
           </RisingSheet>
         </View>
-      </Modal>
+      </SheetModal>
 
       <FilterSheet
         visible={filterSheetOpen}
@@ -3005,9 +3045,9 @@ const styles = StyleSheet.create({
    * every entry opens with the number of events it claims.
    */
 
+  // No fill: `SheetModal` draws the dim and fades it on its own.
   cityPickerBackdrop: {
     flex: 1,
-    backgroundColor: EMBER.backdrop,
     justifyContent: 'flex-end',
   },
   cityPickerSheet: {
@@ -3015,10 +3055,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: EMBER_RADIUS.lg,
     borderTopRightRadius: EMBER_RADIUS.lg,
     paddingHorizontal: GUTTER,
-    paddingTop: SPACE.xl,
+    // The grabber's own top inset, as the filter sheet's.
+    paddingTop: SPACE.md,
     paddingBottom: SPACE.xxl,
     maxHeight: '70%',
   },
+  cityPickerGrabber: { marginBottom: SPACE.lg },
   cityPickerTitle: {
     ...TYPE.heading,
     marginBottom: SPACE.lg,

@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -13,7 +13,7 @@ import {
   type When,
 } from '../../lib/eventFilters'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
-import { RisingSheet } from '../motion/RisingSheet'
+import { RisingSheet, SheetModal, SheetScrollView } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
 
 export interface CategoryOption {
@@ -61,7 +61,7 @@ export function FilterSheet({
   const count = activeFilterCount(draft)
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close filters" />
       <RisingSheet style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
         <Grabber />
@@ -82,7 +82,7 @@ export function FilterSheet({
           ) : null}
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.sheetBody}>
+        <SheetScrollView showsVerticalScrollIndicator={false} style={styles.sheetBody}>
           <Group label="What">
             <Chip
               label="Anything"
@@ -136,7 +136,7 @@ export function FilterSheet({
               ))}
             </Group>
           ) : null}
-        </ScrollView>
+        </SheetScrollView>
 
         <Pressable
           onPress={onApply}
@@ -147,7 +147,7 @@ export function FilterSheet({
           <Text style={styles.applyText}>Show results</Text>
         </Pressable>
       </RisingSheet>
-    </Modal>
+    </SheetModal>
   )
 }
 
@@ -221,7 +221,8 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 
 const styles = StyleSheet.create({
 
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.backdrop },
+  // Transparent: `SheetModal` draws the dim and fades it on its own.
+  backdrop: { ...StyleSheet.absoluteFill },
   sheet: {
     position: 'absolute',
     left: 0,

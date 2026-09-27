@@ -1,6 +1,8 @@
 import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, StyleSheet, Text, View } from 'react-native'
+
+import ScalePress from '../motion/ScalePress'
 
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import type { FeedMediaItem } from '../../lib/feedMedia'
@@ -133,11 +135,15 @@ function FeaturedCardImpl({
   const photoHeight = Math.round(width * FEATURED_PHOTO_ASPECT)
 
   return (
-    <Pressable
+    // Scales rather than dims: a dimmed photo reads as disabled. No haptic —
+    // it navigates, and the next screen is the confirmation.
+    <ScalePress
+      haptic={false}
+      pressedScale={0.98}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
-      style={({ pressed }) => [{ width }, pressed && styles.pressed]}
+      style={{ width }}
     >
       <View style={[styles.photo, { height: photoHeight }]}>
         {/*
@@ -192,12 +198,11 @@ function FeaturedCardImpl({
           ) : null}
         </View>
       </View>
-    </Pressable>
+    </ScalePress>
   )
 }
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.9 },
   photo: {
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',

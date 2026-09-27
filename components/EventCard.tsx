@@ -3,9 +3,12 @@ import type { BlendnEvent } from '../lib/api'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native'
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 import { formatEventDateTime } from '../lib/time'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
 import { OptimizedImage } from './OptimizedImage'
+import ScalePress from './motion/ScalePress'
+import { fadeInFast, popIn } from './motion/presence'
 import { Text } from './ui/Text'
 
 /*
@@ -74,7 +77,9 @@ const EventCard = memo<EventCardProps>(({
     !!proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius
 
   return (
-    <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
+    // Scales rather than dims, and no haptic: the tap navigates, and the long
+    // press opens a tray that fires its own.
+    <ScalePress haptic={false} pressedScale={0.98} style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
       <View>
         {event.cover_image_url ? (
           <OptimizedImage
@@ -123,23 +128,31 @@ const EventCard = memo<EventCardProps>(({
           )}
         </View>
 
-        {/* Status badges: their own row, so 32pt badges never share a row with 48pt buttons. */}
-        {(isCheckedIn || showDistanceBadge) && (
-          <View style={styles.badgeRow}>
-            {isCheckedIn && (
-              <View style={styles.statusBadge}>
-                <Text variant="caption" style={styles.statusText}>✅ Checked In</Text>
-              </View>
-            )}
-            {showDistanceBadge && (
-              <View style={[styles.statusBadge, styles.distanceBadge]}>
-                <Text variant="caption" style={[styles.statusText, styles.distanceText]}>
-                  📍 {distanceLabel} away • within {Math.round(event.check_in_radius)}m required
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        {/*
+          Status badges: their own row, so 32pt badges never share a row with 48pt buttons.
+
+          A badge that arrives while the card is on screen — you just checked
+          in, or the location fix landed — pops in. Not on first paint: a list
+          of cards would all pop as they mount. The row's own height snaps.
+        */}
+        <LayoutAnimationConfig skipEntering>
+          {(isCheckedIn || showDistanceBadge) && (
+            <View style={styles.badgeRow}>
+              {isCheckedIn && (
+                <Animated.View entering={popIn} style={styles.statusBadge}>
+                  <Text variant="caption" style={styles.statusText}>✅ Checked In</Text>
+                </Animated.View>
+              )}
+              {showDistanceBadge && (
+                <Animated.View entering={popIn} style={[styles.statusBadge, styles.distanceBadge]}>
+                  <Text variant="caption" style={[styles.statusText, styles.distanceText]}>
+                    📍 {distanceLabel} away • within {Math.round(event.check_in_radius)}m required
+                  </Text>
+                </Animated.View>
+              )}
+            </View>
+          )}
+        </LayoutAnimationConfig>
 
         {/* Actions: one height, one fill. */}
         {(canCheckIn || !isEnded) && (
@@ -152,11 +165,18 @@ const EventCard = memo<EventCardProps>(({
                 accessibilityRole="button"
                 accessibilityLabel="Check in to event"
               >
-                {checkInLoading ? (
-                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
-                ) : (
-                  <Text variant="button" color={EMBER.textPrimary}>Check In</Text>
-                )}
+                {/* The label and the spinner fade into each other's place; first paint doesn't. */}
+                <LayoutAnimationConfig skipEntering>
+                  {checkInLoading ? (
+                    <Animated.View key="busy" entering={fadeInFast}>
+                      <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                    </Animated.View>
+                  ) : (
+                    <Animated.View key="idle" entering={fadeInFast}>
+                      <Text variant="button" color={EMBER.textPrimary}>Check In</Text>
+                    </Animated.View>
+                  )}
+                </LayoutAnimationConfig>
               </TouchableOpacity>
             )}
 
@@ -169,15 +189,21 @@ const EventCard = memo<EventCardProps>(({
                 accessibilityLabel={interested ? 'Remove from interested events' : 'Mark as interested'}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {interestLoading ? (
-                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
-                ) : (
-                  <Ionicons
-                    name={interested ? 'heart' : 'heart-outline'}
-                    size={ICON.md}
-                    color={EMBER.textPrimary}
-                  />
-                )}
+                <LayoutAnimationConfig skipEntering>
+                  {interestLoading ? (
+                    <Animated.View key="busy" entering={fadeInFast}>
+                      <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                    </Animated.View>
+                  ) : (
+                    <Animated.View key="idle" entering={fadeInFast}>
+                      <Ionicons
+                        name={interested ? 'heart' : 'heart-outline'}
+                        size={ICON.md}
+                        color={EMBER.textPrimary}
+                      />
+                    </Animated.View>
+                  )}
+                </LayoutAnimationConfig>
               </TouchableOpacity>
             )}
           </View>
@@ -206,7 +232,7 @@ const EventCard = memo<EventCardProps>(({
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </ScalePress>
   )
 })
 

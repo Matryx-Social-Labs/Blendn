@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
+import ScalePress from '../motion/ScalePress'
 import { HeartIcon } from '../motion/HeartIcon'
 
 /** The photo: a square on the card's right edge. */
@@ -100,12 +101,18 @@ function UpcomingCardImpl({
       pressable card holding a pressable button gives two ways to do one thing.
       As a row the card *is* the thing — every list app works this way — and the
       one control inside it, the heart, sits on the photo, away from the words.
+
+      It scales on press rather than dimming; no haptic, since it navigates. The
+      heart and the action are their own Pressables, so pressing them never
+      shrinks the row.
     */
-    <Pressable
+    <ScalePress
+      haptic={false}
+      pressedScale={0.98}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={styles.card}
     >
       <View style={styles.body}>
         {eyebrow || note ? (
@@ -194,7 +201,7 @@ function UpcomingCardImpl({
           </Pressable>
         ) : null}
       </View>
-    </Pressable>
+    </ScalePress>
   )
 }
 

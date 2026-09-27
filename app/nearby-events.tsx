@@ -3,25 +3,28 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
-    ActivityIndicator,
     Dimensions,
     FlatList,
     Linking,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import NearbyEventCard from '../components/NearbyEventCard'
+import NearbyEventCard, { NEARBY_CARD_ASPECT } from '../components/NearbyEventCard'
+import FadeInUp from '../components/motion/FadeInUp'
+import ScalePress from '../components/motion/ScalePress'
+import { SkeletonBlock } from '../components/Skeleton'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
 import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
+import { MOTION_STAGGER } from '../lib/motion'
 import { formatTimeRange } from '../lib/time'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { useMinimumVisible } from '../lib/useMinimumVisible'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -43,6 +46,25 @@ type Event = BlendnEvent
 
 const screenW = Dimensions.get('window').width
 
+/*
+ * The rows that fade up when the list first appears — about a screenful. Rows
+ * below arrive by scrolling, where an entrance would only read as lag.
+ */
+const STAGGER_ROWS = 6
+
+/**
+ * A row that fades up on the list's first reveal, and is a plain view after.
+ *
+ * Whether it animates is fixed at mount: a pull-to-refresh that brings new
+ * events into the top rows must not replay the entrance, and a row must not
+ * swap wrappers (remounting its card and its photo fade) once the reveal ends.
+ */
+function RevealRow({ animate, delay, children }: { animate: boolean; delay: number; children: React.ReactNode }) {
+  const [animateOnMount] = useState(animate)
+  if (!animateOnMount) return <View style={styles.cardWrapper}>{children}</View>
+  return <FadeInUp delay={delay} style={styles.cardWrapper}>{children}</FadeInUp>
+}
+
 export default function NearbyEventsScreen() {
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<Event[]>([])
@@ -51,6 +73,15 @@ export default function NearbyEventsScreen() {
   const [locationDenied, setLocationDenied] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const mountedRef = useRef(true)
+  // The same floor as the home screen, so a fast load doesn't flash the placeholders.
+  const showSkeleton = useMinimumVisible(loading, 720)
+  const showList = !showSkeleton && !locationDenied && events.length > 0
+  // False until the list has committed once: the rows in its first render stagger in.
+  const listRevealedRef = useRef(false)
+
+  useEffect(() => {
+    listRevealedRef.current = showList
+  }, [showList])
 
   useEffect(() => {
     return () => { mountedRef.current = false }
@@ -173,14 +204,17 @@ export default function NearbyEventsScreen() {
   const innerW = Math.max(0, screenW - containerPadding)
   const cardWidth = Math.min(420, innerW)
 
-  const renderItem = useCallback(({ item }: { item: Event }) => {
+  const renderItem = useCallback(({ item, index }: { item: Event; index: number }) => {
     const dist = (item as any)._distance
     // Shared with the home screen's Nearby cards, so the same event does not
     // read "1.2km away" on one screen and "1km away" on the other.
     const distLabel = formatDistance(dist)
 
     return (
-      <View style={styles.cardWrapper}>
+      <RevealRow
+        animate={!listRevealedRef.current && index < STAGGER_ROWS}
+        delay={index * MOTION_STAGGER.normal}
+      >
         <NearbyEventCard
           event={item as any}
           width={cardWidth}
@@ -188,7 +222,7 @@ export default function NearbyEventsScreen() {
           timeLabel={formatTimeRange(item.start_time, item.end_time)}
           locationLabel={distLabel || item.venue_name || item.address || ''}
         />
-      </View>
+      </RevealRow>
     )
   }, [cardWidth, handleEventPress])
 
@@ -197,41 +231,49 @@ export default function NearbyEventsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        <TouchableOpacity
+        <ScalePress
           onPress={() => router.back()}
           style={styles.backBtn}
+          pressedScale={0.9}
+          haptic={false}
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
           <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-        </TouchableOpacity>
+        </ScalePress>
         <Text style={styles.headerTitle} accessibilityRole="header">Nearby Events</Text>
         {/* The back button's width less its negative margin, so the title stays centred. */}
         <View style={{ width: CONTROL.md - SPACE.md }} />
       </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={EMBER.textPrimary} />
+      {showSkeleton ? (
+        // The cards the list fades up into: same width, ratio and radius.
+        <View style={styles.listContent} accessibilityLabel="Loading nearby events" accessible>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[styles.cardWrapper, styles.skeletonCard]}>
+              <SkeletonBlock width={cardWidth} height={cardWidth / NEARBY_CARD_ASPECT} borderRadius={EMBER_RADIUS.lg} />
+            </View>
+          ))}
         </View>
       ) : locationDenied ? (
-        <View style={styles.empty}>
+        <FadeInUp style={styles.empty}>
           <Ionicons name="location-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
           <Text style={styles.emptyTitle}>Location access needed</Text>
           <Text style={styles.emptySub}>Enable location to see events near you.</Text>
-          <TouchableOpacity
+          <ScalePress
             style={styles.settingsBtn}
             onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
+            accessibilityRole="button"
           >
             <Text style={styles.settingsBtnText}>Open Settings</Text>
-          </TouchableOpacity>
-        </View>
+          </ScalePress>
+        </FadeInUp>
       ) : events.length === 0 && loadFailed ? (
-        <View style={styles.empty}>
+        <FadeInUp style={styles.empty}>
           <Ionicons name="cloud-offline-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
           <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
           <Text style={styles.emptySub}>Check your connection and try again.</Text>
-          <TouchableOpacity
+          <ScalePress
             style={styles.settingsBtn}
             onPress={() => {
               setLoading(true)
@@ -240,14 +282,14 @@ export default function NearbyEventsScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.settingsBtnText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
+          </ScalePress>
+        </FadeInUp>
       ) : events.length === 0 ? (
-        <View style={styles.empty}>
+        <FadeInUp style={styles.empty}>
           <Ionicons name="calendar-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
           <Text style={styles.emptyTitle}>No nearby events</Text>
           <Text style={styles.emptySub}>There are no events near your current location.</Text>
-        </View>
+        </FadeInUp>
       ) : (
         <FlatList
           data={events}
@@ -275,7 +317,6 @@ const styles = StyleSheet.create({
   // 48pt target; the negative margin puts the chevron on the gutter.
   backBtn: { width: CONTROL.md, height: CONTROL.md, marginLeft: -SPACE.md, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...TYPE.heading },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
   emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
   emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
@@ -296,4 +337,6 @@ const styles = StyleSheet.create({
   cardWrapper: {
     marginBottom: SPACE.sm,
   },
+  // The card's own bottom margin, which `NearbyEventCard` sets on itself.
+  skeletonCard: { paddingBottom: SPACE.lg, alignSelf: 'center' },
 })

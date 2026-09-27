@@ -1,5 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import ScalePress from '../motion/ScalePress'
+import FadeInUp from '../motion/FadeInUp'
+import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
 import { HeartIcon } from '../motion/HeartIcon'
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -17,10 +19,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View
 } from 'react-native';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
@@ -159,6 +166,14 @@ type EventDetailTrayState = {
 }
 
 const { width } = Dimensions.get('window')
+
+/*
+ * The Scene's entrance. The hero crossfades over the skeleton (a fade is the
+ * reduced form, so it stays under Reduce Motion); the sections below fade up
+ * a stagger apart, capped at the fourth — by then they are below the fold.
+ */
+const HERO_FADE_IN = FadeIn.duration(MOTION_DURATION.normal).reduceMotion(ReduceMotion.Never)
+const SECTION_DELAY = [0, 1, 2, 3].map((i) => i * MOTION_STAGGER.normal)
 
 /*
  * The Scene — frame `1141:4853`, 390 wide. See `docs/SCENE.md`.
@@ -1247,10 +1262,13 @@ export default function EventDetail() {
   if (!isLoading && !event) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
-        <Text style={styles.errorText}>Event not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        {/* Arrives like any other content, rather than cutting in after the skeleton. */}
+        <FadeInUp style={styles.errorBody}>
+          <Text style={styles.errorText}>Event not found</Text>
+          <ScalePress style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </ScalePress>
+        </FadeInUp>
       </SafeAreaView>
     )
   }
@@ -1316,6 +1334,9 @@ export default function EventDetail() {
         ? (rsvpd ? 'rsvpd' : 'rsvp')
         : 'join'
 
+
+  const ctaIcon =
+    ctaState === 'rsvpd' ? 'checkmark' : actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'
 
   const when = event ? new Date(event.start_time) : null
   const dateLabel = when
@@ -1405,9 +1426,16 @@ export default function EventDetail() {
           paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + SPACE.md + SPACE.lg + SPACE.xl,
         }}
       >
+        {/*
+          The hero fades in over the skeleton's slot instead of cutting in.
+          `skipEntering` means a cached event, which paints the hero first,
+          doesn't fade — only the skeleton-to-hero swap does.
+        */}
+        <LayoutAnimationConfig skipEntering>
         {isLoading && !event ? (
           <SkeletonBlock width="100%" height={420} borderRadius={0} />
         ) : (
+          <Animated.View entering={HERO_FADE_IN}>
           <SceneHero
             playlist={playlist}
             /*
@@ -1434,18 +1462,26 @@ export default function EventDetail() {
             onPressMedia={(i) => setLightbox(i)}
             scrollY={scrollY}
           />
+          </Animated.View>
         )}
+        </LayoutAnimationConfig>
 
         <View style={styles.content}>
+          {/*
+            Each section fades up once, as it first mounts, a beat after the one
+            above — they mount with the event, so a socket update or a refetch
+            re-renders them in place and never replays this. Anything past the
+            first screenful shares the last delay; nobody sees it arrive.
+          */}
           {event?.description ? (
-            <View style={styles.section}>
+            <FadeInUp delay={SECTION_DELAY[0]} style={styles.section}>
               <SceneHeading>The Experience</SceneHeading>
               <SceneBody>
                 {highlightEntities(event.description, entities).map((seg, i) =>
                   seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
                 )}
               </SceneBody>
-            </View>
+            </FadeInUp>
           ) : null}
 
           {/*
@@ -1462,7 +1498,7 @@ export default function EventDetail() {
             amenity added later without one.
           */}
           {amenities.length > 0 ? (
-            <View style={styles.amenityRow}>
+            <FadeInUp delay={SECTION_DELAY[1]} style={styles.amenityRow}>
               {amenities.map((a, i) => (
                 <SceneAmenity
                   key={a.id}
@@ -1473,7 +1509,7 @@ export default function EventDetail() {
                   style={styles.amenityTile}
                 />
               ))}
-            </View>
+            </FadeInUp>
           ) : null}
 
           {/*
@@ -1487,24 +1523,37 @@ export default function EventDetail() {
             sentence. `eventDetailBlocks` has already dropped anything malformed,
             so an empty list means the organiser wrote nothing.
           */}
-          <SceneDetails blocks={detailBlocks} />
+          {/* Wrapped only when it draws something: an empty wrapper still takes a gap. */}
+          {detailBlocks.length > 0 ? (
+            <FadeInUp delay={SECTION_DELAY[2]}>
+              <SceneDetails blocks={detailBlocks} />
+            </FadeInUp>
+          ) : null}
 
           {/* Only when there is more than the cover -- a "gallery" of one is a
               heading over the picture already at the top of the screen. */}
           {playlist.length > 1 ? (
-            <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
+            <FadeInUp delay={SECTION_DELAY[3]}>
+              <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
+            </FadeInUp>
           ) : null}
 
           {attendeeBlock.count > 0 ? (
-            <SceneAttendees
-              count={attendeeBlock.count}
-              label={attendeeBlock.label}
-              seed={event?.id || 'scene'}
-            />
+            <FadeInUp delay={SECTION_DELAY[3]}>
+              <SceneAttendees
+                count={attendeeBlock.count}
+                label={attendeeBlock.label}
+                seed={event?.id || 'scene'}
+              />
+            </FadeInUp>
           ) : null}
 
           {event?.venue_name ? (
-            <Pressable
+            <FadeInUp delay={SECTION_DELAY[3]}>
+            {/* No haptic: it leaves the app, and the Maps hand-off is the feedback. */}
+            <ScalePress
+              pressedScale={0.98}
+              haptic={false}
               onPress={openInMaps}
               accessibilityRole="button"
               accessibilityLabel={`Open ${event.venue_name} in Maps`}
@@ -1522,7 +1571,8 @@ export default function EventDetail() {
                 ) : null
               }
             />
-            </Pressable>
+            </ScalePress>
+            </FadeInUp>
           ) : null}
 
           {/*
@@ -1555,21 +1605,12 @@ export default function EventDetail() {
           <SceneCTA
             state={ctaState}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
+            iconKey={checkingIn ? 'busy' : ctaIcon}
             icon={(color) =>
               checkingIn ? (
                 <ActivityIndicator size="small" color={color} />
               ) : (
-                <Ionicons
-                  name={
-                    ctaState === 'rsvpd'
-                      ? 'checkmark'
-                      : actionStage === 'chat'
-                        ? 'chatbubbles-outline'
-                        : 'radio-outline'
-                  }
-                  size={SCENE_CTA_ICON}
-                  color={color}
-                />
+                <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} />
               )
             }
           />
@@ -1856,9 +1897,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: SPACE.lg,
     backgroundColor: EMBER.bg,
   },
+  errorBody: { alignItems: 'center', gap: SPACE.lg },
   errorText: { ...TYPE.title },
   backButton: {
     minHeight: CONTROL.md,

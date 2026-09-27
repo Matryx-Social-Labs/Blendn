@@ -7,6 +7,8 @@
 - **A native dependency upgrade isn't verified until the rebuilt binary runs.** Until the new build installs, the old binary runs the new JS and aborts with `SIGABRT` and no crash report. Wait for the build to finish, then relaunch, before diagnosing a crash.
 - **If there's no simulator, say so before calling motion done.** A layout animation that only type-checks hasn't been verified. Ask the user to feel-check it before committing.
 
+- **When motion is split across two nested views, everything visible goes on the view that moves.** For the sheet drag, I put the drag on an inner layer and left the fill, corners and padding on the outer one. Dragging then slid the content down through a background that stayed put (2026-09-28). Split the style instead: placement and height caps go on the wrapper, and the look goes on the moving layer.
+
 ## Visual design
 
 - **No glows, blooms or glass stacks.** The user rejected the frosted-glass CTA with an orange bloom, and the pulsing halo on the room button, as "very AI generated". Use a flat, high-contrast fill with no shadow; show status with a still mark (dot or label), not motion. Research real apps (Refero) before restyling, instead of inventing effects.
@@ -14,6 +16,8 @@
 - **When moving an element off the accent, check what it sits on.** Neutralising colours made four things vanish: the Liked button went `surfaceSunken` inside a `surfaceSunken` tray, off switch tracks went `surface` on a `surfaceSunken` card, the Room's selected segment was `surface` on `surfaceSunken`, and a 4pt ring used `separator` (a 10% hairline colour). Pick the neutral by the parent's fill: one step away from it, or `textPrimary`/`textTertiary` for marks.
 
 ## Verification
+
+- **Parallel agents in one working tree must never `git stash`, `checkout` or `reset`.** On 2026-09-28 an agent stashed to check whether a lint warning was already there, which briefly hid three other agents' in-progress edits. Put the rule in every parallel-agent prompt, and compare against `git show HEAD:<file>` instead.
 
 - **Re-run the full suite after the *last* edit, not before it.** A one-line lint cleanup (dropping an unused `EMBER_TYPE` import) after the final `jest` run broke a source-grepping test and failed CI on PR #285. Many tests here grep source files, so "only an import" is never safe to skip.
 - **A token check that passes isn't a design audit.** `lint:design` was clean while ~225 departures from docs/DESIGN_SYSTEM.md shipped, because it only checked what it was written to check. When asked "does every screen follow the system", read the doc's rules and check each one, then extend the checker for anything mechanical.

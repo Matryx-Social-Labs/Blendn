@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
+import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
+import { useLatest } from '../../lib/useLatest'
 import { OptimizedImage } from '../OptimizedImage'
 import { FeedVideo } from './FeedVideo'
 
@@ -13,6 +16,19 @@ import { FeedVideo } from './FeedVideo'
  * deliberately *not* matched to the clip length: a video ends when it ends.
  */
 const IMAGE_DWELL_MS = 4000
+
+/*
+ * Each item dissolves in over the one before it rather than cutting.
+ *
+ * A cut every four seconds on the largest photo on screen reads as a glitch;
+ * a dissolve reads as a slideshow. 320ms on the entrance curve: slow enough to
+ * register as a crossfade, a small fraction of the dwell. Kept under Reduce
+ * Motion — nothing moves, and a fade is gentler than the cut it replaces.
+ */
+const FRAME_FADE_MS = MOTION_DURATION.slow
+const frameIn = FadeIn.duration(FRAME_FADE_MS)
+  .easing(Easing.bezier(...MOTION_EASING.entrance))
+  .reduceMotion(ReduceMotion.Never)
 
 /**
  * The media on a feed card — one still, or the whole set on a loop.
@@ -52,6 +68,11 @@ export function FeedMedia({
   height: number
 }) {
   const [index, setIndex] = useState(0)
+  /**
+   * The item being dissolved away from, held underneath the new one until its
+   * fade has finished. Never more than this one: two frames, then back to one.
+   */
+  const [under, setUnder] = useState<number | null>(null)
 
   /*
    * Back to the top whenever the card stops being the active one.
@@ -64,13 +85,32 @@ export function FeedMedia({
    * `index` while inactive, so the result is the same, one commit sooner.
    */
   if (!isActive && index !== 0) setIndex(0)
+  if (!isActive && under !== null) setUnder(null)
 
   const current = playlist[Math.min(index, Math.max(playlist.length - 1, 0))]
   const playlistLength = playlist.length
-  const advance = useCallback(
-    () => setIndex((i) => (i + 1) % Math.max(playlistLength, 1)),
-    [playlistLength],
-  )
+  // Read, not rendered: a caller may build the array inline, and `advance`
+  // changing identity would restart the dwell timer on every parent render.
+  const latestPlaylist = useLatest(playlist)
+  const advance = useCallback(() => {
+    const next = (index + 1) % Math.max(playlistLength, 1)
+    /*
+     * A clip is not held under a clip: that would be two decoders at once, and
+     * the incoming one is transparent until its first frame, so there would be
+     * nothing to dissolve anyway.
+     */
+    const items = latestPlaylist.current
+    const bothClips = items[index]?.kind === 'video' && items[next]?.kind === 'video'
+    setUnder(bothClips ? null : index)
+    setIndex(next)
+  }, [index, latestPlaylist, playlistLength])
+
+  // Drops the frame underneath once the one on top is opaque.
+  useEffect(() => {
+    if (under === null) return
+    const id = setTimeout(() => setUnder(null), FRAME_FADE_MS)
+    return () => clearTimeout(id)
+  }, [under, index])
 
   /*
    * The still timer, and nothing else.
@@ -88,6 +128,38 @@ export function FeedMedia({
   }, [isActive, index, current?.kind, playlist.length, advance])
 
   const opener = playlist[0]
+
+  function renderFrame(i: number, onTop: boolean) {
+    const item = playlist[i]
+    if (!item) return null
+    return (
+      <Animated.View key={`frame-${i}`} entering={frameIn} style={StyleSheet.absoluteFill}>
+        {item.kind === 'image' ? (
+          <OptimizedImage
+            source={item.url}
+            style={StyleSheet.absoluteFill as never}
+            width={Math.round(width)}
+            height={Math.round(height)}
+            contentFit="cover"
+            // Same reason as the opener's key, twice over: as well as cards
+            // recycling, this card walks its own playlist.
+            recyclingKey={item.url}
+          />
+        ) : (
+          <FeedVideo
+            // Keyed by url **and** index, so a playlist that repeats the same clip
+            // gets a fresh player rather than one that has already ended and will
+            // never fire again.
+            key={`${item.url}-${i}`}
+            source={item.url}
+            // Only the item on top walks the playlist; the one underneath has
+            // already ended and is only there to be dissolved over.
+            onEnded={onTop && playlist.length > 1 ? advance : undefined}
+          />
+        )}
+      </Animated.View>
+    )
+  }
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -115,29 +187,18 @@ export function FeedMedia({
         />
       ) : null}
 
-      {isActive && current && index > 0 && current.kind === 'image' ? (
-        <OptimizedImage
-          source={current.url}
-          style={StyleSheet.absoluteFill as never}
-          width={Math.round(width)}
-          height={Math.round(height)}
-          contentFit="cover"
-          // Same reason, and it matters twice over here: this view is reused
-          // as the card walks its own playlist, not only as cards recycle.
-          recyclingKey={current.url}
-        />
-      ) : null}
-
-      {isActive && current?.kind === 'video' ? (
-        <FeedVideo
-          // Keyed by url **and** index, so a playlist that repeats the same clip
-          // gets a fresh player rather than one that has already ended and will
-          // never fire again.
-          key={`${current.url}-${index}`}
-          source={current.url}
-          onEnded={playlist.length > 1 ? advance : undefined}
-        />
-      ) : null}
+      {/*
+        The item underneath, then the one on top. Keyed by position, so the
+        frame that was on top becomes the one underneath without remounting —
+        no second decode, no flash — and only the newcomer runs `frameIn`.
+        The opener needs no layer of its own once it is alone: it is the floor.
+        Arriving back at it after a loop does get one, so the last item
+        dissolves into it instead of vanishing.
+      */}
+      {isActive && under !== null ? renderFrame(under, false) : null}
+      {isActive && current && (index > 0 || under !== null || current.kind === 'video')
+        ? renderFrame(index, true)
+        : null}
     </View>
   )
 }
