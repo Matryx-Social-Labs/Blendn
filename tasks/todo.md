@@ -11,6 +11,8 @@ Script: `blendn-admin/scripts/seed-blr-scenarios.ts` (+ `seed-blr-photos.json`).
 - [x] Crowd: 48 non-login profiles (`scripts/seed-blr-crowd.ts`, `@crowd.blendn.invalid`), full profiles + age-matched Unsplash portraits, spread across events within capacity; applied to staging
 - [x] Fixed: purge had hidden 12 `me-demo-*` Me-tab events another session seeded — restored, and `me-demo-` is now excluded
 
+- [x] `scripts/seed-blr-my-banter.ts`: hemanth@unbothered.studio live at the AI meetup, 3 attended, 3 rooms w/ unread, 5 matches (via openConversation), 2 incoming likes, 1 outgoing, 2 message requests — applied to staging. Run after seed-blr-scenarios.
+
 ## Review
 - Idempotent: second `--apply` left identical row counts
 - Feed as Ananya: 18 events, no negatives, all with cover + gallery. Teen tester: 13 (5 age-gated hidden)
