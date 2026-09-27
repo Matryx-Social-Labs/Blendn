@@ -717,10 +717,10 @@ Play's figures for bundle 15, against a local R8 build of `dev` at 5390f5b
 
 | | bundle 15 | R8 on |
 |---|---|---|
-| Uncompressed DEX | 31.2 MB | 9.1 MB |
-| Obfuscated | 2% | 86% |
-| Optimised | – | 66% |
-| Shrunk | – | 85% |
+| Uncompressed DEX | 31.2 MB | 8.4 MB |
+| Obfuscated | 2% | 84% |
+| Optimised | – | 83% |
+| Shrunk | – | 83% |
 
 **The first R8 build crashed before its first screen, and the error pointed at
 the wrong thing.** The crash read:
@@ -742,14 +742,18 @@ Call to function 'ExpoSplashScreen.setOptions' has been rejected.
 → java.lang.NullPointerException
 ```
 
-Every JS object passed to an Expo module becomes a Kotlin `Record` through
-kotlin-reflect (`property.javaField!!`). R8's optimiser rewrote kotlin-reflect's
-internals and `javaField` came back null. This is expo/expo#28010, whose answer
-was `-dontoptimize` for the whole app. `android/app/proguard-rules.pro` instead
-keeps the optimiser off `kotlin.reflect.jvm.internal.**` and
-`kotlin.jvm.internal.**` only. Those are still shrunk and obfuscated; everything
-else is optimised. That rule costs 0.7 MB of DEX and is why "Optimised" reads
-66% rather than 83%.
+Every JS object passed to an Expo module becomes a Kotlin `Record`, filled field
+by field from each property's `@Field` annotation. No class in the app
+implements `Field`, because the runtime supplies annotations as proxies. So R8's
+optimiser decided a `Field` value could only be null, and compiled the per-field
+loop to `throw null`. `dexdump` of the converter showed exactly that. This is
+expo/expo#28010, whose answer was `-dontoptimize` for the whole app.
+`android/app/proguard-rules.pro` keeps Expo's annotation types instead
+(`-keep @interface expo.modules.**`), and everything stays optimised.
+
+A first guess, keeping the optimiser off kotlin-reflect, built and changed
+nothing: the next launch crashed the same way. Read the disassembly before
+writing a keep rule.
 
 **So an R8 change, or a new native dependency, is tested by launching a release
 build, never by it compiling:**
@@ -762,7 +766,11 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
 Then drive it, because a class R8 broke fails only when something first calls
-it. If it crashes:
+it. Two things a local release build cannot show, whatever R8 does. It is signed
+with the debug keystore, so Google Maps logs `Authorization failure` and draws
+an empty grid: the Android key only accepts the Play signing certificate. And it
+has no Firebase config, so there is no push token. Check both on the Play
+internal-track build. If it crashes:
 
 - **Build a control without R8** from the same checkout:
   `-Pandroid.enableProguardInReleaseBuilds=false -Pandroid.enableShrinkResourcesInReleaseBuilds=false`
@@ -773,6 +781,11 @@ it. If it crashes:
   back afterwards.
 - **Bisect** with `proguard-android.txt` (optimiser off). If that launches, the
   optimiser is the cause and a keep rule scoped to the affected package is the fix.
+- **Read what R8 produced** before choosing that rule. Look up the class's
+  obfuscated name in `app/build/outputs/mapping/release/mapping.txt`, then
+  disassemble it:
+  `unzip -o app/build/outputs/apk/release/app-release.apk classes.dex -d /tmp/r8 && "$(ls -d $ANDROID_HOME/build-tools/* | tail -1)/dexdump" -d /tmp/r8/classes.dex`.
+  A `throw` where a call used to be means R8 proved something null that isn't.
 
 **Checking a build without Play Console:**
 
