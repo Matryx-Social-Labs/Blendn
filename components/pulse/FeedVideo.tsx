@@ -88,7 +88,6 @@ export function FeedVideo({
       nativeControls={false}
       // Nothing here should offer full-screen or PiP: the card is a preview,
       // and the event's own screen is where the media gets a real surface.
-      allowsFullscreen={false}
       allowsPictureInPicture={false}
       accessible={false}
     />

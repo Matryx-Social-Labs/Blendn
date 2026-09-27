@@ -8,7 +8,6 @@
     "icon": "./assets/logo/icon-ios.png",
     "scheme": "blendn",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
@@ -35,7 +34,6 @@
         "backgroundImage": "./assets/logo/adaptive-background.png",
         "backgroundColor": "#F05524"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.matryxsociallabs.blendn",
       "intentFilters": [
         {

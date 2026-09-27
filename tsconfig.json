@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // TypeScript 6 no longer includes every @types package as a global. The
+    // tests use jest's (describe, it, jest.mock) and Node's (fs, path,
+    // __dirname) without importing them, as they could before.
+    "types": ["jest", "node"],
     "paths": {
       "@/*": [
         "./*"

@@ -2,9 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import ScalePress from '../motion/ScalePress'
 import { HeartIcon } from '../motion/HeartIcon'
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,

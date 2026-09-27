@@ -411,7 +411,6 @@ function HeroVideo({
       style={StyleSheet.absoluteFill}
       contentFit="cover"
       nativeControls={false}
-      allowsFullscreen={false}
       allowsPictureInPicture={false}
       accessible={false}
     />

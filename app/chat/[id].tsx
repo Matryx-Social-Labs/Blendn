@@ -623,7 +623,7 @@ function GroupChatInner(props?: {
       edges={embedded ? ['bottom'] : ['top', 'bottom']}
     >
       {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
-      <StatusBar style="light" backgroundColor={EMBER.bg} />
+      <StatusBar style="light" />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         {embedded ? null : (

@@ -211,7 +211,7 @@ function LightboxVideo({
           style={StyleSheet.absoluteFill}
           contentFit="contain"
           nativeControls
-          allowsFullscreen={false}
+          fullscreenOptions={{ enable: false }}
           allowsPictureInPicture={false}
         />
       ) : null}

@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceMedia,
     justifyContent: 'flex-end',
   },
-  curationArt: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.6 },
+  curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
   curationText: { padding: SPACE.xl, gap: SPACE.xs },
   curationEyebrow: { ...TYPE.label, color: EMBER.accent },
   curationCaption: TYPE.meta,

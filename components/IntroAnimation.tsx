@@ -281,7 +281,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     /*
      * `EMBER.bg`, not `APP_COLORS.backgroundBase`.
      *
