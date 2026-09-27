@@ -9,6 +9,8 @@
 
 - **When motion is split across two nested views, everything visible goes on the view that moves.** For the sheet drag, I put the drag on an inner layer and left the fill, corners and padding on the outer one. Dragging then slid the content down through a background that stayed put (2026-09-28). Split the style instead: placement and height caps go on the wrapper, and the look goes on the moving layer.
 
+- **When something "disappears", check whether it's missing or just invisible before touching motion.** On the Me tab I blamed a stuck `entering` animation for the missing Nights out grid. A screenshot showed its heading was gone too, so the section wasn't rendered at all: the attendance request had failed once and nothing retried it (2026-09-28). A section that depends on a secondary request needs a retry and the last good data. Also, this app's dev build launches with `hot=false`, so relaunch it before checking an edit on the simulator.
+
 ## Visual design
 
 - **No glows, blooms or glass stacks.** The user rejected the frosted-glass CTA with an orange bloom, and the pulsing halo on the room button, as "very AI generated". Use a flat, high-contrast fill with no shadow; show status with a still mark (dot or label), not motion. Research real apps (Refero) before restyling, instead of inventing effects.

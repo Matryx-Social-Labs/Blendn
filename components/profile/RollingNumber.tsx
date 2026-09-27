@@ -13,11 +13,12 @@ import type { TypeRole } from '../../lib/theme'
 import { Text } from '../ui/Text'
 
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+/** Soft ease-out: the digits keep turning visibly before they settle. */
+const EASE_OUT = Easing.bezier(0.33, 1, 0.68, 1)
 /** Long for UI, on purpose: it plays once, when the number first arrives or changes. */
-const ROLL_MS = 560
+const ROLL_MS = 900
 /** Each column to the left starts a beat later, so the number reads as counting up. */
-const COLUMN_STAGGER = 60
+const COLUMN_STAGGER = 90
 
 function Column({
   digit,
@@ -46,7 +47,7 @@ function Column({
     <View style={{ height, overflow: 'hidden' }}>
       <Animated.View style={strip}>
         {DIGITS.map((d) => (
-          <Text key={d} variant={variant} maxFontSizeMultiplier={maxFontSizeMultiplier} style={{ height }}>
+          <Text key={d} variant={variant} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.digit, { height }]}>
             {d}
           </Text>
         ))}
@@ -96,7 +97,7 @@ export function RollingNumber({
         variant={variant}
         maxFontSizeMultiplier={maxFontSizeMultiplier}
         onLayout={onMeasure}
-        style={height ? styles.measure : null}
+        style={[styles.digit, height ? styles.measure : null]}
       >
         {height ? '0' : digits.join('')}
       </Text>
@@ -120,5 +121,11 @@ export function RollingNumber({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
+  /*
+   * Tabular figures, so every digit is one width and a strip of 0-9 is as
+   * wide as the digit showing. Without it a "1" sat in a "0"-wide slot and
+   * 12 read as "1 2".
+   */
+  digit: { fontVariant: ['tabular-nums'], textAlign: 'center' },
   measure: { position: 'absolute', opacity: 0 },
 })

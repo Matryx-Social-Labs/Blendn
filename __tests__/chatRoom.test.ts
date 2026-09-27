@@ -294,10 +294,12 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(content.indexOf("router.push('/settings')")).toBeGreaterThan(content.indexOf('title="Recent"'))
   })
 
-  it('puts the header flat on the page: one display line, and one Edit button with no accent', () => {
+  it('puts the header flat on the page: one display line, and one compact Edit pill with no accent', () => {
     const src = OWN()
     expect(src.match(/variant="display"/g)).toHaveLength(1)
-    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.md[^}]*backgroundColor: EMBER\.surface,/)
+    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.sm[^}]*backgroundColor: EMBER\.surface,/)
+    // One way into Edit profile: the sections carry no EDIT links of their own.
+    expect(src).not.toContain('actionLabel="EDIT"')
     // The old identity card sat on `surfaceMedia`; the header has no card now.
     expect(src).not.toContain('surfaceMedia')
   })

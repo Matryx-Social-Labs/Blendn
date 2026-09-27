@@ -24,7 +24,7 @@ import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { agoLabel, identityMeta, profileGaps } from '../../lib/meProfile'
-import { MOTION_STAGGER } from '../../lib/motion'
+import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
@@ -40,9 +40,19 @@ const RECENT_COUNT = 8
  * of going out every night. The route caps `limit` server-side anyway.
  */
 const ATTENDANCE_LIMIT = 50
+/** How long a loaded attendance list is shown while a fresh one loads. */
+const ATTENDANCE_CACHE_TTL = 10 * 60 * 1000
+/** The wait before the one retry of a failed attendance request. */
+const ATTENDANCE_RETRY_MS = 1500
 
-/** Sections arrive one beat apart, top to bottom, the first time the panel shows. */
-const enter = (i: number) => i * MOTION_STAGGER.normal
+/**
+ * Sections arrive one beat apart, top to bottom, the first time the page
+ * shows: 520ms each on a soft ease-out, 70ms apart, rising 16pt. Seen once per
+ * load, so it's allowed to be seen -- at 220ms on a strong ease-out it read
+ * as a snap.
+ */
+const enter = (i: number) => i * 70
+const ENTER = { duration: MOTION_DURATION.relaxed, easing: MOTION_EASING.gentle, distance: 16 } as const
 
 /** One number and what it counts, optionally a way through to the list behind it. */
 function Stat({ value, label, onPress }: { value: number; label: string; onPress?: () => void }) {
@@ -225,15 +235,30 @@ function ProfileInner() {
    */
   const loadRecent = useCallback(async () => {
     if (!user) return
-    try {
-      const result = await apiClient.getMyAttendance(ATTENDANCE_LIMIT)
-      if (result.success && result.data) {
-        setAttended(pastEventRows(result.data.events))
-      } else {
-        Logger.debug('profile', 'Failed to load attendance', { error: result.error })
+    const cacheKey = `attendance_${user.id}`
+    /*
+     * Last good list first. Nights out and Recent hang off this one request,
+     * and a single failed fetch (a cold start racing the token, a 429) used
+     * to leave both sections missing until you left the tab and came back.
+     */
+    const cached = queryCache.get<PastEventRow[]>(cacheKey)
+    if (cached) setAttended(cached)
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await apiClient.getMyAttendance(ATTENDANCE_LIMIT)
+        if (result.success && result.data) {
+          const rows = pastEventRows(result.data.events)
+          setAttended(rows)
+          queryCache.set(cacheKey, rows, ATTENDANCE_CACHE_TTL)
+          return
+        }
+        Logger.debug('profile', 'Failed to load attendance', { error: result.error, attempt })
+      } catch (error) {
+        Logger.debug('profile', 'Failed to load attendance', { error, attempt })
       }
-    } catch (error) {
-      Logger.debug('profile', 'Failed to load attendance', { error })
+      // One retry, a beat later. A failure keeps whatever is already on screen.
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, ATTENDANCE_RETRY_MS))
     }
   }, [user])
 
@@ -272,10 +297,10 @@ function ProfileInner() {
           <View style={styles.identityText}>
             <SkeletonBlock width={'70%'} height={TYPE.display.lineHeight} />
             <SkeletonLine width={'50%'} />
+            <SkeletonBlock width={128} height={CONTROL.sm} borderRadius={EMBER_RADIUS.pill} />
           </View>
           <SkeletonBlock width={STACK.width} height={STACK.height} borderRadius={EMBER_RADIUS.md} />
         </View>
-        <SkeletonBlock height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
       </View>
       <SkeletonBlock height={CONTROL.lg + SPACE.lg * 2} borderRadius={EMBER_RADIUS.lg} />
     </View>
@@ -320,7 +345,7 @@ function ProfileInner() {
   const renderContent = () => (
     <View style={styles.panel}>
       {/* Flat on the page: the name is the screen's one display line. */}
-      <FadeInUp style={styles.headerBlock}>
+      <FadeInUp {...ENTER} style={styles.headerBlock}>
         <View style={styles.identity}>
           <View style={styles.identityText}>
             <Text variant="display" numberOfLines={1} maxFontSizeMultiplier={1.2} accessibilityRole="header">
@@ -335,22 +360,29 @@ function ProfileInner() {
                 {profile.occupation}
               </Text>
             ) : null}
+            {/*
+              The page's one way into Edit profile: sections carry no EDIT
+              links of their own, since every one of them opened the same
+              screen. Small and beside your name, like the edit pill on
+              any profile you own -- a tool, not the page's headline. No accent.
+            */}
+            <ScalePress
+              onPress={() => router.push('/edit-profile')}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+              hitSlop={SPACE.sm}
+              style={styles.button}
+            >
+              <Ionicons name="pencil" size={ICON.sm} color={EMBER.textPrimary} />
+              <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
+            </ScalePress>
           </View>
 
           {/* Tap opens the photo on top; a sideways flick shuffles the pile. See PhotoStack. */}
           <PhotoStack photos={photoList} fallback={mark} onPress={openPhoto} />
         </View>
 
-        {/* One way to change any of it, so one full-width button -- no accent. */}
-        <ScalePress
-          onPress={() => router.push('/edit-profile')}
-          haptic={false}
-          accessibilityRole="button"
-          accessibilityLabel="Edit profile"
-          style={styles.button}
-        >
-          <Text variant="button" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
-        </ScalePress>
       </FadeInUp>
 
       {/*
@@ -360,7 +392,7 @@ function ProfileInner() {
         revealing yourself in a room has nothing to reveal.
       */}
       {gaps.length > 0 ? (
-        <FadeInUp delay={enter(1)} style={styles.section}>
+        <FadeInUp {...ENTER} delay={enter(1)} style={styles.section}>
           <ProfileHeading title="Finish your profile" />
           <View style={styles.rows}>
             {gaps.map((gap) => (
@@ -382,7 +414,7 @@ function ProfileInner() {
         role you do not have. The numbers roll up when they first arrive.
       */}
       {stats ? (
-        <FadeInUp delay={enter(2)} style={styles.section}>
+        <FadeInUp {...ENTER} delay={enter(2)} style={styles.section}>
           <ProfileHeading title="Stats" />
           <View style={styles.stats}>
             <Stat value={stats.eventsAttended} label="Attended" onPress={openGoing} />
@@ -403,7 +435,7 @@ function ProfileInner() {
         entirely when none fall in the window -- see NightsOut.
       */}
       {attended.length > 0 ? (
-        <FadeInUp delay={enter(3)} style={styles.section}>
+        <FadeInUp {...ENTER} delay={enter(3)} style={styles.section}>
           <ProfileHeading title="Nights out" />
           <NightsOut events={attended} onOpenEvent={openEvent} />
         </FadeInUp>
@@ -414,23 +446,23 @@ function ProfileInner() {
         the order `app/user/[id].tsx` shows it.
       */}
       {profile?.bio ? (
-        <FadeInUp delay={enter(4)} style={styles.section}>
-          <SectionHeader title="Bio" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
+        <FadeInUp {...ENTER} delay={enter(4)} style={styles.section}>
+          <ProfileHeading title="Bio" />
           <ProfileBio text={profile.bio} />
         </FadeInUp>
       ) : null}
 
       {/* Your own chips, so nothing is "shared" -- plain chips only. */}
       {interests.length > 0 ? (
-        <FadeInUp delay={enter(5)} style={styles.section}>
-          <SectionHeader title="Interests" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
+        <FadeInUp {...ENTER} delay={enter(5)} style={styles.section}>
+          <ProfileHeading title="Interests" />
           <ProfileInterests interests={interests} />
         </FadeInUp>
       ) : null}
 
       {/* A filled card and a ruled block, as on the attendee page. */}
       {profile?.occupation || profile?.education ? (
-        <FadeInUp delay={enter(6)} style={styles.details}>
+        <FadeInUp {...ENTER} delay={enter(6)} style={styles.details}>
           {profile.occupation ? <ProfileDetail label="OCCUPATION" value={profile.occupation} /> : null}
           {profile.education ? (
             <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
@@ -443,8 +475,11 @@ function ProfileInner() {
         fanned and half covered.
       */}
       {photoList.length > 0 ? (
-        <FadeInUp delay={enter(7)} style={styles.section}>
-          <SectionHeader title="Gallery" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
+        <FadeInUp {...ENTER} delay={enter(7)} style={styles.section}>
+          <ProfileHeading
+            title="Gallery"
+            trailing={`${photoList.length} photo${photoList.length === 1 ? '' : 's'}`}
+          />
           <ProfileGallery
             photos={photoList}
             columnWidth={(windowWidth - GUTTER * 2 - SPACE.lg) / 2}
@@ -459,7 +494,7 @@ function ProfileInner() {
         its first tile at the gutter, like every carousel in the app.
       */}
       {recent.length > 0 ? (
-        <FadeInUp delay={enter(8)} style={styles.section}>
+        <FadeInUp {...ENTER} delay={enter(8)} style={styles.section}>
           <SectionHeader title="Recent" actionLabel="SEE ALL" onAction={openGoing} />
           <ScrollView
             horizontal
@@ -480,7 +515,7 @@ function ProfileInner() {
         </FadeInUp>
       ) : null}
 
-      <FadeInUp delay={enter(9)}>
+      <FadeInUp {...ENTER} delay={enter(9)}>
         <PanelRow
           icon="settings-outline"
           label="Settings"
@@ -552,10 +587,15 @@ const styles = StyleSheet.create({
   identity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   identityText: { flex: 1, gap: SPACE.xs },
 
+  /* A compact pill: `CONTROL.sm` tall, as wide as its words, 8 under the details above it. */
   button: {
-    height: CONTROL.md,
+    height: CONTROL.sm,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACE.xs,
+    paddingHorizontal: SPACE.md,
+    marginTop: SPACE.sm,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },

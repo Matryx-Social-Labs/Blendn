@@ -45,9 +45,14 @@ const COMMIT_DISTANCE = 40
 const FLICK_VELOCITY = 500
 /** How far a committed card travels out before it tucks in behind. */
 const THROW = 96
+/** The throw out, before the card springs back under the pile. */
+const THROW_MS = 220
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
-const SETTLE = { duration: 400, dampingRatio: 0.8 } as const
+/** Settles a little slower than the default 400ms, so the fan is seen re-forming. */
+const SETTLE = { duration: 550, dampingRatio: 0.8 } as const
+/** Soft ease-out for the one-off deal. */
+const EASE_GENTLE = Easing.bezier(0.33, 1, 0.68, 1)
 
 function lightTick() {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
@@ -132,11 +137,12 @@ function StackCard({
  * ## Motion
  *
  * - **Deal** (once, when it first appears): the cards start squared up and
- *   fan out, 320ms ease-out. It happens once per launch, so it's allowed to be seen.
+ *   fan out, 620ms on a soft ease-out after a 250ms beat. It happens once per
+ *   launch, so it's allowed to be seen.
  * - **Drag**: shared values on the UI thread; the order itself (`front`) is a
  *   shared value too, so a swap never waits on a React render.
  * - **Release**: past 40pt or 500pt/s it's committed. The card drops behind
- *   the pile, is thrown out 96pt and springs back in under it, with a light
+ *   the pile, is thrown out 96pt (220ms) and springs back in under it (550ms), with a light
  *   haptic on the same frame. Otherwise it springs home carrying the finger's velocity.
  * - **Reduce Motion**: no deal and no throw. A committed swipe just swaps the order.
  *
@@ -174,7 +180,7 @@ export function PhotoStack({
       dealt.set(1)
       return
     }
-    dealt.set(withDelay(120, withTiming(1, { duration: 320, easing: EASE_OUT })))
+    dealt.set(withDelay(250, withTiming(1, { duration: 620, easing: EASE_GENTLE })))
   }, [dealt, reduceMotion])
 
   // VoiceOver's "next photo" action: the same swap, without the throw.
@@ -206,7 +212,7 @@ export function PhotoStack({
         reduceMotion
           ? 0
           : withSequence(
-              withTiming(dir * THROW, { duration: 140, easing: EASE_OUT }),
+              withTiming(dir * THROW, { duration: THROW_MS, easing: EASE_OUT }),
               withSpring(0, SETTLE)
             )
       )
