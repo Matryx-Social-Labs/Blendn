@@ -268,13 +268,9 @@ export default function ScenePreview() {
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state="join"
-            icon={
-              <Ionicons
-                name="radio-outline"
-                size={SCENE_CTA_ICON}
-                color={EMBER.accent}
-              />
-            }
+            icon={(color) => (
+              <Ionicons name="radio-outline" size={SCENE_CTA_ICON} color={color} />
+            )}
           />
         </View>
       </View>

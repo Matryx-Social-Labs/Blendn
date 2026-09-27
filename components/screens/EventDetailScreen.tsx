@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -1547,18 +1548,35 @@ export default function EventDetail() {
         page underneath; only the pill takes touches.
       */}
       <View style={styles.ctaDock} pointerEvents="box-none">
+        {/*
+          The page fading out under the pill, instead of a glow around it: the
+          pill no longer carries a blur or a shadow, so this is what keeps a
+          photo or the map scrolling underneath from running into it.
+        */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(15,14,14,0)', EMBER.bg]}
+          locations={[0, 0.55]}
+          style={StyleSheet.absoluteFill}
+        />
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state={ctaState}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
-            icon={
+            icon={(color) =>
               checkingIn ? (
-                <ActivityIndicator size="small" color={EMBER.accent} />
+                <ActivityIndicator size="small" color={color} />
               ) : (
                 <Ionicons
-                  name={actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'}
+                  name={
+                    ctaState === 'rsvpd'
+                      ? 'checkmark'
+                      : actionStage === 'chat'
+                        ? 'chatbubbles-outline'
+                        : 'radio-outline'
+                  }
                   size={SCENE_CTA_ICON}
-                  color={EMBER.accent}
+                  color={color}
                 />
               )
             }
