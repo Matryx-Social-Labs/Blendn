@@ -23,7 +23,7 @@ import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { clearNewAccountFlag, useAuth } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
-import { isAccountAge } from '../lib/onboarding'
+import { accountAgeError } from '../lib/onboarding'
 
 /**
  * The one screen that replaced eight.
@@ -201,9 +201,9 @@ function AboutYouInner() {
 
   const validate = (): string | null => {
     const years = effectiveAge()
-    if (needsAge && age.trim() && !isAccountAge(years)) {
-      return 'Enter a valid age.'
-    }
+    // The same rule and sentence as sign-up: 18+ (SCRUM-330).
+    const ageProblem = needsAge ? accountAgeError(age) : null
+    if (ageProblem) return ageProblem
     if (wantsDating) {
       if (years === null) return 'Add your age before choosing dating.'
       if (years < DATING_MIN_AGE) {

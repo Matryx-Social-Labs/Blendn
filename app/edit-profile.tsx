@@ -296,7 +296,7 @@ export default function EditProfile() {
     if (!authUser) return
 
     const trimmedName = name.trim()
-    const errors = profileFormErrors({ name, age })
+    const errors = profileFormErrors({ name, age, storedAge: profile?.age ?? null })
     const parsedAge = errors.years
 
     setNameError(errors.name)

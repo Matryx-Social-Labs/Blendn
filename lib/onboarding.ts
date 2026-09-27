@@ -355,15 +355,20 @@ export function canContinue(step: OnboardingStep, draft: OnboardingDraft): boole
 }
 
 /**
- * The ages the product admits: the API's own rule, `age.min(13).max(120)`.
+ * The ages the product admits: the API's own rule, `age.min(18).max(120)`.
  *
- * Every form that takes an age asks `isAccountAge` rather than writing the
- * numbers itself. Edit profile wrote 18 — the dating age, not the account age —
- * and no 13–17-year-old could save any change to their profile (SCRUM-293).
- * Dating's own floor is a separate rule and lives with dating.
+ * Blend'n is 18+ (SCRUM-330, the owner's ruling of 2026-09-27; the store
+ * listings already said so). The floor was 13. Every form that takes an age
+ * asks `accountAgeError` / `isAccountAge` rather than writing the numbers
+ * itself — Edit profile once wrote its own 18 and locked every minor out of
+ * saving (SCRUM-293), which is why the age already on a profile still passes:
+ * accounts made before the ruling are left alone.
  */
-export const ACCOUNT_MIN_AGE = 13
+export const ACCOUNT_MIN_AGE = 18
 export const ACCOUNT_MAX_AGE = 120
+
+/** What someone under `ACCOUNT_MIN_AGE` is told, word for word what the server says. */
+export const ADULTS_ONLY = `Blend'n is for people ${ACCOUNT_MIN_AGE} and over.`
 
 export function isAccountAge(years: number | null | undefined): boolean {
   return (
@@ -375,27 +380,45 @@ export function isAccountAge(years: number | null | undefined): boolean {
 }
 
 /**
+ * Why a typed age cannot be used, as the sentence to show, or `null`.
+ *
+ * `required` is sign-up, where an age is the price of an account. `stored` is
+ * the age already on the profile: someone who joined before the 18+ ruling
+ * keeps theirs, and Edit profile does not send an unchanged age anyway.
+ */
+export function accountAgeError(
+  age: string,
+  opts: { required?: boolean; stored?: number | null } = {}
+): string | null {
+  const typed = age.trim()
+  if (!typed) return opts.required ? `Enter your age. ${ADULTS_ONLY}` : null
+  const years = Number(typed)
+  if (years === opts.stored) return null
+  if (Number.isInteger(years) && years >= 0 && years < ACCOUNT_MIN_AGE) return ADULTS_ONLY
+  return isAccountAge(years) ? null : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`
+}
+
+/**
  * Edit profile's required checks, as the sentences it shows under the fields,
  * and the age they validated. The screen saves `years`, not a second parse of
  * the same string: one parse means what was checked is what is sent.
  */
-export function profileFormErrors(input: { name: string; age: string }): {
+export function profileFormErrors(input: { name: string; age: string; storedAge: number | null }): {
   name: string | null
   age: string | null
   years: number | undefined
 } {
   const age = input.age.trim()
-  const years = age ? Number(age) : undefined
-  const valid = years === undefined || isAccountAge(years)
+  const error = accountAgeError(age, { stored: input.storedAge })
   return {
     name: input.name.trim() ? null : 'Name is required',
-    age: valid ? null : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`,
-    years: valid ? years : undefined,
+    age: error,
+    years: error || !age ? undefined : Number(age),
   }
 }
 
 /**
- * `YYYY-MM-DD`, a real calendar date, in the past, and at least 13 years ago.
+ * `YYYY-MM-DD`, a real calendar date, in the past, and at least 18 years ago.
  *
  * The same rule the server applies in `parseDateOfBirth`, checked here so the
  * Continue button can be disabled rather than the person tapping it and being
@@ -404,9 +427,24 @@ export function profileFormErrors(input: { name: string; age: string }): {
  * shows the server's error, which is the safe way round.
  */
 export function isCompleteDateOfBirth(value: string | undefined): boolean {
-  if (!value) return false
+  return isAccountAge(wholeYearsSince(value) ?? undefined)
+}
+
+/**
+ * A real birth date that makes this person under 18 today — the one reason
+ * "The basics" can give for a disabled Continue that is not "that is not a
+ * date". A future date is "not a date", so it is not this.
+ */
+export function isUnderAccountAge(value: string | undefined): boolean {
+  const years = wholeYearsSince(value)
+  return years !== null && years >= 0 && years < ACCOUNT_MIN_AGE
+}
+
+/** Whole years from a `YYYY-MM-DD` to today (UTC), or `null` if it is not a real date. */
+function wholeYearsSince(value: string | undefined): number | null {
+  if (!value) return null
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (!match) return false
+  if (!match) return null
 
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
   const date = new Date(Date.UTC(year, month - 1, day))
@@ -417,7 +455,7 @@ export function isCompleteDateOfBirth(value: string | undefined): boolean {
     date.getUTCMonth() !== month - 1 ||
     date.getUTCDate() !== day
   ) {
-    return false
+    return null
   }
 
   const now = new Date()
@@ -425,7 +463,7 @@ export function isCompleteDateOfBirth(value: string | undefined): boolean {
   const monthDiff = now.getUTCMonth() - (month - 1)
   const dayDiff = now.getUTCDate() - day
   if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1
-  return isAccountAge(age)
+  return age
 }
 
 /**

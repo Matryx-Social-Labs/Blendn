@@ -12,7 +12,9 @@ import {
 } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
+  ADULTS_ONLY,
   canContinue,
+  isUnderAccountAge,
   joinDateOfBirth,
   splitDateOfBirth,
   type OnboardingGender,
@@ -205,6 +207,10 @@ function BasicsScreenInner() {
          */}
         {dob.day && dob.month && dob.year.length === 4 && !dateOfBirth ? (
           <Text style={styles.error}>That is not a date we recognise.</Text>
+        ) : isUnderAccountAge(dateOfBirth) ? (
+          // Why Continue is off: Blend'n is 18+ (SCRUM-330). Every Google and
+          // Apple account passes this screen before it can finish onboarding.
+          <Text style={styles.error}>{ADULTS_ONLY}</Text>
         ) : null}
       </EmberFieldGroup>
 
