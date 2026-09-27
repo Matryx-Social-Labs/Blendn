@@ -29,6 +29,8 @@ import {
 } from '../../components/pulse/FeaturedCard'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
+import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
+import { drawableCityArt } from '../../components/cityArt/drawable'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
@@ -2501,13 +2503,23 @@ function EventsInner() {
                 {events.length === 0 && !netError && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
-                      <View style={styles.emptyGlyph}>
-                        <Ionicons
-                          name={notLiveHere ? 'rocket-outline' : 'calendar-outline'}
-                          size={36}
-                          color={EMBER.textTertiary}
-                        />
-                      </View>
+                      {/*
+                        The city itself, when we have drawn it. An empty week in
+                        Bengaluru is still Bengaluru, and the skyline says which
+                        city this is before the copy does. A search miss keeps
+                        the glyph: that empty is about the query, not the place.
+                      */}
+                      {!isSearching && drawableCityArt(selectedCity) ? (
+                        <CityArtBanner art={drawableCityArt(selectedCity)!} height={140} />
+                      ) : (
+                        <View style={styles.emptyGlyph}>
+                          <Ionicons
+                            name={notLiveHere ? 'rocket-outline' : 'calendar-outline'}
+                            size={36}
+                            color={EMBER.textTertiary}
+                          />
+                        </View>
+                      )}
                       {/*
                         Two different empties, and conflating them is a lie.
 
@@ -2654,8 +2666,8 @@ function EventsInner() {
         selection is written to storage on tap, so a restart does not re-ask —
         a selection that does not survive a restart is not a selection.
 
-        Design is a placeholder, like the interest picker before it. See
-        `docs/PLACEHOLDER_SCREENS.md`.
+        Cities with art (`lib/cityArt.ts`) render as an illustrated card with a
+        living skyline; the rest are plain rows until they are drawn.
       */}
       <SheetModal
         visible={cityPickerOpen}
@@ -2725,6 +2737,20 @@ function EventsInner() {
                 renderItem={({ item }) => {
                   const active = sameCity(item.city, selectedCity)
                   const here = sameCity(item.city, deviceCity)
+                  // A city we have drawn gets its skyline; the rest stay plain rows.
+                  const art = drawableCityArt(item.city)
+                  if (art) {
+                    return (
+                      <CityArtCard
+                        city={item.city}
+                        art={art}
+                        eventCount={item.eventCount}
+                        active={active}
+                        here={here}
+                        onPress={() => chooseCity(item.city)}
+                      />
+                    )
+                  }
                   return (
                     <TouchableOpacity
                       style={[styles.cityPickerRow, active && styles.cityPickerRowActive]}
