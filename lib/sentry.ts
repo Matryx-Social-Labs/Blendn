@@ -20,6 +20,15 @@ export function initSentry() {
     // addresses and other PII to every event regardless of that, undoing
     // the minimal-PII intent already established there.
     sendDefaultPii: false,
+    // Since SDK 56 the global `fetch` is `expo/fetch`, which does not go
+    // through XHR. The Sentry defaults instrument only XHR on mobile (RN's old
+    // fetch was built on it), so without these every apiClient call would drop
+    // out of breadcrumbs and traces. Same-named integrations replace the
+    // defaults, not add to them.
+    integrations: [
+      Sentry.breadcrumbsIntegration({ fetch: true }),
+      Sentry.reactNativeTracingIntegration({ traceFetch: true }),
+    ],
   })
 }
 

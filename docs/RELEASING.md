@@ -823,8 +823,8 @@ plugin, which is not installed.
 
 **Rollback** is both properties back to `false`. The next build is the old one.
 
-**Not fixable here:** Play's "R8 configuration: upgrade to AGP 9.0" row. Expo
-SDK 53 pins AGP 8.8.2, so that row stays "–" until an SDK upgrade. iOS has no
+**Not fixable here:** Play's "R8 configuration: upgrade to AGP 9.0" row. React
+Native pins AGP (8.12.0 on SDK 57), so that row stays "–" until an SDK ships AGP 9. iOS has no
 equivalent score; Xcode's Release defaults already optimise and strip.
 
 ## One-time setup
