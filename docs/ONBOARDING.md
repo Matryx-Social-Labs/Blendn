@@ -163,10 +163,9 @@ be authentic.
 | No duplicates | Same |
 | "Prefer not to say" is exclusive | Same, and the server rejects the pair |
 
-Two screens write orientation — onboarding step four and `about-you`, reached
-from Settings as "You and matching". A cap enforced in one of them is a 400 from
-the other, so `toggleOrientation` and `orientationDisabled` are shared and
-tested once.
+Two screens write orientation — onboarding step four and Edit profile (through
+`MatchingFields`). A cap enforced in one of them is a 400 from the other, so
+`toggleOrientation` and `orientationDisabled` are shared and tested once.
 
 **Chips past the cap are dimmed, not removed.** The unreachable ones are what
 tell somebody a limit exists; hiding them makes three-of-eight look like

@@ -447,8 +447,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg },
-  // Translucent-white overlay, not an opaque card token — kept as a literal;
-  // see the same note in about-you.tsx.
+  // Translucent-white overlay, not an opaque card token — kept as a literal.
   card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: EMBER_RADIUS.md, borderWidth: 1, borderColor: EMBER.separator },
   sectionHeader: { ...TYPE.label, marginTop: SPACE.lg, marginBottom: SPACE.sm, paddingHorizontal: SPACE.lg },
   /*

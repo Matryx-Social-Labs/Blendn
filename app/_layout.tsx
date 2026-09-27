@@ -505,22 +505,6 @@ function RootLayout() {
         }} 
       />
       <Stack.Screen
-        name="about-you"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-          /*
-           * Back is disabled, and "Skip for now" is the way out.
-           *
-           * Not the hard gate onboarding was: skipping writes nothing and lands
-           * on the events tab. What this prevents is swiping back to the signup
-           * form of an account that now exists, which would offer to create it
-           * again and fail with "that email is already registered".
-           */
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
         name="onboarding"
         options={{
           headerShown: false,

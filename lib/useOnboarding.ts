@@ -213,9 +213,11 @@ export function useOnboarding(step: OnboardingStep) {
          * the pre-event board, which gates on `interestCount >= 2`, and matched
          * weakly because ranking's dominant term is the graph.
          *
-         * Ordered first for the reason `app/about-you.tsx` gives: this call is
-         * idempotent and re-runnable from edit-profile, so if the profile write
-         * below fails nothing is permanently lost.
+         * Ordered first on purpose: this call is idempotent and re-runnable
+         * from edit-profile, so if the profile write below fails nothing is
+         * permanently lost. The reverse order is what loses data — interests
+         * landing first satisfy the interest-count gates and stop anything
+         * asking for the rest.
          *
          * Only on the step that owns the picker. `interestIds` is not a profile
          * field — `updateProfileSchema` has no such key and strips it — so the

@@ -60,7 +60,7 @@ re-run that script to set a fresh one — it re-asserts passwords by design.
 2. **Correct:** the room, or an honest error. Never "Not Checked In Yet".
 
 ### A5. Dating cannot be chosen without an orientation
-1. New account → `about-you` → tick **Dating**, leave gender/orientation empty →
+1. New account → onboarding preferences step (or Edit profile) → tick **Dating**, leave gender/orientation empty →
    Continue.
 2. **Correct:** refused, naming what is missing.
 3. **The bug:** it continued, and dating silently never worked afterwards with

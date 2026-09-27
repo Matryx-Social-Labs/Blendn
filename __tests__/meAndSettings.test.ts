@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 /**
@@ -60,11 +60,10 @@ describe('there is one profile editor', () => {
     expect(codeOnly(read('app/edit-profile.tsx'))).toContain("if (savedIntents.includes('dating'))")
   })
 
-  it('shares one field block with onboarding', () => {
-    // Two copies would drift into asking the same question differently.
-    for (const screen of ['app/about-you.tsx', 'app/edit-profile.tsx']) {
-      expect(codeOnly(read(screen))).toContain('<MatchingFields')
-    }
+  it('edits the matching fields in one place', () => {
+    // About you was the second copy; it was unreachable and is gone.
+    expect(codeOnly(read('app/edit-profile.tsx'))).toContain('<MatchingFields')
+    expect(existsSync(join(__dirname, '..', 'app', 'about-you.tsx'))).toBe(false)
   })
 
   it('leaves no second door in Settings', () => {

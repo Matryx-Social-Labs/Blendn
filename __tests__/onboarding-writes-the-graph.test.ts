@@ -112,7 +112,7 @@ describe('the hook writes the graph', () => {
   })
 
   it('writes the graph BEFORE the profile, and inside the try', () => {
-    // Order, for the reason `app/about-you.tsx` argues: idempotent and
+    // Order: the graph write is idempotent and
     // re-runnable, so a profile write failing after it loses nothing. Inside
     // the `try` because that block is what stops a throw pinning the button.
     const src = read('lib/useOnboarding.ts')
