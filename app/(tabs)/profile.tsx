@@ -2,35 +2,46 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
-import { OptimizedImage } from '../../components/OptimizedImage'
+import { MemoryTile } from '../../components/profile/MemoryTile'
+import { NightsOut } from '../../components/profile/NightsOut'
+import { PhotoStack } from '../../components/profile/PhotoStack'
+import { RollingNumber } from '../../components/profile/RollingNumber'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { ProfileHeading, ProfileInterests } from '../../components/profile/ProfileSections'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
-import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { identityMeta, profileGaps } from '../../lib/meProfile'
-import { featuredDateLabel, placeLabel } from '../../lib/pulse'
+import { agoLabel, identityMeta, profileGaps } from '../../lib/meProfile'
+import { MOTION_STAGGER } from '../../lib/motion'
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
-/** The avatar beside your name. */
-const AVATAR = 72
-/** How many past events the Recent list shows before SEE ALL. */
-const RECENT_COUNT = 3
+/** The photo pile beside your name, for the skeleton's stand-in. */
+const STACK = { width: 120, height: 120 }
+/** How many past events the Recent rail shows before SEE ALL. */
+const RECENT_COUNT = 8
+/**
+ * Enough attended events to cover Nights out's twelve weeks for anyone short
+ * of going out every night. The route caps `limit` server-side anyway.
+ */
+const ATTENDANCE_LIMIT = 50
+
+/** Sections arrive one beat apart, top to bottom, the first time the panel shows. */
+const enter = (i: number) => i * MOTION_STAGGER.normal
 
 /** One number and what it counts, optionally a way through to the list behind it. */
 function Stat({ value, label, onPress }: { value: number; label: string; onPress?: () => void }) {
   const body = (
     <>
-      <Text variant="title" maxFontSizeMultiplier={1.2}>{value}</Text>
+      <RollingNumber value={value} />
       <Text variant="label" maxFontSizeMultiplier={1.3}>{label.toUpperCase()}</Text>
     </>
   )
@@ -119,8 +130,9 @@ function ProfileInner() {
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // Empty until it loads, and on failure: Recent is left out rather than erroring.
-  const [recent, setRecent] = useState<PastEventRow[]>([])
+  // Empty until it loads, and on failure: Recent and Nights out are left out rather than erroring.
+  const [attended, setAttended] = useState<PastEventRow[]>([])
+  const [refreshing, setRefreshing] = useState(false)
   const lastBackgroundRefreshRef = React.useRef(0)
 
   const photoList = useMemo(() => {
@@ -204,9 +216,9 @@ function ProfileInner() {
   const loadRecent = useCallback(async () => {
     if (!user) return
     try {
-      const result = await apiClient.getMyAttendance()
+      const result = await apiClient.getMyAttendance(ATTENDANCE_LIMIT)
       if (result.success && result.data) {
-        setRecent(pastEventRows(result.data.events).slice(0, RECENT_COUNT))
+        setAttended(pastEventRows(result.data.events))
       } else {
         Logger.debug('profile', 'Failed to load attendance', { error: result.error })
       }
@@ -252,7 +264,7 @@ function ProfileInner() {
             <SkeletonBlock width={'70%'} height={TYPE.display.lineHeight} />
             <SkeletonLine width={'50%'} />
           </View>
-          <SkeletonBlock width={AVATAR} height={AVATAR} borderRadius={EMBER_RADIUS.pill} />
+          <SkeletonBlock width={STACK.width} height={STACK.height} borderRadius={EMBER_RADIUS.md} />
         </View>
         <View style={styles.buttons}>
           <SkeletonBlock height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} style={styles.flex} />
@@ -264,13 +276,28 @@ function ProfileInner() {
   )
 
   const mark = pseudonymAvatar(profile?.id || user?.id || 'you')
-  const avatar = photoList[0] || null
   const stats = profile?.stats
   const meta = identityMeta(profile?.location, profile?.memberSince)
   const gaps = profile
     ? profileGaps({ photos: photoList, bio: profile.bio, interests: profile.interests })
     : []
   const interests = profile?.interests ?? []
+  const recent = attended.slice(0, RECENT_COUNT)
+  const openEvent = (id: string) => router.push({ pathname: '/event/[id]', params: { id } })
+
+  /*
+   * Pull to refresh: skips the cache. The spinner waits on the profile only;
+   * attendance refreshes alongside and, as on focus, is never awaited.
+   */
+  const onRefresh = async () => {
+    setRefreshing(true)
+    loadRecent()
+    try {
+      await getUserAndProfile(true)
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const openPreview = () =>
     router.push({ pathname: '/user/[id]', params: { id: profile?.id || user?.id || '' } })
@@ -280,7 +307,7 @@ function ProfileInner() {
   const renderContent = () => (
     <View style={styles.panel}>
       {/* Flat on the page: the name is the screen's one display line. */}
-      <View style={styles.headerBlock}>
+      <FadeInUp style={styles.headerBlock}>
         <View style={styles.identity}>
           <View style={styles.identityText}>
             <Text variant="display" numberOfLines={1} maxFontSizeMultiplier={1.2} accessibilityRole="header">
@@ -297,30 +324,11 @@ function ProfileInner() {
             ) : null}
           </View>
 
-          {/* Tapping your own face to see your own page is the gesture people expect. */}
-          <ScalePress
-            onPress={openPreview}
-            haptic={false}
-            accessibilityRole="imagebutton"
-            accessibilityLabel="Preview your profile as others see it"
-          >
-            {avatar ? (
-              <OptimizedImage
-                source={avatar}
-                recyclingKey={avatar}
-                style={styles.avatar as never}
-                width={AVATAR}
-                height={AVATAR}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.avatar, { backgroundColor: mark.colors[0] }]}>
-                <Text style={styles.avatarGlyph} maxFontSizeMultiplier={1}>
-                  {mark.character}
-                </Text>
-              </View>
-            )}
-          </ScalePress>
+          {/*
+            Tapping your own face to see your own page is the gesture people
+            expect. Swiping it shuffles your photos: see PhotoStack.
+          */}
+          <PhotoStack photos={photoList} fallback={mark} onPress={openPreview} />
         </View>
 
         {/* Two equal choices, so one height and one fill -- no accent. */}
@@ -344,16 +352,16 @@ function ProfileInner() {
             <Text variant="button" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Preview</Text>
           </ScalePress>
         </View>
-      </View>
+      </FadeInUp>
 
       {/*
-        What is missing, as rows -- never a completeness meter: staying without
-        a photo is a legitimate choice (see `event-preferences`). The "Add a
-        photo" icon is the screen's one accent while it shows, because without a
-        photo revealing yourself in a room has nothing to reveal.
+        What is missing, as rows -- never a meter: staying without a photo is
+        a legitimate choice (see `event-preferences`). The "Add a photo" icon
+        is the screen's one accent while it shows, because without a photo
+        revealing yourself in a room has nothing to reveal.
       */}
       {gaps.length > 0 ? (
-        <View style={styles.section}>
+        <FadeInUp delay={enter(1)} style={styles.section}>
           <ProfileHeading title="Finish your profile" />
           <View style={styles.rows}>
             {gaps.map((gap) => (
@@ -366,16 +374,16 @@ function ProfileInner() {
               />
             ))}
           </View>
-        </View>
+        </FadeInUp>
       ) : null}
 
       {/*
         `eventsOrganized` is hidden at zero because almost nobody organises, and
         a permanent "0 Hosted" reads as a thing you failed to do rather than a
-        role you do not have.
+        role you do not have. The numbers roll up when they first arrive.
       */}
       {stats ? (
-        <View style={styles.section}>
+        <FadeInUp delay={enter(2)} style={styles.section}>
           <ProfileHeading title="Stats" />
           <View style={styles.stats}>
             <Stat value={stats.eventsAttended} label="Attended" onPress={openGoing} />
@@ -388,40 +396,62 @@ function ProfileInner() {
               </>
             ) : null}
           </View>
-        </View>
+        </FadeInUp>
+      ) : null}
+
+      {/*
+        The nights behind "Attended", as twelve weeks of dots. Left out
+        entirely when none fall in the window -- see NightsOut.
+      */}
+      {attended.length > 0 ? (
+        <FadeInUp delay={enter(3)} style={styles.section}>
+          <ProfileHeading title="Nights out" />
+          <NightsOut events={attended} onOpenEvent={openEvent} />
+        </FadeInUp>
       ) : null}
 
       {/* Your own chips, so nothing is "shared" -- plain chips only. */}
       {interests.length > 0 ? (
-        <View style={styles.section}>
+        <FadeInUp delay={enter(4)} style={styles.section}>
           <SectionHeader title="Interests" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
           <ProfileInterests interests={interests} />
-        </View>
+        </FadeInUp>
       ) : null}
 
+      {/*
+        A rail of photo tiles rather than rows: these are memories, and the
+        cover is what you remember. It bleeds to the screen edge and starts
+        its first tile at the gutter, like every carousel in the app.
+      */}
       {recent.length > 0 ? (
-        <View style={styles.section}>
+        <FadeInUp delay={enter(5)} style={styles.section}>
           <SectionHeader title="Recent" actionLabel="SEE ALL" onAction={openGoing} />
-          <View style={styles.recent}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.rail}
+            contentContainerStyle={styles.railContent}
+          >
             {recent.map((row) => (
-              <UpcomingCard
+              <MemoryTile
                 key={row.id}
                 title={row.title}
                 imageUrl={row.cover_image_url}
-                timeLabel={featuredDateLabel(row.start_time)}
-                placeLabel={placeLabel(row)}
+                ago={agoLabel(row.start_time)}
                 onPress={() => router.push({ pathname: '/event/[id]', params: { id: row.id } })}
               />
             ))}
-          </View>
-        </View>
+          </ScrollView>
+        </FadeInUp>
       ) : null}
 
-      <PanelRow
-        icon="settings-outline"
-        label="Settings"
-        onPress={() => router.push('/settings')}
-      />
+      <FadeInUp delay={enter(6)}>
+        <PanelRow
+          icon="settings-outline"
+          label="Settings"
+          onPress={() => router.push('/settings')}
+        />
+      </FadeInUp>
     </View>
   )
 
@@ -456,7 +486,12 @@ function ProfileInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
+        }
+      >
         {renderContent()}
       </ScrollView>
     </SafeAreaView>
@@ -474,14 +509,6 @@ const styles = StyleSheet.create({
   headerBlock: { gap: SPACE.lg },
   identity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   identityText: { flex: 1, gap: SPACE.xs },
-  avatar: {
-    width: AVATAR,
-    height: AVATAR,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarGlyph: { ...TYPE.display },
 
   buttons: { flexDirection: 'row', gap: SPACE.md },
   button: {
@@ -503,7 +530,9 @@ const styles = StyleSheet.create({
   stat: { flex: 1, gap: SPACE.xxs, paddingHorizontal: SPACE.md },
   statRule: { width: StyleSheet.hairlineWidth, backgroundColor: EMBER.separator },
 
-  recent: { gap: SPACE.md },
+  /* Out to the screen edge, first tile back at the gutter. */
+  rail: { marginHorizontal: -GUTTER },
+  railContent: { paddingHorizontal: GUTTER, gap: SPACE.md },
 
   rows: { gap: SPACE.sm },
   row: {

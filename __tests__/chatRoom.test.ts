@@ -336,9 +336,11 @@ describe('the Me tab is a control panel, not a second profile', () => {
      * awaited by the profile load, and a failure only leaves Recent out.
      */
     const src = OWN()
-    expect(src).toContain('apiClient.getMyAttendance()')
+    // Enough of it to fill Nights out's twelve weeks, not just the Recent rail.
+    expect(src).toContain('apiClient.getMyAttendance(ATTENDANCE_LIMIT)')
     expect(src).toContain('pastEventRows(result.data.events)')
-    expect(src).toContain('<UpcomingCard')
+    // Past events as a rail of photo tiles: memories, not a schedule.
+    expect(src).toContain('<MemoryTile')
     expect(src).not.toContain('onToggleFavorite')
     expect(src).toContain("pathname: '/event/[id]'")
     expect(src).not.toMatch(/await loadRecent|Promise\.all/)
