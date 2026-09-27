@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useState } from 'react'
@@ -31,8 +32,11 @@ export default function ReadyScreen() {
   const complete = async () => {
     setFailed(false)
     if (await finish()) {
+      // Once per account, and it lands with the fade into the tabs.
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       router.replace('/(tabs)/events')
     } else {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       // Kept here rather than pushed on regardless. This is the write that
       // decides whether the account is finished, and letting someone through
       // on a failure would leave them permanently mid-funnel with no screen

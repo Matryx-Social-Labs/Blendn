@@ -464,7 +464,14 @@ function RootLayout() {
         name="(tabs)"
         options={{ 
           headerShown: false,
-          animation: 'none',
+          /*
+           * Fade, not a cut. The tabs arrive by `replace` — from sign-in, from
+           * the end of onboarding — and a hard cut from a full-screen form to
+           * the feed reads as a crash. A slide would say "deeper"; this is a
+           * different place, so it crossfades. Tab-to-tab switching is inside
+           * the navigator and unaffected.
+           */
+          animation: 'fade',
           gestureEnabled: false // Prevent swipe back to login
         }} 
       />
