@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { RisingSheet } from '../motion/RisingSheet'
 
 /**
  * Sending a connection request — the message, and what it costs you.
@@ -88,7 +89,7 @@ export function ConnectSheet({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent
       onRequestClose={onDismiss}
       accessibilityViewIsModal
@@ -96,7 +97,7 @@ export function ConnectSheet({
       <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Cancel" />
 
       <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR}>
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.grabber} />
 
           <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
@@ -178,7 +179,7 @@ export function ConnectSheet({
           <Text style={styles.footnote} maxFontSizeMultiplier={1.3}>
             You can only send one request to someone.
           </Text>
-        </View>
+        </RisingSheet>
       </KeyboardAvoidingView>
     </Modal>
   )

@@ -1,20 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, {
-  Easing,
-  FadeIn,
-  ReduceMotion,
-  useReducedMotion,
-  withDelay,
-  withTiming,
-  type EntryAnimationsValues,
-} from 'react-native-reanimated'
+import Animated, { Easing, useReducedMotion, withDelay, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_TYPE } from '../../lib/theme'
-import { MOTION_DURATION } from '../../lib/motion'
+import { RisingSheet } from '../motion/RisingSheet'
 
 /**
  * "A new spark." — frame `1141:5389`, *Connection Success*.
@@ -60,7 +52,7 @@ const AVATAR_DROP = 16
  *
  * The Modal fades, so the scrim darkens in place instead of riding up with the
  * sheet (`animationType="slide"` moved the whole transparent layer, scrim
- * included). The sheet rises on the iOS sheet curve. The two discs slide 24pt
+ * included). The sheet rises on the iOS sheet curve (`RisingSheet`). The two discs slide 24pt
  * toward each other as it settles — the meeting is the content — and the spark
  * lands last. The gradient aura behind the discs is gone: a glow under the
  * moment read as decoration, and the discs carry their own colour.
@@ -70,18 +62,8 @@ const AVATAR_DROP = 16
  *
  * Reduce Motion: the sheet fades in and the discs and spark simply appear.
  */
-const EASE_SHEET = Easing.bezier(0.32, 0.72, 0, 1)
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
-const SHEET_MS = 300
 const DISC_SHIFT = 24
-
-const sheetIn = (values: EntryAnimationsValues) => {
-  'worklet'
-  return {
-    initialValues: { transform: [{ translateY: values.targetHeight }] },
-    animations: { transform: [{ translateY: withTiming(0, { duration: SHEET_MS, easing: EASE_SHEET }) }] },
-  }
-}
 
 const discIn = (from: number) => () => {
   'worklet'
@@ -108,8 +90,6 @@ const sparkIn = () => {
     },
   }
 }
-
-const sheetFade = FadeIn.duration(MOTION_DURATION.normal).reduceMotion(ReduceMotion.Never)
 
 export function ConnectionSheet({
   visible,
@@ -141,10 +121,7 @@ export function ConnectionSheet({
     >
       <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Dismiss" />
 
-      <Animated.View
-        entering={reduceMotion ? sheetFade : sheetIn}
-        style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}
-      >
+      <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.grabber} />
 
         <View style={styles.composition}>
@@ -210,7 +187,7 @@ export function ConnectionSheet({
             </Text>
           </Pressable>
         </View>
-      </Animated.View>
+      </RisingSheet>
     </Modal>
   )
 }

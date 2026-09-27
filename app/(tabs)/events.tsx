@@ -89,6 +89,7 @@ import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { RisingSheet } from '../../components/motion/RisingSheet'
 
 /*
  * Distance in METRES, not kilometres.
@@ -2573,7 +2574,7 @@ function EventsInner() {
       */}
       <Modal
         visible={cityPickerOpen}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setCityPickerOpen(false)}
       >
@@ -2590,7 +2591,7 @@ function EventsInner() {
             accessibilityRole="button"
             accessibilityLabel="Close city picker"
           />
-          <View style={styles.cityPickerSheet}>
+          <RisingSheet style={styles.cityPickerSheet}>
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
             </Text>
@@ -2663,7 +2664,7 @@ function EventsInner() {
                 }}
               />
             )}
-          </View>
+          </RisingSheet>
         </View>
       </Modal>
 

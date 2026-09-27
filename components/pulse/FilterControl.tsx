@@ -12,6 +12,7 @@ import {
   type When,
 } from '../../lib/eventFilters'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { RisingSheet } from '../motion/RisingSheet'
 
 export interface CategoryOption {
   slug: string
@@ -58,9 +59,9 @@ export function FilterSheet({
   const count = activeFilterCount(draft)
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close filters" />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+      <RisingSheet style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
         <View style={styles.grabber} />
 
         <View style={styles.sheetHead}>
@@ -149,7 +150,7 @@ export function FilterSheet({
           />
           <Text style={styles.applyText}>Show results</Text>
         </Pressable>
-      </View>
+      </RisingSheet>
     </Modal>
   )
 }
