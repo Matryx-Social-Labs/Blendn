@@ -9,6 +9,7 @@ import {
   Clipboard,
   FlatList,
   KeyboardAvoidingView,
+  Platform,
   Modal,
   Pressable,
   StyleSheet,
@@ -37,6 +38,8 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { showMessageReportOptions } from '../../lib/safetyUtils'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import Animated from 'react-native-reanimated'
+import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
 interface Message {
   message_id: string
@@ -553,7 +556,7 @@ function GroupChatInner(props?: {
    * inline arrow here would re-render every mounted bubble each time.
    */
   const openMessageMenu = useCallback((message: Message) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     setSelectedMessage(message)
     setShowMessageMenu(true)
   }, [])
@@ -643,6 +646,12 @@ function GroupChatInner(props?: {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          /*
+           * Drag the conversation down to put the keyboard away — on iOS the
+           * keyboard follows the finger, the Messages behaviour people expect.
+           * Android has no interactive mode, so a drag dismisses it.
+           */
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}
@@ -697,13 +706,22 @@ function GroupChatInner(props?: {
         />
 
         {showScrollToBottom && (
-          <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
-          </TouchableOpacity>
+          <Animated.View entering={popIn} exiting={popOut} style={styles.scrollToBottomBtn}>
+            <TouchableOpacity
+              style={styles.scrollToBottomHit}
+              onPress={() => scrollToBottom(true)}
+              activeOpacity={0.8}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to the newest message"
+            >
+              <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
         {replyingTo && (
-          <View style={styles.replyBar}>
+          <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.replyBar}>
             <View style={styles.replyBarLine} />
             <View style={styles.replyBarContent}>
               <Text style={styles.replyBarLabel}>Replying to {replyingTo.sender_name}</Text>
@@ -712,7 +730,7 @@ function GroupChatInner(props?: {
             <TouchableOpacity style={styles.replyBarClose} onPress={() => setReplyingTo(null)}>
               <Ionicons name="close" size={16} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
 
         <ChatComposer
@@ -834,6 +852,7 @@ const styles = StyleSheet.create({
   // Input bar
 
   // Scroll to bottom
+  scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
     position: 'absolute', right: 16, bottom: 80,
     width: 36, height: 36, borderRadius: 18,

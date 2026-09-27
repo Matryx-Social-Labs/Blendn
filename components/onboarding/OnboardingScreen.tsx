@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import {
   KeyboardAvoidingView,
   Pressable,
@@ -9,13 +9,20 @@ import {
   Text,
   View,
 } from 'react-native'
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AtmosphericBackground } from './AtmosphericBackground'
 
 import {
   EMBER,
-  EMBER_GLOW,
   EMBER_GRADIENT,
   EMBER_RADIUS,
   EMBER_TYPE,
@@ -68,6 +75,10 @@ interface Props {
   onBack?: () => void
 }
 
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+/** The width the bar last showed, so the next step's bar can start from it. */
+let lastShownPercent = 0
+
 export function OnboardingScreen({
   step,
   title,
@@ -85,6 +96,29 @@ export function OnboardingScreen({
 }: Props) {
   const insets = useSafeAreaInsets()
   const percent = progressPercent(step)
+  const reduceMotion = useReducedMotion()
+  /*
+   * The bar fills from where the last step left it.
+   *
+   * Every step is its own screen, so each mounted with the fill already at
+   * its new width — the bar never visibly moved, and "you are further along"
+   * went unsaid. Now it starts at the previous step's width (going back, it
+   * drains) and eases to this one once the push has mostly landed.
+   *
+   * `width`, which is normally off-limits: the fill is absolutely positioned
+   * and has no children that lay out, so nothing else re-flows — and `scaleX`
+   * would squash its rounded end. Reduce Motion: it is simply at its width.
+   */
+  const fill = useSharedValue(reduceMotion ? percent : lastShownPercent)
+  useEffect(() => {
+    lastShownPercent = percent
+    if (reduceMotion) {
+      fill.set(percent)
+      return
+    }
+    fill.set(withDelay(200, withTiming(percent, { duration: 300, easing: EASE_OUT })))
+  }, [percent, reduceMotion, fill])
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get()}%` }))
 
   return (
     <View style={styles.root}>
@@ -116,12 +150,14 @@ export function OnboardingScreen({
           accessibilityRole="progressbar"
           accessibilityValue={{ min: 0, max: 100, now: percent }}
         >
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={[styles.progressFill, { width: `${percent}%` }]}
-          />
+          <Animated.View style={[styles.progressFill, fillStyle]}>
+            <LinearGradient
+              colors={[...EMBER_GRADIENT.colors]}
+              start={EMBER_GRADIENT.start}
+              end={EMBER_GRADIENT.end}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
         </View>
 
         <Text style={styles.progressLabel}>{percent}%</Text>
@@ -215,10 +251,15 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     overflow: 'hidden',
   },
+  // No glow: the track clips it anyway (`overflow: hidden`), and a shadow on
+  // an element whose width animates re-renders the shadow every frame.
   progressFill: {
-    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     borderRadius: EMBER_RADIUS.pill,
-    ...EMBER_GLOW.progress,
+    overflow: 'hidden',
   },
   progressLabel: EMBER_TYPE.progress,
 

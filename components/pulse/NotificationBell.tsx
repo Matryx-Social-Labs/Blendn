@@ -18,6 +18,7 @@ import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { RisingSheet } from '../motion/RisingSheet'
 
 /**
  * The bell in The Pulse's top bar — frame `1141:4819`'s right glyph.
@@ -146,7 +147,7 @@ export function NotificationBell() {
 
       <Modal
         visible={open}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setOpen(false)}
       >
@@ -155,7 +156,7 @@ export function NotificationBell() {
           the most common way a modal traps somebody.
         */}
         <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.sheetTint} pointerEvents="none" />
           <View style={styles.grabber} />
@@ -230,7 +231,7 @@ export function NotificationBell() {
               }}
             />
           )}
-        </View>
+        </RisingSheet>
       </Modal>
     </>
   )

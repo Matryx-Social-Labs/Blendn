@@ -106,37 +106,23 @@ export function roomButtonLabel(state: RoomButtonState): string {
 }
 
 /**
- * Should the button draw attention to itself?
- *
- * Only the two states that are time-critical. An idle button that pulses is an
- * app tugging at somebody for no reason, and the cost is that the pulse stops
- * meaning anything on the night it does.
- */
-export function roomButtonPulses(state: RoomButtonState): boolean {
-  return state === 'live' || state === 'checkin'
-}
-
-/**
- * How the button glows — and it is two different things, not one at two volumes.
+ * Which live dot the button wears — two different marks, not one at two volumes.
  *
  * The Pulse used to carry a **"You're checked in"** carousel: a section header,
  * a horizontal strip of cards and a Check out pill, roughly 200pt of the first
  * screen, to say one bit of information. It is gone, and this is where that bit
- * went.
+ * went — so being in a room has to look different from standing outside one.
  *
- * Which puts a real requirement on the glow. `roomButtonPulses` is true for both
- * `live` and `checkin`, so as long as the glow is *only* a breath, the button
- * looks identical whether you are in a room or merely standing outside one —
- * fine while the carousel said which, and not fine once it is the only signal.
+ *     invite  a white dot   "there is a room here, come in"
+ *     live    a green dot   "you are in it"
+ *     none    nothing       an idle button that marks itself is an app tugging
+ *                           at somebody for no reason
  *
- *     invite  a breath, and nothing else    "there is a room here, come in"
- *     live    a breath around a steady ring "you are in it"
- *
- * The **ring is the status and the breath is the invitation**, and that split is
- * deliberate: motion cannot carry a state. It is invisible in a screenshot, to
- * anybody who has turned motion off at the OS level, and to anybody who simply
- * is not looking at the moment it swells. A ring that is always there is legible
- * at a glance and survives all three.
+ * Both are **still**. This was a halo breathing out to 1.42x around a ring,
+ * and motion cannot carry a state: it is invisible in a screenshot, to anybody
+ * who has turned motion off, and to anybody not looking at the moment it
+ * swells. A dot that is simply there is legible at a glance and survives all
+ * three.
  */
 export type RoomButtonGlow = 'none' | 'invite' | 'live'
 

@@ -12,6 +12,7 @@ import {
   View,
   ViewToken,
 } from 'react-native'
+import { SwipeToDismiss } from './motion/SwipeToDismiss'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -65,7 +66,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
       statusBarTranslucent
     >
       <StatusBar style="light" />
-      <View style={styles.backdrop}>
+      <SwipeToDismiss onDismiss={onClose}>
         <FlatList
           ref={listRef}
           data={photos}
@@ -102,16 +103,12 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
             ))}
           </View>
         )}
-      </View>
+      </SwipeToDismiss>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
   page: {
     width: SCREEN_W,
     height: SCREEN_H,

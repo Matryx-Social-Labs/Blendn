@@ -279,6 +279,9 @@ export default function Match({
          * Both pseudonyms come down with the like (`pseudonyms`), so the sheet
          * paints immediately instead of fetching the conversation first.
          */
+        // The sheet rises on this same frame; the haptic is the moment, not a
+        // follow-up to it. One per mutual, and the sheet stands alone without it.
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
         setConnection({
           conversationId,
           userId: attendee.user_id,
@@ -717,7 +720,6 @@ export default function Match({
 
   const onPullToRefresh = useCallback(async () => {
     if (!authUser) return
-    void Haptics.selectionAsync()
     setRefreshing(true)
     try {
       await loadActiveEventAndAttendees(authUser.id, true)

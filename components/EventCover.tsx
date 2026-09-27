@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Image, ImageBackground, StyleSheet, View } from 'react-native'
+import { Image as ExpoImage } from 'expo-image'
+import { Image, StyleSheet, View } from 'react-native'
 
 import { EMBER } from '../lib/theme'
 
@@ -39,20 +40,28 @@ export function EventCover({ uri, height, radius = 12, retry = 0, children }: Ev
 
   if (uri && failedAttempt !== attempt) {
     return (
-      <ImageBackground
-        testID="event-cover-image"
-        // Remounted per attempt: the native view does not reload a source it
-        // already failed on just because it rendered again.
-        key={attempt}
-        source={{ uri }}
-        onError={() => setFailedAttempt(attempt)}
-        style={{ height, width: '100%' }}
-        imageStyle={corners}
-        resizeMode="cover"
-      >
+      /*
+       * expo-image rather than RN's ImageBackground, which cannot fade: the
+       * poster used to snap in over the empty card a beat after the text. It
+       * now fades over the surface colour in 150ms, and comes from the
+       * memory/disk cache the rest of the app's images already share.
+       */
+      <View style={[styles.frame, corners, { height }]}>
+        <ExpoImage
+          testID="event-cover-image"
+          // Remounted per attempt: the native view does not reload a source it
+          // already failed on just because it rendered again.
+          key={attempt}
+          source={{ uri }}
+          onError={() => setFailedAttempt(attempt)}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="memory-disk"
+        />
         {overlay}
         {children}
-      </ImageBackground>
+      </View>
     )
   }
 
@@ -66,6 +75,7 @@ export function EventCover({ uri, height, radius = 12, retry = 0, children }: Ev
 }
 
 const styles = StyleSheet.create({
+  frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
   placeholder: {
     width: '100%',
     backgroundColor: EMBER.surface,

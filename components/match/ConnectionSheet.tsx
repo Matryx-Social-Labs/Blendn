@@ -1,10 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, useReducedMotion, withDelay, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_TYPE } from '../../lib/theme'
+import { RisingSheet } from '../motion/RisingSheet'
 
 /**
  * "A new spark." — frame `1141:5389`, *Connection Success*.
@@ -29,7 +31,7 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_TYPE } from '../../lib/theme'
  * cache, and server-side blur still carries skin tone, hair colour and build.
  *
  * So the composition is the frame's — 128pt, 4pt `#141313` ring, overlapped by
- * 24, the right one dropped 16, the gradient aura behind — and the faces are
+ * 24, the right one dropped 16 — and the faces are
  * `pseudonymAvatar` marks. Same colour, same creature as the grid card they came
  * from and the Banter row they are about to become.
  *
@@ -44,6 +46,50 @@ const AVATAR_RING = 4
 /** Frame `1141:5412`: `left-[-24px]`. Frame `1141:5410`: `pt-[16px]`. */
 const AVATAR_OVERLAP = 24
 const AVATAR_DROP = 16
+
+/*
+ * The moment, in three beats — and nothing that glows.
+ *
+ * The Modal fades, so the scrim darkens in place instead of riding up with the
+ * sheet (`animationType="slide"` moved the whole transparent layer, scrim
+ * included). The sheet rises on the iOS sheet curve (`RisingSheet`). The two discs slide 24pt
+ * toward each other as it settles — the meeting is the content — and the spark
+ * lands last. The gradient aura behind the discs is gone: a glow under the
+ * moment read as decoration, and the discs carry their own colour.
+ *
+ * Timed, not sprung: a match arrives from a tap, with no momentum to carry.
+ * A mutual is rare, which is the only reason this gets choreography at all.
+ *
+ * Reduce Motion: the sheet fades in and the discs and spark simply appear.
+ */
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+const DISC_SHIFT = 24
+
+const discIn = (from: number) => () => {
+  'worklet'
+  const t = { duration: 280, easing: EASE_OUT }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateX: from }] },
+    animations: {
+      opacity: withDelay(120, withTiming(1, t)),
+      transform: [{ translateX: withDelay(120, withTiming(0, t)) }],
+    },
+  }
+}
+const leftDiscIn = discIn(-DISC_SHIFT)
+const rightDiscIn = discIn(DISC_SHIFT)
+
+const sparkIn = () => {
+  'worklet'
+  const t = { duration: 200, easing: EASE_OUT }
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.6 }] },
+    animations: {
+      opacity: withDelay(320, withTiming(1, t)),
+      transform: [{ scale: withDelay(320, withTiming(1, t)) }],
+    },
+  }
+}
 
 export function ConnectionSheet({
   visible,
@@ -63,51 +109,41 @@ export function ConnectionSheet({
   const insets = useSafeAreaInsets()
   const you = pseudonymAvatar(youPseudonym)
   const them = pseudonymAvatar(pseudonym)
+  const reduceMotion = useReducedMotion()
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent
       onRequestClose={onDismiss}
       accessibilityViewIsModal
     >
       <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Dismiss" />
 
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+      <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.grabber} />
 
         <View style={styles.composition}>
-          {/*
-            Frame `1141:5406`: 192pt, the gradient at 20% under a 30pt blur. RN
-            has no backdrop blur on a plain View, so this is the gradient at low
-            opacity — the aura reads as a glow either way, and a `BlurView` here
-            would be a native layer rendering behind two opaque discs.
-          */}
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={styles.aura}
-            pointerEvents="none"
-          />
-
-          <Disc colors={you.colors} character={you.character} label="You" />
-          <Disc
-            colors={them.colors}
-            character={them.character}
-            label={pseudonym}
-            style={styles.discSecond}
-          />
+          <Animated.View entering={reduceMotion ? undefined : leftDiscIn}>
+            <Disc colors={you.colors} character={you.character} label="You" />
+          </Animated.View>
+          <Animated.View entering={reduceMotion ? undefined : rightDiscIn} style={styles.discSecond}>
+            <Disc colors={them.colors} character={them.character} label={pseudonym} />
+          </Animated.View>
 
           {/*
             Frame `1141:5414` is a 46pt exported sparkle. `react-native-svg` is
             not a dependency and one icon does not justify adding it — this is
             the same glyph from the icon set already installed.
           */}
-          <View style={styles.spark} pointerEvents="none">
+          <Animated.View
+            entering={reduceMotion ? undefined : sparkIn}
+            style={styles.spark}
+            pointerEvents="none"
+          >
             <MaterialIcons name="auto-awesome" size={22} color={EMBER.onGradient} />
-          </View>
+          </Animated.View>
         </View>
 
         <Text style={styles.title} maxFontSizeMultiplier={1.4} accessibilityRole="header">
@@ -151,7 +187,7 @@ export function ConnectionSheet({
             </Text>
           </Pressable>
         </View>
-      </View>
+      </RisingSheet>
     </Modal>
   )
 }
@@ -203,14 +239,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     marginBottom: 16,
-  },
-  aura: {
-    position: 'absolute',
-    width: 192,
-    height: 192,
-    borderRadius: 96,
-    top: -32,
-    opacity: 0.2,
   },
   disc: {
     width: AVATAR,

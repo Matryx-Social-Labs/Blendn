@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
+import Animated from 'react-native-reanimated'
+import { fadeInFast, fadeOutFast } from './motion/presence'
 
 /**
  * Two different failures wearing one banner.
@@ -61,14 +63,14 @@ export default function RealtimeStatusBanner({
   }
 
   return (
-    <View style={[styles.container, isOffline && styles.offlineContainer, style]}>
+    <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={[styles.container, isOffline && styles.offlineContainer, style]}>
       <Text style={styles.text}>{message}</Text>
       {!isOffline && !isReconnecting && (
         <TouchableOpacity onPress={handleRetry} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </Animated.View>
   )
 }
 

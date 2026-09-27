@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, Tabs } from 'expo-router'
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
-import { useReducedMotion } from 'react-native-reanimated'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
@@ -14,12 +14,12 @@ import { Logger } from '../../lib/logger'
 import {
   roomButtonAccessibilityLabel,
   roomButtonGlow,
-  roomButtonPulses,
   roomButtonTarget,
   type RoomButtonTarget,
 } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { MOTION_DURATION } from '../../lib/motion'
+import { APP_COLORS, EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -168,93 +168,22 @@ TabButton.displayName = 'TabButton'
  * Seated in the bar rather than raised above it — see `centreSlot` for why the
  * frame's `y=-16` does not survive contact with a real screen.
  */
-/** Where the halo rests under Reduce Motion: ~1.17x, ~0.3 opacity — a glow clear of the button, not a pulse. */
-const REDUCED_HALO_PROGRESS = 0.4
+/*
+ * The live dot fades in once, when the state starts, and then holds still.
+ * It used to be a halo breathing out to 1.42x on a loop plus a ring around the
+ * button: effects on effects, a warm glow that read as generated, and a loop
+ * running for as long as somebody was in a room. Status is a still mark — the
+ * way Open marks a live broadcast, with a dot and nothing else.
+ */
+const liveDotIn = FadeIn.duration(MOTION_DURATION.normal)
 
 const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
-  const pulses = roomButtonPulses(target.state)
-  const glow = roomButtonGlow(target.state)
-  const pulse = useRef(new Animated.Value(0)).current
-  const reduceMotion = useReducedMotion()
-
-  useEffect(() => {
-    if (!pulses) {
-      pulse.setValue(0)
-      return
-    }
-    /*
-     * Reduce Motion holds the halo still instead of removing it. In `checkin`
-     * there is no live ring, so the halo is the only thing saying "there is a
-     * room here" — a static glow keeps that without the loop.
-     */
-    if (reduceMotion) {
-      pulse.setValue(REDUCED_HALO_PROGRESS)
-      return
-    }
-    /*
-     * A slow breath, not a blink.
-     *
-     * `useNativeDriver` because this runs for the whole time somebody is in a
-     * room — on the JS thread it would compete with the chat's socket traffic
-     * and the roster's re-renders, which is exactly when it must not stutter.
-     */
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 1400,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 1400,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ])
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [pulses, pulse, reduceMotion])
-
-  /*
-   * 1.42, up from 1.06.
-   *
-   * The halo is the same size as the button and sits behind it, so at 1.06 it
-   * grew 52 -> 55 and showed as a 1.5pt rim: a ring the width of a hairline,
-   * fading to nothing, under a disc that already casts a 16pt warm shadow. It
-   * was invisible, which did not matter while the Pulse carried a "You're
-   * checked in" strip and does now that it does not.
-   *
-   * At 1.42 it reaches 74pt and stands 11pt clear of the button on every side,
-   * which is a glow you can see from across a room -- the point of it.
-   *
-   * It bleeds above the bar's top edge, deliberately: the button's own shadow
-   * already does, and a glow contained inside the nav would read as a swelling
-   * button rather than something radiating out of it.
-   */
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.42] })
-  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
+  const dot = roomButtonGlow(target.state)
+  // The unread badge only appears in `live`, and says it already.
+  const showDot = dot !== 'none' && target.badge === 0
 
   return (
     <View style={styles.centreSlot}>
-      {pulses ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.halo, { opacity: haloOpacity, transform: [{ scale }] }]}
-        />
-      ) : null}
-      {/*
-        The ring, and only when you are actually in a room.
-
-        This is the piece that replaced the carousel, and it is static on
-        purpose -- see `roomButtonGlow`. The breath above says "there is a room
-        here"; a ring that is simply always drawn says "you are in it", and it
-        keeps saying so at the bottom of every fade, in a screenshot, and with
-        Reduce Motion on.
-      */}
-      {glow === 'live' ? <View pointerEvents="none" style={styles.liveRing} /> : null}
       <Pressable
         onPress={() => {
           /*
@@ -314,6 +243,19 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
           </View>
         ) : null}
       </Pressable>
+      {/*
+        Outside the Pressable, which clips to its disc: the dot sits on the
+        disc's edge, ringed in the page colour so it reads as cut out of it.
+        White says "there is a room here"; green says "you are in it".
+      */}
+      {showDot ? (
+        <Animated.View
+          key={dot}
+          entering={liveDotIn}
+          pointerEvents="none"
+          style={[styles.liveDot, dot === 'live' ? styles.liveDotLive : styles.liveDotInvite]}
+        />
+      ) : null}
       {/*
         No label. The frame's centre slot is a 56pt circle and nothing else —
         the four words either side are the navigation, and a fifth under the
@@ -712,17 +654,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        // The frame's `Button:shadow` — the warm bloom under the button.
-        shadowColor: EMBER.gradientFrom,
-        shadowOpacity: 0.45,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
-      },
-      android: { elevation: 12 },
-      default: {},
-    }),
+    // No bloom. The frame's warm `Button:shadow` was the other half of the
+    // glow; the gradient disc on the dark bar needs nothing to stand out.
   },
   /*
    * The mark, at 24 rather than the frame's 17.5.
@@ -783,37 +716,23 @@ const styles = StyleSheet.create({
      */
     transform: [{ translateX: 1.6 }],
   },
-  halo: {
-    position: 'absolute',
-    // Level with the button now that the button is level with the bar.
-    top: 0,
-    width: CENTRE_SIZE,
-    height: CENTRE_SIZE,
-    borderRadius: CENTRE_SIZE / 2,
-    backgroundColor: EMBER.gradientFrom,
-  },
   /*
-   * A 2pt ring 4pt off the button, so there is a dark gap between the two.
-   *
-   * Drawn as a bordered box rather than a thicker button border: a border on
-   * `centreButton` would eat into the disc (RN grows borders inward, the same
-   * arithmetic that made the Banter's unread dot an 8pt core in a 12pt
-   * footprint), shrinking the gradient and the mark on it.
-   *
-   * `accent` rather than `gradientFrom`: the halo behind it is `gradientFrom`,
-   * and a ring in the same colour as its own glow disappears into it at the top
-   * of every breath.
+   * 8pt of colour in a 2pt ring of the page background, on the disc's top-right
+   * edge. The ring is the cut-out that keeps a white or green dot legible on the
+   * warm gradient; RN grows borders inward, so the footprint is 12 and the core 8.
    */
-  liveRing: {
+  liveDot: {
     position: 'absolute',
-    top: -4,
-    left: -4,
-    width: CENTRE_SIZE + 8,
-    height: CENTRE_SIZE + 8,
-    borderRadius: (CENTRE_SIZE + 8) / 2,
+    top: 1,
+    right: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: EMBER.accent,
+    borderColor: EMBER.bg,
   },
+  liveDotInvite: { backgroundColor: EMBER.textPrimary },
+  liveDotLive: { backgroundColor: APP_COLORS.success },
 
   badge: {
     position: 'absolute',

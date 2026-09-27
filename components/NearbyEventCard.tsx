@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
-import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { EMBER } from '../lib/theme'
 
 type NearbyEvent = {
@@ -140,15 +141,19 @@ function Frame({
 
   if (source) {
     return (
-      <ImageBackground
-        source={{ uri: source }}
-        style={{ width: '100%', height }}
-        imageStyle={{ borderRadius: radius }}
-        resizeMode="cover"
-      >
+      // expo-image so the photo fades in (150ms) over the placeholder colour
+      // instead of snapping in a beat after the text; ImageBackground cannot.
+      <View style={[styles.placeholder, { width: '100%', height, borderRadius: radius, overflow: 'hidden' }]}>
+        <Image
+          source={{ uri: source }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={150}
+          cachePolicy="memory-disk"
+        />
         {gradient}
         {children}
-      </ImageBackground>
+      </View>
     )
   }
 

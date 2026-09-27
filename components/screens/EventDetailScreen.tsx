@@ -1,3 +1,6 @@
+import { LinearGradient } from 'expo-linear-gradient'
+import ScalePress from '../motion/ScalePress'
+import { HeartIcon } from '../motion/HeartIcon'
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -1373,6 +1376,9 @@ export default function EventDetail() {
           <>
             <SceneBarButton
               icon={userInterested ? 'heart' : 'heart-outline'}
+              glyph={
+                <HeartIcon on={userInterested} size={20} onColor={EMBER.accent} offColor={EMBER.textPrimary} />
+              }
               label={userInterested ? 'Remove from interested events' : 'Save this event'}
               active={userInterested}
               onPress={handleToggleInterest}
@@ -1547,18 +1553,35 @@ export default function EventDetail() {
         page underneath; only the pill takes touches.
       */}
       <View style={styles.ctaDock} pointerEvents="box-none">
+        {/*
+          The page fading out under the pill, instead of a glow around it: the
+          pill no longer carries a blur or a shadow, so this is what keeps a
+          photo or the map scrolling underneath from running into it.
+        */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(15,14,14,0)', EMBER.bg]}
+          locations={[0, 0.55]}
+          style={StyleSheet.absoluteFill}
+        />
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state={ctaState}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
-            icon={
+            icon={(color) =>
               checkingIn ? (
-                <ActivityIndicator size="small" color={EMBER.accent} />
+                <ActivityIndicator size="small" color={color} />
               ) : (
                 <Ionicons
-                  name={actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'}
+                  name={
+                    ctaState === 'rsvpd'
+                      ? 'checkmark'
+                      : actionStage === 'chat'
+                        ? 'chatbubbles-outline'
+                        : 'radio-outline'
+                  }
                   size={SCENE_CTA_ICON}
-                  color={EMBER.accent}
+                  color={color}
                 />
               )
             }
@@ -1580,30 +1603,30 @@ export default function EventDetail() {
       */}
       {isOrganizer ? (
         <View style={styles.organiserBar} pointerEvents="box-none">
-          <Pressable
+          <ScalePress haptic={false} pressedScale={0.9}
             onPress={openEditComposer}
             style={styles.organiserButton}
             accessibilityRole="button"
             accessibilityLabel="Edit event"
           >
             <Ionicons name="create-outline" size={18} color={EMBER.textPrimary} />
-          </Pressable>
-          <Pressable
+          </ScalePress>
+          <ScalePress haptic={false} pressedScale={0.9}
             onPress={openAnnouncementComposer}
             style={styles.organiserButton}
             accessibilityRole="button"
             accessibilityLabel="Send an announcement"
           >
             <Ionicons name="megaphone-outline" size={18} color={EMBER.textPrimary} />
-          </Pressable>
-          <Pressable
+          </ScalePress>
+          <ScalePress haptic={false} pressedScale={0.9}
             onPress={handleDeleteEvent}
             style={styles.organiserButton}
             accessibilityRole="button"
             accessibilityLabel="Delete this event"
           >
             <Ionicons name="trash-outline" size={18} color={EMBER.textPrimary} />
-          </Pressable>
+          </ScalePress>
         </View>
       ) : null}
 
@@ -1751,27 +1774,37 @@ export default function EventDetail() {
  * is translucent over photography, so an icon with no disc behind it has no
  * consistent contrast and no apparent hit target.
  */
+/*
+ * Shrinks to 0.9 on press-in: at 36pt, the 0.97 a full-width button uses is
+ * below what an eye notices. No haptic of its own — the heart's handler fires
+ * one, and Back and Share are navigation, which does not buzz.
+ */
 function SceneBarButton({
   icon,
+  glyph,
   label,
   active,
   onPress,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name']
+  /** Replaces the plain icon, for a glyph that animates itself (the heart). */
+  glyph?: React.ReactNode
   label: string
   active?: boolean
   onPress?: () => void
 }) {
   return (
-    <Pressable
+    <ScalePress
       onPress={onPress}
+      haptic={false}
+      pressedScale={0.9}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={styles.barButton}
     >
-      <Ionicons name={icon} size={20} color={active ? EMBER.accent : EMBER.textPrimary} />
-    </Pressable>
+      {glyph ?? <Ionicons name={icon} size={20} color={active ? EMBER.accent : EMBER.textPrimary} />}
+    </ScalePress>
   )
 }
 

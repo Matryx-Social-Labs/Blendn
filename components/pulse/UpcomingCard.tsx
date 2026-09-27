@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
+import { HeartIcon } from '../motion/HeartIcon'
 
 // Frame: 165.38 in a 390pt frame.
 const IMAGE_HEIGHT = 165
@@ -116,10 +117,11 @@ function UpcomingCardImpl({
               pressed && styles.pressed,
             ]}
           >
-            <Ionicons
-              name={isFavorited ? 'heart' : 'heart-outline'}
+            <HeartIcon
+              on={Boolean(isFavorited)}
               size={18}
-              color={isFavorited ? EMBER.accent : EMBER.textPrimary}
+              onColor={EMBER.accent}
+              offColor={EMBER.textPrimary}
             />
           </Pressable>
         ) : null}

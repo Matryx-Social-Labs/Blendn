@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { MaterialIcons } from '@expo/vector-icons'
-import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +16,16 @@ import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import MapView, { Marker } from 'react-native-maps'
+import Animated, {
+  Easing,
+  FadeIn,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  useReducedMotion,
+  withTiming,
+} from 'react-native-reanimated'
+import ScalePress from '../motion/ScalePress'
+import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
 
@@ -402,8 +410,9 @@ export function SceneGallery({
            */
           const uri = item.kind === 'image' ? item.url : item.posterUrl
           return (
-            <Pressable
+            <ScalePress
               key={`${item.url}-${i}`}
+              haptic={false}
               onPress={() => onOpen(i)}
               accessibilityRole="imagebutton"
               accessibilityLabel={
@@ -425,7 +434,7 @@ export function SceneGallery({
                   <MaterialIcons name="play-arrow" size={22} color={EMBER.textPrimary} />
                 </View>
               ) : null}
-            </Pressable>
+            </ScalePress>
           )
         })}
       </ScrollView>
@@ -592,7 +601,35 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
  * the same reason `going` is not accompanied by a "leave" button: one slot,
  * one subject, and the state tells you which way the tap goes.
  */
-const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going']
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going', 'ended']
+
+/*
+ * The CTA's motion: a press scale, and a label that rises into place when the
+ * state changes. Nothing else.
+ *
+ * - The new label rises 6pt and fades in; the old one simply goes. Two labels
+ *   crossfading in a content-width pill would each push the other's layout.
+ * - The pill's width and colour snap. A `LinearTransition` on the width
+ *   stuttered on device (layout transitions under Reanimated 3 on the New
+ *   Architecture flicker), and a 1.04 "pop" on saying yes read as decoration —
+ *   the label and the fill changing are the confirmation.
+ *
+ * Reduce Motion keeps the label fade, which is what says the state changed,
+ * and drops the rise.
+ */
+const CTA_EASE_OUT = Easing.bezier(...MOTION_EASING.entrance)
+
+const ctaLabelIn = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 6 }] },
+    animations: {
+      opacity: withTiming(1, { duration: MOTION_DURATION.normal, easing: CTA_EASE_OUT }),
+      transform: [{ translateY: withTiming(0, { duration: MOTION_DURATION.normal, easing: CTA_EASE_OUT }) }],
+    },
+  }
+}
+const ctaLabelFade = FadeIn.duration(MOTION_DURATION.fast).reduceMotion(ReduceMotion.Never)
 
 export function SceneCTA({
   state = 'join',
@@ -600,16 +637,18 @@ export function SceneCTA({
   onPress,
 }: {
   state?: SceneCTAState
-  icon?: React.ReactNode
+  /** Drawn in the colour the pill hands it — dark on the accent fill, accent on the quiet one. */
+  icon?: (color: string) => React.ReactNode
   onPress?: () => void
 }) {
   const disabled = state === 'ended'
   /*
-   * Quiet once you have already said yes. The gradient is for the thing that
+   * Quiet once you have already said yes. The accent is for the thing that
    * still needs doing; a fully lit pill that only un-does something reads as
    * the primary action of the screen.
    */
   const quiet = CTA_QUIET.includes(state)
+  const reduceMotion = useReducedMotion()
   /*
    * The label was a free string, which was survivable while this sat at the
    * bottom of a 1900pt page and most people never reached it. Pinned to the
@@ -618,43 +657,47 @@ export function SceneCTA({
    * "did that work?" failure, permanently in view.
    */
   return (
-    <Pressable
+    /*
+     * Scales on press-in, before the request goes out: that is the latency the
+     * finger actually feels. No haptic here — every handler behind this button
+     * already fires its own `feedback.*`, and two per tap is a buzz.
+     */
+    <ScalePress
+      haptic={false}
       onPress={disabled ? undefined : onPress}
-      disabled={disabled}
+      disabled={disabled || !onPress}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected: state === 'going' }}
       accessibilityLabel={CTA_LABEL[state]}
       style={disabled ? styles.ctaDisabled : undefined}
     >
       {/*
-        Glass, and the gradient ring had to go to get it.
+        A solid pill, and nothing around it.
 
-        The pill was a `LinearGradient` with `padding: 1` wrapping an opaque
-        fill — a standard way to fake a gradient border, and it works only while
-        the inner fill is opaque. It is not any more: a 50%-alpha fill over a
-        gradient *rectangle* shows the whole rectangle, so the first attempt at
-        this rendered a brown-to-purple wash inside the pill rather than a
-        stroke around it. React Native has no gradient `borderColor` and no
-        masking without a new dependency, so a translucent pill and a gradient
-        ring are mutually exclusive here.
-
-        The ring is a hairline of white at 18% instead — which is the actual
-        glassmorphism idiom: an edge lit by the light passing through the sheet,
-        not a painted outline. The brand does not leave: the warm bloom under
-        the pill stays, and the icon takes the accent, so the gradient's warm
-        end is still the first colour in the control.
+        It was frosted glass with a warm tint, a lit white edge and an orange
+        bloom under it — every effect at once, and it read as generated rather
+        than designed. The event apps that get this right (Luma, District) use
+        a flat, high-contrast pill with no shadow, no blur and no gradient:
+        contrast alone lifts it off the page. So the to-do states are the
+        accent, solid, with the dark on-accent text; the done states step back
+        to a dark surface with a hairline edge, and the accent moves into the
+        icon.
       */}
-      <View style={[styles.ctaGlow, quiet && styles.ctaGlowGoing]}>
-        <View style={styles.ctaFill}>
-          <BlurView intensity={64} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.ctaTint} pointerEvents="none" />
-          {icon}
-          <Text style={styles.ctaLabel} numberOfLines={1}>
+      <View style={[styles.ctaFill, quiet ? styles.ctaFillQuiet : styles.ctaFillLoud]}>
+        {icon?.(quiet ? EMBER.accent : EMBER.onGradient)}
+        {/* Skips the entrance on first paint; only a *change* of label animates. */}
+        <LayoutAnimationConfig skipEntering>
+          <Animated.Text
+            key={state}
+            entering={reduceMotion ? ctaLabelFade : ctaLabelIn}
+            style={[styles.ctaLabel, quiet ? styles.ctaLabelQuiet : styles.ctaLabelLoud]}
+            numberOfLines={1}
+          >
             {CTA_LABEL[state]}
-          </Text>
-        </View>
+          </Animated.Text>
+        </LayoutAnimationConfig>
       </View>
-    </Pressable>
+    </ScalePress>
   )
 }
 
@@ -942,27 +985,6 @@ const styles = StyleSheet.create({
     color: EMBER.textSecondary,
   },
 
-  /*
-   * The warm bloom, and it is the only place the gradient's colour survives on
-   * this control now. `shadowRadius: 30` is a soft halo on iOS; on Android
-   * `elevation` cannot be coloured, so it simply does not get one rather than
-   * getting a grey drop-shadow that reads as a mistake.
-   */
-  ctaGlow: {
-    borderRadius: 9999,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#FF906D',
-        shadowOpacity: 0.22,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
-      },
-      default: {},
-    }),
-  },
-  // Joined is settled, not an invitation: the bloom drops away and the pill
-  // stops advertising itself.
-  ctaGlowGoing: Platform.OS === 'ios' ? { shadowOpacity: 0.14 } : {},
   ctaFill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -982,34 +1004,16 @@ const styles = StyleSheet.create({
     // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
     paddingVertical: 14,
     borderRadius: 9999,
-    // Clips the BlurView to the pill. Without it the blur is a rectangle.
-    overflow: 'hidden',
-    // The lit edge. `hairlineWidth` would vanish at this radius, so 1pt.
+    // Present in both states so the height never changes between them.
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
-  /*
-   * The tint over the blur — **warm**, and that is the whole design.
-   *
-   * A neutral `rgba(15,14,14,0.5)` was tried first and it is what glass on this
-   * screen actually looks like: the pill docks over the bottom of a dark map on
-   * a `#0F0E0E` page, so there is nothing luminous behind it to refract and a
-   * neutral frost renders as a near-black slab. It read as a *disabled* control
-   * in the position of the primary one.
-   *
-   * `#4B2F26` is `gradientFrom` at 25% over the page background, so the tint is
-   * the brand's warm end rather than an invented brown. Frosted and warm is the
-   * tinted-glass idiom iOS itself uses for a docked primary action, and it
-   * keeps the colour the gradient ring used to carry.
-   *
-   * Alpha is platform-split: `expo-blur` on Android needs
-   * `experimentalBlurMethod` and degrades to nothing without it, so at 0.62 the
-   * label would sit on raw photograph. Android keeps a near-opaque fill and
-   * simply does not get the glass.
-   */
-  ctaTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(75,47,38,0.74)' : 'rgba(48,30,25,0.94)',
+  ctaFillLoud: {
+    backgroundColor: EMBER.accent,
+    borderColor: EMBER.accent,
+  },
+  ctaFillQuiet: {
+    backgroundColor: EMBER.surfaceSunken,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   ctaDisabled: { opacity: 0.45 },
   ctaLabel: {
@@ -1017,6 +1021,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 28,
     letterSpacing: -0.45,
-    color: EMBER.textPrimary,
   },
+  ctaLabelLoud: { color: EMBER.onGradient },
+  ctaLabelQuiet: { color: EMBER.textPrimary },
 })

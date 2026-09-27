@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
@@ -14,6 +15,7 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -42,6 +44,8 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import Animated from 'react-native-reanimated'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface PrivateMessage {
   id: string
@@ -561,6 +565,9 @@ function PrivateChatInner() {
    * mounted bubble each time.
    */
   const reportMessage = useCallback((messageId: string) => {
+    // The same press-and-hold answer the room's message menu gives, on the
+    // frame the tray opens — the hold has "caught".
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     showTray('Message options', 'What would you like to do?', [
       { label: 'Cancel', onPress: closeTray },
       {
@@ -701,6 +708,12 @@ function PrivateChatInner() {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          /*
+           * Drag the conversation down to put the keyboard away — on iOS the
+           * keyboard follows the finger, the Messages behaviour people expect.
+           * Android has no interactive mode, so a drag dismisses it.
+           */
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}
@@ -751,9 +764,18 @@ function PrivateChatInner() {
         />
 
         {showScrollToBottom && (
-          <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
-          </TouchableOpacity>
+          <Animated.View entering={popIn} exiting={popOut} style={styles.scrollToBottomBtn}>
+            <TouchableOpacity
+              style={styles.scrollToBottomHit}
+              onPress={() => scrollToBottom(true)}
+              activeOpacity={0.8}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to the newest message"
+            >
+              <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
         <ChatComposer
@@ -830,6 +852,7 @@ const styles = StyleSheet.create({
   // Input bar — WhatsApp style: simple, no icons
 
   // Scroll to bottom
+  scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
     position: 'absolute',
     right: 16,
