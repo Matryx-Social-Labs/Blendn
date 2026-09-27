@@ -22,7 +22,7 @@ describe("the Pulse handlers keep their identity", () => {
    * reads them to snapshot a previous value before an optimistic update. So
    * `onCheckIn` and `onToggleInterest` were new objects whenever any map
    * changed — and they are props on every card in the list, which defeats
-   * `EventCard`'s `memo` on all of them at once. One person checking in
+   * the card's `memo` on all of them at once. One person checking in
    * re-rendered every mounted card. Measured at 27 commits / 257ms per visit.
    *
    * The distinction: those maps are inputs to a *decision* taken on a tap, not
@@ -91,7 +91,7 @@ describe("the Pulse handlers keep their identity", () => {
      * the re-render count by never re-rendering.
      */
     expect(src).toMatch(
-      /\}, \[checkinStatuses, proximityData, interestStatuses, interestCounts,/
+      /\}, \[checkinStatuses, proximityData, interestStatuses,/
     )
   })
 })

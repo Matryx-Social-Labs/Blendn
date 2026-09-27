@@ -1,4 +1,4 @@
-import type { AttendeeProfile } from '../components/screens/MatchScreen'
+import type { AttendeeProfile } from './attendee'
 
 /**
  * The last roster this session saw, so reopening the room paints instantly.

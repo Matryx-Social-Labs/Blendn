@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -19,6 +18,9 @@ import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { MOTION_DURATION } from '../../lib/motion'
 import { popIn, popOut } from '../../components/motion/presence'
+import ScalePress from '../../components/motion/ScalePress'
+import { BlendnScreen } from '../../components/blendn/BlendnScreen'
+import { openBlendn, useBlendnOpen } from '../../lib/blendnOverlay'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -185,22 +187,27 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
 
   return (
     <View style={styles.centreSlot}>
-      <Pressable
+      <ScalePress
         onPress={() => {
           /*
-           * Each state goes somewhere real, which is the whole reason this is a
-           * mode switch rather than a link. A centre button that did nothing in
-           * three of its four states would be a dead control in the most
-           * prominent position on the screen.
+           * Always the Blend'n screen. It used to go somewhere different in
+           * each state — the Room when live, the event page when you had one
+           * today, the nearby list otherwise — so the centre of the app had no
+           * home until you were checked in. The screen now reads your state
+           * itself and shows Tonight or the Room (`components/blendn`); the
+           * states still decide the dot and the badge on this button.
            */
-          if (target.state === 'live') router.push('/room')
-          else if (target.eventId) {
-            router.push({ pathname: '/event/[id]', params: { id: target.eventId } as never })
-          } else router.push('/nearby-events')
+          openBlendn()
         }}
         accessibilityRole="button"
         accessibilityLabel={roomButtonAccessibilityLabel(target)}
-        style={({ pressed }) => [styles.centreButton, pressed && styles.pressed]}
+        style={styles.centreButton}
+        /*
+         * Squashes under the finger (Airbnb's tactile tab button): 0.9 on
+         * press-in, eased back on release. The screen then opens *out of*
+         * this disc, so the press and the open read as one gesture.
+         */
+        pressedScale={0.9}
       >
         {/*
           Flat accent in every state (the fill lives on `centreButton`).
@@ -241,7 +248,7 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
             </Text>
           </Animated.View>
         ) : null}
-      </Pressable>
+      </ScalePress>
       {/*
         Outside the Pressable, which clips to its disc: the dot sits on the
         disc's edge, ringed in the page colour so it reads as cut out of it.
@@ -452,7 +459,9 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
 BlendnTabBar.displayName = 'BlendnTabBar'
 
 export default function TabLayout() {
+  const blendnOpen = useBlendnOpen()
   return (
+    <View style={styles.host}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -489,6 +498,13 @@ export default function TabLayout() {
       <Tabs.Screen name="chat" options={{ title: 'Banter' }} />
       <Tabs.Screen name="profile" options={{ title: 'Me' }} />
     </Tabs>
+      {/*
+        The Blend'n screen, over the tabs *and* the bar, under the root stack.
+        An overlay rather than a route so a profile, a DM or the room chat
+        pushed from it lands on top of it — see `lib/blendnOverlay.ts`.
+      */}
+      {blendnOpen ? <BlendnScreen /> : null}
+    </View>
   )
 }
 
@@ -553,6 +569,7 @@ export function tabBarTop(screenHeight: number, bottomInset: number) {
 }
 
 const styles = StyleSheet.create({
+  host: { flex: 1, backgroundColor: EMBER.bg },
   /*
    * Frame `1141:4827`, measured rather than guessed.
    *

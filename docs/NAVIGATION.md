@@ -51,10 +51,15 @@ the status indicator. The screen is called The Pulse; the button is the pulse.
 
 | Your state | Button | Mark | Tap |
 |---|---|---|---|
-| Checked in | gradient, unread badge | **green dot** (the badge stands in while it shows) | The Room |
-| Inside a running event's fence, not checked in | gradient | white dot | that event |
-| Saved event today, not there yet | gradient | none | that event |
-| Nothing on | gradient | none | nearby events |
+| Checked in | gradient, unread badge | **green dot** (the badge stands in while it shows) | Blend'n → Room |
+| Inside a running event's fence, not checked in | gradient | white dot | Blend'n → Tonight, with the venue pass |
+| Saved event today, not there yet | gradient | none | Blend'n → Tonight |
+| Nothing on | gradient | none | Blend'n → Tonight |
+
+**Updated 2026-09-28: the tap always opens the Blend'n screen.** It used to go
+to a different place per state (the Room, the event page, the nearby list), so
+the centre of the app had no home until you were checked in. The screen reads
+your state itself; the states still decide the dot and the badge.
 
 All four are live. The states, their precedence and the event selection are in
 `lib/roomButton.ts` with tests.
@@ -117,26 +122,41 @@ false *offer* is not: the server re-validates the GPS on the real check-in and
 refuses. So the button asks the plain question and lets the real gate be the
 gate.
 
-## The Room — what the centre button opens
+## The Blend'n screen — what the centre button opens
 
-Frame `1141:4951` draws a `Grid | Join Chat` segmented toggle, and that is the
-screen:
+`components/blendn/BlendnScreen.tsx`. Redesigned 2026-09-28 (research: Refero,
+60fps.design — see `tasks/todo.md`).
 
-| Segment | What | Built |
-|---|---|---|
-| **Grid** | ranked roster, filters, cards → View Dossier, **like** | `MatchScreen.tsx` |
-| **Chat** | the event's anonymous room chat | `chat/[id].tsx` |
+**An overlay, not a route.** It is hosted by the tab layout, over the tabs and
+the bar and *under* the root stack (`lib/blendnOverlay.ts`). As a modal route,
+anything pushed from it went underneath it on iOS, so Join Chat had to replace
+the room to be seen. Now a profile, a DM or the room chat push on top, and Back
+returns to the room. `/room` survives as an address that opens the overlay.
 
-Matchmaking is not a third segment. It **is** the Grid: the ranking, the
-shared-interest chips and the "both open to dating" tag are the matchmaking
-output, computed server-side and already rendered.
+**It opens out of the button** (`RoomStage`): a disc grows from the 56pt button,
+turning from accent to page colour, and the content fades up. Drag down (from
+the top of the scroll) or tap the chevron and it closes back into the button.
 
-`RoomVisibilityBanner` mounts here, above the toggle so it shows in both
-segments. `event-preferences/[eventId]` is the room's own settings, reachable
-from the Grid.
+Two modes, chosen from your active check-in (`lib/useRoom.ts`):
+
+| Mode | What |
+|---|---|
+| **Tonight** | A swipeable deck of what is on, yours first then nearest (the Me tab's photo stack, `SwipeDeck`). At a venue, a docked pass: **hold to check in** (`HoldToConfirm`), which runs the event screen's own flow (`lib/useCheckInFlow.ts`) and turns into the Room. A "N here share your taste" teaser with blank faces (`room-preview`, never under 3 people). |
+| **Room** | LIVE, a rolling headcount, the faces who just walked in, and your time in the room set around your photo. **Meet next**: the server's top picks, three at a time, reshuffled every 15 minutes on a clock every phone agrees on. **Everyone here**: a 3-column face grid (virtualised), one reason per face; tap for the person card, double-tap to like. The room chat is docked at the bottom (last two lines + arrivals/waves/matches), pull up for the full chat. |
+
+The person card has three verbs: **Like** (private until mutual; the accent),
+**Wave** (they are told at once, as they see you; one per pair per 10 min) and
+**Message** (a connection request, which reveals you). A mutual like plays the
+match moment: both faces meet, three hearts arc from you to them, one haptic
+when they land. Faces only where earned — theirs is a photo only if they
+revealed, yours only if you did.
+
+`RoomVisibilityBanner` still sits under the header; Check out and the room's
+settings are in the top bar. The work-field filter chips of the old Grid are
+gone: a face grid of one room does not need them.
 
 The presence monitor is **not** here — it mounts at the root, because leaving a
-venue should be noticed whether or not the room is the screen you have open.
+venue should be noticed whether or not the room is open.
 
 ---
 

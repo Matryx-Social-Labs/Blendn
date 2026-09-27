@@ -101,27 +101,38 @@ describe('an empty screen says which kind of empty it is', () => {
 })
 
 /**
- * The screen, after the rebuild. Source assertions: the roster needs a check-in,
- * a live socket and people in a room, none of which decides whether a network
- * failure is drawn as an empty room.
+ * The room, after the Blend'n rebuild. Source assertions: the roster needs a
+ * check-in, a live socket and people in a room, none of which decides whether
+ * a network failure is drawn as an empty room.
+ *
+ * The Grid (`MatchScreen` inside the `app/room.tsx` modal) is gone. The room is
+ * a face grid in `components/blendn/BlendnScreen.tsx`, fed by `lib/useRoom.ts`.
+ * The work-field filter chips went with it on purpose — a face grid has no
+ * slot for them — so only the pure `lib/gridFilters.ts` tests above remain.
  */
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const SCREEN = () =>
-  readFileSync(join(__dirname, '..', 'components', 'screens', 'MatchScreen.tsx'), 'utf8')
+const code = (...p: string[]) =>
+  readFileSync(join(__dirname, '..', ...p), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
+const SCREEN = () => code('components', 'blendn', 'BlendnScreen.tsx')
+const USE_ROOM = () => code('lib', 'useRoom.ts')
+const SECTIONS = () => code('components', 'blendn', 'RoomSections.tsx')
 
-describe('the rebuilt Grid kept what the frame has no slot for', () => {
+describe('the rebuilt room kept what the old Grid had', () => {
   it('still offers report and block from the card', () => {
     /*
-     * The rebuild dropped this and the lint caught it. Safety cannot get
+     * The first rebuild dropped this and the lint caught it. Safety cannot get
      * quietly further away: without it the fastest route to "this person is
      * making me uncomfortable" goes from one tap to opening a profile and
-     * finding a menu.
+     * finding a menu. The card is `PersonCard` now; its "more" button is it.
      */
-    expect(SCREEN()).toContain('onSafety={() => onSafetyPress(')
+    expect(code('components', 'blendn', 'PersonCard.tsx')).toContain('onPress={() => onSafety(p)}')
+    const src = SCREEN()
+    expect(src).toContain('onSafety={safety}')
+    expect(src).toContain('showUserSafetyActions(p.name, p.id')
   })
 
   it('tells a failed load from an empty room', () => {
@@ -131,71 +142,59 @@ describe('the rebuilt Grid kept what the frame has no slot for', () => {
      * is empty when the network dropped is a lie they will act on.
      */
     const src = SCREEN()
-    /*
-     * `loadError ? (`, not `{loadError ? (`. The brace was incidental to the
-     * roster living directly in a `ScrollView`; once it moved into
-     * `ListEmptyComponent` the same branch was still there and the test failed
-     * on the punctuation in front of it.
-     */
-    expect(src).toContain('loadError ? (')
+    expect(src).toContain("mode === 'error' ? (")
     expect(src).toContain('Could not load the room')
+    expect(src).toContain('onPress={room.retry}')
     // Both branches, because the whole point is that they say different things.
-    expect(src).toContain('Nobody here yet')
+    expect(SECTIONS()).toContain('Nobody else is here yet')
   })
 
   it('still announces people arriving', () => {
-    // The roster updates over the socket, so without this the list grows under
-    // your thumb and a new card is indistinguishable from one you scrolled past.
-    expect(SCREEN()).toContain('{newJoinsCount} just arrived')
-  })
-
-  it('filters without re-ranking', () => {
-    expect(SCREEN()).toContain('applyGridFilters(attendees, filters)')
+    // The roster updates over the socket, so without this the grid grows under
+    // your thumb and a new face is indistinguishable from one you scrolled past.
+    expect(USE_ROOM()).toContain('subscribeToEventRoomCheckIn(eventId')
+    expect(SCREEN()).toContain('walked in`')
+    expect(SECTIONS()).toContain('walked in`')
   })
 
   it('virtualises the roster instead of rendering all of it', () => {
     /*
-     * The roster was a `shown.map()` inside a `ScrollView`. A `GridCard` is a
-     * full-width card over 280pt tall, so three fill the screen -- and the room
-     * asks for twenty. That was twenty cards and sixty `LinearGradient`s in one
-     * 98ms commit: six frames dropped, seventeen of them built where nobody
-     * could see them, and the cost linear in how busy the night was.
+     * The Grid's roster was once a `shown.map()` inside a `ScrollView`: twenty
+     * cards in one 98ms commit, six frames dropped, and the cost linear in how
+     * busy the night was.
      *
      * The regression this guards is the easy one to make: a `.map()` reads as
-     * simpler than a `FlatList` and looks identical in a screenshot, because on
-     * a seed room of twenty it *is* identical -- just slower, and worse the
+     * simpler than a list and looks identical in a screenshot, because on a
+     * seed room of twenty it *is* identical -- just slower, and worse the
      * fuller the room gets.
+     *
+     * `numColumns={3}` is right now (it was pinned *off* for the old
+     * single-column cards): the room is a grid of faces.
      */
     const src = SCREEN()
-    expect(src).toContain('<FlatList')
-    expect(src).toContain('renderItem={renderCard}')
-    expect(src).not.toContain('shown.map(')
-
-    /*
-     * `numColumns` would be wrong here and is worth pinning: `styles.list` sets
-     * no `flexDirection`, so the Grid is one column of full-width cards. A
-     * two-column grid is a different design, not a performance setting.
-     */
-    expect(src).not.toContain('numColumns')
+    expect(src).toContain('<Animated.FlatList')
+    expect(src).toContain('numColumns={3}')
+    expect(src).toContain('renderItem=')
+    expect(src).not.toMatch(/everyone\.map\(|people\.map\(/)
   })
 
   it('does not offer "Show more" over an empty room', () => {
     /*
-     * A `ListFooterComponent` renders even when the list is empty, which the
-     * old `.map()` branch could not do -- the button lived inside the same
-     * `else` as the cards. Ungarded, "Show more" sits under "Nobody here yet"
-     * and offers to fetch a second page of nobody.
+     * A `ListFooterComponent` renders even when the list is empty. Ungarded,
+     * "Show more" sits under "Nobody else is here yet" and offers to fetch a
+     * second page of nobody.
      */
-    expect(SCREEN()).toContain('attendeesHasMore && shown.length > 0')
+    expect(SCREEN()).toContain('room.hasMore && everyone.length > 0')
   })
 
-  it('does not re-probe the event room', () => {
+  it('resolves the room chat once per room, not on every open', () => {
     /*
-     * `room.tsx` owns the chat segment and resolves the group when you switch to
-     * it. The effect here called `getEventChat` on every mount for a button this
-     * screen no longer has.
+     * The Grid once called `getEventChat` on every mount for a button it no
+     * longer had. `useRoom` resolves it once per room; the screen only asks
+     * again when that answer was "not open", as you tap into the chat.
      */
-    expect(SCREEN()).not.toContain('getEventChat')
+    expect(USE_ROOM()).toContain('chatResolvedForRef.current === eventId')
+    expect(SCREEN()).toMatch(/if \(!id && eventId\) \{[\s\S]{0,80}apiClient\.getEventChat\(eventId\)/)
   })
 
   it('never sends a filter to the server', () => {
@@ -203,139 +202,33 @@ describe('the rebuilt Grid kept what the frame has no slot for', () => {
      * The whole reason `lib/gridFilters.ts` exists: a `?workField=` param would
      * narrow on the real column while the response still suppressed it, so one
      * result would name a suppressed attribute by elimination.
-     *
-     * Asserted as "no query parameter", not "the word never appears" — the
-     * screen holds `workFields` in local state, which is exactly the safe thing.
      */
-    const src = SCREEN()
-    expect(src).not.toMatch(/workField[s]?\s*[=:]\s*[`'"]/)
-    const fetches = src.match(/apiClient\.\w+\([^)]*\)/g) ?? []
-    expect(fetches.filter((f) => /workField|minShared/.test(f))).toEqual([])
-  })
-})
-
-const ROOM_SCREEN = () =>
-  readFileSync(join(__dirname, '..', 'app', 'room.tsx'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
-
-describe('the room carries the shared header', () => {
-  it('uses PulseTopBar rather than a screen-local bar', () => {
-    /*
-     * Frame `1141:5129` is that component: same `rgba(15,14,14,0.8)`, same 12pt
-     * blur, same accent wordmark. The frame sets the wordmark at 24/32 and the
-     * shared bar is 16/24 — the bar wins, because the point of a shared bar is
-     * that it does not vary per screen. Raised with the designer instead.
-     */
-    expect(ROOM_SCREEN()).toContain('<PulseTopBar')
-  })
-
-  it('offsets the content below the overlay', () => {
-    /*
-     * `PulseTopBar` draws over the content at absolute position, so the heading
-     * must clear it or it renders behind the blur — which is what the first
-     * screenshot of this change showed.
-     *
-     * The offset is `TOP_BAR_HEIGHT` alone, not `insets.top + TOP_BAR_HEIGHT`:
-     * this screen is a sheet, and the notch is accounted for once by the bar's
-     * own `topInset`. See the sheet block below for why adding it here was the
-     * bug rather than the fix.
-     */
-    const src = ROOM_SCREEN()
-    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + SPACE.sm')
-    // And the safe area must not inset the screen a second time.
-    expect(src).toContain("edges={['left', 'right']}")
+    for (const src of [SCREEN(), USE_ROOM()]) {
+      expect(src).not.toMatch(/workField[s]?\s*[=:]\s*[`'"]/)
+      const fetches = src.match(/apiClient\.\w+\([^)]*\)/g) ?? []
+      expect(fetches.filter((f) => /workField|minShared/.test(f))).toEqual([])
+    }
   })
 })
 
 describe('Join Chat is a door, not a pane', () => {
   it('navigates to the event room', () => {
     /*
-     * The screen used to mount the chat here and hide it. That meant the event
-     * chat existed twice — once embedded, once at `app/chat/[id]` — with one
-     * socket, one moderation path and one composer duplicated across both.
+     * The room once mounted the chat and hid it. That meant the event chat
+     * existed twice — once embedded, once at `app/chat/[id]` — with one socket,
+     * one moderation path and one composer duplicated across both. `ChatDock`
+     * shows the last few lines; tapping it opens the real room.
      */
-    const src = ROOM_SCREEN()
+    const src = SCREEN()
     expect(src).toContain("pathname: '/chat/[id]'")
+    expect(src).toContain('onOpen={() => void openChat()}')
     expect(src).not.toContain('<GroupChat')
+    expect(code('components', 'blendn', 'ChatDock.tsx')).not.toContain('<GroupChat')
   })
 
   it('says so when the room has no chat yet', () => {
-    // Otherwise the toggle is a control that sometimes does nothing, which
-    // reads as the app being broken rather than the chat not existing yet.
-    expect(ROOM_SCREEN()).toContain('The chat for this event is not open yet.')
-  })
-
-  it('takes the roster count from the screen that fetched it', () => {
-    // Rather than a second request for a number already in memory one level
-    // down.
-    expect(ROOM_SCREEN()).toContain('<MatchScreen onRosterCount={setRosterCount} />')
-  })
-
-  it('draws no subtitle until both halves are real', () => {
-    // "0 people at undefined" is worse than no subtitle.
-    expect(ROOM_SCREEN()).toContain('eventTitle && rosterCount > 0')
-  })
-})
-
-describe('the sheet does not pay for the notch twice', () => {
-  it('passes topInset 0 to the shared bar', () => {
-    /*
-     * `/room` is `presentation: 'modal'`, and iOS already drops a sheet below
-     * the notch. `useSafeAreaInsets()` reads the nearest provider and the app's
-     * lives at the root, so inside the sheet it still reports the *device's*
-     * inset -- the bar padded by a notch that was not there, and the heading
-     * offset by `insets.top + TOP_BAR_HEIGHT` counted the same 62pt again.
-     *
-     * That is the black band above the header, and it was invisible in the code.
-     */
-    const src = ROOM_SCREEN()
-    expect(src).toContain('topInset={0}')
-    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + SPACE.sm')
-    expect(src).not.toContain('insets.top + TOP_BAR_HEIGHT')
-  })
-
-  it('keeps the override optional, so every other screen is unchanged', () => {
-    // The Pulse, the Scene and the Banter are pushed, not presented, and their
-    // inset is correct. Defaulting to `insets.top` leaves them alone.
-    const bar = readFileSync(
-      join(__dirname, '..', 'components', 'pulse', 'PulseTopBar.tsx'),
-      'utf8'
-    )
-    expect(bar).toContain('topInset ?? insets.top')
-  })
-})
-
-describe('the toggle is the frame’s pill', () => {
-  it('is a track holding two buttons, not two stretched segments', () => {
-    /*
-     * Frame `1141:4959`: `#211F1F` at p6 around the pair, centred and
-     * content-width. The unselected side is a hole in the track rather than a
-     * second button -- stretching both to full width makes it read as a tab bar.
-     */
-    const src = ROOM_SCREEN()
-    expect(src).toContain('styles.segmentTrack')
-    const track = src.slice(src.indexOf('segmentTrack: {'))
-    const body = track.slice(0, track.indexOf('},'))
-    expect(body).toContain('padding: SPACE.xs')
-    expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
-  })
-
-  it('fills only the selected side, and inverts its label', () => {
-    // The design system's selected segment: a `textPrimary` fill with `bg`
-    // text, and flat: the fill against the sunken track carries the state.
-    const src = ROOM_SCREEN()
-    const on = src.slice(src.indexOf('segmentOn: {'))
-    const onBody = on.slice(0, on.indexOf('},'))
-    expect(onBody).toContain('backgroundColor: EMBER.textPrimary')
-    expect(onBody).not.toContain('shadow')
-    expect(onBody).not.toContain('elevation')
-    expect(src).toContain('segmentTextOn: { color: EMBER.bg }')
-  })
-
-  it('does not stretch the buttons', () => {
-    const src = ROOM_SCREEN()
-    const seg = src.slice(src.indexOf('  segment: {'))
-    expect(seg.slice(0, seg.indexOf('},'))).not.toContain('flex: 1')
+    // Otherwise the dock is a control that sometimes does nothing, which reads
+    // as the app being broken rather than the chat not existing yet.
+    expect(SCREEN()).toContain('The chat for this event is not open yet.')
   })
 })

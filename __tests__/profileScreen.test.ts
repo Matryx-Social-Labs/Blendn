@@ -138,8 +138,9 @@ describe('the profile carries the Grid\'s two actions', () => {
      * a request on `haveSharedAnEvent` and resolves it itself.
      */
     expect(SCREEN()).toContain("useLocalSearchParams<{ id: string; eventId?: string }>")
-    expect(stripComments(read('components/screens/MatchScreen.tsx'))).toContain(
-      'eventInfo?.id ? { eventId: eventInfo.id } : {}'
+    // The room passes the event with the id when it opens a profile.
+    expect(stripComments(read('components/blendn/BlendnScreen.tsx'))).toContain(
+      '...(eventId ? { eventId } : {})'
     )
   })
 

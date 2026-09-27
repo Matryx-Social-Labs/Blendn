@@ -234,11 +234,13 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      * The Scene stopped carrying check out on the grounds that its CTA opens
      * the room and the room has it. That is only true while the room does --
      * so the claim is asserted rather than trusted, and this fails the day
-     * somebody tidies the room's top bar.
+     * somebody tidies the room's top bar. The room is the Blend'n overlay now,
+     * and its Check out goes through `useRoomControls`.
      */
-    const room = read('app', 'room.tsx')
-    expect(room).toContain('checkOutOf(eventId)')
+    const room = read('components', 'blendn', 'BlendnScreen.tsx')
+    expect(room).toContain('controls.checkOut()')
     expect(room).toContain('Check out')
+    expect(read('lib', 'useRoomControls.ts')).toContain('checkOutOf(eventId)')
   })
 
   it('renders the rebuilt Scene rather than a second implementation of it', () => {
@@ -387,12 +389,6 @@ describe('the Scene is a full-screen route', () => {
      */
     expect(DETAIL()).not.toContain('topInset={0}')
   })
-
-  it('leaves room.tsx zeroing its inset, because that one IS a sheet', () => {
-    // Guards against someone "fixing" both together. The rule is per
-    // presentation, not per screen.
-    expect(read('app', 'room.tsx')).toContain('topInset={0}')
-  })
 })
 
 describe('the check-in position request has a deadline', () => {
@@ -403,11 +399,13 @@ describe('the check-in position request has a deadline', () => {
      * button spun for five minutes and the "Location timeout" tray, written
      * for exactly this, could never show.
      */
-    const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
+    // The fix moved to `lib/locationFix.ts`, shared by the event screen and
+    // the Blend'n room through `lib/useCheckInFlow.ts`.
+    const src = readFileSync(join(__dirname, '..', 'lib', 'locationFix.ts'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
     expect(src).toContain("code: 'E_LOCATION_TIMEOUT'")
-    expect(src).toMatch(/const LOCATION_FIX_TIMEOUT_MS = 1[0-9]_000/)
+    expect(src).toMatch(/export const LOCATION_FIX_TIMEOUT_MS = 1[0-9]_000/)
     expect(src).not.toContain('timeInterval: 12000')
   })
 })

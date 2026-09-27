@@ -9,7 +9,11 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-const SHEET = () => stripComments(read('components/match/ConnectionSheet.tsx'))
+// The match moment replaced ConnectionSheet; every face in it draws through `Face`.
+const MOMENT = () => stripComments(read('components/blendn/MatchMoment.tsx'))
+const FACE = () => stripComments(read('components/blendn/Face.tsx'))
+const SCREEN = () => stripComments(read('components/blendn/BlendnScreen.tsx'))
+const ROOM = () => stripComments(read('lib/useRoom.ts'))
 const DM = () => stripComments(read('app/private-chat/[conversationId].tsx'))
 
 describe('the opener only greets an actual match', () => {
@@ -93,56 +97,50 @@ describe('the header is a header, not an empty state', () => {
   })
 })
 
-describe('Connection Success shows no faces', () => {
-  it('never reads a photo', () => {
+describe('the match moment shows only faces that were earned', () => {
+  it('never reads a photo the roster did not already carry', () => {
     /*
-     * At the instant of a match neither person has one: `rankMatches` sends no
-     * `profile_photos` for anyone unrevealed, enforced server-side. Building it
-     * with faces would make a like a one-way identity disclosure — someone
-     * could be identified by liking back and never speaking.
+     * At the instant of a match an unrevealed person has no photo to show:
+     * `rankMatches` sends no `profile_photos` for anyone unrevealed, enforced
+     * server-side. Reaching for one anywhere else would make a like a one-way
+     * identity disclosure — someone could be identified by liking back and
+     * never speaking. So their face is the roster's photo or nothing.
      */
-    const src = SHEET()
+    const src = MOMENT()
     expect(src).not.toContain('profile_photos')
     expect(src).not.toContain('OptimizedImage')
     expect(src).not.toContain('avatarUrl')
+    expect(SCREEN()).toContain("them={{ name: room.match?.name ?? '', photo: matchPerson?.photo ?? null }}")
+    // …and the roster's photo is exactly what the server sent, never fetched.
+    expect(ROOM()).toContain('photo: a.profile_photos?.[0] ?? null')
   })
 
-  it('draws the generated mark for both people', () => {
-    const src = SHEET()
-    expect(src).toContain('pseudonymAvatar(youPseudonym)')
-    expect(src).toContain('pseudonymAvatar(pseudonym)')
+  it('shows your own face only if you revealed it', () => {
+    /*
+     * The moment must not show you something about yourself they cannot see.
+     * Unrevealed, you are the mark they know you by.
+     */
+    expect(SCREEN()).toContain(
+      "me={controls.revealed ? me : { name: room.match?.you ?? 'You', photo: null }}"
+    )
+  })
+
+  it('draws the generated mark for anybody without a photo', () => {
+    expect(MOMENT()).toContain('<Face name={me.name} photo={me.photo}')
+    expect(MOMENT()).toContain('<Face name={them.name} photo={them.photo}')
+    expect(FACE()).toContain('pseudonymAvatar(name)')
   })
 
   it('is seeded on pseudonyms, never a user id', () => {
     // A user id is stable forever and would rebuild the cross-surface identity
     // the pseudonyms exist to prevent.
-    const src = SHEET()
-    expect(src).not.toContain('userId')
-    expect(src).not.toContain('user_id')
-  })
-
-  it('keeps the frame geometry it can keep', () => {
-    // 128pt discs, 4pt ring, overlapped 24, the right one dropped 16.
-    const src = SHEET()
-    expect(src).toContain('const AVATAR = 128')
-    expect(src).toContain('const AVATAR_RING = 4')
-    expect(src).toContain('const AVATAR_OVERLAP = 24')
-    expect(src).toContain('const AVATAR_DROP = 16')
-  })
-
-  it('sizes buttons by minHeight on the scale, not the frame’s fixed 68', () => {
-    /*
-     * 68 is `py-20` around an 18/28 line. Pinned, it clips the label at large
-     * Dynamic Type and in any language whose translation runs to two lines.
-     */
-    const src = SHEET()
-    expect(src).toContain('minHeight: CONTROL.lg')
-    expect(src).not.toMatch(/[^n]height: CONTROL\.lg/)
-    expect(src).not.toContain('height: 68')
+    for (const src of [MOMENT(), FACE()]) {
+      expect(src).not.toMatch(/userId|user_id|\.id\b/)
+    }
   })
 })
 
-describe('the sheet paints without a second request', () => {
+describe('the moment paints without a second request', () => {
   it('takes both pseudonyms from the like response', () => {
     /*
      * `likeAtEvent` already loads both rows to snapshot them onto the
@@ -150,16 +148,14 @@ describe('the sheet paints without a second request', () => {
      * put a round trip in the middle of the one moment that should feel
      * instant.
      */
-    const src = stripComments(read('components/screens/MatchScreen.tsx'))
-    expect(src).toContain('result.data.pseudonyms?.them')
-    expect(src).toContain('result.data.pseudonyms?.you')
+    const src = ROOM()
+    expect(src).toContain('result.data?.pseudonyms?.them')
+    expect(src).toContain('result.data?.pseudonyms?.you')
   })
 
   it('falls back to the card’s name, which is also the pseudonym', () => {
     // Pre-reveal `attendee.name` IS the pseudonym — `rankMatches` enforces it —
     // so the fallback cannot leak a real name.
-    expect(stripComments(read('components/screens/MatchScreen.tsx'))).toContain(
-      'getDisplayName(attendee.name)'
-    )
+    expect(ROOM()).toContain('result.data?.pseudonyms?.them || displayName(attendee.name)')
   })
 })

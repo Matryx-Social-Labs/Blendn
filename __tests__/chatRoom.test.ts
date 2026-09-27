@@ -44,7 +44,7 @@ describe('the bubble points at its sender', () => {
   it('never draws a photograph', () => {
     /*
      * The frame draws faces. This room is pseudonymous until somebody chooses
-     * otherwise, so a photo here undoes what `app/room.tsx` exists to protect.
+     * otherwise, so a photo here undoes what the room's pseudonyms exist to protect.
      * `pseudonymAvatar` is the only avatar source allowed on this surface.
      */
     const src = codeOnly(BUBBLE())
@@ -254,35 +254,45 @@ describe('the screen renders through the rebuilt components', () => {
 })
 
 describe('the room opens the chat in front of itself', () => {
-  it('replaces the modal rather than pushing beneath it', () => {
+  it('pushes over the overlay, and the overlay is not a modal route', () => {
     /*
-     * `app/room.tsx` is `presentation: 'modal'`. On iOS a card pushed after a
-     * modal lands on the stack under it: Join Chat fetched the room and
-     * showed nothing, and closing the room then took two taps. Driven
-     * 2026-09-13 on the simulator, from a fresh launch.
+     * The room used to be `app/room.tsx`, `presentation: 'modal'`. On iOS a
+     * card pushed after a modal lands on the stack under it: Join Chat fetched
+     * the room and showed nothing, and closing the room then took two taps.
+     * Driven 2026-09-13 on the simulator, from a fresh launch. The fix then was
+     * `router.replace`, which closed the room to open its own chat.
+     *
+     * The room is the Blend'n overlay now, hosted by the tab layout *under*
+     * the root stack (`lib/blendnOverlay.ts`), so a push lands on top of it
+     * and Back returns to it. A push is only right while that holds — so this
+     * pins both halves: the push, and that `/room` is no longer a screen.
      */
-    const src = codeOnly(read('app/room.tsx'))
-    expect(src).toMatch(/router\.replace\(\{\s*pathname: '\/chat\/\[id\]'/)
-    expect(src).not.toMatch(/router\.push\(\{\s*pathname: '\/chat\/\[id\]'/)
+    const src = codeOnly(read('components/blendn/BlendnScreen.tsx'))
+    expect(src).toMatch(/router\.push\(\{\s*pathname: '\/chat\/\[id\]'/)
+    expect(src).not.toMatch(/router\.replace\(\{\s*pathname: '\/chat\/\[id\]'/)
+    const route = codeOnly(read('app/room.tsx'))
+    expect(route).toContain('openBlendn()')
+    expect(route).not.toContain('BlendnScreen')
   })
 })
 
-describe('the Me tab is a control panel, not a second profile', () => {
+describe('the Me tab is your profile, with no separate preview', () => {
   /*
-   * It was briefly the editorial frame `1141:5633` -- which was a second copy
-   * of a screen that already existed. `app/user/[id].tsx` has a `'self'` mode,
-   * so pointing it at your own id renders that page with Connect suppressed.
-   *
-   * Preview being *the same screen* is the whole point: "how others see me"
-   * cannot drift from how they actually see you, gating included.
+   * It was a control panel whose Preview button opened `app/user/[id].tsx` in
+   * its `'self'` mode. Two screens for one person was one too many: the
+   * parts only Preview had (bio, work, gallery) now render here, through the
+   * same `ProfileSections` pieces that screen uses.
    */
   const OWN = () => codeOnly(read('app/(tabs)/profile.tsx'))
 
-  it('sends Preview to the attendee screen rather than re-rendering it', () => {
+  it('shows what others see on this page instead of sending you to a preview', () => {
     const src = OWN()
-    expect(src).toContain("pathname: '/user/[id]'")
-    // The editorial pieces belong to that screen now, not this one.
-    expect(src).not.toMatch(/<ProfileHero|<ProfileOwnCta|<ProfileBio/)
+    expect(src).not.toContain("pathname: '/user/[id]'")
+    expect(src).not.toMatch(/>Preview</)
+    expect(src).toContain('<ProfileBio')
+    expect(src).toContain('<ProfileDetail')
+    expect(src).toContain('<ProfileGallery')
+    expect(src).toContain('<PhotoLightbox')
   })
 
   it('offers Edit profile and Settings, with Settings last', () => {
@@ -293,10 +303,12 @@ describe('the Me tab is a control panel, not a second profile', () => {
     expect(content.indexOf("router.push('/settings')")).toBeGreaterThan(content.indexOf('title="Recent"'))
   })
 
-  it('puts the header flat on the page: one display line, and an Edit/Preview pair with no accent', () => {
+  it('puts the header flat on the page: one display line, and one compact Edit pill with no accent', () => {
     const src = OWN()
     expect(src.match(/variant="display"/g)).toHaveLength(1)
-    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.md[^}]*backgroundColor: EMBER\.surface,/)
+    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.sm[^}]*backgroundColor: EMBER\.surface,/)
+    // One way into Edit profile: the sections carry no EDIT links of their own.
+    expect(src).not.toContain('actionLabel="EDIT"')
     // The old identity card sat on `surfaceMedia`; the header has no card now.
     expect(src).not.toContain('surfaceMedia')
   })
@@ -336,9 +348,11 @@ describe('the Me tab is a control panel, not a second profile', () => {
      * awaited by the profile load, and a failure only leaves Recent out.
      */
     const src = OWN()
-    expect(src).toContain('apiClient.getMyAttendance()')
+    // Enough of it to fill Nights out's twelve weeks, not just the Recent rail.
+    expect(src).toContain('apiClient.getMyAttendance(ATTENDANCE_LIMIT)')
     expect(src).toContain('pastEventRows(result.data.events)')
-    expect(src).toContain('<UpcomingCard')
+    // Past events as a rail of photo tiles: memories, not a schedule.
+    expect(src).toContain('<MemoryTile')
     expect(src).not.toContain('onToggleFavorite')
     expect(src).toContain("pathname: '/event/[id]'")
     expect(src).not.toMatch(/await loadRecent|Promise\.all/)

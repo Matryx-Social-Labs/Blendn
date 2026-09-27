@@ -94,8 +94,9 @@ describe('it can be forgotten, and both callers matter', () => {
      * Leaving the venue ends your claim on the roster. Without this, reopening
      * the room would repaint the one you just left.
      */
-    // Every check-out goes through `checkOutOf`, which forgets the roster.
-    const room = readFileSync(join(__dirname, '..', 'app', 'room.tsx'), 'utf8')
+    // Every check-out goes through `checkOutOf`, which forgets the roster. The
+    // room's is in `useRoomControls`, behind the Blend'n top bar's Check out.
+    const room = readFileSync(join(__dirname, '..', 'lib', 'useRoomControls.ts'), 'utf8')
     expect(room).toContain('checkOutOf(eventId)')
     const helper = readFileSync(join(__dirname, '..', 'lib', 'checkIn.ts'), 'utf8')
     expect(helper).toContain('forgetRoster(eventId)')

@@ -15,6 +15,8 @@ type FadeInUpProps = {
   delay?: number
   distance?: number
   duration?: number
+  /** Bezier control points; defaults to `MOTION_EASING.entrance`. */
+  easing?: readonly [number, number, number, number]
   style?: StyleProp<ViewStyle>
 }
 
@@ -23,6 +25,7 @@ export default function FadeInUp({
   delay = 0,
   distance = 10,
   duration = MOTION_DURATION.normal,
+  easing = MOTION_EASING.entrance,
   style,
 }: FadeInUpProps) {
   const reduceMotion = useReducedMotion()
@@ -38,11 +41,11 @@ export default function FadeInUp({
         Math.max(0, delay),
         withTiming(1, {
           duration,
-          easing: Easing.bezier(...MOTION_EASING.entrance),
+          easing: Easing.bezier(...easing),
         })
       )
     )
-  }, [delay, duration, progress, reduceMotion])
+  }, [delay, duration, easing, progress, reduceMotion])
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: progress.get(),

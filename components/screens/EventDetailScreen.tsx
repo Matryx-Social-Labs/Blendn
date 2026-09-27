@@ -3,8 +3,8 @@ import ScalePress from '../motion/ScalePress'
 import FadeInUp from '../motion/FadeInUp'
 import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
 import { HeartIcon } from '../motion/HeartIcon'
+import { ConfettiBurst } from '../motion/ConfettiBurst'
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
@@ -13,7 +13,6 @@ import {
   Pressable,
   Dimensions,
   InteractionManager,
-  Linking,
   Modal,
   Share,
   StyleSheet,
@@ -32,14 +31,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
-import { askIntentRoute, revealOffer, submitCheckIn } from '../../lib/checkIn'
+import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
-import { NotificationHelpers, syncEventReminder } from '../../lib/notifications';
+import { syncEventReminder } from '../../lib/notifications';
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
@@ -72,9 +71,6 @@ import {
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
 import { highlightEntities } from '../../lib/entityHighlight';
 import { heroPillLabel } from '../../lib/scarcity';
-
-/** How long a check-in waits for a GPS fix before saying so. */
-const LOCATION_FIX_TIMEOUT_MS = 15_000
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
@@ -185,16 +181,6 @@ const SECTION_DELAY = [0, 1, 2, 3].map((i) => i * MOTION_STAGGER.normal)
  * change of screen width rather than its absolute height. 574 on a 390 frame is
  * an aspect, not a number of points.
  */
-const CHECKIN_RULES_TEXT = [
-  'Before you check in, please confirm:',
-  '1. You are physically at the event venue.',
-  '2. Location permission is enabled and accurate.',
-  '3. Fake/spoofed check-ins are not allowed.',
-  '4. One active check-in per event/account.',
-  '5. Follow venue rules and Blendn community guidelines.',
-  '6. Harassment, hate speech, or unsafe behavior is prohibited.',
-  '7. Violations can lead to check-in revocation or account restrictions.',
-].join('\n')
 
 export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
@@ -244,7 +230,6 @@ export default function EventDetail() {
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
   // Don't show loading skeleton if we have params - show content immediately
   const [loading, setLoading] = useState(!hasParams)
-  const [checkingIn, setCheckingIn] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   // Initialize from params for instant display
   const [checkInCount, setCheckInCount] = useState(0)
@@ -695,307 +680,6 @@ export default function EventDetail() {
     }, [id, loading])
   )
 
-  const getCurrentLocation = async () => {
-    try {
-      // Fallback if expo-location is not available
-      if (!Location) {
-        Logger.warn('events', 'location:moduleUnavailable')
-        showTray(
-          'Location service not available',
-          'Location services are required to check in to events. Please ensure you have the latest version of this app.'
-        )
-        return null
-      }
-
-      // Check if location services are enabled
-      const serviceEnabled = await Location.hasServicesEnabledAsync()
-      if (!serviceEnabled) {
-        Logger.warn('events', 'location:servicesDisabled')
-        showTray(
-          'Location services disabled',
-          'Please enable location services in your device settings to check in to events.',
-          [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Open Settings',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                Linking.openSettings().catch(() => {})
-              }
-            }
-          ]
-        )
-        return null
-      }
-
-      // Request permission with better messaging
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        Logger.warn('events', 'location:permissionDenied')
-        showTray(
-          'Location permission required',
-          'Blendn needs location access to verify you are at events. This keeps check-ins authentic.',
-          [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Open Settings',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                Linking.openSettings().catch(() => {})
-              }
-            }
-          ]
-        )
-        return null
-      }
-
-      /*
-       * A deadline of our own. `getCurrentPositionAsync` has no timeout
-       * option (`timeInterval` is a watch setting and does nothing here), and
-       * BestForNavigation waits for a fresh GNSS fix — on a phone that cannot
-       * get one the promise never settles, the button spins for ever, and the
-       * "Location timeout" tray below was unreachable. Driven on an emulator
-       * with no GPS stream: five minutes of spinner. Fifteen seconds is
-       * longer than any fix worth waiting for at a venue door.
-       */
-      const location = await new Promise<Location.LocationObject>((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })),
-          LOCATION_FIX_TIMEOUT_MS
-        )
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
-          mayShowUserSettingsDialog: true,
-        })
-          .then((fix) => { clearTimeout(timer); resolve(fix) })
-          .catch((err) => { clearTimeout(timer); reject(err) })
-      })
-
-      // Validate GPS accuracy for production
-      const accuracy = location.coords.accuracy || 999
-      if (accuracy > 50) {
-        Logger.warn('events', 'location:lowAccuracy', { accuracy })
-        showTray(
-          'GPS signal weak',
-          `GPS accuracy is ${Math.round(accuracy)}m. Move to a location with better GPS signal for accurate check-ins.`,
-          [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Try Again',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                getCurrentLocation().catch(() => {})
-              },
-            },
-          ]
-        )
-        return null
-      }
-
-      return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        /*
-         * The number the server has been asking for and never receiving.
-         *
-         * It is read six lines above to refuse a weak fix, and was then dropped
-         * at this return — so `deviceInfo.gpsAccuracy` was `undefined` on every
-         * check-in the app has ever sent, and four separate server mechanisms
-         * that read it saw nothing:
-         *
-         *   - `MAX_GPS_ACCURACY_METERS` (150m) — unreachable, so the ceiling is
-         *     whatever this file happens to enforce
-         *   - `evaluateCheckIn`'s allowance — every fix judged as the assumed
-         *     35m rather than as itself
-         *   - `check_in_refusals.accuracy_metres` — the column that exists to
-         *     tell a wrong pin from bad phones. Measured on staging: **zero**
-         *     rows written by the API carry one
-         *   - `presence_sessions.last_accuracy` — 37 sessions, none with a value
-         *
-         * `accuracy` is nullable on iOS and Android both, so it is passed
-         * through as-is rather than coerced; `accuracyAllowance` already treats
-         * null as "no information" and applies the assumed value.
-         */
-        accuracy: location.coords.accuracy ?? null,
-      }
-    } catch (error) {
-      Logger.error('events', 'location:getCurrentLocation:error', { error: error as any })
-      
-      // Handle specific location errors for production
-      const errorCode = (error as any)?.code
-      if (errorCode === 'E_LOCATION_TIMEOUT') {
-        showTray('Location timeout', 'Unable to get your location. Please try again or move to an area with better GPS signal.')
-      } else if (errorCode === 'E_LOCATION_UNAVAILABLE') {
-        showTray('Location unavailable', 'Location services are temporarily unavailable. Please try again.')
-      } else {
-        showTray('Location error', 'Failed to get your current location. Please check your GPS settings and try again.')
-      }
-      return null
-    }
-  }
-
-  const handleCheckIn = async (skipRules = false) => {
-    if (!skipRules) {
-      showTray('Rules and regulations', CHECKIN_RULES_TEXT, [
-        { label: 'Cancel', onPress: closeTray },
-        {
-          label: "I Agree, Continue",
-          variant: 'primary',
-          onPress: () => {
-            closeTray()
-            handleCheckIn(true)
-          },
-        },
-      ])
-      return
-    }
-
-    setCheckingIn(true)
-
-    try {
-      Logger.journey('checkin', 'detail:start', { eventId: String(id) })
-      if (!user) {
-        Logger.journey('auth', 'detail:blocked:notSignedIn')
-        showTray('Sign in required', 'Please sign in to check in to events.')
-        setCheckingIn(false)
-        return
-      }
-
-      // Get current location
-      const location = await getCurrentLocation()
-      if (!location) {
-        Logger.warn('events', 'checkin:location:unavailable')
-        setCheckingIn(false)
-        return
-      }
-
-      setUserLocation(location)
-
-      const outcome = await submitCheckIn(String(id), location)
-
-      if (outcome.kind === 'timeout') {
-        Logger.warn('events', 'checkin:timeout')
-        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Retry',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              handleCheckIn(true)
-            }
-          }
-        ])
-      } else if (outcome.kind === 'refused') {
-        Logger.error('events', 'checkin:api:error', { title: outcome.refusal.title })
-        const { refusal } = outcome
-        if (outcome.alreadyCheckedIn) {
-          Logger.journey('checkin', 'detail:alreadyCheckedIn')
-          setCheckInStatus({ success: true, checked_in: true })
-        } else {
-          feedback.error()
-        }
-
-        showTray(
-          refusal.title,
-          refusal.message,
-          refusal.offerDirections
-            ? [
-                { label: 'Done', onPress: closeTray },
-                {
-                  label: 'Open Maps',
-                  variant: 'primary',
-                  onPress: () => {
-                    closeTray()
-                    openInMaps()
-                  },
-                },
-              ]
-            : undefined
-        )
-      } else {
-        Logger.journey('checkin', 'detail:success', { eventId: String(id) })
-        feedback.success()
-
-        // What follows a check-in is decided in `lib/checkIn.ts`, the same for
-        // this door and the Pulse's; only the trays are this screen's.
-        const { askIntent } = outcome
-        const closeAndAsk = () => {
-          closeTray()
-          if (askIntent) router.push(askIntentRoute(String(id)))
-        }
-
-        if (outcome.revealSuggestion) {
-          const offer = await revealOffer({
-            id: user.id,
-            firstName: user.name?.trim().split(/\s+/)[0] ?? null,
-            image: user.image,
-          })
-          showTray(offer.title, offer.message, [
-            { label: offer.cancel, onPress: closeAndAsk },
-            {
-              label: offer.confirm,
-              variant: 'primary',
-              onPress: () => {
-                closeAndAsk()
-                apiClient
-                  .setMatchPreferences(String(id), { revealed: true })
-                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-              },
-            },
-          ])
-        } else {
-          // Keep user in context and offer next step instead of forcing a full-screen jump.
-          showTray(
-            'Checked in',
-            'You are now checked in. Join the event chat now, or stay on this screen.',
-            [
-              {
-                label: 'Stay here',
-                onPress: closeAndAsk,
-              },
-              {
-                label: 'Go to Chat',
-                variant: 'primary',
-                onPress: async () => {
-                  if (askIntent) {
-                    closeAndAsk()
-                    return
-                  }
-                  closeTray()
-                  await openEventChat()
-                }
-              }
-            ]
-          )
-        }
-
-        // Send check-in success notification to the user
-        try {
-          await NotificationHelpers.checkInNotification(
-            event?.title || 'Event',
-            user.id
-          )
-        } catch (notificationError) {
-          Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
-          // Don't fail check-in if notification fails
-        }
-
-        // Update check-in status directly - no need for another API call
-        setCheckInStatus({ success: true, checked_in: true, check_in_id: outcome.checkInId })
-      }
-    } catch (error) {
-      Logger.error('events', 'checkin:exception', { error: error as any })
-      feedback.error()
-      showTray('Check-in failed', 'Something went wrong. Please try again.')
-    } finally {
-      setCheckingIn(false)
-    }
-  }
-
   /*
    * `handleCheckout` lived here and is gone -- the control moved, it was not
    * dropped.
@@ -1200,6 +884,24 @@ export default function EventDetail() {
     router.replace('/(tabs)/chat' as any)
   }, [eventChatGroupId, eventTitle, id])
 
+  // The check-in itself, shared with the Blend'n room's hold-to-check-in.
+  const { checkingIn, celebrations, start: startCheckIn } = useCheckInFlow({
+    eventId: String(id),
+    eventTitle,
+    showTray,
+    closeTray,
+    onLocated: setUserLocation,
+    onOpenMaps: openInMaps,
+    onOpenChat: openEventChat,
+    // Update check-in status directly - no need for another API call
+    onCheckedIn: (outcome) =>
+      setCheckInStatus(
+        outcome.kind === 'checkedIn'
+          ? { success: true, checked_in: true, check_in_id: outcome.checkInId }
+          : { success: true, checked_in: true }
+      ),
+  })
+
   /*
    * Checking in morphs the CTA: 'checked' at once, 'chat' 900ms later; checking
    * out puts it back to 'blend'. The immediate step is taken during render when
@@ -1250,7 +952,7 @@ export default function EventDetail() {
       return
     }
     if (!isCheckedIn) {
-      handleCheckIn()
+      void startCheckIn()
       return
     }
     if (actionStage === 'chat') {
@@ -1783,6 +1485,13 @@ export default function EventDetail() {
           </View>
         </View>
       </Modal>
+
+      {/* Out of the CTA pill: the dock's bottom padding, then half the pill. */}
+      <ConfettiBurst
+        trigger={celebrations}
+        originBottom={insets.bottom + SPACE.lg + SCENE_CTA_HEIGHT / 2}
+        originWidth={200}
+      />
 
       <ActionTray
         visible={trayState.visible}

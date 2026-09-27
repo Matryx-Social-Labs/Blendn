@@ -23,7 +23,11 @@ import { join } from 'path'
  * after being computed and used two lines above. That is invisible to types —
  * the object was valid, just smaller — and it is the shape a guard has to pin.
  */
-const SOURCE = readFileSync(
+// The fix moved to `lib/locationFix.ts` and the flow that sends it to
+// `lib/useCheckInFlow.ts`, so the event screen and the Blend'n room share both.
+const SOURCE = readFileSync(join(__dirname, '..', 'lib', 'locationFix.ts'), 'utf8')
+const FLOW = readFileSync(join(__dirname, '..', 'lib', 'useCheckInFlow.ts'), 'utf8')
+const SCREEN = readFileSync(
   join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'),
   'utf8'
 )
@@ -59,8 +63,11 @@ describe('check-in sends the accuracy it already measured', () => {
   it('found the file, so the assertions below are not vacuous', () => {
     expect(SOURCE).toContain('location.coords.accuracy')
     expect(HELPER).toContain('apiClient.checkIn(')
-    // The screen hands the whole location, accuracy included, to the helper.
-    expect(SOURCE).toContain('submitCheckIn(String(id), location)')
+    // The flow hands the whole location, accuracy included, to the helper,
+    // and the event screen checks in through that flow.
+    expect(FLOW).toContain('submitCheckIn(eventId, location)')
+    expect(FLOW).toContain("from './locationFix'")
+    expect(SCREEN).toContain('useCheckInFlow({')
   })
 
   it('returns the accuracy from getCurrentLocation rather than dropping it', () => {

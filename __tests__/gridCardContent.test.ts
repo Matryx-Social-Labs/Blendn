@@ -94,41 +94,39 @@ describe('every field the card renders is actually read off the payload', () => 
    * Nothing catches that. Both are optional, so the compiler is satisfied; both
    * degrade to a card that merely says less, so no test failed and no screen
    * looked broken. **A field is not wired because a type says it exists.**
+   *
+   * The Blend'n room (`lib/useRoom.ts`) fixed the shape of the bug: both the
+   * first load and load-more map through one function, `attendeeFromMatch`
+   * (`lib/roomLive.ts`, whose own test pins every field). What is left to
+   * guard is that no path grows its own inline map again, and that `toPerson`
+   * reads each field onto the `RoomPerson` the screen draws.
    */
-  const MATCH_SCREEN = readFileSync(
-    join(__dirname, '..', 'components/screens/MatchScreen.tsx'),
-    'utf8'
-  )
+  const USE_ROOM = readFileSync(join(__dirname, '..', 'lib/useRoom.ts'), 'utf8')
   const stripComments = (src: string) =>
     src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-  /** Every field the roster payload carries that a card can show. */
-  const CARRIED = [
-    'sharedIntents',
-    'workField',
-    'sharedWorkField',
-    'age',
-    'insideNow',
-    'youLiked',
-  ] as const
-
-  /*
-   * Asserted per field AND per path, in one test, because the two-way split
-   * that seems tidier is not: a test that only checks the field appears
-   * *somewhere* passes when the first load drops it and load-more keeps it.
-   * That was verified by deleting the first map's two lines -- the per-field
-   * checks stayed green and only the count caught it.
-   */
-  it.each(CARRIED)('reads %s on BOTH the first load and load-more', (field) => {
-    const src = stripComments(MATCH_SCREEN)
-    const occurrences = src.split(`${field}: m.${field}`).length - 1
-    expect(occurrences).toBeGreaterThanOrEqual(2)
+  it('maps BOTH the first load and load-more through attendeeFromMatch', () => {
+    // Asserted as a count: a check that it appears *somewhere* passes when
+    // the first load drops it and load-more keeps it.
+    const src = stripComments(USE_ROOM)
+    expect(src.split('.map(attendeeFromMatch)').length - 1).toBe(2)
+    // …and no inline payload map beside it.
+    expect(src).not.toMatch(/\.map\(\(m\) => \(\{/)
   })
 
-  it('has exactly the two payload maps these counts assume', () => {
-    // If a third map appears, ">= 2" stops meaning "both paths" and the suite
-    // above quietly weakens without failing.
-    const maps = stripComments(MATCH_SCREEN).split('.map((m) => ({')
-    expect(maps).toHaveLength(3)
+  /** Every field the roster payload carries that a card can show, as `toPerson` reads it. */
+  const READ = [
+    'a.sharedIntents',
+    'a.workField',
+    'a.sharedWorkField',
+    'a.age',
+    'a.insideNow',
+    'a.youLiked',
+  ] as const
+
+  it.each(READ)('toPerson reads %s', (field) => {
+    const src = stripComments(USE_ROOM)
+    const toPerson = src.slice(src.indexOf('const toPerson'), src.indexOf('const people'))
+    expect(toPerson).toContain(field)
   })
 })

@@ -108,15 +108,21 @@ describe("the screen consults the code, not the sentence", () => {
 
   it("classifies no refusal by matching the server's prose", () => {
     // The producer, not the consumer: `.includes(` on an error string at all.
-    for (const file of ["lib/checkIn.ts", "components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"]) {
+    for (const file of ["lib/checkIn.ts", "lib/useCheckInFlow.ts", "components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"]) {
       expect(read(file)).not.toMatch(/result\.error\?\.includes\(/)
     }
   })
 
-  it.each(["components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"])(
+  // The event screen's refusal tray lives in `lib/useCheckInFlow.ts`; the
+  // screen supplies the map through `onOpenMaps`.
+  it.each(["lib/useCheckInFlow.ts", "app/(tabs)/events.tsx"])(
     "%s keeps Open Maps behind the refusal that a map can fix",
     (file) => {
       expect(read(file)).toContain("refusal.offerDirections")
     }
   )
+
+  it("the event screen gives the shared flow its map", () => {
+    expect(read("components/screens/EventDetailScreen.tsx")).toContain("onOpenMaps: openInMaps")
+  })
 })

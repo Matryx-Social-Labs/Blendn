@@ -13,7 +13,8 @@ import { RoomVisibilityBanner } from "../components/RoomVisibilityBanner"
  * could see would change** — a switch that silently did nothing, which is the
  * dead-control fault the centre nav button was redesigned to remove.
  */
-const code = readFileSync(join(__dirname, "..", "app", "room.tsx"), "utf8")
+// The room is the Blend'n overlay now; `app/room.tsx` only opens it.
+const code = readFileSync(join(__dirname, "..", "components", "blendn", "BlendnScreen.tsx"), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/^\s*\/\/.*$/gm, "")
 
@@ -68,7 +69,7 @@ describe("the way into the room's settings", () => {
   })
 
   it("feeds the banner the gate it could not compute alone", () => {
-    expect(code).toContain("canReveal={readiness.ok}")
-    expect(code).toContain("missing={readiness.missing}")
+    expect(code).toContain("canReveal={controls.readiness.ok}")
+    expect(code).toContain("missing={controls.readiness.missing}")
   })
 })

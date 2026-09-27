@@ -40,8 +40,18 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/*
+ * Screens, and the hooks that fetch for them. The Blend'n room moved its
+ * loading out of the screen into `lib/useRoom.ts` / `lib/useTonight.ts`, so
+ * walking `app/` and `components/` alone would stop seeing the room at all.
+ */
+const hooks = readdirSync(join(ROOT, 'lib'))
+  .filter((f) => /^use[A-Z]\w*\.tsx?$/.test(f))
+  .map((f) => join(ROOT, 'lib', f))
+
 const files = walk(join(ROOT, 'app'))
   .concat(walk(join(ROOT, 'components')))
+  .concat(hooks)
   .filter((f) => !f.includes('/preview/'))
 
 const stripComments = (s: string) =>
@@ -58,7 +68,7 @@ const ALLOWED: Record<string, string> = {
   'components/PresenceMonitor.tsx':
     'presence is correctness, not freshness: a stale check-in decides whether ' +
     'somebody is shown as in the room',
-  'components/screens/MatchScreen.tsx':
+  'lib/useRoom.ts':
     'load-more raises the limit, which is a different query rather than a ' +
     're-read of the same one',
 }
@@ -82,25 +92,34 @@ describe('force is user intent, never a mount', () => {
   it('the room reads its cache on mount', () => {
     /*
      * The two calls the report was actually about. Both are on a mount path and
-     * both have a live SWR cache behind them.
+     * both have a live SWR cache behind them. They live in `lib/useRoom.ts`
+     * now: `load` defaults to unforced, and the mount and the sync both take
+     * that default.
      */
-    const room = stripComments(readFileSync(join(ROOT, 'app/room.tsx'), 'utf8'))
-    expect(room).toContain('.getActiveCheckins()')
-    expect(room).not.toContain('getActiveCheckins({ force')
+    const room = stripComments(readFileSync(join(ROOT, 'lib/useRoom.ts'), 'utf8'))
+    expect(room).toContain('async (selfId: string, force = false, leaving = false)')
+    expect(room).toContain('apiClient.getActiveCheckins({ force })')
+    expect(room).toContain('apiClient.getEventMatches(eventId, { force, limit: PAGE })')
+    // The mount effect and the live sync, both unforced.
+    expect(room.match(/await load\(userId\)\n/g)).toHaveLength(2)
 
-    const match = stripComments(
-      readFileSync(join(ROOT, 'components/screens/MatchScreen.tsx'), 'utf8')
-    )
-    expect(match).toContain('await loadActiveEventAndAttendees(authUser.id)')
+    // Tonight, the other half of the Blend'n screen, follows the same rule.
+    const tonight = stripComments(readFileSync(join(ROOT, 'lib/useTonight.ts'), 'utf8'))
+    expect(tonight).toContain('await load(false)')
+    expect(tonight).toContain('onSync: () => load(false)')
   })
 
-  it('keeps pull-to-refresh forcing, because that IS the ask', () => {
-    // The other half of the rule. A refresh gesture that returned cache would
-    // be a control that does nothing, which is worse than a slow one.
-    const match = stripComments(
-      readFileSync(join(ROOT, 'components/screens/MatchScreen.tsx'), 'utf8')
-    )
-    const pull = match.slice(match.indexOf('const onPullToRefresh'))
-    expect(pull.slice(0, 400)).toContain('loadActiveEventAndAttendees(authUser.id, true)')
+  it('keeps refresh and retry forcing, because that IS the ask', () => {
+    // The other half of the rule. A refresh or a retry that returned cache
+    // would be a control that does nothing, which is worse than a slow one.
+    const room = stripComments(readFileSync(join(ROOT, 'lib/useRoom.ts'), 'utf8'))
+    const refresh = room.slice(room.indexOf('const refresh = useCallback'))
+    expect(refresh.slice(0, 300)).toContain('await load(userId, true)')
+    const retry = room.slice(room.indexOf('const retry = useCallback'))
+    expect(retry.slice(0, 300)).toContain('load(userId, true)')
+    // …and the screen's Try again is that retry.
+    expect(
+      stripComments(readFileSync(join(ROOT, 'components/blendn/BlendnScreen.tsx'), 'utf8'))
+    ).toContain('onPress={room.retry}')
   })
 })

@@ -371,7 +371,7 @@ The behaviour above is **shipped**. The look of it is not.
 |---|---|
 | City scoping the fetch, radius gone | Built |
 | `GET /events/cities`, counts that match what opens | Built |
-| The picker sheet — "use my current location", then city + count | **Placeholder.** Dark sheet from the bottom, no search, no grouping, no recents |
+| The picker sheet — "use my current location", then city + count | **Partly built.** Drawn cities are illustrated cards with a living skyline (see `docs/PULSE.md`, City art); the sheet itself has no search, grouping or recents |
 | *"Coming soon to {city}"* when we have no events there | Built |
 | The header trigger — `📍 City ▾` | **Placeholder.** Inherits `topBarSubtitle`, sized as a caption rather than a control |
 | *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |

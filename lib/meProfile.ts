@@ -64,3 +64,97 @@ export function profileGaps(profile: {
   if (!profile.interests?.length) gaps.push({ key: 'interests', label: 'Pick interests' })
   return gaps.slice(0, 3)
 }
+
+/** How many weeks the Nights out grid looks back, the current week included. */
+export const NIGHTS_WEEKS = 12
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Local midnight of the Monday on or before `d`. */
+function mondayOf(d: Date): Date {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7))
+  return m
+}
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
+export interface NightCell {
+  /** Local midnight of the day. */
+  date: Date
+  /** Events you attended that started that day, as the caller passed them. */
+  eventIds: string[]
+  /** After today: the rest of the current week, drawn as nothing. */
+  future: boolean
+}
+
+export interface NightsGrid {
+  /** `NIGHTS_WEEKS` columns, oldest first, each Monday → Sunday. */
+  weeks: NightCell[][]
+  /** Column index → "SEP", on the first column and wherever a month starts. */
+  monthLabels: (string | null)[]
+  /** Days in the window with at least one event. */
+  nights: number
+}
+
+/**
+ * The last twelve weeks as a Monday-first grid of days, each day carrying the
+ * events you attended that started on it (local time).
+ *
+ * Counts *nights*, not events: two events on one Saturday are one night out,
+ * which is what the grid draws. Events outside the window are ignored.
+ */
+export function nightsGrid(
+  events: { id: string; start_time: string }[],
+  now: Date = new Date()
+): NightsGrid {
+  const byDay = new Map<string, string[]>()
+  for (const e of events) {
+    const d = new Date(e.start_time)
+    if (Number.isNaN(d.getTime())) continue
+    const k = dayKey(d)
+    byDay.set(k, [...(byDay.get(k) ?? []), e.id])
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const first = mondayOf(now)
+  first.setDate(first.getDate() - (NIGHTS_WEEKS - 1) * 7)
+
+  const weeks: NightCell[][] = []
+  const monthLabels: (string | null)[] = []
+  let nights = 0
+  for (let w = 0; w < NIGHTS_WEEKS; w++) {
+    const week: NightCell[] = []
+    let label: string | null = null
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(first.getFullYear(), first.getMonth(), first.getDate() + w * 7 + d)
+      const future = date.getTime() > today.getTime()
+      const eventIds = future ? [] : byDay.get(dayKey(date)) ?? []
+      if (eventIds.length) nights++
+      if ((w === 0 && d === 0) || date.getDate() === 1) label = MONTHS[date.getMonth()].toUpperCase()
+      week.push({ date, eventIds, future })
+    }
+    weeks.push(week)
+    monthLabels.push(label)
+  }
+  return { weeks, monthLabels, nights }
+}
+
+/**
+ * "THIS WEEK", "LAST WEEK", "3 WEEKS AGO", "2 MONTHS AGO", "LAST YEAR" — how
+ * long ago an event was, for the eyebrow on a Recent tile. Uppercase in the
+ * string, because the `label` role is (docs/DESIGN_SYSTEM.md).
+ */
+export function agoLabel(startTime: string, now: Date = new Date()): string {
+  const start = new Date(startTime)
+  if (Number.isNaN(start.getTime())) return ''
+  const weeks = Math.floor((mondayOf(now).getTime() - mondayOf(start).getTime()) / (7 * DAY_MS) + 0.5)
+  if (weeks <= 0) return 'THIS WEEK'
+  if (weeks === 1) return 'LAST WEEK'
+  if (weeks < 8) return `${weeks} WEEKS AGO`
+  const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth()
+  if (months < 12) return `${months} MONTHS AGO`
+  return months < 24 ? 'LAST YEAR' : `${Math.floor(months / 12)} YEARS AGO`
+}

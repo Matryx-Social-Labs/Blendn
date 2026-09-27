@@ -54,15 +54,23 @@ describe('both doors ask', () => {
   // Two doors, one rule (SCRUM-77 / SCRUM-188).
   const { readFileSync } = require('fs') as typeof import('fs')
   const { join } = require('path') as typeof import('path')
+  // The event screen's door is `lib/useCheckInFlow.ts`, which the Blend'n room
+  // shares; the screen is pinned to it below.
   it.each([
     'app/(tabs)/events.tsx',
-    'components/screens/EventDetailScreen.tsx',
+    'lib/useCheckInFlow.ts',
   ])('%s routes to the intent screen when the server says intentNeeded', (file) => {
     // One helper reads the server's answer; both doors act on it.
     const src = readFileSync(join(__dirname, '..', file), 'utf8')
     expect(src).toContain('submitCheckIn(')
     expect(src).toContain('askIntentRoute(')
     expect(src).toContain('outcome.revealSuggestion')
+  })
+
+  it('the event screen checks in through the shared flow', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
+    expect(src).toContain("import { useCheckInFlow } from '../../lib/useCheckInFlow'")
+    expect(src).toContain('useCheckInFlow({')
   })
 
   it('the helper reads intentNeeded and routes to the question', () => {

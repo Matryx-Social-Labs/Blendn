@@ -100,6 +100,34 @@ Three things follow from it, and none are drawn:
 
 ---
 
+## City art (2026-09-28)
+
+Cities we have drawn show a living skyline instead of a bare name: in the city
+picker as an illustrated card, and on the "Nothing on in {city}" empty state as a
+banner. Bengaluru (Vidhana Soudha, UB City, the Purple Line, Cubbon Park), Mumbai
+(the Sea Link) and Delhi (India Gate, Qutub Minar) are drawn; every other city
+stays a plain row until it has art.
+
+- **Where it lives.** `lib/cityArt.ts` holds the aliases ("Bangalore" →
+  Bengaluru), the local time of day and the palettes, and is tested.
+  `components/cityArt/` holds the renderer and the drawings.
+- **Lit by the city's clock, not the phone's.** Day, dusk and night are palette
+  swaps; at night windows light up and the landmarks get festival bulbs.
+- **Motion runs on the UI thread.** Each moving piece is its own small `Svg` in
+  an `Animated.View` whose transform Reanimated drives. See the header of
+  `CityScene.tsx` for why it is not done by animating SVG props.
+- **Reduce Motion holds a finished frame.** Each loop has a phase, so the still
+  scene has the metro mid-crossing rather than every piece parked off-canvas.
+- **Not on the busy feed.** The header stays a compact chip; the art appears
+  where the city is the subject — choosing one, or finding it empty.
+- **Native dependency.** `react-native-svg` came in with this, so it needs a new
+  build and cannot reach an existing install over the air.
+
+To add a city: draw it as a `Layer[]` in `components/cityArt/scenes.tsx`, add
+its key, script name and time zone to `INFO` and its spellings to `ALIASES`.
+
+---
+
 ## One palette, and how it came to be two
 
 The screen shipped half-restyled. `Featured` and `Upcoming` were built as new

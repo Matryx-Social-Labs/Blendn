@@ -51,15 +51,17 @@ describe("the roster arrives on its own room", () => {
     expect(src).toMatch(/eventRoomCheckInSubscriptions\.forEach[\s\S]{0,80}?"join:event:room"/)
   })
 
-  it("has MatchScreen read the name from the roster room", () => {
+  it("has the room read the name from the roster room", () => {
     /*
-     * MatchScreen is the only consumer that wanted the name — it builds the
-     * attendee list live. It renders only when you are checked in, which is
-     * exactly the gate the roster room applies, so nothing is lost.
+     * The room is the only consumer that wants the name — it builds the
+     * attendee list live. `useRoom` subscribes only once it has a room, i.e.
+     * once you are checked in, which is exactly the gate the roster room
+     * applies, so nothing is lost.
      */
-    const src = code("components/screens/MatchScreen.tsx")
-    expect(src).toMatch(/subscribeToEventRoomCheckIn\(eventInfo\.id, handleCheckIn\)/)
+    const src = code("lib/useRoom.ts")
+    expect(src).toMatch(/subscribeToEventRoomCheckIn\(eventId, /)
     expect(src).not.toMatch(/subscribeToEventCheckIn\(/)
+    expect(src).toContain("if (!userId || !eventId) return")
   })
 
   it("leaves EventDetailScreen on the counter room", () => {
