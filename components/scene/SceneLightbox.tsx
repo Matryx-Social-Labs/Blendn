@@ -16,6 +16,7 @@ import {
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { SwipeToDismiss } from '../motion/SwipeToDismiss'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -108,7 +109,7 @@ export function SceneLightbox({
       statusBarTranslucent
     >
       <StatusBar style="light" />
-      <View style={styles.backdrop}>
+      <SwipeToDismiss onDismiss={onClose}>
         <FlatList
           ref={listRef}
           data={items}
@@ -136,7 +137,7 @@ export function SceneLightbox({
             <Ionicons name="close" size={22} color="#FFFFFF" />
           </View>
         </Pressable>
-      </View>
+      </SwipeToDismiss>
     </Modal>
   )
 }
@@ -219,7 +220,6 @@ function LightboxVideo({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: '#000000' },
   page: { width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' },
   media: { width: SCREEN_W, height: SCREEN_H },
   close: { position: 'absolute', top: 56, right: 20, zIndex: 10 },
