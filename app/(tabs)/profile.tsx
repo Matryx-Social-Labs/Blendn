@@ -281,6 +281,19 @@ function ProfileInner() {
       ) : null}
 
       <View style={styles.rows}>
+        {/*
+          Only while there is no photo. Revealing yourself in a room shows your
+          name and photo and nothing else, so without one there is nothing to
+          reveal. A row, not a badge or a completeness meter: staying without a
+          photo is a legitimate choice (see `event-preferences`).
+        */}
+        {photoList.length === 0 ? (
+          <PanelRow
+            icon="camera-outline"
+            label="Add a photo"
+            onPress={() => router.push('/edit-profile')}
+          />
+        ) : null}
         <PanelRow
           icon="create-outline"
           label="Edit profile"

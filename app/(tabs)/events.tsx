@@ -1716,22 +1716,12 @@ function EventsInner() {
     const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
     return (
       <View style={styles.pulseSection}>
-        <SectionHeader
-          title="Featured"
-          /*
-           * "VIEW ALL" only once there is more than the row already shows.
-           *
-           * With four featured events and four on screen it is a link to the
-           * same four, which is the kind of control that teaches people the
-           * app's links do nothing.
-           */
-          actionLabel={upcomingItems.length > featuredItems.length ? 'VIEW ALL' : undefined}
-          onAction={
-            upcomingItems.length > featuredItems.length
-              ? () => router.push('/nearby-events')
-              : undefined
-          }
-        />
+        {/*
+          No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
+          not the featured events it sat above; and every event not in a section
+          is already in the list further down this screen.
+        */}
+        <SectionHeader title="Featured" />
         {/*
           A row of one is not a row.
 
@@ -1822,7 +1812,9 @@ function EventsInner() {
               imageUrl={item.cover_image_url}
               dayLabel={upcomingDayLabel(item.start_time)}
               joinedCount={joinedCount(item)}
-              distanceLabel={formatDistance(item.distance)}
+              // Distance from you only means something in the city you are in;
+              // browsing elsewhere it read "6412km away". Same rule as Nearby.
+              distanceLabel={browsingHere ? formatDistance(item.distance) : null}
               description={item.short_description || null}
               onPress={() => handleEventPress(item)}
               isFavorited={!!interestStatuses[item.id]}
@@ -2172,7 +2164,11 @@ function EventsInner() {
                 </Text>
               </View>
             )}
-            {locationStatus === 'denied' && (
+            {/*
+              Not while the Nearby section is showing its own "Open Settings"
+              prompt (unnarrowed, no location): one ask, not two on one screen.
+            */}
+            {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
               <View style={styles.bannerWarn}>
                 <Text style={styles.bannerText}>
                   Enable Location to show nearby events and check-in.
