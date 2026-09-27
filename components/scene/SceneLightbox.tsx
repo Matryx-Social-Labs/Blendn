@@ -22,6 +22,10 @@ import { ZoomableImage } from '../motion/ZoomableImage'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
+// Module-level so its identity never changes: FlatList throws if
+// `viewabilityConfig` changes after mount.
+const VIEWABILITY_CONFIG = { viewAreaCoveragePercentThreshold: 50 }
+
 /**
  * Full-screen viewer for an event's media — the place a photograph is actually
  * looked at.
@@ -90,8 +94,6 @@ export function SceneLightbox({
     }
   }, [])
 
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current
-
   const renderItem = useCallback(
     ({ item, index: i }: { item: FeedMediaItem; index: number }) => (
       <View style={styles.page}>
@@ -132,7 +134,7 @@ export function SceneLightbox({
           scrollEnabled={!zoomed}
           showsHorizontalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
+          viewabilityConfig={VIEWABILITY_CONFIG}
           initialScrollIndex={initialIndex}
           getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
         />
@@ -224,7 +226,7 @@ function LightboxVideo({
           style={StyleSheet.absoluteFill}
           contentFit="contain"
           nativeControls
-          allowsFullscreen={false}
+          fullscreenOptions={{ enable: false }}
           allowsPictureInPicture={false}
         />
       ) : null}

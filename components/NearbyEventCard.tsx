@@ -131,7 +131,7 @@ function Frame({
       colors={[tint(EMBER.bg, 0.08), tint(EMBER.bg, 0.42), tint(EMBER.bg, 0.74)]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={{ ...StyleSheet.absoluteFillObject, borderRadius: radius }}
+      style={{ ...StyleSheet.absoluteFill, borderRadius: radius }}
     />
   )
 

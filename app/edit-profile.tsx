@@ -124,111 +124,110 @@ export default function EditProfile() {
   const nameInputRef = useRef<TextInput>(null)
   const ageInputRef = useRef<TextInput>(null)
 
+  // Declared inside the effect: it sets state only after its requests return.
   useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        if (!authUser) {
+          Alert.alert('Error', 'Please sign in to edit your profile')
+          router.back()
+          return
+        }
+
+        // Load profile data via API
+        const result = await apiClient.getProfile(authUser.id)
+
+        if (!result.success || !result.data) {
+          Logger.error('profile', 'EditProfile: Profile load error', { error: result.error })
+        }
+
+        const profileData = result.data || {}
+        const p = profileData.profile || {}
+
+        // Combine with auth user data
+        // API returns { name, profile: { age, location, phone, bio, ... } }
+        const combinedProfile = {
+          id: authUser.id,
+          name: profileData.name || authUser.name || '',
+          // `p.age || ''` typed this `string | number` against an `age?: number`
+          // field. It only ever fed `.toString()` below, so undefined is both
+          // correct and what the type has always said.
+          age: typeof p.age === 'number' ? p.age : undefined,
+          location: p.location || '',
+          phone: p.phone || '',
+          occupation: p.occupation || '',
+          education: p.education || '',
+          display_name: p.name || '',
+          bio: p.bio || '',
+          profile_photos: p.photos || [],
+          goals: p.goals || [],
+          looking_for: p.looking_for || []
+        }
+
+        setProfile(combinedProfile)
+
+        // Set form values
+        setName(combinedProfile.name || '')
+        setAge(combinedProfile.age?.toString() || '')
+        setLocation(combinedProfile.location || '')
+        setPhone(combinedProfile.phone || '')
+        setOccupation(combinedProfile.occupation || '')
+        setEducation(combinedProfile.education || '')
+        setBio(combinedProfile.bio || '')
+        /*
+         * `profileData.interests` is the structured list the server joins from
+         * `user_interests`; `profile.interests` is the legacy free-text column.
+         * They have the same name one level apart, which is exactly how this
+         * screen came to write the wrong one.
+         */
+        const structured = Array.isArray(profileData.interests)
+          ? (profileData.interests as { id: string }[]).map((i) => String(i.id))
+          : []
+        setInterestIds(structured)
+        setInterestsAtLoad(structured)
+        setGoals(combinedProfile.goals || [])
+        setLookingFor(combinedProfile.looking_for || [])
+        setPhotos(combinedProfile.profile_photos || [])
+
+        /*
+         * Pre-filled, which the old screen never did: it read only name and age,
+         * so every chip opened blank and you could not tell "networking" from
+         * "nothing chosen".
+         */
+        const p2 = profileData.profile
+        const loadedIntents = (p2?.intent_default || []) as Intent[]
+        const loadedWorkField = p2?.work_field ?? null
+        const loadedGender = (p2?.gender ?? null) as Gender | null
+        const loadedOrientations = (p2?.orientations || []) as Orientation[]
+        const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
+        setIntents(loadedIntents)
+        setWorkField(loadedWorkField)
+        setGender(loadedGender)
+        setOrientations(loadedOrientations)
+        setInterestedIn(loadedInterestedIn)
+        setMatchingAtLoad({
+          intents: loadedIntents,
+          workField: loadedWorkField,
+          gender: loadedGender,
+          orientations: loadedOrientations,
+          interestedIn: loadedInterestedIn,
+        })
+
+        const fields = await apiClient.getWorkFields()
+        if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
+
+      } catch (error) {
+        Logger.error('profile', 'EditProfile: Load profile error', { error })
+        Alert.alert('Error', 'Failed to load profile data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
     if (authUser) {
       loadProfile()
     }
-    // loadProfile is redefined every render; only authUser should trigger a reload.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser])
-
-  const loadProfile = async () => {
-    try {
-      if (!authUser) {
-        Alert.alert('Error', 'Please sign in to edit your profile')
-        router.back()
-        return
-      }
-
-      // Load profile data via API
-      const result = await apiClient.getProfile(authUser.id)
-
-      if (!result.success || !result.data) {
-        Logger.error('profile', 'EditProfile: Profile load error', { error: result.error })
-      }
-
-      const profileData = result.data || {}
-      const p = profileData.profile || {}
-
-      // Combine with auth user data
-      // API returns { name, profile: { age, location, phone, bio, ... } }
-      const combinedProfile = {
-        id: authUser.id,
-        name: profileData.name || authUser.name || '',
-        // `p.age || ''` typed this `string | number` against an `age?: number`
-        // field. It only ever fed `.toString()` below, so undefined is both
-        // correct and what the type has always said.
-        age: typeof p.age === 'number' ? p.age : undefined,
-        location: p.location || '',
-        phone: p.phone || '',
-        occupation: p.occupation || '',
-        education: p.education || '',
-        display_name: p.name || '',
-        bio: p.bio || '',
-        profile_photos: p.photos || [],
-        goals: p.goals || [],
-        looking_for: p.looking_for || []
-      }
-
-      setProfile(combinedProfile)
-
-      // Set form values
-      setName(combinedProfile.name || '')
-      setAge(combinedProfile.age?.toString() || '')
-      setLocation(combinedProfile.location || '')
-      setPhone(combinedProfile.phone || '')
-      setOccupation(combinedProfile.occupation || '')
-      setEducation(combinedProfile.education || '')
-      setBio(combinedProfile.bio || '')
-      /*
-       * `profileData.interests` is the structured list the server joins from
-       * `user_interests`; `profile.interests` is the legacy free-text column.
-       * They have the same name one level apart, which is exactly how this
-       * screen came to write the wrong one.
-       */
-      const structured = Array.isArray(profileData.interests)
-        ? (profileData.interests as { id: string }[]).map((i) => String(i.id))
-        : []
-      setInterestIds(structured)
-      setInterestsAtLoad(structured)
-      setGoals(combinedProfile.goals || [])
-      setLookingFor(combinedProfile.looking_for || [])
-      setPhotos(combinedProfile.profile_photos || [])
-
-      /*
-       * Pre-filled, which the old screen never did: it read only name and age,
-       * so every chip opened blank and you could not tell "networking" from
-       * "nothing chosen".
-       */
-      const p2 = profileData.profile
-      const loadedIntents = (p2?.intent_default || []) as Intent[]
-      const loadedWorkField = p2?.work_field ?? null
-      const loadedGender = (p2?.gender ?? null) as Gender | null
-      const loadedOrientations = (p2?.orientations || []) as Orientation[]
-      const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
-      setIntents(loadedIntents)
-      setWorkField(loadedWorkField)
-      setGender(loadedGender)
-      setOrientations(loadedOrientations)
-      setInterestedIn(loadedInterestedIn)
-      setMatchingAtLoad({
-        intents: loadedIntents,
-        workField: loadedWorkField,
-        gender: loadedGender,
-        orientations: loadedOrientations,
-        interestedIn: loadedInterestedIn,
-      })
-
-      const fields = await apiClient.getWorkFields()
-      if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
-
-    } catch (error) {
-      Logger.error('profile', 'EditProfile: Load profile error', { error })
-      Alert.alert('Error', 'Failed to load profile data')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handlePhotosChange = (newPhotos: string[]) => {
     setPhotos(newPhotos)

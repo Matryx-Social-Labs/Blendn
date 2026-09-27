@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
@@ -59,14 +59,18 @@ export function FeedMedia({
    * Without this a card resumed halfway through its set — so scrolling past and
    * back showed the third image with no explanation, and the cover the
    * organiser chose was skipped for everybody except a first-time viewer.
+   *
+   * Reset during render rather than in an effect: nothing past this point draws
+   * `index` while inactive, so the result is the same, one commit sooner.
    */
-  useEffect(() => {
-    if (!isActive) setIndex(0)
-  }, [isActive])
+  if (!isActive && index !== 0) setIndex(0)
 
   const current = playlist[Math.min(index, Math.max(playlist.length - 1, 0))]
-  const advance = useRef(() => {})
-  advance.current = () => setIndex((i) => (i + 1) % Math.max(playlist.length, 1))
+  const playlistLength = playlist.length
+  const advance = useCallback(
+    () => setIndex((i) => (i + 1) % Math.max(playlistLength, 1)),
+    [playlistLength],
+  )
 
   /*
    * The still timer, and nothing else.
@@ -79,9 +83,9 @@ export function FeedMedia({
   useEffect(() => {
     if (!isActive || playlist.length < 2) return
     if (current?.kind !== 'image') return
-    const id = setTimeout(() => advance.current(), IMAGE_DWELL_MS)
+    const id = setTimeout(advance, IMAGE_DWELL_MS)
     return () => clearTimeout(id)
-  }, [isActive, index, current?.kind, playlist.length])
+  }, [isActive, index, current?.kind, playlist.length, advance])
 
   const opener = playlist[0]
 
@@ -131,7 +135,7 @@ export function FeedMedia({
           // never fire again.
           key={`${current.url}-${index}`}
           source={current.url}
-          onEnded={playlist.length > 1 ? () => advance.current() : undefined}
+          onEnded={playlist.length > 1 ? advance : undefined}
         />
       ) : null}
     </View>

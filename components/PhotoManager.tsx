@@ -67,6 +67,36 @@ export default function PhotoManager({
   const GAP = SPACE.sm
   const itemSize = Math.max(80, Math.floor((containerWidth - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS))
 
+  // Sets state only once the request settles. A caller that wants the spinner
+  // meanwhile sets `loading` itself.
+  const loadPhotos = () =>
+    getUserPhotos(userId)
+      .then((userPhotos) => {
+        setPhotos(userPhotos)
+
+        // Pre-cache photos for better performance
+        userPhotos.forEach(photo => {
+          if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
+            cachePhoto(photo.url).then(localPath => {
+              if (localPath) {
+                setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
+              }
+            })
+          }
+        })
+      })
+      .catch((error) => {
+        Logger.error('profile', 'PhotoManager: Load photos error', { error, userId })
+      })
+      .finally(() => setLoading(false))
+
+  // A different user's photos are loading from the render that names them.
+  const [photosFor, setPhotosFor] = useState(userId)
+  if (userId !== photosFor) {
+    setPhotosFor(userId)
+    setLoading(true)
+  }
+
   useEffect(() => {
     loadPhotos()
     // loadPhotos is redefined every render; only userId should trigger a reload.
@@ -84,29 +114,6 @@ export default function PhotoManager({
       onPhotosChangeRef.current(photos.map(p => p.url))
     }
   }, [photos])
-
-  const loadPhotos = async () => {
-    try {
-      setLoading(true)
-      const userPhotos = await getUserPhotos(userId)
-      setPhotos(userPhotos)
-      
-      // Pre-cache photos for better performance
-      userPhotos.forEach(photo => {
-        if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
-          cachePhoto(photo.url).then(localPath => {
-            if (localPath) {
-              setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
-            }
-          })
-        }
-      })
-    } catch (error) {
-      Logger.error('profile', 'PhotoManager: Load photos error', { error, userId })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleAddPhoto = async () => {
     if (photos.length >= maxPhotos) {
@@ -239,6 +246,7 @@ export default function PhotoManager({
               Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
               Alert.alert('Error', 'Failed to remove photo')
               // Reload photos to restore state
+              setLoading(true)
               loadPhotos()
             }
           }

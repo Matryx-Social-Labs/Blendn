@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
   stage: { flex: 1 },
-  layer: { ...StyleSheet.absoluteFillObject },
+  layer: { ...StyleSheet.absoluteFill },
   scroll: { padding: GUTTER, gap: SPACE.md },
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: GUTTER, gap: SPACE.md },
   loader: { marginTop: SPACE.xxxl },

@@ -38,13 +38,15 @@ export default function JourneyScreen() {
   const [workField, setWorkField] = useState<string | undefined>()
   const [fields, setFields] = useState<{ slug: string; label: string }[]>([])
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setLocation(draft.location ?? '')
     setOccupation(draft.occupation ?? '')
     setEducation(draft.education ?? '')
     setWorkField(draft.work_field)
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   /*
    * The list comes from the server, never from a copy in the app.

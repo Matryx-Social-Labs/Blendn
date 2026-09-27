@@ -18,10 +18,13 @@ describe('the name a person reads is the brand', () => {
   })
 
   it('is Blend’n on iOS', () => {
-    // XML-escaped, because an apostrophe in a plist string must be.
-    expect(read('ios/blendn/Info.plist')).toContain(
-      '<key>CFBundleDisplayName</key>\n    <string>Blend&apos;n</string>'
-    )
+    // Read as a value, not matched as text: `pod install` re-serialises the
+    // plist with tabs and a bare apostrophe, where Xcode wrote spaces and
+    // `&apos;`. Both are the same string.
+    const name = read('ios/blendn/Info.plist').match(
+      /<key>CFBundleDisplayName<\/key>\s*<string>([^<]*)<\/string>/
+    )?.[1]
+    expect(name?.replace(/&apos;/g, "'")).toBe("Blend'n")
   })
 
   it('is Blend’n on Android', () => {

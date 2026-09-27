@@ -1,5 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
@@ -73,7 +73,8 @@ function BasicsScreenInner() {
   const yearRef = useRef<TextInput>(null)
 
   // Prefilled once storage has answered, not on every render — otherwise a
-  // rehydrate landing mid-edit would overwrite what is being typed.
+  // rehydrate landing mid-edit would overwrite what is being typed. Done during
+  // the render that first sees `loaded`, so the fields never paint empty first.
   /*
    * The draft first, then the account.
    *
@@ -89,12 +90,13 @@ function BasicsScreenInner() {
    */
   const { user } = useAuth()
 
-  useEffect(() => {
-    if (!loaded) return
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setName(draft.name ?? user?.name ?? '')
     setGender(draft.gender)
     setDob(splitDateOfBirth(draft.dateOfBirth))
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
   const patch = { name: name.trim(), gender, dateOfBirth }
@@ -275,7 +277,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceMedia,
     justifyContent: 'flex-end',
   },
-  curationArt: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.6 },
+  curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
   curationText: { padding: SPACE.xl, gap: SPACE.xs },
   curationEyebrow: { ...TYPE.label, color: EMBER.textSecondary },
   curationCaption: TYPE.meta,

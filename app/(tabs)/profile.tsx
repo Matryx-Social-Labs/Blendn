@@ -128,7 +128,7 @@ function ProfileInner() {
     return raw.filter((url): url is string => !!url && url.trim() !== '')
   }, [profile?.photos])
 
-  const getUserAndProfile = useCallback(async (force = false) => {
+  const getUserAndProfile = useCallback(async function load(force = false) {
     if (!user) return
     try {
       const cacheKey = `profile_${user.id}`
@@ -141,7 +141,7 @@ function ProfileInner() {
             const now = Date.now()
             if (user?.id && now - lastBackgroundRefreshRef.current > 15_000) {
               lastBackgroundRefreshRef.current = now
-              getUserAndProfile(true)
+              load(true)
             }
           }, 0)
           return

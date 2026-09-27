@@ -86,12 +86,19 @@ export function ZoomableImage({
     onZoomChange(next)
   }
 
+  // Swiped away: the zoom resets. The state is adjusted during render, not in
+  // the effect, so leaving a page costs one render rather than two.
+  const [wasActive, setWasActive] = useState(active)
+  if (active !== wasActive) {
+    setWasActive(active)
+    if (!active) setZoomed(false)
+  }
+
   useEffect(() => {
     if (active) return
     scale.set(1)
     tx.set(0)
     ty.set(0)
-    setZoomed(false)
   }, [active, scale, tx, ty])
 
   const pinch = Gesture.Pinch()

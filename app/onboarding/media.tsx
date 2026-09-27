@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   ActivityIndicator,
   Dimensions,
@@ -126,10 +126,12 @@ function MediaScreenInner() {
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setPhotos(draft.photos ?? [])
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const add = async (slot: number) => {
     if (!user?.id || uploadingSlot !== null) return

@@ -3,6 +3,13 @@
 Push to `stage` → TestFlight and Play internal, against the staging API.
 Push to `prod` → both stores, against production, waiting for a human.
 
+**A push means a promotion PR merged with a merge commit.** Since 2026-09-27 a
+ruleset makes `stage` and `prod` take changes only through a pull request from
+`dev` (or `stage` → `prod`), checked by `promotion source`
+(`.github/workflows/promotion.yml`). Nobody can push to them directly, delete
+them, or force-push them, admins included. Every `stage` merge spends EAS
+builds, so promote when a build is wanted, not on every dev merge.
+
 Nobody downloads an `.ipa` or an `.aab`, and nobody opens Transporter.
 
 ```
@@ -90,8 +97,7 @@ xcrun simctl boot <udid>                       # e.g. iPhone 17 Pro, iOS 26.5
 SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild \
   -workspace ios/blendn.xcworkspace -scheme blendn \
   -configuration Release -sdk iphonesimulator \
-  -destination "id=<udid>" -derivedDataPath ios/build -quiet \
-  IPHONEOS_DEPLOYMENT_TARGET=15.1 build
+  -destination "id=<udid>" -derivedDataPath ios/build -quiet build
 xcrun simctl install <udid> ios/build/Build/Products/Release-iphonesimulator/blendn.app
 xcrun simctl launch  <udid> com.matryxsociallabs.blendn
 ```
@@ -701,6 +707,133 @@ Do **not** put the JSON path in `eas.json`. A path only works on the machine
 holding the file, which is the opposite of what a workflow needs — and unlike
 the `EXPO_PUBLIC_*` values, this one is a real secret.
 
+### R8 is on for release builds, and it can break a build that compiles
+
+Play Console scored bundle 15 **"DEX code optimisation: Low"**: 2% obfuscated,
+no optimisation, no shrinking, 31.2 MB of uncompressed DEX. R8 had never run.
+`android/app/build.gradle` reads `android.enableProguardInReleaseBuilds` and
+`android.enableShrinkResourcesInReleaseBuilds`, nothing set either, and both
+fell through to `false`. They are now set in `android/gradle.properties` (not
+through `expo-build-properties`: see "The native directories are committed"),
+and the release build type uses `proguard-android-optimize.txt`. Plain
+`proguard-android.txt` carries `-dontoptimize`.
+
+Play's figures for bundle 15, against a local R8 build of `dev` at 5390f5b
+(`r8.json` in the bundle, below):
+
+| | bundle 15 | R8 on |
+|---|---|---|
+| Uncompressed DEX | 31.2 MB | 8.4 MB |
+| Obfuscated | 2% | 84% |
+| Optimised | – | 83% |
+| Shrunk | – | 83% |
+
+On **SDK 57** (React Native 0.86, Expo modules 57) the same build is 13.8 MB of
+DEX, about 82% obfuscated / optimised / shrunk: more Kotlin ships, the ratio holds.
+
+**The first R8 build crashed before its first screen, and the error pointed at
+the wrong thing.** The crash read:
+
+```
+TypeError: Cannot read property 'ErrorBoundary' of undefined
+    at ContextNavigator … at ExpoRoot
+```
+
+That is expo-router finding `app/_layout.tsx` undefined. Metro reports a
+module that throws while loading to the global error handler and hands back
+`undefined`; Sentry's handler takes that first error, so it never reaches
+logcat, and the `ErrorBoundary` line is only the aftermath. With the Sentry DSN
+blanked the real error showed:
+
+```
+Call to function 'ExpoSplashScreen.setOptions' has been rejected.
+→ The 1st argument cannot be cast to type expo.modules.splashscreen.SplashScreenOptions
+→ java.lang.NullPointerException
+```
+
+Every JS object passed to an Expo module becomes a Kotlin `Record`, filled field
+by field from each property's `@Field` annotation. No class in the app
+implements `Field`, because the runtime supplies annotations as proxies. So R8's
+optimiser decided a `Field` value could only be null, and compiled the per-field
+loop to `throw null`. `dexdump` of the converter showed exactly that. This is
+expo/expo#28010, whose answer was `-dontoptimize` for the whole app.
+`android/app/proguard-rules.pro` keeps Expo's annotation types instead
+(`-keep @interface expo.modules.**`), and everything stays optimised.
+
+A first guess, keeping the optimiser off kotlin-reflect, built and changed
+nothing: the next launch crashed the same way. Read the disassembly before
+writing a keep rule.
+
+**So an R8 change, or a new native dependency, is tested by launching a release
+build, never by it compiling:**
+
+```bash
+cd android
+SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew bundleRelease assembleRelease \
+  -PreactNativeArchitectures=arm64-v8a      # one ABI: R8 does not care, and it is 4x faster
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+Then drive it, because a class R8 broke fails only when something first calls
+it. Two things a local release build cannot show, whatever R8 does. It is signed
+with the debug keystore, so Google Maps logs `Authorization failure` and draws
+an empty grid: the Android key only accepts the Play signing certificate. And it
+has no Firebase config, so there is no push token. Check both on the Play
+internal-track build.
+
+**On SDK 57 the emulator cannot soak the Pulse.** Media3 1.9 decodes feed video
+with the emulator's host-side decoder (`c2.goldfish.h264.decoder`; the host log
+prints `[h264 @ …] no frame!`), and after a few minutes of it the emulator's
+network and then the guest hang, and the emulator exits. The app is doing
+what it should — one player at a time, released between clips, visible in logcat
+as `ExoPlayerImpl Init` / `Release` pairs. Sign-in, the Pulse and navigation can
+be driven on the emulator; leave long feed-video sessions to a phone. While a
+video plays, `uiautomator dump` (and Maestro's view hierarchy) also stall, because
+the screen never goes idle. If it crashes:
+
+- **Build a control without R8** from the same checkout:
+  `-Pandroid.enableProguardInReleaseBuilds=false -Pandroid.enableShrinkResourcesInReleaseBuilds=false`
+  on the same command. It launches → R8 is the cause. It crashes too → R8 is not.
+- **Blank `EXPO_PUBLIC_SENTRY_DSN`** in `.env.local` and delete
+  `android/app/build/generated/assets/createBundleReleaseJsAndAssets` so the JS
+  re-bundles without Sentry. The first error then reaches logcat. Put the DSN
+  back afterwards.
+- **Bisect** with `proguard-android.txt` (optimiser off). If that launches, the
+  optimiser is the cause and a keep rule scoped to the affected package is the fix.
+- **Read what R8 produced** before choosing that rule. Look up the class's
+  obfuscated name in `app/build/outputs/mapping/release/mapping.txt`, then
+  disassemble it:
+  `unzip -o app/build/outputs/apk/release/app-release.apk classes.dex -d /tmp/r8 && "$(ls -d $ANDROID_HOME/build-tools/* | tail -1)/dexdump" -d /tmp/r8/classes.dex`.
+  A `throw` where a call used to be means R8 proved something null that isn't.
+
+**Checking a build without Play Console:**
+
+```bash
+AAB=android/app/build/outputs/bundle/release/app-release.aab
+unzip -l $AAB | grep -E '\.dex$' | awk '{s+=$1} END {print s}'      # DEX bytes
+unzip -p $AAB BUNDLE-METADATA/com.android.tools/r8.json              # the percentages Play shows
+unzip -l $AAB | grep obfuscation/proguard.map                        # the mapping Play reads
+```
+
+**Resources.** The resource shrinker cannot see JS asking for an image or a font
+by name, but React Native's bundle step writes `res/raw/keep.xml` listing every
+JS asset, so none are removed. `mapping/release/resources.txt` ends with the
+"Unused resources are:" list if that is ever in doubt.
+
+**Crash reports.** Play reads the R8 mapping from inside the bundle, so Android
+vitals stays readable with no upload. Sentry does not: a *native Java* crash in
+Sentry shows obfuscated names. JS errors are unaffected (Hermes bytecode, not
+R8). EAS keeps each store build's `mapping.txt` as a build artifact
+(`buildArtifactPaths` in `eas.json`); download it from the build page and
+retrace with it. Uploading it automatically needs the Sentry Android Gradle
+plugin, which is not installed.
+
+**Rollback** is both properties back to `false`. The next build is the old one.
+
+**Not fixable here:** Play's "R8 configuration: upgrade to AGP 9.0" row. React
+Native pins AGP (8.12.0 on SDK 57), so that row stays "–" until an SDK ships AGP 9. iOS has no
+equivalent score; Xcode's Release defaults already optimise and strip.
+
 ## One-time setup
 
 1. **App Store Connect API key.** Users and Access → Integrations → App Store
@@ -761,8 +894,7 @@ old capability set does not acquire the new entitlement.
 
 Since **28 April 2026**, Apple refuses **any upload to App Store Connect** built
 with anything older than Xcode 26. EAS's default `image: auto` chooses by Expo
-SDK version, and this project is on **SDK 53**, so `auto` resolves to
-`macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
+SDK version; on **SDK 53** it resolved to `macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
 
 > *This build can no longer be submitted to the App Store.*
 
@@ -780,27 +912,19 @@ Connect or submitted for distribution.
 Nothing in the CLI output tells you. Build 102 went through the whole pipeline —
 built, submitted, "scheduled" — and died in App Store Connect afterwards.
 
-**Upgrading the SDK is not the fix here.** SDK 54 was tried on 2026-08-11 and
-rolled back with reasons — it raised the advisory count from 25 to 29 and
-Reanimated 4 removed `sharedTransitionTag`, which six components use. See
-`SECURITY_RELIABILITY_BACKLOG.md`.
-
-Pin the image instead, on both profiles in `eas.json`:
+**On SDK 57 the pin is `macos-tahoe-26.5-xcode-26.6`, on both profiles in
+`eas.json`.** SDK 57 needs Xcode 26.4 or newer (`expo-doctor` checks
+`>=26.4.0`), so the Xcode 26.0 image that carried SDK 53 through Apple's deadline
+can no longer build it. This is the image Expo pairs with SDK 57.
 
 ```json
-"ios": { "image": "macos-sequoia-15.6-xcode-26.0" }
+"ios": { "image": "macos-tahoe-26.5-xcode-26.6" }
 ```
 
-**The lowest Xcode 26 image, deliberately.** Newer ones exist —
-`macos-tahoe-26.5-xcode-26.6` is paired with SDK 57 — and the further the jump
-from SDK 53, the likelier some native module fails to compile. Take the smallest
-step that satisfies Apple.
-
-**Confirmed working, 2026-08-12.** SDK 53 / React Native 0.79.6 compiles cleanly
-under Xcode 26.0, submits without 90725, and reaches TestFlight. The pairing was
-an open question when the pin was made (#79) and is not one any more — so an SDK
-upgrade is not required to satisfy Apple's deadline, and the rollback recorded in
-`SECURITY_RELIABILITY_BACKLOG.md` stands.
+SDK 57 also raised the iOS deployment target to **16.4** (`ExpoModulesCore`
+requires it), which is set in `project.pbxproj` and the Podfile. Do not pass
+`IPHONEOS_DEPLOYMENT_TARGET=15.1` to a local `xcodebuild` any more: Swift pods
+built for 16.4 will not link into a 15.1 target.
 
 ## The native directories are committed, and that has a cost
 

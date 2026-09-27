@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
-import { router, Tabs } from 'expo-router'
+import { router } from 'expo-router'
+import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
@@ -265,6 +265,10 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
 })
 
 RoomButton.displayName = 'RoomButton'
+
+// expo-router 56+ vendors React Navigation and does not export the bottom-tabs
+// types publicly, so take the tab bar's props from the Tabs component itself.
+type BottomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0]
 
 const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets()
@@ -586,7 +590,7 @@ const styles = StyleSheet.create({
   },
   // The surface, separate from the layout — see the note at the render site.
   barSurface: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     // Flat and opaque, no glow: the frame's translucent fill under a 20pt
     // blur with a warm upward shadow is glass (tasks/lessons.md). The sunken
     // surface is what that fill rendered as over the page.

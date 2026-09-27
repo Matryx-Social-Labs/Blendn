@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   cardOn: { borderColor: EMBER.textPrimary },
-  art: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.4 },
+  art: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.4 },
   label: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg, gap: SPACE.sm },
   labelText: TYPE.button,
 })

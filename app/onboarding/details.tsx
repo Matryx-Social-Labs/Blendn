@@ -64,12 +64,14 @@ export default function DetailsScreen() {
   const [interestIds, setInterestIds] = useState<string[]>([])
   const [bio, setBio] = useState('')
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setInterests(draft.interests ?? [])
     setInterestIds(draft.interestIds ?? [])
     setBio(draft.bio ?? '')
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   useEffect(() => {
     apiClient.getCategories().then((result) => {

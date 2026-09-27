@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
    * The clip lives here, not on `hero`, so the stretch can grow the box above
    * the hero's top while the caption (a sibling) stays unscaled on the bottom.
    */
-  clip: { ...StyleSheet.absoluteFillObject, overflow: 'hidden', backgroundColor: EMBER.surfaceSunken },
+  clip: { ...StyleSheet.absoluteFill, overflow: 'hidden', backgroundColor: EMBER.surfaceSunken },
   /* The screen gutter on every side, bottom-aligned, 16pt between the three blocks. */
   info: {
     position: 'absolute',

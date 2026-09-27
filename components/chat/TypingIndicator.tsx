@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
@@ -30,7 +30,7 @@ import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
  * the dots are the ambience, not the message.
  */
 export function TypingIndicator({ label }: { label: string }) {
-  const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current]
+  const [dots] = useState(() => [new Animated.Value(0.3), new Animated.Value(0.3), new Animated.Value(0.3)])
   const reduceMotion = useReducedMotion()
 
   useEffect(() => {
@@ -60,8 +60,7 @@ export function TypingIndicator({ label }: { label: string }) {
     )
     loops.forEach((l) => l.start())
     return () => loops.forEach((l) => l.stop())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion])
+  }, [dots, reduceMotion])
 
   return (
     <View style={styles.row} accessibilityLiveRegion="polite">

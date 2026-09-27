@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
 import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
@@ -35,13 +35,8 @@ export default function RealtimeStatusBanner({
   style,
   showSocketIssues = true,
 }: RealtimeStatusBannerProps) {
-  const [networkState, setNetworkState] = useState<NetworkState>(getNetworkState())
+  const networkState = useSyncExternalStore<NetworkState>(subscribeNetworkState, getNetworkState)
   const [retrying, setRetrying] = useState(false)
-
-  useEffect(() => {
-    setNetworkState(getNetworkState())
-    return subscribeNetworkState(setNetworkState)
-  }, [])
 
   const isOffline = networkState === 'offline'
   const isSocketIssue = showSocketIssues && status.state !== 'connected'

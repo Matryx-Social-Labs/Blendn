@@ -4,12 +4,23 @@ require File.join(File.dirname(`node --print "require.resolve('react-native/pack
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-ENV['RCT_NEW_ARCH_ENABLED'] = '0' if podfile_properties['newArchEnabled'] == 'false'
-ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] = podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+def ccache_enabled?(podfile_properties)
+  # Environment variable takes precedence
+  return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
 
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
-install! 'cocoapods',
-  :deterministic_uuids => false
+  # Fall back to Podfile properties
+  podfile_properties['apple.ccacheEnabled'] == 'true'
+end
+
+ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+ENV['RCT_USE_RN_DEP'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '0' if podfile_properties['expo.useHermesV1'] == 'false'
+# An explicit `ios.usePrecompiledModules: false` must win even when the env var is already set
+# (e.g. EXPO_USE_PRECOMPILED_MODULES exported by EAS Build), so force-disable here before the default.
+ENV['EXPO_USE_PRECOMPILED_MODULES'] = '0' if podfile_properties['EXPO_USE_PRECOMPILED_MODULES'] == 'false'
+ENV['EXPO_USE_PRECOMPILED_MODULES'] ||= '1'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
 
 prepare_react_native_project!
 
@@ -29,9 +40,10 @@ target 'blendn' do
   # Google Maps on iOS, so the Location card looks the same on both platforms.
   #
   # `react-native-maps` autolinks its Apple Maps pod on its own; the Google
-  # provider is a separate opt-in pod that is NOT autolinked, which is why this
-  # line is here by hand. It pulls GoogleMaps 8.4.0 and Google-Maps-iOS-Utils
-  # 5.0.0 with it.
+  # provider is a separate opt-in that is NOT autolinked, which is why this
+  # line is here by hand. Since react-native-maps 1.21 it is the `Google`
+  # subspec rather than a `react-native-google-maps` pod, and it pins
+  # GoogleMaps 9.4.0 and Google-Maps-iOS-Utils 6.1.0.
   #
   # `:modular_headers` for the same reason as the two above rather than a
   # different one: Google-Maps-iOS-Utils is Swift, and a Swift pod can only
@@ -40,7 +52,7 @@ target 'blendn' do
   # make CocoaPods generate a modulemap for every pod — and React-jsitooling and
   # React-RuntimeCore both set `header_dir 'react_runtime'`, so both would
   # declare `module react_runtime` and collide.
-  pod 'react-native-google-maps', :path => '../node_modules/react-native-maps'
+  pod 'react-native-maps/Google', :path => '../node_modules/react-native-maps'
   pod 'GoogleMaps', :modular_headers => true
   pod 'Google-Maps-iOS-Utils', :modular_headers => true
 
@@ -48,7 +60,10 @@ target 'blendn' do
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else
     config_command = [
-      'npx',
+      'node',
+      '--no-warnings',
+      '--eval',
+      'require(\'expo/bin/autolinking\')',
       'expo-modules-autolinking',
       'react-native-config',
       '--json',
@@ -75,25 +90,15 @@ target 'blendn' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
+      :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    # This is necessary for Xcode 14, because it signs resource bundles by default
-    # when building for devices.
-    installer.target_installation_results.pod_target_installation_results
-      .each do |pod_name, target_installation_result|
-      target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
-        resource_bundle_target.build_configurations.each do |config|
-          config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-        end
-      end
-    end
 
     # fmt (bundled via RCT-Folly) uses a consteval-based FMT_STRING macro that
     # newer Clang (Xcode 16.3+/26.x) rejects as "not a constant expression".
     # fmt's base.h unconditionally #defines FMT_USE_CONSTEVAL/FMT_CONSTEVAL
     # itself (not guarded by #ifndef), so a compiler -D flag gets silently
-    # overridden -- patch the installed header directly instead.
+    # overridden -- patch the installed header directly instead. Guarded: with
+    # SDK 57's precompiled React Native dependencies there may be no fmt pod.
     fmt_header = File.join(installer.sandbox.pod_dir('fmt').to_s, 'include', 'fmt', 'base.h')
     if File.exist?(fmt_header)
       content = File.read(fmt_header)

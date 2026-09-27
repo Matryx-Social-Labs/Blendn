@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useRef } from 'react'
+import React, { memo, useCallback, useImperativeHandle, useMemo, useRef } from 'react'
 import { FlatList, FlatListProps, ListRenderItem, ViewToken } from 'react-native'
 import { Logger } from '../lib/logger'
 
@@ -23,6 +23,13 @@ interface ViewabilityConfig {
   minimumViewTime: number
 }
 
+// Module-level so FlatList always gets the same object: it refuses a
+// viewabilityConfig that changes after mount.
+const VIEWABILITY_CONFIG: ViewabilityConfig = {
+  itemVisiblePercentThreshold: 50,
+  minimumViewTime: 100
+}
+
 // eslint-disable-next-line react/display-name
 export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListProps<T>) => {
   const {
@@ -42,10 +49,9 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
   } = props
 
   const listRef = useRef<FlatList<T>>(null)
-  const viewabilityConfig = useRef<ViewabilityConfig>({
-    itemVisiblePercentThreshold: 50,
-    minimumViewTime: 100
-  })
+  // Hands the caller the same FlatList instance `listRef` holds, whether its
+  // ref is an object or a callback. React re-runs this if the ref changes.
+  useImperativeHandle(forwardedRef, () => listRef.current as FlatList<T>, [])
 
   // Memoized getItemLayout for better performance when itemHeight is known
   const getItemLayout = useMemo(() => {
@@ -105,11 +111,7 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
   if (!enableVirtualization) {
     return (
       <FlatList
-        ref={(node) => {
-          listRef.current = node as any
-          if (typeof forwardedRef === 'function') forwardedRef(node as any)
-          else if (forwardedRef) (forwardedRef as any).current = node
-        }}
+        ref={listRef}
         data={data}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
@@ -127,11 +129,7 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
 
   return (
     <FlatList
-      ref={(node) => {
-        listRef.current = node as any
-        if (typeof forwardedRef === 'function') forwardedRef(node as any)
-        else if (forwardedRef) (forwardedRef as any).current = node
-      }}
+      ref={listRef}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
@@ -147,7 +145,7 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
       // Performance optimizations
       onEndReachedThreshold={onEndReachedThreshold}
       onViewableItemsChanged={onViewableItemsChanged}
-      viewabilityConfig={viewabilityConfig.current}
+      viewabilityConfig={VIEWABILITY_CONFIG}
       onScrollToIndexFailed={onScrollToIndexFailed}
       
       // Memory management
@@ -158,75 +156,5 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
     />
   )
 }) as <T extends any>(props: VirtualizedListProps<T>) => React.JSX.Element
-
-// Hook for managing large dataset pagination
-export const useVirtualizedData = <T extends any>(
-  allData: T[],
-  pageSize: number = 50,
-  threshold: number = 0.8
-) => {
-  const [displayData, setDisplayData] = React.useState<T[]>(() => 
-    allData.slice(0, pageSize)
-  )
-  const [hasMore, setHasMore] = React.useState(allData.length > pageSize)
-  
-  const loadMore = useCallback(() => {
-    if (!hasMore) return
-    
-    const currentLength = displayData.length
-    const newData = allData.slice(0, currentLength + pageSize)
-    
-    setDisplayData(newData)
-    setHasMore(newData.length < allData.length)
-    
-    Logger.debug('general', `Loaded more data: ${newData.length}/${allData.length}`)
-  }, [allData, displayData.length, hasMore, pageSize])
-  
-  const onEndReached = useCallback(() => {
-    if (hasMore) {
-      loadMore()
-    }
-  }, [hasMore, loadMore])
-  
-  // Reset when source data changes
-  React.useEffect(() => {
-    const initialData = allData.slice(0, pageSize)
-    setDisplayData(initialData)
-    setHasMore(allData.length > pageSize)
-  }, [allData, pageSize])
-  
-  return {
-    data: displayData,
-    hasMore,
-    loadMore,
-    onEndReached,
-    onEndReachedThreshold: threshold
-  }
-}
-
-// Performance monitoring hook
-export const useListPerformance = (listName: string) => {
-  const renderCount = useRef(0)
-  const lastRenderTime = useRef(Date.now())
-  
-  React.useEffect(() => {
-    renderCount.current += 1
-    const now = Date.now()
-    const timeSinceLastRender = now - lastRenderTime.current
-    
-    if (renderCount.current % 10 === 0) {
-      Logger.debug('general', `List ${listName} performance`, {
-        renders: renderCount.current,
-        avgRenderInterval: timeSinceLastRender / 10
-      })
-    }
-    
-    lastRenderTime.current = now
-  })
-  
-  return {
-    renderCount: renderCount.current
-  }
-}
 
 export default VirtualizedList

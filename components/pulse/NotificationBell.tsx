@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { ...TYPE.caption, color: EMBER.bg },
 
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.backdrop },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.backdrop },
   sheet: {
     position: 'absolute',
     left: 0,

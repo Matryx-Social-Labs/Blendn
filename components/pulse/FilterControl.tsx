@@ -221,7 +221,7 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 
 const styles = StyleSheet.create({
 
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.backdrop },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.backdrop },
   sheet: {
     position: 'absolute',
     left: 0,

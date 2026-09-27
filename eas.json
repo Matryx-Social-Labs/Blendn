@@ -26,20 +26,22 @@
       "environment": "preview",
       "autoIncrement": true,
       "ios": {
-        "image": "macos-sequoia-15.6-xcode-26.0"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"]
       }
     },
     "production": {
       "environment": "production",
       "autoIncrement": true,
       "ios": {
-        "image": "macos-sequoia-15.6-xcode-26.0"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"]
       }
     }
   },

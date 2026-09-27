@@ -188,7 +188,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 
 ### Important Patterns
 
-- **Motion runs on Reanimated 4.1 + `react-native-worklets` 0.5**, ahead of SDK 53's bundled 3.17 (both officially support RN 0.79). `expo.install.exclude` in `package.json` keeps `npx expo install --check` from downgrading them. Remove that entry when the SDK upgrade bundles Reanimated 4. Use `.get()/.set()` on shared values and `scheduleOnRN` from `react-native-worklets`, not `runOnJS`. Babel needs nothing: `babel-preset-expo` adds `react-native-reanimated/plugin`, which now re-exports the worklets plugin.
+- **Motion is Reanimated 4** (SDK 57 pin). Use `.get()/.set()` on shared values, and `scheduleOnRN` from `react-native-worklets`, not `runOnJS`. For state-driven changes, use a CSS transition written as the `transition` shorthand string (`'color 150ms cubic-bezier(…)'`). `transitionProperty` & co. collide with react-native-web's string-typed style props.
 - **Logging**: use `Logger.info/warn/error('module', 'message', data)` from `lib/logger.ts` — never `console.log`.
 - **Auth singleton**: `useAuth.ts` stores state in a module-level variable, not React context. All components share one instance; calling `useAuth()` subscribes to updates.
 - **Socket lifecycle**: managed in `_layout.tsx` — connects on login via `initSocketWithAppState()`, disconnects on logout, auto-reconnects on foreground. Rooms are automatically rejoined after every reconnect.
