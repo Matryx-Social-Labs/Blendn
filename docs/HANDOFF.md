@@ -93,8 +93,14 @@ guards the ratio staying near 1.
 
 ## Decisions already made — do not re-litigate
 
-- **Friendship does not reveal identity.** A friend sees what a match sees.
-  Otherwise the friend graph is a back door around `maySeeIdentity`.
+- **Friendship does not reveal identity *in a room*.** Revised by the owner on
+  2026-09-27 when the friend graph was built: the friends list and a friend's
+  profile show real names — both people said yes, by request and accept — but
+  in a room a friend is a pseudonym like anyone else, unless *they* turn on
+  "Friends can see who I am in rooms" (off by default). Friendship is still not
+  a branch of `maySeeIdentity` without that switch, and a DM opened between
+  friends is marked so it does not become one either. No search, ever: you add
+  someone through their link or from a match/conversation.
 - **Orientation is multi-select**, capped at 3, "Prefer not to say" exclusive,
   union for `interested_in`.
 - **Anonymity defaults on.** Guarded by `anonymousByDefault` with five tests and
@@ -102,10 +108,11 @@ guards the ratio staying near 1.
 - **Sign in with Apple stays iOS-only.** Already gated at `app/index.tsx:273`.
   No Android implementation exists, and Apple guideline 4.8 requires it on iOS
   because Google sign-in is offered.
-- **Friends are excluded from the match pool** and shown as "people you know are
-  here", visible only if they checked in publicly — including the *count*, since
-  "1 person you know is here" identifies them when they are your only friend
-  attending.
+- **Friends are excluded from the match pool** (built, 2026-09-27) and shown as
+  "people you know are here", visible only if they checked in publicly —
+  including the *count*, since "1 person you know is here" identifies them when
+  they are your only friend attending. The "people you know are here" half is
+  not built.
 - **No background location.** Foreground only. iOS `always` is an App Review
   liability and buys least where a false eviction is least recoverable.
 - **Cut, for now:** voice/video calling, voice messages, PRO membership tier,

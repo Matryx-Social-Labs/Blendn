@@ -24,6 +24,8 @@ export type NotificationKind =
   | 'match'
   | 'reveal_request'
   | 'reveal'
+  | 'friend_request'
+  | 'friend_accepted'
 
 export interface NotificationItem {
   id: string

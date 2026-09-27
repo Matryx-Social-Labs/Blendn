@@ -67,7 +67,7 @@ describe('badgeLabel', () => {
 
 describe('every kind the server can send goes somewhere', () => {
   /**
-   * The eleven in `notification_kind` / `NotificationData["type"]`.
+   * Every kind in `notification_kind` / `NotificationData["type"]`.
    *
    * Five of these — the ones marked below — fell straight through
    * `navigateFromNotificationData` and navigated nowhere. They are kinds
@@ -87,9 +87,11 @@ describe('every kind the server can send goes somewhere', () => {
     'match',
     'reveal_request', // was falling through
     'reveal', // was falling through
+    'friend_request',
+    'friend_accepted',
   ]
 
-  it('has a case in the switch for all eleven', () => {
+  it('has a case in the switch for every kind', () => {
     const switchBody = SRC().slice(
       SRC().indexOf('export function notificationTarget'),
       SRC().indexOf('export function navigateFromNotificationData')

@@ -336,6 +336,18 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       target = '/(tabs)/chat'
       break
     }
+    case 'friend_request': {
+      /*
+       * Where requests are answered. Not the asker's profile: a friend's
+       * profile is what accepting gives you, and the push carries no name.
+       */
+      target = '/friends/add'
+      break
+    }
+    case 'friend_accepted': {
+      target = '/friends'
+      break
+    }
     case 'waitlist_promoted': {
       // "A place opened up" is only actionable on the event itself.
       if (data.eventId) {
