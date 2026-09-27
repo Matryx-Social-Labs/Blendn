@@ -9,7 +9,7 @@
 jest.mock('expo-image-picker', () => ({}))
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() }, Linking: {}, Platform: { OS: 'ios' } }))
 jest.mock('@react-native-async-storage/async-storage', () => ({}))
-jest.mock('expo-file-system', () => ({}))
+jest.mock('expo-file-system/legacy', () => ({}))
 jest.mock('expo-image-manipulator', () => ({
   SaveFormat: { JPEG: 'jpeg' },
   manipulateAsync: jest.fn().mockResolvedValue({ uri: 'file:///out.jpg' }),

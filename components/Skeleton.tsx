@@ -2,6 +2,8 @@ import React, { useEffect } from 'react'
 import { Animated, Easing, StyleProp, StyleSheet, ViewStyle } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
+import { EMBER, EMBER_RADIUS } from '../lib/theme'
+
 type SkeletonProps = {
   width?: number | string
   height?: number
@@ -48,7 +50,7 @@ function useSharedPulse(enabled: boolean) {
   }, [enabled])
 }
 
-export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = 8, style, color }) => {
+export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = EMBER_RADIUS.sm, style, color }) => {
   // Reduce Motion: a still block at the pulse's resting opacity.
   const reduceMotion = useReducedMotion()
   useSharedPulse(!reduceMotion)
@@ -62,7 +64,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
           height,
           borderRadius,
           opacity: reduceMotion ? PULSE_LOW : pulse,
-          backgroundColor: color || 'rgba(255,255,255,0.12)',
+          backgroundColor: color || EMBER.skeleton,
         } as any,
         style,
       ]}
@@ -71,11 +73,11 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
 }
 
 export const SkeletonLine: React.FC<Pick<SkeletonProps, 'width' | 'style' | 'color'>> = ({ width = '100%', style, color }) => (
-  <Skeleton width={width} height={12} borderRadius={6} style={style} color={color} />
+  <Skeleton width={width} height={12} borderRadius={EMBER_RADIUS.pill} style={style} color={color} />
 )
 
 export const SkeletonCircle: React.FC<Pick<SkeletonProps, 'width' | 'style' | 'color'>> = ({ width = 40, style, color }) => (
-  <Skeleton width={width} height={Number(width)} borderRadius={999} style={style} color={color} />
+  <Skeleton width={width} height={Number(width)} borderRadius={EMBER_RADIUS.pill} style={style} color={color} />
 )
 
 export const SkeletonBlock: React.FC<SkeletonProps> = (props) => (
@@ -84,7 +86,7 @@ export const SkeletonBlock: React.FC<SkeletonProps> = (props) => (
 
 const styles = StyleSheet.create({
   base: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: EMBER.skeleton,
   },
 })
 

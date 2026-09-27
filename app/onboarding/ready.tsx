@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -71,7 +70,7 @@ export default function ReadyScreen() {
           importantForAccessibility="no-hide-descendants"
           style={styles.badge}
         >
-          <Ionicons name="checkmark" size={ICON.md} color={EMBER.accent} />
+          <Ionicons name="checkmark" size={ICON.md} color={EMBER.textPrimary} />
         </View>
 
         {/*
@@ -87,12 +86,7 @@ export default function ReadyScreen() {
          * `width`/`height` are the decode hint, so the bitmap is the size of
          * the thing on screen.
          */}
-        <LinearGradient
-          colors={[...EMBER_GRADIENT.colors]}
-          start={EMBER_GRADIENT.start}
-          end={EMBER_GRADIENT.end}
-          style={styles.avatarRing}
-        >
+        <View style={styles.avatarRing}>
           <View style={styles.avatarBorder}>
             {primaryPhoto ? (
               <OptimizedImage
@@ -106,7 +100,7 @@ export default function ReadyScreen() {
               <View style={[styles.avatar, styles.avatarEmpty]} />
             )}
           </View>
-        </LinearGradient>
+        </View>
 
         <Text style={styles.name}>{name || 'Your name'}</Text>
         {draft.occupation ? <Text style={styles.role}>{draft.occupation}</Text> : null}
@@ -125,19 +119,9 @@ export default function ReadyScreen() {
         <View style={styles.interestsCard}>
           <Text style={styles.interestsHeading}>Interests</Text>
           <View style={styles.interestsRow}>
-            {draft.interests.map((interest, index) => (
+            {draft.interests.map((interest) => (
               <View key={interest} style={styles.chip}>
-                {index === 0 ? (
-                  <LinearGradient
-                    colors={[...EMBER_GRADIENT.colors]}
-                    start={EMBER_GRADIENT.start}
-                    end={EMBER_GRADIENT.end}
-                    style={StyleSheet.absoluteFill}
-                  />
-                ) : null}
-                <Text style={index === 0 ? styles.chipAccentText : styles.chipText}>
-                  {interest}
-                </Text>
+                <Text style={styles.chipText}>{interest}</Text>
               </View>
             ))}
           </View>
@@ -184,7 +168,7 @@ function Summary({
 
 /** One number, so the box and the decode hint cannot drift apart. */
 const AVATAR = 128
-/** The gradient ring's own thickness plus the gap between it and the photo. */
+/** The ring's own thickness plus the gap between it and the photo. */
 const RING = 8
 
 const styles = StyleSheet.create({
@@ -199,10 +183,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: SPACE.lg,
     right: SPACE.lg,
-    width: 40,
-    height: 40,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(45,44,44,0.6)',
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -210,6 +194,7 @@ const styles = StyleSheet.create({
     width: AVATAR + RING,
     height: AVATAR + RING,
     borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.textTertiary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -224,9 +209,9 @@ const styles = StyleSheet.create({
   avatar: { width: '100%', height: '100%' },
   avatarEmpty: { backgroundColor: EMBER.surfaceSunken },
   name: TYPE.title,
-  role: { ...TYPE.body, color: EMBER.accent },
-  divider: { width: 96, height: 1, backgroundColor: 'rgba(238,131,97,0.2)' },
-  bio: { ...EMBER_TYPE.subtitle, color: EMBER.textSecondary },
+  role: { ...TYPE.body, color: EMBER.textSecondary },
+  divider: { width: 96, height: 1, backgroundColor: EMBER.separator },
+  bio: { ...TYPE.body, color: EMBER.textSecondary },
 
   interestsCard: {
     backgroundColor: EMBER.surfaceSunken,
@@ -241,22 +226,22 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
-    overflow: 'hidden',
+    minHeight: CONTROL.sm,
+    justifyContent: 'center',
   },
   chipText: TYPE.bodyStrong,
-  chipAccentText: { ...TYPE.bodyStrong, color: EMBER.onGradientChip },
 
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.lg,
     backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.card,
+    borderRadius: EMBER_RADIUS.md,
     padding: SPACE.xl,
   },
   summaryIcon: {
-    width: 48,
-    height: 48,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     alignItems: 'center',
@@ -266,5 +251,5 @@ const styles = StyleSheet.create({
   summaryLabel: TYPE.meta,
   summaryValue: TYPE.bodyStrong,
 
-  error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
+  error: { ...TYPE.meta, color: EMBER.destructive },
 })

@@ -176,9 +176,14 @@ export default function Match({
    * The seed must not overwrite a roster the fetch has already delivered -- on
    * a slow network the remembered one could otherwise land second and replace
    * fresher data with staler.
+   *
+   * Synced in an effect, like `eventInfoRef` below, rather than during render:
+   * the seed only reads it after an await, never during a render.
    */
   const attendeesRef = useRef<AttendeeProfile[]>([])
-  attendeesRef.current = attendees
+  useEffect(() => {
+    attendeesRef.current = attendees
+  }, [attendees])
   const [attendeesHasMore, setAttendeesHasMore] = useState(false)
   const [attendeesPage, setAttendeesPage] = useState(1)
   const [loadingMoreAttendees, setLoadingMoreAttendees] = useState(false)
@@ -194,6 +199,14 @@ export default function Match({
    */
   const [likeState, setLikeState] = useState<Record<string, LikeStatus>>({})
   const [matchedConversations, setMatchedConversations] = useState<Record<string, string>>({})
+
+  /** The mutual just made, if its sheet is still up. */
+  const [connection, setConnection] = useState<{
+    conversationId: string
+    userId: string
+    them: string
+    you: string
+  } | null>(null)
 
   /**
    * Like someone, which is the one thing this screen could not do.
@@ -300,14 +313,6 @@ export default function Match({
   }, [likeState, matchedConversations, showToast])
 
 
-  /** The mutual just made, if its sheet is still up. */
-  const [connection, setConnection] = useState<{
-    conversationId: string
-    userId: string
-    them: string
-    you: string
-  } | null>(null)
-
   /** Client-side, always. See `lib/gridFilters.ts` for why that is not optional. */
   const [filters, setFilters] = useState<GridFilters>(NO_GRID_FILTERS)
   /** Who the request composer is open for, so the disclosure can name them. */
@@ -358,9 +363,15 @@ export default function Match({
     eventInfoRef.current = eventInfo
   }, [eventInfo])
 
-  useEffect(() => {
+  /*
+   * A new room starts the join count at zero. Adjusted during render rather
+   * than in an effect, so the pill never shows one room's count over the next.
+   */
+  const [joinsRoomId, setJoinsRoomId] = useState(eventInfo?.id)
+  if (joinsRoomId !== eventInfo?.id) {
+    setJoinsRoomId(eventInfo?.id)
     setNewJoinsCount(0)
-  }, [eventInfo?.id])
+  }
 
   useEffect(() => {
     return () => {
@@ -673,50 +684,49 @@ export default function Match({
     }
   }, [attendeesHasMore, attendeesPage, loadingMoreAttendees, authUser?.id])
 
-  const loadInitialData = useCallback(async () => {
-    try {
-      if (!authUser) {
-        return
-      }
-
-      /*
-       * The viewer's own interests are no longer fetched here.
-       *
-       * They existed only to feed the client-side re-sort deleted below, and
-       * they were read from `profile.interests` — the **free-text** column that
-       * `interest-coverage.ts` exists to warn nobody reads, not the structured
-       * graph the ranking actually uses. So this screen was intersecting the
-       * server's computed overlap with a legacy list that was usually empty, on
-       * every load, to produce a number it then sorted by.
-       *
-       * One fewer round trip before the room can render, and one fewer reader
-       * of a column that is on its way out.
-       */
-      /*
-       * Not forced. Both endpoints behind this have SWR caches --
-       * `getActiveCheckins` at `CHECKINS_SWR_TTL`, `getEventMatches` at 30s --
-       * and forcing on mount bypassed both, so opening the room always cost two
-       * sequential round trips before anything could render. With
-       * `attendees.length === 0` on a fresh mount that is a full-screen spinner
-       * every single time, which is the "wait a few seconds, close it, wait
-       * again" this screen was reported for.
-       *
-       * Reading the cache paints immediately and revalidates behind the paint.
-       * Forcing belongs to a human asking for it -- see `onPullToRefresh`.
-       */
-      await loadActiveEventAndAttendees(authUser.id)
-    } catch (e) {
-      Logger.error('match', 'Unexpected error during initialization', { error: e })
-    } finally {
-      setLoading(false)
-    }
-  }, [authUser, loadActiveEventAndAttendees])
-
+  /*
+   * The first load, written inside its effect -- the shape React documents for
+   * fetching in one. It had no other caller; as a separate callback the linter
+   * read its (post-await) setState calls as synchronous ones in the effect.
+   */
   useEffect(() => {
-    if (authUser) {
-      loadInitialData()
+    if (!authUser) return
+    const loadInitialData = async () => {
+      try {
+        /*
+         * The viewer's own interests are no longer fetched here.
+         *
+         * They existed only to feed the client-side re-sort deleted below, and
+         * they were read from `profile.interests` — the **free-text** column that
+         * `interest-coverage.ts` exists to warn nobody reads, not the structured
+         * graph the ranking actually uses. So this screen was intersecting the
+         * server's computed overlap with a legacy list that was usually empty, on
+         * every load, to produce a number it then sorted by.
+         *
+         * One fewer round trip before the room can render, and one fewer reader
+         * of a column that is on its way out.
+         */
+        /*
+         * Not forced. Both endpoints behind this have SWR caches --
+         * `getActiveCheckins` at `CHECKINS_SWR_TTL`, `getEventMatches` at 30s --
+         * and forcing on mount bypassed both, so opening the room always cost two
+         * sequential round trips before anything could render. With
+         * `attendees.length === 0` on a fresh mount that is a full-screen spinner
+         * every single time, which is the "wait a few seconds, close it, wait
+         * again" this screen was reported for.
+         *
+         * Reading the cache paints immediately and revalidates behind the paint.
+         * Forcing belongs to a human asking for it -- see `onPullToRefresh`.
+         */
+        await loadActiveEventAndAttendees(authUser.id)
+      } catch (e) {
+        Logger.error('match', 'Unexpected error during initialization', { error: e })
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [authUser, loadInitialData])
+    void loadInitialData()
+  }, [authUser, loadActiveEventAndAttendees])
 
   const onPullToRefresh = useCallback(async () => {
     if (!authUser) return
@@ -773,7 +783,10 @@ export default function Match({
         params: { id: userId, ...(eventInfo?.id ? { eventId: eventInfo.id } : {}) } as never,
       })
     },
-    [eventInfo?.id]
+    // The object, not `eventInfo?.id`: the compiler reads `eventInfo.id` as a
+    // read of `eventInfo`. Every write to it also replaces `attendees`, so the
+    // list re-renders on those commits either way.
+    [eventInfo]
   )
 
 
@@ -838,7 +851,11 @@ export default function Match({
       setConnectSending(true)
       try {
         const result = await apiClient.createMessageRequest(target.user_id, message)
-        if (!result.success) {
+        if (result.success) {
+          // The "Requested" crossfade and this tap land on the same frame.
+          // Success only: a request that already existed is not a new send.
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        } else {
           Logger.warn('match', 'connect request failed', { error: result.error })
         }
         setRequested((prev) => ({ ...prev, [target.user_id]: true }))
@@ -920,7 +937,7 @@ export default function Match({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onPullToRefresh}
-            tintColor={EMBER.accent}
+            tintColor={EMBER.textSecondary}
           />
         }
         /*
@@ -1050,7 +1067,7 @@ export default function Match({
               style={({ pressed }) => [styles.more, pressed && styles.pressed]}
             >
               {loadingMoreAttendees ? (
-                <ActivityIndicator color={EMBER.accent} />
+                <ActivityIndicator color={EMBER.textSecondary} />
               ) : (
                 <Text style={styles.moreLabel}>Show more</Text>
               )}
@@ -1142,13 +1159,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    backgroundColor: EMBER.surface,
   },
-  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.textSecondary },
+  // The design system's selected chip: a `textPrimary` fill with `bg` text.
+  chipOn: { backgroundColor: EMBER.textPrimary },
   chipLabel: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
-  chipLabelOn: { color: EMBER.textPrimary },
+  chipLabelOn: { color: EMBER.bg },
 
   // The screen gutter, cards 24 apart.
   list: { paddingHorizontal: GUTTER, gap: SPACE.xl },

@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
@@ -26,9 +25,9 @@ import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
  *
  * The label is not decoration. A paid message styled like an organiser's is an
  * advert wearing the venue's voice, and the one thing that must never be
- * ambiguous is which of the two you are reading. Announcement takes the warm
- * accent; sponsored takes a deliberately cooler, quieter treatment so it cannot
- * borrow the room's own colour.
+ * ambiguous is which of the two you are reading. Announcement takes a bright
+ * rail; sponsored takes a deliberately dimmer, quieter one so it cannot borrow
+ * the room's own voice.
  */
 
 export type BroadcastKind = 'announcement' | 'sponsored'
@@ -56,18 +55,13 @@ export function BroadcastNotice({
   return (
     <View style={styles.wrap}>
       {/*
-        A hairline of the room's gradient down the leading edge for an
-        announcement only. Sponsored does not get it -- see above.
+        A bright hairline down the leading edge for an announcement only.
+        Sponsored gets a dimmed one -- see above.
       */}
       {sponsored ? (
         <View style={styles.railSponsored} />
       ) : (
-        <LinearGradient
-          colors={[EMBER.gradientFrom, EMBER.gradientTo]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.rail}
-        />
+        <View style={styles.rail} />
       )}
 
       <View style={styles.body}>
@@ -93,11 +87,11 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     overflow: 'hidden',
   },
-  rail: { width: 3, borderRadius: 9999 },
-  railSponsored: { width: 3, borderRadius: 9999, backgroundColor: EMBER.textSecondary, opacity: 0.4 },
+  rail: { width: 3, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textPrimary },
+  railSponsored: { width: 3, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textSecondary, opacity: 0.4 },
   body: { flex: 1, gap: SPACE.sm },
-  label: { ...TYPE.label, color: EMBER.accent },
-  labelSponsored: { color: EMBER.textSecondary },
+  label: { ...TYPE.label, color: EMBER.textSecondary },
+  labelSponsored: { color: EMBER.textTertiary },
   text: TYPE.body,
-  time: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)' },
+  time: { ...TYPE.caption, color: EMBER.textTertiary },
 })

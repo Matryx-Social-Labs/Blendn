@@ -3,8 +3,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import {
-    ActivityIndicator,
     Linking,
+    Pressable,
     Share,
     StyleSheet,
     Text,
@@ -14,6 +14,10 @@ import {
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
+import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
+import { DayHeading } from '../../components/ui/DayHeading'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
@@ -23,12 +27,11 @@ import {
   savedEventRows,
   type AttendancePayload,
   type GoingItem,
-  type PastEventRow,
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
-import { formatEventDateTime } from '../../lib/time'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
@@ -44,8 +47,10 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * category on a one-city catalogue and reads as broken. See
  * `docs/NAVIGATION.md`.
  *
- * Three sections, from `goingItems` (lib/savedEvents.ts): **Going** — your
- * RSVPs, from `/me/rsvps`; **Saved** — hearts not already under Going;
+ * From `goingItems` (lib/savedEvents.ts), top to bottom: your soonest RSVP
+ * (from `/me/rsvps`) as the one large **next up** card, with directions,
+ * calendar and share; the rest of your RSVPs as rows under day headings;
+ * **Saved** — hearts not already above, the heart on each row removing it;
  * **Past** — events you attended, each with the way in to rating the people
  * you met there, which had no entry point but reopening an old event.
  */
@@ -219,60 +224,122 @@ function GoingScreenInner() {
     router.push({ pathname: '/event/[id]', params: { id } as any })
   }, [])
 
-  /** The cover, as the "open" target. Its chips are siblings, not children. */
-  const cover = useCallback((item: EventRow | PastEventRow, opts: { height: number; note?: string | null; cancelled?: boolean }) => (
-    // A card that was itself a touchable made VoiceOver read it as one element,
-    // so the actions inside it could not be reached.
-    <TouchableOpacity
-      onPress={() => openEvent(item.id)}
-      accessibilityRole="button"
-      accessibilityLabel={[
-        item.title,
-        item.venue_name,
-        formatEventDateTime(item.start_time),
-        opts.note,
-        opts.cancelled ? 'Cancelled by the organiser' : null,
-      ].filter(Boolean).join(', ')}
-      accessibilityHint="Opens the event"
-    >
-      <EventCover uri={item.cover_image_url} height={opts.height} retry={refreshCount}>
-        <View style={styles.overlayContent}>
-          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-          <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
-          <Text style={styles.time}>{formatEventDateTime(item.start_time)}</Text>
-          {opts.cancelled ? (
-            <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">CANCELLED</Text>
-          ) : opts.note ? (
-            <Text style={styles.note}>{opts.note.toUpperCase()}</Text>
-          ) : null}
+  /*
+   * Next up: the soonest RSVP, large. The photo carries nothing — its words sit
+   * under it — and photo, time, title and place are one button that opens the
+   * event. The actions are siblings of that button, not children: a card that
+   * was itself a touchable made VoiceOver read it as one element, so the
+   * actions inside it could not be reached.
+   */
+  const renderNext = useCallback((row: RsvpEventRow) => {
+    const when = nextUpLabel(row.start_time, row.end_time)
+    const live = when === HAPPENING_NOW
+    const place = placeLabel(row)
+    const cancelled = row.status === 'cancelled'
+    const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
+    return (
+      <View style={styles.hero}>
+        <Pressable
+          onPress={() => openEvent(row.id)}
+          accessibilityRole="button"
+          accessibilityLabel={[
+            row.title,
+            when,
+            place,
+            cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : null,
+          ].filter(Boolean).join(', ')}
+          accessibilityHint="Opens the event"
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <View style={styles.heroPhoto}>
+            <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={EMBER_RADIUS.sm} retry={refreshCount} />
+          </View>
+          <View style={styles.heroBody}>
+            {when ? (
+              <View style={styles.heroWhen}>
+                {live ? <View style={styles.liveDot} /> : null}
+                <Text style={styles.heroEyebrow} numberOfLines={1}>{when}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.heroTitle} numberOfLines={2}>{row.title}</Text>
+            {place ? (
+              <View style={styles.heroPlace}>
+                <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
+                <Text style={styles.heroPlaceText} numberOfLines={1}>{place}</Text>
+              </View>
+            ) : null}
+            {cancelled ? (
+              <View style={[styles.statusTag, styles.statusTagBad]}>
+                <Text style={[styles.statusText, styles.statusTextBad]}>CANCELLED</Text>
+              </View>
+            ) : waitlisted ? (
+              <View style={styles.statusTag}>
+                <Text style={styles.statusText}>ON THE WAITLIST</Text>
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+
+        {/*
+          Directions carries its word; Calendar and Share are icons. Three
+          labelled pills do not fit the 310pt inside the card at the body size —
+          "Directions" alone needs ~120 of a third's ~98 — and the type scale has
+          no smaller button label. No check-in here: that lives on the event.
+        */}
+        <View style={styles.heroActions}>
+          <Pressable
+            style={({ pressed }) => [styles.heroAction, styles.heroActionWide, pressed && styles.pressed]}
+            onPress={() => openInMaps(row)}
+            accessibilityRole="button"
+            accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
+          >
+            <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textPrimary} />
+            <Text style={styles.heroActionText} numberOfLines={1}>Directions</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.heroAction, styles.heroActionIcon, pressed && styles.pressed]}
+            onPress={() => addToCalendar(row)}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${row.title} to calendar`}
+          >
+            <Ionicons name="calendar-outline" size={ICON.sm} color={EMBER.textPrimary} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.heroAction, styles.heroActionIcon, pressed && styles.pressed]}
+            onPress={() => shareEvent(row)}
+            accessibilityRole="button"
+            accessibilityLabel={`Share ${row.title}`}
+          >
+            <Ionicons name="share-outline" size={ICON.sm} color={EMBER.textPrimary} />
+          </Pressable>
         </View>
-      </EventCover>
-    </TouchableOpacity>
-  ), [openEvent, refreshCount])
+      </View>
+    )
+  }, [addToCalendar, openEvent, openInMaps, refreshCount, shareEvent])
 
-  const plannedChips = useCallback((item: EventRow) => (
-    <>
-      <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
-        <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
-        <Text style={styles.actionText}>Open in Maps</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
-        <Ionicons name="calendar" size={ICON.sm} color={EMBER.textSecondary} />
-        <Text style={styles.actionText}>Add to calendar</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
-        <Ionicons name="share-social" size={ICON.sm} color={EMBER.textSecondary} />
-        <Text style={styles.actionText}>Share</Text>
-      </TouchableOpacity>
-    </>
-  ), [openInMaps, addToCalendar, shareEvent])
+  /*
+   * Every item carries its own space above it, because a FlatList has no `gap`:
+   * `SPACE.xl` above a day, `SPACE.xxl` above a section, `SPACE.md` between a
+   * heading and its rows and between rows. The first item sits on the header.
+   */
+  const renderItem = useCallback(({ item, index }: { item: GoingItem; index: number }) => {
+    const first = index === 0
 
-  const renderItem = useCallback(({ item }: { item: GoingItem }) => {
+    if (item.kind === 'next') return renderNext(item.row)
+
+    if (item.kind === 'day') {
+      return (
+        <View style={[styles.inset, !first && { marginTop: SPACE.xl }]}>
+          <DayHeading title={item.title} detail={item.weekday} />
+        </View>
+      )
+    }
+
     if (item.kind === 'header') {
       return (
-        <Text style={styles.sectionHeader} accessibilityRole="header">
-          {item.title}
-        </Text>
+        <View style={[styles.inset, !first && { marginTop: SPACE.xxl }]}>
+          <SectionHeader title={item.title} />
+        </View>
       )
     }
 
@@ -280,14 +347,18 @@ function GoingScreenInner() {
       // No Remove here: leaving an RSVP is a decision about the event, and the
       // event screen is where its consequences (the waitlist) are explained.
       const row = item.row
+      const cancelled = row.status === 'cancelled'
       return (
-        <View style={styles.card}>
-          {cover(row, {
-            height: 180,
-            note: row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null,
-            cancelled: row.status === 'cancelled',
-          })}
-          <View style={styles.actionsRow}>{plannedChips(row)}</View>
+        <View style={styles.row}>
+          <UpcomingCard
+            title={row.title}
+            imageUrl={row.cover_image_url}
+            timeLabel={timeLabel(row.start_time)}
+            placeLabel={placeLabel(row)}
+            note={cancelled ? 'Cancelled' : row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null}
+            noteTone={cancelled ? 'destructive' : 'default'}
+            onPress={() => openEvent(row.id)}
+          />
         </View>
       )
     }
@@ -295,43 +366,48 @@ function GoingScreenInner() {
     if (item.kind === 'past') {
       const row = item.row
       return (
-        <View style={styles.card}>
-          {cover(row, { height: 120 })}
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.actionChip}
-              onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
-              accessibilityRole="button"
-              accessibilityLabel={`Rate the people you met at ${row.title}`}
-            >
-              <Ionicons name="star" size={ICON.sm} color={EMBER.textSecondary} />
-              <Text style={styles.actionText}>Rate people you met</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.row}>
+          <UpcomingCard
+            title={row.title}
+            imageUrl={row.cover_image_url}
+            timeLabel={featuredDateLabel(row.start_time)}
+            placeLabel={placeLabel(row)}
+            onPress={() => openEvent(row.id)}
+            action={{
+              label: 'RATE PEOPLE YOU MET',
+              accessibilityLabel: `Rate people you met at ${row.title}`,
+              onPress: () => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any }),
+            }}
+          />
         </View>
       )
     }
 
-    // Saved. `exiting` on every row; `entering` only on the one Undo just put
-    // back — an entrance on every row would replay as the list virtualises.
+    // Saved. The heart is the remove. `exiting` on every row; `entering` only
+    // on the one Undo just put back — an entrance on every row would replay as
+    // the list virtualises.
     const row = item.row
+    const cancelled = row.status === 'cancelled'
     return (
       <Animated.View
-        style={styles.card}
+        style={styles.row}
         exiting={reduceMotion ? undefined : ROW_OUT}
         entering={!reduceMotion && row.id === restoredId ? ROW_BACK : undefined}
       >
-        {cover(row, { height: 180, cancelled: row.status === 'cancelled' })}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(row)} accessibilityRole="button" accessibilityLabel={`Remove ${row.title} from saved`}>
-            <Ionicons name="heart-dislike" size={ICON.sm} color={EMBER.destructive} />
-            <Text style={styles.actionText}>Remove</Text>
-          </TouchableOpacity>
-          {plannedChips(row)}
-        </View>
+        <UpcomingCard
+          title={row.title}
+          imageUrl={row.cover_image_url}
+          timeLabel={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
+          placeLabel={placeLabel(row)}
+          note={cancelled ? 'Cancelled' : null}
+          noteTone={cancelled ? 'destructive' : 'default'}
+          onPress={() => openEvent(row.id)}
+          isFavorited
+          onToggleFavorite={() => void removeSave(row)}
+        />
       </Animated.View>
     )
-  }, [cover, plannedChips, removeSave, reduceMotion, restoredId])
+  }, [openEvent, removeSave, reduceMotion, renderNext, restoredId])
 
   const items = useMemo(() => goingItems(going, events, attended), [going, events, attended])
 
@@ -349,8 +425,26 @@ function GoingScreenInner() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={EMBER.textPrimary} />
+        // The shapes the list fades into: the next-up card, then two rows.
+        <View accessibilityLabel="Loading your events" accessible>
+          <View style={styles.hero}>
+            <SkeletonBlock width={'100%'} height={HERO_PHOTO} borderRadius={EMBER_RADIUS.sm} />
+            <View style={styles.skeletonLines}>
+              <SkeletonLine width={'35%'} />
+              <SkeletonLine width={'80%'} />
+              <SkeletonLine width={'50%'} />
+            </View>
+          </View>
+          {[0, 1].map((i) => (
+            <View key={i} style={[styles.row, styles.skeletonRow]}>
+              <View style={styles.skeletonRowText}>
+                <SkeletonLine width={'40%'} />
+                <SkeletonLine width={'85%'} />
+                <SkeletonLine width={'55%'} />
+              </View>
+              <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
+            </View>
+          ))}
         </View>
       ) : items.length === 0 && loadFailed ? (
         <View style={styles.empty}>
@@ -396,11 +490,14 @@ function GoingScreenInner() {
   )
 }
 
+/** The next-up card's photo. */
+const HERO_PHOTO = 180
+
 /*
- * Removing a save: the card fades out while the ones below close the gap,
+ * Removing a save: the row fades out while the ones below close the gap,
  * instead of vanishing and letting the list snap up — the snap hid where the
- * card went. Undo fades it back in at its old place and the list opens for it.
- * The cards carry no blur or shadow, which is what makes a layout transition
+ * row went. Undo fades it back in at its old place and the list opens for it.
+ * The rows carry no blur or shadow, which is what makes a layout transition
  * safe here (see tasks/lessons.md). Reduce Motion: the list simply updates.
  */
 const ROW_OUT = FadeOut.duration(MOTION_DURATION.fast)
@@ -417,36 +514,83 @@ const styles = StyleSheet.create({
     paddingTop: SPACE.sm,
     paddingBottom: SPACE.lg,
   },
-  backBtn: { padding: SPACE.xs },
   headerTitle: { ...TYPE.display },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
   emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
   emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
+  // The empty or error state's one action is that state's primary action — the
+  // only accent the screen ever shows. A populated list has none.
   retryButton: {
     marginTop: SPACE.xl,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     justifyContent: 'center',
     borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
+  },
+  retryText: { ...TYPE.button, color: EMBER.onGradient },
+  pressed: { opacity: 0.7 },
+
+  inset: { marginHorizontal: GUTTER },
+  row: { marginHorizontal: GUTTER, marginTop: SPACE.md },
+
+  // Next up. A row's fill and radius, larger: the photo sits inside the card's
+  // padding on `surface` (EventCover's own fill), one step off the card.
+  hero: {
+    marginHorizontal: GUTTER,
+    padding: SPACE.lg,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
+  },
+  heroPhoto: { borderRadius: EMBER_RADIUS.sm, overflow: 'hidden' },
+  heroBody: { marginTop: SPACE.lg, gap: SPACE.xs },
+  heroWhen: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  // Still, not pulsing: status is a mark, not motion (tasks/lessons.md).
+  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
+  heroEyebrow: { ...TYPE.meta, flexShrink: 1 },
+  heroTitle: TYPE.title,
+  heroPlace: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  heroPlaceText: { ...TYPE.meta, flexShrink: 1 },
+  statusTag: {
+    alignSelf: 'flex-start',
+    height: CONTROL.sm,
+    marginTop: SPACE.xs,
+    paddingHorizontal: SPACE.md,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: tint(EMBER.textPrimary, 0.12),
+  },
+  statusTagBad: { backgroundColor: tint(EMBER.destructive, 0.16) },
+  statusText: { ...TYPE.label, color: EMBER.textPrimary },
+  statusTextBad: { color: EMBER.destructive },
+  // One row, one height, one fill: `surface` on the `surfaceSunken` card.
+  heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md },
+  heroAction: {
+    height: CONTROL.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACE.sm,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
-  retryText: { ...TYPE.button },
-  card: { marginHorizontal: GUTTER, marginBottom: SPACE.lg, backgroundColor: EMBER.surfaceSunken, borderRadius: EMBER_RADIUS.md, overflow: 'hidden' },
-  overlayContent: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
-  title: { ...TYPE.title },
-  venue: { ...TYPE.meta, color: EMBER.textPrimary, marginTop: SPACE.xxs },
-  time: { ...TYPE.meta, marginTop: SPACE.xxs },
-  cancelled: { ...TYPE.label, color: EMBER.destructive, marginTop: SPACE.xs },
-  note: { ...TYPE.label, color: EMBER.accent, marginTop: SPACE.xs },
-  sectionHeader: { ...TYPE.label, color: EMBER.textSecondary, paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.md },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, padding: SPACE.md, backgroundColor: EMBER.surfaceSunken },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, backgroundColor: EMBER.surface, paddingHorizontal: SPACE.md, height: CONTROL.md, borderRadius: EMBER_RADIUS.pill },
-  actionText: { ...TYPE.bodyStrong },
+  heroActionWide: { flex: 1, paddingHorizontal: SPACE.lg },
+  heroActionIcon: { width: CONTROL.md },
+  heroActionText: TYPE.bodyStrong,
+
+  // Loading: `UpcomingCard`'s own card box, so the placeholder is the shape the
+  // row fades into (as on the Pulse).
+  skeletonLines: { marginTop: SPACE.lg, gap: SPACE.sm },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACE.lg,
+    padding: SPACE.lg,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
+  },
+  skeletonRowText: { flex: 1, gap: SPACE.sm },
 })
-
-
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

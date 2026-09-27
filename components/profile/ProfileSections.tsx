@@ -1,10 +1,13 @@
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { APP_ELEVATION, CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE, tint } from '../../lib/theme'
+import { fadeInFast, fadeOutFast } from '../motion/presence'
+import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
 import { SceneHeroMedia } from '../scene/SceneHeroMedia'
 
@@ -65,7 +68,7 @@ export function ProfileHero({
   photos: string[]
   /** "Julian Ember, 24", or the pseudonym. */
   title: string
-  /** The accent line under it. `work_field`, or occupation on your own. */
+  /** The line under it. `work_field`, or occupation on your own. */
   subtitle?: string | null
   /** Seeds the mark when there is no photo. */
   pseudonym: string
@@ -133,7 +136,7 @@ export function ProfileHero({
         bottom of the photograph happens to be.
       */}
       <LinearGradient
-        colors={['transparent', 'rgba(15,14,14,0.7)', EMBER.bg]}
+        colors={[EMBER.bgClear, tint(EMBER.bg, 0.7), EMBER.bg]}
         locations={[0.45, 0.78, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
@@ -186,10 +189,9 @@ export function ProfileBio({ text }: { text: string }) {
  * strings, and a real person's interests are any number of any length. Same
  * chip, same gaps, same highlight rule.
  *
- * `highlightIndex` is the frame's one gradient chip. On an attendee profile it
- * marks a **shared** interest — the server already intersects those — which
- * turns a decorative accent into the most useful thing on the screen: the
- * reason you might talk to them.
+ * A **shared** interest — the server already intersects those — gets a
+ * hairline edge the plain chips do not, which marks the most useful thing on
+ * the screen: the reason you might talk to them.
  */
 export function ProfileInterests({
   interests,
@@ -206,17 +208,11 @@ export function ProfileInterests({
       {interests.map((interest) => {
         const isShared = shared.has(interest.toLowerCase())
         return isShared ? (
-          <LinearGradient
-            key={interest}
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={styles.chip}
-          >
+          <View key={interest} style={[styles.chip, styles.chipShared]}>
             <Text style={styles.chipLabelShared} maxFontSizeMultiplier={1.4}>
               {interest}
             </Text>
-          </LinearGradient>
+          </View>
         ) : (
           <View key={interest} style={[styles.chip, styles.chipPlain]}>
             <Text style={styles.chipLabel} maxFontSizeMultiplier={1.4}>
@@ -275,16 +271,13 @@ export function ProfileGallery({
   return (
     <View style={styles.galleryGrid}>
       {photos.map((url, i) => (
-        <Pressable
+        <ScalePress
           key={`${url}:${i}`}
           onPress={() => onPressPhoto?.(i)}
+          haptic={false}
           accessibilityRole="imagebutton"
           accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
-          style={({ pressed }) => [
-            styles.galleryCell,
-            { width: columnWidth },
-            pressed && styles.pressed,
-          ]}
+          style={[styles.galleryCell, { width: columnWidth }]}
         >
           <OptimizedImage
             source={url}
@@ -294,7 +287,7 @@ export function ProfileGallery({
             height={163}
             contentFit="cover"
           />
-        </Pressable>
+        </ScalePress>
       ))}
     </View>
   )
@@ -332,9 +325,10 @@ export function ProfileGallery({
  *   Like     private, symmetric, stays pseudonymous
  *   Connect  a message request, and it reveals your name and photo
  *
- * Like keeps the gradient here too. The safe, reversible action is the easy one
+ * Like keeps the accent here too. The safe, reversible action is the easy one
  * on every surface — a button that publishes your identity should not be the
- * prettiest thing on two different screens.
+ * loudest thing on two different screens. Once liked it drops to a `surface`
+ * pill, so it still reads against the sunken tray.
  *
  * **Like needs an event.** `event_likes` is keyed on one, so it is offered only
  * when the caller knows which room you met in. Opened from a notification or the
@@ -369,8 +363,9 @@ export function ProfileActions({
     <View style={[styles.actionsWrap, style]}>
       <View style={styles.actionsPill}>
         {onLike ? (
-          <Pressable
+          <ScalePress
             onPress={onLike}
+            haptic={false}
             disabled={liked || likeBusy}
             accessibilityRole="button"
             accessibilityLabel={
@@ -379,10 +374,10 @@ export function ProfileActions({
                 : `Like ${name}. They are only told if they like you back`
             }
             accessibilityState={{ disabled: !!(liked || likeBusy) }}
-            style={({ pressed }) => [
+            style={[
               styles.actionButton,
-              liked && styles.actionLiked,
-              (pressed || likeBusy) && styles.pressed,
+              liked ? styles.actionLiked : styles.actionPrimary,
+              likeBusy && styles.pressed,
             ]}
           >
             {liked ? (
@@ -390,23 +385,16 @@ export function ProfileActions({
                 Liked
               </Text>
             ) : (
-              <>
-                <LinearGradient
-                  colors={[...EMBER_GRADIENT.colors]}
-                  start={EMBER_GRADIENT.start}
-                  end={EMBER_GRADIENT.end}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Text style={styles.actionLabel} maxFontSizeMultiplier={1.3}>
-                  Like
-                </Text>
-              </>
+              <Text style={styles.actionLabel} maxFontSizeMultiplier={1.3}>
+                Like
+              </Text>
             )}
-          </Pressable>
+          </ScalePress>
         ) : null}
 
-        <Pressable
+        <ScalePress
           onPress={onPress}
+          haptic={false}
           disabled={disabled}
           accessibilityRole="button"
           accessibilityLabel={
@@ -416,16 +404,26 @@ export function ProfileActions({
           }
           accessibilityState={{ disabled: !!disabled }}
           accessibilityHint={hint ?? undefined}
-          style={({ pressed }) => [
-            styles.actionButton,
-            styles.actionSecondary,
-            (pressed || disabled) && styles.pressed,
-          ]}
+          style={[styles.actionButton, styles.actionSecondary, disabled && styles.pressed]}
         >
-          <Text style={styles.actionSecondaryLabel} maxFontSizeMultiplier={1.3}>
-            {label}
-          </Text>
-        </Pressable>
+          {/*
+            Connect → Requested (or Message) crossfades rather than jumps:
+            keyed on the label, so the change is an exit and an entrance.
+            `skipEntering` keeps the first paint still; only a change while
+            the page is open animates.
+          */}
+          <LayoutAnimationConfig skipEntering skipExiting>
+            <Animated.Text
+              key={label}
+              entering={fadeInFast}
+              exiting={fadeOutFast}
+              style={styles.actionSecondaryLabel}
+              maxFontSizeMultiplier={1.3}
+            >
+              {label}
+            </Animated.Text>
+          </LayoutAnimationConfig>
+        </ScalePress>
       </View>
     </View>
   )
@@ -454,13 +452,7 @@ const styles = StyleSheet.create({
   heading: { ...TYPE.heading },
   headingTrailing: { ...TYPE.meta },
 
-  bio: {
-    ...TYPE.body,
-    // 26, not the 24 every other body line uses. The frame gives the bio more
-    // air than the rest because it is the only long-form text on the screen.
-    lineHeight: 26,
-    color: EMBER.textSecondary,
-  },
+  bio: { ...TYPE.body, color: EMBER.textSecondary },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
   chip: {
@@ -471,8 +463,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   chipPlain: { backgroundColor: EMBER.surface },
+  // A primary outline, not a hairline: `separator` vanishes against the fill.
+  chipShared: {
+    backgroundColor: EMBER.surface,
+    borderWidth: 1,
+    borderColor: EMBER.textPrimary,
+  },
   chipLabel: { ...TYPE.bodyStrong },
-  chipLabelShared: { ...TYPE.bodyStrong, color: EMBER.onGradient },
+  chipLabelShared: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
 
   detailCard: {
     backgroundColor: EMBER.surfaceMedia,
@@ -501,15 +499,17 @@ const styles = StyleSheet.create({
   galleryImage: { width: '100%', height: '100%' },
 
   actionsWrap: { alignItems: 'center' },
-  // A neutral lift off the page, not a glow.
+  /*
+   * A flat tray, no lift. `surfaceSunken`, not `surface`: the secondary button
+   * inside it is `surface`, and on a `surface` tray it would have no edge.
+   */
   actionsPill: {
     flexDirection: 'row',
     gap: SPACE.sm,
     alignSelf: 'stretch',
     padding: SPACE.sm,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(45,44,44,0.9)',
-    ...APP_ELEVATION.medium,
+    backgroundColor: EMBER.surfaceSunken,
   },
   actionButton: {
     flex: 1,
@@ -521,9 +521,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  actionPrimary: { backgroundColor: EMBER.accent },
   actionLabel: { ...TYPE.button, color: EMBER.onGradient, textAlign: 'center' },
   actionSecondary: { backgroundColor: EMBER.surface },
   actionSecondaryLabel: { ...TYPE.button, textAlign: 'center' },
-  actionLiked: { backgroundColor: EMBER.surfaceSunken },
-  actionLikedLabel: { ...TYPE.button, color: EMBER.accent, textAlign: 'center' },
+  actionLiked: { backgroundColor: EMBER.surface },
+  actionLikedLabel: { ...TYPE.button, color: EMBER.textSecondary, textAlign: 'center' },
 })

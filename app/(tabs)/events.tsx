@@ -8,6 +8,7 @@ import {
   Dimensions,
   AppState,
   FlatList,
+  type LayoutChangeEvent,
   Linking,
   Modal,
   RefreshControl,
@@ -33,8 +34,9 @@ import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { DayHeading } from '../../components/ui/DayHeading'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
-import { UpcomingCard } from '../../components/pulse/UpcomingCard'
+import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
@@ -66,7 +68,8 @@ import {
   featuredDateLabel,
   joinedCount,
   placeLabel,
-  upcomingDayLabel,
+  groupByDay,
+  timeLabel,
 } from '../../lib/pulse'
 import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
 import { openInMaps } from '../../lib/openInMaps'
@@ -81,7 +84,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet } from '../../components/motion/RisingSheet'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
@@ -190,6 +193,34 @@ const getFirstName = (value?: string | null): string | null => {
   return trimmed.split(/\s+/)[0] || null
 }
 
+/*
+ * Which events are close enough to check in to, and how far each one is.
+ *
+ * Calculated client-side, since there is no proximity endpoint. Pure, so the
+ * screen derives it during render. It used to be stored by an effect, which
+ * left it one render behind the list it describes.
+ */
+const proximityFor = (
+  events: Event[],
+  at: { latitude: number; longitude: number }
+): { [eventId: string]: any } => {
+  const proximityMap: { [eventId: string]: any } = {}
+  for (const event of events) {
+    if (!event.latitude || !event.longitude) continue
+    const distanceMetres = getDistanceMetres(at.latitude, at.longitude, event.latitude, event.longitude)
+    // Metres, matching what the API returns. The old default of 0.5 was a
+    // kilometre value standing in for "500m" and made the mismatch invisible.
+    const checkInRadiusMetres = event.check_in_radius || 500
+    proximityMap[event.id] = {
+      within_radius: distanceMetres <= checkInRadiusMetres,
+      // The field name is the contract: kilometres here, metres above.
+      distance_km: distanceMetres / 1000,
+      can_check_in: distanceMetres <= checkInRadiusMetres,
+    }
+  }
+  return proximityMap
+}
+
 function EventsInner() {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
@@ -198,7 +229,10 @@ function EventsInner() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
-  const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
+  const proximityData = useMemo(
+    () => (userLocation ? proximityFor(events, userLocation) : {}),
+    [events, userLocation]
+  )
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
 
   /*
@@ -219,12 +253,16 @@ function EventsInner() {
   /*
    * The five maps every action handler reads, held so they do not force the
    * handlers to change identity. See lib/useLatest.ts for what that was costing.
+   *
+   * The `Ref` suffix is load-bearing. The React Compiler cannot see through
+   * `useLatest`, and it only recognises a ref by its name. Without the suffix
+   * it reads `.current` as a dependency of every handler.
    */
-  const latestCheckinStatuses = useLatest(checkinStatuses)
-  const latestCheckedInEvents = useLatest(checkedInEvents)
-  const latestProximityData = useLatest(proximityData)
-  const latestInterestStatuses = useLatest(interestStatuses)
-  const latestInterestCounts = useLatest(interestCounts)
+  const latestCheckinStatusesRef = useLatest(checkinStatuses)
+  const latestCheckedInEventsRef = useLatest(checkedInEvents)
+  const latestProximityDataRef = useLatest(proximityData)
+  const latestInterestStatusesRef = useLatest(interestStatuses)
+  const latestInterestCountsRef = useLatest(interestCounts)
 
   const checkedInEventId =
     Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
@@ -233,13 +271,16 @@ function EventsInner() {
   // The server has ended this check-in -- the user walked out and the grace
   // period expired, or the sweeper got there first. Reflect it rather than
   // leaving a stale "checked in" chip on screen.
-  useEffect(() => {
-    if (!presence.finished || !checkedInEventId) return
+  //
+  // Done during render, not in an effect, so the stale chip is never painted.
+  // It cannot loop: marking the event checked out takes it out of
+  // `checkedInEventId`, and that is the condition that brought us here.
+  if (presence.finished && checkedInEventId) {
     setCheckinStatuses((prev) => ({
       ...prev,
       [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
     }))
-  }, [presence.finished, checkedInEventId])
+  }
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
   /*
@@ -270,6 +311,12 @@ function EventsInner() {
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
+  /** Height of the banners above the header, so the Featured card still clears the bar. */
+  const [bannersHeight, setBannersHeight] = useState(0)
+  const onBannersLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = Math.round(e.nativeEvent.layout.height)
+    setBannersHeight((prev) => (prev === h ? prev : h))
+  }, [])
   const [netError, setNetError] = useState<string | null>(null)
 
   /*
@@ -307,9 +354,11 @@ function EventsInner() {
    * down a player for every card it crossed.
    */
   const [featuredActiveIndex, setFeaturedActiveIndex] = useState(0)
-  const featuredViewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 })
-  const onFeaturedViewable = useRef(
-    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+  // Held in state so the identities are guaranteed never to change. FlatList
+  // throws if either one changes on a mounted list.
+  const [featuredViewability] = useState(() => ({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 }))
+  const [onFeaturedViewable] = useState(
+    () => ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       const first = viewableItems.find((v) => v.index !== null)
       if (first?.index != null) setFeaturedActiveIndex(first.index)
     }
@@ -331,15 +380,18 @@ function EventsInner() {
    */
   const isNarrowed = isSearching || hasActiveFilters(filters)
 
-  useEffect(() => {
-    const trimmed = searchInput.trim()
+  const changeSearchInput = useCallback((next: string) => {
+    setSearchInput(next)
     // No wait when clearing. Emptying the box is a request to see the normal
     // screen again, and making somebody watch a spinner for a third of a second
     // to get back to where they started reads as the app being slow.
-    if (trimmed.length === 0) {
-      setSearchTerm('')
-      return
-    }
+    if (next.trim().length === 0) setSearchTerm('')
+  }, [])
+
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    // Clearing has already happened, with no wait, in `changeSearchInput`.
+    if (trimmed.length === 0) return
     const id = setTimeout(() => setSearchTerm(trimmed), 350)
     return () => clearTimeout(id)
   }, [searchInput])
@@ -450,10 +502,10 @@ function EventsInner() {
         end: event.end_time,
         category: event.category || '',
         description: event.description || '',
-        interestCount: String(latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0),
+        interestCount: String(latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0),
       } as any,
     })
-  }, [userLocation, latestInterestCounts])
+  }, [userLocation, latestInterestCountsRef])
 
   const loadCheckedInEvents = useCallback(async () => {
     if (!user) return
@@ -551,8 +603,8 @@ function EventsInner() {
       checkInFlightRef.current.add(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      previousStatus = latestCheckinStatuses.current[event.id]
-      hadCheckedInEvent = latestCheckedInEvents.current.some((e) => e.id === event.id)
+      previousStatus = latestCheckinStatusesRef.current[event.id]
+      hadCheckedInEvent = latestCheckedInEventsRef.current.some((e) => e.id === event.id)
 
       // Optimistic UI update
       setCheckinStatuses((prev) => ({
@@ -744,7 +796,7 @@ function EventsInner() {
       checkInFlightRef.current.delete(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
+  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -766,8 +818,8 @@ function EventsInner() {
       interestInFlightRef.current.add(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      prevInterested = !!latestInterestStatuses.current[event.id]
-      prevCount = latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0
+      prevInterested = !!latestInterestStatusesRef.current[event.id]
+      prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
       // Optimistic update
       setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
@@ -816,15 +868,15 @@ function EventsInner() {
       interestInFlightRef.current.delete(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, feedback, showTray, closeTray, latestInterestStatuses, latestInterestCounts])
+  }, [user, feedback, showTray, closeTray, latestInterestStatusesRef, latestInterestCountsRef])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
     feedback.tap()
 
-    const previousStatus = latestCheckinStatuses.current[event.id]
-    const previousCheckedInEvents = latestCheckedInEvents.current
+    const previousStatus = latestCheckinStatusesRef.current[event.id]
+    const previousCheckedInEvents = latestCheckedInEventsRef.current
 
     // Optimistic removal from checked-in state
     setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
@@ -877,15 +929,15 @@ function EventsInner() {
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, loadCheckedInEvents, loadCheckinStatusesBatch])
+  }, [feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()
-    const checkinStatus = latestCheckinStatuses.current[event.id]
-    const proximity = latestProximityData.current[event.id]
+    const checkinStatus = latestCheckinStatusesRef.current[event.id]
+    const proximity = latestProximityDataRef.current[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
     const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!latestInterestStatuses.current[event.id]
+    const interested = !!latestInterestStatusesRef.current[event.id]
     const summary = [
       formatCarouselCardDate(event.start_time),
       event.venue_name || event.display_city || 'Location TBA',
@@ -903,7 +955,8 @@ function EventsInner() {
       },
       {
         label: 'View Details',
-        variant: 'primary',
+        // One primary per tray: Check In takes it when it is on offer.
+        variant: canCheckIn ? 'secondary' : 'primary',
         onPress: () => {
           closeTray()
           handleEventPress(event)
@@ -947,32 +1000,7 @@ function EventsInner() {
       buttons,
       size: 'expanded',
     })
-  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatuses, latestProximityData, latestInterestStatuses])
-
-  /*
-   * NOT memoised, and that is the fix.
-   *
-   * This was `useCallback(..., [])`. `fetchEvents` is a plain arrow function
-   * redefined on every render, so an empty dependency array froze the copy
-   * created on the FIRST render — the one whose closure captured
-   * `userLocation` while it was still `null`, before the GPS fix arrived.
-   *
-   * The result was two refresh paths that disagreed forever. Pull-to-refresh
-   * ran the stale copy, sent no `lat`/`lon`, and the server applied no bounding
-   * box at all — so it returned **every event on the platform**, while the
-   * Refresh button ran the live copy and correctly returned the ones nearby.
-   * A device in Germany saw a Bengaluru event by pulling and nothing by
-   * tapping, which reads as a broken button rather than a leaked query.
-   *
-   * A `RefreshControl` handler is called once per gesture, so there is nothing
-   * to memoise for. Re-creating it per render is the cheap, obviously-correct
-   * option, and it cannot go stale again.
-   */
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await fetchEvents({ silent: true, force: true })
-    setRefreshing(false)
-  }
+  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
 
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
@@ -1107,6 +1135,145 @@ function EventsInner() {
     }
   }, [])
 
+  // Pagination, declared ahead of `fetchEvents` because it resets the page.
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+  /*
+   * When `events` was last written. "Upcoming" means not started as of the
+   * load, so this is set beside every `setEvents` and not read from the clock
+   * during render.
+   */
+  const [eventsLoadedAt, setEventsLoadedAt] = useState(() => Date.now())
+
+  const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
+    try {
+      const isInitial = !initialLoadedRef.current
+      const shouldShowLoading = isInitial || !options?.silent
+      if (shouldShowLoading) {
+        setLoading(true)
+      }
+      setNetError(null)
+      Logger.journey('events', 'fetch:start')
+
+      /*
+       * `city` scopes; `lat`/`lon` only sort and label.
+       *
+       * No `radius` is sent, and the server no longer supplies one. That
+       * default — 10 km around the device — is what made this screen blank:
+       * every section below is a `useMemo` over this one array, so an empty
+       * result took the whole page with it, carousels and heroes included.
+       */
+      const lat = userLocation?.latitude
+      const lon = userLocation?.longitude
+      const { data: eventsData, meta, error } = await fetchEventsApi({
+        page: 0,
+        limit: PAGE_SIZE,
+        city: selectedCity ?? undefined,
+        lat,
+        lon,
+        include: 'checkins,activeCheckins,profile',
+        search: searchTerm || undefined,
+        // `categorySlug`, `startDate`, `endDate` and `radius` — every one of
+        // them a parameter this endpoint has always accepted.
+        ...filtersToQuery(filters),
+      }, { force: !!options?.force })
+
+      if (error) {
+        Logger.error('events', 'Error fetching events', { error })
+        setNetError('Failed to load events')
+        return
+      }
+
+      const normalized = (eventsData || []).map(normalizeEvent)
+      setEvents(normalized)
+      setEventsLoadedAt(Date.now())
+      /*
+       * Hand the centre button what this fetch already knows.
+       *
+       * This screen asks for events with a location and gets `distance` back on
+       * every one. The tab bar needs two facts derived from exactly that —
+       * whether you are standing inside a fence, and what you said you were
+       * going to tonight — and re-deriving them there would mean a second
+       * location permission dance and a second copy of this list on a timer.
+       */
+      publishRoomSignal(normalized)
+      setPage(0)
+      lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
+      initialLoadedRef.current = true
+      if (eventsData) {
+        const interestMap: { [eventId: string]: boolean } = {}
+        const countMap: Record<string, number> = {}
+        const checkinMap: { [eventId: string]: any } = {}
+        eventsData.forEach((event) => {
+          interestMap[event.id] = !!event.is_favorited
+          countMap[event.id] = event.favorite_count || 0
+          if (event.user_checkin) {
+            checkinMap[event.id] = {
+              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
+              checkInId: event.user_checkin.checkInId,
+              checkInTime: event.user_checkin.checkInTime,
+            }
+          }
+        })
+        setInterestStatuses(interestMap)
+        setInterestCounts(countMap)
+        setCheckinStatuses(checkinMap)
+      }
+      if (meta?.activeCheckins?.length) {
+        const activeEvents: Event[] = meta.activeCheckins
+          .filter((c: any) => c.event)
+          .map((c: any) => eventFromApi(c.event))
+          .map(normalizeEvent)
+        setCheckedInEvents(activeEvents)
+      } else {
+        setCheckedInEvents([])
+      }
+      if (meta?.profile?.profile) {
+        const profile = meta.profile.profile
+        const profileFirstName = getFirstName(profile.name)
+        if (profileFirstName) {
+          setUserFirstName(profileFirstName)
+        }
+        // `profile.location` does not set the browse city — see the note where
+        // the profile is loaded above.
+      }
+      // Image preloading is handled by useEffect when events change
+      Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
+    } catch (error) {
+      Logger.error('events', 'Unexpected error', { error: error as any })
+      setNetError('Failed to load events')
+    } finally {
+      if (!options?.silent || !initialLoadedRef.current) {
+        setLoading(false)
+      }
+    }
+  }, [userLocation, selectedCity, searchTerm, filters])
+
+  /*
+   * NOT memoised, and that is the fix.
+   *
+   * This was `useCallback(..., [])`. `fetchEvents` is a plain arrow function
+   * redefined on every render, so an empty dependency array froze the copy
+   * created on the FIRST render — the one whose closure captured
+   * `userLocation` while it was still `null`, before the GPS fix arrived.
+   *
+   * The result was two refresh paths that disagreed forever. Pull-to-refresh
+   * ran the stale copy, sent no `lat`/`lon`, and the server applied no bounding
+   * box at all — so it returned **every event on the platform**, while the
+   * Refresh button ran the live copy and correctly returned the ones nearby.
+   * A device in Germany saw a Bengaluru event by pulling and nothing by
+   * tapping, which reads as a broken button rather than a leaked query.
+   *
+   * A `RefreshControl` handler is called once per gesture, so there is nothing
+   * to memoise for. Re-creating it per render is the cheap, obviously-correct
+   * option, and it cannot go stale again.
+   */
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await fetchEvents({ silent: true, force: true })
+    setRefreshing(false)
+  }
+
   /*
    * Which of the four dependencies actually changed, so a search keystroke
    * or a filter change can be told apart from a city switch.
@@ -1152,12 +1319,17 @@ function EventsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading, selectedCity, searchTerm, filters])
 
-  useEffect(() => {
+  // A changed sign-in name replaces the first name. The profile fetch in
+  // `fetchEvents` writes it too, and whichever wrote last wins. Adjusted
+  // during render, against the name last seen, rather than in an effect.
+  const [seenAuthName, setSeenAuthName] = useState(user?.name)
+  if (seenAuthName !== user?.name) {
+    setSeenAuthName(user?.name)
     const authFirstName = getFirstName(user?.name)
     if (authFirstName) {
       setUserFirstName(authFirstName)
     }
-  }, [user?.name])
+  }
 
   // Preload images - use a ref to track already preloaded URLs and avoid redundant work
   const preloadedUrlsRef = useRef<Set<string>>(new Set())
@@ -1194,72 +1366,23 @@ function EventsInner() {
    *
    * That bit now lives on the Blend'n button in the tab bar, which is where the
    * app already keeps this state — `roomButtonTarget` reads the same active
-   * check-in and the button is on every screen rather than only this one. It
-   * draws a steady ring when you are in a room; see `roomButtonGlow`.
+   * check-in and the button is on every screen rather than only this one. The
+   * disc stays flat; a still status dot on its edge says you are in a room
+   * (see `roomButtonGlow`, which picks the dot).
    *
    * **Check out moved with it, it was not dropped.** The strip carried the only
    * one-tap check-out and that is worth protecting, so it is now in the room
-   * screen's top bar — the place the glowing button takes you. `handleCheckOut`
+   * screen's top bar — the place that button takes you. `handleCheckOut`
    * below stays for the long-press action tray, which is the other caller.
    */
 
-  const checkEventProximity = useCallback(async () => {
-    if (!userLocation || !user) return
-
-    try {
-      Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
-
-      // Use the actual function that exists: check_user_proximity_status
-      // TODO: Add API endpoint for proximity check
-      // For now, calculate distance client-side
-      const proximityResults = events.map(event => {
-        if (!event.latitude || !event.longitude) return null
-        const distanceMetres = getDistanceMetres(userLocation.latitude, userLocation.longitude, event.latitude, event.longitude)
-        // Metres, matching what the API returns. The old default of 0.5 was a
-        // kilometre value standing in for "500m" and made the mismatch invisible.
-        const checkInRadiusMetres = event.check_in_radius || 500
-        return {
-          event_id: event.id,
-          within_radius: distanceMetres <= checkInRadiusMetres,
-          // The field name is the contract: kilometres here, metres above.
-          distance_km: distanceMetres / 1000,
-          can_check_in: distanceMetres <= checkInRadiusMetres
-        }
-      }).filter(Boolean)
-
-      const proximityData = { nearby_events: proximityResults }
-      const error = null
-
-      if (error) {
-        Logger.error('events', 'Error checking proximity', { error })
-        return
-      }
-
-      // Transform the response to match our expected format
-      const proximityMap: { [eventId: string]: any } = {}
-
-      if (proximityData?.nearby_events) {
-        proximityData.nearby_events.forEach((event: any) => {
-          proximityMap[event.event_id] = {
-            within_radius: event.within_radius,
-            distance_km: event.distance_km,
-            can_check_in: event.can_check_in
-          }
-        })
-      }
-
-      setProximityData(proximityMap)
-      Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: proximityData?.nearby_events?.length || 0 })
-    } catch (error) {
-      Logger.error('events', 'Proximity check failed', { error: error as any })
-    }
-  }, [userLocation, user, events])
-
+  // The journey log the proximity pass has always written, on the same
+  // conditions. `proximityData` itself is derived near the top (`proximityFor`).
   useEffect(() => {
-    if (userLocation && events.length > 0) {
-      checkEventProximity()
-    }
-  }, [userLocation, events, checkEventProximity])
+    if (!userLocation || !user || events.length === 0) return
+    Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
+    Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: Object.keys(proximityData).length })
+  }, [userLocation, user, events, proximityData])
 
   /*
    * Decide which city to browse, once, before the first fetch.
@@ -1331,17 +1454,24 @@ function EventsInner() {
    * selection exactly where it is.
    *
    * The replacement stays `inferred`, so it can be improved again next time.
+   *
+   * Run during render when either input changes, not in an effect. An effect
+   * committed the old selection first, and that fetched the old city before
+   * the new one.
    */
-  useEffect(() => {
-    if (!deviceCity || cityOptions.length === 0) return
-    setSelection((current) => {
-      if (!current) {
-        return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions })
-      }
-      const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
-      return next ? { city: next, source: 'inferred' } : current
-    })
-  }, [deviceCity, cityOptions])
+  const [cityInputsSeen, setCityInputsSeen] = useState({ deviceCity, cityOptions })
+  if (cityInputsSeen.deviceCity !== deviceCity || cityInputsSeen.cityOptions !== cityOptions) {
+    setCityInputsSeen({ deviceCity, cityOptions })
+    if (deviceCity && cityOptions.length > 0) {
+      setSelection((current) => {
+        if (!current) {
+          return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions })
+        }
+        const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
+        return next ? { city: next, source: 'inferred' } : current
+      })
+    }
+  }
 
   /*
    * Re-check where the phone is when the app comes back to the foreground.
@@ -1454,109 +1584,6 @@ function EventsInner() {
    */
   const notLiveHere = cityOptions.length > 0 && !isServedCity(selectedCity, cityOptions)
 
-  const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
-    try {
-      const isInitial = !initialLoadedRef.current
-      const shouldShowLoading = isInitial || !options?.silent
-      if (shouldShowLoading) {
-        setLoading(true)
-      }
-      setNetError(null)
-      Logger.journey('events', 'fetch:start')
-
-      /*
-       * `city` scopes; `lat`/`lon` only sort and label.
-       *
-       * No `radius` is sent, and the server no longer supplies one. That
-       * default — 10 km around the device — is what made this screen blank:
-       * every section below is a `useMemo` over this one array, so an empty
-       * result took the whole page with it, carousels and heroes included.
-       */
-      const lat = userLocation?.latitude
-      const lon = userLocation?.longitude
-      const { data: eventsData, meta, error } = await fetchEventsApi({
-        page: 0,
-        limit: PAGE_SIZE,
-        city: selectedCity ?? undefined,
-        lat,
-        lon,
-        include: 'checkins,activeCheckins,profile',
-        search: searchTerm || undefined,
-        // `categorySlug`, `startDate`, `endDate` and `radius` — every one of
-        // them a parameter this endpoint has always accepted.
-        ...filtersToQuery(filters),
-      }, { force: !!options?.force })
-
-      if (error) {
-        Logger.error('events', 'Error fetching events', { error })
-        setNetError('Failed to load events')
-        return
-      }
-
-      const normalized = (eventsData || []).map(normalizeEvent)
-      setEvents(normalized)
-      /*
-       * Hand the centre button what this fetch already knows.
-       *
-       * This screen asks for events with a location and gets `distance` back on
-       * every one. The tab bar needs two facts derived from exactly that —
-       * whether you are standing inside a fence, and what you said you were
-       * going to tonight — and re-deriving them there would mean a second
-       * location permission dance and a second copy of this list on a timer.
-       */
-      publishRoomSignal(normalized)
-      setPage(0)
-      lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
-      initialLoadedRef.current = true
-      if (eventsData) {
-        const interestMap: { [eventId: string]: boolean } = {}
-        const countMap: Record<string, number> = {}
-        const checkinMap: { [eventId: string]: any } = {}
-        eventsData.forEach((event) => {
-          interestMap[event.id] = !!event.is_favorited
-          countMap[event.id] = event.favorite_count || 0
-          if (event.user_checkin) {
-            checkinMap[event.id] = {
-              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
-              checkInId: event.user_checkin.checkInId,
-              checkInTime: event.user_checkin.checkInTime,
-            }
-          }
-        })
-        setInterestStatuses(interestMap)
-        setInterestCounts(countMap)
-        setCheckinStatuses(checkinMap)
-      }
-      if (meta?.activeCheckins?.length) {
-        const activeEvents: Event[] = meta.activeCheckins
-          .filter((c: any) => c.event)
-          .map((c: any) => eventFromApi(c.event))
-          .map(normalizeEvent)
-        setCheckedInEvents(activeEvents)
-      } else {
-        setCheckedInEvents([])
-      }
-      if (meta?.profile?.profile) {
-        const profile = meta.profile.profile
-        const profileFirstName = getFirstName(profile.name)
-        if (profileFirstName) {
-          setUserFirstName(profileFirstName)
-        }
-        // `profile.location` does not set the browse city — see the note where
-        // the profile is loaded above.
-      }
-      // Image preloading is handled by useEffect when events change
-      Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
-    } catch (error) {
-      Logger.error('events', 'Unexpected error', { error: error as any })
-      setNetError('Failed to load events')
-    } finally {
-      if (!options?.silent || !initialLoadedRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [userLocation, selectedCity, searchTerm, filters])
-
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
     /*
@@ -1585,8 +1612,6 @@ function EventsInner() {
   }, [user, authLoading, userLocation, loading, fetchEvents])
 
   // Basic pagination: fetch next page after current items
-  const [page, setPage] = useState(0)
-  const PAGE_SIZE = 20
   const fetchMore = useCallback(async () => {
     try {
       if (loading) return
@@ -1616,6 +1641,7 @@ function EventsInner() {
         publishRoomSignal(merged)
         return merged
       })
+      setEventsLoadedAt(Date.now())
       setPage(prev => prev + 1)
       const interestMap: { [eventId: string]: boolean } = {}
       const countMap: Record<string, number> = {}
@@ -1668,6 +1694,57 @@ function EventsInner() {
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
 
+  // Compute all distances once and cache - avoids O(n^2) recalculations
+  const distanceMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    if (!userLocation) return map
+    for (const ev of events) {
+      // Use proximity data if available, otherwise calculate
+      const prox = proximityData[ev.id]
+      if (prox && typeof prox.distance_km === 'number') {
+        map[ev.id] = prox.distance_km
+      } else if (ev.latitude && ev.longitude) {
+        // This map is in kilometres -- it sits alongside `prox.distance_km`
+        // and feeds sorting, not the check-in gate. Converting explicitly
+        // rather than keeping a second helper in a different unit.
+        map[ev.id] =
+          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
+      } else {
+        map[ev.id] = Number.POSITIVE_INFINITY
+      }
+    }
+    return map
+  }, [events, userLocation, proximityData])
+
+  const upcomingItems = useMemo(() => {
+    return events
+      .filter(e => new Date(e.start_time).getTime() >= eventsLoadedAt)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [events, eventsLoadedAt])
+
+  /*
+   * `happeningNowItems` is gone. It was recomputed on every render and
+   * rendered nowhere — its only remaining use was seeding the "already shown"
+   * set below, which the sections that *do* render already cover.
+   *
+   * If a "happening now" section is wanted, it should be built deliberately
+   * against the checked-in strip, which already knows what you are at.
+   */
+
+  const nearbyItems = useMemo(() => {
+    if (!userLocation) return [] as Event[]
+    return events
+      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
+      .filter(x => Number.isFinite(x.d))
+      .sort((a, b) => a.d - b.d)
+      .map(x => x.e)
+  }, [events, userLocation, distanceMap])
+
+  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
+
+  const filteredSortedEvents = useMemo(() => events, [events])
+
   /*
    * Featured, then Upcoming — the frame's two sections, from one sorted list.
    *
@@ -1681,6 +1758,73 @@ function EventsInner() {
    * which is the same subtraction `mainListData` does further down for the same
    * reason.
    */
+  const featuredItems = useMemo(
+    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
+    [upcomingItems]
+  )
+  /*
+   * The Featured cards' props, computed once per data change.
+   *
+   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
+   * and a fresh `() => handleEventPress(item)` closure for **every card on
+   * every parent render**. Two allocations per card is not the cost -- the cost
+   * is that both are props, so a new identity defeats any memoisation the card
+   * could have, and these are the most expensive components on the screen:
+   * full-bleed heroes carrying images and a video player.
+   *
+   * `handleEventPress` is already a `useCallback` and `featuredItems` is
+   * already a `useMemo`, so binding here is stable for as long as the data is.
+   */
+  const featuredCards = useMemo(
+    () =>
+      featuredItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.category || null,
+        playlist: feedPlaylist(item.media, item.cover_image_url),
+        dateLabel: featuredDateLabel(item.start_time),
+        placeLabel: placeLabel(item),
+        onPress: () => handleEventPress(item),
+      })),
+    [featuredItems, handleEventPress]
+  )
+
+  const upcomingStackItems = useMemo(() => {
+    const featuredIds = new Set(featuredItems.map(e => e.id))
+    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
+  }, [upcomingItems, featuredItems])
+
+  const mainListData = useMemo(() => {
+    /*
+     * A search is a flat list, not a magazine.
+     *
+     * Normally this holds only what the sections above did not already show,
+     * because a carousel and the list beneath it repeating the same event reads
+     * as a bug. Under a search that subtraction becomes the bug: the sections
+     * are hidden, so every id they claim is an id that appears nowhere — and
+     * searching a venue's name would return it and then not show it.
+     */
+    if (isNarrowed) return filteredSortedEvents
+
+    /*
+     * Subtract exactly what the three sections draw, and nothing else.
+     *
+     * This used to subtract Interested, city-top and nightlife as well. Those
+     * sections are gone, so every id they claimed became an id that appears
+     * **nowhere** — the event is not in a carousel, because there is no
+     * carousel, and it is filtered out of the list underneath for being in one.
+     *
+     * The same bug in the other direction is why `isSearching` returns early
+     * above. Keeping this list in step with what actually renders is the whole
+     * job of this memo, so it now names the three and only the three.
+     */
+    const shown = new Set<string>()
+    featuredItems.forEach(e => shown.add(e.id))
+    upcomingStackItems.forEach(e => shown.add(e.id))
+    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
+    return filteredSortedEvents.filter(e => !shown.has(e.id))
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
+
   const renderFeaturedRow = () => {
     if (featuredItems.length === 0) return null
     /*
@@ -1701,7 +1845,8 @@ function EventsInner() {
     const featured = featuredCardLayout(
       insets,
       tabBarTop(SCREEN_HEIGHT, insets.bottom),
-      featuredItems.length === 1
+      featuredItems.length === 1,
+      bannersHeight
     )
     return (
       <View style={styles.pulseSection}>
@@ -1757,8 +1902,8 @@ function EventsInner() {
             snapToAlignment="start"
             snapToInterval={featured.width + FEATURED_CARD_GAP}
             decelerationRate="fast"
-            viewabilityConfig={featuredViewability.current}
-            onViewableItemsChanged={onFeaturedViewable.current}
+            viewabilityConfig={featuredViewability}
+            onViewableItemsChanged={onFeaturedViewable}
             renderItem={({ item, index }) => (
               <FeaturedCard
                 title={item.title}
@@ -1791,24 +1936,33 @@ function EventsInner() {
           are passed, which is why they are absent rather than inert.
         */}
         <SectionHeader title="Upcoming" />
-        <View style={styles.pulseStack}>
-          {upcomingStackItems.map((item) => (
-            <UpcomingCard
-              key={`up-${item.id}`}
-              title={item.title}
-              category={item.category || null}
-              imageUrl={item.cover_image_url}
-              dayLabel={upcomingDayLabel(item.start_time)}
-              joinedCount={joinedCount(item)}
-              // Distance from you only means something in the city you are in;
-              // browsing elsewhere it read "6412km away". Same rule as Nearby.
-              distanceLabel={browsingHere ? formatDistance(item.distance) : null}
-              description={item.short_description || null}
-              onPress={() => handleEventPress(item)}
-              isFavorited={!!interestStatuses[item.id]}
-              favoriteBusy={!!interestPending[item.id]}
-              onToggleFavorite={() => toggleInterest(item)}
-            />
+        {/*
+          Grouped by day, the way a calendar is (and Luma's event list): the
+          date is said once, above its events, so each card only needs a time.
+        */}
+        <View style={styles.dayGroups}>
+          {groupByDay(upcomingStackItems).map((group) => (
+            <View key={group.key} style={styles.dayGroup}>
+              <DayHeading title={group.title} detail={group.weekday} />
+              {group.items.map((item) => (
+                <UpcomingCard
+                  key={`up-${item.id}`}
+                  title={item.title}
+                  category={item.category || null}
+                  imageUrl={item.cover_image_url}
+                  timeLabel={timeLabel(item.start_time)}
+                  placeLabel={placeLabel(item)}
+                  joinedCount={joinedCount(item)}
+                  // Distance from you only means something in the city you are in;
+                  // browsing elsewhere it read "6412km away". Same rule as Nearby.
+                  distanceLabel={browsingHere ? formatDistance(item.distance) : null}
+                  onPress={() => handleEventPress(item)}
+                  isFavorited={!!interestStatuses[item.id]}
+                  favoriteBusy={!!interestPending[item.id]}
+                  onToggleFavorite={() => toggleInterest(item)}
+                />
+              ))}
+            </View>
           ))}
         </View>
       </View>
@@ -1930,125 +2084,6 @@ function EventsInner() {
     </View>
   )
 
-  // Compute all distances once and cache - avoids O(n^2) recalculations
-  const distanceMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    if (!userLocation) return map
-    for (const ev of events) {
-      // Use proximity data if available, otherwise calculate
-      const prox = proximityData[ev.id]
-      if (prox && typeof prox.distance_km === 'number') {
-        map[ev.id] = prox.distance_km
-      } else if (ev.latitude && ev.longitude) {
-        // This map is in kilometres -- it sits alongside `prox.distance_km`
-        // and feeds sorting, not the check-in gate. Converting explicitly
-        // rather than keeping a second helper in a different unit.
-        map[ev.id] =
-          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
-      } else {
-        map[ev.id] = Number.POSITIVE_INFINITY
-      }
-    }
-    return map
-  }, [events, userLocation, proximityData])
-
-  const upcomingItems = useMemo(() => {
-    const now = Date.now()
-    return events
-      .filter(e => new Date(e.start_time).getTime() >= now)
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events])
-
-  /*
-   * `happeningNowItems` is gone. It was recomputed on every render and
-   * rendered nowhere — its only remaining use was seeding the "already shown"
-   * set below, which the sections that *do* render already cover.
-   *
-   * If a "happening now" section is wanted, it should be built deliberately
-   * against the checked-in strip, which already knows what you are at.
-   */
-
-  const nearbyItems = useMemo(() => {
-    if (!userLocation) return [] as Event[]
-    return events
-      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
-      .filter(x => Number.isFinite(x.d))
-      .sort((a, b) => a.d - b.d)
-      .map(x => x.e)
-  }, [events, userLocation, distanceMap])
-
-  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
-
-  const filteredSortedEvents = useMemo(() => events, [events])
-
-  const featuredItems = useMemo(
-    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
-    [upcomingItems]
-  )
-  /*
-   * The Featured cards' props, computed once per data change.
-   *
-   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
-   * and a fresh `() => handleEventPress(item)` closure for **every card on
-   * every parent render**. Two allocations per card is not the cost -- the cost
-   * is that both are props, so a new identity defeats any memoisation the card
-   * could have, and these are the most expensive components on the screen:
-   * full-bleed heroes carrying images and a video player.
-   *
-   * `handleEventPress` is already a `useCallback` and `featuredItems` is
-   * already a `useMemo`, so binding here is stable for as long as the data is.
-   */
-  const featuredCards = useMemo(
-    () =>
-      featuredItems.map((item) => ({
-        id: item.id,
-        title: item.title,
-        tag: item.category || null,
-        playlist: feedPlaylist(item.media, item.cover_image_url),
-        dateLabel: featuredDateLabel(item.start_time),
-        placeLabel: placeLabel(item),
-        onPress: () => handleEventPress(item),
-      })),
-    [featuredItems, handleEventPress]
-  )
-
-  const upcomingStackItems = useMemo(() => {
-    const featuredIds = new Set(featuredItems.map(e => e.id))
-    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
-  }, [upcomingItems, featuredItems])
-
-  const mainListData = useMemo(() => {
-    /*
-     * A search is a flat list, not a magazine.
-     *
-     * Normally this holds only what the sections above did not already show,
-     * because a carousel and the list beneath it repeating the same event reads
-     * as a bug. Under a search that subtraction becomes the bug: the sections
-     * are hidden, so every id they claim is an id that appears nowhere — and
-     * searching a venue's name would return it and then not show it.
-     */
-    if (isNarrowed) return filteredSortedEvents
-
-    /*
-     * Subtract exactly what the three sections draw, and nothing else.
-     *
-     * This used to subtract Interested, city-top and nightlife as well. Those
-     * sections are gone, so every id they claimed became an id that appears
-     * **nowhere** — the event is not in a carousel, because there is no
-     * carousel, and it is filtered out of the list underneath for being in one.
-     *
-     * The same bug in the other direction is why `isSearching` returns early
-     * above. Keeping this list in step with what actually renders is the whole
-     * job of this memo, so it now names the three and only the three.
-     */
-    const shown = new Set<string>()
-    featuredItems.forEach(e => shown.add(e.id))
-    upcomingStackItems.forEach(e => shown.add(e.id))
-    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
-    return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
-
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
 
@@ -2073,7 +2108,7 @@ function EventsInner() {
    * `pulseHeader` is.
    */
   const banners = (
-          <View style={styles.filtersBar}>
+          <View style={styles.filtersBar} onLayout={onBannersLayout}>
             {showPreviewHint && (
               <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
@@ -2193,7 +2228,7 @@ function EventsInner() {
       city={selectedCity}
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
-      onChangeQuery={setSearchInput}
+      onChangeQuery={changeSearchInput}
       searching={refining}
       activeFilterCount={activeFilterCount(filters)}
       onPressFilter={() => {
@@ -2211,7 +2246,7 @@ function EventsInner() {
    * as a prop would couple two render paths that would otherwise stay
    * independent.
    */
-  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
+  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
 
   return (
     /*
@@ -2255,7 +2290,7 @@ function EventsInner() {
           onEndReachedThreshold={0.5}
           onEndReached={fetchMore}
           refreshControl={
-            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
           }
           contentContainerStyle={[
             styles.listContainer,
@@ -2278,11 +2313,10 @@ function EventsInner() {
           scrollEventThrottle={16}
           enableVirtualization={!isLoading && mainListData.length > 20}
           /*
-           * 4, not 10 — arithmetic, not a guess.
+           * 4, not 10.
            *
-           * A row here is an `UpcomingCard`: a 165pt image plus a 200pt body
-           * inside 24pt of padding, ~437pt, with `STACK_GAP` 32 between them.
-           * On a 956pt screen roughly **two** are ever visible at once.
+           * The rows below the header are `EventCard`s, tall enough that
+           * only a few are ever visible at once.
            *
            * `initialNumToRender` is rendered *synchronously before first
            * paint*. At 10 that is ~4,700pt of content — five screens — and ten
@@ -2331,7 +2365,7 @@ function EventsInner() {
                 {isNarrowed ? (
                   [...Array(4)].map((_, i) => (
                     <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? SPACE.xl : STACK_GAP }}>
-                      <SkeletonBlock width={'100%'} height={200} borderRadius={20} />
+                      <SkeletonBlock width={'100%'} height={200} borderRadius={EMBER_RADIUS.lg} />
                       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
                         <SkeletonLine width={'60%'} />
                         <SkeletonLine width={'40%'} />
@@ -2340,31 +2374,39 @@ function EventsInner() {
                   ))
                 ) : (
                   <>
-                    {/* Featured — one hero card at the real card's own size, with the next peeking. */}
+                    {/* Featured — the real card's photo and words, with the next photo peeking. */}
                     <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
                       <View style={styles.sectionHeaderRow}>
                         <SkeletonLine width={100} />
                         <SkeletonLine width={64} />
                       </View>
                       <View style={[styles.featuredBleed, { flexDirection: 'row', paddingHorizontal: featuredSkeleton.inset, gap: FEATURED_CARD_GAP }]}>
-                        <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.height} borderRadius={32} />
-                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.height} borderRadius={32} />
+                        <View style={{ gap: SPACE.lg }}>
+                          <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
+                          <View style={{ gap: SPACE.sm }}>
+                            <SkeletonLine width={featuredSkeleton.width * 0.8} />
+                            <SkeletonLine width={featuredSkeleton.width * 0.5} />
+                          </View>
+                        </View>
+                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
                       </View>
                     </View>
 
-                    {/* Upcoming — a vertical stack, matching `pulseStack` and `UpcomingCard`'s own image-plus-body shape. */}
+                    {/* Upcoming — one day heading over `UpcomingCard` rows: words left, square photo right. */}
                     <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
                       <View style={styles.sectionHeaderRow}>
                         <SkeletonLine width={120} />
                       </View>
-                      <View style={{ gap: STACK_GAP }}>
-                        {[...Array(2)].map((_, i) => (
+                      <View style={styles.dayGroup}>
+                        <SkeletonLine width={80} />
+                        {[...Array(3)].map((_, i) => (
                           <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
-                            <SkeletonBlock width={'100%'} height={165} borderRadius={20} />
-                            <View style={{ gap: SPACE.sm }}>
-                              <SkeletonLine width={'70%'} />
-                              <SkeletonLine width={'45%'} />
+                            <View style={{ flex: 1, gap: SPACE.sm }}>
+                              <SkeletonLine width={'40%'} />
+                              <SkeletonLine width={'85%'} />
+                              <SkeletonLine width={'55%'} />
                             </View>
+                            <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
                           </View>
                         ))}
                       </View>
@@ -2383,14 +2425,14 @@ function EventsInner() {
                             key={`s-near-${i}`}
                             width={'100%'}
                             height={(SCREEN_WIDTH - MAIN_PADDING_HORIZONTAL * 2) * (249 / 363)}
-                            borderRadius={24}
+                            borderRadius={EMBER_RADIUS.lg}
                           />
                         ))}
                       </View>
                     </View>
                   </>
                 )}
-                <View style={{ height: 8 }} />
+                <View style={{ height: SPACE.sm }} />
               </View>
             ) : (
               <View>
@@ -2464,7 +2506,7 @@ function EventsInner() {
                       {isSearching && (
                         <ScalePress
                           style={styles.ctaGhost}
-                          onPress={() => setSearchInput('')}
+                          onPress={() => changeSearchInput('')}
                           accessibilityRole="button"
                           accessibilityLabel="Clear search"
                         >
@@ -2545,7 +2587,7 @@ function EventsInner() {
                       {renderNearbyPrompt()}
                     </FadeInUp>
                   ) : null)}
-                <View style={{ height: 8 }} />
+                <View style={{ height: SPACE.sm }} />
               </View>
             )
           )}
@@ -2609,7 +2651,7 @@ function EventsInner() {
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.accent} />
+                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.textSecondary} />
                   <View>
                     <Text style={styles.cityPickerCity}>Use my current location</Text>
                     <Text style={styles.cityPickerCount}>{deviceCity}</Text>
@@ -2645,7 +2687,7 @@ function EventsInner() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.cityPickerCity}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.accent} />
+                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
                         ) : null}
                       </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
@@ -2709,7 +2751,7 @@ function EventsInner() {
  * `fontWeight: '700'` on Manrope gave bold on iOS and regular on Android from
  * identical code — which the old sheet did in thirty places, and which no
  * simulator screenshot would ever show. Every text style spreads an
- * `EMBER_TYPE` entry; the sizes are the scale's, not the call site's.
+ * `TYPE` role; the sizes are the scale's, not the call site's.
  *
  * `APP_COLORS` is gone from this file entirely. It is the old blue palette, and
  * one import of it is enough to put a blue separator on a warm-black page.
@@ -2771,21 +2813,26 @@ const styles = StyleSheet.create({
   featuredBleed: {
     marginHorizontal: -MAIN_PADDING_HORIZONTAL,
   },
-  /** A vertical column of cards inside a section — Upcoming, Nearby. */
+  /** A vertical column of cards inside a section — Nearby. */
   pulseStack: {
     gap: STACK_GAP,
   },
+  /** Upcoming: days a section's gap apart, rows within a day close together. */
+  dayGroups: { gap: SPACE.xl },
+  dayGroup: { gap: SPACE.md },
   /**
-   * The loading skeleton's Upcoming card — `UpcomingCard`'s own `card` style
-   * (`surfaceMedia`, `EMBER_RADIUS.card`, 24 padding, 24 gap), so the
+   * The loading skeleton's Upcoming row — `UpcomingCard`'s own `card` style
+   * (`surfaceSunken`, `EMBER_RADIUS.md`, 16 padding, 16 gap), so the
    * placeholder is the same box the real card fades into rather than a
    * differently-shaped one it has to replace.
    */
   upcomingSkeletonCard: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.card,
-    padding: 24,
-    gap: 24,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
+    padding: SPACE.lg,
+    gap: SPACE.lg,
   },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
@@ -2806,27 +2853,28 @@ const styles = StyleSheet.create({
   /* ---- Nearby, when there is no location -------------------------------- */
 
   nearbyCta: {
-    marginTop: 12,
-    minHeight: 44,
+    marginTop: SPACE.md,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
     borderRadius: EMBER_RADIUS.pill,
   },
   nearbyCtaText: {
     ...TYPE.button,
-    // Dark on warm. White on `#FF906D` fails contrast — see `EMBER.onGradient`.
-    color: EMBER.onGradient,
+    // Neutral: the screen's one accent is the title (docs/DESIGN_SYSTEM.md).
+    color: EMBER.textPrimary,
   },
 
   /* ---- The rows with behaviour and no frame ----------------------------- */
   /*
    * The offline banner, the switch-city offer, the away notice, and the
-   * location and network errors. Undesigned, so they are deliberately plain:
-   * one shape, three colours, and the colour is the only thing that says how
-   * much the row matters.
+   * location and network errors. One shape, flat fills: info sits on
+   * `surface` with a `separator` hairline, warnings and errors on a faint
+   * tint of `warning` / `destructive` with a stronger tint for the border.
+   * The copy stays `textPrimary` so it reads on every fill.
    */
 
   filtersBar: {
@@ -2840,9 +2888,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: 'rgba(255,144,109,0.18)',
+    backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,144,109,0.45)',
+    borderColor: EMBER.separator,
   },
   bannerWarn: {
     flexDirection: 'row',
@@ -2851,11 +2899,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: tint(EMBER.warning, 0.16),
     borderWidth: StyleSheet.hairlineWidth,
-    // Was `APP_COLORS.separator`, which is the old blue palette's hairline. On
-    // a warm-black page it reads as a cold edge around a warm card.
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: tint(EMBER.warning, 0.4),
   },
   bannerError: {
     flexDirection: 'row',
@@ -2864,17 +2910,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: tint(EMBER.destructive, 0.16),
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: tint(EMBER.destructive, 0.4),
   },
   /*
    * Neutral, not a warning.
    *
-   * The other banners are warm or sunken because something is wrong and an
-   * action is owed. This one is a statement of fact — you are somewhere we do
-   * not serve yet — and dressing it as an alert would make an ordinary
-   * situation read as a fault.
+   * The other banners carry a border and an action because something is
+   * wrong and an action is owed. This one is a statement of fact — you are
+   * somewhere we do not serve yet — and dressing it as an alert would make an
+   * ordinary situation read as a fault.
    */
   bannerNeutral: {
     flexDirection: 'row',
@@ -2883,7 +2929,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: EMBER.surfaceSunken,
   },
   bannerNeutralText: {
     ...TYPE.meta,
@@ -2895,15 +2941,15 @@ const styles = StyleSheet.create({
     marginRight: SPACE.md,
   },
   bannerCta: {
-    minHeight: 44,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
   },
   bannerCtaText: {
     ...TYPE.button,
-    color: EMBER.onGradient,
+    color: EMBER.textPrimary,
   },
 
   /* ---- Empty states ----------------------------------------------------- */
@@ -2939,11 +2985,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   ctaGhost: {
-    marginTop: 12,
-    minHeight: 44,
+    marginTop: SPACE.md,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: tint(EMBER.textPrimary, 0.3),
     borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
@@ -2961,7 +3007,7 @@ const styles = StyleSheet.create({
 
   cityPickerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: EMBER.backdrop,
     justifyContent: 'flex-end',
   },
   cityPickerSheet: {
@@ -2990,7 +3036,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.md,
     marginBottom: SPACE.sm,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: EMBER.surfaceSunken,
   },
   /*
    * Dashed, and above the list rather than in it.
@@ -3001,16 +3047,16 @@ const styles = StyleSheet.create({
    * to say where they are. The dash is what marks it as the odd one out.
    */
   cityPickerRowLocate: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: tint(EMBER.textPrimary, 0.18),
     borderStyle: 'dashed',
     marginBottom: SPACE.lg,
   },
   cityPickerRowActive: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: tint(EMBER.textPrimary, 0.14),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: tint(EMBER.textPrimary, 0.35),
   },
   cityPickerCity: {
     ...TYPE.bodyStrong,

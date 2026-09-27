@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   ActivityIndicator,
   Dimensions,
@@ -15,7 +15,7 @@ import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
 import { selectAndUploadPhoto } from '../../lib/photoUtils'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 import Animated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { MOTION_DURATION } from '../../lib/motion'
@@ -52,7 +52,7 @@ import { MOTION_DURATION } from '../../lib/motion'
  * so in words rather than relying on anyone guessing.
  *
  * The current main photo is unmistakable three ways at once: it is the big
- * slot, it carries an accent ring, and it is labelled. One of those alone is a
+ * slot, it carries a ring, and it is labelled. One of those alone is a
  * decoration; together they are a state. Removing moved to its own corner
  * target, because a single tap cannot mean both "choose this" and "delete this".
  */
@@ -79,7 +79,7 @@ const SLOT = Math.floor((Dimensions.get('window').width - GUTTER * 2 - GRID_GAP)
 function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number }) {
   const bar = {
     position: 'absolute' as const,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textSecondary,
     borderRadius: thickness,
   }
   return (
@@ -101,9 +101,9 @@ function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number 
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <View
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: 24,
+            width: CONTROL.md,
+            height: CONTROL.md,
+            borderRadius: EMBER_RADIUS.pill,
             backgroundColor: EMBER.surface,
             alignItems: 'center',
             justifyContent: 'center',
@@ -126,10 +126,12 @@ function MediaScreenInner() {
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setPhotos(draft.photos ?? [])
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const add = async (slot: number) => {
     if (!user?.id || uploadingSlot !== null) return
@@ -211,7 +213,7 @@ function MediaScreenInner() {
                 <>
                   {/* A scrim under the label, so it survives a bright photo. */}
                   <LinearGradient
-                    colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.85)']}
+                    colors={[EMBER.bgClear, tint(EMBER.bg, 0.85)]}
                     style={styles.primaryScrim}
                     pointerEvents="none"
                   />
@@ -241,7 +243,7 @@ function MediaScreenInner() {
                 accessibilityLabel={`Remove photo ${index + 1}`}
                 style={styles.removeBadge}
               >
-                <Ionicons name="close" size={ICON.sm} color={EMBER.onGradientChip} />
+                <Ionicons name="close" size={ICON.sm} color={EMBER.textPrimary} />
               </Pressable>
             </AnimatedPressable>
           )
@@ -255,7 +257,7 @@ function MediaScreenInner() {
             accessibilityLabel={photos.length === 0 ? 'Add your main photo' : 'Add a photo'}
             style={[styles.slot, photos.length === 0 && styles.slotPrimary, styles.slotEmpty]}
           >
-            {uploadingSlot !== null ? <ActivityIndicator color={EMBER.accent} /> : <Plus />}
+            {uploadingSlot !== null ? <ActivityIndicator color={EMBER.textSecondary} /> : <Plus />}
           </Pressable>
         ) : null}
       </View>
@@ -292,11 +294,11 @@ const styles = StyleSheet.create({
   slotPrimary: { width: '100%', height: Math.round(SLOT * 1.55) },
   // The ring is the third signal, after size and the label. Any one of them
   // alone reads as decoration; together they read as a state.
-  slotChosen: { borderWidth: 2, borderColor: EMBER.accent },
+  slotChosen: { borderWidth: 2, borderColor: EMBER.textPrimary },
   slotEmpty: {
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,144,109,0.35)',
+    borderColor: EMBER.separator,
     backgroundColor: 'transparent',
   },
   photo: { width: '100%', height: '100%' },
@@ -309,7 +311,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(15,14,14,0.75)',
+    backgroundColor: EMBER.scrim,
   },
   makeMainText: { ...TYPE.caption, color: EMBER.textPrimary },
   primaryTag: {
@@ -319,9 +321,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
   },
-  primaryTagText: { ...TYPE.caption, color: EMBER.onGradientChip },
+  primaryTagText: { ...TYPE.caption, color: EMBER.bg },
   removeBadge: {
     position: 'absolute',
     top: SPACE.md,
@@ -329,11 +331,11 @@ const styles = StyleSheet.create({
     width: ICON.lg,
     height: ICON.lg,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.scrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  note: EMBER_TYPE.helper,
+  note: { ...TYPE.meta, color: EMBER.textTertiary },
 })
 
 

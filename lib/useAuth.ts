@@ -274,7 +274,12 @@ export function useAuth(): AuthState {
     if (!globalAuthState.initialized) {
       initializeAuth()
     } else {
-      // If already initialized, just update this component
+      // If already initialized, just update this component. It catches a change
+      // made between render and subscribe. The rule's answer, useSyncExternalStore,
+      // renders auth consumers at sync priority, so the root layout's routing
+      // effect would run before the code after `await signIn…()`, which is the
+      // race `isNewAccount` exists for.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAuthState(globalAuthState)
     }
 

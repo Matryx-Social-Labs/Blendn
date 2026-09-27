@@ -3,7 +3,8 @@
 Frame `1141:5247` on the **Updates** canvas. The screen the app shipped before
 this was a different design entirely; it was deleted rather than adapted.
 
-Components live in `components/banter/BanterSections.tsx`. The screen is
+Components live in `components/banter/BanterSections.tsx`, pure helpers in
+`components/banter/inbox.ts`. The screen is
 `app/(tabs)/chat.tsx`. `app/preview/banter.tsx` renders the pieces
 against fixtures — deep-link `exp+blendn:///preview/banter` — so layout can be
 looked at without a login, a socket or a conversation that exists.
@@ -28,102 +29,87 @@ drives the layout.
 
 ## Layout, top to bottom
 
-| | Frame | Built |
+| Section | Shown when | Built |
 |---|---|---|
-| Top bar | `1141:5345` | Same 64pt bar as the Pulse and the Scene. Title is now a prop, so it reads **The Banter** in `#FF906D` rather than the wordmark. |
-| Search | `1141:5249` | `#211F1F`, radius 48, px 20 / py 12, gap 12. |
-| Rail | `1141:5261` | 64pt discs, gap 24, bleeds the 12pt page gutter. **Heading changed** — see below. |
-| Requests | *not in frame* | Added. See below. |
-| Recent | `1141:5292` / `1141:5304` | One list. A person is a photograph; a room is a `#211F1F` disc with a glyph. |
+| Top bar | always | `PulseTopBar` "The Banter" + the notification bell. No menu button, no compose. |
+| Search | always | `BanterSearch`, a `surface` pill. Filters titles, previews and a room's last sender in place. |
+| **Live now** | you are checked into a room | One full-width row per room: `surfaceSunken`, radius `md`, padding 16. 56pt square event cover (radius `sm`; a glyph on `surface` when there is none), title, and a still 8pt `success` dot + "You're here · N in the room" (count left off when 0). Rows 12 apart. Tapping opens the room. |
+| **Requests** | a request is pending | Heading + count in `meta`. Each request is a conversation row — sender's photo (or a glyph disc on `surface`), name, time, two lines of message — with **Decline** (`surface`) and **Accept** (`accent`, `onGradient`) 32pt pills under it. |
+| **Conversations** | always (headings hidden when empty) | Bucketed **Today / This week / Earlier** by last activity with `DayHeading`. "MARK ALL READ" on the right of the first heading. |
 
-### Type and colour
+Checked-in rooms are **lifted out** of the conversations rather than repeated.
 
-Taken from the frame, unchanged: row radius 32, padding 16, gap 16. Read rows
-carry a `rgba(73,71,71,0.1)` hairline and the unread row does not, which is what
-makes the unread one read as a card and the rest as a list.
+### A conversation row
 
-The EVENT badge is `#F79EFF` on `#570066`, 10/15.
+Fixed height — 56pt avatar, 12 above and below, 16 to the text, **no
+hairlines**. A person is round (photo, or the generated mark before they
+reveal); a room is its event's cover in a square, radius `sm`.
 
----
+- Line 1: name `bodyStrong`, time `meta` on the right.
+- Line 2: one line of preview, `body` `textSecondary`, prefixed "You: " for your
+  own message and "Name: " for someone else's in a room (their room
+  pseudonym).
+- **Unread** is three changes and never a height change: the preview goes
+  `bodyStrong` `textPrimary`, the time goes `textPrimary`, and a 10pt
+  `textPrimary` dot appears under the time. The dot's slot is reserved on read
+  rows so nothing shifts when a row is read. No counts on rows — the total is
+  on the bell.
+- Someone asked you to reveal: the preview reads **"Asked to reveal names"** in
+  `textPrimary` until you open the thread (this session; the server keeps the
+  flag until you answer, so it returns after a relaunch).
 
-## Three places this departs from the frame
+### Timestamps
 
-### 1. The rail says "Live now", not "Pinned"
+`components/banter/inbox.ts`, pure and tested: `now`, `5m`, `3h` (earlier
+today), `Yesterday`, a weekday (`Tue`) within the week, `Oct 4` this year,
+`Oct 4, 2025` before. Never the device locale's date format.
 
-**Nothing in the product can pin a conversation.** No column, no endpoint, no
-gesture. The rail could not be built as drawn.
+### States
 
-Filling it from "most recent" was the obvious cheat and is worse than leaving it
-empty: it would duplicate the top of the list directly beneath it, under a label
-that lies about why those items are there.
+- **Loading** — four skeleton rows at the row's geometry, round and square.
+- **Empty** — no bucket headings; the glyph tile, "No conversations yet", and
+  an "Explore events" accent button. Not shown when Live now or Requests has
+  something in it.
+- **Failed** — "Couldn't load your chats" + Retry. If one of the two lists
+  failed and the other loaded, a `meta` line above says so.
 
-What *is* pinned — by circumstance rather than by a gesture — is **the event you
-are standing in**. That room is temporary, anonymous, and only useful while you
-are there. It is the one conversation that belongs at the top without anyone
-putting it there, and the only one that stops being relevant on its own.
+### Colour
 
-So the rail keeps the frame's component, its 64pt discs, its 24 gap and its
-gutter bleed, and changes only the heading and the icon (`sensors`). Those rooms
-are **lifted out** of Recent rather than repeated in it.
+One accent: **Accept** (repeated per request — one action). With no requests
+the populated inbox has none; the empty state's "Explore events" is that
+state's action. Unread is `textPrimary`, presence is `success`. The violet
+EVENT badge is gone.
 
-**If pinning is ever designed**, this rail is not free — it is occupied. A
-pinned rail and a live rail are two rails, and the screen would need to say
-which is which.
+### Unread in rooms, and "Mark all read"
 
-### 2. There is no compose button
+Room unread comes from `GET /chat/groups`' `unreadCount`, plus one locally for
+each message someone else sends to a room you are not reading.
 
-The frame has a 56pt gradient FAB at `1141:5360`. Removed by decision: a DM
-starts from a person, and every route to one already goes through a profile. A
-floating button opening an empty picker is a second way to do something that
-already has a first way.
-
-### 3. Message requests have a card the frame does not have
-
-A request is the one row in an inbox that **cannot be opened** — tapping it has
-to mean *accept* or *decline*, not *read*. Building the frame exactly would have
-left the endpoint in place with nothing calling it.
-
-`BanterRequest` is made from the frame's own parts: same 32-radius card, same
-avatar disc, same two lines of type. It adds two 44pt buttons. **Decline is on
-the left, accept on the right** — the destructive one is not where your thumb
-lands by default, and accept carries the gradient because it is the affirmative.
-
-**This needs a designer pass.** It is built to be consistent, not to be
-designed.
-
----
-
-## Two measurements that were wrong and are worth knowing
-
-### The unread dot's ring is outset
-
-Frame `1141:5296` rings the accent dot with `shadow: 0 0 0 2px #0F0E0E` —
-**outside** the 12pt circle, total footprint 16pt.
-
-React Native has no outset border. `borderWidth: 2` grows *inwards*, so writing
-it the obvious way gives an 8pt accent core inside a 12pt footprint — and that is
-not a cosmetic difference:
-
-The dot sits at the **bounding box's** top-right corner, and the avatar is a
-circle, so that corner is empty space. From the 56pt avatar's centre the dot's
-centre is `√(22² + 22²) = 31.1` away, against a radius of 28 — the dot is centred
-*outside* the photograph and only its inner edge reaches back in.
-
-| | Inner edge reaches | Against radius 28 |
-|---|---|---|
-| 8pt core (inset border) | 27.1 | grazes by 0.9pt — reads as floating |
-| 12pt core (the frame) | 25.1 | bites 2.9pt in — reads as attached |
-
-Built as a 16pt `#0F0E0E` ring holding a 12pt accent circle, offset `-2` on both
-axes so the **accent** — not the ring — lands where the frame puts it.
-
-### The pinned rail's presence dot is *not* the same
-
-Frame `1141:5265` is a single 16pt "Background+Border" rectangle: the ring is
-part of the 16, not outside it. So `borderWidth: 2` is correct there and wrong
-three lines away in the same file. Both are pinned by tests.
+**Mark all read covers DMs only.** No endpoint marks a room read: the only
+writer of `chat_group_members.last_read_message_id` is `GET
+/events/[eventId]/chat`, and the room screen (`app/chat/[id].tsx`) reads
+through `GET /chat/groups/[id]/messages`, which does not move it. Opening a
+room clears its dot locally, but the next refresh can bring it back. **Needs
+a server change**: have the messages GET (without `before`) advance the
+reader's last-read, and add a group equivalent of `POST /conversations/read`
+if rooms should join Mark all read.
 
 ---
+
+## Why it departs from the original frame (`1141:5247`)
+
+- **"Live now", not "Pinned".** Nothing in the product can pin a
+  conversation. What *is* pinned, by circumstance, is the event you are
+  standing in — temporary, anonymous, only useful while you are there. The
+  frame's horizontal rail of 64pt discs became full-width rows so the room's
+  name and headcount fit.
+- **No compose button.** A DM starts from a person, and every route to one
+  already goes through a profile.
+- **Requests exist.** The frame has no slot for them; building it exactly
+  would have left the endpoint with nothing calling it.
+- **No hairlines, no taller unread row.** The frame ruled read rows and gave
+  the unread one extra top padding; a list that changes height as you read it
+  moves under your thumb.
 
 ---
 
@@ -156,28 +142,8 @@ Three states, and the middle one is the new drawing:
 > **Never seed the mark with a user id.** That is stable forever and would
 > rebuild exactly the cross-surface identity the pseudonyms exist to prevent.
 
-### A question for you — `revealRequested` has nowhere to go
-
-The server tells the client when someone has **asked you to reveal**
-(`revealRequested`). The frame has no slot for it, so today you only find out by
-opening the thread — and a request you never see is a request that goes
-unanswered.
-
-The parts to build it already exist: the pinned rail's EVENT badge (`#F79EFF` on
-`#570066`, 10/15) is the established pill idiom, and it would sit naturally
-beside the name on the row.
-
-**Not built, because inventing a badge on a screen you have designed is the
-wrong way round.** Carried through the data layer and waiting for a decision.
-
 ## Still open
 
-- **Search does nothing.** The field is drawn and is not wired to a query.
-  Needs a decision on what it searches: conversation titles only, or message
-  bodies too (which is a server endpoint that does not exist).
-- **The top bar's menu button** (`1141:5345`, leading slot) has nowhere to go.
-  Omitted.
-- **No unread count anywhere on a row.** That is the frame's decision and a good
-  one — the row reads as unread from across the screen instead of by finding a
-  number on it, and the total that matters is on the bell. Worth keeping in mind
-  if a count is ever requested.
+- **Message-body search** needs a server endpoint; search covers what the list
+  already holds.
+- **Room read state** needs the server change above.

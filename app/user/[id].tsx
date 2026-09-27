@@ -1,5 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -20,7 +21,7 @@ import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -46,9 +47,8 @@ interface UserProfileView {
   /**
    * The subset you both picked, already intersected by the server.
    *
-   * Drives the frame's one gradient chip. On the artboard that accent is
-   * decoration; here it marks the reason you might talk to them, which is the
-   * most useful thing on the screen.
+   * Drives the outlined chips. They mark the reason you might talk to them,
+   * which is the most useful thing on the screen.
    */
   sharedInterests?: string[]
   photos?: string[]
@@ -146,57 +146,25 @@ function UserProfileInner() {
     setCtaMessage('Send a request to start chatting.')
   }, [authUser])
 
-  const load = useCallback(async () => {
+  // State is set only in the callbacks, once the requests have settled; the
+  // spinner for a reload is switched on in render, below.
+  const load = useCallback(() => {
     if (!id) return
-    setLoading(true)
-    try {
-      let nextProfile: UserProfileView | null = null
+    return apiClient.getPublicProfile(id)
+      .then(async (result) => {
+        let nextProfile: UserProfileView | null = null
 
-      const result = await apiClient.getPublicProfile(id)
-      if (result.success && result.data) {
-        const data = result.data
-        const photos = data.photos || data.profile_photos || []
-        // Map interests: API returns objects {id, name, slug, icon} — extract names
-        const interests = Array.isArray(data.interests)
-          ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
-              .filter((n: string) => n)
-          : []
-        nextProfile = {
-          user_id: id,
-          name: data.name || data.display_name,
-          age: data.age,
-          bio: data.bio,
-          location: data.location,
-          occupation: data.occupation,
-          education: data.education,
-          interests,
-          photos,
-          /*
-           * Both are optional on the payload and typed loosely upstream, so they
-           * are read defensively rather than asserted -- an older server build
-           * simply yields no shared chips and no subtitle, which degrades to the
-           * plain design rather than to a crash.
-           */
-          workField: (data as { work_field?: string }).work_field,
-          blurPhoto: (data as { blurPhoto?: string | null }).blurPhoto ?? null,
-          sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
-            ? (data as { sharedInterests?: string[] }).sharedInterests
-            : [],
-          stats: data.stats,
-          memberSince: data.memberSince,
-        }
-      } else {
-        const fallbackResult = await apiClient.getProfile(id)
-        if (fallbackResult.success && fallbackResult.data) {
-          const data = fallbackResult.data
+        if (result.success && result.data) {
+          const data = result.data
           const photos = data.photos || data.profile_photos || []
+          // Map interests: API returns objects {id, name, slug, icon} — extract names
           const interests = Array.isArray(data.interests)
             ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
                 .filter((n: string) => n)
             : []
           nextProfile = {
             user_id: id,
-            name: data.name,
+            name: data.name || data.display_name,
             age: data.age,
             bio: data.bio,
             location: data.location,
@@ -204,21 +172,63 @@ function UserProfileInner() {
             education: data.education,
             interests,
             photos,
+            /*
+             * Both are optional on the payload and typed loosely upstream, so they
+             * are read defensively rather than asserted -- an older server build
+             * simply yields no shared chips and no subtitle, which degrades to the
+             * plain design rather than to a crash.
+             */
+            workField: (data as { work_field?: string }).work_field,
+            blurPhoto: (data as { blurPhoto?: string | null }).blurPhoto ?? null,
+            sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
+              ? (data as { sharedInterests?: string[] }).sharedInterests
+              : [],
+            stats: data.stats,
+            memberSince: data.memberSince,
+          }
+        } else {
+          const fallbackResult = await apiClient.getProfile(id)
+          if (fallbackResult.success && fallbackResult.data) {
+            const data = fallbackResult.data
+            const photos = data.photos || data.profile_photos || []
+            const interests = Array.isArray(data.interests)
+              ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
+                  .filter((n: string) => n)
+              : []
+            nextProfile = {
+              user_id: id,
+              name: data.name,
+              age: data.age,
+              bio: data.bio,
+              location: data.location,
+              occupation: data.occupation,
+              education: data.education,
+              interests,
+              photos,
+            }
           }
         }
-      }
 
-      setProfile(nextProfile)
-      if (nextProfile?.user_id) {
-        await hydrateCtaState(nextProfile.user_id)
-      }
-    } catch (e) {
-      Logger.error('profile', 'User profile load failed', { error: e })
-      Alert.alert('Error', 'Failed to load profile')
-    } finally {
-      setLoading(false)
-    }
+        setProfile(nextProfile)
+        if (nextProfile?.user_id) {
+          await hydrateCtaState(nextProfile.user_id)
+        }
+      })
+      .catch((e) => {
+        Logger.error('profile', 'User profile load failed', { error: e })
+        Alert.alert('Error', 'Failed to load profile')
+      })
+      .finally(() => setLoading(false))
   }, [id, hydrateCtaState])
+
+  // A new `load` is a new profile to fetch, and it shows as loading from this
+  // render rather than one commit later. The first `load` rides on the
+  // initial `loading: true`.
+  const [loadingFor, setLoadingFor] = useState(() => load)
+  if (loadingFor !== load) {
+    setLoadingFor(() => load)
+    if (id) setLoading(true)
+  }
 
   useEffect(() => {
     load()
@@ -307,7 +317,9 @@ function UserProfileInner() {
     setConnectSending(true)
     try {
       const result = await apiClient.createMessageRequest(profile.user_id, message)
-      if (!result.success) {
+      if (result.success) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+      } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
       }
       /*
@@ -380,7 +392,7 @@ function UserProfileInner() {
     : profile?.name || 'Attendee'
 
   /*
-   * The frame's accent line is "PRO MEMBER • @blendn_julia". Neither exists --
+   * The frame's line under the name is "PRO MEMBER • @blendn_julia". Neither exists --
    * there is no membership tier and no username column -- so it carries what is
    * real and, in an unrevealed profile, is the whole point of `work_field`
    * living outside the identity gate: an attribute rather than an address.
@@ -602,10 +614,10 @@ const styles = StyleSheet.create({
   barButton: {
     width: CONTROL.md,
     height: CONTROL.md,
-    borderRadius: CONTROL.md / 2,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15,14,14,0.55)',
+    backgroundColor: EMBER.scrim,
   },
   pressed: { opacity: 0.6 },
 })

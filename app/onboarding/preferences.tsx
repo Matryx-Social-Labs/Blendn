@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import {
@@ -122,13 +122,15 @@ export default function PreferencesScreen() {
   // — `basics` is not skippable, so it is there.
   const under18 = loaded && isUnder18(draft.dateOfBirth)
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setOrientations((draft.orientations ?? []) as Orientation[])
     setShowOrientation(draft.show_orientation ?? false)
     setLookingFor(draft.looking_for ?? [])
     setAnonymous(anonymousByDefault(draft))
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const toggle = (value: string) =>
     setLookingFor((current) =>

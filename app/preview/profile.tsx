@@ -11,7 +11,7 @@ import {
   ProfileHero,
   ProfileInterests,
 } from '../../components/profile/ProfileSections'
-import { EMBER, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The attendee profile against fixtures — frame `1141:5163`.
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     right: GUTTER,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15,14,14,0.7)',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.scrim,
   },
   toggleLabel: { ...TYPE.label, color: EMBER.textPrimary },
 })

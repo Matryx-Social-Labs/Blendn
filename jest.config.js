@@ -48,5 +48,6 @@ module.exports = {
   // which would pick up files inside `node_modules/**/__tests__` on some
   // packages and fail for reasons that have nothing to do with this app.
   testMatch: ["<rootDir>/__tests__/**/*.test.ts?(x)"],
+  setupFiles: ["<rootDir>/jest.setup.js"],
   clearMocks: true,
 }

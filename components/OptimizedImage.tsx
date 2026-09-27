@@ -3,6 +3,7 @@ import React, { memo, useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
 import { Logger } from '../lib/logger'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
+import { EMBER, tint } from '../lib/theme'
 
 interface OptimizedImageProps {
   source: string | ImageSource
@@ -141,13 +142,18 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     }
   }, [onError, highQualityUrl])
 
-  // Reset state when source changes
-  useEffect(() => {
+  // Reset state when source changes: the flags during render, so a new source
+  // never renders with the last one's; the animated values after commit.
+  const [prevSource, setPrevSource] = useState(source)
+  if (source !== prevSource) {
+    setPrevSource(source)
     setLoadingState({
       lowQualityLoaded: false,
       highQualityLoaded: false,
       hasError: false
     })
+  }
+  useEffect(() => {
     opacity.setValue(0)
     lowQualityOpacity.setValue(0)
   }, [source, opacity, lowQualityOpacity])
@@ -228,7 +234,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         {/* Loading indicator */}
         {!loadingState.highQualityLoaded && !loadingState.hasError && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#ffffff80" />
+            <ActivityIndicator size="small" color={EMBER.textSecondary} />
           </View>
         )}
       </>
@@ -345,10 +351,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)'
+    backgroundColor: tint(EMBER.bg, 0.1),
   }
 })
 

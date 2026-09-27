@@ -1,10 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
-import { LinearGradient } from 'expo-linear-gradient'
-import { router, Tabs } from 'expo-router'
+import { router } from 'expo-router'
+import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import { BlurView } from 'expo-blur'
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -20,7 +18,8 @@ import {
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { popIn, popOut } from '../../components/motion/presence'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -65,14 +64,15 @@ const MONOGRAM = require('../../assets/logo/monogram-white-bold.png')
  *
  * Both the mono lockup and the full lockup draw the mark in `#1B1931` — one
  * colour, byte-identical across the two files. The button was tinting it
- * `EMBER.onGradient` (`#5B1600`), which is the token for *text* on a gradient
- * and reads as a muddy maroon under a coral disc: 6.07:1, and desaturated in a
- * way that makes a thin outline mark look smudged. The brand ink is 7.69:1 on
- * `gradientFrom` and is what the mark is actually drawn in.
+ * `EMBER.onGradient` (`#5B1600`), which is the token for *text* on an accent
+ * fill and reads as a muddy maroon under a coral disc: 6.07:1, and desaturated
+ * in a way that makes a thin outline mark look smudged. The brand ink is 7.69:1
+ * on `EMBER.accent` and is what the mark is actually drawn in.
  *
  * Not promoted to `lib/theme.ts` — it is the logo's colour, not a UI role, and
  * this is the only place the logo sits on a warm field.
  */
+// design-exception: the logo's own ink, sampled from the artwork — not a UI role
 const BRAND_INK = '#1B1931'
 
 const TABS = [
@@ -203,30 +203,24 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
         style={({ pressed }) => [styles.centreButton, pressed && styles.pressed]}
       >
         {/*
-          Gradient in every state, as the frame draws it.
+          Flat accent in every state (the fill lives on `centreButton`).
 
-          It used to be gradient only when something was live, on the reasoning
-          that a permanently glowing button is one people stop seeing. That was
-          right while this was a *status light*. It is the Blend'n mark now — the
+          It used to be lit only when something was live, on the reasoning that
+          a permanently lit button is one people stop seeing. That was right
+          while this was a *status light*. It is the Blend'n mark now — the
           brand's one fixed point in the app — and a logo that changes colour
           depending on whether you are near an event is not a logo.
 
           The status it used to carry has not been dropped: it is in the badge,
-          in the slow breath below, and in where the button goes.
+          the still dot below, and in where the button goes.
         */}
-        <LinearGradient
-          colors={[...EMBER_GRADIENT.colors]}
-          start={EMBER_GRADIENT.start}
-          end={EMBER_GRADIENT.end}
-          style={StyleSheet.absoluteFill}
-        />
         {/*
           `monogram-white.png` tinted, not `monogram-gradient.png`.
 
           The gradient monogram is the mark for a dark background — on the warm
           button it would be orange on orange. This is the white silhouette
-          tinted to `onGradient`, the same dark-on-warm pairing every gradient
-          control in the app uses, and it is the asset the splash already ships
+          tinted to `BRAND_INK`, dark on warm like every accent control in the
+          app, and it is the asset the splash already ships
           so no second copy of the logo enters the bundle.
         */}
         <Image
@@ -236,12 +230,16 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
           tintColor={BRAND_INK}
           accessibilityIgnoresInvertColors
         />
+        {/*
+          Pops in on 0 → unread and out when read; stays mounted while the
+          count changes, so a new message in a busy room only changes the digit.
+        */}
         {target.badge > 0 ? (
-          <View style={styles.badge}>
+          <Animated.View style={styles.badge} entering={popIn} exiting={popOut}>
             <Text style={styles.badgeText}>
               {target.badge > 9 ? '9+' : String(target.badge)}
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
       </Pressable>
       {/*
@@ -267,6 +265,10 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
 })
 
 RoomButton.displayName = 'RoomButton'
+
+// expo-router 56+ vendors React Navigation and does not export the bottom-tabs
+// types publicly, so take the tab bar's props from the Tabs component itself.
+type BottomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0]
 
 const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets()
@@ -424,10 +426,9 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     /*
      * Two views, and the split is the whole reason the corners were filled.
      *
-     * The rounded, blurred surface needs `overflow: 'hidden'` to clip the blur
-     * to its 48pt corners, so the outer view lays out and does not clip while
-     * `barSurface` is an absolute child holding the fill, the radius and the
-     * blur.
+     * The rounded surface clips to its `EMBER_RADIUS.card` corners, so the
+     * outer view lays out and does not clip while `barSurface` is an absolute
+     * child holding the fill and the radius.
      *
      * The centre button used to *need* that split — it hung 16pt above the top
      * edge and anything clipping the surface decapitated it. It no longer does;
@@ -437,15 +438,8 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       style={[styles.bar, { paddingBottom: tabBarBottomPadding(insets.bottom) }]}
       pointerEvents="box-none"
     >
-      <View style={styles.barSurface} pointerEvents="none">
-        {/*
-          The frame's 20pt backdrop blur. `expo-blur` blurs what is *behind* a
-          view, which is exactly right for a bar the feed scrolls under — the
-          same reason it was the wrong tool for the onboarding background, where
-          there was nothing behind to blur.
-        */}
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-      </View>
+      {/* Opaque and flat: no glass (tasks/lessons.md). */}
+      <View style={styles.barSurface} pointerEvents="none" />
       {renderTab(TABS[0])}
       {renderTab(TABS[1])}
       <RoomButton target={target} />
@@ -482,7 +476,7 @@ export default function TabLayout() {
            *
            * react-navigation paints its own bar behind the custom one and that
            * bar is square, so with an opaque default it showed as two filled
-           * wedges either side of the 48pt radius. The custom bar is the only
+           * wedges either side of the rounded corners. The custom bar is the only
            * surface.
            */
           backgroundColor: 'transparent',
@@ -499,16 +493,15 @@ export default function TabLayout() {
 }
 
 /*
- * 52, down from 56.
+ * `CONTROL.lg`, 56 — the primary-action height, which is what this is.
  *
- * The disc is the tallest child in the row, so it — not the 48pt icon-plus-
- * label column — sets the bar's height, and the bar's height is what the
- * Pulse's hero card has left over. Four points here are four points of card.
+ * The disc is the tallest child in the row, so it — not the icon-plus-label
+ * column — sets the bar's height, and the bar's height is what the Pulse's
+ * hero card has left over (`tabBarTop`).
  *
- * The mark scales with it (34 -> 32), so it still fills ~61% of the disc, the
- * same proportion it had at 56.
+ * The mark stays at 32, ~57% of the disc.
  */
-const CENTRE_SIZE = 52
+const CENTRE_SIZE = CONTROL.lg
 
 /**
  * How much bottom padding a screen needs so its last item clears the bar.
@@ -518,16 +511,15 @@ const CENTRE_SIZE = 52
  * exported because a hardcoded guess in each one drifts the moment the bar
  * changes height.
  */
-export const TAB_BAR_CLEARANCE = 88
+export const TAB_BAR_CLEARANCE = 92
 
 /**
  * The bar's own chrome, so callers can work out where its top edge actually is.
  *
  * `TAB_BAR_CLEARANCE` is a *padding* number — how much a scroll must reserve so
- * its last item is reachable — and it has been 88 through two changes of the
- * bar's real height. That is fine for padding and wrong for anything that needs
- * the edge: at 88 it under-reported the bar by 20pt, and the Pulse's hero card
- * was sized against it.
+ * its last item is reachable — and it once drifted 20pt from the bar's real
+ * height. That is fine for padding and wrong for anything that needs the edge:
+ * the Pulse's hero card was sized against it. Keep the two equal.
  *
  * Height is `paddingTop + line + max(bottom inset, 20)`, where the line is the
  * 56pt centre button — the tallest child now that it is seated in the row
@@ -551,10 +543,10 @@ export function tabBarBottomPadding(bottomInset: number) {
 /**
  * Where the bar's top edge sits, measured from the top of the screen.
  *
- * `8 + 52 + 28 = 88` on the phone this was measured on — which is finally the
- * same number as `TAB_BAR_CLEARANCE`. Those two had drifted 20pt apart, and
- * anything placing an edge against the bar was reading the padding constant and
- * getting it wrong.
+ * `8 + 56 + 28 = 92` on a home-indicator phone — the same number as
+ * `TAB_BAR_CLEARANCE`. Those two had once drifted 20pt apart, and anything
+ * placing an edge against the bar was reading the padding constant and getting
+ * it wrong.
  */
 export function tabBarTop(screenHeight: number, bottomInset: number) {
   return screenHeight - (TAB_BAR_PADDING_TOP + TAB_BAR_LINE + tabBarBottomPadding(bottomInset))
@@ -580,17 +572,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     /*
-     * 10, down from the frame's 18.
+     * 8 (`TAB_BAR_PADDING_TOP`), down from the frame's 18.
      *
      * The frame's 18 put the icon boxes at y=18 and every label at y=42, which
-     * is where all four of its labels sit. That still holds — the whole row
-     * simply starts 8pt lower.
+     * is where all four of its labels sit. They still share that one line —
+     * the whole row simply starts 10pt higher.
      *
-     * Seating the centre button grew this bar from 100 to 108: the row's line
-     * height is now the 56pt disc rather than the 48pt icon-plus-label column.
-     * Those 8pt came out of the screen above, and the Pulse's hero card is
-     * sized against exactly that space. Taking them back off the top padding
-     * returns the bar to its previous height and gives the card the room.
+     * Seating the centre button made the row's line height the 56pt disc
+     * rather than the icon-plus-label column. Those points come out of the
+     * screen above, and the Pulse's hero card is sized against exactly that
+     * space, so the top padding stays small.
      */
     paddingTop: TAB_BAR_PADDING_TOP,
     // Frame: first item's left edge is 27.51, last item's right edge is 359.64
@@ -599,23 +590,14 @@ const styles = StyleSheet.create({
   },
   // The surface, separate from the layout — see the note at the render site.
   barSurface: {
-    ...StyleSheet.absoluteFillObject,
-    // Frame `1141:4643`: `rgba(27,25,25,0.9)` under a 20pt backdrop blur, with
-    // 48pt top corners.
-    backgroundColor: 'rgba(27,25,25,0.9)',
-    borderTopLeftRadius: 48,
-    borderTopRightRadius: 48,
+    ...StyleSheet.absoluteFill,
+    // Flat and opaque, no glow: the frame's translucent fill under a 20pt
+    // blur with a warm upward shadow is glass (tasks/lessons.md). The sunken
+    // surface is what that fill rendered as over the page.
+    backgroundColor: EMBER.surfaceSunken,
+    borderTopLeftRadius: EMBER_RADIUS.card,
+    borderTopRightRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: EMBER.gradientFrom,
-        shadowOpacity: 0.06,
-        shadowRadius: 40,
-        shadowOffset: { width: 0, height: -10 },
-      },
-      android: { elevation: 16 },
-      default: {},
-    }),
   },
   item: { alignItems: 'center' },
   /*
@@ -626,11 +608,11 @@ const styles = StyleSheet.create({
    */
   // A fixed box, so glyphs of different natural heights (the frame's are 24.2,
   // 18, 22×16 and 16) all put their label on the same line.
-  iconBox: { height: 24, alignItems: 'center', justifyContent: 'center' },
+  iconBox: { height: ICON.lg, alignItems: 'center', justifyContent: 'center' },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: ICON.lg,
+    height: ICON.lg,
+    borderRadius: EMBER_RADIUS.pill,
     // Same footprint as the 22pt glyph it replaces, so the row does not shift
     // when the photo arrives.
     borderWidth: 1.5,
@@ -659,25 +641,17 @@ const styles = StyleSheet.create({
   centreButton: {
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,
-    borderRadius: CENTRE_SIZE / 2,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     // No bloom. The frame's warm `Button:shadow` was the other half of the
-    // glow; the gradient disc on the dark bar needs nothing to stand out.
+    // glow; the flat accent disc on the dark bar needs nothing to stand out.
   },
   /*
-   * The mark, at 24 rather than the frame's 17.5.
-   *
-   * The frame draws a `+` in a 17.5pt box, and a plus is a single stroke that
-   * reads at any size. The Blend'n monogram is a two-counter line mark — at
-   * 17.5 inside a 56pt circle it fills 31% and reads as a smudge. 24 puts it at
-   * 43%, which is where a logo-in-a-circle normally sits.
-   *
-   * Deliberate deviation, recorded in `docs/PULSE.md` for the designer.
-   */
-  /*
-   * 34, and the number comes from a stroke measurement rather than a ratio.
+   * The mark, at 32 rather than the frame's 17.5, and the number comes from a
+   * stroke measurement rather than a ratio.
    *
    * The frame draws a `+`: one stroke, legible at any size. The Blend'n
    * monogram is an *outline* mark with two interior counters — `monogram-
@@ -687,8 +661,8 @@ const styles = StyleSheet.create({
    * every other glyph in the bar. It was the lightest thing in the row while
    * being the most important control in it.
    *
-   * The mark's aspect is 0.845, so at 32 it draws 27 × 32 — inside the 36.8pt
-   * square inscribed in the 52pt disc, with the stroke at 1.35pt. Not parity
+   * The mark's aspect is 0.845, so at 32 it draws 27 × 32 — inside the 39.6pt
+   * square inscribed in the 56pt disc, with the stroke at 1.35pt. Not parity
    * with its neighbours, but 14% closer than the old 28, and it stops looking
    * like a badge floating in a field of coral.
    *
@@ -728,7 +702,7 @@ const styles = StyleSheet.create({
   /*
    * 8pt of colour in a 2pt ring of the page background, on the disc's top-right
    * edge. The ring is the cut-out that keeps a white or green dot legible on the
-   * warm gradient; RN grows borders inward, so the footprint is 12 and the core 8.
+   * warm disc; RN grows borders inward, so the footprint is 12 and the core 8.
    */
   liveDot: {
     position: 'absolute',
@@ -736,7 +710,7 @@ const styles = StyleSheet.create({
     right: 1,
     width: 12,
     height: 12,
-    borderRadius: 6,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: 2,
     borderColor: EMBER.bg,
   },
@@ -747,15 +721,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    minWidth: 18,
-    height: 18,
+    minWidth: CONTROL.badge,
+    height: CONTROL.badge,
     paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.bg,
+    backgroundColor: EMBER.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { ...TYPE.caption, color: EMBER.accent },
+  badgeText: { ...TYPE.caption, color: EMBER.bg },
 
   pressed: { opacity: 0.7 },
 })

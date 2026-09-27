@@ -72,7 +72,7 @@ export function scarcityLabel({ maxCapacity, currentCapacity, goingCount }: Scar
   if (!urgent) return null
 
   // Uppercased in the string rather than by `textTransform`, so the pill's
-  // letter-spacing lands on the real glyphs — the same rule as EMBER_TYPE.
+  // letter-spacing lands on the real glyphs — the same rule as TYPE.label.
   return left === 1 ? '1 SPOT LEFT' : `${left} SPOTS LEFT`
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
@@ -54,8 +54,8 @@ export default function ActionTray({
   dismissible = true,
 }: ActionTrayProps) {
   const config = TRAY_SPECS[size]
-  const opacity = useRef(new Animated.Value(0)).current
-  const translateY = useRef(new Animated.Value(40)).current
+  const [opacity] = useState(() => new Animated.Value(0))
+  const [translateY] = useState(() => new Animated.Value(40))
   const reduceMotion = useReducedMotion()
 
   /*
@@ -157,8 +157,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: EMBER.backdrop,
   },
   tray: {
     width: '100%',
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: EMBER_RADIUS.pill,
     alignSelf: 'center',
-    backgroundColor: EMBER.separator,
+    backgroundColor: EMBER.textTertiary,
     marginBottom: SPACE.sm,
   },
   title: {

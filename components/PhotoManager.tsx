@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -11,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native'
+import Animated, { Easing, LinearTransition } from 'react-native-reanimated'
 import {
     cachePhoto,
     deletePhoto,
@@ -20,9 +22,24 @@ import {
     selectAndUploadPhoto
 } from '../lib/photoUtils'
 import { Logger } from '../lib/logger'
+import { fadeOutFast } from './motion/presence'
 import { OptimizedImage } from './OptimizedImage'
 
 const { width } = Dimensions.get('window')
+
+/*
+ * "Make main" moves a photo to the front, and the grid used to jump: the tile
+ * you tapped vanished from its slot and reappeared first, with no line between
+ * the two. The tiles now travel to their new slots, so you can see where your
+ * photo went and what moved over to make room. The same applies when a
+ * removal closes a gap.
+ *
+ * On-screen movement, so ease-in-out, 250ms. Positions only: tiles are fixed
+ * size with no shadow or blur, so the layout pass per frame stays small (see
+ * tasks/lessons.md). Reanimated skips it under Reduce Motion and the tiles
+ * snap into place.
+ */
+const TILE_REFLOW = LinearTransition.duration(250).easing(Easing.bezier(0.77, 0, 0.175, 1))
 
 interface PhotoManagerProps {
   userId: string
@@ -50,6 +67,36 @@ export default function PhotoManager({
   const GAP = SPACE.sm
   const itemSize = Math.max(80, Math.floor((containerWidth - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS))
 
+  // Sets state only once the request settles. A caller that wants the spinner
+  // meanwhile sets `loading` itself.
+  const loadPhotos = () =>
+    getUserPhotos(userId)
+      .then((userPhotos) => {
+        setPhotos(userPhotos)
+
+        // Pre-cache photos for better performance
+        userPhotos.forEach(photo => {
+          if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
+            cachePhoto(photo.url).then(localPath => {
+              if (localPath) {
+                setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
+              }
+            })
+          }
+        })
+      })
+      .catch((error) => {
+        Logger.error('profile', 'PhotoManager: Load photos error', { error, userId })
+      })
+      .finally(() => setLoading(false))
+
+  // A different user's photos are loading from the render that names them.
+  const [photosFor, setPhotosFor] = useState(userId)
+  if (userId !== photosFor) {
+    setPhotosFor(userId)
+    setLoading(true)
+  }
+
   useEffect(() => {
     loadPhotos()
     // loadPhotos is redefined every render; only userId should trigger a reload.
@@ -67,29 +114,6 @@ export default function PhotoManager({
       onPhotosChangeRef.current(photos.map(p => p.url))
     }
   }, [photos])
-
-  const loadPhotos = async () => {
-    try {
-      setLoading(true)
-      const userPhotos = await getUserPhotos(userId)
-      setPhotos(userPhotos)
-      
-      // Pre-cache photos for better performance
-      userPhotos.forEach(photo => {
-        if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
-          cachePhoto(photo.url).then(localPath => {
-            if (localPath) {
-              setCachedUrls(prev => ({ ...prev, [photo.url]: localPath }))
-            }
-          })
-        }
-      })
-    } catch (error) {
-      Logger.error('profile', 'PhotoManager: Load photos error', { error, userId })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleAddPhoto = async () => {
     if (photos.length >= maxPhotos) {
@@ -168,8 +192,10 @@ export default function PhotoManager({
         ...photos.filter((_, i) => i !== photoIndex),
       ]
       // Optimistic: the grid reorders under the finger, and a failed write
-      // puts it back rather than leaving the UI ahead of the server.
+      // puts it back rather than leaving the UI ahead of the server. The
+      // haptic lands on the same frame the tiles start to move.
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
 
       const saved = await reorderPhotos(userId, reordered.map((p) => p.url))
       if (!saved.ok) {
@@ -220,6 +246,7 @@ export default function PhotoManager({
               Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
               Alert.alert('Error', 'Failed to remove photo')
               // Reload photos to restore state
+              setLoading(true)
               loadPhotos()
             }
           }
@@ -235,7 +262,11 @@ export default function PhotoManager({
     const cachedUrl = cachedUrls[item.url]
 
     return (
-      <View style={[styles.photoContainer, { width: itemSize, height: itemSize }]}> 
+      <Animated.View
+        layout={TILE_REFLOW}
+        exiting={fadeOutFast}
+        style={[styles.photoContainer, { width: itemSize, height: itemSize }]}
+      >
         {/*
           `accessible={false}`: the wrapper has no action of its own, and as an
           accessible element it swallowed the badge and both buttons into one
@@ -299,7 +330,7 @@ export default function PhotoManager({
             </TouchableOpacity>
           )}
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     )
   }, [cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
 
@@ -415,11 +446,6 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.sm,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceSunken,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   photoImage: {
     width: '100%',
@@ -432,14 +458,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.sm,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: EMBER.scrim,
   },
   makePrimaryText: { ...TYPE.caption, color: EMBER.textPrimary },
   primaryBadge: {
     position: 'absolute',
     top: SPACE.sm,
     left: SPACE.sm,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: EMBER.scrim,
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.sm,
@@ -449,15 +475,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: SPACE.xs,
     right: SPACE.xs,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12,
+    // White disc behind the red close-circle glyph, so it reads on any photo.
+    backgroundColor: EMBER.textPrimary,
+    borderRadius: EMBER_RADIUS.pill,
   },
   dragHandle: {
     position: 'absolute',
     bottom: SPACE.xs,
     right: SPACE.xs,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 4,
+    backgroundColor: EMBER.scrim,
+    borderRadius: EMBER_RADIUS.sm,
     padding: SPACE.xxs,
   },
   dragText: { ...TYPE.caption, color: EMBER.textPrimary },

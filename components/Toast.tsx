@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
@@ -46,25 +46,25 @@ export function useToast() {
 const VARIANT_CONFIG: Record<ToastVariant, { icon: string; bg: string; border: string }> = {
   success: {
     icon: 'checkmark-circle',
-    bg: 'rgba(48,209,88,0.15)',
-    border: 'rgba(48,209,88,0.4)',
+    bg: tint(EMBER.success, 0.15),
+    border: tint(EMBER.success, 0.4),
   },
   error: {
     icon: 'alert-circle',
-    bg: 'rgba(255,69,58,0.15)',
-    border: 'rgba(255,69,58,0.4)',
+    bg: tint(EMBER.destructive, 0.15),
+    border: tint(EMBER.destructive, 0.4),
   },
   info: {
     icon: 'information-circle',
-    bg: 'rgba(255,144,109,0.15)',
-    border: 'rgba(255,144,109,0.4)',
+    bg: EMBER.surface,
+    border: EMBER.separator,
   },
 }
 
 const VARIANT_ICON_COLOR: Record<ToastVariant, string> = {
   success: EMBER.success,
   error: EMBER.destructive,
-  info: EMBER.accent,
+  info: EMBER.textSecondary,
 }
 
 let nextId = 0
@@ -125,8 +125,10 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
       entering={reduceMotion ? toastFadeIn : toastEntering}
       exiting={reduceMotion ? toastFadeOut : toastExiting}
       layout={reduceMotion ? undefined : toastReflow}
-      style={[styles.toast, { backgroundColor: config.bg, borderColor: config.border }]}
+      style={[styles.toast, { borderColor: config.border }]}
     >
+      {/* The status tint over an opaque surface: a 15% fill alone lets the screen show through the text. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: config.bg }]} pointerEvents="none" />
       <Ionicons
         name={config.icon as any}
         size={ICON.md}
@@ -195,11 +197,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.md,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    overflow: 'hidden',
+    backgroundColor: EMBER.surface,
   },
   icon: {
     marginRight: SPACE.sm,

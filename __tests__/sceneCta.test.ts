@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
+import { CONTROL, ICON, TYPE } from '../lib/theme'
+
 /**
  * The Scene's CTA — the numbers, and the two structural rules behind them.
  *
@@ -21,12 +23,15 @@ const PREVIEW = () =>
 describe('the CTA pays for its own height', () => {
   it('SCENE_CTA_HEIGHT is the sum of what is actually in the pill', () => {
     const src = SRC()
-    const height = Number(/SCENE_CTA_HEIGHT = (\d+)/.exec(src)?.[1])
-    const icon = Number(/SCENE_CTA_ICON = (\d+)/.exec(src)?.[1])
+    // The pill is the scale's primary-action height, holding a navigation-size
+    // icon beside the button role's own line — all three from the tokens.
+    expect(src).toContain('SCENE_CTA_HEIGHT = CONTROL.lg')
+    expect(src).toContain('SCENE_CTA_ICON = ICON.lg')
+    expect(src).toContain('ctaLabel: { ...TYPE.button }')
+    const height = CONTROL.lg
+    const icon = ICON.lg
+    const lineHeight = TYPE.button.lineHeight
     const padding = Number(/paddingVertical: (\d+),/.exec(src.slice(src.indexOf('ctaFill:')))?.[1])
-    const lineHeight = Number(
-      /lineHeight: (\d+),/.exec(src.slice(src.indexOf('ctaLabel:')))?.[1]
-    )
 
     // 1pt border, padding, the taller of icon and line, padding, 1pt border.
     const border = 2
@@ -95,14 +100,14 @@ describe('the pill is solid, and nothing glows around it', () => {
   it('is content-width, not screen-width', () => {
     // A full-bleed pill is a bar, and a bar is chrome. The node is named
     // "Floating CTA"; padded to its label it can actually float.
-    expect(style('ctaFill')).toContain('paddingHorizontal: 32')
+    expect(style('ctaFill')).toContain('paddingHorizontal: SPACE.xxl')
     expect(PREVIEW()).toContain("alignItems: 'center'")
   })
 
   it('separates from the page with a fade behind the dock, not a glow around the pill', () => {
     const screen = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
     const dock = screen.slice(screen.indexOf('<View style={styles.ctaDock}'))
-    expect(dock.slice(0, dock.indexOf('<SceneCTA'))).toContain("colors={['rgba(15,14,14,0)', EMBER.bg]}")
+    expect(dock.slice(0, dock.indexOf('<SceneCTA'))).toContain('colors={[EMBER.bgClear, EMBER.bg]}')
   })
 
   it('does not pop on saying yes — the label and the fill are the confirmation', () => {
@@ -255,7 +260,6 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
 const SECTIONS = () => SRC()
 const HERO = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
-const THEME = () => readFileSync(join(__dirname, '..', 'lib', 'theme.ts'), 'utf8')
 
 describe('the Location card matches 1141:4900', () => {
   it('pads the body 32/32/56, not 32 all round', () => {
@@ -266,7 +270,7 @@ describe('the Location card matches 1141:4900', () => {
 
   it('sets the venue name 16 below the eyebrow', () => {
     // `1141:4904` is `pt-[16px]`; the 8 came from reusing the card's own gap.
-    expect(SECTIONS()).toContain('...EMBER_TYPE.cardValue, paddingTop: 16')
+    expect(SECTIONS()).toContain('venue: { ...TYPE.body, paddingTop: SPACE.lg }')
   })
 
   it('draws both lines from the type scale', () => {
@@ -275,11 +279,8 @@ describe('the Location card matches 1141:4900', () => {
      * to `label` and `body` (docs/DESIGN_SYSTEM.md), so the Regular weight is
      * no longer loaded.
      */
-    const theme = THEME()
-    expect(theme).toContain('cardEyebrow: TYPE.label')
-    expect(theme).toContain('cardValue: TYPE.body')
-    expect(theme).toContain('cardValue')
-    expect(SECTIONS()).toContain('eyebrow: EMBER_TYPE.cardEyebrow')
+    expect(SECTIONS()).toContain('eyebrow: TYPE.label')
+    expect(SECTIONS()).toContain('venue: { ...TYPE.body,')
   })
 })
 

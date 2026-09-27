@@ -9,11 +9,14 @@
  */
 
 import { feedPoster, type EventMediaItem } from './feedMedia'
+import { groupByDay } from './pulse'
 
 export interface SavedEventRow {
   id: string
   title: string
   venue_name: string
+  /** The fallback place when the venue is unnamed — see `placeLabel`. */
+  city: string | null
   address: string
   start_time: string
   end_time: string
@@ -33,6 +36,8 @@ export interface SavedEventsPayload {
     id: string
     title: string
     venueName?: string | null
+    /** Both routes send it; optional so an older server still maps. */
+    city?: string | null
     address?: string | null
     startTime: string
     endTime: string
@@ -52,6 +57,7 @@ export function savedEventRows(data: SavedEventsPayload | undefined | null): Sav
     id: e.id,
     title: e.title,
     venue_name: e.venueName ?? '',
+    city: e.city ?? null,
     address: e.address ?? '',
     start_time: e.startTime,
     end_time: e.endTime,
@@ -102,26 +108,57 @@ export interface PastEventRow {
   id: string
   title: string
   venue_name: string
+  /** The fallback place when the venue is unnamed — see `placeLabel`. */
+  city: string | null
   start_time: string
   end_time: string
   cover_image_url: string | null
 }
 
+/**
+ * Events you attended that have ended, most recent first as the server sends
+ * them. Shared by the Going tab's Past section and the Me tab's Recent list, so
+ * the two can never disagree about what counts as "past".
+ */
+export function pastEventRows(
+  attended: AttendancePayload['events'] | undefined | null,
+  now: number = Date.now()
+): PastEventRow[] {
+  if (!Array.isArray(attended)) return []
+  return attended
+    .filter((e) => new Date(e.end_time).getTime() < now)
+    .map((e) => ({
+      id: e.id,
+      title: e.title,
+      venue_name: e.venue_name ?? '',
+      city: e.city ?? null,
+      start_time: e.start_time,
+      end_time: e.end_time,
+      cover_image_url: e.cover_image_url,
+    }))
+}
+
 export type GoingItem =
-  | { kind: 'header'; key: string; title: string }
+  | { kind: 'next'; key: string; row: RsvpEventRow }
+  | { kind: 'day'; key: string; title: string; weekday: string }
   | { kind: 'going'; key: string; row: RsvpEventRow }
+  | { kind: 'header'; key: string; title: string }
   | { kind: 'saved'; key: string; row: SavedEventRow }
   | { kind: 'past'; key: string; row: PastEventRow }
 
 /**
  * The Going tab, top to bottom.
  *
- * **Going** — what you said yes to, soonest first. The tab was named for this
- * and listed only hearts, so somebody who tapped "I'm going" did not find the
- * event under Going. **Saved** — the hearts, minus anything already under
- * Going: one event, one card. **Past** — events you attended that have ended,
- * which is where "rate the people you met" lives; `rate/[eventId]` was reachable
- * only by reopening an old event.
+ * **Next up** — the soonest RSVP, as the one large card: the event you are
+ * about to leave the house for, with its directions, calendar and share. **The
+ * rest of your RSVPs** — under day headings, one row each, the way the Pulse's
+ * Upcoming reads. The tab was named for these and once listed only hearts, so
+ * somebody who tapped "I'm going" did not find the event under Going. There is
+ * no "Going" heading over them: the screen's title already says it.
+ * **Saved** — the hearts, minus anything already under Going: one event, one
+ * row. **Past** — events you attended that have ended, which is where "rate
+ * the people you met" lives; `rate/[eventId]` was reachable only by reopening
+ * an old event.
  *
  * A section with nothing in it is left out, header and all.
  */
@@ -133,21 +170,14 @@ export function goingItems(
 ): GoingItem[] {
   const goingIds = new Set(going.map((r) => r.id))
   const savedOnly = saved.filter((r) => !goingIds.has(r.id))
-  const past: PastEventRow[] = attended
-    .filter((e) => new Date(e.end_time).getTime() < now)
-    .map((e) => ({
-      id: e.id,
-      title: e.title,
-      venue_name: e.venue_name ?? '',
-      start_time: e.start_time,
-      end_time: e.end_time,
-      cover_image_url: e.cover_image_url,
-    }))
+  const past = pastEventRows(attended, now)
 
   const items: GoingItem[] = []
-  if (going.length) {
-    items.push({ kind: 'header', key: 'h:going', title: 'Going' })
-    for (const row of going) items.push({ kind: 'going', key: `g:${row.id}`, row })
+  const [next, ...rest] = going
+  if (next) items.push({ kind: 'next', key: `n:${next.id}`, row: next })
+  for (const day of groupByDay(rest, new Date(now))) {
+    items.push({ kind: 'day', key: `d:${day.key}`, title: day.title, weekday: day.weekday })
+    for (const row of day.items) items.push({ kind: 'going', key: `g:${row.id}`, row })
   }
   if (savedOnly.length) {
     items.push({ kind: 'header', key: 'h:saved', title: 'Saved' })

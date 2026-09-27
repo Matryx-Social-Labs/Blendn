@@ -64,14 +64,14 @@ describe('What are you open to?', () => {
   it('offers Dating and its questions to someone who may date', async () => {
     await render(fields({ intents: ['dating'] }))
     expect(screen.getByText(/^Dating/)).toBeTruthy()
-    expect(screen.getByText('You identify as')).toBeTruthy()
+    expect(screen.getByText('YOU IDENTIFY AS')).toBeTruthy()
   })
 
   it('offers a minor neither the chip nor the questions — even with a stale dating intent', async () => {
     await render(fields({ offerDating: false, intents: ['dating'] }))
     expect(screen.queryByText(/^Dating/)).toBeNull()
-    expect(screen.queryByText('You are')).toBeNull()
-    expect(screen.queryByText('You identify as')).toBeNull()
+    expect(screen.queryByText('YOU ARE')).toBeNull()
+    expect(screen.queryByText('YOU IDENTIFY AS')).toBeNull()
     expect(screen.getByText(/^Friendship/)).toBeTruthy()
   })
 })

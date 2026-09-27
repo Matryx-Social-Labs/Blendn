@@ -1,9 +1,9 @@
 import { Image } from 'expo-image'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER, GUTTER, SPACE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, SPACE, tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
 
 /**
@@ -78,7 +78,6 @@ export function SceneHeroMedia({
   // `index` in a ref as well, so the timer can read the current page without
   // being torn down and rebuilt every time the page changes.
   const indexRef = useRef(0)
-  indexRef.current = index
 
   const goTo = (next: number) => {
     const wrapped = ((next % playlist.length) + playlist.length) % playlist.length
@@ -93,11 +92,9 @@ export function SceneHeroMedia({
     setTimeout(() => setSettled(wrapped), 400)
   }
   const goToRef = useRef(goTo)
-  goToRef.current = goTo
 
   const current = playlist[index]
 
-  // Defined once. See the note at its use site for why the identity matters.
   /*
    * Whether the pager is still driving itself.
    *
@@ -108,12 +105,20 @@ export function SceneHeroMedia({
    */
   const autoAdvances = !manual && playlist.length > 1
   const autoAdvancesRef = useRef(autoAdvances)
-  autoAdvancesRef.current = autoAdvances
 
-  const onClipEnded = useRef((from: number) => {
+  // The three refs above, refreshed on every commit rather than during render.
+  // A layout effect runs before any timer or player event can read them.
+  useLayoutEffect(() => {
+    indexRef.current = index
+    goToRef.current = goTo
+    autoAdvancesRef.current = autoAdvances
+  })
+
+  // Defined once. See the note at its use site for why the identity matters.
+  const onClipEnded = useCallback((from: number) => {
     if (!autoAdvancesRef.current) return
     goToRef.current(from + 1)
-  }).current
+  }, [])
 
   useEffect(() => {
     if (manual || playlist.length < 2) return
@@ -296,10 +301,10 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: tint(EMBER.textPrimary, 0.4),
   },
-  dotActive: { backgroundColor: EMBER.accent, width: 18 },
+  dotActive: { backgroundColor: EMBER.textPrimary, width: 18 },
 })
 
 /**
@@ -339,6 +344,10 @@ function HeroVideo({
   // `loop` can change after construction — a manual swipe flips it — so it is
   // assigned on every change rather than only in the setup callback.
   useEffect(() => {
+    // `player` is expo-video's native object,
+    // not React state, and a property write is its only API for `loop`.
+    // Recreating the player would restart the clip.
+    // eslint-disable-next-line react-hooks/immutability
     player.loop = loop
   }, [player, loop])
 
@@ -356,9 +365,11 @@ function HeroVideo({
   }, [active, player])
 
   const endedRef = useRef(onEnded)
-  endedRef.current = onEnded
   const failedRef = useRef(onFailed)
-  failedRef.current = onFailed
+  useLayoutEffect(() => {
+    endedRef.current = onEnded
+    failedRef.current = onFailed
+  })
 
   useEffect(() => {
     // `playToEnd` rather than polling: the player already knows, and a poll has
@@ -411,7 +422,6 @@ function HeroVideo({
       style={StyleSheet.absoluteFill}
       contentFit="cover"
       nativeControls={false}
-      allowsFullscreen={false}
       allowsPictureInPicture={false}
       accessible={false}
     />

@@ -18,7 +18,7 @@ import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { useAuth } from '../../lib/useAuth'
 import { Logger } from '../../lib/logger'
 import { useToast } from '../../components/Toast'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
 
 /**
  * Why you are here tonight, and whether people can see who you are.
@@ -205,6 +205,7 @@ export default function EventPreferences() {
           onValueChange={setRevealed}
           disabled={canReveal ? !canReveal.ok : false}
           accessibilityLabel="Show my real name and photo at this event"
+          {...SWITCH_COLORS}
         />
       </View>
 
@@ -225,7 +226,12 @@ export default function EventPreferences() {
       {revealed && (
         <View style={styles.switchRow}>
           <Text style={styles.optionText}>Do this at future events too</Text>
-          <Switch value={rememberReveal} onValueChange={setRememberReveal} />
+          <Switch
+            value={rememberReveal}
+            onValueChange={setRememberReveal}
+            accessibilityLabel="Show my name and photo at future events too"
+            {...SWITCH_COLORS}
+          />
         </View>
       )}
     </>
@@ -314,7 +320,7 @@ const styles = StyleSheet.create({
   optionHint: { ...TYPE.meta, marginTop: SPACE.xxs },
   textOnSelected: { color: EMBER.bg },
   divider: {
-    height: 1,
+    height: StyleSheet.hairlineWidth,
     backgroundColor: EMBER.separator,
     marginVertical: SPACE.xl,
   },

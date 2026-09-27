@@ -1,8 +1,7 @@
-import { BlurView } from 'expo-blur'
 import { StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
 export const TOP_BAR_HEIGHT = 64
@@ -12,8 +11,8 @@ export const TOP_BAR_HEIGHT = 64
  *
  * ## An overlay, not a header component
  *
- * It sits at `top: 0` over the feed with an 80%-opacity fill and a 12pt
- * backdrop blur, and the feed scrolls **under** it. The bar this replaced
+ * It sits at `top: 0` over the feed as an opaque `EMBER.bg` band — no blur —
+ * and the feed scrolls **under** it. The bar this replaced
  * reserved its own height and sat above a bordered panel, which is half of why
  * the old Pulse read as a page inside a page. Nothing here occupies layout;
  * the screen clears it with padding on the scroll content.
@@ -45,8 +44,8 @@ export const TOP_BAR_HEIGHT = 64
  *
  * The Scene's header (`1141:4930`) and the Pulse's (`1141:4819`) are the same
  * component in the design, and The Scene had grown its own lookalike — a
- * second bar with different padding, a different fill and no blur. Two bars
- * that are supposed to be one drift the first time either is touched.
+ * second bar with different padding and a different fill. Two bars that are
+ * supposed to be one drift the first time either is touched.
  *
  * They differ in what they *hold*, not how they look. The Pulse is a tab and
  * needs nothing; The Scene is pushed, so it needs a way back, and the actions
@@ -66,12 +65,13 @@ export function PulseTopBar({
   leading?: React.ReactNode
   actions?: React.ReactNode
   /**
-   * The word in the accent slot.
+   * The word beside the leading control.
    *
    * Per screen, not fixed: the Pulse's frame (`1141:4819`) puts the wordmark
    * here, The Banter's (`1141:5351`) puts "The Banter" — same position, same
-   * `#FF906D` Plus Jakarta Bold 16/24. Hardcoding the wordmark made every
-   * screen that reused this bar claim to be the home screen.
+   * `TYPE.button` in `textPrimary` (the frames drew it in the accent; the
+   * accent now belongs to one thing per screen). Hardcoding the wordmark made
+   * every screen that reused this bar claim to be the home screen.
    */
   title?: string
   /**
@@ -98,7 +98,6 @@ export function PulseTopBar({
       ]}
       pointerEvents={interactive ? 'box-none' : 'none'}
     >
-      <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.row} pointerEvents={interactive ? 'box-none' : 'none'}>
         {/*
           Frame: the left group is the glyph and the wordmark together, 16pt
@@ -109,8 +108,8 @@ export function PulseTopBar({
           {leading}
           {/*
             The wordmark, in white. The frame sets it in the accent, but the
-            screen title below already carries the one accent, and two orange
-            headings stacked that close read as two titles.
+            accent belongs to at most one thing per screen, and that is the
+            screen's own call — not a label the bar prints on every screen.
           */}
           <Text style={styles.wordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
             {title}
@@ -131,9 +130,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    // Frame: `rgba(15,14,14,0.8)` — `EMBER.bg` at 80%, so the feed shows
-    // through as a darkened blur rather than disappearing behind a solid band.
-    backgroundColor: 'rgba(15,14,14,0.8)',
+    // The page colour, opaque. The frame's 80% fill under a 12pt blur is
+    // glass (tasks/lessons.md); the feed now passes under a flat band.
+    backgroundColor: EMBER.bg,
   },
   row: {
     height: TOP_BAR_HEIGHT,
@@ -145,5 +144,5 @@ const styles = StyleSheet.create({
   // Frame `1141:4931`: the glyph and the wordmark, 16pt apart.
   leadingGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
-  wordmark: { ...TYPE.button, letterSpacing: -0.4 },
+  wordmark: { ...TYPE.button },
 })

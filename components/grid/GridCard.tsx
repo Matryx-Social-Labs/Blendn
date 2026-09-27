@@ -1,10 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import { gridCardBox } from '../../lib/gridCardContent'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { fadeInFast, fadeOutFast } from '../motion/presence'
+import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
 
 /**
@@ -114,20 +117,20 @@ export function GridCard({
    */
   const box = gridCardBox(person)
 
+  /*
+   * Press feedback is a shrink, not a dim. No haptic on any of the three: the
+   * card is touched on the way into every scroll, and Like already fires its
+   * own from the screen's handler.
+   */
   return (
-    <Pressable
+    <ScalePress
       onPress={onOpenProfile}
+      haptic={false}
+      pressedScale={0.98}
       accessibilityRole="button"
       accessibilityLabel={`View ${person.name}'s profile`}
-      style={({ pressed }) => pressed && styles.pressed}
     >
-    <LinearGradient
-      // Frame `1141:4978`: 147deg, #141313 → #0F0E0E.
-      colors={[EMBER.surfaceMedia, EMBER.bg]}
-      start={{ x: 0.15, y: 0 }}
-      end={{ x: 0.85, y: 1 }}
-      style={styles.card}
-    >
+    <View style={styles.card}>
       {/*
         Report and block.
         
@@ -182,7 +185,7 @@ export function GridCard({
           {person.insideNow ? (
             <View style={styles.presence} accessibilityLabel="Here now">
               {/* design-exception: glyph inside the 16pt well of a 24pt ringed dot */}
-              <MaterialIcons name="place" size={12} color={EMBER.onGradient} />
+              <MaterialIcons name="place" size={12} color={EMBER.bg} />
             </View>
           ) : null}
         </View>
@@ -253,8 +256,9 @@ export function GridCard({
           The like, and the prominent one. Nothing reaches them unless they tap
           it too — so the action with no cost is the action with no friction.
         */}
-        <Pressable
+        <ScalePress
           onPress={onLike}
+          haptic={false}
           disabled={person.liked || person.pending}
           accessibilityRole="button"
           accessibilityLabel={
@@ -263,37 +267,26 @@ export function GridCard({
               : `Like ${person.name}. They are only told if they like you back`
           }
           accessibilityState={{ disabled: person.liked || person.pending }}
-          style={({ pressed }) => [
-            styles.button,
-            person.liked && styles.liked,
-            (pressed || person.pending) && styles.pressed,
-          ]}
+          style={[styles.button, person.liked ? styles.liked : styles.like, person.pending && styles.pressed]}
         >
           {person.liked ? (
             <Text style={styles.likedLabel} maxFontSizeMultiplier={1.3}>
               Liked
             </Text>
           ) : (
-            <>
-              <LinearGradient
-                colors={[...EMBER_GRADIENT.colors]}
-                start={EMBER_GRADIENT.start}
-                end={EMBER_GRADIENT.end}
-                style={StyleSheet.absoluteFill}
-              />
-              <Text style={styles.likeLabel} maxFontSizeMultiplier={1.3}>
-                Like
-              </Text>
-            </>
+            <Text style={styles.likeLabel} maxFontSizeMultiplier={1.3}>
+              Like
+            </Text>
           )}
-        </Pressable>
+        </ScalePress>
 
         {/*
           The request. Quieter than the like on purpose: it reveals you, and the
           sheet says so before anything is typed.
         */}
-        <Pressable
+        <ScalePress
           onPress={onConnect}
+          haptic={false}
           disabled={person.requested}
           accessibilityRole="button"
           accessibilityLabel={
@@ -302,26 +295,44 @@ export function GridCard({
               : `Connect with ${person.name}. Sends a message and shows them your name and photo`
           }
           accessibilityState={{ disabled: person.requested }}
-          style={({ pressed }) => [
-            styles.button,
-            styles.secondary,
-            (pressed || person.requested) && styles.pressed,
-          ]}
+          style={[styles.button, styles.secondary, person.requested && styles.pressed]}
         >
-          <Text style={styles.secondaryLabel} maxFontSizeMultiplier={1.3}>
-            {person.requested ? 'Requested' : 'Connect'}
-          </Text>
-        </Pressable>
+          {/*
+            "Connect" crossfades to "Requested" when the sheet sends: 150ms in,
+            120ms out, so the label changes rather than jumps. Keyed, so the
+            swap is an exit and an entrance. `skipEntering` keeps a card that
+            scrolls in already requested from fading its label in; only a
+            change while the card is on screen animates.
+          */}
+          <LayoutAnimationConfig skipEntering skipExiting>
+            <Animated.Text
+              key={person.requested ? 'requested' : 'connect'}
+              entering={fadeInFast}
+              exiting={fadeOutFast}
+              style={styles.secondaryLabel}
+              maxFontSizeMultiplier={1.3}
+            >
+              {person.requested ? 'Requested' : 'Connect'}
+            </Animated.Text>
+          </LayoutAnimationConfig>
+        </ScalePress>
       </View>
-    </LinearGradient>
-    </Pressable>
+    </View>
+    </ScalePress>
   )
 }
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
 
-  card: { borderRadius: EMBER_RADIUS.card, padding: SPACE.xl, gap: SPACE.xl, overflow: 'hidden' },
+  // Flat fill: surfaces carry no gradient (docs/DESIGN_SYSTEM.md).
+  card: {
+    backgroundColor: EMBER.surfaceMedia,
+    borderRadius: EMBER_RADIUS.card,
+    padding: SPACE.xl,
+    gap: SPACE.xl,
+    overflow: 'hidden',
+  },
   safety: {
     position: 'absolute',
     top: SPACE.sm,
@@ -337,9 +348,9 @@ const styles = StyleSheet.create({
   avatar: {
     width: AVATAR,
     height: AVATAR,
-    borderRadius: AVATAR / 2,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: 2,
-    borderColor: 'rgba(255,144,109,0.2)',
+    borderColor: EMBER.separator,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -351,12 +362,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -4,
     bottom: -4,
-    width: 24,
-    height: 24,
+    width: ICON.lg,
+    height: ICON.lg,
     borderRadius: EMBER_RADIUS.pill,
     borderWidth: 4,
     borderColor: EMBER.bg,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.success,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -364,7 +375,7 @@ const styles = StyleSheet.create({
   name: { ...TYPE.title },
   workField: { ...TYPE.meta },
 
-  overlap: { backgroundColor: EMBER.surfaceMedia, borderRadius: EMBER_RADIUS.lg, padding: SPACE.lg, gap: SPACE.md },
+  overlap: { backgroundColor: EMBER.surfaceSunken, borderRadius: EMBER_RADIUS.lg, padding: SPACE.lg, gap: SPACE.md },
   overlapHead: { flexDirection: 'row', gap: SPACE.sm, alignItems: 'center' },
   // Uppercase in the string (`lib/gridCardContent.ts`).
   boxLabel: { ...TYPE.label, color: EMBER.textPrimary },
@@ -384,6 +395,9 @@ const styles = StyleSheet.create({
   },
   secondary: { backgroundColor: EMBER.surface },
   secondaryLabel: { ...TYPE.button },
+  // The Room's one action, repeated on every card — one accent that repeats
+  // (docs/DESIGN_SYSTEM.md). Flat, no gradient.
+  like: { backgroundColor: EMBER.accent },
   likeLabel: { ...TYPE.button, color: EMBER.onGradient },
   liked: { backgroundColor: EMBER.surface },
   likedLabel: { ...TYPE.button, color: EMBER.textSecondary },

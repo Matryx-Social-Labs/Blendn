@@ -1,9 +1,7 @@
-import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native'
 
-import { EMBER, EMBER_GRADIENT, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The composer. Frame `1141:5582`.
@@ -16,8 +14,9 @@ import { EMBER, EMBER_GRADIENT, GUTTER, SPACE, TYPE } from '../../lib/theme'
  * than stopping at it. That is the difference between a room you are in and a
  * form you are filling in.
  *
- * It is translucent and blurred for the same reason: you can see there is more
- * conversation under your thumb.
+ * The frame drew it translucent and blurred; it is a flat `EMBER.surface`
+ * instead (no glass — see `tasks/lessons.md`). The inset and the rounded ends
+ * still say "floating", without a blur redraw on every scroll frame.
  *
  * ## Two buttons from the frame are not here
  *
@@ -55,15 +54,13 @@ export function ChatComposer({
   return (
     <View style={styles.shell}>
       <View style={styles.pill}>
-        <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
-
         <TextInput
           style={styles.input}
           value={value}
           onChangeText={onChangeText}
           onFocus={onFocus}
           placeholder="Share your thoughts..."
-          placeholderTextColor="rgba(174,170,170,0.5)"
+          placeholderTextColor={EMBER.textPlaceholder}
           multiline
           /*
            * The server's own limit. Enforced here too so the count that stops
@@ -82,18 +79,13 @@ export function ChatComposer({
           accessibilityState={{ disabled: !canSend }}
           style={({ pressed }) => [styles.send, pressed && styles.pressed]}
         >
-          <LinearGradient
-            colors={EMBER_GRADIENT.colors}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={[styles.sendFill, !canSend && styles.sendIdle]}
-          >
+          <View style={[styles.sendFill, !canSend && styles.sendIdle]}>
             {sending ? (
               <ActivityIndicator size="small" color={EMBER.onGradient} />
             ) : (
-              <Ionicons name="send" size={16} color={EMBER.onGradient} />
+              <Ionicons name="send" size={ICON.sm} color={EMBER.onGradient} />
             )}
-          </LinearGradient>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -107,15 +99,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: SPACE.sm,
     padding: SPACE.sm,
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     overflow: 'hidden',
-    backgroundColor: 'rgba(45,44,44,0.4)',
+    backgroundColor: EMBER.surface,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.1)',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 50,
-    shadowOffset: { width: 0, height: 25 },
+    borderColor: EMBER.separator,
   },
   input: {
     flex: 1,
@@ -128,13 +116,23 @@ const styles = StyleSheet.create({
      */
     maxHeight: 132,
   },
-  /* `1141:5593` is 35 x 40 — a touch wider than tall, which the frame is firm about. */
-  send: { width: 35, height: 40, borderRadius: 9999, overflow: 'hidden' },
-  sendFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   /*
-   * Dimmed rather than grey. The gradient is the room's one warm thing and
-   * swapping it for a flat disabled colour made the composer look broken
-   * rather than waiting.
+   * A `CONTROL.sm` circle: it sits inside the 40pt one-line input row, so the
+   * pill stays `CONTROL.lg` tall. `marginBottom` centres it on that first line
+   * (the row is bottom-aligned so it stays by your thumb as the input grows).
+   */
+  send: {
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    marginBottom: SPACE.xs,
+    borderRadius: EMBER_RADIUS.pill,
+    overflow: 'hidden',
+  },
+  sendFill: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: EMBER.accent },
+  /*
+   * Dimmed rather than grey. Send is the room's one accent, and swapping it
+   * for a flat disabled colour made the composer look broken rather than
+   * waiting.
    */
   sendIdle: { opacity: 0.4 },
   pressed: { opacity: 0.8 },

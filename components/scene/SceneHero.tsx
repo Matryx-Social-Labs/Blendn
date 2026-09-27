@@ -2,6 +2,13 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, StyleSheet, Text, View } from 'react-native'
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  type SharedValue,
+} from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
@@ -67,6 +74,7 @@ export function SceneHero({
   scarcity,
   height,
   onPressMedia,
+  scrollY,
   children,
 }: {
   source: React.ComponentProps<typeof Image>['source']
@@ -89,56 +97,118 @@ export function SceneHero({
   height?: number
   /** Opens the lightbox at the item currently shown. */
   onPressMedia?: (index: number) => void
+  /**
+   * The host scroll's `contentOffset.y`, when the hero sits in one.
+   *
+   * Drives the parallax, the pull-down stretch and the caption fade on the UI
+   * thread. Absent (the preview harness), the hero is still.
+   */
+  scrollY?: SharedValue<number>
   /** The title is a shared element on the real screen; the harness passes none. */
   children?: React.ReactNode
 }) {
   const h = height ?? sceneHeroHeight()
+  const reduceMotion = useReducedMotion()
+
+  /*
+   * ## Pulled past the top, the photograph stretches to fill the gap
+   *
+   * iOS bounces the scroll, and without this the bounce opened a strip of bare
+   * page above the hero. Scaled from its bottom edge, by exactly what it takes
+   * for the top to stay on the screen's top, so the picture follows the finger
+   * down (Apple Music's album art does this). A transform on the clip box, not
+   * a height: scaling costs nothing, and a height change here would re-lay-out
+   * the whole screen on every frame of the pull.
+   *
+   * The box is scaled, not the media inside it. The media is clipped by this
+   * box, so scaling the media alone would crop the stretch away at the old top.
+   * Android does not bounce past zero, so there it never runs.
+   */
+  const clipStyle = useAnimatedStyle(() => {
+    const y = scrollY ? scrollY.get() : 0
+    if (reduceMotion || y >= 0) return { transform: [{ translateY: 0 }, { scale: 1 }] }
+    const pull = -y
+    // Translate first so it is not itself scaled: moving up by half the growth
+    // keeps the bottom edge where it was.
+    return { transform: [{ translateY: -pull / 2 }, { scale: (h + pull) / h }] }
+  })
+
+  /*
+   * ## Scrolled down, the photograph drifts at half speed
+   *
+   * The page moves at 1x and the picture at 0.5x, so the sections slide up
+   * over it instead of the two leaving together, which is the one cue that
+   * the hero is *behind* the page and not a block in it. Clipped by the box
+   * above, so the drift never shows below the hero's own foot.
+   */
+  const mediaStyle = useAnimatedStyle(() => {
+    const y = scrollY ? scrollY.get() : 0
+    if (reduceMotion || y <= 0) return { transform: [{ translateY: 0 }] }
+    return { transform: [{ translateY: Math.min(y, h) * 0.5 }] }
+  })
+
+  /*
+   * ## The caption goes before the header reaches it
+   *
+   * Gone by 45% of the hero, while it is still well below the top bar, so the
+   * title never slides under the bar's buttons half-read. A fade, so it stays
+   * under Reduce Motion: it moves nothing, and it explains where the title
+   * went.
+   */
+  const captionStyle = useAnimatedStyle(() => {
+    const y = scrollY ? scrollY.get() : 0
+    return { opacity: interpolate(y, [0, h * 0.45], [1, 0], Extrapolation.CLAMP) }
+  })
 
   return (
     <View style={[styles.hero, { height: h }]}>
-      {playlist && playlist.length > 0 ? (
-        <SceneHeroMedia
-          playlist={playlist}
-          width={Dimensions.get('window').width}
-          height={h}
-          onPress={onPressMedia}
-        />
-      ) : (
-        <Image
-          source={source}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={200}
-        />
-      )}
-      {/*
-        Transparent to the page's own background, not to black, and spanning
-        the whole hero rather than a band at its foot.
+      <Animated.View style={[styles.clip, clipStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, mediaStyle]}>
+          {playlist && playlist.length > 0 ? (
+            <SceneHeroMedia
+              playlist={playlist}
+              width={Dimensions.get('window').width}
+              height={h}
+              onPress={onPressMedia}
+            />
+          ) : (
+            <Image
+              source={source}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+            />
+          )}
+        </Animated.View>
+        {/*
+          Transparent to the page's own background, not to black, and spanning
+          the whole hero rather than a band at its foot.
 
-        The frame's gradient is `inset-0` ending on #0F0E0E. Ending it on black
-        instead would put a subtly darker, cooler rectangle over a warm
-        near-black page — the same two-blacks problem that survived months in
-        the launch overlay because nobody diffs them. And at 180pt it was sized
-        for the old 430pt card: against a hero half again as tall, a two-line title
-        would begin above the gradient's top edge, on bare photograph.
-      */}
-      <LinearGradient
-        colors={['rgba(15,14,14,0)', EMBER.bg]}
-        start={{ x: 0.5, y: 0.25 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        /*
-         * Nothing here may take a touch.
-         *
-         * This covers the *entire* hero and is drawn after the pager, so
-         * without this it swallowed every gesture aimed at the media beneath
-         * it — the hero could not be swiped and tapping it opened nothing.
-         * A decorative overlay that eats input is the most invisible kind of
-         * broken: it looks exactly right and simply does not respond.
-         */
-        pointerEvents="none"
-      />
+          The frame's gradient is `inset-0` ending on #0F0E0E. Ending it on black
+          instead would put a subtly darker, cooler rectangle over a warm
+          near-black page — the same two-blacks problem that survived months in
+          the launch overlay because nobody diffs them. And at 180pt it was sized
+          for the old 430pt card: against a hero half again as tall, a two-line title
+          would begin above the gradient's top edge, on bare photograph.
+        */}
+        <LinearGradient
+          colors={[EMBER.bgClear, EMBER.bg]}
+          start={{ x: 0.5, y: 0.25 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          /*
+           * Nothing here may take a touch.
+           *
+           * This covers the *entire* hero and is drawn after the pager, so
+           * without this it swallowed every gesture aimed at the media beneath
+           * it — the hero could not be swiped and tapping it opened nothing.
+           * A decorative overlay that eats input is the most invisible kind of
+           * broken: it looks exactly right and simply does not respond.
+           */
+          pointerEvents="none"
+        />
+      </Animated.View>
       {/*
         Also `none`. The caption covers the bottom third and holds no controls,
         so the pager underneath keeps that area swipeable.
@@ -156,8 +226,8 @@ export function SceneHero({
         it lets a VoiceOver user jump straight here with the rotor rather than
         swiping past the hero's media pager.
       */}
-      <View
-        style={styles.info}
+      <Animated.View
+        style={[styles.info, captionStyle]}
         pointerEvents="none"
         accessible
         accessibilityRole="header"
@@ -222,7 +292,7 @@ export function SceneHero({
             </Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   )
 }
@@ -240,13 +310,17 @@ export function SceneHero({
 export const sceneHeroTitleStyle = TYPE.display
 
 const styles = StyleSheet.create({
+  hero: { width: '100%' },
   /*
    * `surfaceSunken`, so an event with no cover is a dark panel rather than a
    * transparent hole. `source` is undefined in that case and `expo-image`
    * draws nothing, which would otherwise show the page straight through the
    * hero and put the title on nothing.
+   *
+   * The clip lives here, not on `hero`, so the stretch can grow the box above
+   * the hero's top while the caption (a sibling) stays unscaled on the bottom.
    */
-  hero: { width: '100%', overflow: 'hidden', backgroundColor: EMBER.surfaceSunken },
+  clip: { ...StyleSheet.absoluteFill, overflow: 'hidden', backgroundColor: EMBER.surfaceSunken },
   /* The screen gutter on every side, bottom-aligned, 16pt between the three blocks. */
   info: {
     position: 'absolute',
@@ -260,7 +334,7 @@ const styles = StyleSheet.create({
   pill: {
     minHeight: CONTROL.sm,
     justifyContent: 'center',
-    backgroundColor: 'rgba(15,14,14,0.6)',
+    backgroundColor: EMBER.scrim,
     borderWidth: 1,
     borderColor: EMBER.separator,
     borderRadius: EMBER_RADIUS.pill,

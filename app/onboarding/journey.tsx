@@ -11,6 +11,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Dimensions } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
+import { GUTTER, SPACE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -37,13 +38,15 @@ export default function JourneyScreen() {
   const [workField, setWorkField] = useState<string | undefined>()
   const [fields, setFields] = useState<{ slug: string; label: string }[]>([])
 
-  useEffect(() => {
-    if (!loaded) return
+  // Prefilled once, in the render that first sees `loaded`.
+  const [prefilled, setPrefilled] = useState(false)
+  if (loaded && !prefilled) {
+    setPrefilled(true)
     setLocation(draft.location ?? '')
     setOccupation(draft.occupation ?? '')
     setEducation(draft.education ?? '')
     setWorkField(draft.work_field)
-  }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   /*
    * The list comes from the server, never from a copy in the app.
@@ -127,7 +130,8 @@ export default function JourneyScreen() {
             label="Field of work"
             helper="The only part of this shown in a room. Your job title and employer are not."
           >
-            <EmberChipRow pack width={Dimensions.get('window').width - 48 - 32}>
+            {/* The page gutters, less the card's own SPACE.lg padding each side. */}
+            <EmberChipRow pack width={Dimensions.get('window').width - GUTTER * 2 - SPACE.lg * 2}>
               {fields.map((field) => (
                 <EmberChip
                   key={field.slug}

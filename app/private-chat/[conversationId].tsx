@@ -45,7 +45,7 @@ import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import Animated from 'react-native-reanimated'
-import { popIn, popOut } from '../../components/motion/presence'
+import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
 interface PrivateMessage {
   id: string
@@ -149,22 +149,24 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACE.xs,
+    // 12 + (48 − 24) / 2 puts the back and options glyphs on GUTTER.
+    paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: EMBER.separator,
     gap: SPACE.sm,
   },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: { position: 'relative' },
-  avatar: { width: 38, height: 38, borderRadius: 19 },
-  avatarFallback: { backgroundColor: '#2C4A3E', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
+  avatarFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   avatarText: TYPE.bodyStrong,
   titleArea: { flex: 1 },
   name: TYPE.bodyStrong,
-  subtitle: { ...TYPE.meta, color: 'rgba(255,255,255,0.6)' },
-  typing: { ...TYPE.meta, color: '#4CAF91' },
+  subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
+  // Primary, so a live "typing…" never reads as the secondary subtitle.
+  typing: { ...TYPE.meta, color: EMBER.textPrimary },
 })
 
 /**
@@ -214,10 +216,10 @@ const revealStyles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     paddingVertical: SPACE.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: EMBER.separator,
     gap: SPACE.sm,
   },
-  nudge: { ...TYPE.meta, color: 'rgba(255,255,255,0.75)' },
+  nudge: { ...TYPE.meta, color: EMBER.textSecondary },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -266,36 +268,50 @@ function PrivateChatInner() {
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
 
-  const loadReveal = useCallback(async () => {
-    if (!conversationId) return
-    const r = await apiClient.getConversation(conversationId as string)
-    if (!r.success || !r.data) return
-    setReveal({
-      displayName: r.data.otherUser?.name || 'Someone',
-      youRevealed: r.data.youRevealed ?? false,
-      theyRevealed: r.data.theyRevealed ?? false,
-      revealRequested: r.data.revealRequested ?? false,
-      /*
-       * Server-supplied. Replaces the guess below for anything that needs to
-       * know "did this come from a match" rather than "is this pseudonymous" --
-       * a revealed match is no longer pseudonymous but is still a match.
-       */
-      fromMatch: r.data.fromMatch === true,
-      // Server-supplied. This used to be inferred from the reveal fields being
-      // absent, and the server always sent them — so an accepted message
-      // request drew "You can see their name. They can't see yours." and a
-      // reveal button the server refuses. An older server without the field
-      // falls back to the old inference.
-      pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
-    })
-  }, [conversationId])
-
+  // Declared inside the effect: it sets state only after the request returns.
   useEffect(() => {
+    const loadReveal = async () => {
+      if (!conversationId) return
+      const r = await apiClient.getConversation(conversationId as string)
+      if (!r.success || !r.data) return
+      setReveal({
+        displayName: r.data.otherUser?.name || 'Someone',
+        youRevealed: r.data.youRevealed ?? false,
+        theyRevealed: r.data.theyRevealed ?? false,
+        revealRequested: r.data.revealRequested ?? false,
+        /*
+         * Server-supplied. Replaces the guess below for anything that needs to
+         * know "did this come from a match" rather than "is this pseudonymous" --
+         * a revealed match is no longer pseudonymous but is still a match.
+         */
+        fromMatch: r.data.fromMatch === true,
+        // Server-supplied. This used to be inferred from the reveal fields being
+        // absent, and the server always sent them — so an accepted message
+        // request drew "You can see their name. They can't see yours." and a
+        // reveal button the server refuses. An older server without the field
+        // falls back to the old inference.
+        pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
+      })
+    }
     void loadReveal()
-  }, [loadReveal])
+  }, [conversationId])
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
+  /*
+   * Messages that should rise into place as they mount: the one you just sent,
+   * and whichever message is first into an empty thread (it replaces the
+   * "Start the conversation" card, which fades out as it arrives).
+   *
+   * A ref, not state — nothing re-renders because of it; the bubble reads it
+   * once when it mounts. Each id is dropped after a second, so a row the list
+   * later unmounts and remounts does not replay its entrance.
+   */
+  const arrivingRef = useRef(new Set<string>())
+  const markArriving = useCallback((id: string) => {
+    arrivingRef.current.add(id)
+    setTimeout(() => arrivingRef.current.delete(id), 1000)
+  }, [])
   const initialLoadDoneRef = useRef(false)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
@@ -375,38 +391,38 @@ function PrivateChatInner() {
     flatListRef.current?.scrollToEnd({ animated })
   }
 
-  const loadMessages = async (cursor?: string) => {
-    try {
-      const result = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
-      if (!result.success && result.errorCode === 'NOT_FOUND') {
-        setEnded(true)
-        return
-      }
-      if (result.success && result.data) {
-        const msgs = result.data.messages.map(mapMessage).reverse()
-        if (cursor) {
-          setMessages(prev => {
-            const existingIds = new Set(prev.map(m => m.id))
-            return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
-          })
-        } else {
-          setMessages(msgs)
-          // Scroll to bottom instantly on initial load — no animation so there's no visible jump
-          setTimeout(() => scrollToBottom(false), 50)
-          initialLoadDoneRef.current = true
+  // State is set only in the callbacks, once the request has settled.
+  const loadMessages = (cursor?: string) =>
+    apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
+      .then((result) => {
+        if (!result.success && result.errorCode === 'NOT_FOUND') {
+          setEnded(true)
+          return
         }
-        setHasMore(result.data.hasMore)
-        setOldestCursor(result.data.nextCursor)
-        if (conversationId && !cursor) {
-          setConversationLastRead(String(conversationId)).catch(() => {})
+        if (result.success && result.data) {
+          const msgs = result.data.messages.map(mapMessage).reverse()
+          if (cursor) {
+            setMessages(prev => {
+              const existingIds = new Set(prev.map(m => m.id))
+              return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
+            })
+          } else {
+            setMessages(msgs)
+            // Scroll to bottom instantly on initial load — no animation so there's no visible jump
+            setTimeout(() => scrollToBottom(false), 50)
+            initialLoadDoneRef.current = true
+          }
+          setHasMore(result.data.hasMore)
+          setOldestCursor(result.data.nextCursor)
+          if (conversationId && !cursor) {
+            setConversationLastRead(String(conversationId)).catch(() => {})
+          }
         }
-      }
-    } catch (err) {
-      Logger.error('private-chat', 'Failed to load messages', { error: err })
-    } finally {
-      setLoading(false)
-    }
-  }
+      })
+      .catch((err) => {
+        Logger.error('private-chat', 'Failed to load messages', { error: err })
+      })
+      .finally(() => setLoading(false))
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMore || !oldestCursor) return
@@ -446,6 +462,9 @@ function PrivateChatInner() {
       if (!('message' in data) || !data.message) return
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev
+        // Your own send echoed back before the request resolved is still your
+        // send; the first message into an empty thread takes over from the card.
+        if (prev.length === 0 || data.message.senderId === authUser?.id) markArriving(data.message.id)
         return [...prev, mapMessage(data.message)]
       })
       setIsOtherTyping(false)
@@ -475,7 +494,7 @@ function PrivateChatInner() {
     const u2 = subscribeToConversation(String(conversationId), handleTyping)
     const u3 = subscribeToConversation(String(conversationId), handleRead)
     return () => { u1(); u2(); u3(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
-  }, [conversationId, authUser?.id])
+  }, [conversationId, authUser?.id, markArriving])
 
   useEffect(() => {
     if (!conversationId) return
@@ -533,6 +552,7 @@ function PrivateChatInner() {
       }
 
       if (result.data) {
+        markArriving(result.data.id)
         setMessages(prev => prev.some(m => m.id === result.data!.id) ? prev : [...prev, mapMessage(result.data)])
         markDomainsDirty(['chat'])
         setTimeout(() => scrollToBottom(true), 80)
@@ -588,6 +608,7 @@ function PrivateChatInner() {
       <ChatBubble
         variant="direct"
         mine={isMe}
+        animateIn={arrivingRef.current.has(item.id)}
         senderId={item.senderId}
         roomId={String(conversationId)}
         senderName={reveal?.displayName || 'Them'}
@@ -647,7 +668,7 @@ function PrivateChatInner() {
         </View>
       ) : null}
       {loading ? (
-        <ActivityIndicator style={styles.loadingIndicator} color={EMBER.accent} />
+        <ActivityIndicator style={styles.loadingIndicator} color={EMBER.textSecondary} />
       ) : hasMore ? (
         <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
           <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
@@ -659,7 +680,7 @@ function PrivateChatInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" backgroundColor={EMBER.bg} />
+      <StatusBar style="light" />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
@@ -738,7 +759,12 @@ function PrivateChatInner() {
               <Text style={styles.emptyText}>It is no longer available to either of you.</Text>
             </View>
           ) : !loading ? (
-            <View style={styles.emptyContainer}>
+            /*
+              Fades out as the first message lands rather than vanishing in the
+              frame it arrives, so the card hands over to the bubble instead of
+              being swapped for it.
+            */
+            <Animated.View style={styles.emptyContainer} exiting={fadeOutFast}>
               <View style={styles.emptyGlyph}>
                 <Ionicons name="chatbubble-ellipses-outline" size={36} color={EMBER.textTertiary} />
               </View>
@@ -752,7 +778,7 @@ function PrivateChatInner() {
               <ScalePress style={styles.emptyCta} onPress={() => setNewMessage('Hey 👋')} pressedScale={0.97}>
                 <Text style={styles.emptyCtaText}>Send a wave 👋</Text>
               </ScalePress>
-            </View>
+            </Animated.View>
           ) : null}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
@@ -828,7 +854,7 @@ const styles = StyleSheet.create({
   },
   matchOpenerTitle: TYPE.heading,
   matchOpenerBody: { ...TYPE.body, color: EMBER.textSecondary },
-  loadMoreText: { ...TYPE.meta, color: 'rgba(255,255,255,0.45)' },
+  loadMoreText: { ...TYPE.meta, color: EMBER.textTertiary },
 
   // Messages
 
@@ -845,17 +871,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: GUTTER,
     bottom: 80,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: CONTROL.md,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
 
   // Empty state
@@ -866,24 +887,23 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surface,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.3)',
+    borderColor: EMBER.separator,
     marginBottom: SPACE.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm },
-  emptyText: { ...TYPE.body, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
+  emptyText: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   emptyCta: {
     marginTop: SPACE.lg,
-    backgroundColor: EMBER.accent,
-    borderRadius: 999,
+    backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.pill,
     height: CONTROL.md,
     justifyContent: 'center',
     paddingHorizontal: SPACE.xl,
   },
-  // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
-  // `lib/theme.ts` is explicit that white fails contrast there.
-  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
+  // A secondary button: the composer's send is this screen's one accent.
+  emptyCtaText: { ...TYPE.button, color: EMBER.textPrimary },
 })
 
 

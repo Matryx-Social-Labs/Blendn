@@ -56,78 +56,79 @@ export default function NearbyEventsScreen() {
     return () => { mountedRef.current = false }
   }, [])
 
-  const getLocation = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        setLocationDenied(true)
-        return null
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
-      setUserLocation(coords)
-      setLocationDenied(false)
-      return coords
-    } catch {
-      return null
-    }
-  }, [])
+  // This and `loadEvents` set state only in their callbacks, once a request has
+  // settled, so the effect below can start them.
+  const getLocation = useCallback(() =>
+    Location.requestForegroundPermissionsAsync()
+      .then(async ({ status }) => {
+        if (status !== 'granted') {
+          setLocationDenied(true)
+          return null
+        }
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+        setUserLocation(coords)
+        setLocationDenied(false)
+        return coords
+      })
+      .catch(() => null), [])
 
-  const loadEvents = useCallback(async (force = false) => {
-    try {
-      const coords = userLocation || await getLocation()
-      if (!coords) {
-        setEvents([])
-        return
-      }
+  const loadEvents = useCallback((force = false) =>
+    Promise.resolve(userLocation || getLocation())
+      .then(async (coords) => {
+        if (!coords) {
+          setEvents([])
+          return
+        }
 
-      /*
-       * The same city as the home screen, nearest first.
-       *
-       * This is the "View all" behind the Nearby section, so it has to expand
-       * that section rather than answer a different question. It used to send
-       * `radius: 50` — the same hard cut that blanked the home screen, just at
-       * a bigger number, so someone 60km from everything got an empty list with
-       * no way to tell whether that meant "nothing here" or "you are too far".
-       *
-       * The city comes from the same stored selection the home screen uses, so
-       * "View all" cannot silently show a different city than the one you were
-       * just looking at.
-       */
-      const result = await fetchEventsApi({
-        city: (await readStoredCity())?.city,
-        lat: coords.latitude,
-        lon: coords.longitude,
-        limit: 50,
-        sortBy: 'distance',
-        sortOrder: 'asc',
-        status: 'published',
-      }, { force })
+        /*
+         * The same city as the home screen, nearest first.
+         *
+         * This is the "View all" behind the Nearby section, so it has to expand
+         * that section rather than answer a different question. It used to send
+         * `radius: 50` — the same hard cut that blanked the home screen, just at
+         * a bigger number, so someone 60km from everything got an empty list with
+         * no way to tell whether that meant "nothing here" or "you are too far".
+         *
+         * The city comes from the same stored selection the home screen uses, so
+         * "View all" cannot silently show a different city than the one you were
+         * just looking at.
+         */
+        const result = await fetchEventsApi({
+          city: (await readStoredCity())?.city,
+          lat: coords.latitude,
+          lon: coords.longitude,
+          limit: 50,
+          sortBy: 'distance',
+          sortOrder: 'asc',
+          status: 'published',
+        }, { force })
 
-      if (!mountedRef.current) return
+        if (!mountedRef.current) return
 
-      if (result.data) {
-        // Filter to events that have coordinates, then sort by distance
-        const withDistance = result.data
-          .filter((e: any) => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-          .map((e: any) => ({
-            ...e,
-            _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude),
-          }))
-          .sort((a: any, b: any) => a._distance - b._distance)
+        if (result.data) {
+          // Filter to events that have coordinates, then sort by distance
+          const withDistance = result.data
+            .filter((e: any) => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+            .map((e: any) => ({
+              ...e,
+              _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude),
+            }))
+            .sort((a: any, b: any) => a._distance - b._distance)
 
-        setEvents(withDistance)
-        setLoadFailed(false)
-      } else {
-        setLoadFailed(true)
-      }
-    } catch {
-      // Keep what is on screen: a network error is not "no events near you".
-      if (mountedRef.current) setLoadFailed(true)
-    } finally {
-      if (mountedRef.current) setLoading(false)
-    }
-  }, [userLocation, getLocation])
+          setEvents(withDistance)
+          setLoadFailed(false)
+        } else {
+          setLoadFailed(true)
+        }
+      })
+      .catch(() => {
+        // Keep what is on screen: a network error is not "no events near you".
+        if (mountedRef.current) setLoadFailed(true)
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false)
+      }), [userLocation, getLocation])
 
   useEffect(() => {
     loadEvents(true)
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
   emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   settingsBtn: {
     marginTop: SPACE.xl,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     justifyContent: 'center',
     backgroundColor: EMBER.accent,
