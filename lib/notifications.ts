@@ -476,6 +476,25 @@ export async function cancelEventReminder(eventId: string): Promise<void> {
   }
 }
 
+/**
+ * The one-hour reminder, on for an event somebody has said they care about —
+ * interested, going, or waitlisted — and off otherwise.
+ *
+ * Only the Pulse's heart used to schedule it, so "I'm going" — the strongest
+ * commitment the app records — got no reminder at all. Both calls are
+ * idempotent (`scheduleEventReminder` cancels first), so calling this on every
+ * change, rollbacks included, is safe.
+ */
+export function syncEventReminder(
+  event: { id: string; title: string; start_time: string; venue_name?: string | null },
+  wanted: boolean
+): void {
+  const done = wanted
+    ? scheduleEventReminder({ ...event, venue_name: event.venue_name ?? undefined })
+    : cancelEventReminder(event.id)
+  done.catch(() => {})
+}
+
 // Initialize push notifications (call this on app startup)
 export async function initializePushNotifications(): Promise<string | null> {
   try {
