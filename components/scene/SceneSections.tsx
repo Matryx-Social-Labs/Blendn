@@ -410,8 +410,9 @@ export function SceneGallery({
            */
           const uri = item.kind === 'image' ? item.url : item.posterUrl
           return (
-            <Pressable
+            <ScalePress
               key={`${item.url}-${i}`}
+              haptic={false}
               onPress={() => onOpen(i)}
               accessibilityRole="imagebutton"
               accessibilityLabel={
@@ -433,7 +434,7 @@ export function SceneGallery({
                   <MaterialIcons name="play-arrow" size={22} color={EMBER.textPrimary} />
                 </View>
               ) : null}
-            </Pressable>
+            </ScalePress>
           )
         })}
       </ScrollView>
