@@ -42,7 +42,11 @@ import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
  */
 
 interface Props {
-  step: OnboardingStep
+  /**
+   * Drives the progress bar. Absent on the one screen after the last step —
+   * "Bring your friends" — which is past the flow's 100% and draws no bar.
+   */
+  step?: OnboardingStep
   title: string
   /**
    * The second half of the headline, set as its own span. Optional. It is
@@ -97,7 +101,7 @@ export function OnboardingScreen({
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const percent = progressPercent(step)
+  const percent = step ? progressPercent(step) : 100
   const reduceMotion = useReducedMotion()
   /*
    * The bar fills from where the last step left it.
@@ -141,15 +145,19 @@ export function OnboardingScreen({
           {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.textPrimary} /> : null}
         </Pressable>
 
-        <View
-          style={styles.progressTrack}
-          accessibilityRole="progressbar"
-          accessibilityValue={{ min: 0, max: 100, now: percent }}
-        >
-          <Animated.View style={[styles.progressFill, fillStyle]} />
-        </View>
+        {step ? (
+          <>
+            <View
+              style={styles.progressTrack}
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: 100, now: percent }}
+            >
+              <Animated.View style={[styles.progressFill, fillStyle]} />
+            </View>
 
-        <Text style={styles.progressLabel}>{percent}%</Text>
+            <Text style={styles.progressLabel}>{percent}%</Text>
+          </>
+        ) : null}
       </View>
 
       <KeyboardAvoidingView

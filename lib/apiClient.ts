@@ -12,6 +12,7 @@ import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeou
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
+import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
@@ -1864,6 +1865,8 @@ class ApiClientClass {
       show_online?: boolean
       read_receipts?: boolean
       share_location?: boolean
+      /** Off by default: friends see a pseudonym in rooms unless this is on. */
+      friends_see_me_in_rooms?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(
@@ -2757,6 +2760,84 @@ class ApiClientClass {
         method: 'POST',
         body: JSON.stringify({ action }),
       },
+      true,
+      2
+    )
+  }
+
+  // === FRIENDS ===
+  // No search, by design: see lib/friends.ts. Reads go through `queuedRequest`
+  // uncached — these lists change the moment someone taps Accept.
+
+  async getFriends(): Promise<ApiResponse<{ friends: Friend[]; count: number }>> {
+    return this.queuedRequest('/api/mobile/friends')
+  }
+
+  async getFriend(userId: string): Promise<ApiResponse<FriendProfile>> {
+    return this.queuedRequest(`/api/mobile/friends/${encodeURIComponent(userId)}`)
+  }
+
+  async removeFriend(userId: string): Promise<ApiResponse<{ removed: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/friends/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  async openFriendConversation(userId: string): Promise<ApiResponse<{ conversationId: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/friends/${encodeURIComponent(userId)}/conversation`,
+      { method: 'POST' },
+      true,
+      2
+    )
+  }
+
+  async getFriendInvite(): Promise<ApiResponse<FriendInvite>> {
+    return this.queuedRequest('/api/mobile/friends/invite')
+  }
+
+  async resetFriendInvite(): Promise<ApiResponse<FriendInvite>> {
+    return this.queuedRequest('/api/mobile/friends/invite', { method: 'POST' }, true, 2)
+  }
+
+  async openFriendInvite(token: string): Promise<ApiResponse<{ person: FriendPerson; state: FriendState }>> {
+    return this.queuedRequest(`/api/mobile/friends/invite/${encodeURIComponent(token)}`)
+  }
+
+  async getFriendRequests(): Promise<ApiResponse<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>> {
+    return this.queuedRequest('/api/mobile/friends/requests')
+  }
+
+  async sendFriendRequest(
+    to: { token: string } | { userId: string }
+  ): Promise<ApiResponse<{ state: 'requested' | 'friends' }>> {
+    return this.queuedRequest(
+      '/api/mobile/friends/requests',
+      { method: 'POST', body: JSON.stringify(to) },
+      true,
+      2
+    )
+  }
+
+  async respondToFriendRequest(
+    requestId: string,
+    action: 'accept' | 'dismiss'
+  ): Promise<ApiResponse<{ state?: 'friends'; dismissed?: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/friends/requests/${encodeURIComponent(requestId)}`,
+      { method: 'POST', body: JSON.stringify({ action }) },
+      true,
+      2
+    )
+  }
+
+  async withdrawFriendRequest(requestId: string): Promise<ApiResponse<{ withdrawn: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/friends/requests/${encodeURIComponent(requestId)}`,
+      { method: 'DELETE' },
       true,
       2
     )

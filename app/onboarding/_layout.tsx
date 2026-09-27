@@ -29,6 +29,12 @@ export default function OnboardingLayout() {
         animation: 'slide_from_right',
         contentStyle: { backgroundColor: EMBER.bg },
       }}
-    />
+    >
+      {/*
+        After the last step, with the finished steps still underneath: a swipe
+        here would reopen one. See app/onboarding/friends.tsx.
+      */}
+      <Stack.Screen name="friends" options={{ gestureEnabled: false }} />
+    </Stack>
   )
 }

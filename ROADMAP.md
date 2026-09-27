@@ -934,7 +934,13 @@ shows nothing it is editing.
 hydration in the existing `load()`, not a new endpoint. Sized small; left out of
 #129 to keep that change to one field.
 
-### Decided: friendship does not reveal identity
+### Decided: friendship does not reveal identity — in a room
+
+**Revised 2026-09-27, when the friend graph shipped (owner's ruling).** Friend
+surfaces — the list, a friend's profile, a DM between friends — show real names:
+both people said yes. In a room a friend sees what a match sees, unless the
+person turns on "Friends can see who I am in rooms" in Settings (off by
+default). What follows was the original reasoning, and it still governs rooms.
 
 A friend sees what a match sees. Revealing stays an act taken in a room.
 

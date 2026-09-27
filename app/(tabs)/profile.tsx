@@ -55,7 +55,18 @@ const enter = (i: number) => i * 70
 const ENTER = { duration: MOTION_DURATION.relaxed, easing: MOTION_EASING.gentle, distance: 16 } as const
 
 /** One number and what it counts, optionally a way through to the list behind it. */
-function Stat({ value, label, onPress }: { value: number; label: string; onPress?: () => void }) {
+function Stat({
+  value,
+  label,
+  onPress,
+  hint = 'Opens Going',
+}: {
+  value: number
+  label: string
+  onPress?: () => void
+  /** Where the tap goes, spoken. Most stats open Going; Friends opens the list. */
+  hint?: string
+}) {
   const body = (
     <>
       <RollingNumber value={value} />
@@ -69,7 +80,7 @@ function Stat({ value, label, onPress }: { value: number; label: string; onPress
       haptic={false}
       accessibilityRole="button"
       accessibilityLabel={`${value} ${label}`}
-      accessibilityHint="Opens Going"
+      accessibilityHint={hint}
       style={styles.stat}
     >
       {body}
@@ -150,6 +161,8 @@ function ProfileInner() {
   // Empty until it loads, and on failure: Recent and Nights out are left out rather than erroring.
   const [attended, setAttended] = useState<PastEventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  // Null until it loads, and on failure: the stat is left out rather than showing a wrong 0.
+  const [friendsCount, setFriendsCount] = useState<number | null>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const { width: windowWidth } = useWindowDimensions()
@@ -263,6 +276,16 @@ function ProfileInner() {
   }, [user])
 
   /*
+   * How many friends, for the stat. Its own request like attendance, never
+   * awaited by the profile; on focus, so accepting someone on Add friends
+   * shows here when you come back.
+   */
+  const loadFriendsCount = useCallback(async () => {
+    const result = await apiClient.getFriends()
+    if (result.success && result.data) setFriendsCount(result.data.count)
+  }, [])
+
+  /*
    * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
    * once per session: change the primary photo in Edit profile, come back,
    * and this screen still showed the old one — the report that found it.
@@ -275,8 +298,9 @@ function ProfileInner() {
       if (!authLoading && user) {
         getUserAndProfile()
         loadRecent()
+        loadFriendsCount()
       }
-    }, [user, authLoading, getUserAndProfile, loadRecent])
+    }, [user, authLoading, getUserAndProfile, loadRecent, loadFriendsCount])
   )
 
   /*
@@ -323,6 +347,7 @@ function ProfileInner() {
   const onRefresh = async () => {
     setRefreshing(true)
     loadRecent()
+    loadFriendsCount()
     try {
       await getUserAndProfile(true)
     } finally {
@@ -341,6 +366,7 @@ function ProfileInner() {
   }
   // `navigate`, not `push`: Going is a tab, and pushing it would stack a second copy.
   const openGoing = () => router.navigate('/going')
+  const openFriends = () => router.push('/friends')
 
   const renderContent = () => (
     <View style={styles.panel}>
@@ -366,17 +392,34 @@ function ProfileInner() {
               screen. Small and beside your name, like the edit pill on
               any profile you own -- a tool, not the page's headline. No accent.
             */}
-            <ScalePress
-              onPress={() => router.push('/edit-profile')}
-              haptic={false}
-              accessibilityRole="button"
-              accessibilityLabel="Edit profile"
-              hitSlop={SPACE.sm}
-              style={styles.button}
-            >
-              <Ionicons name="pencil" size={ICON.sm} color={EMBER.textPrimary} />
-              <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
-            </ScalePress>
+            <View style={styles.buttons}>
+              <ScalePress
+                onPress={() => router.push('/edit-profile')}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel="Edit profile"
+                hitSlop={SPACE.sm}
+                style={styles.button}
+              >
+                <Ionicons name="pencil" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
+              </ScalePress>
+              {/*
+                Beside Edit, the same quiet pill. There is no search on
+                Blend'n, so this — your link — is how anybody you know gets in.
+              */}
+              <ScalePress
+                onPress={() => router.push('/friends/add')}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel="Add friends"
+                hitSlop={SPACE.sm}
+                style={styles.button}
+              >
+                <Ionicons name="person-add" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Add friends</Text>
+              </ScalePress>
+            </View>
           </View>
 
           {/* Tap opens the photo on top; a sideways flick shuffles the pile. See PhotoStack. */}
@@ -420,6 +463,12 @@ function ProfileInner() {
             <Stat value={stats.eventsAttended} label="Attended" onPress={openGoing} />
             <View style={styles.statRule} />
             <Stat value={stats.eventsFavorited} label="Saved" onPress={openGoing} />
+            {friendsCount !== null ? (
+              <>
+                <View style={styles.statRule} />
+                <Stat value={friendsCount} label="Friends" onPress={openFriends} hint="Opens your friends" />
+              </>
+            ) : null}
             {stats.eventsOrganized > 0 ? (
               <>
                 <View style={styles.statRule} />
@@ -587,7 +636,9 @@ const styles = StyleSheet.create({
   identity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   identityText: { flex: 1, gap: SPACE.xs },
 
-  /* A compact pill: `CONTROL.sm` tall, as wide as its words, 8 under the details above it. */
+  /* The two pills, side by side, 8 under the details above them. */
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.sm },
+  /* A compact pill: `CONTROL.sm` tall, as wide as its words. */
   button: {
     height: CONTROL.sm,
     flexDirection: 'row',
@@ -595,7 +646,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: SPACE.xs,
     paddingHorizontal: SPACE.md,
-    marginTop: SPACE.sm,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },

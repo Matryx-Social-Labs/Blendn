@@ -33,7 +33,8 @@ export default function ReadyScreen() {
     if (await finish()) {
       // Once per account, and it lands with the fade into the tabs.
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
-      router.replace('/(tabs)/events')
+      // "Bring your friends" first, then the app — see app/onboarding/friends.tsx.
+      router.replace('/onboarding/friends')
     } else {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       // Kept here rather than pushed on regardless. This is the write that

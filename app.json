@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
       "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:www.blendn.app"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CADisableMinimumFrameDurationOnPhone": true,
@@ -37,6 +38,21 @@
       },
       "package": "com.matryxsociallabs.blendn",
       "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.blendn.app",
+              "pathPrefix": "/f/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
         {
           "action": "VIEW",
           "data": [

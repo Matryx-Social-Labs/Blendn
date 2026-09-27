@@ -56,6 +56,12 @@
         <data android:scheme="blendn"/>
         <data android:scheme="exp+blendn"/>
       </intent-filter>
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/f/"/>
+      </intent-filter>
       <intent-filter data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
         <data android:scheme="blendn" android:host="*" android:pathPrefix="/"/>

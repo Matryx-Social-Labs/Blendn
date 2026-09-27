@@ -12,7 +12,7 @@ import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
-type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
+type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
 /** The visible row title per key, so a failure can name the setting it lost. */
 const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
@@ -20,6 +20,7 @@ const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
   showOnlineStatus: 'Show online status',
   shareReadReceipts: 'Read receipts',
   locationSharing: 'Share location for nearby events',
+  friendsSeeMe: 'Friends can see who I am in rooms',
 }
 
 interface PreferencesState {
@@ -27,6 +28,7 @@ interface PreferencesState {
   showOnlineStatus: boolean
   shareReadReceipts: boolean
   locationSharing: boolean
+  friendsSeeMe: boolean
 }
 
 const DEFAULT_PREFERENCES: PreferencesState = {
@@ -34,6 +36,9 @@ const DEFAULT_PREFERENCES: PreferencesState = {
   showOnlineStatus: true,
   shareReadReceipts: true,
   locationSharing: true,
+  // Off, unlike the four above: in a room a friend is a pseudonym like anyone
+  // else until you choose otherwise. The column defaults false for the same reason.
+  friendsSeeMe: false,
 }
 
 const toBoolean = (value: unknown, fallback: boolean) =>
@@ -64,6 +69,7 @@ export default function SettingsScreen() {
     showOnlineStatus: false,
     shareReadReceipts: false,
     locationSharing: false,
+    friendsSeeMe: false,
   })
   const [loadingPreferences, setLoadingPreferences] = useState(true)
   const [preferencesError, setPreferencesError] = useState<string | null>(null)
@@ -108,6 +114,7 @@ export default function SettingsScreen() {
       showOnlineStatus: toBoolean(profile.show_online, DEFAULT_PREFERENCES.showOnlineStatus),
       shareReadReceipts: toBoolean(profile.read_receipts, DEFAULT_PREFERENCES.shareReadReceipts),
       locationSharing: toBoolean(profile.share_location, DEFAULT_PREFERENCES.locationSharing),
+      friendsSeeMe: toBoolean(profile.friends_see_me_in_rooms, DEFAULT_PREFERENCES.friendsSeeMe),
     }
 
     return { profile, nextPrefs }
@@ -127,6 +134,7 @@ export default function SettingsScreen() {
                 showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
                 shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
                 locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
+                friendsSeeMe: toBoolean(parsed.friendsSeeMe, DEFAULT_PREFERENCES.friendsSeeMe),
               })
             }
           } catch {}
@@ -182,6 +190,7 @@ export default function SettingsScreen() {
         show_online: next.showOnlineStatus,
         read_receipts: next.shareReadReceipts,
         share_location: next.locationSharing,
+        friends_see_me_in_rooms: next.friendsSeeMe,
       }
 
       const result = await apiClient.updateProfile(user.id, payload)
@@ -299,6 +308,12 @@ export default function SettingsScreen() {
     },
     { icon: 'checkmark-done-outline', title: 'Read receipts', keyName: 'shareReadReceipts' as const },
     { icon: 'navigate-outline', title: 'Share location for nearby events', keyName: 'locationSharing' as const },
+    {
+      icon: 'people-outline',
+      title: 'Friends can see who I am in rooms',
+      hint: 'Off: at an event, your friends see your pseudonym like everyone else.',
+      keyName: 'friendsSeeMe' as const,
+    },
 
     { header: 'Notifications' },
     { icon: 'notifications-outline', title: 'Push notifications', keyName: 'pushEnabled' as const },
