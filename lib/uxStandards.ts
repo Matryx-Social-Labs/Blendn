@@ -1,4 +1,4 @@
-import { APP_MOTION, APP_SIZE, APP_SPACING } from './theme'
+import { APP_MOTION, CONTROL, EMBER_RADIUS, GUTTER, SPACE } from './theme'
 
 export type BlendnPrinciple = 'simplicity' | 'fluidity' | 'delight'
 
@@ -9,8 +9,8 @@ export const BLENDN_UX_PRINCIPLES: Record<BlendnPrinciple, string> = {
 }
 
 export const INTERACTION_STANDARDS = {
-  minTouchTarget: APP_SIZE.touchTarget,
-  sectionSpacing: APP_SPACING.lg,
+  minTouchTarget: CONTROL.md,
+  sectionSpacing: SPACE.xxl,
   inlineValidationFirst: true,
   destructiveRequiresExplicitConfirm: true,
   allowBackdropDismissForDestructive: false,
@@ -29,21 +29,21 @@ export const TRAY_SPECS: Record<
 > = {
   compact: {
     maxHeightPercent: 0.35,
-    topInset: APP_SPACING['4xl'],
-    horizontalPadding: APP_SPACING.md,
-    cornerRadius: 20,
+    topInset: SPACE.xxxl,
+    horizontalPadding: GUTTER,
+    cornerRadius: EMBER_RADIUS.lg,
   },
   default: {
     maxHeightPercent: 0.55,
-    topInset: APP_SPACING['3xl'],
-    horizontalPadding: APP_SPACING.md,
-    cornerRadius: 24,
+    topInset: SPACE.xxxl,
+    horizontalPadding: GUTTER,
+    cornerRadius: EMBER_RADIUS.lg,
   },
   expanded: {
     maxHeightPercent: 0.8,
-    topInset: APP_SPACING['2xl'],
-    horizontalPadding: APP_SPACING.sm,
-    cornerRadius: 24,
+    topInset: SPACE.xxl,
+    horizontalPadding: GUTTER,
+    cornerRadius: EMBER_RADIUS.lg,
   },
 }
 

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { BlurView } from 'expo-blur'
 import { useFocusEffect } from '@react-navigation/native'
 import { useCallback, useState } from 'react'
 import {
@@ -11,14 +10,17 @@ import {
   Text,
   View,
 } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { popIn, popOut } from '../motion/presence'
 import { RisingSheet } from '../motion/RisingSheet'
+import { Grabber } from '../ui/Grabber'
 
 /**
  * The bell in The Pulse's top bar — frame `1141:4819`'s right glyph.
@@ -136,12 +138,18 @@ export function NotificationBell() {
         style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
       >
         <Ionicons name="notifications-outline" size={ICON.lg} color={EMBER.textPrimary} />
+        {/*
+          The badge pops in when there is something new (0 → any) and out when
+          it is cleared. It stays mounted while the count moves between
+          non-zero numbers, so "3 → 4" just changes the digit — a count that
+          ticks up is not a new arrival.
+        */}
         {badge ? (
-          <View style={styles.badge} pointerEvents="none">
+          <Animated.View style={styles.badge} pointerEvents="none" entering={popIn} exiting={popOut}>
             <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
               {badge}
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
       </Pressable>
 
@@ -157,9 +165,7 @@ export function NotificationBell() {
         */}
         <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
         <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.sheetTint} pointerEvents="none" />
-          <View style={styles.grabber} />
+          <Grabber style={styles.grabber} />
 
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>Notifications</Text>
@@ -182,7 +188,7 @@ export function NotificationBell() {
           </View>
 
           {loading && items.length === 0 ? (
-            <ActivityIndicator style={styles.loading} color={EMBER.accent} />
+            <ActivityIndicator style={styles.loading} color={EMBER.textSecondary} />
           ) : items.length === 0 ? (
             /*
               An empty bell is a normal state, not a failure. It says what it
@@ -249,11 +255,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -SPACE.sm,
     right: -SPACE.sm,
-    minWidth: 18,
-    height: 18,
+    minWidth: CONTROL.badge,
+    height: CONTROL.badge,
     paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     // The page colour, so the badge reads as sitting *on* the bar rather than
@@ -261,9 +267,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: EMBER.bg,
   },
-  badgeText: { ...TYPE.caption, color: EMBER.onGradient },
+  badgeText: { ...TYPE.caption, color: EMBER.bg },
 
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.backdrop },
   sheet: {
     position: 'absolute',
     left: 0,
@@ -273,21 +279,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: EMBER_RADIUS.lg,
     borderTopRightRadius: EMBER_RADIUS.lg,
     overflow: 'hidden',
+    // Flat and opaque, like the filter sheet: no glass (tasks/lessons.md).
+    backgroundColor: EMBER.surfaceSunken,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: EMBER.separator,
   },
-  sheetTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20,19,19,0.86)',
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    marginTop: SPACE.sm,
-  },
+  grabber: { marginTop: SPACE.sm },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,7 +294,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACE.sm,
   },
   sheetTitle: TYPE.heading,
-  clear: { ...TYPE.label, color: EMBER.accent },
+  clear: { ...TYPE.label, color: EMBER.textPrimary },
 
   loading: { paddingVertical: 48 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 48, paddingHorizontal: 32 },
@@ -316,8 +313,8 @@ const styles = StyleSheet.create({
   dot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: EMBER.accent,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.textPrimary,
     marginTop: SPACE.sm,
   },
   dotRead: { backgroundColor: 'transparent' },

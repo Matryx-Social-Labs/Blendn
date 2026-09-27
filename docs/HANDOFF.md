@@ -170,6 +170,6 @@ imports that `tsc` and `jest` both pass.
   named, what is backed by real tables and what is not
 - `docs/ONBOARDING.md` — the eight screens, how resume and per-step saving work,
   and every place the build departs from the frames with the reason
-- `docs/DESIGN_TOKENS.md` — Liquid Ember, and why `APP_COLORS` still exists
+- `docs/DESIGN_SYSTEM.md` — the tokens every screen uses, and the rules the check enforces
 - `ROADMAP.md` (app) and `docs/ROADMAP.md` (API) — the ledgers, including the
   deferred bio/contact-details hole

@@ -3,6 +3,7 @@ import React, { memo, useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
 import { Logger } from '../lib/logger'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
+import { EMBER, tint } from '../lib/theme'
 
 interface OptimizedImageProps {
   source: string | ImageSource
@@ -228,7 +229,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         {/* Loading indicator */}
         {!loadingState.highQualityLoaded && !loadingState.hasError && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#ffffff80" />
+            <ActivityIndicator size="small" color={EMBER.textSecondary} />
           </View>
         )}
       </>
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)'
+    backgroundColor: tint(EMBER.bg, 0.1),
   }
 })
 

@@ -6,25 +6,30 @@ import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme
 import { OptimizedImage } from '../OptimizedImage'
 import { HeartIcon } from '../motion/HeartIcon'
 
-// Frame: 165.38 in a 390pt frame.
-const IMAGE_HEIGHT = 165
+/** The photo: a square on the card's right edge. */
+export const UPCOMING_THUMB = CONTROL.md * 2
 
 /**
- * An event in the Upcoming list — image, name, who is going, how far.
+ * An event in the Upcoming list, as one row: words on the left, photo on the right.
+ *
+ * ## Why a row and not a photo card
+ *
+ * Luma's event list (and every dense event list worth copying) reads by *when*
+ * first and treats the cover as colour, not as a stage. The list is grouped by
+ * day above this card, so the card says only the time; the photo is a 96pt
+ * square beside the text, so nothing is ever printed on top of an unknown
+ * photograph and no scrim is needed. Three of these fit where one 165pt photo
+ * card used to.
  *
  * ## Every value on this card is one the server already returns
  *
- * The frame's numbers are invented ("142 Joined", "1.2 mi", "28"), but each has
- * a real column behind it, which is the difference between this section and the
- * Nearby one below it:
- *
- * | Drawn | Real |
+ * | Shown | Real |
  * |---|---|
- * | category pill | `categories[0]` |
- * | "142 Joined" | `currentCapacity` |
- * | "1.2 mi" | `distance`, via `formatDistance` |
- * | "28" / "Nov 2" | `startTime` |
- * | paragraph | `shortDescription` |
+ * | "7:00 PM" | `startTime`, via `timeLabel` |
+ * | category | `categories[0]` |
+ * | venue | `venueName`, else `city`, via `placeLabel` |
+ * | "142 joined" | `currentCapacity` |
+ * | "1.2 km" | `distance`, via `formatDistance` |
  *
  * Anything the caller cannot fill is omitted rather than zeroed. "0 joined" on
  * a new event reads as a failure of the event; no line reads as an event that
@@ -35,28 +40,33 @@ interface Props {
   /** Category name from the server's taxonomy, not a mood word. */
   category?: string | null
   imageUrl?: string | null
-  /** "28", "Nov 2" — the short date that sits opposite the title. */
-  dayLabel: string
+  /** "7:00 PM" — the date is the group heading above the card. */
+  timeLabel: string
+  /** Venue name, or the city when the venue is unnamed. */
+  placeLabel?: string | null
   /** Attendees so far. Omitted below 1: see above. */
   joinedCount?: number | null
   /** Pre-formatted by `formatDistance`, or absent when we have no fix. */
   distanceLabel?: string | null
-  description?: string | null
   onPress: () => void
-  actionLabel?: string
+  /**
+   * A status after the time — "On the waitlist", "Cancelled". `noteTone`
+   * `destructive` for the one that is bad news.
+   */
+  note?: string | null
+  noteTone?: 'default' | 'destructive'
+  /**
+   * One text action under the meta — "RATE PEOPLE YOU MET" on a past event.
+   * Its own button, so it does not open the event.
+   */
+  action?: { label: string; accessibilityLabel: string; onPress: () => void } | null
   /*
-   * The heart, which the frame does not draw.
+   * The heart. Saving an event is the whole of `event_favorites` and what the
+   * Going tab's "Saved" section is built from, so it stays through the restyle.
    *
-   * Kept because the card it replaces had one, and quietly dropping a control
-   * during a restyle is how a capability disappears without a decision — saving
-   * an event for later is the whole of `event_favorites` and the thing the
-   * "Interested" rail above is built from.
-   *
-   * Placed opposite the category pill rather than beside "Details", so the two
-   * actions on the card are not adjacent: one opens a screen and the other is a
-   * silent toggle, and a mis-tap between them is annoying in both directions.
-   *
-   * Raised for the designer in `docs/PULSE.md`.
+   * On the photo's corner rather than in the text column: it is a silent
+   * toggle, and keeping it off the words keeps a mis-tap from opening the
+   * event (or the reverse).
    */
   isFavorited?: boolean
   favoriteBusy?: boolean
@@ -67,38 +77,96 @@ function UpcomingCardImpl({
   title,
   category,
   imageUrl,
-  dayLabel,
+  timeLabel,
+  placeLabel,
   joinedCount,
   distanceLabel,
-  description,
   onPress,
-  actionLabel = 'Details',
+  note,
+  noteTone = 'default',
+  action,
   isFavorited,
   favoriteBusy,
   onToggleFavorite,
 }: Props) {
   const showJoined = typeof joinedCount === 'number' && joinedCount > 0
+  const eyebrow = [timeLabel, category].filter(Boolean).join(' · ')
 
   return (
-    <View style={styles.card}>
-      <View style={styles.media}>
+    /*
+      The whole card opens the event.
+
+      It used to be a card with a "Details" button, on the reasoning that a
+      pressable card holding a pressable button gives two ways to do one thing.
+      As a row the card *is* the thing — every list app works this way — and the
+      one control inside it, the heart, sits on the photo, away from the words.
+    */
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
+      <View style={styles.body}>
+        {eyebrow || note ? (
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            {eyebrow}
+            {note ? (
+              <Text style={noteTone === 'destructive' ? styles.noteBad : styles.note}>
+                {eyebrow ? ` · ${note}` : note}
+              </Text>
+            ) : null}
+          </Text>
+        ) : null}
+        <Text style={styles.title} numberOfLines={2}>
+          {title}
+        </Text>
+        {placeLabel ? (
+          <View style={styles.metaItem}>
+            <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {placeLabel}
+            </Text>
+          </View>
+        ) : null}
+        {showJoined || distanceLabel ? (
+          <View style={styles.metaRow}>
+            {showJoined ? (
+              <View style={styles.metaItem}>
+                <Ionicons name="people-outline" size={ICON.sm} color={EMBER.textSecondary} />
+                <Text style={styles.metaText}>{`${joinedCount} joined`}</Text>
+              </View>
+            ) : null}
+            {distanceLabel ? (
+              <View style={styles.metaItem}>
+                <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textSecondary} />
+                <Text style={styles.metaText}>{distanceLabel}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {action ? (
+          <Pressable
+            onPress={action.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel}
+            hitSlop={{ top: 8, bottom: 8 }}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <Text style={styles.actionText}>{action.label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={styles.thumb}>
         {imageUrl ? (
           <OptimizedImage
             source={imageUrl}
             recyclingKey={imageUrl ?? undefined}
             style={StyleSheet.absoluteFill as never}
-            height={IMAGE_HEIGHT}
+            height={UPCOMING_THUMB}
             contentFit="cover"
           />
-        ) : (
-          <View style={styles.mediaFallback} />
-        )}
-        {category ? (
-          <View style={styles.categoryPill}>
-            <Text style={styles.categoryText} numberOfLines={1}>
-              {category}
-            </Text>
-          </View>
         ) : null}
 
         {onToggleFavorite ? (
@@ -119,100 +187,57 @@ function UpcomingCardImpl({
           >
             <HeartIcon
               on={Boolean(isFavorited)}
-              size={18}
-              onColor={EMBER.accent}
+              size={ICON.sm}
+              onColor={EMBER.textPrimary}
               offColor={EMBER.textPrimary}
             />
           </Pressable>
         ) : null}
       </View>
-
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={styles.day} numberOfLines={1}>
-            {dayLabel}
-          </Text>
-        </View>
-
-        {showJoined || distanceLabel ? (
-          <View style={styles.metaRow}>
-            {showJoined ? (
-              <View style={styles.metaItem}>
-                <Ionicons name="people-outline" size={ICON.sm} color={EMBER.textSecondary} />
-                <Text style={styles.metaText}>{`${joinedCount} joined`}</Text>
-              </View>
-            ) : null}
-            {distanceLabel ? (
-              <View style={styles.metaItem}>
-                <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textSecondary} />
-                <Text style={styles.metaText}>{distanceLabel}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {description ? (
-          <Text style={styles.description} numberOfLines={2}>
-            {description}
-          </Text>
-        ) : null}
-
-        {/*
-          The whole card is not the tap target; this button is.
-
-          A card that is itself pressable and also contains a pressable button
-          gives two ways to do one thing and a dead zone between them. The frame
-          draws the button, so the button is the affordance.
-        */}
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          accessibilityLabel={`${actionLabel} for ${title}`}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-        >
-          <Text style={styles.actionText}>{actionLabel}</Text>
-        </Pressable>
-      </View>
-    </View>
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
+  // A row on the page: one step up from `bg`, no border, no shadow.
   card: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.card,
-    padding: SPACE.xl,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: SPACE.lg,
-  },
-  media: {
-    height: IMAGE_HEIGHT,
-    borderRadius: EMBER_RADIUS.card,
-    overflow: 'hidden',
+    padding: SPACE.lg,
     backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
   },
-  mediaFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceSunken },
-  categoryPill: {
-    position: 'absolute',
-    left: SPACE.md,
-    top: SPACE.md,
-    backgroundColor: 'rgba(15,14,14,0.6)',
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.md,
-    paddingVertical: SPACE.xs,
-    maxWidth: '70%',
+  pressed: { opacity: 0.7 },
+
+  body: { flex: 1, gap: SPACE.xs },
+  eyebrow: TYPE.meta,
+  note: { color: EMBER.textPrimary },
+  noteBad: { color: EMBER.destructive },
+  action: { alignSelf: 'flex-start', marginTop: SPACE.xs },
+  actionText: { ...TYPE.label, color: EMBER.textPrimary },
+  title: TYPE.bodyStrong,
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, flexShrink: 1 },
+  metaText: { ...TYPE.meta, flexShrink: 1 },
+
+  // The fallback is the fill itself: an event with no cover shows a quiet
+  // square, not a broken-image glyph, and every row keeps the same shape.
+  thumb: {
+    width: UPCOMING_THUMB,
+    height: UPCOMING_THUMB,
+    borderRadius: EMBER_RADIUS.sm,
+    overflow: 'hidden',
+    backgroundColor: EMBER.surface,
   },
-  categoryText: { ...TYPE.label, color: EMBER.textPrimary },
   favorite: {
     position: 'absolute',
-    right: SPACE.md,
-    top: SPACE.md,
+    right: SPACE.xs,
+    top: SPACE.xs,
     width: CONTROL.sm,
     height: CONTROL.sm,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(39,37,37,0.75)',
+    backgroundColor: EMBER.scrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -220,40 +245,6 @@ const styles = StyleSheet.create({
   // icon has already changed optimistically, and replacing it mid-write makes
   // the state you just chose vanish for the length of a round trip.
   favoriteBusy: { opacity: 0.5 },
-
-  body: { gap: SPACE.sm },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
-  // Only the title flexes. The date is short and must never be the thing that
-  // truncates — "Nov" is not a date.
-  title: { ...TYPE.title, flex: 1 },
-  // Aligned to the title's first line: `title` is 30 tall, `meta` 18.
-  day: { ...TYPE.meta, color: EMBER.textPrimary, marginTop: SPACE.xs },
-
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  metaText: TYPE.meta,
-
-  description: { ...TYPE.body, color: EMBER.textSecondary },
-
-  action: {
-    height: CONTROL.md,
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionText: TYPE.button,
-  pressed: { opacity: 0.7 },
 })
 
-/**
- * Memoised, and the props it is given were made stable for it.
- *
- * Three of these sit under the Featured carousel, each with a 318x165 image.
- *
- * `memo` alone would have bought nothing: `renderItem` built a fresh
- * `feedPlaylist(...)` array and a fresh `onPress` closure per card per render,
- * so the shallow compare failed every time. `featuredCards` in
- * `app/(tabs)/events.tsx` precomputes both, which is what makes this work.
- */
 export const UpcomingCard = memo(UpcomingCardImpl)

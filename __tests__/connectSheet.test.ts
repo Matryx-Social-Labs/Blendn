@@ -112,7 +112,10 @@ describe('the card keeps the two actions apart', () => {
     const actions = src.slice(src.indexOf('<View style={styles.actions}>'))
     expect(actions.indexOf('onPress={onLike}')).toBeLessThan(actions.indexOf('onPress={onConnect}'))
     const like = actions.slice(actions.indexOf('onPress={onLike}'), actions.indexOf('onPress={onConnect}'))
-    expect(like).toContain('EMBER_GRADIENT')
+    // The accent fill, flat (no gradient fills — docs/DESIGN_SYSTEM.md).
+    expect(like).toContain('styles.like')
+    expect(src).toContain('like: { backgroundColor: EMBER.accent }')
+    expect(like).not.toContain('EMBER_GRADIENT')
   })
 
   it('tells a screen reader what each one costs', () => {

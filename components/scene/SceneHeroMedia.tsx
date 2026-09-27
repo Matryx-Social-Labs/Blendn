@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER, GUTTER, SPACE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, SPACE, tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
 
 /**
@@ -296,10 +296,10 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: tint(EMBER.textPrimary, 0.4),
   },
-  dotActive: { backgroundColor: EMBER.accent, width: 18 },
+  dotActive: { backgroundColor: EMBER.textPrimary, width: 18 },
 })
 
 /**

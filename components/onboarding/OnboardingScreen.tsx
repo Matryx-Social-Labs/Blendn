@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { ReactNode, useEffect } from 'react'
 import {
   KeyboardAvoidingView,
@@ -19,13 +18,9 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AtmosphericBackground } from './AtmosphericBackground'
-
 import {
   EMBER,
-  EMBER_GRADIENT,
   EMBER_RADIUS,
-  EMBER_TYPE,
   GUTTER,
   ICON,
   SPACE,
@@ -49,7 +44,10 @@ import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 interface Props {
   step: OnboardingStep
   title: string
-  /** The second half of the headline, printed in the accent colour. Optional. */
+  /**
+   * The second half of the headline, set as its own span. Optional. It is
+   * `textPrimary` like the rest: the accent on these screens is the CTA's.
+   */
   titleAccent?: string
   subtitle?: string
   /**
@@ -126,12 +124,6 @@ export function OnboardingScreen({
 
   return (
     <View style={styles.root}>
-      {/*
-       * The two blurred blobs. `pointerEvents="none"` because they cover the
-       * whole screen and would otherwise eat every tap on the form beneath.
-       */}
-      <AtmosphericBackground />
-
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         {/*
          * The back chevron keeps its footprint when there is nowhere to go
@@ -146,7 +138,7 @@ export function OnboardingScreen({
           accessibilityLabel="Go back"
           style={styles.backButton}
         >
-          {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.accent} /> : null}
+          {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.textPrimary} /> : null}
         </Pressable>
 
         <View
@@ -154,14 +146,7 @@ export function OnboardingScreen({
           accessibilityRole="progressbar"
           accessibilityValue={{ min: 0, max: 100, now: percent }}
         >
-          <Animated.View style={[styles.progressFill, fillStyle]}>
-            <LinearGradient
-              colors={[...EMBER_GRADIENT.colors]}
-              start={EMBER_GRADIENT.start}
-              end={EMBER_GRADIENT.end}
-              style={StyleSheet.absoluteFill}
-            />
-          </Animated.View>
+          <Animated.View style={[styles.progressFill, fillStyle]} />
         </View>
 
         <Text style={styles.progressLabel}>{percent}%</Text>
@@ -207,7 +192,7 @@ export function OnboardingScreen({
       </KeyboardAvoidingView>
 
       {/*
-       * Pinned rather than at the end of the scroll, and translucent over the
+       * Pinned rather than at the end of the scroll, and opaque over the
        * page: the design puts the action within one-handed reach, and on a
        * screen with six fields a button that scrolls away is a button people
        * think is missing.
@@ -255,36 +240,34 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     overflow: 'hidden',
   },
-  // No glow: the track clips it anyway (`overflow: hidden`), and a shadow on
-  // an element whose width animates re-renders the shadow every frame.
+  // Flat, like every surface (docs/DESIGN_SYSTEM.md): a plain fill whose
+  // width animates, clipped to the track's pill by `overflow: hidden`.
   progressFill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
     borderRadius: EMBER_RADIUS.pill,
-    overflow: 'hidden',
+    backgroundColor: EMBER.textPrimary,
   },
-  progressLabel: EMBER_TYPE.progress,
+  progressLabel: TYPE.label,
 
   scrollContent: { paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
   headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
-  title: EMBER_TYPE.display,
-  titleAccent: { color: EMBER.accent },
-  subtitle: { ...EMBER_TYPE.subtitle, maxWidth: 300 },
+  title: TYPE.display,
+  titleAccent: { color: EMBER.textPrimary },
+  subtitle: { ...TYPE.body, color: EMBER.textSecondary, maxWidth: 300 },
   body: { gap: SPACE.xxl },
 
   footer: {
     paddingHorizontal: GUTTER,
     paddingTop: SPACE.lg,
     gap: SPACE.md,
-    // The design's `backdrop-blur` again — same substitution as the blobs, and
-    // here the near-opaque background is what actually stops text showing
-    // through, not the blur.
-    backgroundColor: 'rgba(15,14,14,0.94)',
+    // Opaque page colour, so scrolled text never shows through the button.
+    backgroundColor: EMBER.bg,
   },
   secondary: {
-    ...EMBER_TYPE.subtitle,
+    ...TYPE.body,
     textAlign: 'center',
     color: EMBER.textTertiary,
     paddingVertical: SPACE.xs,

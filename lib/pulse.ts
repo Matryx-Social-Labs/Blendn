@@ -7,33 +7,72 @@
  */
 
 /**
- * The short date opposite an upcoming card's title.
+ * The heading over one day of the Upcoming list: "Today" / "Thursday".
  *
- * The frame shows `28`, `30`, `Nov 2` down three consecutive cards, which is a
- * real rule and not three inconsistent labels: **the month is dropped while it
- * is the one you are already in**, and reappears the moment the list crosses
- * into the next. A column of "Oct 28 / Oct 30 / Nov 2" repeats a word the
- * heading already implies; a column of "28 / 30 / Nov 2" puts the emphasis on
- * the thing that changes.
+ * The list is grouped by day, the way a calendar is, so a card only needs its
+ * time — the date is said once, above the group, instead of down every card.
+ * `title` is what somebody scans for; `weekday` is the quieter line beside it.
+ * "Today" and "Tomorrow" take the place of a date for the same reason
+ * `featuredDateLabel` uses them: "Oct 24" makes the reader do the arithmetic.
  *
- * The year appears only when it is not this one, for the same reason.
- *
- * Compared in local time on purpose. Whether an event is "this month" is a
- * question about the calendar on the wall next to the person holding the phone,
- * not about the event's own timezone — an event abroad on the 1st should read
- * as next month to somebody whose month has not ended.
+ * The year appears only when it is not this one.
  */
-export function upcomingDayLabel(startTime: string, now: Date = new Date()): string {
+export function dayGroupLabel(
+  startTime: string,
+  now: Date = new Date()
+): { title: string; weekday: string } | null {
+  const d = new Date(startTime)
+  if (Number.isNaN(d.getTime())) return null
+
+  const weekday = longWeekday(d)
+  const days = calendarDaysBetween(now, d)
+  if (days === 0) return { title: 'Today', weekday }
+  if (days === 1) return { title: 'Tomorrow', weekday }
+  if (d.getFullYear() !== now.getFullYear()) {
+    return { title: `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`, weekday }
+  }
+  return { title: `${shortMonth(d)} ${d.getDate()}`, weekday }
+}
+
+/**
+ * Events split into runs of the same local calendar day, in the order given.
+ *
+ * The caller's order is kept (the list is already sorted by start time), so
+ * this only draws the lines between days — it never reorders. An event whose
+ * start time cannot be read is left out rather than filed under a made-up day.
+ */
+export function groupByDay<T extends { start_time: string }>(
+  items: T[],
+  now: Date = new Date()
+): { key: string; title: string; weekday: string; items: T[] }[] {
+  const groups: { key: string; title: string; weekday: string; items: T[] }[] = []
+  for (const item of items) {
+    const d = new Date(item.start_time)
+    const label = dayGroupLabel(item.start_time, now)
+    if (!label) continue
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.items.push(item)
+    else groups.push({ key, ...label, items: [item] })
+  }
+  return groups
+}
+
+/**
+ * The time on an upcoming card: "7:00 PM", in the phone's own format.
+ *
+ * Local time, like the day headings — the question is when to leave the house.
+ */
+export function timeLabel(startTime: string): string {
   const d = new Date(startTime)
   if (Number.isNaN(d.getTime())) return ''
-
-  if (d.getFullYear() !== now.getFullYear()) {
-    return `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`
+  try {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  } catch {
+    // No ICU (see `shortMonth`).
+    const h = d.getHours() % 12 || 12
+    return `${h}:${String(d.getMinutes()).padStart(2, '0')} ${d.getHours() < 12 ? 'AM' : 'PM'}`
   }
-  if (d.getMonth() !== now.getMonth()) {
-    return `${shortMonth(d)} ${d.getDate()}`
-  }
-  return String(d.getDate())
 }
 
 /**
@@ -56,6 +95,43 @@ export function featuredDateLabel(startTime: string, now: Date = new Date()): st
     return `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`
   }
   return `${shortMonth(d)} ${d.getDate()}`
+}
+
+/** What `nextUpLabel` says while the event is on — the Going hero draws a live dot beside it. */
+export const HAPPENING_NOW = 'Happening now'
+
+/**
+ * The eyebrow on the Going tab's "next up" card: when to be there.
+ *
+ * - "Happening now" — started and not yet over.
+ * - "Tonight · 6:30 PM" — later today, from 5pm.
+ * - "Today · 10:00 AM" / "Tomorrow · 6:30 PM".
+ * - "Sat, Oct 4 · 6:30 PM" beyond that, with the year only when it is not this
+ *   one.
+ *
+ * "Tonight" is a separate word from "Today" because it is the one people plan
+ * around; a 10am start is not tonight, and calling it so gets somebody there
+ * nine hours late. Calendar days, not elapsed hours, as in `featuredDateLabel`.
+ */
+export function nextUpLabel(
+  startTime: string,
+  endTime: string | null | undefined,
+  now: Date = new Date()
+): string {
+  const start = new Date(startTime)
+  if (Number.isNaN(start.getTime())) return ''
+  const end = endTime ? new Date(endTime).getTime() : NaN
+  if (start.getTime() <= now.getTime() && Number.isFinite(end) && now.getTime() < end) {
+    return HAPPENING_NOW
+  }
+
+  const time = timeLabel(startTime)
+  const days = calendarDaysBetween(now, start)
+  if (days === 0) return `${start.getHours() >= 17 ? 'Tonight' : 'Today'} · ${time}`
+  if (days === 1) return `Tomorrow · ${time}`
+
+  const year = start.getFullYear() !== now.getFullYear() ? `, ${start.getFullYear()}` : ''
+  return `${shortWeekday(start)}, ${shortMonth(start)} ${start.getDate()}${year} · ${time}`
 }
 
 /**
@@ -102,6 +178,24 @@ function shortMonth(d: Date): string {
     // hypothetical. A three-letter month is recoverable without it.
     return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
       d.getMonth()
+    ]
+  }
+}
+
+function shortWeekday(d: Date): string {
+  try {
+    return d.toLocaleString(undefined, { weekday: 'short' })
+  } catch {
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+  }
+}
+
+function longWeekday(d: Date): string {
+  try {
+    return d.toLocaleString(undefined, { weekday: 'long' })
+  } catch {
+    return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
+      d.getDay()
     ]
   }
 }

@@ -31,8 +31,8 @@ describe('roomStateLine', () => {
 
 describe('the Banter list', () => {
   const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'chat.tsx'), 'utf8')
-  it('prefers the state line to the last message on a Recent row', () => {
-    expect(src).toContain("preview: roomStateLine(c.room_state) ?? displayPreview(c.last_message, 'No messages yet')")
+  it('prefers the state line to the last message on a conversation row', () => {
+    expect(src).toMatch(/const preview =\s*roomStateLine\(c\.room_state\) \?\?/)
     expect(src).toContain('room_state: roomStateFrom(room)')
   })
 })

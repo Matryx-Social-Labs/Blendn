@@ -141,11 +141,41 @@ describe('the Going tab sections', () => {
     ])
   })
 
-  it('lists Going, then Saved without the ones already going, then Past', () => {
+  it('leads with the next RSVP, then Saved without the ones already going, then Past', () => {
     const going = rsvpEventRows({ events: [api('a', { rsvpStatus: 'going' })] as never })
     const saved = savedEventRows({ events: [api('a'), api('b')] })
     const items = goingItems(going, saved, [attended('p', '2026-09-02T01:00:00.000Z')], NOW)
-    expect(items.map((i) => i.key)).toEqual(['h:going', 'g:a', 'h:saved', 's:b', 'h:past', 'p:p'])
+    // No "Going" heading: the screen's title already says it.
+    expect(items.map((i) => i.key)).toEqual(['n:a', 'h:saved', 's:b', 'h:past', 'p:p'])
+  })
+
+  it('files the RSVPs after the first under day headings, in the order given', () => {
+    const local = (d: number, h: number) => new Date(2026, 8, d, h).toISOString()
+    const going = rsvpEventRows({
+      events: [
+        api('a', { rsvpStatus: 'going', startTime: local(28, 19) }),
+        api('b', { rsvpStatus: 'going', startTime: local(28, 21) }),
+        api('c', { rsvpStatus: 'waitlisted', startTime: local(28, 22) }),
+        api('d', { rsvpStatus: 'going', startTime: local(30, 19) }),
+      ] as never,
+    })
+    const items = goingItems(going, [], [], new Date(2026, 8, 27, 12).getTime())
+    expect(items.map((i) => (i.kind === 'day' ? `day:${i.title}` : i.key))).toEqual([
+      'n:a',
+      'day:Tomorrow',
+      'g:b',
+      'g:c',
+      'day:Sep 30',
+      'g:d',
+    ])
+  })
+
+  it('carries the city, the place a row falls back to without a venue', () => {
+    expect(savedEventRows({ events: [api('a', { venueName: null, city: 'Bengaluru' })] })[0]).toMatchObject({
+      venue_name: '',
+      city: 'Bengaluru',
+    })
+    expect(savedEventRows({ events: [api('b')] })[0].city).toBeNull()
   })
 
   it('leaves Past to events that have ended', () => {

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useRef, useState } from 'react'
 import {
@@ -13,7 +12,8 @@ import {
   ViewToken,
 } from 'react-native'
 import { SwipeToDismiss } from './motion/SwipeToDismiss'
-import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { ZoomableImage } from './motion/ZoomableImage'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -26,11 +26,15 @@ interface PhotoLightboxProps {
 
 export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClose }: PhotoLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  // A zoomed photo owns every drag: the pager and swipe-to-dismiss stand down
+  // until it is back at 1×. See `ZoomableImage`.
+  const [zoomed, setZoomed] = useState(false)
   const listRef = useRef<FlatList>(null)
 
   // Sync to initialIndex when lightbox opens
   const handleShow = useCallback(() => {
     setCurrentIndex(initialIndex)
+    setZoomed(false)
     setTimeout(() => {
       listRef.current?.scrollToIndex({ index: initialIndex, animated: false })
     }, 50)
@@ -39,21 +43,23 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems[0]?.index != null) {
       setCurrentIndex(viewableItems[0].index)
+      setZoomed(false)
     }
   }, [])
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current
 
-  const renderItem = useCallback(({ item }: { item: string }) => (
+  const renderItem = useCallback(({ item, index }: { item: string; index: number }) => (
     <View style={styles.page}>
-      <Image
-        source={{ uri: item }}
-        style={styles.image}
-        contentFit="contain"
-        cachePolicy="memory-disk"
+      <ZoomableImage
+        uri={item}
+        width={SCREEN_W}
+        height={SCREEN_H}
+        active={index === currentIndex}
+        onZoomChange={setZoomed}
       />
     </View>
-  ), [])
+  ), [currentIndex])
 
   const keyExtractor = useCallback((_: string, i: number) => String(i), [])
 
@@ -67,7 +73,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
       statusBarTranslucent
     >
       <StatusBar style="light" />
-      <SwipeToDismiss onDismiss={onClose}>
+      <SwipeToDismiss onDismiss={onClose} enabled={!zoomed}>
         <FlatList
           ref={listRef}
           data={photos}
@@ -75,6 +81,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
           keyExtractor={keyExtractor}
           horizontal
           pagingEnabled
+          scrollEnabled={!zoomed}
           showsHorizontalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
@@ -116,10 +123,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  image: {
-    width: SCREEN_W,
-    height: SCREEN_H,
-  },
   closeBtn: {
     position: 'absolute',
     top: 56,
@@ -129,8 +132,8 @@ const styles = StyleSheet.create({
   closeBtnInner: {
     width: CONTROL.sm,
     height: CONTROL.sm,
-    borderRadius: CONTROL.sm / 2,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.scrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -138,10 +141,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: EMBER.scrim,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.xs,
-    borderRadius: 12,
+    borderRadius: EMBER_RADIUS.pill,
   },
   counterText: {
     ...TYPE.caption,
@@ -157,8 +160,8 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: tint(EMBER.textPrimary, 0.4),
   },
   dotActive: {
     backgroundColor: EMBER.textPrimary,

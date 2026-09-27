@@ -1,8 +1,10 @@
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, useReducedMotion, withTiming } from 'react-native-reanimated'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { fadeInFast } from '../motion/presence'
 
 /**
  * One message in the event room. Frame `1141:5535` (inbound), `1141:5546`
@@ -90,7 +92,41 @@ export interface ChatBubbleProps {
    * reader and one answer.
    */
   receipt?: 'sent' | 'read' | null
+  /**
+   * Arrives with a short rise instead of appearing in one frame.
+   *
+   * The screen decides, and only for a message that has just landed in front
+   * of you — the one you sent, or the first one into an empty thread. Never
+   * history or an older page: forty bubbles rising as a conversation opens is
+   * a delay, not an arrival.
+   *
+   * Read on mount only. A row the list unmounts and later remounts comes back
+   * with this `false`, so scrolling back never replays it.
+   */
+  animateIn?: boolean
   onLongPress?: () => void
+}
+
+/*
+ * Fade plus a 6pt rise in 150ms, ease-out: fast at the start, where the eye
+ * lands. The rise says "this came from the composer" without travelling far
+ * enough to read as motion for its own sake. Sending happens tens of times a
+ * conversation, so it stays under the 150ms line.
+ *
+ * Reduce Motion keeps the fade and drops the rise.
+ */
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+
+const sentIn = () => {
+  'worklet'
+  const t = { duration: 150, easing: EASE_OUT }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 6 }] },
+    animations: {
+      opacity: withTiming(1, t),
+      transform: [{ translateY: withTiming(0, t) }],
+    },
+  }
 }
 
 function ChatBubbleBase({
@@ -107,8 +143,10 @@ function ChatBubbleBase({
   receipt = null,
   onLongPress,
   removed = false,
+  animateIn = false,
 }: ChatBubbleProps) {
   const direct = variant === 'direct'
+  const reduceMotion = useReducedMotion()
   /*
    * Seeded on the room *and* the sender, which is neither of the two things
    * this was argued between.
@@ -132,7 +170,10 @@ function ChatBubbleBase({
   const reactionEntries = reactions ?? []
 
   return (
-    <View style={[styles.row, mine && styles.rowMine]}>
+    <Animated.View
+      style={[styles.row, mine && styles.rowMine]}
+      entering={animateIn ? (reduceMotion ? fadeInFast : sentIn) : undefined}
+    >
       {/*
         Flat, where the Grid's disc is a `LinearGradient`. A gradient is a
         native view and a busy room draws one of these per message; the Grid
@@ -249,7 +290,7 @@ function ChatBubbleBase({
           </View>
         ) : null}
       </View>
-    </View>
+    </Animated.View>
   )
 }
 
@@ -271,7 +312,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 40,
     height: 40,
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -285,25 +326,19 @@ const styles = StyleSheet.create({
   metaMine: { justifyContent: 'flex-end' },
 
   name: { ...TYPE.bodyStrong, flexShrink: 1 },
-  nameMine: { ...TYPE.bodyStrong, color: EMBER.accent },
+  nameMine: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
   time: {
     ...TYPE.caption,
     // `1141:5542` — the timestamp is deliberately the quietest thing on the row.
-    color: 'rgba(174,170,170,0.6)',
+    color: EMBER.textTertiary,
   },
 
   bubble: { paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.md },
   /* The tail. One square corner, on the side the sender is. */
-  bubbleTheirs: { backgroundColor: '#1B1919', borderBottomLeftRadius: 4 },
+  bubbleTheirs: { backgroundColor: EMBER.surfaceSunken, borderBottomLeftRadius: EMBER_RADIUS.sm },
   bubbleMine: {
     backgroundColor: EMBER.surface,
-    borderBottomRightRadius: 4,
-    /* `1141:5554` — a warm lift on your own words, not a visible shadow. */
-    shadowColor: EMBER.gradientFrom,
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
+    borderBottomRightRadius: EMBER_RADIUS.sm,
   },
   pressed: { opacity: 0.7 },
   /* No fill, a dashed edge: the outline of a message that is not there. */
@@ -312,21 +347,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: EMBER.textTertiary,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   removedText: { ...TYPE.body, fontStyle: 'italic', color: EMBER.textTertiary },
 
   text: TYPE.body,
-  receipt: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)' },
-  /* Read is the accent, so "they saw it" is a colour change and not a glyph count. */
-  receiptRead: { color: EMBER.accent },
-  edited: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)', marginTop: SPACE.xs },
+  receipt: { ...TYPE.caption, color: EMBER.textTertiary },
+  /* Read is one step brighter, so "they saw it" is a colour change and not a glyph count. */
+  receiptRead: { color: EMBER.textSecondary },
+  edited: { ...TYPE.caption, color: EMBER.textTertiary, marginTop: SPACE.xs },
 
   quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
-  quoteBar: { width: 2, borderRadius: 9999, backgroundColor: EMBER.accent, opacity: 0.6 },
+  quoteBar: { width: 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },
   quoteBody: { flex: 1, gap: SPACE.xxs },
-  quoteName: { ...TYPE.caption, color: EMBER.accent },
+  quoteName: { ...TYPE.caption, color: EMBER.textSecondary },
   quoteText: TYPE.caption,
 
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs },
@@ -337,7 +370,7 @@ const styles = StyleSheet.create({
     gap: SPACE.xs,
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xxs,
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
   },
   reactionEmoji: TYPE.meta,

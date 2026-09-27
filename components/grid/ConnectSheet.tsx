@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { RisingSheet } from '../motion/RisingSheet'
+import { Grabber } from '../ui/Grabber'
 
 /**
  * Sending a connection request — the message, and what it costs you.
@@ -97,7 +98,7 @@ export function ConnectSheet({
 
       <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR}>
         <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.xl }]}>
-          <View style={styles.grabber} />
+          <Grabber style={styles.grabber} />
 
           <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
             Connect with {displayName}
@@ -177,7 +178,7 @@ export function ConnectSheet({
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  scrim: { flex: 1, backgroundColor: EMBER.backdrop },
   sheet: {
     backgroundColor: EMBER.bg,
     borderTopLeftRadius: EMBER_RADIUS.lg,
@@ -186,14 +187,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACE.md,
     gap: SPACE.md,
   },
-  grabber: {
-    width: 36,
-    height: 4,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignSelf: 'center',
-    marginBottom: SPACE.md,
-  },
+  grabber: { marginBottom: SPACE.md },
   title: { ...TYPE.title },
   disclosure: { ...TYPE.body, color: EMBER.textSecondary },
   input: {

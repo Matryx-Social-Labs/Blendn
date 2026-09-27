@@ -321,11 +321,16 @@ describe('the toggle is the frame’s pill', () => {
     expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
   })
 
-  it('raises only the selected side, and brightens its label', () => {
-    // Frame `1141:4961`: `#2D2C2C` with a drop shadow; `1141:4963`: the accent.
+  it('fills only the selected side, and inverts its label', () => {
+    // The design system's selected segment: a `textPrimary` fill with `bg`
+    // text, and flat: the fill against the sunken track carries the state.
     const src = ROOM_SCREEN()
-    expect(src.slice(src.indexOf('segmentOn: {'))).toContain("backgroundColor: '#2D2C2C'")
-    expect(src).toContain('segmentTextOn: { color: EMBER.textPrimary }')
+    const on = src.slice(src.indexOf('segmentOn: {'))
+    const onBody = on.slice(0, on.indexOf('},'))
+    expect(onBody).toContain('backgroundColor: EMBER.textPrimary')
+    expect(onBody).not.toContain('shadow')
+    expect(onBody).not.toContain('elevation')
+    expect(src).toContain('segmentTextOn: { color: EMBER.bg }')
   })
 
   it('does not stretch the buttons', () => {

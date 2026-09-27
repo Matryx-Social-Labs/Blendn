@@ -1,12 +1,11 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,20 +15,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
-import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
+import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import {
   BANTER_PADDING_HORIZONTAL,
   BANTER_SECTION_GAP,
+  BanterBucketHeading,
   BanterConversation,
   BanterHeading,
-  BanterPinned,
+  BanterLiveRoom,
   BanterRequest,
   BanterSearch,
   ROW_AVATAR,
   type ConversationItem,
 } from '../../components/banter/BanterSections'
+import { bucketRows, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
@@ -53,79 +54,63 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
- * The Banter — frame `1141:5247` on the Updates canvas.
+ * The Banter — every conversation you have, on one screen.
  *
  * ## One inbox, not two tabs
  *
  * The screen this replaced split rooms and people into a `group` / `personal`
- * segmented control, and only ever fetched the visible half. The frame has a
- * single **Recent** list: a person is a photograph, a room is a `#211F1F` disc
- * with a glyph, and that is the whole distinction.
+ * segmented control, and only ever fetched the visible half. A tabbed inbox
+ * makes you check two places for "did anyone message me", and the tab you are
+ * not looking at is the one with the unread message on it. One list costs one
+ * extra request on first load and removes a decision from every visit. A
+ * person is round, a room is its event's cover in a square, and that is the
+ * whole distinction.
  *
- * It is the better model, and not only because it is the design. A tabbed
- * inbox makes you check two places for "did anyone message me", and the tab
- * you are not looking at is the one with the unread message on it. Merging
- * costs one extra request on first load and removes a decision from every
- * visit.
+ * ## Top to bottom
  *
- * ## The rail is "Live now", not "Pinned"
+ * 1. **Live now** — the rooms you are checked into, one full-width row each.
+ *    What is pinned, by circumstance rather than by a gesture, is the event you
+ *    are standing in: temporary, anonymous, only useful while you are there.
+ *    Those rooms are lifted out of the list below rather than repeated in it.
+ *    `isCheckedIn` comes from the API — `checked_in` with no `check_out_time`,
+ *    which the client cannot derive, because "the event is on now" is not the
+ *    same as "I am there".
+ * 2. **Requests** — the one row that cannot be opened, because tapping it has
+ *    to mean accept or decline. Accept is the screen's one accent.
+ * 3. **Conversations**, bucketed Today / This week / Earlier by last activity
+ *    (`components/banter/inbox.ts`), "Mark all read" on the first heading.
  *
- * The frame's top rail is labelled Pinned, and nothing in the product can pin
- * a conversation — no column, no endpoint, no gesture. Filling it from "most
- * recent" would have duplicated the list directly beneath it under a label
- * that lies.
- *
- * What *is* pinned, by circumstance rather than by a gesture, is the event you
- * are standing in. A room you are checked into is a different object from the
- * rest of the inbox: temporary, anonymous, and only useful while you are
- * there. It is the one conversation that should be at the top without being
- * put there, and it is the only one that stops being relevant on its own.
- *
- * So the rail keeps the frame's component and geometry and changes its
- * heading. Those rooms are lifted out of Recent rather than repeated in it.
- * `isCheckedIn` comes from the API — `checked_in` with no `check_out_time`,
- * which the client cannot derive, because "the event is on now" is not the
- * same as "I am there".
- *
- * ## Also not from the frame
- *
- * - **A menu button** in the top bar's leading slot, which has nowhere to go.
- * - **The compose FAB**, removed by decision: a DM starts from a person, and
- *   every path to one already goes through a profile.
+ * No compose button, by decision: a DM starts from a person, and every path to
+ * one already goes through a profile.
  *
  * ## Anonymity holds in the inbox
  *
  * A DM that opens from a mutual like carries the pseudonym the match card
  * showed, and the real name appears only when that person reveals. The server
  * gates it — pre-reveal, `name` is the pseudonym and `image` is `null` — so the
- * list cannot leak a name it was never sent.
+ * list cannot leak a name it was never sent. `theyRevealed` is carried through
+ * so an unrevealed match gets the generated mark instead of an empty circle —
+ * the same one the Scene's discs and the room use, seeded on the pseudonym.
  *
- * What it *can* get wrong is drawing that state as a fault. A null photo
- * through the ordinary avatar is an empty grey circle, which reads as a broken
- * row rather than as anonymity working. `theyRevealed` is carried through so an
- * unrevealed match gets the generated mark instead — the same one the Scene's
- * discs and the room use, seeded on the pseudonym.
- *
- * `revealRequested` is carried and **not yet drawn**: the frame has no slot for
- * it, so today you only learn someone asked by opening the thread. Recorded in
- * `docs/BANTER.md` as a question for the designer, not invented here.
- *
- * **Message requests** are the reverse — in this and not in the frame. A
- * request is the one row that cannot be opened, because tapping it has to mean
- * accept or decline. Matching the frame exactly would have deleted the only
- * way to answer one. See `BanterRequest`.
+ * `revealRequested` turns the row's preview into "Asked to reveal names" until
+ * you open that thread — this session only; the server keeps the flag until
+ * you answer, so it comes back after a relaunch.
  */
 
 interface GroupChat {
   chat_room_id: string
   event_id: string
   event_title: string
-  event_venue: string
+  /** `memberCount` — active members. 0 when the server did not say. */
   participant_count: number
+  /** The event's cover — the room's square avatar. */
   event_image?: string | null
   last_message?: string
   last_message_time?: string
+  /** The sender's name *in this room* — their pseudonym, never a real name. */
   last_sender_name?: string
+  last_sender_is_me: boolean
+  unread_count: number
   /** Standing in it right now: the room is live and anonymous. */
   is_checked_in: boolean
   /** Readable but not postable — the list says why (SCRUM-178). */
@@ -139,6 +124,8 @@ interface PersonalChat {
   other_user_avatar?: string | null
   last_message?: string
   last_message_time?: string
+  /** The last message is yours — the preview says "You: ". */
+  last_message_from_me: boolean
   unread_count: number
   /**
    * They have revealed themselves to you.
@@ -158,31 +145,23 @@ interface PersonalChat {
 interface MessageRequest {
   request_id: string
   sender_name?: string | null
+  sender_avatar?: string | null
   initial_message?: string | null
+  created_at?: string | null
 }
 
-/** A row in the merged list, plus what it takes to open it. */
-type InboxRow = ConversationItem & { sortTime: number; open: () => void }
+/** A row in the merged list, plus what it takes to open it and find it. */
+type InboxRow = ConversationItem & { sortTime: number; searchText: string; open: () => void }
+
+/** What the FlatList draws: a bucket heading or a conversation. */
+type InboxItem =
+  | { type: 'heading'; id: string; title: string; first: boolean }
+  | ({ type: 'row' } & InboxRow)
 
 const GROUP_CHAT_CACHE_TTL = 60 * 1000
 const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
 const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
 const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
-
-const formatRelativeTime = (timeString: string) => {
-  const messageTime = new Date(timeString)
-  const now = new Date()
-  const diffMs = now.getTime() - messageTime.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return 'now'
-  if (diffHours < 1) return `${diffMins}m`
-  if (diffHours < 24) return `${diffHours}h`
-  if (diffDays < 7) return `${diffDays}d`
-  return messageTime.toLocaleDateString()
-}
 
 const previewFromMessage = (message: any): string | undefined => {
   if (!message) return undefined
@@ -236,7 +215,30 @@ function ChatInner() {
   const lastFetchRef = useRef({ list: 0, requests: 0 })
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
 
+  /*
+   * The room open on top of this tab, if any. A message arriving for it is
+   * being read as it lands, so it must not bump the room's unread here. Cleared
+   * when the Banter is focused again.
+   */
+  const openRoomRef = useRef<string | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      openRoomRef.current = null
+    }, [])
+  )
+
+  /*
+   * Threads whose "Asked to reveal names" you have opened this session. The
+   * server keeps `revealRequested` until you answer, so without this every
+   * background refresh would put the line straight back.
+   */
+  const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
+
   const handleGroupChatPress = useCallback((chat: GroupChat) => {
+    openRoomRef.current = chat.chat_room_id
+    setGroupChats((prev) =>
+      prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c))
+    )
     router.push({
       pathname: '/chat/[id]',
       params: {
@@ -250,6 +252,9 @@ function ChatInner() {
 
   const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
     setConversationLastRead(chat.conversation_id).catch(() => {})
+    if (chat.reveal_requested) {
+      setRevealSeen((prev) => new Set(prev).add(chat.conversation_id))
+    }
     router.push({
       pathname: '/private-chat/[conversationId]',
       params: {
@@ -261,6 +266,9 @@ function ChatInner() {
     })
   }, [])
 
+  /* Lifted into Live now above, so not repeated in the list below. */
+  const liveRooms = useMemo(() => groupChats.filter((c) => c.is_checked_in), [groupChats])
+
   /*
    * The merged list.
    *
@@ -269,59 +277,84 @@ function ChatInner() {
    * carried on the row so the comparator does not re-parse a date per
    * comparison.
    */
-  /* Lifted into the rail above, so not repeated in the list below. */
-  const liveRooms = useMemo(() => groupChats.filter((c) => c.is_checked_in), [groupChats])
-
   const rows = useMemo<InboxRow[]>(() => {
+    const now = new Date()
     const merged: InboxRow[] = [
-      ...personalChats.map((c) => ({
-        id: `p:${c.conversation_id}`,
-        title: c.other_user_name,
+      ...personalChats.map((c) => {
+        const askedToReveal = c.reveal_requested && !revealSeen.has(c.conversation_id)
         /*
          * A match nobody has written in yet says why it exists, rather than the
          * generic "Start chatting" that is true of any empty thread. The row
          * arrived because two people chose each other; it should say so before
          * it is opened.
          */
-        preview: c.last_message?.trim()
-          ? c.last_message
-          : matchRowPreview({ fromMatch: c.from_match }) ?? displayPreview(undefined),
-        timeLabel: c.last_message_time ? formatRelativeTime(c.last_message_time) : '',
-        avatarUrl: c.other_user_avatar,
-        kind: 'direct' as const,
-        pseudonymous: !c.they_revealed,
-        unread: c.unread_count > 0,
-        sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
-        open: () => handlePersonalChatPress(c),
-      })),
-      ...groupChats.filter((c) => !c.is_checked_in).map((c) => ({
-        id: `g:${c.chat_room_id}`,
-        title: c.event_title,
-        preview: roomStateLine(c.room_state) ?? displayPreview(c.last_message, 'No messages yet'),
-        timeLabel: c.last_message_time ? formatRelativeTime(c.last_message_time) : '',
-        kind: 'event' as const,
-        sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
-        open: () => handleGroupChatPress(c),
-      })),
+        const preview = askedToReveal
+          ? 'Asked to reveal names'
+          : c.last_message?.trim()
+            ? previewWithSender(c.last_message, { fromMe: c.last_message_from_me })
+            : matchRowPreview({ fromMatch: c.from_match }) ?? displayPreview(undefined)
+        return {
+          id: `p:${c.conversation_id}`,
+          title: c.other_user_name,
+          preview,
+          previewEmphasis: askedToReveal,
+          timeLabel: inboxTimeLabel(c.last_message_time, now),
+          avatarUrl: c.other_user_avatar,
+          kind: 'direct' as const,
+          pseudonymous: !c.they_revealed,
+          unread: c.unread_count > 0,
+          sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
+          searchText: `${c.other_user_name} ${preview}`.toLowerCase(),
+          open: () => handlePersonalChatPress(c),
+        }
+      }),
+      ...groupChats.filter((c) => !c.is_checked_in).map((c) => {
+        const preview =
+          roomStateLine(c.room_state) ??
+          (c.last_message?.trim()
+            ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
+            : 'No messages yet')
+        return {
+          id: `g:${c.chat_room_id}`,
+          title: c.event_title,
+          preview,
+          timeLabel: inboxTimeLabel(c.last_message_time, now),
+          avatarUrl: c.event_image,
+          kind: 'event' as const,
+          unread: c.unread_count > 0,
+          sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
+          // The sender is searchable even when a room-state line replaces the preview.
+          searchText: `${c.event_title} ${preview} ${c.last_sender_name ?? ''}`.toLowerCase(),
+          open: () => handleGroupChatPress(c),
+        }
+      }),
     ]
     return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, groupChats, handlePersonalChatPress, handleGroupChatPress])
+  }, [personalChats, groupChats, revealSeen, handlePersonalChatPress, handleGroupChatPress])
 
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim().toLowerCase()
   const visibleRows = useMemo(
-    () =>
-      trimmedQuery
-        ? rows.filter(
-            (r) =>
-              r.title?.toLowerCase().includes(trimmedQuery) ||
-              r.preview?.toLowerCase().includes(trimmedQuery)
-          )
-        : rows,
+    () => (trimmedQuery ? rows.filter((r) => r.searchText.includes(trimmedQuery)) : rows),
     [rows, trimmedQuery]
   )
 
+  /*
+   * "Mark all read" covers DMs only. The server has no endpoint that marks a
+   * room read (only fetching the event chat moves `last_read_message_id`), so
+   * offering it for a room's unread would be a button that does nothing.
+   */
   const hasUnread = useMemo(() => personalChats.some((c) => c.unread_count > 0), [personalChats])
+
+  /* The rows cut into Today / This week / Earlier, each under its heading. */
+  const listItems = useMemo<InboxItem[]>(() => {
+    const items: InboxItem[] = []
+    bucketRows(visibleRows).forEach((bucket, i) => {
+      items.push({ type: 'heading', id: `h:${bucket.title}`, title: bucket.title, first: i === 0 })
+      for (const row of bucket.rows) items.push({ type: 'row', ...row })
+    })
+    return items
+  }, [visibleRows])
 
   /*
    * Optimistic, then written to the server. The local caches alone were undone
@@ -379,6 +412,7 @@ function ChatInner() {
           ...updated[idx],
           last_message: nextPreview,
           last_message_time: data.message.createdAt,
+          last_message_from_me: isFromMe,
           // Only increment unread if message is from other user
           unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
         }
@@ -407,11 +441,16 @@ function ChatInner() {
         if (idx === -1) return prev
 
         const updated = [...prev]
+        const isFromMe = data.message.userId === user.id
+        // Someone else's message in a room you are not reading is unread.
+        const bump = !isFromMe && openRoomRef.current !== data.chatGroupId
         updated[idx] = {
           ...updated[idx],
           last_message: data.message.content,
           last_message_time: data.message.createdAt,
           last_sender_name: data.message.userName,
+          last_sender_is_me: isFromMe,
+          unread_count: bump ? updated[idx].unread_count + 1 : updated[idx].unread_count,
         }
         return updated
       })
@@ -456,6 +495,8 @@ function ChatInner() {
             ...updated[idx],
             last_message: update.lastMessage,
             last_message_time: update.lastMessageTime,
+            // Only ever emitted by this device's own sends.
+            last_message_from_me: true,
           }
           return updated
         })
@@ -469,6 +510,7 @@ function ChatInner() {
             last_message: update.lastMessage,
             last_message_time: update.lastMessageTime,
             last_sender_name: update.senderName,
+            last_sender_is_me: true,
           }
           return updated
         })
@@ -592,7 +634,9 @@ function ChatInner() {
         const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
           request_id: r.id,
           sender_name: r.sender?.name || null,
+          sender_avatar: r.sender?.avatar || null,
           initial_message: r.message || null,
+          created_at: r.createdAt || null,
         }))
         setIncomingRequests(requests)
         Logger.info('chat', 'Message requests loaded', { count: requests.length })
@@ -644,12 +688,15 @@ function ChatInner() {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
             event_id: room.event_id || room.eventId || '',
             event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Unknown Event',
-            event_venue: room.event?.venue_name || room.event?.venueName || room.venue_name || room.venueName || 'Unknown Venue',
-            participant_count: room.participant_count || room.participantCount || room.participants || 0,
-            event_image: room.event?.cover_image_url || room.event?.coverImageUrl || room.cover_image_url || room.coverImageUrl || null,
+            // `memberCount` is what `GET /chat/groups` sends; the rest never arrived.
+            participant_count: Number(room.memberCount ?? room.participant_count) || 0,
+            event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
             last_message: preview.text,
             last_message_time: preview.time,
-            last_sender_name: undefined,
+            // The sender's room pseudonym (`anonymous_name`), or null.
+            last_sender_name: room.lastMessage?.user?.name || undefined,
+            last_sender_is_me: !!room.lastMessage?.user?.id && room.lastMessage.user.id === user?.id,
+            unread_count: Number(room.unreadCount ?? room.unread_count) || 0,
             is_checked_in: room.isCheckedIn === true,
             room_state: roomStateFrom(room),
           }
@@ -692,6 +739,7 @@ function ChatInner() {
             other_user_avatar: otherUser?.image || otherUser?.avatar || null,
             last_message: preview.text,
             last_message_time: preview.time,
+            last_message_from_me: !!conv.lastMessage?.senderId && conv.lastMessage.senderId === user?.id,
             unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
             /*
              * Absent means revealed, which looks like the wrong direction and
@@ -788,8 +836,19 @@ function ChatInner() {
   }, [user, authLoading])
 
   const renderItem = useCallback(
-    ({ item }: { item: InboxRow }) => <BanterConversation item={item} onPress={item.open} />,
-    []
+    ({ item }: { item: InboxItem }) =>
+      item.type === 'heading' ? (
+        <View style={item.first ? undefined : styles.bucketGap}>
+          <BanterBucketHeading
+            title={item.title}
+            action={item.first && hasUnread ? 'Mark all read' : undefined}
+            onAction={item.first && hasUnread ? handleMarkAllRead : undefined}
+          />
+        </View>
+      ) : (
+        <BanterConversation item={item} onPress={item.open} />
+      ),
+    [hasUnread, handleMarkAllRead]
   )
 
   const header = (
@@ -804,38 +863,30 @@ function ChatInner() {
 
       {liveRooms.length > 0 ? (
         <View style={styles.section}>
-          <BanterHeading title="Live now" trailingIcon="sensors" />
-          {/*
-            Bleeds the page gutter for the same reason the Pulse's Featured row
-            does: a rail that stops inside the margin reads as clipped rather
-            than as running off the edge.
-          */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.railBleed}
-            contentContainerStyle={styles.rail}
-          >
+          <BanterHeading title="Live now" />
+          <View style={styles.liveList}>
             {liveRooms.map((c) => (
-              <BanterPinned
+              <BanterLiveRoom
                 key={c.chat_room_id}
-                item={{ id: c.chat_room_id, name: c.event_title, isEvent: true, online: true }}
+                title={c.event_title}
+                coverUrl={c.event_image}
+                memberCount={c.participant_count}
                 onPress={() => handleGroupChatPress(c)}
               />
             ))}
-          </ScrollView>
+          </View>
         </View>
       ) : null}
 
       {incomingRequests.length > 0 ? (
         <View style={styles.section}>
-          <BanterHeading title="Requests" trailingIcon="mark-email-unread" />
-          <View style={styles.requestList}>
+          <BanterHeading title="Requests" detail={String(incomingRequests.length)} />
+          <View>
             {incomingRequests.map((r) => (
               /*
                * Fades out while the requests below close the gap, rather than
                * fading to an empty slot that then snaps shut. No blur or
-               * shadow in the card, so the layout transition is cheap.
+               * shadow in the row, so the layout transition is cheap.
                */
               <Reanimated.View
                 key={r.request_id}
@@ -844,6 +895,8 @@ function ChatInner() {
               >
                 <BanterRequest
                   name={r.sender_name || 'Someone'}
+                  avatarUrl={r.sender_avatar}
+                  timeLabel={inboxTimeLabel(r.created_at)}
                   message={displayPreview(r.initial_message ?? undefined, 'Wants to message you')}
                   pending={requestPending[r.request_id]}
                   onAccept={() => respondToRequest(r, 'accept')}
@@ -854,14 +907,14 @@ function ChatInner() {
           </View>
         </View>
       ) : null}
-
-      <BanterHeading
-        title="Recent"
-        action={hasUnread ? 'Mark all read' : undefined}
-        onAction={hasUnread ? handleMarkAllRead : undefined}
-      />
     </View>
   )
+
+  /*
+   * Live rooms or requests with nothing else is not an empty inbox, so it does
+   * not say "No conversations yet" under them.
+   */
+  const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0
 
   return (
     <View style={styles.container}>
@@ -881,7 +934,7 @@ function ChatInner() {
       />
 
       <FlatList
-        data={visibleRows}
+        data={listItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={header}
@@ -896,7 +949,7 @@ function ChatInner() {
             </Text>
           ) : listFailed ? (
             <InboxLoadFailed onRetry={() => void loadChats(true, true)} />
-          ) : (
+          ) : hasHeaderContent ? null : (
             <EmptyInbox />
           )
         }
@@ -912,7 +965,7 @@ function ChatInner() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={EMBER.accent}
+            tintColor={EMBER.textSecondary}
             progressViewOffset={insets.top + TOP_BAR_HEIGHT}
           />
         }
@@ -921,13 +974,22 @@ function ChatInner() {
   )
 }
 
-/** Three rows at the real row's geometry, so the list does not jump when it lands. */
+/*
+ * Four rows at the real row's geometry — people round, rooms square — so the
+ * list does not jump or change shape when it lands.
+ */
+const SKELETON_ROWS: ('person' | 'room')[] = ['person', 'room', 'person', 'person']
+
 function InboxSkeleton() {
   return (
-    <View style={styles.skeleton}>
-      {[0, 1, 2].map((i) => (
+    <View>
+      {SKELETON_ROWS.map((kind, i) => (
         <View key={i} style={styles.skeletonRow}>
-          <SkeletonCircle width={ROW_AVATAR} />
+          {kind === 'room' ? (
+            <SkeletonBlock width={ROW_AVATAR} height={ROW_AVATAR} borderRadius={EMBER_RADIUS.sm} />
+          ) : (
+            <SkeletonCircle width={ROW_AVATAR} />
+          )}
           <View style={styles.skeletonBody}>
             <SkeletonLine width="45%" />
             <SkeletonLine width="80%" />
@@ -989,13 +1051,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   pressed: { opacity: 0.6 },
   content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
-  header: { gap: BANTER_SECTION_GAP, marginBottom: SPACE.lg },
-  // Frame `1141:5255`: a heading and its content are 16 apart, not 32.
+  header: { gap: BANTER_SECTION_GAP, marginBottom: BANTER_SECTION_GAP },
+  // A heading and its content are 16 apart, not 32.
   section: { gap: SPACE.lg },
-  requestList: { gap: SPACE.md },
-  railBleed: { marginHorizontal: -BANTER_PADDING_HORIZONTAL },
-  // Frame `1141:5261`: gap 24, `pb-[8px]`.
-  rail: { gap: SPACE.xl, paddingBottom: SPACE.sm, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
+  liveList: { gap: SPACE.md },
+  /*
+   * Between one day's rows and the next heading. The rows carry their own
+   * `SPACE.md` padding, so the first heading needs no margin under it and the
+   * next one needs only this above.
+   */
+  bucketGap: { marginTop: SPACE.xl },
   // Above the list and level with the top bar's own zIndex.
   statusBanner: {
     position: 'absolute',
@@ -1011,18 +1076,18 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xxl,
   },
 
-  skeleton: { gap: SPACE.sm },
-  skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.lg, alignItems: 'center' },
+  skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.md, alignItems: 'center' },
   skeletonBody: { flex: 1, gap: SPACE.sm },
 
   empty: { alignItems: 'center', paddingVertical: SPACE.xxxl, paddingHorizontal: SPACE.lg, gap: SPACE.sm },
+  // Same glyph tile as the Pulse's empty state (events.tsx `emptyGlyph`).
   emptyGlyph: {
-    width: 72,
-    height: 72,
+    width: 80,
+    height: 80,
     borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: EMBER.separator,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACE.sm,
@@ -1032,7 +1097,7 @@ const styles = StyleSheet.create({
   emptyCta: {
     marginTop: SPACE.sm,
     backgroundColor: EMBER.accent,
-    borderRadius: 999,
+    borderRadius: EMBER_RADIUS.pill,
     height: CONTROL.md,
     justifyContent: 'center',
     paddingHorizontal: SPACE.xl,

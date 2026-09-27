@@ -149,13 +149,11 @@ describe('the frame is followed, and where it is not, deliberately', () => {
     expect(SCREEN()).toContain('title="The Banter"')
   })
 
-  it('does not truncate the name of a pinned conversation', () => {
-    /*
-     * Fixed at the avatar's width this rendered "Gala Nig…". A pinned row that
-     * abbreviates the thing it is pinning is doing the opposite of its job.
-     */
-    expect(SECTIONS()).toContain('minWidth: PINNED_AVATAR')
-    expect(SECTIONS()).not.toContain('width: PINNED_AVATAR + 8')
+  it('draws no violet EVENT badge — a room is told apart by its square cover', () => {
+    const sections = SECTIONS()
+    expect(sections).not.toContain('EMBER.violet')
+    expect(sections).not.toContain('BanterPinned')
+    expect(sections).toContain('borderRadius: EMBER_RADIUS.sm')
   })
 })
 
@@ -212,57 +210,67 @@ describe('the room you are standing in', () => {
     expect(src).toContain('...groupChats.filter((c) => !c.is_checked_in).map')
   })
 
-  it('reuses the frame\'s rail rather than inventing a section', () => {
-    // Same component, same 64pt discs, same 24 gap, same gutter bleed. Only
-    // the heading changes, because only the meaning changed.
+  it('draws each live room as a full-width row, not a horizontal rail', () => {
     const src = SCREEN()
-    expect(src).toContain('<BanterPinned')
     expect(src).toContain('title="Live now"')
-    expect(src).toContain('online: true')
+    expect(src).toContain('<BanterLiveRoom')
+    expect(src).not.toContain('<ScrollView')
+    const sections = SECTIONS()
+    const row = sections.slice(sections.indexOf('liveRow: {'))
+    const body = row.slice(0, row.indexOf('},'))
+    expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
+    expect(body).toContain('borderRadius: EMBER_RADIUS.md')
+    expect(body).toContain('padding: SPACE.lg')
+  })
+
+  it('marks presence with a still success dot, never the accent or motion', () => {
+    const sections = SECTIONS()
+    const dot = sections.slice(sections.indexOf('liveDot: {'))
+    const body = dot.slice(0, dot.indexOf('},'))
+    expect(body).toContain('backgroundColor: EMBER.success')
+    expect(sections).not.toContain('Animated')
+  })
+
+  it('shows the room count from `memberCount`, which is what the server sends', () => {
+    /*
+     * It read `participant_count` / `participantCount` / `participants`, none
+     * of which `GET /chat/groups` has ever sent, so every room had 0 people.
+     */
+    expect(SCREEN()).toContain('room.memberCount')
+    expect(SCREEN()).toContain('memberCount={c.participant_count}')
   })
 })
 
-describe('the unread dot lands on the avatar', () => {
-  it('builds the ring outwards, which is the only way RN can', () => {
+describe('a row is one height, read or unread', () => {
+  it('reserves the unread dot\'s slot on every row', () => {
     /*
-     * Frame `1141:5296` rings the dot with `shadow: 0 0 0 2px #0F0E0E` —
-     * outset. `borderWidth: 2` grows *inwards*, which leaves an 8pt accent core
-     * in a 12pt footprint.
-     *
-     * The dot sits at the bounding box's top-right and the avatar is a circle,
-     * so that corner is empty space: the dot's centre is √(22²+22²) = 31.1 from
-     * the 56pt avatar's centre against a radius of 28. An 8pt core reaches back
-     * to 27.1 and grazes the rim; the frame's 12pt core reaches 25.1 and bites
-     * into the photograph. That difference is the whole reason it read as
-     * floating beside the avatar rather than sitting on it.
+     * The dot sits under the time; a read row keeps the empty slot so reading
+     * a conversation never shifts the list under your thumb.
      */
     const sections = SECTIONS()
-    const ring = sections.slice(sections.indexOf('unreadRing: {'))
-    const body = ring.slice(0, ring.indexOf('},'))
-    expect(body).toContain('top: -2')
-    expect(body).toContain('right: -2')
-    expect(body).toContain('width: 16')
-    expect(body).toContain('backgroundColor: EMBER.bg')
-
+    expect(sections).toContain('<View style={styles.unreadSlot}>')
+    expect(sections).toContain('{item.unread ? <View style={styles.unreadDot} /> : null}')
     const dot = sections.slice(sections.indexOf('unreadDot: {'))
     const dotBody = dot.slice(0, dot.indexOf('},'))
-    expect(dotBody).toContain('width: 12')
-    expect(dotBody).toContain('backgroundColor: EMBER.accent')
-    // The inset border is the bug. It must not come back.
-    expect(dotBody).not.toContain('borderWidth')
+    expect(dotBody).toContain('width: UNREAD_DOT')
+    // Unread is neutral: the screen's one accent is Accept.
+    expect(dotBody).toContain('backgroundColor: EMBER.textPrimary')
   })
 
-  it('keeps the pinned presence dot inset, because that frame draws it inset', () => {
-    /*
-     * Not a copy-paste of the fix above. Frame `1141:5265` is a single 16pt
-     * "Background+Border" rectangle — the ring is part of the 16, not outside
-     * it — so `borderWidth: 2` is correct there and wrong three lines away.
-     */
+  it('has no unread-only padding and no hairlines', () => {
     const sections = SECTIONS()
-    const presence = sections.slice(sections.indexOf('presence: {'))
-    const body = presence.slice(0, presence.indexOf('},'))
-    expect(body).toContain('width: 16')
-    expect(body).toContain('borderWidth: 2')
+    expect(sections).not.toContain('rowUnread')
+    expect(sections).not.toContain('hairlineWidth')
+    expect(sections).toContain('minHeight: ROW_HEIGHT')
+    expect(sections).toContain('export const ROW_HEIGHT = ROW_AVATAR + SPACE.md * 2')
+  })
+
+  it('keeps the preview to one line', () => {
+    const sections = SECTIONS()
+    const conv = sections.slice(sections.indexOf('export function BanterConversation'))
+    const body = conv.slice(0, conv.indexOf('function RoomCover'))
+    expect(body).toContain('numberOfLines={1}')
+    expect(body).not.toContain('numberOfLines={2}')
   })
 })
 
@@ -316,5 +324,165 @@ describe('a match is anonymous until they reveal', () => {
     const src = SCREEN()
     expect(src).toContain("|| 'Someone'")
     expect(src).not.toContain("|| 'Unknown'")
+  })
+})
+
+describe('requests look like the conversations they become', () => {
+  it('is a row, not a radius-32 card', () => {
+    const sections = SECTIONS()
+    const req = sections.slice(sections.indexOf('request: {'))
+    const body = req.slice(0, req.indexOf('},'))
+    expect(body).not.toContain('EMBER_RADIUS.card')
+    expect(body).not.toContain('backgroundColor')
+    expect(body).toContain('paddingVertical: SPACE.md')
+  })
+
+  it("draws the sender's face and when they asked", () => {
+    const src = SCREEN()
+    expect(src).toContain('sender_avatar: r.sender?.avatar || null')
+    expect(src).toContain('created_at: r.createdAt || null')
+    expect(src).toContain('timeLabel={inboxTimeLabel(r.created_at)}')
+  })
+
+  it('gives Accept the accent — the only one on the screen with rows', () => {
+    const sections = SECTIONS()
+    expect(sections).toContain('requestAccept: { backgroundColor: EMBER.accent }')
+    expect(sections).toContain('requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient }')
+    expect(sections).toContain('requestDecline: { backgroundColor: EMBER.surface }')
+    expect(sections).toContain('height: CONTROL.sm')
+    // Nothing else in the sections reaches for it.
+    expect(sections.match(/EMBER\.accent/g)).toHaveLength(1)
+  })
+
+  it('shows the count beside the heading', () => {
+    expect(SCREEN()).toContain('<BanterHeading title="Requests" detail={String(incomingRequests.length)} />')
+  })
+
+  it('keeps the exit and reflow animations', () => {
+    const src = SCREEN()
+    expect(src).toContain('exiting={reduceMotion ? undefined : REQUEST_OUT}')
+    expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
+  })
+})
+
+describe('what the API already sends is read', () => {
+  it('reads room unread, sender and cover from the group payload', () => {
+    const src = SCREEN()
+    expect(src).toContain('room.unreadCount')
+    expect(src).toContain('last_sender_name: room.lastMessage?.user?.name || undefined')
+    expect(src).toContain('room.event?.coverImageUrl')
+    expect(src).toContain('avatarUrl: c.event_image')
+    expect(src).toContain('unread: c.unread_count > 0')
+  })
+
+  it('no longer carries a venue that was always "Unknown Venue"', () => {
+    expect(SCREEN()).not.toContain('event_venue')
+    expect(SCREEN()).not.toContain('Unknown Venue')
+  })
+
+  it('knows when the last DM was yours', () => {
+    const src = SCREEN()
+    expect(src).toContain('conv.lastMessage.senderId === user?.id')
+    expect(src).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
+  })
+
+  it('bumps a room it is not showing when someone else writes in it', () => {
+    const src = SCREEN()
+    expect(src).toContain('const bump = !isFromMe && openRoomRef.current !== data.chatGroupId')
+    expect(src).toContain('unread_count: bump ? updated[idx].unread_count + 1 : updated[idx].unread_count')
+  })
+
+  it('offers Mark all read for DMs only — no endpoint marks a room read', () => {
+    const src = SCREEN()
+    expect(src).toContain('const hasUnread = useMemo(() => personalChats.some((c) => c.unread_count > 0), [personalChats])')
+    expect(src).toContain("action={item.first && hasUnread ? 'Mark all read' : undefined}")
+  })
+
+  it('searches the room sender too', () => {
+    expect(SCREEN()).toContain("${c.last_sender_name ?? ''}")
+    expect(SCREEN()).toContain('r.searchText.includes(trimmedQuery)')
+  })
+
+  it('tells you someone asked to reveal, until you open the thread', () => {
+    const src = SCREEN()
+    expect(src).toContain('c.reveal_requested && !revealSeen.has(c.conversation_id)')
+    expect(src).toContain("'Asked to reveal names'")
+  })
+
+  it('formats no date through the device locale', () => {
+    expect(SCREEN()).not.toContain('toLocaleDateString')
+  })
+})
+
+describe('the conversations are grouped by when', () => {
+  it('buckets through DayHeading, and hides every heading when empty', () => {
+    const src = SCREEN()
+    expect(src).toContain('bucketRows(visibleRows)')
+    expect(src).not.toContain('title="Recent"')
+    expect(SECTIONS()).toContain('<DayHeading title={title} />')
+  })
+
+  it('only says the inbox is empty when nothing is above the list either', () => {
+    expect(SCREEN()).toContain('hasHeaderContent ? null : (')
+  })
+
+  it('draws a skeleton with both avatar shapes', () => {
+    const src = SCREEN()
+    expect(src).toContain('<SkeletonBlock width={ROW_AVATAR} height={ROW_AVATAR} borderRadius={EMBER_RADIUS.sm} />')
+    expect(src).toContain('<SkeletonCircle width={ROW_AVATAR} />')
+  })
+})
+
+describe('inbox helpers', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { inboxTimeLabel, activityBucket, bucketRows, previewWithSender, liveRoomMeta } = require('../components/banter/inbox')
+  // Wednesday 1 October 2026, 15:00 local.
+  const now = new Date(2026, 9, 1, 15, 0, 0)
+  const at = (...a: number[]) => new Date(a[0], a[1], a[2], a[3] ?? 12, a[4] ?? 0)
+
+  it('labels times short', () => {
+    expect(inboxTimeLabel(new Date(now.getTime() - 20 * 1000), now)).toBe('now')
+    expect(inboxTimeLabel(new Date(now.getTime() + 60 * 1000), now)).toBe('now')
+    expect(inboxTimeLabel(new Date(now.getTime() - 5 * 60 * 1000), now)).toBe('5m')
+    expect(inboxTimeLabel(at(2026, 9, 1, 12), now)).toBe('3h')
+    expect(inboxTimeLabel(at(2026, 8, 30, 23), now)).toBe('Yesterday')
+    expect(inboxTimeLabel(at(2026, 8, 29), now)).toBe('Tue')
+    expect(inboxTimeLabel(at(2026, 8, 25), now)).toBe('Fri')
+    expect(inboxTimeLabel(at(2026, 8, 24), now)).toBe('Sep 24')
+    expect(inboxTimeLabel(at(2025, 9, 4), now)).toBe('Oct 4, 2025')
+    expect(inboxTimeLabel(undefined, now)).toBe('')
+    expect(inboxTimeLabel('not a date', now)).toBe('')
+  })
+
+  it('buckets by calendar day', () => {
+    expect(activityBucket(at(2026, 9, 1, 0, 5).getTime(), now)).toBe('Today')
+    expect(activityBucket(at(2026, 8, 30, 23).getTime(), now)).toBe('This week')
+    expect(activityBucket(at(2026, 8, 25).getTime(), now)).toBe('This week')
+    expect(activityBucket(at(2026, 8, 24).getTime(), now)).toBe('Earlier')
+    expect(activityBucket(0, now)).toBe('Earlier')
+  })
+
+  it('groups in order and drops empty buckets', () => {
+    const rows = [
+      { id: 'a', sortTime: at(2026, 9, 1, 14).getTime() },
+      { id: 'b', sortTime: at(2026, 7, 1).getTime() },
+      { id: 'c', sortTime: 0 },
+    ]
+    const buckets = bucketRows(rows, now)
+    expect(buckets.map((b: { title: string }) => b.title)).toEqual(['Today', 'Earlier'])
+    expect(buckets[1].rows.map((r: { id: string }) => r.id)).toEqual(['b', 'c'])
+  })
+
+  it('says who wrote the preview', () => {
+    expect(previewWithSender('hi', { fromMe: true, name: 'Mika' })).toBe('You: hi')
+    expect(previewWithSender('hi', { name: 'Velvet Otter' })).toBe('Velvet Otter: hi')
+    expect(previewWithSender('hi', { name: '  ' })).toBe('hi')
+    expect(previewWithSender('hi', {})).toBe('hi')
+  })
+
+  it('leaves an unknown room count off', () => {
+    expect(liveRoomMeta(12)).toBe("You're here · 12 in the room")
+    expect(liveRoomMeta(0)).toBe("You're here")
+    expect(liveRoomMeta(undefined)).toBe("You're here")
   })
 })

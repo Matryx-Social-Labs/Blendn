@@ -167,17 +167,26 @@ Nearby, Nightlife and search.
 Going is about **your** events rather than the catalogue, so it is useful from
 the first day and grows on its own.
 
-It has three sections (`goingItems` in `lib/savedEvents.ts`):
+Top to bottom (`goingItems` in `lib/savedEvents.ts`):
 
-- **Going** — your `going` and `waitlisted` RSVPs, from `GET /me/rsvps`, soonest
-  first; a waitlist place says so on the card.
-- **Saved** — your hearts, minus anything already under Going.
+- **Next up** — your soonest `going` or `waitlisted` RSVP, from
+  `GET /me/rsvps`, as one large card: the photo with nothing on it, then when
+  (`nextUpLabel` in `lib/pulse.ts` — "Happening now" with a still green dot,
+  "Tonight · 6:30 PM", "Tomorrow · …", "Sat, Oct 4 · …"), title and place, a
+  waitlist or cancelled tag, and Directions / Calendar / Share.
+- **The rest of your RSVPs** — under day headings (`groupByDay`), one
+  `UpcomingCard` row each, the way the Pulse's Upcoming reads; a waitlist place
+  or a cancellation says so on the row. No "Going" heading: the screen's title
+  is it.
+- **Saved** — your hearts, minus anything RSVP'd above, as rows; the heart
+  removes one (with Undo).
 - **Past** — events you attended that have ended, from `GET /me/attendance`,
-  each with **Rate people you met** → `rate/[eventId]`. The event screen's CTA
-  also opens it once an event you attended is over.
+  each row with **Rate people you met** → `rate/[eventId]`. The event screen's
+  CTA also opens it once an event you attended is over.
 
-A server that predates `/me/rsvps` answers 404 and the tab simply has no Going
-section.
+A populated Going has no accent; only the empty and error states' one button
+is orange. A server that predates `/me/rsvps` answers 404 and the tab simply
+starts at Saved.
 
 When the catalogue justifies Explore, **Going moves into Me** — it is your data —
 and Explore takes the slot. No re-drawing.

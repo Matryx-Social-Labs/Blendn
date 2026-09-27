@@ -28,7 +28,7 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 
 describe('text in a fixed-height box is capped', () => {
   const FIXED_BOXES: Array<[string, string[]]> = [
-    ['onboarding button + input (EMBER_CONTROL_HEIGHT)', ['components', 'onboarding', 'EmberControls.tsx']],
+    ['onboarding button + input (CONTROL.lg)', ['components', 'onboarding', 'EmberControls.tsx']],
     ['the tab bar label (TAB_BAR_LINE)', ['app', '(tabs)', '_layout.tsx']],
     ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
@@ -54,7 +54,6 @@ describe('text in a fixed-height box is capped', () => {
 describe('decoration is hidden from the accessibility tree', () => {
   const DECORATIVE: Array<[string, string[]]> = [
     ['the splash animation', ['components', 'IntroAnimation.tsx']],
-    ['the onboarding glow', ['components', 'onboarding', 'AtmosphericBackground.tsx']],
     ['the permission illustrations', ['components', 'onboarding', 'PermissionIllustration.tsx']],
     ['the sign-in wordmark', ['app', 'sign-in.tsx']],
   ]

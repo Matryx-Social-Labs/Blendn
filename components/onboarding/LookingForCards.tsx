@@ -3,7 +3,7 @@ import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint, TYPE } from '../../lib/theme'
 
 /**
  * "What brings you to Blend'n today?" — five picture cards, two across.
@@ -80,16 +80,12 @@ export function LookingForCards({
             */}
             <Image source={option.art} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
             <LinearGradient
-              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.95)']}
+              colors={[EMBER.bgClear, EMBER.bgClear, tint(EMBER.bg, 0.95)]}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
             <View style={styles.label}>
-              <Ionicons
-                name={option.icon}
-                size={ICON.md}
-                color={isOn ? EMBER.accent : EMBER.textPrimary}
-              />
+              <Ionicons name={option.icon} size={ICON.md} color={EMBER.textPrimary} />
               <Text style={styles.labelText}>{option.value}</Text>
             </View>
           </Pressable>
@@ -106,13 +102,13 @@ const styles = StyleSheet.create({
     height: CARD,
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
-    backgroundColor: 'rgba(39,37,37,0.4)',
+    backgroundColor: EMBER.surface,
     // A transparent border at rest so selecting one does not resize it — a
     // 4px border appearing from nothing shifts every card in the row.
     borderWidth: 4,
     borderColor: 'transparent',
   },
-  cardOn: { borderColor: EMBER.accent },
+  cardOn: { borderColor: EMBER.textPrimary },
   art: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.4 },
   label: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg, gap: SPACE.sm },
   labelText: TYPE.button,

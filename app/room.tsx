@@ -3,9 +3,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, FadeIn, useReducedMotion, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import MatchScreen from '../components/screens/MatchScreen'
+import { fadeInFast } from '../components/motion/presence'
 import { NotificationBell } from '../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
@@ -18,6 +20,34 @@ import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 const REVEAL_FAILED = "Couldn't change who can see you. Nothing has changed."
+
+/*
+ * What arrives once the room is known.
+ *
+ * The title paints at once; the banner, the count line and the bar's two
+ * controls wait on the check-in lookup and the roster. They used to appear in
+ * one frame a beat later, which reads as the screen jumping. Now they fade in
+ * rising 8pt (220ms, strong ease-out), and the two bar controls just fade, as
+ * the small-control preset does everywhere else.
+ *
+ * No haptic. Opening the room is not the moment you arrived: checking in is,
+ * and that happens on the Pulse. A tick here would fire on every open.
+ *
+ * Reduce Motion: fade only.
+ */
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+const arriveFade = FadeIn.duration(220).easing(EASE_OUT)
+const arrive = () => {
+  'worklet'
+  const t = { duration: 220, easing: EASE_OUT }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 8 }] },
+    animations: {
+      opacity: withTiming(1, t),
+      transform: [{ translateY: withTiming(0, t) }],
+    },
+  }
+}
 
 
 /**
@@ -97,6 +127,8 @@ function RoomInner() {
   }, [user?.id])
   const [checkOutBusy, setCheckOutBusy] = useState(false)
   const { showToast } = useToast()
+  const reduceMotion = useReducedMotion()
+  const entering = reduceMotion ? arriveFade : arrive
 
   /*
    * Which room, from the server rather than from navigation.
@@ -265,7 +297,7 @@ function RoomInner() {
       the content at absolute position, the way it does on the Pulse and the
       Scene. Letting the safe area inset the whole screen as well would push
       everything down twice, and offsetting the content below is what the bar
-      expects -- without it the page heading renders behind the blur.
+      expects -- without it the page heading renders underneath the bar.
     */
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {/*
@@ -305,24 +337,26 @@ function RoomInner() {
               that no-ops is worse than one that arrives a moment late.
             */}
             {eventId ? (
-              <Pressable
-                onPress={() => void checkOut()}
-                disabled={checkOutBusy}
-                accessibilityRole="button"
-                accessibilityLabel="Check out of this event"
-                accessibilityHint="Removes you from the Grid. You can check in again while you are here."
-                accessibilityState={{ disabled: checkOutBusy }}
-                hitSlop={8}
-                style={({ pressed }) => [styles.checkOut, pressed && styles.pressed]}
-              >
-                {checkOutBusy ? (
-                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
-                ) : (
-                  <Text style={styles.checkOutText} maxFontSizeMultiplier={1.2}>
-                    Check out
-                  </Text>
-                )}
-              </Pressable>
+              <Animated.View entering={fadeInFast}>
+                <Pressable
+                  onPress={() => void checkOut()}
+                  disabled={checkOutBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check out of this event"
+                  accessibilityHint="Removes you from the Grid. You can check in again while you are here."
+                  accessibilityState={{ disabled: checkOutBusy }}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.checkOut, pressed && styles.pressed]}
+                >
+                  {checkOutBusy ? (
+                    <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                  ) : (
+                    <Text style={styles.checkOutText} maxFontSizeMultiplier={1.2}>
+                      Check out
+                    </Text>
+                  )}
+                </Pressable>
+              </Animated.View>
             ) : null}
             {/*
               The room's own settings. `NAVIGATION.md` calls
@@ -338,21 +372,23 @@ function RoomInner() {
               in the bar is the thing the banner is not.
             */}
             {eventId ? (
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/event-preferences/[eventId]',
-                    params: { eventId } as any,
-                  })
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Settings for this room"
-                accessibilityHint="Set why you are here tonight, and whether people can see your name"
-                hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Ionicons name="options-outline" size={ICON.lg} color={EMBER.textPrimary} />
-              </Pressable>
+              <Animated.View entering={fadeInFast}>
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/event-preferences/[eventId]',
+                      params: { eventId } as any,
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Settings for this room"
+                  accessibilityHint="Set why you are here tonight, and whether people can see your name"
+                  hitSlop={12}
+                  style={({ pressed }) => pressed && styles.pressed}
+                >
+                  <Ionicons name="options-outline" size={ICON.lg} color={EMBER.textPrimary} />
+                </Pressable>
+              </Animated.View>
             ) : null}
             <NotificationBell />
           </>
@@ -362,8 +398,8 @@ function RoomInner() {
       {/*
         Frame `1141:4954`: the display title over a body line that names the
         count and the event — the count is the
-        reason to look, and the accent falls on the event because that is the
-        part that changes.
+        reason to look, and the event name is set in primary because that is the
+        part that changes. The Room's one accent is the Like on every card.
       */}
       <View style={[styles.pageHead, { paddingTop: TOP_BAR_HEIGHT + SPACE.sm }]}>
         <Text style={styles.pageTitle} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
@@ -374,23 +410,25 @@ function RoomInner() {
           no subtitle, and the count arrives a moment after the title does.
         */}
         {eventTitle && rosterCount > 0 ? (
-          <Text style={styles.pageSubtitle} maxFontSizeMultiplier={1.3}>
+          <Animated.Text style={styles.pageSubtitle} maxFontSizeMultiplier={1.3} entering={entering}>
             {`${rosterCount} ${rosterCount === 1 ? 'person' : 'people'} at `}
-            <Text style={styles.pageSubtitleAccent}>{eventTitle}</Text>
-          </Text>
+            <Text style={styles.pageSubtitleEvent}>{eventTitle}</Text>
+          </Animated.Text>
         ) : null}
       </View>
 
       {eventId ? (
-        <RoomVisibilityBanner
-          revealed={revealed}
-          onToggle={() => void toggleReveal()}
-          busy={revealBusy}
-          canReveal={readiness.ok}
-          missing={readiness.missing}
-          listed={listed}
-          onUnhide={() => router.push('/settings')}
-        />
+        <Animated.View style={styles.banner} entering={entering}>
+          <RoomVisibilityBanner
+            revealed={revealed}
+            onToggle={() => void toggleReveal()}
+            busy={revealBusy}
+            canReveal={readiness.ok}
+            missing={readiness.missing}
+            listed={listed}
+            onUnhide={() => router.push('/settings')}
+          />
+        </Animated.View>
       ) : null}
 
       <View style={styles.segments}>
@@ -473,23 +511,13 @@ function SegmentButton({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.sm,
-  },
-  title: { ...TYPE.heading },
-  titleAccent: { color: EMBER.accent },
-  headerSpacer: { width: ICON.lg },
 
   /*
    * Frame `1141:4959`: the pair is a pill, centred, not two full-width segments.
    *
-   * `surfaceSunken` around the buttons, with an inset shadow — so the
-   * unselected side is a hole in the track rather than a second button, and
-   * only the selected one is raised. Content-width, because two 32pt-padded
+   * `surfaceSunken` around the buttons and `surface` on the selected one — so
+   * the unselected side is a hole in the track rather than a second button,
+   * and the selected one stands out by fill alone, no shadow. Content-width, because two 32pt-padded
    * labels are narrower than the screen and stretching them would make the
    * track read as a tab bar.
    */
@@ -500,7 +528,7 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
   },
-  // Frame `1141:4961`: `px-32`, `#2d2c2c`, raised.
+  // Frame `1141:4961`: `px-32`; its `#2d2c2c` snaps to `surface`.
   segment: {
     minHeight: CONTROL.sm,
     alignItems: 'center',
@@ -509,24 +537,20 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
   },
+  // The design system's selected segment: a `textPrimary` fill with `bg` text.
   segmentOn: {
-    backgroundColor: '#2D2C2C',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
+    backgroundColor: EMBER.textPrimary,
   },
-  // Primary when selected, secondary when not; the raised pill carries the state.
+  // Secondary when not selected; the filled pill carries the state.
   segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
-  segmentTextOn: { color: EMBER.textPrimary },
+  segmentTextOn: { color: EMBER.bg },
 
   /*
    * Quiet, and next to the bell rather than in the page.
    *
-   * A secondary-coloured pill on the surface, not an accent one: leaving is the
+   * A `surface` pill with secondary text, not an accent one: leaving is the
    * least interesting thing you can do in a room you just walked into, and the
-   * warm palette is spent on the event name under the title.
+   * Room's one accent is spent on the Like on every card.
    */
   checkOut: {
     minHeight: CONTROL.sm,
@@ -535,23 +559,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: EMBER.surface,
   },
   checkOutText: { ...TYPE.button, color: EMBER.textSecondary },
 
   body: { flex: 1 },
 
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.xxl, gap: SPACE.sm },
-  emptyTitle: { ...TYPE.title, textAlign: 'center' },
-  emptyBody: { ...TYPE.meta, textAlign: 'center' },
 
   // The heading block sits on the gutter.
   // `paddingTop` is applied inline — it depends on the notch and the overlay bar.
   pageHead: { paddingHorizontal: GUTTER, paddingBottom: SPACE.lg, gap: SPACE.sm },
   pageTitle: { ...TYPE.display },
-  // The event name is the screen's one accent.
+  // The banner is a card, so it sits inside the gutter like the heading above it.
+  banner: { marginHorizontal: GUTTER },
+  // The event name steps up to primary; the Room's one accent is the Like on every card.
   pageSubtitle: { ...TYPE.body, color: EMBER.textSecondary },
-  pageSubtitleAccent: { color: EMBER.accent },
+  pageSubtitleEvent: { color: EMBER.textPrimary },
   chatMissing: {
     ...TYPE.meta,
     paddingHorizontal: GUTTER,

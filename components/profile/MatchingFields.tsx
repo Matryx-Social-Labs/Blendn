@@ -12,7 +12,7 @@ import {
   type Gender,
   type Orientation,
 } from '../../lib/dating'
-import { CONTROL, EMBER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -108,7 +108,7 @@ export function MatchingFields({
 
   return (
     <>
-      <Text style={styles.section}>What are you open to?</Text>
+      <Text style={styles.section}>WHAT ARE YOU OPEN TO?</Text>
       <View style={styles.row}>
         {offered.map((intent) => {
           const on = intents.includes(intent.value)
@@ -137,7 +137,7 @@ export function MatchingFields({
             Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
             is explicit: a networking user is never asked their gender.
           */}
-          <Text style={styles.section}>You are</Text>
+          <Text style={styles.section}>YOU ARE</Text>
           <View style={styles.row}>
             {GENDERS.map((g) => (
               <Pressable
@@ -154,7 +154,7 @@ export function MatchingFields({
             ))}
           </View>
 
-          <Text style={styles.section}>You identify as</Text>
+          <Text style={styles.section}>YOU IDENTIFY AS</Text>
           <Text style={styles.hint}>Select all that apply — up to three.</Text>
           <View style={styles.row}>
             {ORIENTATIONS.map((o) => {
@@ -191,7 +191,7 @@ export function MatchingFields({
                 than tables. Without this the server stores nothing and the
                 dating tag never appears, with no explanation.
               */}
-              <Text style={styles.section}>Interested in</Text>
+              <Text style={styles.section}>INTERESTED IN</Text>
               <View style={styles.row}>
                 {GENDERS.map((g) => {
                   const on = interestedIn.includes(g)
@@ -219,7 +219,7 @@ export function MatchingFields({
         </>
       ) : null}
 
-      <Text style={styles.section}>What do you do?</Text>
+      <Text style={styles.section}>WHAT DO YOU DO?</Text>
       <View style={styles.row}>
         {workFields.map((f) => (
           <Pressable
@@ -248,28 +248,26 @@ export function MatchingFields({
  * step is done, so this one is safe — and it lifts onboarding onto the app's
  * palette at the same time, which it was never on.
  *
- * A selected chip takes the gradient's warm end as a *fill* rather than a
- * brighter grey. On a screen of a dozen chips, "which are on" has to be
+ * A selected chip takes a white (`textPrimary`) *fill* with `bg` text rather
+ * than a brighter grey. On a screen of a dozen chips, "which are on" has to be
  * answerable at a glance, and a 10% lightness step is not.
  */
 const styles = StyleSheet.create({
-  // Uppercased here rather than in the strings, which tests and onboarding match on.
+  // `label` text: the strings above are written uppercase (no textTransform).
   section: {
     ...TYPE.label,
-    textTransform: 'uppercase',
     marginTop: SPACE.xl,
     marginBottom: SPACE.md,
   },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
-  chip: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.lg, borderRadius: 9999, borderWidth: 1 },
+  chip: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.lg, borderRadius: EMBER_RADIUS.pill, borderWidth: 1 },
   chipOff: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
-  chipOn: { backgroundColor: EMBER.accent, borderColor: EMBER.accent },
+  chipOn: { backgroundColor: EMBER.textPrimary, borderColor: EMBER.textPrimary },
   // Opacity only, so a chip that becomes unreachable keeps its width and the
   // row does not reflow under your thumb.
   chipDisabled: { opacity: 0.35 },
   chipText: { ...TYPE.bodyStrong },
-  /* Dark on warm — white on the accent fails contrast. */
-  chipTextOn: { color: EMBER.onGradientChip },
+  chipTextOn: { color: EMBER.bg },
   hint: {
     ...TYPE.meta,
     marginTop: SPACE.sm,

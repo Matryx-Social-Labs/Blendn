@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
 import Animated from 'react-native-reanimated'
-import { EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE, tint } from '../lib/theme'
 import { fadeInFast, fadeOutFast } from './motion/presence'
 
 /**
@@ -80,25 +80,25 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: 'rgba(255,69,58,0.16)',
+    backgroundColor: tint(EMBER.destructive, 0.16),
     borderWidth: 1,
-    borderColor: 'rgba(255,69,58,0.35)',
+    borderColor: tint(EMBER.destructive, 0.35),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   offlineContainer: {
-    backgroundColor: 'rgba(255,69,58,0.22)',
-    borderColor: 'rgba(255,69,58,0.5)',
+    backgroundColor: tint(EMBER.destructive, 0.22),
+    borderColor: tint(EMBER.destructive, 0.5),
   },
   text: {
     ...TYPE.meta,
-    color: '#FFDADA',
+    color: EMBER.textPrimary,
     flex: 1,
   },
   retryText: {
     ...TYPE.label,
-    color: '#FFDADA',
+    color: EMBER.textPrimary,
     marginLeft: SPACE.sm,
   },
 })

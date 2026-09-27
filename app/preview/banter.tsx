@@ -1,24 +1,24 @@
-import { Ionicons } from '@expo/vector-icons'
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
   BANTER_PADDING_HORIZONTAL,
   BANTER_SECTION_GAP,
+  BanterBucketHeading,
   BanterConversation,
   BanterHeading,
-  BanterPinned,
+  BanterLiveRoom,
+  BanterRequest,
   BanterSearch,
   type ConversationItem,
-  type PinnedItem,
 } from '../../components/banter/BanterSections'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
-import { EMBER, ICON, SPACE } from '../../lib/theme'
+import { EMBER, SPACE } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
 
 /**
- * The Banter, against fixtures — frame `1141:5247`.
+ * The Banter, against fixtures.
  *
  * Same reason as `__preview` and `__preview-scene`: the real screen needs a
  * login, a network and a conversation that exists, and none of those has
@@ -28,30 +28,35 @@ import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
  */
 
 /*
- * Realistic length, not "Chat 1".
- *
- * The frame's own previews run to a full sentence — "The gallery opening
- * starts at 8! Are you coming?" — and a two-word fixture would hide the
- * wrapping the two-line preview exists to handle.
+ * Rooms only, because that is all Live now holds: the rooms you are checked
+ * into. One with a cover and a count, one with neither, so both fallbacks show.
  */
-/*
- * Event rooms, because that is all the rail holds.
- *
- * It was four people when the section was called "Pinned". It is called
- * "Live now" and holds the rooms you are checked into, so a fixture with a
- * face in it would show a layout the screen cannot produce.
- */
-const PINNED: PinnedItem[] = [
-  { id: 'p1', name: 'Gala Night', isEvent: true, online: true },
-  { id: 'p2', name: 'Rooftop Sessions', isEvent: true, online: true },
+const LIVE = [
+  { id: 'l1', title: 'Gala Night', coverUrl: 'https://picsum.photos/seed/gala/200/200', memberCount: 42 },
+  { id: 'l2', title: 'Rooftop Sessions', coverUrl: null, memberCount: 0 },
 ]
 
-const CONVERSATIONS: ConversationItem[] = [
+const REQUESTS = [
+  {
+    id: 'r1',
+    name: 'Noor A.',
+    avatarUrl: 'https://picsum.photos/seed/noor/200/200',
+    timeLabel: '12m',
+    message: 'Loved your take on the panel earlier — are you going to the after-party?',
+  },
+  { id: 'r2', name: 'Someone', avatarUrl: null, timeLabel: 'Yesterday', message: 'Wants to message you' },
+]
+
+/*
+ * Realistic length, not "Chat 1" — a two-word fixture would hide the
+ * truncation the one-line preview exists to handle.
+ */
+const TODAY: ConversationItem[] = [
   {
     id: 'c1',
     title: 'Julian Ember',
     preview: 'The gallery opening starts at 8! Are you coming?',
-    timeLabel: '2m ago',
+    timeLabel: '2m',
     avatarUrl: 'https://picsum.photos/seed/julian/200/200',
     kind: 'direct',
     unread: true,
@@ -59,43 +64,51 @@ const CONVERSATIONS: ConversationItem[] = [
   {
     id: 'c2',
     title: 'Creative Circles #12',
-    preview: 'New design assets have been uploaded...',
-    timeLabel: '1h ago',
+    preview: 'Velvet Otter: New design assets have been uploaded to the shared folder',
+    timeLabel: '1h',
+    avatarUrl: 'https://picsum.photos/seed/circles/200/200',
     kind: 'event',
+    unread: true,
   },
   {
     id: 'c3',
     title: 'Aria Vance',
-    preview: 'That layout looks incredible. Great job.',
-    timeLabel: '4h ago',
+    preview: 'You: That layout looks incredible. Great job.',
+    timeLabel: '4h',
     avatarUrl: 'https://picsum.photos/seed/aria/200/200',
     kind: 'direct',
   },
+]
+
+const THIS_WEEK: ConversationItem[] = [
   {
     /*
-     * A match who has not revealed. The server sends the pseudonym as the name
-     * and no photo, so this row must draw the generated mark rather than an
-     * empty circle — the case that was rendering as a grey hole.
+     * A match who has not revealed and has asked you to. The server sends the
+     * pseudonym as the name and no photo, so this row draws the generated mark.
      */
-    id: 'c3b',
+    id: 'c4',
     title: 'Cosmic Panda',
-    preview: 'Nice to finally talk properly.',
-    timeLabel: '5h ago',
+    preview: 'Asked to reveal names',
+    previewEmphasis: true,
+    timeLabel: 'Yesterday',
     kind: 'direct',
     pseudonymous: true,
   },
   {
-    id: 'c4',
-    title: 'Product Team',
-    preview: 'Liam: Meeting moved to 10 AM tomorrow.',
-    timeLabel: 'Yesterday',
-    kind: 'group',
-  },
-  {
     id: 'c5',
+    title: 'Jazz on the Pier',
+    preview: 'You: See everyone next time',
+    timeLabel: 'Tue',
+    kind: 'event',
+  },
+]
+
+const EARLIER: ConversationItem[] = [
+  {
+    id: 'c6',
     title: 'David K.',
     preview: 'Can you send over the final specs?',
-    timeLabel: 'Tuesday',
+    timeLabel: 'Oct 4',
     avatarUrl: 'https://picsum.photos/seed/davidk/200/200',
     kind: 'direct',
   },
@@ -106,22 +119,7 @@ export default function BanterPreview() {
 
   return (
     <View style={styles.container}>
-      {/*
-        The same bar as the Pulse and the Scene. Frame `1141:5345` is the
-        identical component — 64pt, `rgba(15,14,14,0.8)`, 12pt blur, the accent
-        wordmark — differing only in what it holds. That is exactly what the
-        `leading` / `actions` slots were added for.
-      */}
-      <PulseTopBar
-        title="The Banter"
-        leading={<BarButton icon="menu" label="Menu" />}
-        actions={
-          <>
-            <BarButton icon="search" label="Search" />
-            <NotificationBell />
-          </>
-        }
-      />
+      <PulseTopBar title="The Banter" actions={<NotificationBell />} />
 
       <ScrollView
         contentContainerStyle={[
@@ -136,55 +134,51 @@ export default function BanterPreview() {
         <BanterSearch />
 
         <View style={styles.section}>
-          <BanterHeading title="Live now" trailingIcon="sensors" />
-          {/*
-            Horizontal, and it bleeds the page gutter for the same reason the
-            Pulse's Featured row does: a rail that stops inside the margin
-            reads as a clipped list rather than one that runs off the edge.
-          */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.railBleed}
-            contentContainerStyle={styles.rail}
-          >
-            {PINNED.map((p) => (
-              <BanterPinned key={p.id} item={p} />
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.section}>
-          <BanterHeading title="Recent" action="Mark all read" />
-          <View>
-            {CONVERSATIONS.map((c) => (
-              <BanterConversation key={c.id} item={c} />
+          <BanterHeading title="Live now" />
+          <View style={styles.liveList}>
+            {LIVE.map((l) => (
+              <BanterLiveRoom key={l.id} title={l.title} coverUrl={l.coverUrl} memberCount={l.memberCount} />
             ))}
           </View>
         </View>
+
+        <View style={styles.section}>
+          <BanterHeading title="Requests" detail={String(REQUESTS.length)} />
+          <View>
+            {REQUESTS.map((r) => (
+              <BanterRequest
+                key={r.id}
+                name={r.name}
+                avatarUrl={r.avatarUrl}
+                timeLabel={r.timeLabel}
+                message={r.message}
+                onAccept={() => {}}
+                onDecline={() => {}}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View>
+          <BanterBucketHeading title="Today" action="Mark all read" />
+          {TODAY.map((c) => (
+            <BanterConversation key={c.id} item={c} />
+          ))}
+          <View style={styles.bucketGap}>
+            <BanterBucketHeading title="This week" />
+          </View>
+          {THIS_WEEK.map((c) => (
+            <BanterConversation key={c.id} item={c} />
+          ))}
+          <View style={styles.bucketGap}>
+            <BanterBucketHeading title="Earlier" />
+          </View>
+          {EARLIER.map((c) => (
+            <BanterConversation key={c.id} item={c} />
+          ))}
+        </View>
       </ScrollView>
-
     </View>
-  )
-}
-
-/** A 36pt glyph in a 44pt hit area — the top bar's control, as the Scene has it. */
-function BarButton({
-  icon,
-  label,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name']
-  label: string
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={8}
-      style={({ pressed }) => [styles.barButton, pressed && { opacity: 0.6 }]}
-    >
-      <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />
-    </Pressable>
   )
 }
 
@@ -194,10 +188,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: BANTER_PADDING_HORIZONTAL,
     gap: BANTER_SECTION_GAP,
   },
-  // Frame `1141:5255`: the heading and its rail are 16 apart, not 32.
   section: { gap: SPACE.lg },
-  railBleed: { marginHorizontal: -BANTER_PADDING_HORIZONTAL },
-  // Frame `1141:5261`: gap 24, `pb-[8px]`.
-  rail: { gap: SPACE.xl, paddingBottom: SPACE.sm, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
-  barButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  liveList: { gap: SPACE.md },
+  // Matches `bucketGap` in app/(tabs)/chat.tsx.
+  bucketGap: { marginTop: SPACE.xl },
 })

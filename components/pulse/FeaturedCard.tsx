@@ -1,6 +1,5 @@
 import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
@@ -24,13 +23,24 @@ export const FEATURED_ROW_INSET = GUTTER
 export const FEATURED_CARD_GAP = SPACE.lg
 /** How much of the next card shows: enough to read as a card, not a sliver. */
 const FEATURED_PEEK = SPACE.xxl
-/** 4:5. Tall enough for a photograph, short enough to fit above the bar at full width. */
-export const FEATURED_CARD_ASPECT = 5 / 4
+/**
+ * The photograph is square, and the words sit under it rather than on it.
+ *
+ * It was a 4:5 photo with the title printed over a dark scrim. The event lists
+ * worth copying (Luma, District, Airbnb) never put text on a photograph they
+ * did not take: an organiser's upload can be anything, and a scrim strong
+ * enough to guarantee contrast greys out the picture it is there to show.
+ * Square, because the words now need their own ~100pt and a 4:5 photo plus
+ * them no longer fits above the tab bar at full width.
+ */
+export const FEATURED_PHOTO_ASPECT = 1
+/** Title (two lines at most) and the date/venue line, under the photo. */
+export const FEATURED_BODY_HEIGHT =
+  SPACE.lg + TYPE.title.lineHeight * 2 + SPACE.xs + TYPE.meta.lineHeight
 export const FEATURED_CARD_WIDTH =
   SCREEN_WIDTH - FEATURED_ROW_INSET - FEATURED_CARD_GAP - FEATURED_PEEK
 /** The width when there is nothing to peek at: margin to margin. */
 export const FEATURED_CARD_SOLO = SCREEN_WIDTH - FEATURED_ROW_INSET * 2
-export const FEATURED_CARD_HEIGHT = Math.round(FEATURED_CARD_WIDTH * FEATURED_CARD_ASPECT)
 
 /**
  * Everything between the top of the screen (below the safe area) and the top
@@ -47,23 +57,35 @@ const CARD_BOTTOM_BREATH = SPACE.xl
 /**
  * The card's size for a screen with these safe insets.
  *
- * The height is clamped to the space above the tab bar (`barTop` is the bar's
- * real top edge) and the width follows from the aspect, so the hero card is
- * never partly hidden behind the navigation on a short phone.
+ * Photo plus words is clamped to the space above the tab bar (`barTop` is the
+ * bar's real top edge) and the width follows from the photo's aspect, so the
+ * hero card is never partly hidden behind the navigation on a short phone.
  */
 export function featuredCardLayout(
   insets: { top: number; bottom: number },
   barTop: number,
-  solo = false
+  solo = false,
+  /**
+   * Anything drawn above the header that the chrome constant can't know about
+   * — the banners ("You're in San Francisco — nothing here yet", offline),
+   * measured by the caller. Without it a banner pushed the card's words under
+   * the tab bar.
+   */
+  above = 0
 ) {
-  const available = barTop - (insets.top + CHROME_ABOVE_CARD) - CARD_BOTTOM_BREATH
-  const width = Math.min(
-    solo ? FEATURED_CARD_SOLO : FEATURED_CARD_WIDTH,
-    Math.round(available / FEATURED_CARD_ASPECT)
+  const max = solo ? FEATURED_CARD_SOLO : FEATURED_CARD_WIDTH
+  const available = barTop - (insets.top + CHROME_ABOVE_CARD + above) - CARD_BOTTOM_BREATH
+  // Floored at 60%: a stack of banners should push the card down the page,
+  // not shrink it to a thumbnail.
+  const width = Math.max(
+    Math.round(max * 0.6),
+    Math.min(max, Math.round((available - FEATURED_BODY_HEIGHT) / FEATURED_PHOTO_ASPECT))
   )
+  const photoHeight = Math.round(width * FEATURED_PHOTO_ASPECT)
   return {
     width,
-    height: Math.round(width * FEATURED_CARD_ASPECT),
+    photoHeight,
+    height: photoHeight + FEATURED_BODY_HEIGHT,
     inset: FEATURED_ROW_INSET,
   }
 }
@@ -107,92 +129,47 @@ function FeaturedCardImpl({
   width = FEATURED_CARD_WIDTH,
   onPress,
 }: Props) {
-  /*
-   * From the width it is actually being drawn at, not from the default.
-   *
-   * `width` is a prop — the solo card is `FEATURED_CARD_SOLO`, wider than the
-   * carousel one — so pinning the height to a constant made the shape wrong for
-   * whichever of the two was not the default.
-   */
-  const height = Math.round(width * FEATURED_CARD_ASPECT)
+  // From the width it is actually drawn at: the solo card is wider.
+  const photoHeight = Math.round(width * FEATURED_PHOTO_ASPECT)
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
-      style={({ pressed }) => [styles.card, { width, height }, pressed && styles.pressed]}
+      style={({ pressed }) => [{ width }, pressed && styles.pressed]}
     >
-      {/*
-        The whole media set, walked while this is the card on screen.
+      <View style={[styles.photo, { height: photoHeight }]}>
+        {/*
+          The whole media set, walked while this is the card on screen. Only the
+          active card mounts a player; `FeedMedia` keeps the opening still
+          mounted underneath whatever is playing, so there is always a
+          photograph behind and no loading or error state is needed here.
 
-        `playlist` replaces the old image-or-video pair. An event usually has one
-        photograph and this behaves exactly as before for it; an event with three
-        photographs and a clip now shows all four rather than only the first.
+          With no media the photo well stays its own fill — a quiet square, not
+          a broken-image glyph — so every card in the row keeps its shape.
+        */}
+        {playlist.length > 0 ? (
+          <FeedMedia playlist={playlist} isActive={isActive} width={width} height={photoHeight} />
+        ) : null}
 
-        `FeedMedia` keeps the opening still mounted underneath whatever is
-        playing, so this component no longer needs a loading or an error state —
-        there is always a photograph behind.
-      */}
-      {playlist.length > 0 ? (
-        <FeedMedia playlist={playlist} isActive={isActive} width={width} height={height} />
-      ) : (
-        // Not a broken-image glyph and not a blank rectangle: an event with no
-        // cover still has a name, and the scrim below keeps it legible either
-        // way. Every card in the row stays the same size whatever loaded.
-        <View style={styles.imageFallback} />
-      )}
-
-      {/*
-        The clip, over the photograph, only for the card the viewport settled on.
-
-        Mounted rather than paused: an unmounted card allocates no decoder, so a
-        row of six costs one player instead of six. `FeedVideo` explains why that
-        distinction is the whole policy.
-
-        The image above stays mounted underneath — it is the poster. First paint
-        is a real photograph, a slow network shows the photograph rather than
-        black, and a clip that 404s leaves a card that looks finished instead of
-        broken. There is no spinner because the poster already is one, and it is
-        one nobody can tell from the finished thing.
-      */}
-      {/*
-        Top-to-bottom, transparent to page colour.
-
-        The scrim is what makes white text on an unknown photograph legible, so
-        it is not decoration and it is not optional — a light image without it
-        is an unreadable card, and we do not control what an organiser uploads.
-      */}
-      <LinearGradient
-        colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.35)', 'rgba(15,14,14,0.9)']}
-        locations={[0, 0.5, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={styles.body}>
         {tag ? (
+          // A small neutral label on a dark backing, so it stays readable on any
+          // photograph and does not compete with the screen's one accent.
           <View style={styles.tagPill}>
-            <Text
-              style={styles.tagText}
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.4}
-            >
+            <Text style={styles.tagText} numberOfLines={1} maxFontSizeMultiplier={1.4}>
               {tag.toUpperCase()}
             </Text>
           </View>
         ) : null}
+      </View>
 
+      <View style={styles.body}>
         {/*
-          Capped at 1.3.
-
-          The card is a **fixed aspect** box — height is derived from width —
-          so its caption cannot grow into more room. An uncapped title at
-          Accessibility XXXL would fill most of the card, pushing the date and
-          venue off the bottom and leaving a photograph with a wall of text.
-
-          `numberOfLines` truncates, which is the right failure here: a title
-          cut short still tells you what the event is, where a caption pushed
-          off the card tells you nothing about when or where.
+          Capped at 1.3, and two lines: `featuredCardLayout` budgets exactly
+          that much room under the photo so the card clears the tab bar.
+          Truncating is the right failure — a title cut short still says what
+          the event is.
         */}
         <Text style={styles.title} numberOfLines={2} maxFontSizeMultiplier={1.3}>
           {title}
@@ -220,32 +197,26 @@ function FeaturedCardImpl({
 }
 
 const styles = StyleSheet.create({
-  card: {
+  pressed: { opacity: 0.9 },
+  photo: {
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceMedia,
-    // The scrim darkens the bottom almost to the page colour; the hairline
-    // keeps the card's rounded bottom edge visible against the page.
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: EMBER.separator,
   },
-  pressed: { opacity: 0.9 },
-  imageFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceMedia },
 
-  body: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACE.xl, gap: SPACE.sm },
-
-  // A small neutral label on a dark backing, so it stays readable on any
-  // photograph and does not compete with the screen's one accent.
   tagPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(15,14,14,0.6)',
+    position: 'absolute',
+    left: SPACE.lg,
+    top: SPACE.lg,
+    backgroundColor: EMBER.scrim,
     borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.xs,
-    marginBottom: SPACE.xs,
+    maxWidth: '80%',
   },
   tagText: { ...TYPE.label, color: EMBER.textPrimary },
 
+  body: { paddingTop: SPACE.lg, gap: SPACE.xs },
   title: TYPE.title,
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },

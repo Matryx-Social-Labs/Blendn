@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   input: {
     height: CONTROL.lg,
     backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.input,
+    borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.xl,
     ...TYPE.body,
   },

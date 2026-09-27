@@ -13,10 +13,12 @@ import {
   View,
   type ViewToken,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { SwipeToDismiss } from '../motion/SwipeToDismiss'
+import { ZoomableImage } from '../motion/ZoomableImage'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -62,10 +64,18 @@ export function SceneLightbox({
   onClose: () => void
 }) {
   const [index, setIndex] = useState(initialIndex)
+  // A zoomed photo owns every drag: the pager and swipe-to-dismiss stand down
+  // until it is back at 1×. Clips never zoom — pinching a playing video fights
+  // its own controls. See `ZoomableImage`.
+  const [zoomed, setZoomed] = useState(false)
+  // The close button and the counter share one top edge: under the status bar,
+  // a step below it. Both are CONTROL.sm tall, so their centres line up too.
+  const top = useSafeAreaInsets().top + SPACE.sm
   const listRef = useRef<FlatList<FeedMediaItem>>(null)
 
   const onShow = useCallback(() => {
     setIndex(initialIndex)
+    setZoomed(false)
     // After the list has laid out. `initialScrollIndex` alone is unreliable
     // when the modal mounts and measures in the same frame.
     setTimeout(() => {
@@ -74,7 +84,10 @@ export function SceneLightbox({
   }, [initialIndex])
 
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems[0]?.index != null) setIndex(viewableItems[0].index)
+    if (viewableItems[0]?.index != null) {
+      setIndex(viewableItems[0].index)
+      setZoomed(false)
+    }
   }, [])
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current
@@ -85,13 +98,12 @@ export function SceneLightbox({
         {item.kind === 'video' ? (
           <LightboxVideo source={item.url} poster={item.posterUrl} active={i === index} />
         ) : (
-          <Image
-            source={{ uri: item.url }}
-            style={styles.media}
-            // `contain`, not `cover`. This is the one place the whole frame
-            // must be visible — every other slot in the app crops.
-            contentFit="contain"
-            cachePolicy="memory-disk"
+          <ZoomableImage
+            uri={item.url}
+            width={SCREEN_W}
+            height={SCREEN_H}
+            active={i === index}
+            onZoomChange={setZoomed}
           />
         )}
       </View>
@@ -109,7 +121,7 @@ export function SceneLightbox({
       statusBarTranslucent
     >
       <StatusBar style="light" />
-      <SwipeToDismiss onDismiss={onClose}>
+      <SwipeToDismiss onDismiss={onClose} enabled={!zoomed}>
         <FlatList
           ref={listRef}
           data={items}
@@ -117,6 +129,7 @@ export function SceneLightbox({
           keyExtractor={(item, i) => `${item.url}-${i}`}
           horizontal
           pagingEnabled
+          scrollEnabled={!zoomed}
           showsHorizontalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
@@ -125,16 +138,16 @@ export function SceneLightbox({
         />
 
         {items.length > 1 ? (
-          <View style={styles.counter} pointerEvents="none">
+          <View style={[styles.counter, { top }]} pointerEvents="none">
             <Text style={styles.counterText}>
               {index + 1} / {items.length}
             </Text>
           </View>
         ) : null}
 
-        <Pressable style={styles.close} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+        <Pressable style={[styles.close, { top }]} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
           <View style={styles.closeInner}>
-            <Ionicons name="close" size={ICON.md} color="#FFFFFF" />
+            <Ionicons name="close" size={ICON.md} color={EMBER.textPrimary} />
           </View>
         </Pressable>
       </SwipeToDismiss>
@@ -222,22 +235,23 @@ function LightboxVideo({
 const styles = StyleSheet.create({
   page: { width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' },
   media: { width: SCREEN_W, height: SCREEN_H },
-  close: { position: 'absolute', top: 56, right: GUTTER, zIndex: 10 },
+  // `top` is applied inline from the safe-area inset.
+  close: { position: 'absolute', right: GUTTER, zIndex: 10 },
   closeInner: {
     width: CONTROL.sm,
     height: CONTROL.sm,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: EMBER.scrim,
     alignItems: 'center',
     justifyContent: 'center',
   },
   counter: {
     position: 'absolute',
-    top: 60,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    minHeight: CONTROL.sm,
+    justifyContent: 'center',
+    backgroundColor: EMBER.scrim,
     paddingHorizontal: SPACE.md,
-    paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
   },
   counterText: { ...TYPE.caption, color: EMBER.textPrimary },

@@ -1,8 +1,8 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, SPACE } from '../lib/theme'
+import { EMBER, EMBER_RADIUS } from '../lib/theme'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
 
@@ -10,7 +10,6 @@ interface EventCoverProps {
   /** The poster to draw, or null for the placeholder. */
   uri: string | null
   height: number
-  /** Top corners only: the card's action row sits underneath. */
   radius?: number
   /**
    * Bump to try a failed picture again (pull-to-refresh). A failure is
@@ -18,25 +17,25 @@ interface EventCoverProps {
    * loads afresh — with no frame of stale placeholder in between.
    */
   retry?: number
-  children: React.ReactNode
 }
 
 /**
- * An event's picture with its text on top, and never an empty block.
+ * An event's picture, and never an empty block.
  *
  * The Going card was `source={{ uri: cover || '' }}` with no `onError`, so an
  * event without a cover and a cover that failed to load both drew a dark 180 px
  * box above the title (SCRUM-286). On 2026-09-24 that was every card on
  * staging: the seed's image host began bot-checking the phone (SCRUM-285).
- * Either way this draws the brand mark on the surface colour instead, and the
- * title, venue and time stay readable over it.
+ * Either way this draws the brand mark on the surface colour instead.
+ *
+ * Nothing is drawn on the picture any more — the words sit under it — so there
+ * is no darkening layer either.
  */
-export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0, children }: EventCoverProps) {
+export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }: EventCoverProps) {
   const attempt = `${uri}#${retry}`
   const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
-  const corners = { borderTopLeftRadius: radius, borderTopRightRadius: radius }
-  const overlay = <View style={[StyleSheet.absoluteFill, styles.overlay, corners]} />
+  const corners = { borderRadius: radius }
 
   if (uri && failedAttempt !== attempt) {
     return (
@@ -59,8 +58,6 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0, c
           transition={150}
           cachePolicy="memory-disk"
         />
-        {overlay}
-        {children}
       </View>
     )
   }
@@ -68,8 +65,6 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0, c
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
       <Image source={monogram} style={styles.mark} resizeMode="contain" accessible={false} accessibilityIgnoresInvertColors />
-      {overlay}
-      {children}
     </View>
   )
 }
@@ -82,8 +77,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Faint and above centre, so it reads as a mark and not as content, and the
-  // title at the bottom never sits on it.
-  mark: { width: 72, height: 72, opacity: 0.35, marginBottom: SPACE.xxl },
-  overlay: { backgroundColor: 'rgba(0,0,0,0.4)' },
+  // Faint, so it reads as a mark and not as content.
+  mark: { width: 72, height: 72, opacity: 0.35 },
 })

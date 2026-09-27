@@ -231,11 +231,11 @@ export default function ScenePreview() {
               icon="local-bar"
               title="Open Bar"
               subtitle="Premium Spirits"
-              color="#F79EFF"
+              color={EMBER.violet}
               iconSize={18}
             />
             {/* Frame `1141:4925`: a segmented wheel at **20** — Material `camera`. */}
-            <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" color="#FF6D8D" />
+            <SceneAmenity icon="camera" title="Pro Photo" subtitle="Digital Gallery" color={EMBER.textSecondary} />
           </View>
 
         </View>
@@ -376,6 +376,6 @@ const barStyles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: EMBER.scrim,
   },
 })

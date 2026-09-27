@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import {
   Children,
   cloneElement,
@@ -26,13 +25,11 @@ import { isCatchAll, packChips } from '../../lib/chipPacking'
 import {
   CONTROL,
   EMBER,
-  EMBER_CONTROL_HEIGHT,
-  EMBER_GRADIENT,
   EMBER_RADIUS,
-  EMBER_TYPE,
   GUTTER,
   ICON,
   SPACE,
+  SWITCH_COLORS,
   TYPE,
 } from '../../lib/theme'
 
@@ -40,10 +37,9 @@ import {
  * The four controls the onboarding frames are built from.
  *
  * One file rather than four, because they are small and always imported
- * together — and because they share the one rule that matters: **the gradient
- * means "chosen"**. It is on a selected chip and nowhere else. A gradient used
- * decoratively would make the selected state unreadable, which on a chip row is
- * the entire information.
+ * together — and because they share one rule: **a `textPrimary` fill means
+ * "chosen"**. The accent belongs to `EmberButton` alone, the screen's one
+ * primary action (docs/DESIGN_SYSTEM.md).
  */
 
 /* -------------------------------------------------------------------------- */
@@ -66,7 +62,7 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
       accessibilityState={{ disabled: !!inactive, busy: !!busy }}
       accessibilityLabel={label}
       style={({ pressed }) => [
-        styles.buttonShadow,
+        styles.buttonOuter,
         // Dimmed rather than greyed: the disabled state is nearly always
         // "you have not finished typing yet", and swapping the fill for a flat
         // grey reads as broken rather than as not-yet.
@@ -77,7 +73,7 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
       <View style={styles.button}>
         {/*
           The label is capped because this button is a fixed
-          `EMBER_CONTROL_HEIGHT` box. React Native clips a glyph to its line
+          `CONTROL.lg` box. React Native clips a glyph to its line
           height rather than letting it overflow, so at Accessibility XXXL an
           uncapped label renders as a row of sliced letterforms inside a button
           that is still 56pt tall. 1.3 is the largest step that fits.
@@ -93,23 +89,6 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
           </Text>
         )}
       </View>
-    </Pressable>
-  )
-}
-
-/** The quieter second action: "Maybe later", "Skip for now". */
-export function EmberSecondaryButton({ label, onPress, disabled }: ButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-    >
-      <Text style={styles.secondaryLabel} maxFontSizeMultiplier={1.3} numberOfLines={1}>
-        {label}
-      </Text>
     </Pressable>
   )
 }
@@ -151,8 +130,7 @@ export function EmberChip({ label, selected, onPress, disabled }: ChipProps) {
      *
      * The padding, the radius and the border now live on the `Pressable`
      * itself, so the thing being measured and the thing being drawn are the
-     * same box. The gradient becomes a background behind the label rather than
-     * a container around it.
+     * same box, and the selected fill is that box's own background.
      *
      * `alignSelf: 'flex-start'` because a wrap container stretches its items on
      * the cross axis, and a chip should be as tall as its own content rather
@@ -166,19 +144,11 @@ export function EmberChip({ label, selected, onPress, disabled }: ChipProps) {
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.chip,
-        !selected && styles.chipIdle,
+        selected ? styles.chipSelected : styles.chipIdle,
         disabled && styles.chipDisabled,
         pressed && styles.pressed,
       ]}
     >
-      {selected ? (
-        <LinearGradient
-          colors={[...EMBER_GRADIENT.colors]}
-          start={EMBER_GRADIENT.start}
-          end={EMBER_GRADIENT.end}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : styles.chipLabelIdle]}>
         {label}
       </Text>
@@ -312,7 +282,7 @@ export const EmberField = forwardRef<TextInput, FieldProps>(function EmberField(
         ref={ref}
         /*
          * Capped for the same reason as the buttons: `styles.input` is a fixed
-         * `EMBER_CONTROL_HEIGHT` box, so scaled text is clipped rather than
+         * `CONTROL.lg` box, so scaled text is clipped rather than
          * given room. A field whose value is half-visible is worse than one
          * whose text is a size smaller — you cannot check what you typed.
          */
@@ -347,9 +317,7 @@ interface ToggleProps {
  *
  * `Switch` from react-native, not a hand-rolled `Pressable`: the platform one
  * already announces its state to a screen reader, honours reduce-motion, and
- * has the right hit target. `trackColor` is as far as the tint goes, because
- * the gradient cannot be applied to it and a fake switch that looked right
- * would behave worse.
+ * has the right hit target.
  */
 export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps) {
   return (
@@ -363,9 +331,7 @@ export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps
         onValueChange={onValueChange}
         accessibilityLabel={label}
         accessibilityHint={helper}
-        trackColor={{ false: EMBER.surfaceSunken, true: EMBER.gradientFrom }}
-        thumbColor={EMBER.textPrimary}
-        ios_backgroundColor={EMBER.surfaceSunken}
+        {...SWITCH_COLORS}
       />
     </View>
   )
@@ -446,9 +412,7 @@ export function EmberInlineToggle({
         onValueChange={onValueChange}
         accessibilityLabel={label}
         accessibilityHint={hint}
-        trackColor={{ false: EMBER.surface, true: EMBER.accent }}
-        thumbColor={EMBER.textPrimary}
-        ios_backgroundColor={EMBER.surface}
+        {...SWITCH_COLORS}
         style={styles.inlineSwitch}
       />
     </View>
@@ -464,9 +428,8 @@ export function EmberInlineToggle({
  * studied) and without a boundary they read as one long form. The card is what
  * makes them three things.
  *
- * The badge is a circle in the accent colour at low alpha rather than a solid
- * fill, so three of them stacked do not turn the screen into a row of traffic
- * lights.
+ * The badge is a plain `surface` circle with a `textPrimary` glyph — a
+ * decorative well, so three of them stacked stay quiet.
  */
 export function EmberCardSection({
   icon,
@@ -483,7 +446,7 @@ export function EmberCardSection({
     <View style={styles.cardSection}>
       <View style={styles.cardHead}>
         <View style={styles.cardBadge}>
-          <Ionicons name={icon} size={ICON.md} color={EMBER.accent} />
+          <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />
         </View>
         <View style={styles.cardHeadText}>
           <Text style={styles.cardTitle}>{title}</Text>
@@ -520,10 +483,10 @@ const CHIP_SPACING = SPACE.md
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
 
-  buttonShadow: { borderRadius: EMBER_RADIUS.pill },
+  buttonOuter: { borderRadius: EMBER_RADIUS.pill },
   buttonInactive: { opacity: 0.45 },
   button: {
-    height: EMBER_CONTROL_HEIGHT,
+    height: CONTROL.lg,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
     alignItems: 'center',
@@ -531,16 +494,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACE.md,
   },
-  buttonLabel: EMBER_TYPE.button,
-
-  secondaryButton: {
-    height: EMBER_CONTROL_HEIGHT,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryLabel: { ...EMBER_TYPE.button, color: EMBER.textPrimary },
+  buttonLabel: { ...TYPE.button, color: EMBER.onGradient },
 
   chipRow: {
     flexDirection: 'row',
@@ -555,7 +509,7 @@ const styles = StyleSheet.create({
      * A transparent border on *both* states, so selecting a chip does not
      * change its width.
      *
-     * The idle style added `borderWidth: 1` and the selected gradient had
+     * The idle style added `borderWidth: 1` and the selected fill had
      * none, which made every unselected chip two points wider than its
      * selected self. Tapping one therefore re-flowed the whole wrapped row —
      * chips jumping to a different line the moment you chose one, which is why
@@ -592,22 +546,21 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    // The gradient is an absolute fill; without this it paints over the radius.
-    overflow: 'hidden',
     // A wrap container stretches on the cross axis. A chip should be its own
     // height, not the height of the tallest one sharing its line.
     alignSelf: 'flex-start',
     // Over the 44pt floor, and stated so a shorter label cannot shrink below it.
     minHeight: CONTROL.md,
   },
-  // `#141313` with a hairline border, per the frame — a shade below the cards
-  // around it, so an unselected chip recedes rather than competing.
-  chipIdle: { backgroundColor: EMBER.surfaceMedia, borderColor: 'rgba(73,71,71,0.2)' },
+  // Pill controls sit on `surface` with a hairline; the `textPrimary` fill is
+  // the only thing that marks a chip as chosen.
+  chipIdle: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
+  chipSelected: { backgroundColor: EMBER.textPrimary },
   // Opacity only, so the chip keeps its measured width and the row does not
   // re-pack every time the cap is reached or released.
   chipDisabled: { opacity: 0.35 },
-  chipLabel: EMBER_TYPE.chip,
-  chipLabelSelected: { color: EMBER.onGradientChip },
+  chipLabel: TYPE.bodyStrong,
+  chipLabelSelected: { color: EMBER.bg },
   chipLabelIdle: { color: EMBER.textPrimary },
 
   toggleRow: {
@@ -615,7 +568,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.lg,
     backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.card,
+    borderRadius: EMBER_RADIUS.md,
     paddingVertical: SPACE.lg,
     paddingHorizontal: SPACE.xl,
   },
@@ -623,14 +576,14 @@ const styles = StyleSheet.create({
   // the right edge, which is what a row of three fixed children does on a
   // narrow phone.
   toggleText: { flex: 1, gap: SPACE.xs },
-  toggleLabel: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
+  toggleLabel: TYPE.body,
 
   // The caption sits under the title inside the head; 16 before the content.
   cardSection: {
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.2)',
+    borderColor: EMBER.separator,
     // 16 rather than 24: the card already costs the chips inside it width
     // against the open sections elsewhere, and work-field labels are the
     // longest in the app.
@@ -639,10 +592,10 @@ const styles = StyleSheet.create({
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   cardBadge: {
-    width: 40,
-    height: 40,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(255,144,109,0.12)',
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -664,7 +617,7 @@ const styles = StyleSheet.create({
      * so any number here is a guess. This just stops a section with no control
      * at all from sitting shorter than its neighbours.
      */
-    minHeight: 40,
+    minHeight: CONTROL.md,
   },
   sectionTitle: { ...TYPE.heading, flex: 1 },
   sectionCaption: { ...TYPE.meta, color: EMBER.textTertiary, marginBottom: SPACE.md },
@@ -675,6 +628,7 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.xs,
+    minHeight: CONTROL.sm,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceMedia,
   },
@@ -683,14 +637,14 @@ const styles = StyleSheet.create({
   inlineSwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
 
   fieldBlock: { gap: SPACE.md },
-  fieldLabel: EMBER_TYPE.fieldLabel,
+  fieldLabel: TYPE.label,
   input: {
-    height: EMBER_CONTROL_HEIGHT,
-    borderRadius: EMBER_RADIUS.input,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.xl,
-    ...EMBER_TYPE.input,
+    ...TYPE.body,
   },
-  inputCompact: { paddingHorizontal: SPACE.md, ...EMBER_TYPE.inputCentered },
-  helper: EMBER_TYPE.helper,
+  inputCompact: { paddingHorizontal: SPACE.md, ...TYPE.body, textAlign: 'center' },
+  helper: { ...TYPE.meta, color: EMBER.textTertiary },
 })

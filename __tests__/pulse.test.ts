@@ -1,18 +1,20 @@
 import {
+  dayGroupLabel,
   featuredDateLabel,
+  groupByDay,
   joinedCount,
+  nextUpLabel,
   placeLabel,
-  upcomingDayLabel,
+  timeLabel,
 } from '../lib/pulse'
 
 /**
  * The labels on a Pulse card.
  *
  * Every one of these is a rule somebody can disagree with, which is exactly why
- * none of them live inside a `<Text>`. The two worth reading closely are the
- * month-dropping rule (a real reading of the frame, not three inconsistent
- * labels) and "Today", which is the one that can be wrong in a way that sends
- * somebody out on the wrong night.
+ * none of them live inside a `<Text>`. The one worth reading closely is
+ * "Today", which is the one that can be wrong in a way that sends somebody out
+ * on the wrong night.
  */
 
 // A fixed local date, so these never depend on when they are run. October has
@@ -21,26 +23,63 @@ const NOW = new Date(2026, 9, 24, 18, 0, 0) // Sat 24 Oct 2026, 6pm local
 
 const at = (y: number, m: number, d: number, h = 20) => new Date(y, m, d, h).toISOString()
 
-describe('upcomingDayLabel', () => {
-  it('drops the month while it is the month you are already in', () => {
-    // The frame's own rhythm: 28 / 30 / Nov 2. The heading says "Upcoming", so
-    // repeating "Oct" down the column spends space on the part that is not
-    // changing.
-    expect(upcomingDayLabel(at(2026, 9, 28), NOW)).toBe('28')
-    expect(upcomingDayLabel(at(2026, 9, 30), NOW)).toBe('30')
+describe('dayGroupLabel', () => {
+  it('says Today and Tomorrow, with the weekday beside them', () => {
+    expect(dayGroupLabel(at(2026, 9, 24, 21), NOW)).toEqual({ title: 'Today', weekday: 'Saturday' })
+    expect(dayGroupLabel(at(2026, 9, 25, 9), NOW)).toEqual({ title: 'Tomorrow', weekday: 'Sunday' })
   })
 
-  it('brings the month back the moment the list crosses into it', () => {
-    expect(upcomingDayLabel(at(2026, 10, 2), NOW)).toBe('Nov 2')
+  it('names any later day by its date', () => {
+    expect(dayGroupLabel(at(2026, 10, 2), NOW)).toEqual({ title: 'Nov 2', weekday: 'Monday' })
   })
 
   it('adds the year only when it is not this one', () => {
-    expect(upcomingDayLabel(at(2027, 0, 3), NOW)).toBe('Jan 3, 2027')
+    expect(dayGroupLabel(at(2027, 0, 3), NOW)?.title).toBe('Jan 3, 2027')
   })
 
-  it('returns empty for a date it cannot read rather than "Invalid Date"', () => {
-    expect(upcomingDayLabel('not a date', NOW)).toBe('')
-    expect(upcomingDayLabel('', NOW)).toBe('')
+  it('returns null for a date it cannot read rather than "Invalid Date"', () => {
+    expect(dayGroupLabel('not a date', NOW)).toBeNull()
+    expect(dayGroupLabel('', NOW)).toBeNull()
+  })
+})
+
+describe('groupByDay', () => {
+  const ev = (id: string, start: string) => ({ id, start_time: start })
+
+  it('splits a sorted list into runs of one calendar day, keeping the order', () => {
+    const groups = groupByDay(
+      [
+        ev('a', at(2026, 9, 24, 19)),
+        ev('b', at(2026, 9, 24, 22)),
+        ev('c', at(2026, 9, 25, 9)),
+        ev('d', at(2026, 10, 2)),
+      ],
+      NOW
+    )
+    expect(groups.map((g) => [g.title, g.items.map((i) => i.id)])).toEqual([
+      ['Today', ['a', 'b']],
+      ['Tomorrow', ['c']],
+      ['Nov 2', ['d']],
+    ])
+  })
+
+  it('leaves out an event it cannot date rather than inventing a day for it', () => {
+    expect(groupByDay([ev('x', 'nope'), ev('y', at(2026, 9, 24))], NOW).map((g) => g.items.length)).toEqual([1])
+  })
+
+  it('is empty for nothing', () => {
+    expect(groupByDay([], NOW)).toEqual([])
+  })
+})
+
+describe('timeLabel', () => {
+  it('shows the local start time with minutes', () => {
+    expect(timeLabel(new Date(2026, 9, 24, 19, 0).toISOString())).toMatch(/7:00/)
+    expect(timeLabel(new Date(2026, 9, 24, 9, 30).toISOString())).toMatch(/9:30/)
+  })
+
+  it('returns empty for a date it cannot read', () => {
+    expect(timeLabel('nope')).toBe('')
   })
 })
 
@@ -115,5 +154,49 @@ describe('joinedCount', () => {
     expect(joinedCount({ current_capacity: -3 })).toBeNull()
     expect(joinedCount({ current_capacity: Number.NaN })).toBeNull()
     expect(joinedCount({})).toBeNull()
+  })
+})
+
+describe('nextUpLabel', () => {
+  // NOW is Sat 24 Oct 2026, 6pm. The time half is the phone's own format, so
+  // it is compared through `timeLabel` rather than spelled out.
+  const end = (y: number, m: number, d: number, h: number) => new Date(y, m, d, h).toISOString()
+
+  it('says Happening now between the start and the end', () => {
+    expect(nextUpLabel(at(2026, 9, 24, 17), end(2026, 9, 24, 23), NOW)).toBe('Happening now')
+  })
+
+  it('is not Happening now once it has ended, or when the end is unknown', () => {
+    expect(nextUpLabel(at(2026, 9, 24, 10), end(2026, 9, 24, 12), NOW)).toBe(
+      `Today · ${timeLabel(at(2026, 9, 24, 10))}`
+    )
+    expect(nextUpLabel(at(2026, 9, 24, 17), null, NOW)).toBe(`Tonight · ${timeLabel(at(2026, 9, 24, 17))}`)
+  })
+
+  it('says Tonight from 5pm today, Today before it', () => {
+    const tonight = at(2026, 9, 24, 21)
+    expect(nextUpLabel(tonight, end(2026, 9, 24, 23), NOW)).toBe(`Tonight · ${timeLabel(tonight)}`)
+    const morning = new Date(2026, 9, 24, 10)
+    const earlyNow = new Date(2026, 9, 24, 8)
+    expect(nextUpLabel(morning.toISOString(), end(2026, 9, 24, 12), earlyNow)).toBe(
+      `Today · ${timeLabel(morning.toISOString())}`
+    )
+  })
+
+  it('says Tomorrow by calendar day, not by hours away', () => {
+    // 9am tomorrow is 15 hours from 6pm — still Tomorrow, never Today.
+    const t = at(2026, 9, 25, 9)
+    expect(nextUpLabel(t, end(2026, 9, 25, 12), NOW)).toBe(`Tomorrow · ${timeLabel(t)}`)
+  })
+
+  it('names a later day by weekday and date, with the year only when it differs', () => {
+    const t = at(2026, 10, 7, 19)
+    expect(nextUpLabel(t, end(2026, 10, 7, 23), NOW)).toBe(`Sat, Nov 7 · ${timeLabel(t)}`)
+    const next = at(2027, 0, 2, 19)
+    expect(nextUpLabel(next, end(2027, 0, 2, 23), NOW)).toBe(`Sat, Jan 2, 2027 · ${timeLabel(next)}`)
+  })
+
+  it('is empty for a start it cannot read', () => {
+    expect(nextUpLabel('not a date', null, NOW)).toBe('')
   })
 })

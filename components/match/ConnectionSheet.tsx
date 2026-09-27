@@ -5,7 +5,7 @@ import Animated, { Easing, useReducedMotion, withDelay, withTiming } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet } from '../motion/RisingSheet'
 
 /**
@@ -135,14 +135,15 @@ export function ConnectionSheet({
           {/*
             Frame `1141:5414` is a 46pt exported sparkle. `react-native-svg` is
             not a dependency and one icon does not justify adding it — this is
-            the same glyph from the icon set already installed.
+            the same glyph from the icon set already installed, on a `surface`
+            well: the sheet's one accent is its primary button.
           */}
           <Animated.View
             entering={reduceMotion ? undefined : sparkIn}
             style={styles.spark}
             pointerEvents="none"
           >
-            <MaterialIcons name="auto-awesome" size={ICON.lg} color={EMBER.onGradient} />
+            <MaterialIcons name="auto-awesome" size={ICON.lg} color={EMBER.textPrimary} />
           </Animated.View>
         </View>
 
@@ -210,7 +211,7 @@ function Disc({
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  scrim: { flex: 1, backgroundColor: EMBER.backdrop },
   sheet: {
     backgroundColor: EMBER.bg,
     borderTopLeftRadius: EMBER_RADIUS.lg,
@@ -221,10 +222,10 @@ const styles = StyleSheet.create({
     gap: SPACE.lg,
   },
   grabber: {
-    width: 36,
+    width: 40,
     height: 4,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.textTertiary,
     marginBottom: SPACE.lg,
   },
 
@@ -237,7 +238,7 @@ const styles = StyleSheet.create({
   disc: {
     width: AVATAR,
     height: AVATAR,
-    borderRadius: AVATAR / 2,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: AVATAR_RING,
     // The page colour, so the two discs read as overlapping rather than merging.
     borderColor: EMBER.surfaceMedia,
@@ -256,12 +257,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -4,
     top: -16,
-    width: 46,
-    height: 46,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: EMBER.gradientFrom,
+    backgroundColor: EMBER.surface,
   },
 
   title: { ...TYPE.title, textAlign: 'center' },
@@ -272,10 +273,10 @@ const styles = StyleSheet.create({
   /*
    * `minHeight`, not a fixed height: pinned, it clips the label at large
    * Dynamic Type and in any language whose translation runs two lines.
-   * 68 is the frame's, pinned by matchOpener.test.ts; CONTROL.lg is the scale's.
+   * The frame drew 68; the scale's primary action is CONTROL.lg.
    */
   button: {
-    minHeight: 68,
+    minHeight: CONTROL.lg,
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',

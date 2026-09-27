@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics'
 import React, { memo, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { formatEventDateTime } from '../lib/time'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
 import { OptimizedImage } from './OptimizedImage'
 import { Text } from './ui/Text'
 
@@ -70,6 +70,8 @@ const EventCard = memo<EventCardProps>(({
     const km = (meters / 1000)
     return `${km.toFixed(km >= 10 ? 0 : 1)} km`
   }, [proximity])
+  const showDistanceBadge =
+    !!proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius
 
   return (
     <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
@@ -121,68 +123,65 @@ const EventCard = memo<EventCardProps>(({
           )}
         </View>
 
-        {/* Status indicators */}
-        <View style={styles.statusRow}>
-          {isCheckedIn && (
-            <View style={styles.statusBadge}>
-              <Text variant="caption" style={styles.statusText}>✅ Checked In</Text>
-            </View>
-          )}
-          
-          {canCheckIn && (
-            <TouchableOpacity
-              style={[styles.checkinButton, checkInLoading && styles.actionDisabled]}
-              onPress={handleCheckIn}
-              disabled={checkInLoading}
-              accessibilityRole="button"
-              accessibilityLabel="Check in to event"
-            >
-              {checkInLoading ? (
-                /*
-                 * `onGradient`, matching the label beside it.
-                 *
-                 * This was `#FFFFFF`, which was legible while the button was
-                 * iOS blue and is ~2.2:1 once the fill became `EMBER.accent`
-                 * (#FF906D). The static label was moved to the dark token and
-                 * the loading state was missed — so the button met contrast
-                 * except at the moment it was working.
-                 */
-                <ActivityIndicator size="small" color={EMBER.onGradient} />
-              ) : (
-                <Text variant="button" color={EMBER.onGradient}>Check In</Text>
-              )}
-            </TouchableOpacity>
-          )}
-          
-          {proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius && (
-            <View style={[styles.statusBadge, styles.distanceBadge]}>
-              <Text variant="caption" style={[styles.statusText, styles.distanceText]}>
-                📍 {distanceLabel} away • within {Math.round(event.check_in_radius)}m required
-              </Text>
-            </View>
-          )}
+        {/* Status badges: their own row, so 32pt badges never share a row with 48pt buttons. */}
+        {(isCheckedIn || showDistanceBadge) && (
+          <View style={styles.badgeRow}>
+            {isCheckedIn && (
+              <View style={styles.statusBadge}>
+                <Text variant="caption" style={styles.statusText}>✅ Checked In</Text>
+              </View>
+            )}
+            {showDistanceBadge && (
+              <View style={[styles.statusBadge, styles.distanceBadge]}>
+                <Text variant="caption" style={[styles.statusText, styles.distanceText]}>
+                  📍 {distanceLabel} away • within {Math.round(event.check_in_radius)}m required
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
-          {!isEnded && (
-            <TouchableOpacity 
-              style={[styles.interestButton, interestLoading && styles.actionDisabled]}
-              onPress={handleToggleInterest}
-              disabled={interestLoading}
-              accessibilityRole="button"
-              accessibilityLabel={interested ? 'Remove from interested events' : 'Mark as interested'}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {interestLoading ? (
-                <ActivityIndicator size="small" color={EMBER.textPrimary} />
-              ) : (
-                <Ionicons
-                  name={interested ? 'heart' : 'heart-outline'}
-                  size={ICON.md}
-                  color={EMBER.textPrimary}
-                />
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Actions: one height, one fill. */}
+        {(canCheckIn || !isEnded) && (
+          <View style={styles.actionRow}>
+            {canCheckIn && (
+              <TouchableOpacity
+                style={[styles.checkinButton, checkInLoading && styles.actionDisabled]}
+                onPress={handleCheckIn}
+                disabled={checkInLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Check in to event"
+              >
+                {checkInLoading ? (
+                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                ) : (
+                  <Text variant="button" color={EMBER.textPrimary}>Check In</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {!isEnded && (
+              <TouchableOpacity
+                style={[styles.interestButton, interestLoading && styles.actionDisabled]}
+                onPress={handleToggleInterest}
+                disabled={interestLoading}
+                accessibilityRole="button"
+                accessibilityLabel={interested ? 'Remove from interested events' : 'Mark as interested'}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {interestLoading ? (
+                  <ActivityIndicator size="small" color={EMBER.textSecondary} />
+                ) : (
+                  <Ionicons
+                    name={interested ? 'heart' : 'heart-outline'}
+                    size={ICON.md}
+                    color={EMBER.textPrimary}
+                  />
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Secondary metadata: interest count, capacity, tags */}
         <View style={styles.secondaryRow}>
@@ -221,11 +220,6 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
     marginHorizontal: GUTTER,
     marginVertical: SPACE.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
     overflow: 'hidden',
   },
   eventImage: {
@@ -255,11 +249,17 @@ const styles = StyleSheet.create({
   eventTime: {
     flex: 1,
   },
-  statusRow: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.sm,
     flexWrap: 'wrap',
+    marginBottom: SPACE.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
   },
   metaChipsRow: {
     flexDirection: 'row',
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
   },
   chipWarning: {
-    backgroundColor: 'rgba(255,188,92,0.16)',
+    backgroundColor: tint(EMBER.warning, 0.16),
   },
   chipWarningText: {
     color: EMBER.textPrimary,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
   },
   statusBadge: {
-    backgroundColor: 'rgba(52,199,89,0.18)',
+    backgroundColor: tint(EMBER.success, 0.18),
     height: CONTROL.sm,
     paddingHorizontal: SPACE.md,
     justifyContent: 'center',
@@ -307,9 +307,9 @@ const styles = StyleSheet.create({
   distanceText: {
     color: EMBER.textSecondary,
   },
-  // The check-in and heart buttons share a row, so they share a height.
+  // The check-in and heart buttons share a row, so they share a height and a fill.
   checkinButton: {
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.lg,
     height: CONTROL.md,
     alignItems: 'center',

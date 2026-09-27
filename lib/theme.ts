@@ -1,18 +1,11 @@
 /*
  * Shared visual tokens for Blendn's UI foundation.
  *
- * Two palettes live here on purpose. `APP_COLORS` is what twenty-six files
- * render today; `EMBER` below is the Liquid Ember palette from the Figma
- * *🕓 Updates* canvas, which onboarding is built against and the rest migrates
- * onto screen by screen.
- *
- * Not a rename, and not a second source of truth by accident. Repointing
- * `APP_COLORS.backgroundBase` from black to `#0F0E0E` would restyle every
- * screen in the app in one commit, with nobody having looked at any of them —
- * and the two palettes genuinely differ in more than shade: Ember has a
- * gradient as its primary action, dark text on top of it, and a warm
- * near-black rather than true black. They coexist until the last screen moves,
- * and then `APP_COLORS` goes.
+ * `EMBER` and the scales below (`SPACE`, `TYPE`, `ICON`, `CONTROL`,
+ * `EMBER_RADIUS`) are what every screen uses — see docs/DESIGN_SYSTEM.md.
+ * The `APP_*` block is the retired iOS-blue palette; no screen reads it and
+ * `scripts/check-design-tokens.js` keeps it that way. `APP_MOTION` is still
+ * live (durations and easings).
  */
 export const APP_COLORS = {
   backgroundBase: '#000000',
@@ -128,7 +121,7 @@ export const APP_CTA = {
  * more than once is here; anything used once stays inline at the call site.
  */
 export const EMBER = {
-  /** Page background. Warm near-black — not `#000`, which reads blue beside the gradient. */
+  /** Page background. Warm near-black — not `#000`, which reads blue beside the accent. */
   bg: '#0F0E0E',
   /** Inputs and the large content cards. */
   surface: '#272525',
@@ -146,67 +139,55 @@ export const EMBER = {
   textPlaceholder: '#6B7280',
 
   /**
-   * The primary action is a gradient, not a colour, so it cannot be a single
-   * token. `gradientFrom`/`gradientTo` at `GRADIENT_ANGLE`; the two `on*`
-   * values are the dark text that sits on top of it.
+   * The primary action, flat — one per screen (docs/DESIGN_SYSTEM.md). No
+   * gradient, no glow: the Figma frames drew it as a #FF906D → #FF6D8D
+   * gradient; the app draws the warm end alone.
    */
-  gradientFrom: '#FF906D',
-  gradientTo: '#FF6D8D',
-  /** Text on a gradient button. Dark on warm — white on this gradient fails contrast. */
-  onGradient: '#5B1600',
-  /** Text on a selected gradient chip. Darker again: the chip is smaller type. */
-  onGradientChip: '#2D0700',
-  /** The gradient's warm end as a flat colour, for eyebrow text and icons. */
   accent: '#FF906D',
+  /** Text on `accent`. Dark on warm — white on this orange fails contrast. */
+  onGradient: '#5B1600',
 
   /** Hairline dividers and control outlines. */
   separator: 'rgba(255,255,255,0.1)',
+  /** Skeleton placeholder blocks. */
+  skeleton: 'rgba(255,255,255,0.12)',
   /** Destructive actions and errors. */
   destructive: '#FF453A',
   success: '#30D158',
+  /** Caution states (an event filling up, a stale connection). */
+  warning: '#FFBC5C',
+  /** The one cool hue: the alternate glyph in a pair of amenity tiles. */
+  violet: '#F79EFF',
+
+  /** Page colour at 60%: pills and buttons sitting on a photo. */
+  scrim: 'rgba(15,14,14,0.6)',
+  /** Page colour at 0%: the far end of a photo → page fade. */
+  bgClear: 'rgba(15,14,14,0)',
+  /** Behind a modal, sheet or lightbox. */
+  backdrop: 'rgba(0,0,0,0.6)',
 } as const
 
 /**
- * 135°, and it has to be expressed twice.
- *
- * `expo-linear-gradient` takes start/end points in unit space rather than an
- * angle, and 135° in CSS runs top-left to bottom-right — which is `{x:0,y:0}`
- * to `{x:1,y:1}`, not the `{x:0,y:1}` a vertical default would give.
+ * A token colour at a given opacity, for tints behind a status (a success
+ * toast, an offline banner). `tint(EMBER.destructive, 0.16)`.
  */
-export const EMBER_GRADIENT = {
-  colors: [EMBER.gradientFrom, EMBER.gradientTo] as const,
-  start: { x: 0, y: 0 },
-  end: { x: 1, y: 1 },
-} as const
+export function tint(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1, 7), 16)
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
+}
 
 /**
- * The two blurred blobs behind every onboarding screen.
+ * Every `<Switch>` in the app: `<Switch {...SWITCH_COLORS} value={…} />`.
  *
- * 5% opacity under a 50–60px blur: at full strength this is a colour wash, and
- * at this strength it is the faint warmth the flat `#0F0E0E` would otherwise
- * lack. Positions are per-screen; only the colours and radii are shared.
+ * On is `success`, not `accent`: a switch is a setting, not the screen's
+ * primary action, and the accent is reserved for that (docs/DESIGN_SYSTEM.md).
  */
-export const EMBER_ATMOSPHERE = {
-  warm: { color: 'rgba(255,144,109,0.05)', blur: 60 },
-  cool: { color: 'rgba(255,109,141,0.05)', blur: 50 },
-} as const
-
-/** The glow under the primary button and the progress fill. */
-export const EMBER_GLOW = {
-  button: {
-    shadowColor: EMBER.gradientFrom,
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
-  },
-  progress: {
-    shadowColor: EMBER.gradientFrom,
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
+export const SWITCH_COLORS = {
+  // Off is `textTertiary`, not a surface: switches sit on `surface` and
+  // `surfaceSunken` cards, and a surface-coloured track vanishes on both.
+  trackColor: { false: EMBER.textTertiary, true: EMBER.success },
+  thumbColor: EMBER.textPrimary,
+  ios_backgroundColor: EMBER.textTertiary,
 } as const
 
 /**
@@ -220,13 +201,9 @@ export const EMBER_RADIUS = {
   md: 16,
   /** Sheets and grouped panels. */
   lg: 24,
-  input: 32,
   card: 32,
   pill: 9999,
 } as const
-
-/** Every input and the primary button are this tall. Same as `CONTROL.lg`. */
-export const EMBER_CONTROL_HEIGHT = 56
 
 /* -------------------------------------------------------------------------- */
 /* Type                                                                        */
@@ -298,6 +275,8 @@ export const CONTROL = {
   lg: 56,
   md: 48,
   sm: 32,
+  /** Unread-count badge pinned to an icon's corner. */
+  badge: 18,
 } as const
 
 /**
@@ -378,36 +357,3 @@ export const TYPE = {
 } as const
 
 export type TypeRole = keyof typeof TYPE
-
-/**
- * The old per-frame names, pointed at the scale above.
- *
- * Kept so the 60-odd files that spread `EMBER_TYPE.x` move onto the scale in the
- * same commit without a rename across all of them. New code uses `TYPE` or
- * `<Text variant>`; these go once nothing reads them.
- */
-export const EMBER_TYPE = {
-  actionPrimary: { ...TYPE.button, color: EMBER.onGradient },
-  actionSecondary: TYPE.button,
-  display: TYPE.display,
-  subtitle: { ...TYPE.body, color: EMBER.textSecondary },
-  fieldLabel: TYPE.label,
-  input: TYPE.body,
-  inputCentered: { ...TYPE.body, textAlign: 'center' as const },
-  helper: { ...TYPE.meta, color: EMBER.textTertiary },
-  chip: TYPE.bodyStrong,
-  button: { ...TYPE.button, color: EMBER.onGradient },
-  eyebrow: { ...TYPE.label, color: EMBER.accent },
-  progress: { ...TYPE.label, color: EMBER.textSecondary },
-  screenTitle: TYPE.display,
-  sectionHeading: TYPE.heading,
-  link: { ...TYPE.label, color: EMBER.accent },
-  cardEyebrow: TYPE.label,
-  cardValue: TYPE.body,
-  cardTitleLarge: TYPE.title,
-  cardTitle: TYPE.title,
-  meta: TYPE.meta,
-  cardBody: { ...TYPE.body, color: EMBER.textSecondary },
-  tag: TYPE.label,
-  categoryPill: TYPE.bodyStrong,
-} as const

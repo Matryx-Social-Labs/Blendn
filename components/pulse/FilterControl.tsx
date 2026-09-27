@@ -1,4 +1,6 @@
+import * as Haptics from 'expo-haptics'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
@@ -12,6 +14,7 @@ import {
 } from '../../lib/eventFilters'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet } from '../motion/RisingSheet'
+import { Grabber } from '../ui/Grabber'
 
 export interface CategoryOption {
   slug: string
@@ -61,7 +64,7 @@ export function FilterSheet({
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close filters" />
       <RisingSheet style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
-        <View style={styles.grabber} />
+        <Grabber />
 
         <View style={styles.sheetHead}>
           <Text style={styles.sheetTitle} accessibilityRole="header">
@@ -157,25 +160,68 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/*
+ * The fill and the label colour ease across in 150ms rather than snapping.
+ *
+ * These are wrapping rows of chips, not a segmented control, so there is no
+ * single track for an indicator to slide along — a pill travelling from the end
+ * of one row to the start of the next would cut diagonally across the sheet.
+ * The chip itself changing is the honest version: the old one lets go as the
+ * new one fills, in the same beat.
+ *
+ * A CSS transition, because it is a two-state change with no finger dragging
+ * it. It runs under Reduce Motion too: a colour change *is* the reduced form,
+ * and it is what says which chip is on. The tick is a selection haptic, on the
+ * frame of the tap.
+ *
+ * Written as the `transition` shorthand, not `transitionProperty` & co.: SDK
+ * 53's react-native-web typings declare those as strings on `ViewStyle`, and
+ * the two definitions intersect into something neither side can satisfy.
+ * Reanimated parses the shorthand, `cubic-bezier` included.
+ */
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)'
+
 function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {})
+        onPress()
+      }}
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && styles.pressed]}
+      style={({ pressed }) => pressed && styles.pressed}
     >
-      <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
-        {label}
-      </Text>
+      <Animated.View
+        style={[
+          styles.chip,
+          {
+            backgroundColor: on ? EMBER.textPrimary : EMBER.surface,
+            transition: `background-color 150ms ${EASE_OUT}`,
+          },
+        ]}
+      >
+        <Animated.Text
+          style={[
+            styles.chipText,
+            {
+              color: on ? EMBER.bg : EMBER.textPrimary,
+              transition: `color 150ms ${EASE_OUT}`,
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Animated.Text>
+      </Animated.View>
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
 
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.backdrop },
   sheet: {
     position: 'absolute',
     left: 0,
@@ -188,13 +234,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     paddingTop: SPACE.md,
     gap: SPACE.xl,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: EMBER.textTertiary,
   },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitle: TYPE.title,
@@ -209,11 +248,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
   },
-  chipOn: { backgroundColor: EMBER.accent },
-  chipText: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
-  chipTextOn: { color: EMBER.onGradientChip },
+  // Fill and label colour are set inline, where the transition can see them.
+  chipText: TYPE.bodyStrong,
 
   apply: {
     height: CONTROL.lg,

@@ -159,11 +159,13 @@ font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
 `components/` by the design-token check.
 
 - `EMBER` — `bg` (`#0F0E0E`), `surface`, `surfaceSunken`, `surfaceMedia`,
-  `textPrimary/Secondary/Tertiary`, `accent` (`#FF906D`), `gradientFrom/To`,
-  `onGradient`
-- `EMBER_FONTS` / `EMBER_TYPE` — Plus Jakarta Sans for display, Manrope for body.
+  `textPrimary/Secondary/Tertiary/Placeholder`, `accent` (`#FF906D`), `onGradient`,
+  `separator`, `destructive/success/warning`, `scrim/bgClear/backdrop/skeleton`;
+  `tint(EMBER.x, alpha)` for status tints
+- `TYPE` / `<Text variant>`, `SPACE`, `GUTTER`, `ICON`, `CONTROL`, `EMBER_RADIUS`
+- `EMBER_FONTS` — Plus Jakarta Sans for display, Manrope for body.
   **A `fontFamily` naming an unloaded family renders the system font silently**
-- `EMBER_GRADIENT`, `EMBER_RADIUS`, `EMBER_GLOW`, `EMBER_CONTROL_HEIGHT`
+- Surfaces are flat: no shadows, `BlurView`, glows or gradient fills (the check fails on them)
 - `APP_COLORS` — legacy. `#000` background, `#0A84FF` accent. Not the design
 - `APP_SPACING` — xxs/xs/sm/md/lg/xl/2xl/3xl/4xl (4–48 px)
 - `APP_RADIUS` — xs/sm/md/lg/xl/pill
@@ -186,6 +188,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 
 ### Important Patterns
 
+- **Motion runs on Reanimated 4.1 + `react-native-worklets` 0.5**, ahead of SDK 53's bundled 3.17 (both officially support RN 0.79). `expo.install.exclude` in `package.json` keeps `npx expo install --check` from downgrading them. Remove that entry when the SDK upgrade bundles Reanimated 4. Use `.get()/.set()` on shared values and `scheduleOnRN` from `react-native-worklets`, not `runOnJS`. Babel needs nothing: `babel-preset-expo` adds `react-native-reanimated/plugin`, which now re-exports the worklets plugin.
 - **Logging**: use `Logger.info/warn/error('module', 'message', data)` from `lib/logger.ts` — never `console.log`.
 - **Auth singleton**: `useAuth.ts` stores state in a module-level variable, not React context. All components share one instance; calling `useAuth()` subscribes to updates.
 - **Socket lifecycle**: managed in `_layout.tsx` — connects on login via `initSocketWithAppState()`, disconnects on logout, auto-reconnects on foreground. Rooms are automatically rejoined after every reconnect.

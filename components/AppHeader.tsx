@@ -107,8 +107,8 @@ interface AppHeaderProps {
 }
 
 /**
- * Only ever rendered one way — transparent, over the root's gradient
- * background, light text. There used to be a `variant` prop with a light-mode
+ * Only ever rendered one way — transparent, over the root's flat `EMBER.bg`,
+ * light text. There used to be a `variant` prop with a light-mode
  * branch (`#FFFFFF` background, dark text); nothing in the app renders it and
  * there's no dark-mode toggle to reach it, so it was dead code pretending to
  * be a feature.
@@ -132,8 +132,6 @@ export function AppHeader(props: AppHeaderProps) {
         paddingTop: SPACE.sm,
         paddingBottom: SPACE.md,
         backgroundColor: 'transparent',
-        shadowOpacity: 0,
-        elevation: 0,
       },
       containerStyle,
     ]}>

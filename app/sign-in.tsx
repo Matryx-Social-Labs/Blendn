@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   input: {
     height: CONTROL.lg,
     backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.input,
+    borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.xl,
     ...TYPE.body,
   },
@@ -431,7 +431,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
 
   linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
-  link: TYPE.label,
+  // A text action, so it reads as one: primary, not the grey of a caption.
+  link: { ...TYPE.label, color: EMBER.textPrimary },
   legal: {
     ...TYPE.meta,
     color: EMBER.textTertiary,

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
-import { EMBER, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * Three dots and a name. Frame `1141:5574`.
@@ -87,6 +87,6 @@ const styles = StyleSheet.create({
    */
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: 0.6 },
   dots: { flexDirection: 'row', gap: SPACE.xs },
-  dot: { width: 4, height: 4, borderRadius: 9999, backgroundColor: EMBER.textSecondary },
+  dot: { width: 4, height: 4, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textSecondary },
   label: { ...TYPE.label, flexShrink: 1 },
 })

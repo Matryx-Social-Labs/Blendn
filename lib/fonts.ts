@@ -9,7 +9,7 @@
  * nobody loaded does not throw and does not warn — it renders in the system
  * font, which on a dark screen at a glance looks like a slightly different
  * weight rather than like a bug. `__tests__/fonts.test.ts` compares the names
- * in `EMBER_TYPE` against the keys here, so a typo fails a test instead of
+ * in `TYPE` against the keys here, so a typo fails a test instead of
  * shipping.
  */
 

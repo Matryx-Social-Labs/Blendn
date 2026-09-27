@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * A centred pill for anything the room says about itself. Frame `1141:5532`.
@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'center' },
   pill: {
     backgroundColor: EMBER.surfaceSunken,
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
     /*

@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: EMBER.backdrop,
   },
   tray: {
     width: '100%',
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: EMBER_RADIUS.pill,
     alignSelf: 'center',
-    backgroundColor: EMBER.separator,
+    backgroundColor: EMBER.textTertiary,
     marginBottom: SPACE.sm,
   },
   title: {

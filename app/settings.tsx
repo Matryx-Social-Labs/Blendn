@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
+import ScalePress from '../components/motion/ScalePress'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
@@ -378,21 +379,19 @@ export default function SettingsScreen() {
               onValueChange={() => onTogglePreference(keyName)}
               accessibilityLabel={item.title}
               disabled={saving[keyName] || loadingPreferences}
-              /*
-               * `EMBER.accent`. The old `#7A2CF3` predates the ember palette and
-               * was the only purple left in the app -- on the one control whose
-               * whole job is to read as "on".
-               */
-              trackColor={{ false: EMBER.textTertiary, true: EMBER.accent }}
-              thumbColor={EMBER.textPrimary}
+              {...SWITCH_COLORS}
             />
           </View>
         </View>
       )
     }
+    // Shrinks rather than dims, like the Me tab's rows: 0.98 for a full-width
+    // row, no haptic -- settings are tapped often and navigate, they don't commit.
     return (
-      <TouchableOpacity
+      <ScalePress
         key={idx}
+        haptic={false}
+        pressedScale={0.98}
         style={styles.row}
         onPress={item.onPress}
         disabled={item.disabled}
@@ -405,7 +404,7 @@ export default function SettingsScreen() {
           <Text style={[styles.rowTitle, item.danger && { color: EMBER.destructive }]}>{item.title}</Text>
         </View>
         <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
-      </TouchableOpacity>
+      </ScalePress>
     )
   }
 
@@ -447,8 +446,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg },
-  // Translucent-white overlay, not an opaque card token — kept as a literal.
-  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: EMBER_RADIUS.md, borderWidth: 1, borderColor: EMBER.separator },
+  // One step up from the page. (Was a 6% white overlay: on the flat EMBER.bg it renders as this.)
+  card: { backgroundColor: EMBER.surfaceSunken, borderRadius: EMBER_RADIUS.md, borderWidth: 1, borderColor: EMBER.separator },
   sectionHeader: { ...TYPE.label, marginTop: SPACE.lg, marginBottom: SPACE.sm, paddingHorizontal: SPACE.lg },
   /*
    * The gap that separates Delete account from everything above it. 40 rather

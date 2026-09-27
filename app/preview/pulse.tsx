@@ -16,7 +16,8 @@ import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
 import { feedPlaylist } from '../../lib/feedMedia'
-import { EMBER } from '../../lib/theme'
+import { EMBER, SPACE } from '../../lib/theme'
+import { DayHeading } from '../../components/ui/DayHeading'
 import { TAB_BAR_CLEARANCE, tabBarTop } from '../(tabs)/_layout'
 
 /**
@@ -84,25 +85,45 @@ const FEATURED = [
   },
 ]
 
-const UPCOMING = [
+const UPCOMING_DAYS = [
   {
-    id: 'u1',
-    title: 'Founders & Filter Coffee',
-    category: 'Networking',
-    dayLabel: '24',
-    joinedCount: 142,
-    distanceLabel: '1.2 km',
-    description:
-      'An early start with people building things in the city. No pitches, no badges — just coffee and whatever you are working on.',
+    title: 'Today',
+    weekday: 'Sunday',
+    items: [
+      {
+        id: 'u1',
+        title: 'Founders & Filter Coffee',
+        category: 'Networking',
+        timeLabel: '8:00 AM',
+        placeLabel: 'Third Wave, Indiranagar',
+        joinedCount: 142,
+        distanceLabel: '1.2 km',
+      },
+      {
+        id: 'u2',
+        title: 'Rooftop Jazz: The Late Set',
+        category: 'Music',
+        timeLabel: '9:30 PM',
+        placeLabel: 'The Humming Tree',
+        joinedCount: 64,
+        distanceLabel: '2.1 km',
+      },
+    ],
   },
   {
-    id: 'u2',
-    title: 'Kannada Poetry Open Mic',
-    category: 'Spoken word',
-    dayLabel: 'Sep 2',
-    joinedCount: 38,
-    distanceLabel: '4.8 km',
-    description: 'Read something, or come and listen. Sign-ups open at the door.',
+    title: 'Sep 2',
+    weekday: 'Wednesday',
+    items: [
+      {
+        id: 'u3',
+        title: 'Kannada Poetry Open Mic',
+        category: 'Spoken word',
+        timeLabel: '7:00 PM',
+        placeLabel: 'Atta Galatta',
+        joinedCount: 38,
+        distanceLabel: '4.8 km',
+      },
+    ],
   },
 ]
 
@@ -201,19 +222,25 @@ export default function PulsePreview() {
 
         <View style={styles.section}>
           <SectionHeader title="Upcoming" />
-          <View style={styles.stack}>
-            {UPCOMING.map((e) => (
-              <UpcomingCard
-                key={e.id}
-                title={e.title}
-                category={e.category}
-                imageUrl={null}
-                dayLabel={e.dayLabel}
-                joinedCount={e.joinedCount}
-                distanceLabel={e.distanceLabel}
-                description={e.description}
-                onPress={() => {}}
-              />
+          <View style={styles.dayGroups}>
+            {UPCOMING_DAYS.map((day) => (
+              <View key={day.title} style={styles.dayGroup}>
+                <DayHeading title={day.title} detail={day.weekday} />
+                {day.items.map((e) => (
+                  <UpcomingCard
+                    key={e.id}
+                    title={e.title}
+                    category={e.category}
+                    imageUrl={null}
+                    timeLabel={e.timeLabel}
+                    placeLabel={e.placeLabel}
+                    joinedCount={e.joinedCount}
+                    distanceLabel={e.distanceLabel}
+                    onPress={() => {}}
+                    onToggleFavorite={() => {}}
+                  />
+                ))}
+              </View>
             ))}
           </View>
         </View>
@@ -271,4 +298,6 @@ const styles = StyleSheet.create({
    */
   rail: { gap: FEATURED_CARD_GAP },
   stack: { paddingHorizontal: MAIN_PADDING_HORIZONTAL, gap: 32 },
+  dayGroups: { paddingHorizontal: MAIN_PADDING_HORIZONTAL, gap: SPACE.xl },
+  dayGroup: { gap: SPACE.md },
 })

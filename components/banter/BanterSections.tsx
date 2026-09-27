@@ -3,23 +3,21 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { OptimizedImage } from '../OptimizedImage'
+import { DayHeading } from '../ui/DayHeading'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { liveRoomMeta } from './inbox'
 
 /**
- * The Banter's pieces — frame `1141:5247`.
+ * The Banter's pieces.
  *
  * ## One inbox, not two tabs
  *
- * The screen this replaces splits `personal` and `group` into tabs. The frame
- * has a single **Recent** list carrying both, and tells them apart by the
- * avatar: a photograph for a person, a `#211F1F` disc with a glyph for a room.
- *
- * That is the better shape. A tab split asks you to know which *kind* of
+ * People and rooms share one list and are told apart by the avatar: a person
+ * is round (a photograph, or the generated mark before they reveal), a room is
+ * its event's cover in a square. A tab split asks you to know which *kind* of
  * conversation you are looking for before you can look for it — and the answer
  * is usually "the one that just buzzed", which is a property of neither tab.
- * The existing screen's data loading, caching and message-request handling all
- * survive; only the presentation merges.
  *
  * ## Faces are fine here, and this is not the `interestedPreview` case
  *
@@ -34,20 +32,24 @@ import { CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE
 export const BANTER_PADDING_HORIZONTAL = GUTTER
 export const BANTER_SECTION_GAP = SPACE.xxl
 
-/** Frame `1141:5264` — a pinned avatar. `1141:5294` — a conversation's. */
-export const PINNED_AVATAR = 64
+/** Every avatar in the inbox — people, rooms, requests, live rooms. */
 export const ROW_AVATAR = 56
+/** A conversation row: the avatar plus `SPACE.md` above and below. Read or unread, the same. */
+export const ROW_HEIGHT = ROW_AVATAR + SPACE.md * 2
 
-// Frame: `textSecondary` at half, so a placeholder reads lighter than the text
-// that will replace it.
-const SEARCH_PLACEHOLDER = 'rgba(174,170,170,0.5)'
+const UNREAD_DOT = 10
+const LIVE_DOT = 8
+
+// The system placeholder grey, so a placeholder reads apart from the text that
+// will replace it.
+const SEARCH_PLACEHOLDER = EMBER.textPlaceholder
 
 /**
- * The search field — frame `1141:5249`.
+ * The search field.
  *
  * A live input that filters the inbox in place. No `autoFocus`: the keyboard
  * rises only when somebody taps it, so it never covers a list being read.
- * Without `onChangeText` it is the static frame the preview harness draws.
+ * Without `onChangeText` it is the static field the preview harness draws.
  */
 export function BanterSearch({
   value,
@@ -86,24 +88,39 @@ export function BanterSearch({
   )
 }
 
-/** "Pinned" / "Recent" — frame `1141:5258`, the `heading` role. */
-export function BanterHeading({
-  title,
-  action,
-  onAction,
-  trailingIcon,
-}: {
-  title: string
-  /** "Mark all read" — `1141:5291`, a text action in the `label` role. */
-  action?: string
-  onAction?: () => void
-  trailingIcon?: React.ComponentProps<typeof MaterialIcons>['name']
-}) {
+/** "Live now" / "Requests" — the `heading` role, with an optional count beside it. */
+export function BanterHeading({ title, detail }: { title: string; detail?: string }) {
   return (
-    <View style={styles.headingRow}>
+    <View style={styles.headingRow} accessibilityRole="header">
       <Text style={styles.heading} maxFontSizeMultiplier={1.4}>
         {title}
       </Text>
+      {detail ? (
+        <Text style={styles.headingDetail} maxFontSizeMultiplier={1.4}>
+          {detail}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+/**
+ * "Today" / "This week" / "Earlier" over the conversations, with the list's
+ * one text action ("MARK ALL READ", `label` in `textPrimary`) on the right of
+ * the first one.
+ */
+export function BanterBucketHeading({
+  title,
+  action,
+  onAction,
+}: {
+  title: string
+  action?: string
+  onAction?: () => void
+}) {
+  return (
+    <View style={styles.bucketRow}>
+      <DayHeading title={title} />
       {action ? (
         // 16pt of text + 14 above and below is the 44pt minimum, without
         // growing the heading row.
@@ -116,88 +133,52 @@ export function BanterHeading({
             {action.toUpperCase()}
           </Text>
         </Pressable>
-      ) : trailingIcon ? (
-        <MaterialIcons name={trailingIcon} size={ICON.sm} color={EMBER.textSecondary} />
       ) : null}
     </View>
   )
 }
 
-export interface PinnedItem {
-  id: string
-  name: string
-  /** A photograph, or nothing for an event room. */
-  avatarUrl?: string | null
-  /** An event room rather than a person — drawn as the gradient disc. */
-  isEvent?: boolean
-  /** Somebody is online. Frame `1141:5265`: 16pt `#FF6D8D`, 2pt page-colour ring. */
-  online?: boolean
-  /** Dimmed to 80% with a muted name — the frame's read state. */
-  muted?: boolean
-}
-
 /**
- * A pinned conversation — frame `1141:5262`.
+ * A room you are standing in — one full-width row per room under "Live now".
  *
- * The frame gives four treatments in four items, which is the whole vocabulary:
- * an unread person (accent ring + presence dot), an **event** (gradient disc
- * with an `EVENT` badge, no photograph because a room has no face), and two
- * read people at 80% with `#AEAAAA` names.
+ * A room you are checked into is a different object from the rest of the
+ * inbox: temporary, anonymous, and only useful while you are there. It gets a
+ * sunken panel rather than a list row so it reads as *where you are*, and a
+ * still `success` dot — presence is a status, never motion and never the
+ * accent (docs/DESIGN_SYSTEM.md).
  */
-export function BanterPinned({ item, onPress }: { item: PinnedItem; onPress?: () => void }) {
+export function BanterLiveRoom({
+  title,
+  coverUrl,
+  memberCount,
+  onPress,
+}: {
+  title: string
+  coverUrl?: string | null
+  memberCount?: number | null
+  onPress?: () => void
+}) {
+  const meta = liveRoomMeta(memberCount)
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={
-        item.isEvent ? `${item.name}, event room` : `${item.name}${item.online ? ', online' : ''}`
-      }
-      style={({ pressed }) => [styles.pinned, pressed && styles.pressed]}
+      accessibilityLabel={`${title}, live room. ${meta}`}
+      style={({ pressed }) => [styles.liveRow, pressed && styles.pressed]}
     >
-      <View style={item.muted ? styles.pinnedMuted : undefined}>
-        {item.isEvent ? (
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={styles.pinnedAvatar}
-          >
-            <MaterialIcons name="groups" size={ICON.lg} color={EMBER.onGradient} />
-          </LinearGradient>
-        ) : (
-          <OptimizedImage
-            source={item.avatarUrl ?? ''}
-            recyclingKey={item.avatarUrl ?? undefined}
-            style={[styles.pinnedAvatar, !item.muted && styles.pinnedRing] as never}
-            width={PINNED_AVATAR}
-            height={PINNED_AVATAR}
-            contentFit="cover"
-          />
-        )}
-
-        {/*
-          The `EVENT` badge — `1141:5274`. Violet on deep violet, which is the
-          amenity tiles' pair rather than the accent: an accent badge on an
-          accent disc would disappear into it.
-        */}
-        {item.isEvent ? (
-          <View style={styles.eventBadge} pointerEvents="none">
-            <Text style={styles.eventBadgeText} maxFontSizeMultiplier={1.2}>
-              EVENT
-            </Text>
-          </View>
-        ) : null}
-
-        {item.online ? <View style={styles.presence} pointerEvents="none" /> : null}
+      {/* `surface` under the cover: one step up from the panel it sits on. */}
+      <RoomCover url={coverUrl} />
+      <View style={styles.liveBody}>
+        <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+          {title}
+        </Text>
+        <View style={styles.liveMetaLine}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveMeta} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+            {meta}
+          </Text>
+        </View>
       </View>
-
-      <Text
-        style={[styles.pinnedName, item.muted && styles.pinnedNameMuted]}
-        numberOfLines={1}
-        maxFontSizeMultiplier={1.3}
-      >
-        {item.name}
-      </Text>
     </Pressable>
   )
 }
@@ -205,13 +186,20 @@ export function BanterPinned({ item, onPress }: { item: PinnedItem; onPress?: ()
 export interface ConversationItem {
   id: string
   title: string
+  /** Already prefixed — "You: …", "Mika: …". The screen owns who said it. */
   preview: string
-  /** Already formatted — "2m ago", "Yesterday". The screen owns time. */
+  /** Already formatted — "5m", "Yesterday". The screen owns time. */
   timeLabel: string
+  /** A person's photograph, or a room's event cover. */
   avatarUrl?: string | null
-  /** A room rather than a person: a `#211F1F` disc with a glyph. */
+  /** A room rather than a person: a square cover instead of a round face. */
   kind?: 'direct' | 'event' | 'group'
   unread?: boolean
+  /**
+   * The preview is news in itself — "Asked to reveal names" — and is drawn in
+   * `textPrimary` even when the row is read.
+   */
+  previewEmphasis?: boolean
   /**
    * They have not revealed yet, so `title` is a pseudonym and there is no
    * photograph to draw.
@@ -224,19 +212,16 @@ export interface ConversationItem {
 }
 
 /**
- * One row in **Recent** — frames `1141:5292` (unread) and `1141:5304` (read).
+ * One conversation.
  *
- * ## Unread is three changes, not a badge
+ * ## Unread is three changes, not a badge — and never a height change
  *
- * The frame carries no unread *count* on a row. Instead: a 12pt accent dot on
- * the avatar, the preview goes from `#AEAAAA` Regular to **white SemiBold**,
- * and the timestamp goes from `#AEAAAA` to accent Bold. So the row reads as
- * unread from across the screen rather than by finding a number on it — and
- * the count that does matter, the total, is on the bell.
- *
- * The read rows also carry a hairline bottom border and the unread one does
- * not, which is what makes an unread row look like a card and the rest like a
- * list.
+ * No count on a row. Unread turns the preview from `textSecondary` Regular to
+ * `textPrimary` SemiBold, the time to `textPrimary`, and puts a 10pt
+ * `textPrimary` dot under the time. The dot's slot is there on a read row too,
+ * empty, so a row does not grow, shrink or shift when it is read — the list
+ * holds still under your thumb while you work through it. No hairlines: rows
+ * are separated by their padding, the way Messages and Telegram do it.
  */
 export function BanterConversation({
   item,
@@ -255,57 +240,39 @@ export function BanterConversation({
       accessibilityLabel={`${item.title}. ${item.preview}. ${item.timeLabel}${
         item.unread ? '. Unread' : ''
       }`}
-      style={({ pressed }) => [
-        styles.row,
-        item.unread && styles.rowUnread,
-        pressed && styles.pressed,
-        style,
-      ]}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed, style]}
     >
-      <View>
-        {isRoom ? (
-          <View style={styles.roomAvatar}>
-            <MaterialIcons
-              name={item.kind === 'event' ? 'event' : 'groups'}
-              size={ICON.md}
-              color={EMBER.textSecondary}
-            />
-          </View>
-        ) : item.pseudonymous ? (
-          /*
-           * A match who has not revealed.
-           *
-           * The server sends the pseudonym as the name and `null` for the
-           * photo, so drawing `avatarUrl` here renders an empty grey circle —
-           * which reads as a broken row rather than as anonymity working.
-           *
-           * `pseudonymAvatar` is the mark the Scene's attendee discs and the
-           * room already use, seeded on the **pseudonym**: the same person is
-           * the same colour and the same creature everywhere they appear under
-           * that name. Never seed it with a user id — that is stable forever
-           * and would rebuild the cross-surface identity the pseudonyms exist
-           * to prevent.
-           */
-          <PseudonymDisc pseudonym={item.title} />
-        ) : (
-          <OptimizedImage
-            source={item.avatarUrl ?? ''}
-            recyclingKey={item.avatarUrl ?? undefined}
-            style={styles.rowAvatar as never}
-            width={ROW_AVATAR}
-            height={ROW_AVATAR}
-            contentFit="cover"
-          />
-        )}
-        {item.unread ? (
-          <View style={styles.unreadRing} pointerEvents="none">
-            <View style={styles.unreadDot} />
-          </View>
-        ) : null}
-      </View>
+      {isRoom ? (
+        <RoomCover url={item.avatarUrl} />
+      ) : item.pseudonymous ? (
+        /*
+         * A match who has not revealed.
+         *
+         * The server sends the pseudonym as the name and `null` for the
+         * photo, so drawing `avatarUrl` here renders an empty grey circle —
+         * which reads as a broken row rather than as anonymity working.
+         *
+         * `pseudonymAvatar` is the mark the Scene's attendee discs and the
+         * room already use, seeded on the **pseudonym**: the same person is
+         * the same colour and the same creature everywhere they appear under
+         * that name. Never seed it with a user id — that is stable forever
+         * and would rebuild the cross-surface identity the pseudonyms exist
+         * to prevent.
+         */
+        <PseudonymDisc pseudonym={item.title} />
+      ) : (
+        <OptimizedImage
+          source={item.avatarUrl ?? ''}
+          recyclingKey={item.avatarUrl ?? undefined}
+          style={styles.rowAvatar as never}
+          width={ROW_AVATAR}
+          height={ROW_AVATAR}
+          contentFit="cover"
+        />
+      )}
 
-      <View style={[styles.rowBody, !item.unread && styles.rowBodyRuled]}>
-        <View style={styles.rowTitleLine}>
+      <View style={styles.rowBody}>
+        <View style={styles.rowLine}>
           <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
             {item.title}
           </Text>
@@ -316,15 +283,45 @@ export function BanterConversation({
             {item.timeLabel}
           </Text>
         </View>
-        <Text
-          style={[styles.rowPreview, item.unread && styles.rowPreviewUnread]}
-          numberOfLines={2}
-          maxFontSizeMultiplier={1.4}
-        >
-          {item.preview}
-        </Text>
+        <View style={styles.rowLine}>
+          <Text
+            style={[
+              styles.rowPreview,
+              item.previewEmphasis && styles.rowPreviewEmphasis,
+              item.unread && styles.rowPreviewUnread,
+            ]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.4}
+          >
+            {item.preview}
+          </Text>
+          <View style={styles.unreadSlot}>
+            {item.unread ? <View style={styles.unreadDot} /> : null}
+          </View>
+        </View>
       </View>
     </Pressable>
+  )
+}
+
+/** A room's avatar: its event's cover in a small square, or a glyph on `surface`. */
+function RoomCover({ url }: { url?: string | null }) {
+  if (!url) {
+    return (
+      <View style={styles.roomCover}>
+        <MaterialIcons name="groups" size={ICON.lg} color={EMBER.textSecondary} />
+      </View>
+    )
+  }
+  return (
+    <OptimizedImage
+      source={url}
+      recyclingKey={url}
+      style={styles.roomCover as never}
+      width={ROW_AVATAR}
+      height={ROW_AVATAR}
+      contentFit="cover"
+    />
   )
 }
 
@@ -344,62 +341,33 @@ const styles = StyleSheet.create({
   searchPlaceholder: { ...TYPE.body, flex: 1, color: SEARCH_PLACEHOLDER },
   searchInput: { ...TYPE.body, flex: 1, padding: 0 },
 
-  headingRow: {
+  headingRow: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.sm },
+  heading: TYPE.heading,
+  headingDetail: TYPE.meta,
+  bucketRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  heading: TYPE.heading,
   headingAction: { ...TYPE.label, color: EMBER.textPrimary },
 
-  // Frame `1141:5262`: gap 8 between avatar and name, 24 between items.
-  /*
-   * Content-width, with a floor of the avatar.
-   *
-   * Fixed at `PINNED_AVATAR + 8` this truncated "Gala Night" to "Gala Nig…",
-   * and the frame's items are content-sized — `1141:5268` is 93pt tall and as
-   * wide as its label needs. A pinned row that abbreviates the thing it is
-   * pinning is doing the opposite of its job.
-   */
-  pinned: { alignItems: 'center', gap: SPACE.sm, minWidth: PINNED_AVATAR },
-  pinnedMuted: { opacity: 0.8 },
-  pinnedAvatar: {
-    width: PINNED_AVATAR,
-    height: PINNED_AVATAR,
-    borderRadius: PINNED_AVATAR / 2,
+  liveRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SPACE.lg,
+    padding: SPACE.lg,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
   },
-  // Frame: `shadow-[0_0_0_2px_#ff906d]` — a ring, drawn as a border because RN
-  // has no spread-only shadow.
-  pinnedRing: { borderWidth: 2, borderColor: EMBER.accent },
-  pinnedName: TYPE.bodyStrong,
-  pinnedNameMuted: { color: EMBER.textSecondary },
-
-  // Frame `1141:5265`: 16pt, #FF6D8D, 2pt page-colour ring, bottom-right.
-  presence: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: EMBER.gradientTo,
-    borderWidth: 2,
-    borderColor: EMBER.bg,
-  },
-  // Frame `1141:5274`.
-  eventBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    paddingHorizontal: SPACE.sm,
-    paddingVertical: SPACE.xxs,
+  liveBody: { flex: 1, gap: SPACE.xxs },
+  liveMetaLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  liveDot: {
+    width: LIVE_DOT,
+    height: LIVE_DOT,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: '#F79EFF',
+    backgroundColor: EMBER.success,
   },
-  eventBadgeText: { ...TYPE.caption, color: '#570066' },
+  liveMeta: { ...TYPE.meta, flex: 1 },
 
   /*
    * No fill, so no side padding: the avatar lines up with the gutter like the
@@ -409,16 +377,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.lg,
-    paddingVertical: SPACE.lg,
-    borderRadius: EMBER_RADIUS.card,
+    paddingVertical: SPACE.md,
+    minHeight: ROW_HEIGHT,
   },
-  // The unread row is taller — 24 above, 16 below — which is what makes it
-  // sit up out of the list rather than needing a fill behind it.
-  rowUnread: { paddingTop: SPACE.xl, paddingBottom: SPACE.lg },
   rowAvatar: {
     width: ROW_AVATAR,
     height: ROW_AVATAR,
-    borderRadius: ROW_AVATAR / 2,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
     alignItems: 'center',
     justifyContent: 'center',
@@ -432,70 +397,37 @@ const styles = StyleSheet.create({
    */
   // design-exception: an emoji glyph sized to fill the 56pt disc, not text
   pseudonymGlyph: { fontSize: 26, lineHeight: 32 },
-  // Frame `1141:5306`: a room has no face, so it gets a surface disc + glyph.
-  roomAvatar: {
+  // A room is square, which is what tells it from a person at a glance.
+  roomCover: {
     width: ROW_AVATAR,
     height: ROW_AVATAR,
-    borderRadius: ROW_AVATAR / 2,
-    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.sm,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Frame `1141:5295`: 12pt accent, 2pt page-colour ring, top-right.
-  /*
-   * The unread dot — frame `1141:5295` / `1141:5296`.
-   *
-   * ## Why this is two views
-   *
-   * The frame's ring is `shadow: 0 0 0 2px #0F0E0E` — **outset**. RN has no
-   * outset border: `borderWidth` grows inwards, so writing it as a 12pt circle
-   * with `borderWidth: 2` leaves an 8pt accent core inside a 12pt footprint.
-   *
-   * That is not a cosmetic difference. The dot sits at the *bounding box's*
-   * top-right corner, and the avatar is a circle, so the corner is empty space.
-   * Measured from the 56pt avatar's centre, the dot's centre is
-   * `√(22² + 22²) = 31.1` away against a radius of 28 — the dot is centred
-   * outside the photograph and only its inner edge reaches back in. With an
-   * 8pt core that inner edge lands at 27.1, grazing the rim by 0.9pt, and the
-   * dot reads as floating in the corner. With the frame's 12pt core it lands at
-   * 25.1 and bites 2.9pt into the photograph, which is what makes it read as
-   * attached to the avatar rather than hovering beside it.
-   *
-   * So: a 16pt `bg`-coloured ring holding a 12pt accent circle, offset -2 on
-   * both axes so the *accent* — not the ring — lands where the frame puts it.
-   */
-  unreadRing: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: EMBER.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: EMBER.accent,
+    overflow: 'hidden',
   },
 
   rowBody: { flex: 1, gap: SPACE.xxs },
-  // Only the *read* rows are ruled. The unread one is a card; a border under
-  // it would make it look like part of the list it is supposed to leave.
-  rowBodyRuled: {
-    paddingBottom: SPACE.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(73,71,71,0.1)',
-  },
-  rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  rowLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowTitle: { ...TYPE.bodyStrong, flex: 1 },
   rowTime: TYPE.meta,
-  rowTimeUnread: { color: EMBER.accent },
-  rowPreview: { ...TYPE.body, color: EMBER.textSecondary },
-  rowPreviewUnread: TYPE.bodyStrong,
+  rowTimeUnread: { color: EMBER.textPrimary },
+  rowPreview: { ...TYPE.body, flex: 1, color: EMBER.textSecondary },
+  rowPreviewEmphasis: { color: EMBER.textPrimary },
+  rowPreviewUnread: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
+  // Reserved on every row so read and unread line up to the pixel.
+  unreadSlot: {
+    width: UNREAD_DOT,
+    height: UNREAD_DOT,
+  },
+  // Unread is neutral: the one accent on this screen is Accept.
+  unreadDot: {
+    width: UNREAD_DOT,
+    height: UNREAD_DOT,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.textPrimary,
+  },
 })
 
 /** The generated mark for an unrevealed match, at the row's avatar size. */
@@ -513,23 +445,27 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
 /**
  * A message request — someone who is not yet a conversation.
  *
- * The frame has no slot for these. It cannot: a request is the one row in the
- * inbox that is not openable, because tapping it has to mean *accept* or
- * *decline* and not "read". Dropping it to match the frame would have deleted
- * working functionality, so it is built from the frame's own parts — the same
- * 32-radius card, the same avatar, the same two lines — with the two buttons
- * the frame never had to draw.
+ * Drawn as a conversation row, because that is what it becomes: the sender's
+ * face, name and time on the first line, their opening message under it. The
+ * one difference is that it cannot be opened — tapping it has to mean
+ * *accept* or *decline*, not *read* — so the two answers sit under the
+ * message instead of the row being a button.
  *
- * Recorded in `docs/BANTER.md` as an addition, not an interpretation.
+ * Accept is the screen's one accent (docs/DESIGN_SYSTEM.md). It repeats per
+ * request, which the rule allows: it is one action, the Banter's primary one.
  */
 export function BanterRequest({
   name,
+  avatarUrl,
+  timeLabel,
   message,
   pending,
   onAccept,
   onDecline,
 }: {
   name: string
+  avatarUrl?: string | null
+  timeLabel?: string
   message: string
   pending?: boolean
   onAccept: () => void
@@ -537,78 +473,115 @@ export function BanterRequest({
 }) {
   return (
     <View style={requestStyles.request}>
-      <View style={requestStyles.requestHead}>
-        <View style={styles.roomAvatar}>
-          <MaterialIcons name="person-add-alt" size={ICON.md} color={EMBER.textSecondary} />
+      {avatarUrl ? (
+        <OptimizedImage
+          source={avatarUrl}
+          recyclingKey={avatarUrl}
+          style={styles.rowAvatar as never}
+          width={ROW_AVATAR}
+          height={ROW_AVATAR}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={requestStyles.glyphAvatar}>
+          <MaterialIcons name="person" size={ICON.lg} color={EMBER.textSecondary} />
         </View>
-        <View style={requestStyles.requestBody}>
+      )}
+
+      <View style={requestStyles.requestBody}>
+        <View style={styles.rowLine}>
           <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
             {name}
           </Text>
-          <Text style={styles.rowPreview} numberOfLines={2} maxFontSizeMultiplier={1.4}>
-            {message}
-          </Text>
+          {timeLabel ? (
+            <Text style={styles.rowTime} maxFontSizeMultiplier={1.3}>
+              {timeLabel}
+            </Text>
+          ) : null}
         </View>
-      </View>
+        <Text style={requestStyles.requestMessage} numberOfLines={2} maxFontSizeMultiplier={1.4}>
+          {message}
+        </Text>
 
-      <View style={requestStyles.requestActions}>
-        {/*
-          Decline first, accept last. The destructive one is not the one your
-          thumb lands on, and accept is the affirmative so it carries the fill.
-        */}
-        <Pressable
-          onPress={onDecline}
-          disabled={pending}
-          accessibilityRole="button"
-          accessibilityLabel={`Decline the request from ${name}`}
-          accessibilityState={{ disabled: !!pending }}
-          style={({ pressed }) => [
-            requestStyles.requestButton,
-            requestStyles.requestDecline,
-            (pressed || pending) && styles.pressed,
-          ]}
-        >
-          <Text style={requestStyles.requestDeclineLabel} maxFontSizeMultiplier={1.3}>
-            Decline
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={onAccept}
-          disabled={pending}
-          accessibilityRole="button"
-          accessibilityLabel={`Accept the request from ${name}`}
-          accessibilityState={{ disabled: !!pending }}
-          style={({ pressed }) => [
-            requestStyles.requestButton,
-            requestStyles.requestAccept,
-            (pressed || pending) && styles.pressed,
-          ]}
-        >
-          <Text style={requestStyles.requestAcceptLabel} maxFontSizeMultiplier={1.3}>
-            Accept
-          </Text>
-        </Pressable>
+        <View style={requestStyles.requestActions}>
+          {/*
+            Decline first, accept last. The destructive one is not the one your
+            thumb lands on, and accept is the affirmative so it carries the fill.
+          */}
+          <Pressable
+            onPress={onDecline}
+            disabled={pending}
+            accessibilityRole="button"
+            accessibilityLabel={`Decline the request from ${name}`}
+            accessibilityState={{ disabled: !!pending }}
+            hitSlop={REQUEST_HIT_SLOP}
+            style={({ pressed }) => [
+              requestStyles.requestButton,
+              requestStyles.requestDecline,
+              (pressed || pending) && styles.pressed,
+            ]}
+          >
+            <Text style={requestStyles.requestDeclineLabel} maxFontSizeMultiplier={1.3}>
+              Decline
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onAccept}
+            disabled={pending}
+            accessibilityRole="button"
+            accessibilityLabel={`Accept the request from ${name}`}
+            accessibilityState={{ disabled: !!pending }}
+            hitSlop={REQUEST_HIT_SLOP}
+            style={({ pressed }) => [
+              requestStyles.requestButton,
+              requestStyles.requestAccept,
+              (pressed || pending) && styles.pressed,
+            ]}
+          >
+            <Text style={requestStyles.requestAcceptLabel} maxFontSizeMultiplier={1.3}>
+              Accept
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   )
 }
 
+// 32pt pills + 6 above and below reach the 44pt minimum without a taller row.
+const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
+
 const requestStyles = StyleSheet.create({
-  // A card — radius 32, p16, gap 16.
-  request: { borderRadius: EMBER_RADIUS.card, padding: SPACE.lg, gap: SPACE.lg, backgroundColor: '#1A1818' },
-  requestHead: { flexDirection: 'row', gap: SPACE.lg, alignItems: 'center' },
-  requestBody: { flex: 1, gap: SPACE.xs },
-  requestActions: { flexDirection: 'row', gap: SPACE.md },
+  // The conversation row's geometry, top-aligned because the body runs longer.
+  request: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACE.lg,
+    paddingVertical: SPACE.md,
+  },
+  glyphAvatar: {
+    width: ROW_AVATAR,
+    height: ROW_AVATAR,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestBody: { flex: 1, gap: SPACE.xxs },
+  requestMessage: { ...TYPE.body, color: EMBER.textSecondary },
+  requestActions: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.sm },
   requestButton: {
-    flex: 1,
-    height: CONTROL.md,
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // Secondary + primary: the one row where two fills may differ.
   requestDecline: { backgroundColor: EMBER.surface },
   requestAccept: { backgroundColor: EMBER.accent },
-  requestDeclineLabel: TYPE.button,
+  requestDeclineLabel: { ...TYPE.button, color: EMBER.textSecondary },
+  // `onGradient`, not white — white fails contrast on the accent fill.
   requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient },
 })
