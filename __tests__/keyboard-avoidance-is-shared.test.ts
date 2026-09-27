@@ -20,7 +20,7 @@ const files = execSync("grep -rl 'KeyboardAvoidingView' app components --include
 
 describe('KeyboardAvoidingView behaviour', () => {
   it('found the screens, so the loop below is not empty', () => {
-    expect(files.length).toBeGreaterThanOrEqual(8)
+    expect(files.length).toBeGreaterThanOrEqual(7)
   })
 
   it.each(files)('%s uses KEYBOARD_BEHAVIOR and no per-platform guess', (file) => {

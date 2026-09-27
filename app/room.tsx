@@ -11,7 +11,7 @@ import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
-import { forgetRoster } from '../lib/rosterMemory'
+import { checkOutOf } from '../lib/checkIn'
 import { revealReadiness } from '../lib/reveal'
 import { useAuth } from '../lib/useAuth'
 import { Logger } from '../lib/logger'
@@ -242,11 +242,10 @@ function RoomInner() {
     if (!eventId || checkOutBusy) return
     setCheckOutBusy(true)
     try {
-      const result = await apiClient.checkOut(eventId)
+      // `checkOutOf` also forgets the roster: leaving the venue ends your claim
+      // on it, so reopening must not repaint the room you just left.
+      const result = await checkOutOf(eventId)
       if (result.success) {
-        // Leaving the venue ends your claim on the roster, so the memory of it
-        // goes too -- otherwise reopening would repaint the room you just left.
-        forgetRoster(eventId)
         router.back()
       } else {
         Logger.warn('presence', 'check out refused', { error: result.error })

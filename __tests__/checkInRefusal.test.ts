@@ -96,23 +96,27 @@ describe("the screen consults the code, not the sentence", () => {
    * `.includes(` would match its own explanation and pass for ever. That exact
    * vacuous guard has been shipped three times in the sibling repo.
    */
-  const code = readFileSync(
-    join(__dirname, "..", "components", "screens", "EventDetailScreen.tsx"),
-    "utf8"
-  )
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
+  const read = (file: string) =>
+    readFileSync(join(__dirname, "..", file), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+  const helper = read("lib/checkIn.ts")
 
   it("dispatches the refusal on errorCode", () => {
-    expect(code).toContain("checkInRefusal(result.errorCode")
+    expect(helper).toContain("checkInRefusal(result.errorCode")
   })
 
   it("classifies no refusal by matching the server's prose", () => {
     // The producer, not the consumer: `.includes(` on an error string at all.
-    expect(code).not.toMatch(/result\.error\?\.includes\(/)
+    for (const file of ["lib/checkIn.ts", "components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"]) {
+      expect(read(file)).not.toMatch(/result\.error\?\.includes\(/)
+    }
   })
 
-  it("keeps Open Maps behind the refusal that a map can fix", () => {
-    expect(code).toContain("refusal.offerDirections")
-  })
+  it.each(["components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"])(
+    "%s keeps Open Maps behind the refusal that a map can fix",
+    (file) => {
+      expect(read(file)).toContain("refusal.offerDirections")
+    }
+  )
 })

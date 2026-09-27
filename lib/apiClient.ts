@@ -835,6 +835,19 @@ class ApiClientClass {
     return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl }
   }
 
+  /**
+   * Drop the cached `/checkins/active`, so the next read asks the server.
+   *
+   * Called after a check-in or check-out (`lib/checkIn.ts`). The list is SWR-
+   * cached for 30s, so without this the tab bar's re-read right after leaving a
+   * room was answered from the cache that still had you in it.
+   */
+  forgetActiveCheckins(): void {
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(':/api/mobile/checkins/active:')) this.responseCache.delete(key)
+    }
+  }
+
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
     if (this.responseCache.size >= this.MAX_CACHED_RESPONSES) this.evictExpiredOrOldest()
     this.responseCache.set(key, { data: data as ApiResponse<unknown>, timestamp: Date.now(), ttl })

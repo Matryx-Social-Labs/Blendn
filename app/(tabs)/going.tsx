@@ -22,6 +22,7 @@ import { formatEventDateTime } from '../../lib/time'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
+import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -161,16 +162,8 @@ function GoingScreenInner() {
     })
   }, [events, restoreRow, showToast])
 
-  const openInMaps = useCallback(async (event: EventRow) => {
-    const lat = event.latitude
-    const lon = event.longitude
-    const hasCoords = Number.isFinite(lat) && Number.isFinite(lon)
-    const addressQuery = encodeURIComponent(event.address || event.venue_name || event.title || 'Event Location')
-    const googleScheme = 'comgooglemaps://'
-    const googleAppUrl = hasCoords ? `${googleScheme}?q=${lat},${lon}` : `${googleScheme}?q=${addressQuery}`
-    const googleWebUrl = hasCoords ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` : `https://www.google.com/maps/search/?api=1&query=${addressQuery}`
-    try { if (await Linking.canOpenURL(googleScheme)) return Linking.openURL(googleAppUrl) } catch {}
-    return Linking.openURL(googleWebUrl)
+  const openInMaps = useCallback((event: EventRow) => {
+    void openPlaceInMaps(event)
   }, [])
 
   const shareEvent = useCallback(async (event: EventRow) => {

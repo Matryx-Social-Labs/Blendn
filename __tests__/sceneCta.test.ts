@@ -232,7 +232,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      * somebody tidies the room's top bar.
      */
     const room = read('app', 'room.tsx')
-    expect(room).toContain('apiClient.checkOut(eventId)')
+    expect(room).toContain('checkOutOf(eventId)')
     expect(room).toContain('Check out')
   })
 

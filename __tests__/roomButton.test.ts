@@ -181,7 +181,7 @@ describe('the Pulse no longer carries the checked-in strip', () => {
     expect(pulse).toContain("label: 'Check Out'")
     expect(pulse).toContain('void handleCheckOut(event)')
     expect(readFileSync(join(__dirname, '..', 'app/room.tsx'), 'utf8')).toContain(
-      'apiClient.checkOut(eventId)'
+      'checkOutOf(eventId)'
     )
   })
 })
