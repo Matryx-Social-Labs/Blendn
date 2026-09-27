@@ -15,6 +15,8 @@
 
 - **When moving an element off the accent, check what it sits on.** Neutralising colours made four things vanish: the Liked button went `surfaceSunken` inside a `surfaceSunken` tray, off switch tracks went `surface` on a `surfaceSunken` card, the Room's selected segment was `surface` on `surfaceSunken`, and a 4pt ring used `separator` (a 10% hairline colour). Pick the neutral by the parent's fill: one step away from it, or `textPrimary`/`textTertiary` for marks.
 
+- **A design rule written into a test is a past decision, not a user requirement.** The Me tab's "control panel, not a second profile" rule (Preview opening `app/user/[id]`) was guarded by tests, so I built the redesign around it. The user wanted no Preview at all and one merged profile page (2026-09-28). When a redesign is asked to feel more alive, flag the structural rules the tests lock in, and ask whether they still hold, instead of designing inside them.
+
 ## Verification
 
 - **Parallel agents in one working tree must never `git stash`, `checkout` or `reset`.** On 2026-09-28 an agent stashed to check whether a lint warning was already there, which briefly hid three other agents' in-progress edits. Put the rule in every parallel-agent prompt, and compare against `git show HEAD:<file>` instead.

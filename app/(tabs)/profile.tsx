@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
@@ -11,7 +11,14 @@ import { NightsOut } from '../../components/profile/NightsOut'
 import { PhotoStack } from '../../components/profile/PhotoStack'
 import { RollingNumber } from '../../components/profile/RollingNumber'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
-import { ProfileHeading, ProfileInterests } from '../../components/profile/ProfileSections'
+import PhotoLightbox from '../../components/PhotoLightbox'
+import {
+  ProfileBio,
+  ProfileDetail,
+  ProfileGallery,
+  ProfileHeading,
+  ProfileInterests,
+} from '../../components/profile/ProfileSections'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
@@ -133,6 +140,9 @@ function ProfileInner() {
   // Empty until it loads, and on failure: Recent and Nights out are left out rather than erroring.
   const [attended, setAttended] = useState<PastEventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [lightboxVisible, setLightboxVisible] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const { width: windowWidth } = useWindowDimensions()
   const lastBackgroundRefreshRef = React.useRef(0)
 
   const photoList = useMemo(() => {
@@ -245,16 +255,15 @@ function ProfileInner() {
   )
 
   /*
-   * The Me tab is a control panel, not a showcase.
+   * The Me tab is your profile: what others see (photos, bio, interests,
+   * work, gallery) and what is yours alone (what is missing, your stats,
+   * your nights out, settings) on one page.
    *
-   * It was briefly the editorial frame `1141:5633` -- and that was a second
-   * copy of a screen that already existed. `app/user/[id].tsx` has a `'self'`
-   * mode: point it at your own id and it renders exactly that page, Connect
-   * suppressed, CTA reading "You". Preview goes there, so "how others see me"
-   * cannot drift from how they actually see you, gating included.
-   *
-   * What stays here is what is yours to act on: who you are at a glance, what
-   * is missing, what you have done, and where to change it.
+   * It used to be a control panel with a Preview button that opened
+   * `app/user/[id].tsx` in its `'self'` mode. Two screens for one person was
+   * one too many, so the parts only Preview had now live here, rendered with
+   * the same `ProfileSections` pieces that screen uses so the two still look
+   * alike.
    */
   const renderSkeleton = () => (
     <View style={styles.panel}>
@@ -266,10 +275,7 @@ function ProfileInner() {
           </View>
           <SkeletonBlock width={STACK.width} height={STACK.height} borderRadius={EMBER_RADIUS.md} />
         </View>
-        <View style={styles.buttons}>
-          <SkeletonBlock height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} style={styles.flex} />
-          <SkeletonBlock height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} style={styles.flex} />
-        </View>
+        <SkeletonBlock height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
       </View>
       <SkeletonBlock height={CONTROL.lg + SPACE.lg * 2} borderRadius={EMBER_RADIUS.lg} />
     </View>
@@ -299,8 +305,15 @@ function ProfileInner() {
     }
   }
 
-  const openPreview = () =>
-    router.push({ pathname: '/user/[id]', params: { id: profile?.id || user?.id || '' } })
+  // Your photos, full screen, from whichever one you tapped. With none, tapping your mark goes to add one.
+  const openPhoto = (index: number) => {
+    if (!photoList.length) {
+      router.push('/edit-profile')
+      return
+    }
+    setLightboxIndex(index)
+    setLightboxVisible(true)
+  }
   // `navigate`, not `push`: Going is a tab, and pushing it would stack a second copy.
   const openGoing = () => router.navigate('/going')
 
@@ -324,34 +337,20 @@ function ProfileInner() {
             ) : null}
           </View>
 
-          {/*
-            Tapping your own face to see your own page is the gesture people
-            expect. Swiping it shuffles your photos: see PhotoStack.
-          */}
-          <PhotoStack photos={photoList} fallback={mark} onPress={openPreview} />
+          {/* Tap opens the photo on top; a sideways flick shuffles the pile. See PhotoStack. */}
+          <PhotoStack photos={photoList} fallback={mark} onPress={openPhoto} />
         </View>
 
-        {/* Two equal choices, so one height and one fill -- no accent. */}
-        <View style={styles.buttons}>
-          <ScalePress
-            onPress={() => router.push('/edit-profile')}
-            haptic={false}
-            accessibilityRole="button"
-            accessibilityLabel="Edit profile"
-            style={styles.button}
-          >
-            <Text variant="button" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
-          </ScalePress>
-          <ScalePress
-            onPress={openPreview}
-            haptic={false}
-            accessibilityRole="button"
-            accessibilityLabel="Preview your profile as others see it"
-            style={styles.button}
-          >
-            <Text variant="button" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Preview</Text>
-          </ScalePress>
-        </View>
+        {/* One way to change any of it, so one full-width button -- no accent. */}
+        <ScalePress
+          onPress={() => router.push('/edit-profile')}
+          haptic={false}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+          style={styles.button}
+        >
+          <Text variant="button" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Edit profile</Text>
+        </ScalePress>
       </FadeInUp>
 
       {/*
@@ -410,11 +409,47 @@ function ProfileInner() {
         </FadeInUp>
       ) : null}
 
+      {/*
+        From here down to the gallery is what others see on your page, in
+        the order `app/user/[id].tsx` shows it.
+      */}
+      {profile?.bio ? (
+        <FadeInUp delay={enter(4)} style={styles.section}>
+          <SectionHeader title="Bio" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
+          <ProfileBio text={profile.bio} />
+        </FadeInUp>
+      ) : null}
+
       {/* Your own chips, so nothing is "shared" -- plain chips only. */}
       {interests.length > 0 ? (
-        <FadeInUp delay={enter(4)} style={styles.section}>
+        <FadeInUp delay={enter(5)} style={styles.section}>
           <SectionHeader title="Interests" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
           <ProfileInterests interests={interests} />
+        </FadeInUp>
+      ) : null}
+
+      {/* A filled card and a ruled block, as on the attendee page. */}
+      {profile?.occupation || profile?.education ? (
+        <FadeInUp delay={enter(6)} style={styles.details}>
+          {profile.occupation ? <ProfileDetail label="OCCUPATION" value={profile.occupation} /> : null}
+          {profile.education ? (
+            <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
+          ) : null}
+        </FadeInUp>
+      ) : null}
+
+      {/*
+        Every photo, the first included: the stack above shows at most three,
+        fanned and half covered.
+      */}
+      {photoList.length > 0 ? (
+        <FadeInUp delay={enter(7)} style={styles.section}>
+          <SectionHeader title="Gallery" actionLabel="EDIT" onAction={() => router.push('/edit-profile')} />
+          <ProfileGallery
+            photos={photoList}
+            columnWidth={(windowWidth - GUTTER * 2 - SPACE.lg) / 2}
+            onPressPhoto={openPhoto}
+          />
         </FadeInUp>
       ) : null}
 
@@ -424,7 +459,7 @@ function ProfileInner() {
         its first tile at the gutter, like every carousel in the app.
       */}
       {recent.length > 0 ? (
-        <FadeInUp delay={enter(5)} style={styles.section}>
+        <FadeInUp delay={enter(8)} style={styles.section}>
           <SectionHeader title="Recent" actionLabel="SEE ALL" onAction={openGoing} />
           <ScrollView
             horizontal
@@ -445,7 +480,7 @@ function ProfileInner() {
         </FadeInUp>
       ) : null}
 
-      <FadeInUp delay={enter(6)}>
+      <FadeInUp delay={enter(9)}>
         <PanelRow
           icon="settings-outline"
           label="Settings"
@@ -494,6 +529,12 @@ function ProfileInner() {
       >
         {renderContent()}
       </ScrollView>
+      <PhotoLightbox
+        photos={photoList}
+        initialIndex={lightboxIndex}
+        visible={lightboxVisible}
+        onClose={() => setLightboxVisible(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -505,14 +546,13 @@ const styles = StyleSheet.create({
   /* The screen gutter, and 32 between sections. */
   panel: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },
   section: { gap: SPACE.md },
+  details: { gap: SPACE.xl },
 
   headerBlock: { gap: SPACE.lg },
   identity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   identityText: { flex: 1, gap: SPACE.xs },
 
-  buttons: { flexDirection: 'row', gap: SPACE.md },
   button: {
-    flex: 1,
     height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',

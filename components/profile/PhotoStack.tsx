@@ -123,7 +123,7 @@ function StackCard({
 /**
  * Your photos as a small fanned pile beside your name.
  *
- * Tap it to see your page as others do. Drag or flick the top photo sideways
+ * Tap it to open the photo on top, full screen. Drag or flick the top photo sideways
  * and it goes to the back of the pile: something to fidget with that also
  * shows which photos people will see. The order is only for this screen. It
  * resets to your real first photo whenever the photos change, and nothing is
@@ -150,7 +150,8 @@ export function PhotoStack({
   photos: string[]
   /** Your pseudonym mark (`pseudonymAvatar`), drawn when there are no photos. */
   fallback: { colors: readonly [string, string]; character: string }
-  onPress: () => void
+  /** Tapped, with the index (into `photos`) of the photo on top. */
+  onPress: (index: number) => void
 }) {
   const reduceMotion = useReducedMotion()
   const count = photos.length
@@ -219,7 +220,7 @@ export function PhotoStack({
       if (!reduceMotion) pressed.set(withTiming(0.97, { duration: 120, easing: EASE_OUT }))
     })
     .onEnd(() => {
-      scheduleOnRN(onPress)
+      scheduleOnRN(onPress, front.get())
     })
     .onFinalize(() => {
       pressed.set(withTiming(1, { duration: 120, easing: EASE_OUT }))
@@ -233,14 +234,14 @@ export function PhotoStack({
         style={[styles.stack, pressStyle]}
         accessible
         accessibilityRole="imagebutton"
-        accessibilityLabel="Preview your profile as others see it"
+        accessibilityLabel={count ? 'Your photos' : 'Your profile mark'}
         accessibilityHint={count > 1 ? 'Swipe the photos sideways to see the next one' : undefined}
         accessibilityActions={
           count > 1 ? [{ name: 'activate' }, { name: 'increment', label: 'Next photo' }] : [{ name: 'activate' }]
         }
         onAccessibilityAction={(e) => {
           if (e.nativeEvent.actionName === 'increment') next()
-          else onPress()
+          else onPress(front.get())
         }}
       >
         {count ? (

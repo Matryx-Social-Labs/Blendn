@@ -267,22 +267,23 @@ describe('the room opens the chat in front of itself', () => {
   })
 })
 
-describe('the Me tab is a control panel, not a second profile', () => {
+describe('the Me tab is your profile, with no separate preview', () => {
   /*
-   * It was briefly the editorial frame `1141:5633` -- which was a second copy
-   * of a screen that already existed. `app/user/[id].tsx` has a `'self'` mode,
-   * so pointing it at your own id renders that page with Connect suppressed.
-   *
-   * Preview being *the same screen* is the whole point: "how others see me"
-   * cannot drift from how they actually see you, gating included.
+   * It was a control panel whose Preview button opened `app/user/[id].tsx` in
+   * its `'self'` mode. Two screens for one person was one too many: the
+   * parts only Preview had (bio, work, gallery) now render here, through the
+   * same `ProfileSections` pieces that screen uses.
    */
   const OWN = () => codeOnly(read('app/(tabs)/profile.tsx'))
 
-  it('sends Preview to the attendee screen rather than re-rendering it', () => {
+  it('shows what others see on this page instead of sending you to a preview', () => {
     const src = OWN()
-    expect(src).toContain("pathname: '/user/[id]'")
-    // The editorial pieces belong to that screen now, not this one.
-    expect(src).not.toMatch(/<ProfileHero|<ProfileOwnCta|<ProfileBio/)
+    expect(src).not.toContain("pathname: '/user/[id]'")
+    expect(src).not.toMatch(/>Preview</)
+    expect(src).toContain('<ProfileBio')
+    expect(src).toContain('<ProfileDetail')
+    expect(src).toContain('<ProfileGallery')
+    expect(src).toContain('<PhotoLightbox')
   })
 
   it('offers Edit profile and Settings, with Settings last', () => {
@@ -293,7 +294,7 @@ describe('the Me tab is a control panel, not a second profile', () => {
     expect(content.indexOf("router.push('/settings')")).toBeGreaterThan(content.indexOf('title="Recent"'))
   })
 
-  it('puts the header flat on the page: one display line, and an Edit/Preview pair with no accent', () => {
+  it('puts the header flat on the page: one display line, and one Edit button with no accent', () => {
     const src = OWN()
     expect(src.match(/variant="display"/g)).toHaveLength(1)
     expect(src).toMatch(/button: \{[^}]*height: CONTROL\.md[^}]*backgroundColor: EMBER\.surface,/)
