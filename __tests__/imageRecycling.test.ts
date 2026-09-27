@@ -23,7 +23,9 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 const LIST_SURFACES = [
   ['components', 'pulse', 'FeedMedia.tsx'],
   ['components', 'pulse', 'UpcomingCard.tsx'],
-  ['components', 'screens', 'MatchScreen.tsx'],
+  // The Blend'n room's face grid is a FlatList; every face draws through `Face`.
+  ['components', 'blendn', 'Face.tsx'],
+  ['components', 'blendn', 'TonightView.tsx'],
   ['app', '(tabs)', 'events.tsx'],
   ['app', '(tabs)', 'chat.tsx'],
   ['app', 'chat', '[id].tsx'],

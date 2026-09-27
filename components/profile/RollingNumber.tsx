@@ -27,6 +27,8 @@ function Column({
   variant,
   maxFontSizeMultiplier,
   reduceMotion,
+  duration,
+  color,
 }: {
   digit: number
   height: number
@@ -34,12 +36,14 @@ function Column({
   variant: TypeRole
   maxFontSizeMultiplier: number
   reduceMotion: boolean
+  duration: number
+  color?: string
 }) {
   const at = useSharedValue(0)
 
   useEffect(() => {
-    at.set(reduceMotion ? digit : withDelay(delay, withTiming(digit, { duration: ROLL_MS, easing: EASE_OUT })))
-  }, [at, digit, delay, reduceMotion])
+    at.set(reduceMotion ? digit : withDelay(delay, withTiming(digit, { duration, easing: EASE_OUT })))
+  }, [at, digit, delay, reduceMotion, duration])
 
   const strip = useAnimatedStyle(() => ({ transform: [{ translateY: -at.get() * height }] }))
 
@@ -47,7 +51,7 @@ function Column({
     <View style={{ height, overflow: 'hidden' }}>
       <Animated.View style={strip}>
         {DIGITS.map((d) => (
-          <Text key={d} variant={variant} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.digit, { height }]}>
+          <Text key={d} variant={variant} color={color} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.digit, { height }]}>
             {d}
           </Text>
         ))}
@@ -76,10 +80,21 @@ export function RollingNumber({
   value,
   variant = 'title',
   maxFontSizeMultiplier = 1.2,
+  duration = ROLL_MS,
+  stagger = COLUMN_STAGGER,
+  color,
 }: {
   value: number
   variant?: TypeRole
   maxFontSizeMultiplier?: number
+  /**
+   * The Me tab's 900ms is a once-per-load flourish. A live count that ticks
+   * while you watch (the Room's headcount) wants the short roll, so it can
+   * change twice in a second without queueing.
+   */
+  duration?: number
+  stagger?: number
+  color?: string
 }) {
   const reduceMotion = useReducedMotion()
   const [height, setHeight] = useState(0)
@@ -96,6 +111,7 @@ export function RollingNumber({
       <Text
         variant={variant}
         maxFontSizeMultiplier={maxFontSizeMultiplier}
+        color={color}
         onLayout={onMeasure}
         style={[styles.digit, height ? styles.measure : null]}
       >
@@ -108,7 +124,9 @@ export function RollingNumber({
               key={digits.length - i}
               digit={d}
               height={height}
-              delay={(digits.length - 1 - i) * COLUMN_STAGGER}
+              delay={(digits.length - 1 - i) * stagger}
+              duration={duration}
+              color={color}
               variant={variant}
               maxFontSizeMultiplier={maxFontSizeMultiplier}
               reduceMotion={reduceMotion}

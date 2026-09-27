@@ -44,7 +44,7 @@ describe('the bubble points at its sender', () => {
   it('never draws a photograph', () => {
     /*
      * The frame draws faces. This room is pseudonymous until somebody chooses
-     * otherwise, so a photo here undoes what `app/room.tsx` exists to protect.
+     * otherwise, so a photo here undoes what the room's pseudonyms exist to protect.
      * `pseudonymAvatar` is the only avatar source allowed on this surface.
      */
     const src = codeOnly(BUBBLE())
@@ -254,16 +254,25 @@ describe('the screen renders through the rebuilt components', () => {
 })
 
 describe('the room opens the chat in front of itself', () => {
-  it('replaces the modal rather than pushing beneath it', () => {
+  it('pushes over the overlay, and the overlay is not a modal route', () => {
     /*
-     * `app/room.tsx` is `presentation: 'modal'`. On iOS a card pushed after a
-     * modal lands on the stack under it: Join Chat fetched the room and
-     * showed nothing, and closing the room then took two taps. Driven
-     * 2026-09-13 on the simulator, from a fresh launch.
+     * The room used to be `app/room.tsx`, `presentation: 'modal'`. On iOS a
+     * card pushed after a modal lands on the stack under it: Join Chat fetched
+     * the room and showed nothing, and closing the room then took two taps.
+     * Driven 2026-09-13 on the simulator, from a fresh launch. The fix then was
+     * `router.replace`, which closed the room to open its own chat.
+     *
+     * The room is the Blend'n overlay now, hosted by the tab layout *under*
+     * the root stack (`lib/blendnOverlay.ts`), so a push lands on top of it
+     * and Back returns to it. A push is only right while that holds — so this
+     * pins both halves: the push, and that `/room` is no longer a screen.
      */
-    const src = codeOnly(read('app/room.tsx'))
-    expect(src).toMatch(/router\.replace\(\{\s*pathname: '\/chat\/\[id\]'/)
-    expect(src).not.toMatch(/router\.push\(\{\s*pathname: '\/chat\/\[id\]'/)
+    const src = codeOnly(read('components/blendn/BlendnScreen.tsx'))
+    expect(src).toMatch(/router\.push\(\{\s*pathname: '\/chat\/\[id\]'/)
+    expect(src).not.toMatch(/router\.replace\(\{\s*pathname: '\/chat\/\[id\]'/)
+    const route = codeOnly(read('app/room.tsx'))
+    expect(route).toContain('openBlendn()')
+    expect(route).not.toContain('BlendnScreen')
   })
 })
 

@@ -618,20 +618,10 @@ function RootLayout() {
         }}
       />
       {/*
-        The Room, which the Blend'n button in the middle of the bar opens.
-
-        Presented as a sheet rather than a push: it is a mode you are in for the
-        length of an event, not a page in a stack, and the swipe-down out of it
-        matches the chevron the screen draws. `docs/NAVIGATION.md`.
+        `/room` only opens the Blend'n overlay (hosted by the tab layout) and
+        steps back. No animation, so the hop is invisible.
       */}
-      <Stack.Screen
-        name="room"
-        options={{
-          headerShown: false,
-          presentation: 'modal',
-          animation: 'slide_from_bottom',
-        }}
-      />
+      <Stack.Screen name="room" options={{ headerShown: false, animation: 'none' }} />
       {/*
         The fixture harnesses. Declared so the root stack does not draw a native
         header over them — an undeclared route inherits one, which is how

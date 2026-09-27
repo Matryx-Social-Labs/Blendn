@@ -15,7 +15,8 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 const SHEET = () => stripComments(read('components/grid/ConnectSheet.tsx'))
-const CARD = () => stripComments(read('components/grid/GridCard.tsx'))
+// The Grid card is gone; one face opens `PersonCard`, which carries the actions now.
+const CARD = () => stripComments(read('components/blendn/PersonCard.tsx'))
 
 describe('the disclosure names people the way the server does', () => {
   it('uses the pseudonym when they have not revealed', () => {
@@ -98,8 +99,8 @@ describe('the cost is stated before the effort', () => {
 describe('the card keeps the two actions apart', () => {
   it('takes both handlers, and they are not the same one', () => {
     const src = CARD()
-    expect(src).toContain('onLike: () => void')
-    expect(src).toContain('onConnect: () => void')
+    expect(src).toContain('onLike: (p: RoomPerson) => void')
+    expect(src).toContain('onMessage: (p: RoomPerson) => void')
   })
 
   it('makes the like the prominent button', () => {
@@ -110,12 +111,15 @@ describe('the card keeps the two actions apart', () => {
      */
     const src = CARD()
     const actions = src.slice(src.indexOf('<View style={styles.actions}>'))
-    expect(actions.indexOf('onPress={onLike}')).toBeLessThan(actions.indexOf('onPress={onConnect}'))
-    const like = actions.slice(actions.indexOf('onPress={onLike}'), actions.indexOf('onPress={onConnect}'))
+    expect(actions.indexOf('onPress={like}')).toBeLessThan(actions.indexOf('onPress={() => onMessage(p)}'))
+    const like = actions.slice(actions.indexOf('onPress={like}'), actions.indexOf('onPress={() => onMessage(p)}'))
     // The accent fill, flat (no gradient fills — docs/DESIGN_SYSTEM.md).
-    expect(like).toContain('styles.like')
-    expect(src).toContain('like: { backgroundColor: EMBER.accent }')
+    expect(like).toContain('styles.primary')
+    expect(src).toContain('primary: { flex: 1, backgroundColor: EMBER.accent }')
     expect(like).not.toContain('EMBER_GRADIENT')
+    // …and Message is never the accent.
+    const message = actions.slice(actions.indexOf('onPress={() => onMessage(p)}'))
+    expect(message.slice(0, message.indexOf('</ScalePress>'))).not.toContain('styles.primary')
   })
 
   it('tells a screen reader what each one costs', () => {
@@ -126,12 +130,5 @@ describe('the card keeps the two actions apart', () => {
     const src = CARD()
     expect(src).toContain('They are only told if they like you back')
     expect(src).toContain('shows them your name and photo')
-  })
-
-  it('opens the profile from the card, not a third button', () => {
-    // Three buttons would make the two that matter compete.
-    const src = CARD()
-    expect(src).not.toContain('View Profile')
-    expect(src).toContain("accessibilityLabel={`View ${person.name}'s profile`}")
   })
 })

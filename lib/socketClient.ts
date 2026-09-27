@@ -28,6 +28,14 @@ export interface ServerToClientEvents {
     eventId: string
     userId: string
     checkInTime: string
+    /**
+     * How many are inside after this check-in, counted by the server.
+     *
+     * Optional because an older server does not send it: a client that keeps
+     * its own ±1 drifts on every missed event, so the server's number wins
+     * whenever it arrives and the ±1 is only the fallback.
+     */
+    hereCount?: number
   }) => void
   /** Who arrived, by pseudonym. Only delivered to people who have checked in. */
   "event:room:checkin": (data: {
@@ -36,11 +44,15 @@ export interface ServerToClientEvents {
     userName: string
     userImage?: string
     checkInTime: string
+    /** See `event:checkin`. */
+    hereCount?: number
   }) => void
   "event:checkout": (data: {
     eventId: string
     userId: string
     checkOutTime: string
+    /** See `event:checkin`. */
+    hereCount?: number
   }) => void
   "event:interestUpdate": (data: {
     eventId: string
@@ -122,6 +134,22 @@ export interface ServerToClientEvents {
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
   "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
+  /**
+   * A like turned mutual — sent to both people's `user:{id}` rooms.
+   *
+   * The liker already learns this from the like response; this is for the
+   * *other* person, whose earlier like was the first half and who would
+   * otherwise find out only from a push. `name` is how the other person
+   * appears to you (their pseudonym unless they revealed).
+   */
+  "room:match": (data: {
+    eventId: string
+    otherUserId: string
+    conversationId: string
+    name: string
+  }) => void
+  /** Somebody in the room waved at you. `fromName` is how they appear to you. */
+  "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -168,6 +196,8 @@ type ChatMemberBannedCallback = (data: ServerToClientEvents["chat:memberBanned"]
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
+type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
+type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
 
 // Connection state
 let socket: TypedSocket | null = null
@@ -251,6 +281,12 @@ const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCa
 const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
+/*
+ * Sets, not maps keyed by id: both arrive on your own `user:{id}` room, which
+ * the server joins on connect, so there is nothing to key a join on.
+ */
+const roomMatchSubscriptions = new Set<RoomMatchCallback>()
+const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -450,6 +486,8 @@ export function disconnect(): void {
   chatMemberBannedSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
+  roomMatchSubscriptions.clear()
+  roomWaveSubscriptions.clear()
 }
 
 /**
@@ -608,6 +646,16 @@ function setupSocketHandlers(sock: TypedSocket): void {
     userSubscriptions.forEach((userCallbacks) => {
       userCallbacks.forEach((cb) => cb(data))
     })
+  })
+
+  sock.on("room:match", (data) => {
+    // A new conversation exists and the roster's like state changed.
+    markDomainsDirty(["chat", "match"])
+    roomMatchSubscriptions.forEach((cb) => cb(data))
+  })
+
+  sock.on("room:wave", (data) => {
+    roomWaveSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("private:typing", (data) => {
@@ -986,6 +1034,29 @@ export function subscribeToUserNotifications(
   }
 }
 
+/**
+ * A like of yours turned mutual, from the other side.
+ *
+ * User-level like `subscribeToUserNotifications`: the server delivers it to
+ * `user:{id}`, joined on connect, so there is no room to join here.
+ */
+export function subscribeToRoomMatch(callback: RoomMatchCallback): () => void {
+  if (!socket?.connected) connect()
+  roomMatchSubscriptions.add(callback)
+  return () => {
+    roomMatchSubscriptions.delete(callback)
+  }
+}
+
+/** Somebody in your room waved at you. Same delivery as `subscribeToRoomMatch`. */
+export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
+  if (!socket?.connected) connect()
+  roomWaveSubscriptions.add(callback)
+  return () => {
+    roomWaveSubscriptions.delete(callback)
+  }
+}
+
 // === App State Management ===
 
 /**
@@ -1048,4 +1119,6 @@ export type {
   PrivateMessageCallback,
   PrivateTypingCallback,
   PrivateReadCallback,
+  RoomMatchCallback,
+  RoomWaveCallback,
 }

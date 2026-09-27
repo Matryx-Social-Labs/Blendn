@@ -25,3 +25,5 @@
 
 - **Re-run the full suite after the *last* edit, not before it.** A one-line lint cleanup (dropping an unused `EMBER_TYPE` import) after the final `jest` run broke a source-grepping test and failed CI on PR #285. Many tests here grep source files, so "only an import" is never safe to skip.
 - **A token check that passes isn't a design audit.** `lint:design` was clean while ~225 departures from docs/DESIGN_SYSTEM.md shipped, because it only checked what it was written to check. When asked "does every screen follow the system", read the doc's rules and check each one, then extend the checker for anything mechanical.
+
+- **Anything floating over a scroll reserves its *measured* height, not a guess.** The Tonight pass docked over the deck and hid "See everything nearby" once its title ran to two lines (2026-09-28). `onLayout` the overlay and pad the scroll by it. And a new control on a card gets checked against the card's fill: the hold-to-check-in pill was `surface` on a `surface` pass and read as plain text — the existing surface-on-surface lesson, broken again on a brand-new component.

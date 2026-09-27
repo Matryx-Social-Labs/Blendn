@@ -55,11 +55,12 @@ describe("a refused like", () => {
   })
 })
 
-describe("the Grid tells you when a like was refused", () => {
+describe("the room tells you when a like was refused", () => {
   const { readFileSync } = require("fs")
   const { join } = require("path")
   const code = readFileSync(
-    join(__dirname, "..", "components", "screens", "MatchScreen.tsx"),
+    // The room's like lives in `useRoom` now, beside the refusal rule.
+    join(__dirname, "..", "lib", "useRoom.ts"),
     "utf8"
   )
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -71,12 +72,13 @@ describe("the Grid tells you when a like was refused", () => {
   })
 
   it("keeps it a toast, not a tray", () => {
+    expect(code).toContain("const like = useCallback")
     /*
      * The mechanic only works if liking feels free. A modal after every failed
-     * tap is what makes it expensive — the same argument `ConnectionSheet`
-     * makes for being a sheet rather than the frame's full-screen takeover.
+     * tap is what makes it expensive — the same argument the match moment
+     * makes for being a beat rather than a form.
      */
-    const like = code.slice(code.indexOf("likeAtEvent"), code.indexOf("likeAtEvent") + 1800)
+    const like = code.slice(code.indexOf("const like = useCallback"), code.indexOf("const sendWave"))
     expect(like).not.toMatch(/showTray|ActionTray|Alert\.alert/)
   })
 })

@@ -1,3 +1,43 @@
+# Blend'n centre redesign (2026-09-28)
+
+Decided with the user: **one screen, two modes** (Tonight → Room), **chat docked in the Room**, **mobile + small backend adds**, **full-screen, opens out of the centre button**.
+Research: Refero (X Spaces roster, amo dwell time, Bump time ring, Luma LIVE/IN 2H + check-in sheet, 222 blank matches, TikTok LIVE podium + "next update", Around reactions, Telegram polls) and 60fps (Opal hold-to-commit, Trackables card→screen, Habitastic digit roll, Airbnb add-guests, Eimi pull-to-star, Honk heart arcs, Grok pull-down-back).
+Rules: tokens only (lib/theme, lib/motion), flat, no glow/blur/loops, accent once per screen, transform/opacity only, interruptible, haptics on real events, Reduce Motion → fades.
+
+## Route
+The Blend'n screen is an **overlay hosted by the tab layout** (a modal route put pushed screens underneath it on iOS). `/room` only opens the overlay. `nearby-events` stays as "See everything nearby" from Tonight.
+
+## Backend (blendn-admin) — contract
+- [x] `event:checkin`, `event:room:checkin`, `event:checkout` payloads gain `hereCount`
+- [x] mutual like emits `room:match` to `user:{A}` and `user:{B}`: `{ eventId, otherUserId, conversationId, name }` (name = how the other appears to you)
+- [x] `GET /api/mobile/events/[eventId]/room-preview` → `{ hereCount, tasteMatchCount|null }` (null under 3 here; blocked excluded)
+- [x] `POST /api/mobile/events/[eventId]/waves` `{ toUserId }` → both checked in, not blocked, 1 per pair / 10 min; emits `room:wave` to `user:{to}` `{ eventId, fromUserId, fromName }`
+- [x] tests
+
+## Mobile data
+- [x] `lib/useRoom.ts`: roster, live arrivals/checkouts, hereCount, like/connect/safety, wave, match events — lifted from MatchScreen
+- [x] `lib/roomMoments.ts` (pure, tested): meet-next picks + 15-min shuffle window, reason line, time-here label, arrivals queue
+- [x] `lib/useCheckInFlow.ts`: the event screen's check-in flow (rules, location, refusals, reveal, intent) shared with Tonight
+- [x] apiClient + socketClient for the new endpoints/events; polls + chat reactions clients
+
+## Screen
+- [x] Centre button: squash on press, container-transform open (accent disc → page)
+- [ ] Centre button: real unread badge (roomUnread is still never passed)
+- [x] Tonight mode: LIVE / IN 2H list with rolling counts, taste-match teaser (blank faces), venue pass docked + **hold to check in** → pass grows into the Room
+- [x] Room mode: status strip (● LIVE · rolling count · title), time-here ring on your avatar, arrivals row (faces spring in), Meet next top 3 + "Next shuffle" countdown, 3-column face grid w/ one reason each
+- [x] Person card: expands from face, pull down to close, double-tap / pull to like, wave, connect, safety
+- [x] Match moment: hearts arc your face → theirs, avatar bump, success haptic, "Say hi" opener
+- [x] Chat dock: last 2 messages + composer, arrivals/waves/matches as system lines, drag up → full chat
+- [ ] Polls + reactions UI (API clients exist: votePoll, reactToChatMessage)
+- [x] Swipe down to close
+
+## Verify
+- [ ] Rewrite the source-grepping room/MatchScreen tests as behaviour tests
+- [ ] jest + lint + lint:design, admin tests
+- [x] Simulator: Room mode against staging (seeded live account) — screenshot
+- [ ] Simulator: Tonight deck (fixture `preview/tonight`), hold-to-check-in, match moment, drag-to-close
+- [x] Tonight cards → swipeable deck like the Me tab photo stack (user ask, mid-build); PhotoStack now shares `SwipeDeck`
+
 # Bengaluru scenario reseed (2026-09-28)
 
 Script: `blendn-admin/scripts/seed-blr-scenarios.ts` (+ `seed-blr-photos.json`). Dry run by default, `--apply` writes, staging/localhost only.

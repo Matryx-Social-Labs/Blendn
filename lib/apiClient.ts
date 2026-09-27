@@ -416,6 +416,61 @@ export interface LikeOutcome {
   pseudonyms?: { you: string; them: string }
 }
 
+/**
+ * The room from outside it: a number, and how many of them share your taste.
+ *
+ * `tasteMatchCount` is null under three people — "1 person here shares your
+ * taste" in a room of two is that person — and blocked users are excluded
+ * server-side, so neither number can be walked back to anybody.
+ */
+export interface RoomPreview {
+  hereCount: number
+  tasteMatchCount: number | null
+}
+
+/** `null` means "withheld", never "zero" — see the server's `lib/disclosure.ts`. */
+export type Disclosed<T> = T | null
+
+export interface PollOption {
+  id: string
+  label: string
+  position: number
+  votes: Disclosed<number>
+}
+
+/**
+ * One poll as this reader may see it.
+ *
+ * Counts arrive already disclosed. A client that increments them locally after
+ * a vote would show a number the disclosure floor withheld, so the vote call
+ * returns this same shape and the screen renders that instead.
+ */
+export interface PollResults {
+  id: string
+  question: string
+  closesAt: string | null
+  closed: boolean
+  resultsVisible: boolean
+  options: PollOption[]
+  total: Disclosed<number>
+  suppressed: boolean
+  /** What to render in place of the numbers. Null when nothing is withheld. */
+  suppressedLabel: string | null
+  /** Which option you chose, if any. */
+  myVote: string | null
+}
+
+/** Counts and whether *you* reacted — never who else did. */
+export interface ReactionTally {
+  emoji: string
+  count: number
+  mine: boolean
+}
+
+/** The six the server accepts. Anything else is a 400. */
+export const CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const
+export type ChatReaction = (typeof CHAT_REACTIONS)[number]
+
 export interface PresencePing {
   status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'
   reason?: string
@@ -2029,6 +2084,81 @@ class ApiClientClass {
       { method: 'POST', body: JSON.stringify({ userId }) },
       true,
       3
+    )
+  }
+
+  /**
+   * How many are here, and how many share your taste — for the room you are
+   * looking at from outside.
+   *
+   * Cached briefly: Tonight asks for several events at once and a focus
+   * shouldn't re-ask all of them. An older server answers 404, which the
+   * caller treats as "no preview" rather than an error.
+   */
+  async getRoomPreview(
+    eventId: string,
+    options?: { force?: boolean }
+  ): Promise<ApiResponse<RoomPreview>> {
+    const endpoint = `/api/mobile/events/${eventId}/room-preview`
+    if (options?.force) return this.queuedRequest<RoomPreview>(endpoint)
+    return this.cachedRequest<RoomPreview>(endpoint, { ttl: 15_000, swr: true })
+  }
+
+  /**
+   * Wave at somebody in the same room.
+   *
+   * Lighter than a like and deliberately not private: they are told who waved.
+   * One per pair every ten minutes — the server answers `WAVE_TOO_SOON` (429)
+   * inside that window, which the caller shows as "already waved" rather than
+   * as a failure.
+   */
+  async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<{ sent: true }>> {
+    return this.queuedRequest<{ sent: true }>(
+      `/api/mobile/events/${eventId}/waves`,
+      { method: 'POST', body: JSON.stringify({ toUserId }) },
+      true,
+      3
+    )
+  }
+
+  /** One poll, disclosed for you. 403 when you are not in the room. */
+  async getPoll(eventId: string, pollId: string): Promise<ApiResponse<PollResults>> {
+    return this.queuedRequest<PollResults>(`/api/mobile/events/${eventId}/polls/${pollId}`)
+  }
+
+  /**
+   * Cast or change your vote. Answers with the poll's disclosed state, which
+   * is what the screen should render — never a locally incremented count.
+   * 409 carries a sentence the voter can act on ("This poll has closed").
+   */
+  async votePoll(
+    eventId: string,
+    pollId: string,
+    optionId: string
+  ): Promise<ApiResponse<PollResults>> {
+    return this.queuedRequest<PollResults>(
+      `/api/mobile/events/${eventId}/polls/${pollId}/vote`,
+      { method: 'POST', body: JSON.stringify({ optionId }) },
+      true,
+      2
+    )
+  }
+
+  /**
+   * Toggle a reaction on a room message. The server decides add vs remove, so
+   * two devices can't disagree about which state you are in; `added` says
+   * which it did, and `reactions` is the whole tally with your `mine`.
+   */
+  async reactToChatMessage(
+    chatGroupId: string,
+    messageId: string,
+    emoji: ChatReaction
+  ): Promise<ApiResponse<{ messageId: string; added: boolean; reactions: ReactionTally[] }>> {
+    return this.queuedRequest(
+      `/api/mobile/chat/groups/${chatGroupId}/messages/${messageId}/reactions`,
+      { method: 'POST', body: JSON.stringify({ emoji }) },
+      true,
+      2
     )
   }
 
