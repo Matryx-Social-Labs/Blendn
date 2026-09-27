@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Logger } from '../lib/logger'
@@ -90,6 +91,20 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null)
 
   const isSignup = mode === 'signup'
+  /*
+   * The selected segment's background slides between the two rather than
+   * jumping: 200ms ease-in-out, a movement on screen, on the UI thread. It is
+   * one absolute, childless view under the labels, so only a transform moves.
+   * Reduce Motion: it is simply under the selected one.
+   */
+  const reduceMotion = useReducedMotion()
+  const [segmentWidth, setSegmentWidth] = useState(0)
+  const thumbX = useSharedValue(0)
+  useEffect(() => {
+    const target = isSignup ? segmentWidth : 0
+    thumbX.set(reduceMotion ? target : withTiming(target, { duration: 200, easing: SEGMENT_EASE }))
+  }, [isSignup, segmentWidth, reduceMotion, thumbX])
+  const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: thumbX.get() }] }))
   const trimmedEmail = email.trim().toLowerCase()
 
   const switchMode = (next: Mode) => {
@@ -198,12 +213,18 @@ export default function SignIn() {
             importantForAccessibility="no-hide-descendants"
           />
 
-          <View style={styles.segmented}>
+          <View
+            style={styles.segmented}
+            onLayout={(e) => setSegmentWidth((e.nativeEvent.layout.width - SEGMENTED_PADDING * 2) / 2)}
+          >
+            {segmentWidth > 0 ? (
+              <Animated.View pointerEvents="none" style={[styles.segmentThumb, { width: segmentWidth }, thumbStyle]} />
+            ) : null}
             {(['signin', 'signup'] as const).map((m) => (
               <Pressable
                 key={m}
                 onPress={() => switchMode(m)}
-                style={[styles.segment, mode === m && styles.segmentActive]}
+                style={styles.segment}
                 accessibilityRole="button"
                 accessibilityState={{ selected: mode === m }}
               >
@@ -345,6 +366,9 @@ export default function SignIn() {
   )
 }
 
+const SEGMENTED_PADDING = 4
+const SEGMENT_EASE = Easing.bezier(0.77, 0, 0.175, 1)
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
@@ -363,11 +387,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: APP_COLORS.backgroundElevated,
     borderRadius: 12,
-    padding: 4,
+    padding: SEGMENTED_PADDING,
     marginBottom: 8,
   },
   segment: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
-  segmentActive: { backgroundColor: APP_COLORS.backgroundCard },
+  segmentThumb: {
+    position: 'absolute',
+    top: SEGMENTED_PADDING,
+    bottom: SEGMENTED_PADDING,
+    left: SEGMENTED_PADDING,
+    borderRadius: 9,
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
   segmentText: { color: APP_COLORS.textSecondary, fontSize: 15, fontWeight: '500' },
   segmentTextActive: { color: APP_COLORS.textPrimary },
 

@@ -11,7 +11,8 @@ import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-
  * "pop": something arriving from nothing in one frame.
  *
  * The fades ignore Reduce Motion on purpose — a fade *is* the reduced form,
- * and it still says "this just changed". The pop's scale drops out with it.
+ * and it still says "this just changed". The pop is skipped under it: the
+ * control simply appears.
  */
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
 

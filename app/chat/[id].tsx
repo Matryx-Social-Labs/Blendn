@@ -556,7 +556,7 @@ function GroupChatInner(props?: {
    * inline arrow here would re-render every mounted bubble each time.
    */
   const openMessageMenu = useCallback((message: Message) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     setSelectedMessage(message)
     setShowMessageMenu(true)
   }, [])

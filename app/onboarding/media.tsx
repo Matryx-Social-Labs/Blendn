@@ -17,6 +17,8 @@ import { useAuth } from '../../lib/useAuth'
 import { selectAndUploadPhoto } from '../../lib/photoUtils'
 import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
+import Animated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import { MOTION_DURATION } from '../../lib/motion'
 
 /**
  * Step seven — photos.
@@ -139,6 +141,8 @@ function MediaScreenInner() {
     if (result.success && result.url) setPhotos((current) => [...current, result.url!])
   }
 
+  const reduceMotion = useReducedMotion()
+
   const remove = (index: number) =>
     setPhotos((current) => current.filter((_, i) => i !== index))
 
@@ -169,8 +173,17 @@ function MediaScreenInner() {
           const primary = index === 0
 
           return (
-            <Pressable
+            /*
+             * "Make main" moves the photo to the front and grows it; removing
+             * one lets the rest slide up. Both animate (250ms ease-in-out) so
+             * you can see where your photo went instead of it teleporting.
+             * The tiles hold one image and no shadow, which keeps the layout
+             * transition cheap. Reduce Motion: they simply land.
+             */
+            <AnimatedPressable
               key={url}
+              layout={reduceMotion ? undefined : TILE_MOVE}
+              exiting={reduceMotion ? undefined : TILE_OUT}
               onPress={() => (primary ? undefined : makePrimary(index))}
               disabled={uploadingSlot !== null || primary}
               accessibilityRole="button"
@@ -230,7 +243,7 @@ function MediaScreenInner() {
               >
                 <Ionicons name="close" size={14} color={EMBER.onGradientChip} />
               </Pressable>
-            </Pressable>
+            </AnimatedPressable>
           )
         })}
 
@@ -257,6 +270,10 @@ function MediaScreenInner() {
     </OnboardingScreen>
   )
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
+const TILE_MOVE = LinearTransition.duration(250).easing(Easing.bezier(0.77, 0, 0.175, 1))
+const TILE_OUT = FadeOut.duration(MOTION_DURATION.fast)
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

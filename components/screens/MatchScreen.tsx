@@ -720,7 +720,6 @@ export default function Match({
 
   const onPullToRefresh = useCallback(async () => {
     if (!authUser) return
-    void Haptics.selectionAsync()
     setRefreshing(true)
     try {
       await loadActiveEventAndAttendees(authUser.id, true)

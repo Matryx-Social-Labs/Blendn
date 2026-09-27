@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
@@ -564,6 +565,9 @@ function PrivateChatInner() {
    * mounted bubble each time.
    */
   const reportMessage = useCallback((messageId: string) => {
+    // The same press-and-hold answer the room's message menu gives, on the
+    // frame the tray opens — the hold has "caught".
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     showTray('Message options', 'What would you like to do?', [
       { label: 'Cancel', onPress: closeTray },
       {
