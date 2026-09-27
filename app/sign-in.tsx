@@ -20,7 +20,7 @@ import { Logger } from '../lib/logger'
 import { APP_COLORS } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
-import { isAccountAge } from '../lib/onboarding'
+import { accountAgeError } from '../lib/onboarding'
 
 const lockup = require('../assets/logo/lockup-white.png')
 /*
@@ -103,9 +103,9 @@ export default function SignIn() {
   const validate = (): string | null => {
     if (!trimmedEmail.includes('@')) return 'Enter a valid email address.'
     if (isSignup && !name.trim()) return 'Enter your name.'
-    if (isSignup && age.trim()) {
-      const years = Number.parseInt(age, 10)
-      if (!isAccountAge(years)) return 'Enter a valid age.'
+    if (isSignup) {
+      const ageProblem = accountAgeError(age, { required: true })
+      if (ageProblem) return ageProblem
     }
     if (!password) return 'Enter your password.'
     if (isSignup && password.length < MIN_PASSWORD_LENGTH) {
@@ -131,13 +131,12 @@ export default function SignIn() {
       }
 
       /*
-       * Age is optional on the form because it is optional on the server, and
-       * both are the same decision: a build that does not send it must never be
-       * refused by a newer API. `about-you` asks for it when it is missing,
-       * which is also the path every Google and Apple account takes — those
-       * routes create a profile with no age at all.
+       * Required, 18 or over, on the form and on the server: Blend'n is 18+
+       * (SCRUM-330). `validate` has already refused a blank or under-18 age,
+       * so this parse is of a number it checked. Google and Apple accounts
+       * have no age and are held at "The basics" until a birth date is given.
        */
-      const years = age.trim() ? Number.parseInt(age, 10) : undefined
+      const years = Number(age.trim())
 
       const result = isSignup
         ? await signUp(trimmedEmail, password, name.trim(), deviceInfo, years)
@@ -235,18 +234,13 @@ export default function SignIn() {
 
           {isSignup && (
             <View style={styles.field}>
-              {/*
-                Optional, and labelled as such, because the server accepts a
-                signup without one — that is what lets this build ship before
-                the field is required. `about-you` asks again when it is
-                missing, which is the path every OAuth account takes anyway.
-              */}
-              <Text style={styles.label}>Age (optional)</Text>
+              {/* Required: Blend'n is 18+ (SCRUM-330). */}
+              <Text style={styles.label}>Age</Text>
               <TextInput
                 style={styles.input}
                 value={age}
                 onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
-                placeholder="Used for age-restricted events"
+                placeholder="You must be 18 or over"
                 placeholderTextColor={APP_COLORS.textTertiary}
                 keyboardType="number-pad"
                 returnKeyType="next"

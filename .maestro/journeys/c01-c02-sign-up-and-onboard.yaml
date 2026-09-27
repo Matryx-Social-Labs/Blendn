@@ -4,8 +4,8 @@
 #
 # Env: NEW_NAME, NEW_EMAIL (qa.<tag>.<n>@blendn.app — a person your session
 # owns), NEW_PASSWORD (a passphrase: the strength rule refuses common ones),
-# AGE, DOB_DD, DOB_MM, DOB_YYYY. For the minor path use AGE < 18: the
-# Orientation step must not appear (SCRUM-200) — the flow asserts it.
+# AGE, DOB_DD, DOB_MM, DOB_YYYY — 18 or over: Blend'n is 18+ (SCRUM-330), so
+# there is no minor path any more; an age under 18 stops at the form.
 #
 # Read back afterwards (npm run -s qa sq in blendn-admin):
 #   SELECT onboarded, push_enabled, share_location, orientations FROM profiles
@@ -31,7 +31,7 @@ tags:
 - tapOn: "What should we call you?"
 - inputText: ${NEW_NAME}
 - runFlow: ../subflows/keyboard-done.yaml
-- tapOn: "Used for age-restricted events"
+- tapOn: "You must be 18 or over"
 - inputText: ${AGE}
 - runFlow: ../subflows/keyboard-done.yaml
 - tapOn: "you@example.com"
@@ -67,7 +67,7 @@ tags:
     timeout: 20000
 - takeScreenshot: c02-location
 - tapOn: "Maybe later"
-# Adults see Orientation here; a minor must not (SCRUM-200).
+# Everyone who gets this far is an adult, and sees Orientation here.
 - runFlow:
     when:
       visible: "Straight"

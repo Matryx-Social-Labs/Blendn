@@ -21,7 +21,7 @@ people your session creates get a passphrase you choose.
 
 | Journey | Queue unit | Env |
 |---|---|---|
-| `c01-c02-sign-up-and-onboard` | SCRUM-221, 222 | `NEW_NAME NEW_EMAIL NEW_PASSWORD AGE DOB_DD DOB_MM DOB_YYYY` (AGE < 18 for the minor path) |
+| `c01-c02-sign-up-and-onboard` | SCRUM-221, 222 | `NEW_NAME NEW_EMAIL NEW_PASSWORD AGE DOB_DD DOB_MM DOB_YYYY` (AGE 18 or over — the app is 18+, SCRUM-330) |
 | `c03-sign-in-and-out` | SCRUM-223 | `EMAIL PASSWORD` |
 | `c03-staff-refused` | SCRUM-223, SCRUM-198 | `STAFF_EMAIL PASSWORD` |
 | `c08-room-post` | SCRUM-228 | `EMAIL PASSWORD ROOM MESSAGE` (needs a live event) |
