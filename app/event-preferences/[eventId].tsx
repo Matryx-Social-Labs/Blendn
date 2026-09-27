@@ -18,7 +18,7 @@ import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { useAuth } from '../../lib/useAuth'
 import { Logger } from '../../lib/logger'
 import { useToast } from '../../components/Toast'
-import { APP_COLORS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * Why you are here tonight, and whether people can see who you are.
@@ -248,8 +248,8 @@ export default function EventPreferences() {
           accessibilityRole="button"
           accessibilityState={{ selected: intent.includes(opt.value) }}
         >
-          <Text style={styles.optionText}>{opt.label}</Text>
-          <Text style={styles.optionHint}>{opt.hint}</Text>
+          <Text style={[styles.optionText, intent.includes(opt.value) && styles.textOnSelected]}>{opt.label}</Text>
+          <Text style={[styles.optionHint, intent.includes(opt.value) && styles.textOnSelected]}>{opt.hint}</Text>
         </TouchableOpacity>
       ))}
     </>
@@ -302,45 +302,37 @@ export default function EventPreferences() {
 
 /** Placeholder styling. Replace wholesale; nothing here is a decision. */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
-  scroll: { padding: 20, gap: 8 },
-  placeholderBanner: {
-    color: APP_COLORS.destructive,
-    fontSize: 11,
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  h1: { color: APP_COLORS.textPrimary, fontSize: 22, fontWeight: '700', marginTop: 8 },
-  body: { color: APP_COLORS.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 8 },
-  bodyEmphasis: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  option: { padding: 14, borderRadius: 10, backgroundColor: APP_COLORS.backgroundCard },
-  optionSelected: { backgroundColor: APP_COLORS.accent },
-  optionText: { color: APP_COLORS.textPrimary, fontSize: 15, flexShrink: 1 },
-  optionHint: { color: APP_COLORS.textSecondary, fontSize: 13, marginTop: 2 },
+  container: { flex: 1, backgroundColor: EMBER.bg },
+  scroll: { padding: GUTTER, gap: SPACE.sm },
+  placeholderBanner: { ...TYPE.label, color: EMBER.destructive, marginBottom: SPACE.sm },
+  h1: { ...TYPE.title, marginTop: SPACE.sm },
+  body: { ...TYPE.body, color: EMBER.textSecondary, marginBottom: SPACE.sm },
+  bodyEmphasis: { ...TYPE.body, marginBottom: SPACE.sm },
+  option: { padding: SPACE.lg, borderRadius: EMBER_RADIUS.md, backgroundColor: EMBER.surface },
+  optionSelected: { backgroundColor: EMBER.textPrimary },
+  optionText: { ...TYPE.bodyStrong, flexShrink: 1 },
+  optionHint: { ...TYPE.meta, marginTop: SPACE.xxs },
+  textOnSelected: { color: EMBER.bg },
   divider: {
     height: 1,
-    backgroundColor: APP_COLORS.separator,
-    marginVertical: 24,
+    backgroundColor: EMBER.separator,
+    marginVertical: SPACE.xl,
   },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 12,
+    gap: SPACE.md,
+    paddingVertical: SPACE.md,
   },
   primaryButton: {
-    backgroundColor: APP_COLORS.accent,
-    borderRadius: 24,
-    paddingVertical: 15,
+    backgroundColor: EMBER.accent,
+    borderRadius: EMBER_RADIUS.pill,
+    height: CONTROL.lg,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: SPACE.xl,
   },
-  primaryButtonText: { color: APP_COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
+  primaryButtonText: { ...TYPE.button, color: EMBER.onGradient },
   buttonDisabled: { opacity: 0.4 },
 })

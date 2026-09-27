@@ -43,7 +43,7 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient';
-import { EMBER, EMBER_TYPE } from '../../lib/theme';
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme';
 import { PulseTopBar } from '../pulse/PulseTopBar';
 import { SceneHero } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
@@ -151,10 +151,8 @@ const { width } = Dimensions.get('window')
 /*
  * The Scene — frame `1141:4853`, 390 wide. See `docs/SCENE.md`.
  *
- * Type is used at the frame's own values because that is what this codebase
- * already does: `EMBER_TYPE.screenTitle` ships 48/-2.4 unscaled, and the
- * frame's "The Experience" is 16/24 exactly like `sectionHeading`. Only
- * *layout* is scaled, and only where it is genuinely proportional.
+ * Type and spacing come from the fixed `TYPE` / `SPACE` scale. Only *layout* is
+ * scaled, and only where it is genuinely proportional.
  *
  * The hero is one of those: it is a photograph, so its shape has to survive the
  * change of screen width rather than its absolute height. 574 on a 390 frame is
@@ -1416,7 +1414,7 @@ export default function EventDetail() {
           about the same double-count from the other direction.
         */
         contentContainerStyle={{
-          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + 10 + 16 + 24,
+          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + SPACE.md + SPACE.lg + SPACE.xl,
         }}
       >
         {isLoading && !event ? (
@@ -1530,7 +1528,7 @@ export default function EventDetail() {
                   <SceneMap
                     latitude={event.latitude}
                     longitude={event.longitude}
-                    width={width - 24}
+                    width={width - 2 * SCENE_PADDING_HORIZONTAL}
                   />
                 ) : null
               }
@@ -1609,7 +1607,7 @@ export default function EventDetail() {
             accessibilityRole="button"
             accessibilityLabel="Edit event"
           >
-            <Ionicons name="create-outline" size={18} color={EMBER.textPrimary} />
+            <Ionicons name="create-outline" size={ICON.md} color={EMBER.textPrimary} />
           </ScalePress>
           <ScalePress haptic={false} pressedScale={0.9}
             onPress={openAnnouncementComposer}
@@ -1617,7 +1615,7 @@ export default function EventDetail() {
             accessibilityRole="button"
             accessibilityLabel="Send an announcement"
           >
-            <Ionicons name="megaphone-outline" size={18} color={EMBER.textPrimary} />
+            <Ionicons name="megaphone-outline" size={ICON.md} color={EMBER.textPrimary} />
           </ScalePress>
           <ScalePress haptic={false} pressedScale={0.9}
             onPress={handleDeleteEvent}
@@ -1625,7 +1623,7 @@ export default function EventDetail() {
             accessibilityRole="button"
             accessibilityLabel="Delete this event"
           >
-            <Ionicons name="trash-outline" size={18} color={EMBER.textPrimary} />
+            <Ionicons name="trash-outline" size={ICON.md} color={EMBER.textPrimary} />
           </ScalePress>
         </View>
       ) : null}
@@ -1768,14 +1766,14 @@ export default function EventDetail() {
 }
 
 /**
- * A top-bar button — a 36pt disc at 8% white, as `app/preview/scene.tsx` draws it.
+ * A top-bar button — a `CONTROL.sm` disc at 8% white, as `app/preview/scene.tsx` draws it.
  *
  * Bare glyphs on the blur is what made the header read as unfinished: the bar
  * is translucent over photography, so an icon with no disc behind it has no
  * consistent contrast and no apparent hit target.
  */
 /*
- * Shrinks to 0.9 on press-in: at 36pt, the 0.97 a full-width button uses is
+ * Shrinks to 0.9 on press-in: at 32pt, the 0.97 a full-width button uses is
  * below what an eye notices. No haptic of its own — the heart's handler fires
  * one, and Back and Share are navigation, which does not buzz.
  */
@@ -1803,7 +1801,7 @@ function SceneBarButton({
       accessibilityLabel={label}
       style={styles.barButton}
     >
-      {glyph ?? <Ionicons name={icon} size={20} color={active ? EMBER.accent : EMBER.textPrimary} />}
+      {glyph ?? <Ionicons name={icon} size={ICON.md} color={active ? EMBER.accent : EMBER.textPrimary} />}
     </ScalePress>
   )
 }
@@ -1811,25 +1809,25 @@ function SceneBarButton({
 const styles = StyleSheet.create({
   // Frame `1141:4918`: two-up, 16pt gap. `flexWrap` so a vocabulary longer
   // than two runs on rather than squeezing every tile narrower.
-  amenityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  amenityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.lg },
   amenityTile: { flexGrow: 1, flexBasis: '45%' },
   container: { flex: 1, backgroundColor: EMBER.bg },
   barButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   content: {
     paddingHorizontal: SCENE_PADDING_HORIZONTAL,
-    // 48 under the hero, as the harness has it -- not the 64 that separates
-    // unrelated sections further down.
-    paddingTop: 48,
+    // 48 under the hero, as the harness has it -- more than the 32 that
+    // separates sections further down.
+    paddingTop: SPACE.xxxl,
     gap: SCENE_SECTION_GAP,
   },
-  section: { gap: 16 },
+  section: { gap: SPACE.lg },
   ctaDock: {
     position: 'absolute',
     left: 0,
@@ -1838,9 +1836,9 @@ const styles = StyleSheet.create({
   },
   ctaDockInner: {
     paddingHorizontal: SCENE_CTA_INSET,
-    // 10, down from 12 — see SCENE_CTA_HEIGHT for the chrome arithmetic.
-    paddingTop: 10,
-    paddingBottom: 16,
+    // See SCENE_CTA_HEIGHT for the chrome arithmetic.
+    paddingTop: SPACE.md,
+    paddingBottom: SPACE.lg,
     /*
      * Centres the content-width pill. Without this it stretches to the dock and
      * `paddingHorizontal: 32` on the fill buys nothing — which is exactly what
@@ -1851,14 +1849,14 @@ const styles = StyleSheet.create({
   },
   organiserBar: {
     position: 'absolute',
-    right: 16,
-    bottom: SCENE_CTA_HEIGHT + 16 + 10 + 24,
-    gap: 12,
+    right: GUTTER,
+    bottom: SCENE_CTA_HEIGHT + SPACE.lg + SPACE.md + SPACE.xl,
+    gap: SPACE.md,
   },
   organiserButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: CONTROL.md,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: EMBER.surfaceSunken,
@@ -1867,68 +1865,68 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    gap: SPACE.lg,
     backgroundColor: EMBER.bg,
   },
-  errorText: { ...EMBER_TYPE.cardTitle, fontSize: 18 },
+  errorText: { ...TYPE.title },
   backButton: {
-    minHeight: 44,
-    paddingHorizontal: 24,
+    minHeight: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
     justifyContent: 'center',
-    borderRadius: 9999,
-    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
-  backButtonText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
+  backButtonText: { ...TYPE.button },
 
   announcementOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: GUTTER,
   },
   announcementModal: {
     width: '100%',
-    borderRadius: 32,
+    borderRadius: EMBER_RADIUS.card,
     backgroundColor: EMBER.bg,
-    padding: 24,
-    gap: 12,
+    padding: SPACE.xl,
+    gap: SPACE.md,
   },
-  announcementTitle: { ...EMBER_TYPE.cardTitle, fontSize: 20 },
-  announcementSubtitle: { ...EMBER_TYPE.meta },
+  announcementTitle: { ...TYPE.title },
+  announcementSubtitle: { ...TYPE.meta },
   announcementInput: {
+    ...TYPE.body,
     minHeight: 108,
-    borderRadius: 24,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
-    padding: 16,
-    color: EMBER.textPrimary,
+    padding: SPACE.lg,
     textAlignVertical: 'top',
   },
   editFieldInput: {
-    height: 48,
-    borderRadius: 16,
+    ...TYPE.body,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
-    paddingHorizontal: 16,
-    color: EMBER.textPrimary,
+    paddingHorizontal: SPACE.lg,
   },
-  announcementButtons: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  announcementButtons: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.xs },
   announcementCancel: {
     flex: 1,
-    minHeight: 48,
+    minHeight: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
-  announcementCancelText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
+  announcementCancelText: { ...TYPE.button },
   announcementSend: {
     flex: 1,
-    minHeight: 48,
+    minHeight: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 9999,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
   announcementSendOff: { opacity: 0.5 },
-  announcementSendText: { ...EMBER_TYPE.meta, color: EMBER.onGradient },
+  announcementSendText: { ...TYPE.button, color: EMBER.onGradient },
 })

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
 import { Image } from 'expo-image'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { EMBER } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 
 type NearbyEvent = {
   id: string
@@ -30,16 +30,14 @@ const ASPECT_RATIO = 363 / 249
 export default function NearbyEventCard({ event, width, onPress, onLongPress, timeLabel, locationLabel }: NearbyEventCardProps) {
   const height = useMemo(() => width / ASPECT_RATIO, [width])
 
-  // Scale constants from Figma using width as base
-  const scale = width / 363
-  const radiusImage = 23 * scale
+  const radiusImage = EMBER_RADIUS.lg
 
   return (
     <Pressable
       onPress={() => onPress?.(event)}
       onLongPress={() => onLongPress?.(event)}
       delayLongPress={320}
-      style={{ width, marginBottom: 18, alignSelf: 'center' }}
+      style={{ width, marginBottom: SPACE.lg, alignSelf: 'center' }}
       accessibilityRole="button"
       accessibilityLabel={`Open event ${event.title}`}
     >
@@ -68,20 +66,14 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
             pointerEvents="none"
             style={{
               position: 'absolute',
-              left: 16 * scale,
-              right: 16 * scale,
-              bottom: 14 * scale,
+              left: SPACE.lg,
+              right: SPACE.lg,
+              bottom: SPACE.lg,
             }}
           >
             <Text
               numberOfLines={2}
-              style={{
-                color: EMBER.textPrimary,
-                fontSize: 20,
-                lineHeight: 26,
-                fontWeight: '700',
-                marginBottom: 10 * scale,
-              }}
+              style={{ ...TYPE.title, marginBottom: SPACE.sm }}
             >
               {event.title}
             </Text>
@@ -93,13 +85,13 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
                 alignItems: 'center',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 * scale, maxWidth: '55%' }}>
-                <Ionicons name="time-outline" size={13} color="#FFFFFF" />
-                <Text numberOfLines={1} style={{ color: EMBER.textPrimary, fontSize: 13 }}>{timeLabel}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: '55%' }}>
+                <Ionicons name="time-outline" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text numberOfLines={1} style={{ ...TYPE.meta, color: EMBER.textPrimary }}>{timeLabel}</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 * scale, maxWidth: '40%' }}>
-                <Ionicons name="map-outline" size={13} color="#FFFFFF" />
-                <Text numberOfLines={1} style={{ color: EMBER.textPrimary, fontSize: 13 }}>{locationLabel}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: '40%' }}>
+                <Ionicons name="map-outline" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text numberOfLines={1} style={{ ...TYPE.meta, color: EMBER.textPrimary }}>{locationLabel}</Text>
               </View>
             </View>
           </View>

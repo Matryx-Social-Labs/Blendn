@@ -141,7 +141,7 @@ describe('the irreversible row is hard to hit by accident', () => {
     // A `spaced` flag the renderer ignores is worse than no flag.
     const src = SETTINGS()
     expect(src).toContain('item.spaced && styles.sectionHeaderSpaced')
-    expect(src).toContain('sectionHeaderSpaced: { marginTop: 40 }')
+    expect(src).toContain('sectionHeaderSpaced: { marginTop: SPACE.xxxl }')
   })
 })
 

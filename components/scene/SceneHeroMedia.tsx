@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER } from '../../lib/theme'
+import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
 
 /**
@@ -282,16 +282,16 @@ const styles = StyleSheet.create({
   /*
    * Above the gradient's foot but clear of the title block.
    *
-   * The hero's caption sits at 32pt from the bottom and is roughly 150 tall, so
-   * the dots go above it rather than beside it — overlapping a 48pt title with
+   * The hero's caption sits at the gutter from the bottom and is roughly 150 tall,
+   * so the dots go above it rather than beside it — overlapping the title with
    * page indicators is how you get a carousel that looks like a bug.
    */
   dots: {
     position: 'absolute',
-    top: 24,
-    right: 24,
+    top: GUTTER,
+    right: GUTTER,
     flexDirection: 'row',
-    gap: 6,
+    gap: SPACE.sm,
   },
   dot: {
     width: 6,

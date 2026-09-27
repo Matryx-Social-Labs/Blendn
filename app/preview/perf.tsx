@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { dumpPerf, perfSnapshot, resetPerf, SLOW_COMMIT_MS } from '../../lib/perf'
-import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * What every screen cost, since the app started or since the last reset.
@@ -91,27 +91,22 @@ export default function PerfPreview() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg, paddingHorizontal: 16 },
-  title: { ...EMBER_TYPE.cardTitle, fontSize: 24, marginTop: 8 },
-  note: { ...EMBER_TYPE.meta, marginTop: 4 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  container: { flex: 1, backgroundColor: EMBER.bg, paddingHorizontal: GUTTER },
+  title: { ...TYPE.display, marginTop: SPACE.sm },
+  note: { ...TYPE.meta, marginTop: SPACE.xs },
+  actions: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.lg },
   button: {
-    minHeight: 40,
-    paddingHorizontal: 18,
+    minHeight: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 9999,
-    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
-  buttonText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
-  list: { paddingVertical: 20, gap: 14 },
-  empty: { ...EMBER_TYPE.meta },
-  row: { gap: 4 },
-  rowId: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 22,
-    color: EMBER.accent,
-  },
-  rowStat: { ...EMBER_TYPE.meta },
+  buttonText: { ...TYPE.button },
+  list: { paddingVertical: SPACE.xl, gap: SPACE.lg },
+  empty: { ...TYPE.meta },
+  row: { gap: SPACE.xs },
+  rowId: { ...TYPE.bodyStrong },
+  rowStat: { ...TYPE.meta },
 })

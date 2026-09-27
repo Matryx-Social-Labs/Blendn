@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { bannerText, roomVisibility } from '../lib/roomVisibility'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 
 /**
  * What the room knows about you, for as long as you are in it.
@@ -79,7 +79,7 @@ export function RoomVisibilityBanner({
     >
       <Ionicons
         name={hidden ? 'cloud-offline-outline' : named ? 'eye-outline' : 'eye-off-outline'}
-        size={18}
+        size={ICON.md}
         color={named ? EMBER.accent : EMBER.textSecondary}
       />
       <View style={styles.copy}>
@@ -124,9 +124,9 @@ const styles = StyleSheet.create({
   root: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    gap: SPACE.md,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.card,
     borderWidth: 1,
   },
@@ -134,10 +134,10 @@ const styles = StyleSheet.create({
   named: { backgroundColor: EMBER.surface, borderColor: 'rgba(255,144,109,0.4)' },
   // `flex: 1` so a long pseudonym wraps rather than pushing the action off the
   // right edge — the way out must never be the thing that gets clipped.
-  copy: { flex: 1, gap: 2 },
-  title: { ...EMBER_TYPE.helper, color: EMBER.textPrimary, fontSize: 13, lineHeight: 18 },
-  reason: { ...EMBER_TYPE.helper, color: EMBER.textTertiary, fontSize: 12, lineHeight: 16 },
-  action: { ...EMBER_TYPE.helper, color: EMBER.accent, fontSize: 13 },
+  copy: { flex: 1, gap: SPACE.xxs },
+  title: { ...TYPE.meta, color: EMBER.textPrimary },
+  reason: { ...TYPE.meta, color: EMBER.textTertiary },
+  action: { ...TYPE.meta, color: EMBER.accent },
   actionBlocked: { color: EMBER.textTertiary },
   pressed: { opacity: 0.7 },
 })

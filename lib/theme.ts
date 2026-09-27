@@ -158,6 +158,12 @@ export const EMBER = {
   onGradientChip: '#2D0700',
   /** The gradient's warm end as a flat colour, for eyebrow text and icons. */
   accent: '#FF906D',
+
+  /** Hairline dividers and control outlines. */
+  separator: 'rgba(255,255,255,0.1)',
+  /** Destructive actions and errors. */
+  destructive: '#FF453A',
+  success: '#30D158',
 } as const
 
 /**
@@ -208,13 +214,19 @@ export const EMBER_GLOW = {
  * a pill at 64px tall, which is the whole look.
  */
 export const EMBER_RADIUS = {
+  /** Small tiles, thumbnails, badges. */
+  sm: 8,
+  /** Rows, list cells, message bubbles. */
+  md: 16,
+  /** Sheets and grouped panels. */
+  lg: 24,
   input: 32,
   card: 32,
   pill: 9999,
 } as const
 
-/** Every input and the primary button are this tall. Well over the 44pt floor. */
-export const EMBER_CONTROL_HEIGHT = 64
+/** Every input and the primary button are this tall. Same as `CONTROL.lg`. */
+export const EMBER_CONTROL_HEIGHT = 56
 
 /* -------------------------------------------------------------------------- */
 /* Type                                                                        */
@@ -231,225 +243,171 @@ export const EMBER_CONTROL_HEIGHT = 64
 export const EMBER_FONTS = {
   displayExtraBold: 'PlusJakartaSans_800ExtraBold',
   displayBold: 'PlusJakartaSans_700Bold',
-  displaySemiBold: 'PlusJakartaSans_600SemiBold',
-  /*
-   * Added for the Location card, which the frame sets entirely in Regular
-   * (`1141:4903`, `1141:4905`). It was built Bold because Regular was not
-   * loaded — and a `fontFamily` naming an unloaded family does not throw, it
-   * silently renders the system font, so the weight was simply wrong.
-   */
-  displayRegular: 'PlusJakartaSans_400Regular',
   bodyRegular: 'Manrope_400Regular',
-  bodyMedium: 'Manrope_500Medium',
   bodySemiBold: 'Manrope_600SemiBold',
   bodyBold: 'Manrope_700Bold',
 } as const
 
-/**
- * The onboarding type scale, measured off the frames.
+/* -------------------------------------------------------------------------- */
+/* Design system — the only sizes a screen may use                             */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * One scale for every screen. See `docs/DESIGN_SYSTEM.md`.
  *
- * Whole styles rather than loose sizes: every one of these pairs a family with
- * a size, a line height and — for three of them — letter spacing that is not
- * optional. `display` at 56pt with default tracking is a visibly different
- * screen from the design.
+ * These replace the per-frame values measured off Figma `1141:*`: the frames set
+ * nearly everything at 16pt with a 48pt title, which left no hierarchy between a
+ * section heading, a card's details and body copy, and every screen had grown
+ * its own in-between values on top (24 font sizes, 15 paddings). The departures
+ * from the frames are logged in `docs/PULSE.md`.
+ *
+ * `scripts/check-design-tokens.js` (run by `npm test`) fails on a raw
+ * `fontSize`, or a padding/margin/gap off `SPACE`, in `app/` and `components/`.
  */
-export const EMBER_TYPE = {
-  /*
-   * The two button labels on Connection Success (`1141:5401`, `1141:5403`).
-   *
-   * In the scale rather than hand-rolled on the component because the scale is
-   * what justifies a loaded weight -- `__tests__/fonts.test.ts` refuses any
-   * family the scale never asks for, on the grounds that an unused font is
-   * bundle weight downloaded on every cold start for nothing.
-   *
-   * The frame sets the primary Bold and the secondary SemiBold: the affirmative
-   * carries more weight than the way out.
-   */
-  actionPrimary: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.onGradient,
-  },
-  actionSecondary: {
-    fontFamily: EMBER_FONTS.displaySemiBold,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-  },
-  /** "The basics". One per screen, and it is the screen's whole identity. */
+
+/** Spacing scale. Padding, margin and gap come from here and nowhere else. */
+export const SPACE = {
+  xxs: 2,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+  xxxl: 48,
+} as const
+
+/** Left and right margin of every screen. Everything on a screen lines up to it. */
+export const GUTTER = SPACE.xl
+
+/** Icon sizes: inline with text, inside a control, and navigation. */
+export const ICON = {
+  sm: 16,
+  md: 20,
+  lg: 24,
+} as const
+
+/**
+ * Control heights.
+ *
+ * `lg` for the primary action and form inputs, `md` for search fields, chips
+ * and pill buttons that share a row, `sm` for tags and badges. Things in one row
+ * share one height.
+ */
+export const CONTROL = {
+  lg: 56,
+  md: 48,
+  sm: 32,
+} as const
+
+/**
+ * The type scale. Nine roles; a screen picks a role, never a size.
+ *
+ * Plus Jakarta Sans for headings and actions, Manrope for reading. Weight comes
+ * from the family (see `EMBER_FONTS`), never from `fontWeight`.
+ *
+ * - `display`    one per screen: "The Pulse", "The basics"
+ * - `title`      card and sheet titles
+ * - `heading`    section headings: "Featured", "Upcoming"
+ * - `button`     button and action labels
+ * - `body`       reading text and inputs
+ * - `bodyStrong` emphasised body: names, chip labels, list row titles
+ * - `meta`       secondary details: date, venue, timestamps, helper text
+ * - `label`      small caps: tags, field labels, eyebrows, text actions
+ * - `caption`    the smallest text: tab labels, badges, counts
+ */
+export const TYPE = {
   display: {
     fontFamily: EMBER_FONTS.displayExtraBold,
-    fontSize: 56,
-    lineHeight: 56,
-    letterSpacing: -2.8,
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -1,
     color: EMBER.textPrimary,
   },
-  /** The sentence under the display line. */
-  subtitle: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
-  /** "FIRST NAME". Uppercased in the string, not by `textTransform`. */
-  fieldLabel: {
-    fontFamily: EMBER_FONTS.bodySemiBold,
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 1.4,
-    color: EMBER.textSecondary,
-  },
-  input: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
+  title: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.4,
     color: EMBER.textPrimary,
   },
-  /** The DD / MM / YYYY boxes, a step up so three short values stay legible. */
-  inputCentered: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 18,
+  heading: {
+    fontFamily: EMBER_FONTS.displayBold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
     color: EMBER.textPrimary,
-    textAlign: 'center' as const,
-  },
-  helper: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: EMBER.textTertiary,
-  },
-  chip: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
   },
   button: {
     fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    letterSpacing: -0.45,
-    color: EMBER.onGradient,
-  },
-  /** "CURATION PHASE". 9.6pt only works because the tracking is 2.88. */
-  eyebrow: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 9.6,
-    lineHeight: 14.4,
-    letterSpacing: 2.88,
-    color: EMBER.accent,
-  },
-  /** The "30%" beside the progress bar. */
-  progress: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
-
-  /* ---- The Pulse and the feed screens ------------------------------------ */
-
-  /**
-   * "The **Pulse**". Smaller than `display` because this screen scrolls under a
-   * sticky bar and `display` at 56 leaves no room for the search field beneath
-   * it on a 390pt frame — onboarding could spend the height, a feed cannot.
-   */
-  screenTitle: {
-    fontFamily: EMBER_FONTS.displayExtraBold,
-    fontSize: 48,
-    lineHeight: 48,
-    letterSpacing: -2.4,
-    color: EMBER.textPrimary,
-  },
-  /** "Featured", "Upcoming", "Nearby Experiences". */
-  sectionHeading: {
-    fontFamily: EMBER_FONTS.displayBold,
     fontSize: 16,
     lineHeight: 24,
     color: EMBER.textPrimary,
   },
-  /** "VIEW ALL", and the "Launch Map" style text buttons. Uppercased in the
-   *  string rather than by `textTransform`, so the tracking lands on the real
-   *  glyphs — same rule as `eyebrow`. */
-  link: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 1.6,
-    color: EMBER.accent,
-  },
-  /**
-   * The Scene's Location card — `1141:4903` and `1141:4905`.
-   *
-   * Both are Plus Jakarta **Regular**, and both were built Bold. Regular was
-   * not loaded at the time, and a `fontFamily` naming an unloaded family does
-   * not throw or warn — it renders the system font, which on a dark screen
-   * reads as "a slightly different weight" rather than as a bug.
-   *
-   * The eyebrow's 1.6px tracking and `#AEAAAA` are what make it an eyebrow;
-   * bold at 16pt with wide tracking reads as a heading competing with the real
-   * headings on the page.
-   */
-  cardEyebrow: {
-    fontFamily: EMBER_FONTS.displayRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 1.6,
-    color: EMBER.textSecondary,
-  },
-  /** The venue name under it — same family and size, no tracking. */
-  cardValue: {
-    fontFamily: EMBER_FONTS.displayRegular,
+  body: {
+    fontFamily: EMBER_FONTS.bodyRegular,
     fontSize: 16,
     lineHeight: 24,
     color: EMBER.textPrimary,
   },
-  /** The headline on a featured card and on the large local card. */
-  cardTitleLarge: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 36,
-    lineHeight: 45,
+  bodyStrong: {
+    fontFamily: EMBER_FONTS.bodySemiBold,
+    fontSize: 16,
+    lineHeight: 24,
     color: EMBER.textPrimary,
   },
-  /** The headline on an upcoming card. */
-  cardTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 24,
-    lineHeight: 32,
-    color: EMBER.textPrimary,
-  },
-  /** Date, venue, distance, "142 joined" — everything on a card that is not a
-   *  name and not a paragraph. */
   meta: {
     fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 13,
+    lineHeight: 18,
     color: EMBER.textSecondary,
   },
-  /** The card's description paragraph. Same size as `meta`; separate because it
-   *  wraps and clamps where meta never does. */
-  cardBody: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
+  label: {
+    fontFamily: EMBER_FONTS.bodyBold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 1.2,
     color: EMBER.textSecondary,
   },
-  /**
-   * The pill on a featured card — "SONIC VOID", "EXCLUSIVE".
-   *
-   * No colour: it is the one type style whose colour is per-instance, because
-   * the frame alternates the gradient's two ends between cards.
-   */
-  tag: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 1.6,
+  caption: {
+    fontFamily: EMBER_FONTS.bodySemiBold,
+    fontSize: 11,
+    lineHeight: 14,
+    color: EMBER.textSecondary,
   },
-  /** The category pill over an upcoming card's image — "Dance", "Workshop". */
-  categoryPill: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
+} as const
+
+export type TypeRole = keyof typeof TYPE
+
+/**
+ * The old per-frame names, pointed at the scale above.
+ *
+ * Kept so the 60-odd files that spread `EMBER_TYPE.x` move onto the scale in the
+ * same commit without a rename across all of them. New code uses `TYPE` or
+ * `<Text variant>`; these go once nothing reads them.
+ */
+export const EMBER_TYPE = {
+  actionPrimary: { ...TYPE.button, color: EMBER.onGradient },
+  actionSecondary: TYPE.button,
+  display: TYPE.display,
+  subtitle: { ...TYPE.body, color: EMBER.textSecondary },
+  fieldLabel: TYPE.label,
+  input: TYPE.body,
+  inputCentered: { ...TYPE.body, textAlign: 'center' as const },
+  helper: { ...TYPE.meta, color: EMBER.textTertiary },
+  chip: TYPE.bodyStrong,
+  button: { ...TYPE.button, color: EMBER.onGradient },
+  eyebrow: { ...TYPE.label, color: EMBER.accent },
+  progress: { ...TYPE.label, color: EMBER.textSecondary },
+  screenTitle: TYPE.display,
+  sectionHeading: TYPE.heading,
+  link: { ...TYPE.label, color: EMBER.accent },
+  cardEyebrow: TYPE.label,
+  cardValue: TYPE.body,
+  cardTitleLarge: TYPE.title,
+  cardTitle: TYPE.title,
+  meta: TYPE.meta,
+  cardBody: { ...TYPE.body, color: EMBER.textSecondary },
+  tag: TYPE.label,
+  categoryPill: TYPE.bodyStrong,
 } as const

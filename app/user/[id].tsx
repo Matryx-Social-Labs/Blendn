@@ -8,8 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import {
-  PROFILE_GUTTER,
-  PROFILE_SECTION_GAP,
   ProfileActions,
   ProfileBio,
   ProfileDetail,
@@ -22,7 +20,7 @@ import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -389,14 +387,14 @@ function UserProfileInner() {
    */
   const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' • ') || null
 
-  const columnWidth = (WINDOW_WIDTH - PROFILE_GUTTER * 2 - 16) / 2
+  const columnWidth = (WINDOW_WIDTH - GUTTER * 2 - SPACE.lg) / 2
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + SPACE.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
         {isLoading ? (
@@ -534,7 +532,7 @@ function UserProfileInner() {
         onClose={() => setLightboxVisible(false)}
       />
 
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]} pointerEvents="box-none">
+      <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
@@ -542,7 +540,7 @@ function UserProfileInner() {
           hitSlop={12}
           style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
         >
-          <Ionicons name="chevron-back" size={20} color={EMBER.textPrimary} />
+          <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
         </Pressable>
         {ctaMode !== 'self' ? (
           <Pressable
@@ -552,7 +550,7 @@ function UserProfileInner() {
             hitSlop={12}
             style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color={EMBER.textPrimary} />
+            <Ionicons name="ellipsis-horizontal" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         ) : null}
       </View>
@@ -583,34 +581,28 @@ function ProfileSkeleton({ width }: { width: number }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: EMBER.bg },
-  muted: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
+  muted: { ...TYPE.body, color: EMBER.textSecondary },
   scroll: { backgroundColor: EMBER.bg },
-  // Frame `1141:5177`: `px-[12px]`, `gap-[64px]`, 32 clear of the hero.
-  canvas: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 32, gap: PROFILE_SECTION_GAP },
-  // Frame `1141:5178`: heading and body are 24 apart, not 64.
-  section: { gap: 24 },
-  // Frame `1141:5198`: the two blocks are 48 apart.
-  details: { gap: 48 },
+  // The screen gutter, 32 clear of the hero and between sections.
+  canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
+  // Heading to its content.
+  section: { gap: SPACE.lg },
+  details: { gap: SPACE.xl },
 
   topBar: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    paddingHorizontal: 24,
-    paddingBottom: 12,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   barButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: CONTROL.md,
+    height: CONTROL.md,
+    borderRadius: CONTROL.md / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15,14,14,0.55)',

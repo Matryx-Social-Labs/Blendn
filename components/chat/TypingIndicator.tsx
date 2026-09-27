@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * Three dots and a name. Frame `1141:5574`.
@@ -71,27 +71,22 @@ export function TypingIndicator({ label }: { label: string }) {
         ))}
       </View>
       <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-        {label}
+        {label.toUpperCase()}
       </Text>
     </View>
   )
 }
 
+/** `ChatBubble`'s avatar disc. */
+const AVATAR = 40
+
 const styles = StyleSheet.create({
   /*
-   * 56 = a 40pt avatar plus the 16pt gap beside it, so the dots start exactly
+   * A 40pt avatar plus the 16pt gap beside it, so the dots start exactly
    * where the next inbound bubble will.
    */
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingLeft: 56, opacity: 0.6 },
-  dots: { flexDirection: 'row', gap: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: 0.6 },
+  dots: { flexDirection: 'row', gap: SPACE.xs },
   dot: { width: 4, height: 4, borderRadius: 9999, backgroundColor: EMBER.textSecondary },
-  label: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: EMBER.textSecondary,
-    flexShrink: 1,
-  },
+  label: { ...TYPE.label, flexShrink: 1 },
 })

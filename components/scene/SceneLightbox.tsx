@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { SwipeToDismiss } from '../motion/SwipeToDismiss'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
@@ -134,7 +134,7 @@ export function SceneLightbox({
 
         <Pressable style={styles.close} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
           <View style={styles.closeInner}>
-            <Ionicons name="close" size={22} color="#FFFFFF" />
+            <Ionicons name="close" size={ICON.md} color="#FFFFFF" />
           </View>
         </Pressable>
       </SwipeToDismiss>
@@ -222,11 +222,11 @@ function LightboxVideo({
 const styles = StyleSheet.create({
   page: { width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' },
   media: { width: SCREEN_W, height: SCREEN_H },
-  close: { position: 'absolute', top: 56, right: 20, zIndex: 10 },
+  close: { position: 'absolute', top: 56, right: GUTTER, zIndex: 10 },
   closeInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -236,13 +236,9 @@ const styles = StyleSheet.create({
     top: 60,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.xs,
+    borderRadius: EMBER_RADIUS.pill,
   },
-  counterText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    color: EMBER.textPrimary,
-    fontSize: 14,
-  },
+  counterText: { ...TYPE.caption, color: EMBER.textPrimary },
 })

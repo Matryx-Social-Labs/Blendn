@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Logger } from '../lib/logger'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../lib/theme'
 
 interface Props {
   children: ReactNode
@@ -88,7 +89,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <View style={styles.container}>
-          <Ionicons name="warning-outline" size={48} color="#FF6B6B" />
+          <Ionicons name="warning-outline" size={48} color={EMBER.destructive} />
           <Text style={styles.title}>Oops! Something went wrong</Text>
           <Text style={styles.subtitle}>
             We encountered an unexpected error. Don&apos;t worry, your data is safe.
@@ -111,7 +112,7 @@ export class ErrorBoundary extends Component<Props, State> {
               )
             }}
           >
-            <Text style={styles.detailsButtonText}>View Details</Text>
+            <Text style={styles.detailsButtonText}>VIEW DETAILS</Text>
           </TouchableOpacity>
         </View>
       )
@@ -141,42 +142,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff'
+    padding: GUTTER,
+    backgroundColor: EMBER.bg
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 16,
-    marginBottom: 8,
+    ...TYPE.title,
+    marginTop: SPACE.lg,
+    marginBottom: SPACE.sm,
     textAlign: 'center'
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...TYPE.body,
+    color: EMBER.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32
+    marginBottom: SPACE.xxl
   },
   retryButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 16
+    height: CONTROL.lg,
+    justifyContent: 'center',
+    backgroundColor: EMBER.accent,
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
+    marginBottom: SPACE.lg
   },
   retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600'
+    ...TYPE.button,
+    color: EMBER.onGradient
   },
   detailsButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm
   },
-  detailsButtonText: {
-    color: '#007AFF',
-    fontSize: 14
-  }
+  detailsButtonText: TYPE.label
 })

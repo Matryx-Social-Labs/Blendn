@@ -46,7 +46,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -877,7 +877,7 @@ function ChatInner() {
       */}
       <RealtimeStatusBanner
         status={socketStatus}
-        style={{ ...styles.statusBanner, top: insets.top + TOP_BAR_HEIGHT + 8 }}
+        style={{ ...styles.statusBanner, top: insets.top + TOP_BAR_HEIGHT + SPACE.sm }}
       />
 
       <FlatList
@@ -903,8 +903,8 @@ function ChatInner() {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
-            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
+            paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.xxl,
+            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -989,13 +989,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   pressed: { opacity: 0.6 },
   content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
-  header: { gap: BANTER_SECTION_GAP, marginBottom: 16 },
+  header: { gap: BANTER_SECTION_GAP, marginBottom: SPACE.lg },
   // Frame `1141:5255`: a heading and its content are 16 apart, not 32.
-  section: { gap: 16 },
-  requestList: { gap: 12 },
+  section: { gap: SPACE.lg },
+  requestList: { gap: SPACE.md },
   railBleed: { marginHorizontal: -BANTER_PADDING_HORIZONTAL },
   // Frame `1141:5261`: gap 24, `pb-[8px]`.
-  rail: { gap: 24, paddingBottom: 8, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
+  rail: { gap: SPACE.xl, paddingBottom: SPACE.sm, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
   // Above the list and level with the top bar's own zIndex.
   statusBanner: {
     position: 'absolute',
@@ -1003,63 +1003,42 @@ const styles = StyleSheet.create({
     right: BANTER_PADDING_HORIZONTAL,
     zIndex: 10,
   },
-  partialFailure: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textSecondary,
-  },
+  partialFailure: TYPE.meta,
   noMatches: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
+    ...TYPE.body,
     color: EMBER.textSecondary,
     textAlign: 'center',
-    paddingVertical: 32,
+    paddingVertical: SPACE.xxl,
   },
 
-  skeleton: { gap: 8 },
-  skeletonRow: { flexDirection: 'row', gap: 16, padding: 16, alignItems: 'center' },
-  skeletonBody: { flex: 1, gap: 8 },
+  skeleton: { gap: SPACE.sm },
+  skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.lg, alignItems: 'center' },
+  skeletonBody: { flex: 1, gap: SPACE.sm },
 
-  empty: { alignItems: 'center', paddingVertical: 64, paddingHorizontal: 16, gap: 8 },
+  empty: { alignItems: 'center', paddingVertical: SPACE.xxxl, paddingHorizontal: SPACE.lg, gap: SPACE.sm },
   emptyGlyph: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surface,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: SPACE.sm,
   },
-  emptyTitle: {
-    fontFamily: EMBER_FONTS.displaySemiBold,
-    fontSize: 18,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-    textAlign: 'center',
-  },
-  emptyBody: {
-    fontFamily: EMBER_FONTS.displayRegular,
-    fontSize: 14,
-    lineHeight: 21,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-  },
+  emptyTitle: { ...TYPE.title, textAlign: 'center' },
+  emptyBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   emptyCta: {
-    marginTop: 8,
+    marginTop: SPACE.sm,
     backgroundColor: EMBER.accent,
     borderRadius: 999,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    height: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
   },
-  emptyCtaText: {
-    fontFamily: EMBER_FONTS.displaySemiBold,
-    color: '#FFFFFF',
-    fontSize: 14,
-  },
+  // `onGradient`, not white — white fails contrast on the accent fill.
+  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
 })
 
 

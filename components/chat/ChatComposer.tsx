@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native'
 
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
+import { EMBER, EMBER_GRADIENT, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The composer. Frame `1141:5582`.
@@ -11,7 +11,7 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
  * ## A floating pill, not a docked bar
  *
  * The old input was a full-width row with a hard top edge, sitting flush on the
- * bottom of the screen. The frame's is a rounded pill inset 16 from both edges
+ * bottom of the screen. The frame's is a rounded pill inset from both edges
  * and floating over the feed, so the conversation runs *underneath* it rather
  * than stopping at it. That is the difference between a room you are in and a
  * form you are filling in.
@@ -101,12 +101,12 @@ export function ChatComposer({
 }
 
 const styles = StyleSheet.create({
-  shell: { paddingHorizontal: 16 },
+  shell: { paddingHorizontal: GUTTER },
   pill: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    padding: 9,
+    gap: SPACE.sm,
+    padding: SPACE.sm,
     borderRadius: 9999,
     overflow: 'hidden',
     backgroundColor: 'rgba(45,44,44,0.4)',
@@ -119,11 +119,9 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 9,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    color: EMBER.textPrimary,
+    ...TYPE.body,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.sm,
     /*
      * Roughly five lines. Unbounded, a pasted paragraph grows the pill until it
      * covers the conversation it is a reply to.

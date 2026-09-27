@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
-import { APP_COLORS, APP_CTA, APP_RADIUS, APP_SIZE, APP_SPACING } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
 import { TRAY_SPECS, type TraySize } from '../lib/uxStandards'
 
 export type ActionTrayButton = {
@@ -33,27 +33,15 @@ type ActionTrayProps = {
   dismissible?: boolean
 }
 
-const getButtonStyle = (variant: ActionTrayButton['variant'], disabled?: boolean) => {
+const getButtonStyle = (variant: ActionTrayButton['variant']) => {
   const resolved = variant || 'secondary'
   if (resolved === 'primary') {
-    return {
-      backgroundColor: disabled ? APP_CTA.primary.disabled : APP_CTA.primary.background,
-      borderColor: 'transparent',
-      textColor: APP_CTA.primary.text,
-    }
+    return { backgroundColor: EMBER.accent, textColor: EMBER.onGradient }
   }
   if (resolved === 'destructive') {
-    return {
-      backgroundColor: disabled ? APP_CTA.destructive.disabled : APP_CTA.destructive.background,
-      borderColor: 'transparent',
-      textColor: APP_CTA.destructive.text,
-    }
+    return { backgroundColor: EMBER.destructive, textColor: EMBER.textPrimary }
   }
-  return {
-    backgroundColor: disabled ? APP_CTA.secondary.disabled : APP_CTA.secondary.background,
-    borderColor: APP_CTA.secondary.border,
-    textColor: APP_CTA.secondary.text,
-  }
+  return { backgroundColor: EMBER.surface, textColor: EMBER.textPrimary }
 }
 
 export default function ActionTray({
@@ -132,7 +120,7 @@ export default function ActionTray({
             {buttonRows.map((row, rowIndex) => (
               <View style={styles.buttonRow} key={`row-${rowIndex}`}>
                 {row.map((button, buttonIndex) => {
-                  const style = getButtonStyle(button.variant, button.disabled || button.loading)
+                  const style = getButtonStyle(button.variant)
                   const isDisabled = !!button.disabled || !!button.loading
                   return (
                     <TouchableOpacity
@@ -142,10 +130,7 @@ export default function ActionTray({
                       activeOpacity={0.86}
                       style={[
                         styles.button,
-                        {
-                          backgroundColor: style.backgroundColor,
-                          borderColor: style.borderColor,
-                        },
+                        { backgroundColor: style.backgroundColor },
                         isDisabled && styles.buttonDisabled,
                       ]}
                     >
@@ -177,53 +162,48 @@ const styles = StyleSheet.create({
   },
   tray: {
     width: '100%',
-    backgroundColor: APP_COLORS.backgroundElevated,
+    backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    paddingTop: APP_SPACING.xs,
-    paddingBottom: APP_SPACING.xl,
-    gap: APP_SPACING.sm,
+    borderColor: EMBER.separator,
+    paddingTop: SPACE.sm,
+    paddingBottom: SPACE.xl,
+    gap: SPACE.md,
   },
   grabber: {
     width: 40,
     height: 4,
-    borderRadius: APP_RADIUS.pill,
+    borderRadius: EMBER_RADIUS.pill,
     alignSelf: 'center',
-    backgroundColor: APP_COLORS.separator,
-    marginBottom: APP_SPACING.xs,
+    backgroundColor: EMBER.separator,
+    marginBottom: SPACE.sm,
   },
   title: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
+    ...TYPE.title,
   },
   message: {
-    color: APP_COLORS.textSecondary,
-    fontSize: 15,
-    lineHeight: 21,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
   },
   buttonsWrap: {
-    gap: APP_SPACING.xs,
-    marginTop: APP_SPACING.xs,
+    gap: SPACE.md,
+    marginTop: SPACE.sm,
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: APP_SPACING.xs,
+    gap: SPACE.md,
   },
   button: {
-    minHeight: APP_SIZE.touchTarget,
+    minHeight: CONTROL.lg,
     flex: 1,
-    borderRadius: APP_RADIUS.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: APP_SPACING.md,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: SPACE.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
   buttonText: {
-    fontSize: 15,
-    fontWeight: '700',
+    ...TYPE.button,
   },
 })

@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -11,7 +10,7 @@ import {
   type EventFilters,
   type When,
 } from '../../lib/eventFilters'
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet } from '../motion/RisingSheet'
 
 export interface CategoryOption {
@@ -142,12 +141,6 @@ export function FilterSheet({
           accessibilityLabel="Show results"
           style={({ pressed }) => [styles.apply, pressed && styles.pressed]}
         >
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={StyleSheet.absoluteFill}
-          />
           <Text style={styles.applyText}>Show results</Text>
         </Pressable>
       </RisingSheet>
@@ -158,7 +151,7 @@ export function FilterSheet({
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <View style={styles.group}>
-      <Text style={styles.groupLabel}>{label}</Text>
+      <Text style={styles.groupLabel}>{label.toUpperCase()}</Text>
       <View style={styles.chips}>{children}</View>
     </View>
   )
@@ -190,11 +183,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     maxHeight: '80%',
     backgroundColor: EMBER.surfaceSunken,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    gap: 20,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.md,
+    gap: SPACE.xl,
   },
   grabber: {
     alignSelf: 'center',
@@ -204,35 +197,31 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.textTertiary,
   },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle: { ...EMBER_TYPE.cardTitle },
-  clear: { ...EMBER_TYPE.meta, color: EMBER.accent },
+  sheetTitle: TYPE.title,
+  clear: { ...TYPE.label, color: EMBER.textPrimary },
   sheetBody: { flexGrow: 0 },
 
-  group: { gap: 12, marginBottom: 24 },
-  groupLabel: { ...EMBER_TYPE.meta, color: EMBER.textSecondary },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  group: { gap: SPACE.md, marginBottom: SPACE.xl },
+  groupLabel: TYPE.label,
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    height: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
   chipOn: { backgroundColor: EMBER.accent },
-  chipText: { ...EMBER_TYPE.meta, color: EMBER.textPrimary },
+  chipText: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
   chipTextOn: { color: EMBER.onGradientChip },
 
   apply: {
-    height: 52,
+    height: CONTROL.lg,
     borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
-  applyText: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.onGradient,
-  },
+  applyText: { ...TYPE.button, color: EMBER.onGradient },
   pressed: { opacity: 0.7 },
 })

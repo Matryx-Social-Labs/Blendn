@@ -269,15 +269,15 @@ describe('the Location card matches 1141:4900', () => {
     expect(SECTIONS()).toContain('...EMBER_TYPE.cardValue, paddingTop: 16')
   })
 
-  it('draws both lines in Plus Jakarta Regular', () => {
+  it('draws both lines from the type scale', () => {
     /*
-     * `1141:4903` and `1141:4905` are both `font-normal`, and both were built
-     * Bold — because Regular was not loaded, and a `fontFamily` naming an
-     * unloaded family renders the system font without throwing or warning.
+     * The frame sets both in Plus Jakarta Regular; the design system maps them
+     * to `label` and `body` (docs/DESIGN_SYSTEM.md), so the Regular weight is
+     * no longer loaded.
      */
     const theme = THEME()
-    expect(theme).toContain("displayRegular: 'PlusJakartaSans_400Regular'")
-    expect(theme).toContain('cardEyebrow')
+    expect(theme).toContain('cardEyebrow: TYPE.label')
+    expect(theme).toContain('cardValue: TYPE.body')
     expect(theme).toContain('cardValue')
     expect(SECTIONS()).toContain('eyebrow: EMBER_TYPE.cardEyebrow')
   })

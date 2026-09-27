@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import { Logger } from '../lib/logger'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
-import { APP_COLORS } from '../lib/theme'
+import { CONTROL, EMBER, GUTTER, SPACE, TYPE } from '../lib/theme'
 
 export default function BlockedUsers() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
@@ -111,7 +111,7 @@ export default function BlockedUsers() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="shield-checkmark-outline" size={64} color={APP_COLORS.textTertiary} />
+      <Ionicons name="shield-checkmark-outline" size={64} color={EMBER.textTertiary} />
       <Text style={styles.emptyTitle}>No Blocked Users</Text>
       <Text style={styles.emptyText}>
         You haven&apos;t blocked anyone yet. Users you block will appear here.
@@ -125,7 +125,7 @@ export default function BlockedUsers() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={APP_COLORS.destructive} />
+          <ActivityIndicator size="large" color={EMBER.textSecondary} />
           <Text style={styles.loadingText}>Loading blocked users...</Text>
         </View>
       ) : (
@@ -157,15 +157,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: APP_COLORS.textSecondary,
+    ...TYPE.body,
+    marginTop: SPACE.lg,
+    color: EMBER.textSecondary,
   },
   list: {
     flex: 1,
   },
   listContent: {
-    paddingVertical: 16,
+    paddingVertical: SPACE.lg,
   },
   emptyList: {
     flex: 1,
@@ -173,29 +173,26 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: GUTTER,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: APP_COLORS.textPrimary,
-    marginTop: 16,
-    marginBottom: 8,
+    ...TYPE.title,
+    marginTop: SPACE.lg,
+    marginBottom: SPACE.sm,
   },
   emptyText: {
-    fontSize: 16,
-    color: APP_COLORS.textSecondary,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: GUTTER,
+    paddingVertical: SPACE.lg,
     borderBottomWidth: 1,
-    borderBottomColor: APP_COLORS.separator,
+    borderBottomColor: EMBER.separator,
   },
   userInfo: {
     flexDirection: 'row',
@@ -203,7 +200,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatarContainer: {
-    marginRight: 12,
+    marginRight: SPACE.md,
   },
   avatar: {
     width: 50,
@@ -214,43 +211,37 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: APP_COLORS.destructive,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: APP_COLORS.textPrimary,
+    ...TYPE.heading,
   },
   userDetails: {
     flex: 1,
   },
   userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: APP_COLORS.textPrimary,
-    marginBottom: 4,
+    ...TYPE.bodyStrong,
+    marginBottom: SPACE.xs,
   },
   blockDate: {
-    fontSize: 14,
-    color: APP_COLORS.textSecondary,
-    marginBottom: 2,
+    ...TYPE.meta,
+    marginBottom: SPACE.xxs,
   },
   blockReason: {
-    fontSize: 12,
-    color: APP_COLORS.textTertiary,
+    ...TYPE.meta,
+    color: EMBER.textTertiary,
     fontStyle: 'italic',
   },
   unblockButton: {
-    backgroundColor: APP_COLORS.destructive,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
+    backgroundColor: EMBER.surface,
+    height: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.lg,
+    borderRadius: CONTROL.md / 2,
   },
   unblockButtonText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPE.button,
   },
 }) 

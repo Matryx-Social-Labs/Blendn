@@ -2,7 +2,11 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 /**
- * The Pulse's card geometry, against frame `1141:4644`.
+ * The Pulse's card geometry.
+ *
+ * Originally pinned to Figma frame `1141:4644`; since the design-system pass
+ * the cards follow `docs/DESIGN_SYSTEM.md` instead. The table below is the
+ * frame as measured, kept for reference.
  *
  * Every number here was read out of Figma with `get_metadata`, not inferred
  * from the render. They are recorded as a table so a later reader can check the
@@ -27,130 +31,87 @@ const CARD = () => read('components', 'pulse', 'FeaturedCard.tsx')
 const SCREEN = () => read('app', '(tabs)', 'events.tsx')
 const UPCOMING = () => read('components', 'pulse', 'UpcomingCard.tsx')
 
-describe('the Featured card matches 1141:4663', () => {
-  it('is 85% of the screen, both dimensions taken proportionally', () => {
+describe('the Featured row sits on the page margin', () => {
+  it('starts every card at GUTTER, not centred', () => {
     const card = CARD()
-    // 331.5 / 390 = 0.85 exactly.
-    expect(331.5 / 390).toBeCloseTo(0.85, 4)
-    expect(card).toContain('Math.round(SCREEN_WIDTH * 0.85)')
-    /*
-     * The width was once proportional and the height literal (450), so the two
-     * agreed only on a 390pt device — the one a designer checks. On a 440pt
-     * phone that is 374 × 450 where the shape wants 374 × 508.
-     */
-    expect(card).toContain('FEATURED_CARD_ASPECT = 450 / 331.5')
-    expect(card).toContain('Math.round(width * FEATURED_CARD_ASPECT)')
+    // Centring put the card ~55pt in beside a 24pt page — the most visible
+    // misalignment on the screen.
+    expect(card).toContain('export const FEATURED_ROW_INSET = GUTTER')
+    expect(card).toContain('inset: FEATURED_ROW_INSET')
+    expect(card).not.toContain('(SCREEN_WIDTH - width) / 2')
   })
 
-  it('keeps the frame gap of 24 between cards', () => {
-    // 1141:4680 x=379.5 minus 1141:4663 right edge (24 + 331.5 = 355.5).
-    expect(379.5 - (24 + 331.5)).toBe(24)
-    expect(CARD()).toContain('FEATURED_CARD_GAP = 24')
-  })
-
-  it('draws its interior at the frame values', () => {
+  it('leaves room for the next card to peek, and fills the width when alone', () => {
     const card = CARD()
-    expect(card).toContain('padding: 32')          // 1141:4666 p-[32px]
-    expect(card).toContain('gap: 16')              // 1141:4666 gap-[16px]
-    expect(card).toContain('paddingHorizontal: 17') // 1141:4667 px-[17px]
-    expect(card).toContain('paddingVertical: 5')    // 1141:4667 py-[5px]
-    expect(card).toContain("backgroundColor: 'rgba(45,44,44,0.4)'")
-    expect(card).toContain('gap: 24')              // 1141:4671 meta row
-    expect(card).toContain('gap: 8')               // 1141:4672 within a meta item
+    expect(card).toContain(
+      'SCREEN_WIDTH - FEATURED_ROW_INSET - FEATURED_CARD_GAP - FEATURED_PEEK'
+    )
+    expect(card).toContain('FEATURED_CARD_SOLO = SCREEN_WIDTH - FEATURED_ROW_INSET * 2')
+    expect(SCREEN()).toContain('featuredItems.length === 1')
   })
-})
 
-describe('the Featured row bleeds past Main’s gutter', () => {
-  it('cancels the 12pt page padding, as the mask does', () => {
-    /*
-     * `1141:4660` is at section-x `-12`, cancelling `Main`'s 12pt padding so
-     * the row is the full 390. Built inside the gutter, the scroll area ended
-     * 12pt short of the screen edge and read as a clipped list rather than one
-     * running off the edge — which is the affordance the peek exists to create.
-     */
+  it('draws its interior from the design system', () => {
+    const card = CARD()
+    expect(card).toContain('padding: SPACE.xl')
+    expect(card).toContain('title: TYPE.title')
+    expect(card).toContain('numberOfLines={2}')
+    expect(card).toContain('tagText: { ...TYPE.label')
+  })
+
+  it('cancels the page margin so the row runs edge to edge', () => {
     expect(SCREEN()).toContain('marginHorizontal: -MAIN_PADDING_HORIZONTAL')
   })
 })
 
-describe('the card in view is centred and clears the tab bar', () => {
+describe('the card clears the tab bar', () => {
   /*
-   * Two constraints the frame does not have, both from the running app.
-   *
-   * `Main` is a 390 × 3548 scrolling artboard, so the design never had to fit
-   * this card inside a viewport. At the frame's 85% it does not: measured on a
-   * 440 × 956 device the card was 374 × 508 with its top at 387, so its bottom
-   * landed at 908 against a tab bar starting at ~843 — 65pt of the hero card,
-   * including the space under its title, beneath the navigation.
+   * The same arithmetic as `featuredCardLayout`, restated so a change to one
+   * of its terms has to be made on purpose in both places.
+   * 64 bar + 16 top padding + 104 header (40 + 16 + 48) + 32 section gap +
+   * 26 heading + 16 heading gap.
    */
-  const CHROME = 64 + 32 + 133 + 48 + 24 + 24
-  const ASPECT = 450 / 331.5
-  const BREATH = 8
-  /** Mirrors `tabBarTop` / `tabBarBottomPadding` in `app/(tabs)/_layout.tsx`. */
+  const CHROME = 64 + 16 + 104 + 32 + 26 + 16
+  const ASPECT = 5 / 4
+  const BREATH = 24
   const barTopOf = (screenH: number, insetBottom: number) =>
     screenH - (8 + 52 + Math.max(insetBottom - 6, 20))
 
   const layout = (screenH: number, insetTop: number, insetBottom: number, screenW: number) => {
     const available = barTopOf(screenH, insetBottom) - (insetTop + CHROME) - BREATH
-    const width = Math.min(Math.round(screenW * 0.85), Math.round(available / ASPECT))
-    return { width, height: Math.round(width * ASPECT), inset: Math.round((screenW - width) / 2) }
+    const width = Math.min(screenW - 24 - 16 - 32, Math.round(available / ASPECT))
+    return { width, height: Math.round(width * ASPECT), inset: 24 }
   }
+
+  it('sums the chrome from the constants that draw it', () => {
+    expect(CARD()).toContain(
+      'TOP_BAR_HEIGHT + SPACE.lg + PULSE_HEADER_HEIGHT + SPACE.xxl + TYPE.heading.lineHeight + SPACE.lg'
+    )
+    expect(read('components', 'pulse', 'PulseHeader.tsx')).toContain(
+      'PULSE_HEADER_HEIGHT = TYPE.display.lineHeight + SPACE.lg + CONTROL.md'
+    )
+  })
 
   it('fits the card entirely above the bar, on a tall phone and a short one', () => {
     for (const [w, h, top, bottom] of [
-      [440, 956, 62, 34], // iPhone 17 Pro Max, the device this was measured on
-      [390, 844, 47, 34], // the artboard's own size
+      [440, 956, 62, 34], // iPhone 17 Pro Max
+      [390, 844, 47, 34], // iPhone 15/16
       [375, 667, 20, 0], // SE — no safe insets, short screen
     ] as const) {
       const l = layout(h, top, bottom, w)
-      /*
-       * The card's **edge**, not its content.
-       *
-       * Letting the rounded bottom slide under the bar was tried: the last 32pt
-       * of the card is `1141:4666`'s padding with nothing drawn in it, so no
-       * content was hidden and it bought 45pt of width. It still read wrong — a
-       * card that runs out of sight behind the navigation looks clipped
-       * whatever is technically visible.
-       */
-      expect(top + CHROME + l.height).toBeLessThanOrEqual(barTopOf(h, bottom))
+      expect(top + CHROME + l.height + BREATH).toBeLessThanOrEqual(barTopOf(h, bottom))
       expect(l.width).toBeGreaterThan(0)
     }
   })
 
   it('the bar is the size it claims to be', () => {
-    /*
-     * `TAB_BAR_CLEARANCE` is 88 and the bar had grown to 108 — seating the
-     * centre button made the 56pt disc, not the 48pt icon-plus-label column,
-     * the tallest child. Anything placing an edge against the bar read the
-     * padding constant and was 20pt wrong.
-     *
-     * 8 + 52 + 28 = 88 on a home-indicator phone. The two agree again.
-     */
     expect(8 + 52 + Math.max(34 - 6, 20)).toBe(88)
     expect(956 - barTopOf(956, 34)).toBe(88)
   })
 
-  it('centres it — equal margins, so neighbours peek equally either side', () => {
-    const l = layout(956, 62, 34, 440)
-    // Within a point: an odd leftover cannot split into two equal integers.
-    expect(Math.abs(440 - l.width - l.inset - l.inset)).toBeLessThanOrEqual(1)
-    /*
-     * Screenshot-verified: card 348, margins 46.0 / 46.3, bar top 868.
-     *
-     * The sequence, because each step was a real trade: 318 with 61pt margins
-     * (edge-clearing, 108pt bar) → 363 with 39pt margins but sliding under the
-     * bar → 348 with 46pt margins, fully visible, once the bar came back to 88.
-     */
-    expect(l.width).toBe(348)
-    expect(l.inset).toBe(46)
-  })
-
   it('is exported as one function both call sites use', () => {
-    // The solo branch and the carousel used to size independently, so a city
-    // with exactly one featured event placed it differently from a city with
-    // two. Both now read `featuredCardLayout`.
     expect(CARD()).toContain('export function featuredCardLayout')
     const screen = SCREEN()
-    expect(screen).toContain('featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))')
+    expect(screen).toContain('tabBarTop(SCREEN_HEIGHT, insets.bottom)')
     expect(screen.match(/width=\{featured\.width\}/g)?.length).toBe(2)
     expect(screen.match(/paddingHorizontal: featured\.inset/g)?.length).toBe(2)
   })
@@ -160,39 +121,21 @@ describe('the card in view is centred and clears the tab bar', () => {
   })
 
   it('the page still scrolls under the bar rather than stopping at it', () => {
-    // The bar is a floating overlay: the feed runs the full height of the
-    // screen and passes beneath it. Only the hero card is sized to clear it.
     expect(SCREEN()).toContain('paddingBottom: insets.bottom + Math.max(')
-    /*
-     * Against the layout, which is where the bar is positioned.
-     *
-     * This read `SCREEN()` and passed on `position: 'absolute'` appearing
-     * anywhere in it — which it did, in the checked-in carousel's gradient and
-     * status pill. Deleting that carousel broke a test about the tab bar, which
-     * is the tell: it was matching an unrelated string in a file that does not
-     * position the bar at all. `tabBarStyle` in `_layout.tsx` is the thing the
-     * sentence above is actually about.
-     */
     expect(read('app/(tabs)/_layout.tsx')).toContain("position: 'absolute'")
   })
 })
 
-describe('the Upcoming card matches 1141:4709', () => {
-  it('is padded 24 with a 24 gap, and its image is 165', () => {
+describe('the Upcoming card', () => {
+  it('is padded from the design system and keeps its 165 image', () => {
     const up = UPCOMING()
-    // 1141:4710 is at (24, 24) and 318 wide inside a 366 card: 366-24-24 = 318.
-    expect(366 - 24 * 2).toBe(318)
-    // Body starts at 213.38 = 24 (pad) + 165.38 (image) + 24 (gap).
-    expect(24 + 165.38 + 24).toBeCloseTo(213.38, 2)
     expect(up).toContain('const IMAGE_HEIGHT = 165')
-    expect(up).toContain('padding: 24')
-    expect(up).toContain('gap: 24')
+    expect(up).toContain('padding: SPACE.xl')
+    expect(up).toContain('title: { ...TYPE.title')
   })
 
-  it('stacks with the frame’s 32', () => {
-    // 1141:4731 y=469.375 minus card 1 height 437.38.
-    expect(Math.round(469.375 - 437.38)).toBe(32)
-    expect(SCREEN()).toContain('STACK_GAP = 32')
+  it('stacks 24 apart', () => {
+    expect(SCREEN()).toContain('const STACK_GAP = SPACE.xl')
   })
 })
 

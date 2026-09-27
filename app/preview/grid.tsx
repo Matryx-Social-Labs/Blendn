@@ -12,7 +12,7 @@ import {
   NO_GRID_FILTERS,
   type GridFilters,
 } from '../../lib/gridFilters'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The Grid's card and filters, against fixtures — frame `1141:4951`.
@@ -97,7 +97,7 @@ export default function GridPreview() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + SPACE.lg, paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.title} accessibilityRole="header">
@@ -112,7 +112,6 @@ export default function GridPreview() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.chipRail}
           contentContainerStyle={styles.chipRow}
         >
           {/*
@@ -209,64 +208,37 @@ function Chip({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  scroll: { gap: 24 },
-  title: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 32,
-    lineHeight: 40,
-    letterSpacing: -1,
-    color: EMBER.textPrimary,
-    paddingHorizontal: 12,
-  },
+  scroll: { gap: SPACE.xl },
+  title: { ...TYPE.display, paddingHorizontal: GUTTER },
   titleAccent: { color: EMBER.accent },
 
-  chipRail: { marginHorizontal: -12 },
-  chipRow: { gap: 8, paddingHorizontal: 24 },
-  // Frame `1141:4969`: px24 py8, radius full.
+  chipRow: { gap: SPACE.sm, paddingHorizontal: GUTTER },
   chip: {
-    paddingHorizontal: 24,
-    paddingVertical: 9,
-    borderRadius: 9999,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.accent },
-  chipLabel: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
-  chipLabelOn: { color: EMBER.accent, fontFamily: EMBER_FONTS.bodyBold },
+  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.textSecondary },
+  chipLabel: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
+  chipLabelOn: { color: EMBER.textPrimary },
 
-  list: { paddingHorizontal: 12, gap: 24 },
+  list: { paddingHorizontal: GUTTER, gap: SPACE.xl },
 
-  empty: { paddingHorizontal: 24, paddingTop: 48, gap: 8, alignItems: 'flex-start' },
-  emptyTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 20,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-  },
-  emptyBody: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
+  empty: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxxl, gap: SPACE.sm, alignItems: 'flex-start' },
+  emptyTitle: { ...TYPE.title },
+  emptyBody: { ...TYPE.body, color: EMBER.textSecondary },
   clear: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 9999,
+    marginTop: SPACE.lg,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
-  clearLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textPrimary,
-  },
+  clearLabel: { ...TYPE.button },
   pressed: { opacity: 0.7 },
 })

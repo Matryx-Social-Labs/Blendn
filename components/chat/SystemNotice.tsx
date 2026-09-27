@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * A centred pill for anything the room says about itself. Frame `1141:5532`.
@@ -37,8 +37,8 @@ const styles = StyleSheet.create({
   pill: {
     backgroundColor: EMBER.surfaceSunken,
     borderRadius: 9999,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
     /*
      * The frame's pill is the width of its own text. Capped here because a
      * system message is server-authored and can be long -- unbounded, it would
@@ -46,11 +46,5 @@ const styles = StyleSheet.create({
      */
     maxWidth: '86%',
   },
-  label: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-  },
+  label: { ...TYPE.meta, textAlign: 'center' },
 })

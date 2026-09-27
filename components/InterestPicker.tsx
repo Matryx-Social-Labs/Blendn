@@ -5,7 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_FONTS } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
 
 /**
  * Pick what you are into, from the server's taxonomy.
@@ -143,7 +143,7 @@ export function InterestPicker({
       {groups.map((group) => (
         <View key={group.id} style={styles.group}>
           <Text style={styles.groupHeading} accessibilityRole="header">
-            {group.name}
+            {group.name.toUpperCase()}
           </Text>
           <View style={styles.grid}>
             {group.items.map((category) => {
@@ -174,34 +174,21 @@ export function InterestPicker({
 }
 
 const styles = StyleSheet.create({
-  group: { marginBottom: 18 },
-  groupHeading: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  counter: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  notice: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    marginBottom: 12,
-  },
+  group: { marginBottom: SPACE.xl },
+  groupHeading: { ...TYPE.label, marginBottom: SPACE.md },
+  counter: { ...TYPE.meta, marginBottom: SPACE.md },
+  notice: { ...TYPE.meta, marginBottom: SPACE.md },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: SPACE.md,
   },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: 1,
   },
   /*
@@ -210,10 +197,9 @@ const styles = StyleSheet.create({
    *
    * They disagreed: work field filled with the accent when picked, interests
    * went to a white outline — two answers to "what does chosen look like",
-   * a thumb-scroll apart. This file also carried six raw colour values and a
-   * `fontWeight: '600'`, where the other is on `EMBER` and `EMBER_FONTS`
-   * throughout, so aligning to it is the direction that removes literals rather
-   * than adding them.
+   * a thumb-scroll apart. This file also carried six raw colour values, where
+   * the other is on `EMBER` throughout, so aligning to it is the direction that
+   * removes literals rather than adding them.
    *
    * Not extracted into a shared `Chip` yet, deliberately: the client has no
    * primitives layer, and the plan sequences tokens before primitives precisely
@@ -228,14 +214,8 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.accent,
     borderColor: EMBER.accent,
   },
-  chipText: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 15,
-    color: EMBER.textPrimary,
-  },
+  // One weight in both states, so selecting a chip does not change its width.
+  chipText: TYPE.bodyStrong,
   /* Dark on warm — white on the accent fails contrast. */
-  chipTextSelected: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    color: EMBER.onGradientChip,
-  },
+  chipTextSelected: { color: EMBER.onGradientChip },
 })

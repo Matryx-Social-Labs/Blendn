@@ -27,7 +27,7 @@ import Animated, {
 import ScalePress from '../motion/ScalePress'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
-import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, EMBER_TYPE, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The Scene's body sections — frame `1141:4875` and `1227:2903`.
@@ -39,12 +39,11 @@ import { EMBER, EMBER_FONTS, EMBER_TYPE } from '../../lib/theme'
  *
  * ## Layout constants, straight off the frame
  *
- * The content grid is inset 12 and stacks with a 64pt gap between the major
- * blocks and 48 inside the right-hand column. On a 390 frame those are absolute
- * — no scaling, same rule as the type.
+ * The content grid is inset to the screen gutter and stacks with the scale's
+ * between-sections gap (`docs/DESIGN_SYSTEM.md`).
  */
-export const SCENE_PADDING_HORIZONTAL = 12
-export const SCENE_SECTION_GAP = 64
+export const SCENE_PADDING_HORIZONTAL = GUTTER
+export const SCENE_SECTION_GAP = SPACE.xxl
 /** Frame `1141:4910`: the map band inside the Location card. */
 export const MAP_HEIGHT = 256
 /**
@@ -55,11 +54,9 @@ export const MAP_HEIGHT = 256
  * became the last thing on a ~1900pt page, which put the only action this
  * screen has as far from the reader as the layout allows.
  *
- * `SCENE_CTA_INSET` is 24 rather than the content grid's 12: the frame gives the
- * CTA its own gutter, wider than the sections behind it, which is what stops a
- * full-width pill reading as another card in the stack.
+ * `SCENE_CTA_INSET` is the same 24 gutter as the content grid.
  *
- * ## 58, not the frame's 74 — a deliberate deviation
+ * ## 56, not the frame's 74 — a deliberate deviation
  *
  * The frame's pill is 74 because it holds a **40pt** icon (`1227:2912`), and a
  * 40pt icon beside a 28pt line of text sets the height on its own. Docked, that
@@ -69,28 +66,28 @@ export const MAP_HEIGHT = 256
  *
  * The frame measured the CTA floating over a scroll, where it was the only
  * thing at the bottom. It is not — the tab bar is under it. So the icon drops
- * to 26, which is the size at which it stops driving the height and the label
- * does, and the pill lands at 58. The dock gutter goes 12/12 → 10/10.
+ * to 24, which is the size at which it stops driving the height and the label
+ * does, and the pill lands at `CONTROL.lg`, 56.
  *
- * Total saving: 24pt, chrome down to ~162pt. Recorded in `docs/SCENE.md` so the
+ * Recorded in `docs/SCENE.md` so the
  * frame and the build disagreeing here is a decision and not drift.
  */
-export const SCENE_CTA_HEIGHT = 58
+export const SCENE_CTA_HEIGHT = 56
 export const SCENE_CTA_INSET = 24
 
 /** The CTA's icon. Sized here, not at the call site, because it sets the pill's height. */
-export const SCENE_CTA_ICON = 26
+export const SCENE_CTA_ICON = 24
 
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
 
-/** "The Experience", "Attendees", "LOCATION". Frame: 16/24, Plus Jakarta. */
+/** "The Experience", "Attendees", "Gallery". `TYPE.heading`. */
 export function SceneHeading({ children }: { children: string }) {
   return <Text style={styles.heading}>{children}</Text>
 }
 
 /**
- * The prose under a heading. Frame: Manrope 16/26 on #AEAAAA.
+ * The prose under a heading. `TYPE.body` on `textSecondary`.
  *
  * The frame accents the event's own name inside the paragraph in #FF906D. That
  * is a *designed* sentence, not something derivable from an arbitrary
@@ -392,11 +389,12 @@ export function SceneGallery({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.galleryScroll}
         contentContainerStyle={styles.galleryRail}
         // Lands on a tile rather than between two, without paging the whole
         // width — the rail deliberately shows part of the next one as an
         // affordance that there is a next one.
-        snapToInterval={GALLERY_TILE + 12}
+        snapToInterval={GALLERY_TILE + SPACE.md}
         decelerationRate="fast"
       >
         {items.map((item, i) => {
@@ -431,7 +429,7 @@ export function SceneGallery({
               />
               {item.kind === 'video' ? (
                 <View style={styles.playBadge} pointerEvents="none">
-                  <MaterialIcons name="play-arrow" size={22} color={EMBER.textPrimary} />
+                  <MaterialIcons name="play-arrow" size={ICON.md} color={EMBER.textPrimary} />
                 </View>
               ) : null}
             </ScalePress>
@@ -443,7 +441,7 @@ export function SceneGallery({
 }
 
 /**
- * An amenity tile. Frame `1141:4918`: 2-up, 16pt gap, 32pt radius, 25pt pad.
+ * An amenity tile. Frame `1141:4918`: 2-up, 16pt gap, 32pt radius, 24pt pad.
  *
  * **The vocabulary now exists**, so the screen draws these. This used to say
  * "nothing populates these yet" and set the condition for drawing them: "not
@@ -759,7 +757,7 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                       <Text style={styles.detailQuestionText}>{item.question}</Text>
                       <MaterialIcons
                         name={isOpen ? 'expand-less' : 'expand-more'}
-                        size={22}
+                        size={ICON.md}
                         color={EMBER.textSecondary}
                       />
                     </View>
@@ -775,89 +773,48 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
 }
 
 const styles = StyleSheet.create({
-  heading: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
-  body: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 26,
-    color: EMBER.textSecondary,
-  },
+  heading: { ...TYPE.heading },
+  body: { ...TYPE.body, color: EMBER.textSecondary },
   bodyAccent: { color: EMBER.accent },
 
-  detailGroup: { gap: 32 },
-  detailBlock: { gap: 16 },
-  detailPairs: { gap: 10 },
-  detailPair: { gap: 2 },
-  detailPairLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textPrimary,
-  },
-  detailPairValue: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 15,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
+  detailGroup: { gap: SPACE.xxl },
+  detailBlock: { gap: SPACE.lg },
+  detailPairs: { gap: SPACE.md },
+  detailPair: { gap: SPACE.xxs },
+  detailPairLabel: { ...TYPE.bodyStrong },
+  detailPairValue: { ...TYPE.body, color: EMBER.textSecondary },
   /*
-   * 44pt minimum: this is the one control in the section, and a question people
-   * are trying to tap is the wrong place to be stingy with the target.
+   * `CONTROL.md` minimum: this is the one control in the section, and a question
+   * people are trying to tap is the wrong place to be stingy with the target.
    */
-  detailQuestion: { minHeight: 44, justifyContent: 'center', gap: 8 },
+  detailQuestion: { minHeight: CONTROL.md, justifyContent: 'center', gap: SPACE.sm },
   detailQuestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACE.md,
   },
-  detailQuestionText: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 15,
-    lineHeight: 22,
-    color: EMBER.textPrimary,
-  },
-  detailAnswer: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 15,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-    paddingBottom: 4,
-  },
+  detailQuestionText: { ...TYPE.bodyStrong, flex: 1 },
+  detailAnswer: { ...TYPE.body, color: EMBER.textSecondary, paddingBottom: SPACE.xs },
 
   attendees: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
   },
-  attendeeCount: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    /*
-     * 16/24, the same as the heading beside it — which is the frame.
-     *
-     * This was briefly 28, on the argument that with no avatar stack the count
-     * was carrying the whole section. The stack is back, and a count at nearly
-     * twice the heading's size next to it read as two unrelated things rather
-     * than as a row.
-     */
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.accent,
-  },
+  /*
+   * The heading's role, so the pair reads as one row. Secondary rather than the
+   * accent: the CTA is this screen's one accent.
+   */
+  attendeeCount: { ...TYPE.heading, color: EMBER.textSecondary },
 
-  attendeesSection: { gap: 32 },
+  attendeesSection: { gap: SPACE.lg },
   /* Frame `1141:4890`: 56pt discs, 4pt page-coloured ring, overlapping 16. */
   stack: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: 4,
     borderColor: EMBER.bg,
     alignItems: 'center',
@@ -874,33 +831,30 @@ const styles = StyleSheet.create({
    * outline.
    */
   avatarCharacter: {
+    // design-exception: emoji glyph sized to fill the 48pt inner disc
     fontSize: 26,
     lineHeight: 32,
     textAlign: 'center',
   },
   avatarMore: { backgroundColor: EMBER.surfaceSunken },
-  avatarMoreText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.accent,
-  },
+  avatarMoreText: { ...TYPE.bodyStrong },
 
   card: {
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.1)',
-    borderRadius: 32,
+    borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
   },
   /*
-   * `1141:4901`: `pt-[32px] px-[32px] pb-[56px]`, `gap-[8px]`.
+   * Card padding (24) on three sides, `gap-[8px]`.
    *
-   * The bottom is **56**, not 32. It is the gap between the address line and
-   * the map band below it, and at 32 the two crowded — the card read as text
-   * sitting on a photograph rather than as a caption above a map.
+   * The bottom is **56** (`1141:4901`). It is the gap between the address line
+   * and the map band below it, and at 32 the two crowded — the card read as
+   * text sitting on a photograph rather than as a caption above a map.
    */
-  cardBody: { paddingTop: 32, paddingHorizontal: 32, paddingBottom: 56, gap: 8 },
+  // design-exception: 56 gap to the map band, pinned by sceneCta.test.ts (1141:4901)
+  cardBody: { paddingTop: SPACE.xl, paddingHorizontal: SPACE.xl, paddingBottom: 56, gap: SPACE.sm },
   /*
    * `1141:4903`: Plus Jakarta **Regular**, not Bold.
    *
@@ -918,33 +872,29 @@ const styles = StyleSheet.create({
    * eyebrow rather than 16.
    */
   venue: { ...EMBER_TYPE.cardValue, paddingTop: 16 },
-  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  address: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-    flexShrink: 1,
-  },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  address: { ...TYPE.body, color: EMBER.textSecondary, flexShrink: 1 },
   map: { height: MAP_HEIGHT, backgroundColor: EMBER.surfaceSunken },
 
-  gallerySection: { gap: 16 },
+  gallerySection: { gap: SPACE.lg },
   // Bleeds past the page gutter so the rail runs to the edge, which is what
-  // says "this scrolls" without needing a chevron.
-  galleryRail: { gap: 12, paddingRight: 24 },
+  // says "this scrolls" without needing a chevron. The first tile still starts
+  // on the gutter.
+  galleryScroll: { marginHorizontal: -SCENE_PADDING_HORIZONTAL },
+  galleryRail: { gap: SPACE.md, paddingHorizontal: SCENE_PADDING_HORIZONTAL },
   galleryTile: {
     width: GALLERY_TILE,
     height: GALLERY_TILE,
-    borderRadius: 24,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
   },
   playBadge: {
     position: 'absolute',
-    left: 12,
-    bottom: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    left: SPACE.md,
+    bottom: SPACE.md,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15,14,14,0.7)',
@@ -968,28 +918,17 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.05)',
-    borderRadius: 32,
-    padding: 25,
+    borderRadius: EMBER_RADIUS.card,
+    padding: SPACE.xl,
   },
-  amenityTitle: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-    paddingTop: 12,
-  },
-  amenitySubtitle: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: EMBER.textSecondary,
-  },
+  amenityTitle: { ...TYPE.bodyStrong, paddingTop: SPACE.md },
+  amenitySubtitle: { ...TYPE.meta },
 
   ctaFill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: SPACE.md,
     /*
      * Content width, not screen width.
      *
@@ -1000,10 +939,11 @@ const styles = StyleSheet.create({
      * screen whose job is to show an event.
      */
     paddingHorizontal: 32,
-    // 14, with a 26pt icon and a 28pt line: 1 + 14 + 28 + 14 + 1 = 58, which is
+    // 15, with a 24pt icon and a 24pt line: 1 + 15 + 24 + 15 + 1 = 56, which is
     // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
-    paddingVertical: 14,
-    borderRadius: 9999,
+    // design-exception: 15 lands the bordered pill on CONTROL.lg (56)
+    paddingVertical: 15,
+    borderRadius: EMBER_RADIUS.pill,
     // Present in both states so the height never changes between them.
     borderWidth: 1,
   },
@@ -1017,10 +957,9 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: { opacity: 0.45 },
   ctaLabel: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    letterSpacing: -0.45,
+    ...TYPE.button,
+    // TYPE.button's own line, restated because SCENE_CTA_HEIGHT is summed from it.
+    lineHeight: 24,
   },
   ctaLabelLoud: { color: EMBER.onGradient },
   ctaLabelQuiet: { color: EMBER.textPrimary },

@@ -3,7 +3,7 @@ import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * "What brings you to Blend'n today?" — five picture cards, two across.
@@ -35,8 +35,8 @@ import { EMBER, EMBER_RADIUS } from '../../lib/theme'
  * 16pt gap, split in two. It is also what `app/(tabs)/events.tsx` already does
  * for its carousel, for the same reason.
  */
-const SCREEN_PADDING = 24
-const GRID_GAP = 16
+const SCREEN_PADDING = GUTTER
+const GRID_GAP = SPACE.lg
 const CARD = Math.floor((Dimensions.get('window').width - SCREEN_PADDING * 2 - GRID_GAP) / 2)
 
 export const LOOKING_FOR_OPTIONS = [
@@ -87,7 +87,7 @@ export function LookingForCards({
             <View style={styles.label}>
               <Ionicons
                 name={option.icon}
-                size={20}
+                size={ICON.md}
                 color={isOn ? EMBER.accent : EMBER.textPrimary}
               />
               <Text style={styles.labelText}>{option.value}</Text>
@@ -114,11 +114,6 @@ const styles = StyleSheet.create({
   },
   cardOn: { borderColor: EMBER.accent },
   art: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.4 },
-  label: { position: 'absolute', left: 16, right: 16, bottom: 16, gap: 8 },
-  labelText: {
-    fontSize: 18,
-    lineHeight: 28,
-    fontWeight: '700',
-    color: EMBER.textPrimary,
-  },
+  label: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg, gap: SPACE.sm },
+  labelText: TYPE.button,
 })

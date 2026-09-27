@@ -33,7 +33,7 @@ import {
 import { highlightEntities } from '../../lib/entityHighlight'
 import { heroPillLabel } from '../../lib/scarcity'
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
 
 /**
@@ -171,7 +171,7 @@ export default function ScenePreview() {
           for its own height here or it silently eats the end of the content.
         */
         contentContainerStyle={{
-          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + 24,
+          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SCENE_CTA_HEIGHT + SPACE.xl,
         }}
       >
         <SceneHero
@@ -211,7 +211,7 @@ export default function ScenePreview() {
           <SceneLocationCard
             venue="The Obsidian Vault"
             area="Arts District, Downtown"
-            map={<SceneMap latitude={12.9716} longitude={77.5946} width={SCREEN_W - 24} />}
+            map={<SceneMap latitude={12.9716} longitude={77.5946} width={SCREEN_W - 2 * SCENE_PADDING_HORIZONTAL} />}
           />
 
           {/*
@@ -219,9 +219,9 @@ export default function ScenePreview() {
             yet. Rendering the fixture is how the frame stays reviewable without
             the screen asserting two facts it does not have.
 
-            `marginTop` pulls this up to the frame's **48**. `1141:4899` groups
-            the Location card and this grid into one column at `gap-[48px]`,
-            tighter than `Main`'s 64 between unrelated blocks — the map and the
+            `marginTop` pulls this up to 16. `1141:4899` groups the Location
+            card and this grid into one column, tighter than `Main`'s 32 between
+            unrelated blocks — the map and the
             amenities describe the same place, and the frame spaces them as a
             pair rather than as two sections.
           */}
@@ -289,17 +289,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   content: {
     paddingHorizontal: SCENE_PADDING_HORIZONTAL,
-    paddingTop: 48,
+    paddingTop: SPACE.xxxl,
     gap: SCENE_SECTION_GAP,
   },
-  section: { gap: 16 },
-  amenities: { flexDirection: 'row', gap: 16 },
+  section: { gap: SPACE.lg },
+  amenities: { flexDirection: 'row', gap: SPACE.lg },
   /*
-   * −16 against the stack's 64, landing on the frame's 48 (`1141:4899`).
+   * −16 against the stack's 32, landing on 16 (`1141:4899`).
    * A margin rather than a different `gap` on the parent: only this one pair is
    * tighter, and changing the column's gap would move every other section too.
    */
-  amenitiesGap: { marginTop: -16 },
+  amenitiesGap: { marginTop: -SPACE.lg },
   /*
    * `bottom: 0`, not `insets.bottom + TAB_BAR_CLEARANCE`.
    *
@@ -327,9 +327,9 @@ const styles = StyleSheet.create({
   },
   ctaDockInner: {
     paddingHorizontal: SCENE_CTA_INSET,
-    // 10, down from 12 — see SCENE_CTA_HEIGHT for the chrome arithmetic.
-    paddingTop: 10,
-    paddingBottom: 16,
+    // See SCENE_CTA_HEIGHT for the chrome arithmetic.
+    paddingTop: SPACE.md,
+    paddingBottom: SPACE.lg,
     // Centres the content-width pill. Without this it stretches to the dock and
     // `paddingHorizontal: 32` on the fill buys nothing.
     alignItems: 'center',
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
 /**
  * A control in the top bar.
  *
- * 36pt is below the 44pt minimum on its own, so the hit area is expanded rather
+ * 32pt is below the 44pt minimum on its own, so the hit area is expanded rather
  * than the circle — the frame's bar is 64 tall and a 44pt disc in it leaves no
  * air. `hitSlop` is the standard way to keep the target honest without the
  * drawing growing to match.
@@ -364,16 +364,16 @@ function SceneBarButton({
       accessibilityLabel={label}
       style={barStyles.button}
     >
-      <Ionicons name={icon} size={20} color={active ? EMBER.accent : EMBER.textPrimary} />
+      <Ionicons name={icon} size={ICON.md} color={active ? EMBER.accent : EMBER.textPrimary} />
     </Pressable>
   )
 }
 
 const barStyles = StyleSheet.create({
   button: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
