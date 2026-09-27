@@ -293,7 +293,9 @@ function ProfileInner() {
     </View>
   )
 
-  if (authLoading || loading) {
+  // Only before there is something to show: a background refresh of a loaded
+  // profile updates it in place rather than flashing the skeleton.
+  if ((authLoading || loading) && !profile) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false}>

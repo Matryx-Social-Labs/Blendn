@@ -21,6 +21,7 @@ import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedE
 import { formatEventDateTime } from '../../lib/time'
 import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
  * Going — the events that are yours.
@@ -45,8 +46,9 @@ function GoingScreenInner() {
   const [refreshCount, setRefreshCount] = useState(0)
 
   const loadInterestedEvents = useCallback(async () => {
+    // No `setLoading(true)` here: `loading` starts true for the first load, and
+    // later focus refreshes update the list in place instead of blanking it.
     try {
-      setLoading(true)
       if (!authUser) {
         setEvents([])
         setLoading(false)
@@ -216,7 +218,9 @@ function GoingScreenInner() {
           keyExtractor={keyExtractor}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          // The container already insets the home indicator; this clears the
+          // absolutely positioned tab bar on top of that.
+          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 24 }}
         />
       )}
     </SafeAreaView>

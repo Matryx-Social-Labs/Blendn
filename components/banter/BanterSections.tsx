@@ -1,6 +1,6 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { OptimizedImage } from '../OptimizedImage'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
@@ -38,27 +38,51 @@ export const BANTER_SECTION_GAP = 32
 export const PINNED_AVATAR = 64
 export const ROW_AVATAR = 56
 
+// Frame: `textSecondary` at half, so a placeholder reads lighter than the text
+// that will replace it.
+const SEARCH_PLACEHOLDER = 'rgba(174,170,170,0.5)'
+
 /**
  * The search field — frame `1141:5249`.
  *
- * Named "Search Bar Placeholder (Reveals on tap in real app)" in the frame, so
- * it is a *button* that opens search rather than a live input. Rendered as one:
- * a `TextInput` here would take focus, raise the keyboard and cover the list
- * somebody is still reading.
+ * A live input that filters the inbox in place. No `autoFocus`: the keyboard
+ * rises only when somebody taps it, so it never covers a list being read.
+ * Without `onChangeText` it is the static frame the preview harness draws.
  */
-export function BanterSearch({ onPress }: { onPress?: () => void }) {
+export function BanterSearch({
+  value,
+  onChangeText,
+}: {
+  value?: string
+  onChangeText?: (text: string) => void
+}) {
+  if (!onChangeText) {
+    return (
+      <View style={styles.search}>
+        <Ionicons name="search" size={18} color={EMBER.textSecondary} />
+        <Text style={styles.searchPlaceholder} maxFontSizeMultiplier={1.4} numberOfLines={1}>
+          Search conversations...
+        </Text>
+      </View>
+    )
+  }
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="search"
-      accessibilityLabel="Search conversations"
-      style={({ pressed }) => [styles.search, pressed && styles.pressed]}
-    >
+    <View style={styles.search}>
       <Ionicons name="search" size={18} color={EMBER.textSecondary} />
-      <Text style={styles.searchPlaceholder} maxFontSizeMultiplier={1.4} numberOfLines={1}>
-        Search conversations...
-      </Text>
-    </Pressable>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="Search conversations..."
+        placeholderTextColor={SEARCH_PLACEHOLDER}
+        accessibilityLabel="Search conversations"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        maxFontSizeMultiplier={1.4}
+        style={styles.searchInput}
+      />
+    </View>
   )
 }
 
@@ -315,9 +339,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: EMBER_FONTS.bodyRegular,
     fontSize: 16,
-    // Frame: `rgba(174,170,170,0.5)` — `textSecondary` at half, so a
-    // placeholder reads as lighter than the text that will replace it.
-    color: 'rgba(174,170,170,0.5)',
+    color: SEARCH_PLACEHOLDER,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 16,
+    color: EMBER.textPrimary,
+    padding: 0,
   },
 
   headingRow: {

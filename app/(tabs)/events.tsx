@@ -2059,10 +2059,10 @@ function EventsInner() {
      */
     const shown = new Set<string>()
     featuredItems.forEach(e => shown.add(e.id))
-    upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
+    upcomingStackItems.forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
     return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
@@ -2433,7 +2433,7 @@ function EventsInner() {
                   picker is the primary action, and it is reachable even when
                   every other section is empty.
                 */}
-                {events.length === 0 && (
+                {events.length === 0 && !netError && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       <View style={styles.emptyGlyph}>
