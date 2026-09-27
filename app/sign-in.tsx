@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -14,10 +14,11 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Logger } from '../lib/logger'
-import { APP_COLORS } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
@@ -90,6 +91,20 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null)
 
   const isSignup = mode === 'signup'
+  /*
+   * The selected segment's background slides between the two rather than
+   * jumping: 200ms ease-in-out, a movement on screen, on the UI thread. It is
+   * one absolute, childless view under the labels, so only a transform moves.
+   * Reduce Motion: it is simply under the selected one.
+   */
+  const reduceMotion = useReducedMotion()
+  const [segmentWidth, setSegmentWidth] = useState(0)
+  const thumbX = useSharedValue(0)
+  useEffect(() => {
+    const target = isSignup ? segmentWidth : 0
+    thumbX.set(reduceMotion ? target : withTiming(target, { duration: 200, easing: SEGMENT_EASE }))
+  }, [isSignup, segmentWidth, reduceMotion, thumbX])
+  const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: thumbX.get() }] }))
   const trimmedEmail = email.trim().toLowerCase()
 
   const switchMode = (next: Mode) => {
@@ -181,7 +196,7 @@ export default function SignIn() {
             accessibilityLabel="Go back"
             hitSlop={12}
           >
-            <Ionicons name="chevron-back" size={26} color={APP_COLORS.textPrimary} />
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
 
           {/*
@@ -198,12 +213,18 @@ export default function SignIn() {
             importantForAccessibility="no-hide-descendants"
           />
 
-          <View style={styles.segmented}>
+          <View
+            style={styles.segmented}
+            onLayout={(e) => setSegmentWidth((e.nativeEvent.layout.width - SEGMENTED_PADDING * 2) / 2)}
+          >
+            {segmentWidth > 0 ? (
+              <Animated.View pointerEvents="none" style={[styles.segmentThumb, { width: segmentWidth }, thumbStyle]} />
+            ) : null}
             {(['signin', 'signup'] as const).map((m) => (
               <Pressable
                 key={m}
                 onPress={() => switchMode(m)}
-                style={[styles.segment, mode === m && styles.segmentActive]}
+                style={styles.segment}
                 accessibilityRole="button"
                 accessibilityState={{ selected: mode === m }}
               >
@@ -216,13 +237,13 @@ export default function SignIn() {
 
           {isSignup && (
             <View style={styles.field}>
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>NAME</Text>
               <TextInput
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
                 placeholder="What should we call you?"
-                placeholderTextColor={APP_COLORS.textTertiary}
+                placeholderTextColor={EMBER.textPlaceholder}
                 autoCapitalize="words"
                 autoComplete="name"
                 textContentType="name"
@@ -235,13 +256,13 @@ export default function SignIn() {
           {isSignup && (
             <View style={styles.field}>
               {/* Required: Blend'n is 18+ (SCRUM-330). */}
-              <Text style={styles.label}>Age</Text>
+              <Text style={styles.label}>AGE</Text>
               <TextInput
                 style={styles.input}
                 value={age}
                 onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
                 placeholder="You must be 18 or over"
-                placeholderTextColor={APP_COLORS.textTertiary}
+                placeholderTextColor={EMBER.textPlaceholder}
                 keyboardType="number-pad"
                 returnKeyType="next"
                 maxLength={3}
@@ -250,13 +271,13 @@ export default function SignIn() {
           )}
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>EMAIL</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
-              placeholderTextColor={APP_COLORS.textTertiary}
+              placeholderTextColor={EMBER.textPlaceholder}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -267,14 +288,14 @@ export default function SignIn() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>PASSWORD</Text>
             <View style={styles.passwordRow}>
               <TextInput
                 style={[styles.input, styles.passwordInput]}
                 value={password}
                 onChangeText={setPassword}
                 placeholder={isSignup ? `At least ${MIN_PASSWORD_LENGTH} characters` : 'Your password'}
-                placeholderTextColor={APP_COLORS.textTertiary}
+                placeholderTextColor={EMBER.textPlaceholder}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -298,8 +319,8 @@ export default function SignIn() {
               >
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={APP_COLORS.textSecondary}
+                  size={ICON.md}
+                  color={EMBER.textSecondary}
                 />
               </Pressable>
             </View>
@@ -318,7 +339,7 @@ export default function SignIn() {
             style={({ pressed }) => [styles.primary, (pressed || busy) && styles.pressed]}
           >
             {busy ? (
-              <ActivityIndicator color="#1B1931" />
+              <ActivityIndicator color={EMBER.onGradient} />
             ) : (
               <Text style={styles.primaryLabel}>{isSignup ? 'Create account' : 'Sign in'}</Text>
             )}
@@ -330,7 +351,7 @@ export default function SignIn() {
               style={styles.linkButton}
               accessibilityRole="button"
             >
-              <Text style={styles.link}>Forgot your password?</Text>
+              <Text style={styles.link}>FORGOT YOUR PASSWORD?</Text>
             </Pressable>
           )}
 
@@ -345,72 +366,76 @@ export default function SignIn() {
   )
 }
 
+const SEGMENTED_PADDING = SPACE.xs
+const SEGMENT_EASE = Easing.bezier(0.77, 0, 0.175, 1)
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
-  scroll: { paddingHorizontal: 28, paddingBottom: 40, gap: 16 },
-  back: { alignSelf: 'flex-start', paddingVertical: 8, marginLeft: -6 },
+  scroll: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.lg },
+  back: { alignSelf: 'flex-start', paddingVertical: SPACE.sm, marginLeft: -SPACE.xs },
   lockup: {
     height: LOCKUP_HEIGHT,
     width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
     maxWidth: '80%',
     alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: SPACE.sm,
+    marginBottom: SPACE.md,
   },
 
   segmented: {
     flexDirection: 'row',
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 8,
+    height: CONTROL.md,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.pill,
+    padding: SEGMENTED_PADDING,
+    marginBottom: SPACE.sm,
   },
-  segment: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
-  segmentActive: { backgroundColor: APP_COLORS.backgroundCard },
-  segmentText: { color: APP_COLORS.textSecondary, fontSize: 15, fontWeight: '500' },
-  segmentTextActive: { color: APP_COLORS.textPrimary },
+  segment: { flex: 1, borderRadius: EMBER_RADIUS.pill, alignItems: 'center', justifyContent: 'center' },
+  segmentThumb: {
+    position: 'absolute',
+    top: SEGMENTED_PADDING,
+    bottom: SEGMENTED_PADDING,
+    left: SEGMENTED_PADDING,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+  },
+  segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
+  segmentTextActive: { color: EMBER.textPrimary },
 
-  field: { gap: 8 },
-  label: { color: APP_COLORS.textSecondary, fontSize: 13 },
+  field: { gap: SPACE.sm },
+  label: TYPE.label,
   input: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: APP_COLORS.textPrimary,
-    fontSize: 16,
+    height: CONTROL.lg,
+    backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.input,
+    paddingHorizontal: SPACE.xl,
+    ...TYPE.body,
   },
   passwordRow: { justifyContent: 'center' },
-  passwordInput: { paddingRight: 52 },
-  reveal: { position: 'absolute', right: 14, padding: 4 },
+  passwordInput: { paddingRight: SPACE.xxxl },
+  reveal: { position: 'absolute', right: SPACE.lg, padding: SPACE.xs },
 
-  error: {
-    color: APP_COLORS.destructive,
-    fontSize: 14,
-    lineHeight: 19,
-  },
+  error: { ...TYPE.meta, color: EMBER.destructive },
 
   primary: {
-    height: 56,
-    borderRadius: 28,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    marginTop: 8,
+    backgroundColor: EMBER.accent,
+    marginTop: SPACE.sm,
   },
-  // Ink on light, never white — white on the brand orange is 3.4:1 and fails
-  // AA, and the same reasoning applies to any light button.
-  primaryLabel: { color: '#1B1931', fontSize: 16, fontWeight: '600' },
+  // Dark on the accent, never white — white on the orange fails AA.
+  primaryLabel: { ...TYPE.button, color: EMBER.onGradient },
   pressed: { opacity: 0.85 },
 
-  linkButton: { alignItems: 'center', paddingVertical: 12 },
-  link: { color: APP_COLORS.textSecondary, fontSize: 14 },
+  linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
+  link: TYPE.label,
   legal: {
-    color: APP_COLORS.textTertiary,
-    fontSize: 12,
-    lineHeight: 17,
+    ...TYPE.meta,
+    color: EMBER.textTertiary,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: SPACE.xs,
   },
 })

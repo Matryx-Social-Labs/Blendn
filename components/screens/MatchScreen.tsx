@@ -4,7 +4,6 @@ import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -12,8 +11,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -27,7 +24,6 @@ import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
 import { recallRoster, rememberRoster } from '../../lib/rosterMemory'
 import { apiClient } from '../../lib/apiClient'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import {
   applyGridFilters,
   availableWorkFields,
@@ -50,7 +46,7 @@ import {
   EventRoomCheckInCallback,
   EventCheckOutCallback,
 } from '../../lib/socketClient'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
 
@@ -283,6 +279,9 @@ export default function Match({
          * Both pseudonyms come down with the like (`pseudonyms`), so the sheet
          * paints immediately instead of fetching the conversation first.
          */
+        // The sheet rises on this same frame; the haptic is the moment, not a
+        // follow-up to it. One per mutual, and the sheet stands alone without it.
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
         setConnection({
           conversationId,
           userId: attendee.user_id,
@@ -324,9 +323,6 @@ export default function Match({
   const [requested, setRequested] = useState<Record<string, boolean>>({})
 
   const [newJoinsCount, setNewJoinsCount] = useState(0)
-  const { setScrollProgress } = useGradientOverlay()
-  const contentOpacity = useRef(new Animated.Value(0)).current
-  const contentTranslate = useRef(new Animated.Value(8)).current
   const attendeeLoadIdRef = useRef(0)
   const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -357,28 +353,6 @@ export default function Match({
    * Recommended carousel. The frame has one vertical list, so both went with it
    * rather than being kept alive by a constant nothing measures.
    */
-
-  useEffect(() => {
-    if (loading) {
-      contentOpacity.setValue(0)
-      contentTranslate.setValue(8)
-      return
-    }
-
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentTranslate, {
-        toValue: 0,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [loading, contentOpacity, contentTranslate])
-
 
   useEffect(() => {
     eventInfoRef.current = eventInfo
@@ -746,7 +720,6 @@ export default function Match({
 
   const onPullToRefresh = useCallback(async () => {
     if (!authUser) return
-    void Haptics.selectionAsync()
     setRefreshing(true)
     try {
       await loadActiveEventAndAttendees(authUser.id, true)
@@ -915,7 +888,7 @@ export default function Match({
       <View style={styles.container}>
         <View style={styles.list}>
           {[0, 1].map((i) => (
-            <SkeletonBlock key={i} width="100%" height={280} borderRadius={32} />
+            <SkeletonBlock key={i} width="100%" height={280} borderRadius={EMBER_RADIUS.card} />
           ))}
         </View>
       </View>
@@ -943,18 +916,6 @@ export default function Match({
           { paddingBottom: insets.bottom + 120 },
         ]}
         showsVerticalScrollIndicator={false}
-        /*
-          Feeds the shared gradient overlay, the same way the Pulse and the
-          Banter do. Clamped to 0..1 here rather than in the overlay, so a short
-          list that cannot scroll reports 0 instead of a NaN from dividing by a
-          zero-height content area.
-        */
-        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-          const scrollable = contentSize.height - layoutMeasurement.height
-          setScrollProgress(scrollable > 0 ? Math.min(1, Math.max(0, contentOffset.y / scrollable)) : 0)
-        }}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -998,7 +959,6 @@ export default function Match({
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  style={styles.chipRail}
                   contentContainerStyle={styles.chipRow}
                 >
                   {/*
@@ -1173,94 +1133,67 @@ function Chip({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  scroll: { gap: 24, paddingTop: 16 },
+  scroll: { gap: SPACE.xl, paddingTop: SPACE.lg },
   pressed: { opacity: 0.7 },
 
-  chipRail: { marginHorizontal: -12 },
-  chipRow: { gap: 8, paddingHorizontal: 24 },
+  chipRow: { gap: SPACE.sm, paddingHorizontal: GUTTER },
   chip: {
-    paddingHorizontal: 24,
-    paddingVertical: 9,
-    borderRadius: 9999,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.accent },
-  chipLabel: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
-  chipLabelOn: { color: EMBER.accent, fontFamily: EMBER_FONTS.bodyBold },
+  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.textSecondary },
+  chipLabel: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
+  chipLabelOn: { color: EMBER.textPrimary },
 
-  // Frame `1141:4977`: 12pt gutter, cards 24 apart.
-  list: { paddingHorizontal: 12, gap: 24 },
+  // The screen gutter, cards 24 apart.
+  list: { paddingHorizontal: GUTTER, gap: SPACE.xl },
 
   /*
    * Holds the gap the content container used to give these two directly.
    *
-   * `marginHorizontal: -12` cancels the container's own `paddingHorizontal`,
-   * which the cards need and the header never had: as a direct child of the
-   * old `ScrollView` the chip rail measured its inset from the screen edge, and
-   * inheriting the cards' padding pushed it 12pt right of the cards it sits
-   * above. The centred "just arrived" pill is unaffected either way.
+   * `marginHorizontal: -GUTTER` cancels the container's own `paddingHorizontal`,
+   * so the chip rail scrolls edge to edge while its first chip still starts on
+   * the gutter, level with the cards. The centred "just arrived" pill is
+   * unaffected either way.
    */
-  header: { gap: 24, marginHorizontal: -12 },
+  header: { gap: SPACE.xl, marginHorizontal: -GUTTER },
 
   more: {
-    marginTop: 8,
-    paddingVertical: 16,
-    borderRadius: 9999,
+    marginTop: SPACE.sm,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     alignItems: 'center',
   },
-  moreLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textPrimary,
-  },
+  moreLabel: { ...TYPE.button },
 
   joins: {
     alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 9999,
+    minHeight: CONTROL.sm,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
-  joinsLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.accent,
-  },
+  joinsLabel: { ...TYPE.meta, color: EMBER.textPrimary },
 
-  empty: { paddingHorizontal: 24, paddingTop: 48, gap: 8, alignItems: 'flex-start' },
-  emptyTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 20,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-  },
-  emptyBody: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
+  // No horizontal padding of its own: the list's gutter already insets it.
+  empty: { paddingTop: SPACE.xxxl, gap: SPACE.sm, alignItems: 'flex-start' },
+  emptyTitle: { ...TYPE.title },
+  emptyBody: { ...TYPE.body, color: EMBER.textSecondary },
   clear: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 9999,
+    marginTop: SPACE.lg,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
   },
-  clearLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textPrimary,
-  },
+  clearLabel: { ...TYPE.button },
 })

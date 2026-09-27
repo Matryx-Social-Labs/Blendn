@@ -12,7 +12,7 @@ import {
   type Gender,
   type Orientation,
 } from '../../lib/dating'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -253,31 +253,25 @@ export function MatchingFields({
  * answerable at a glance, and a 10% lightness step is not.
  */
 const styles = StyleSheet.create({
+  // Uppercased here rather than in the strings, which tests and onboarding match on.
   section: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 12,
-    lineHeight: 18,
-    letterSpacing: 0.6,
+    ...TYPE.label,
     textTransform: 'uppercase',
-    color: EMBER.textSecondary,
-    marginTop: 24,
-    marginBottom: 10,
+    marginTop: SPACE.xl,
+    marginBottom: SPACE.md,
   },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 9999, borderWidth: 1 },
-  chipOff: { backgroundColor: 'rgba(45,44,44,0.4)', borderColor: 'rgba(73,71,71,0.1)' },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
+  chip: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.lg, borderRadius: 9999, borderWidth: 1 },
+  chipOff: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
   chipOn: { backgroundColor: EMBER.accent, borderColor: EMBER.accent },
   // Opacity only, so a chip that becomes unreachable keeps its width and the
   // row does not reflow under your thumb.
   chipDisabled: { opacity: 0.35 },
-  chipText: { fontFamily: EMBER_FONTS.bodyRegular, fontSize: 15, color: EMBER.textPrimary },
+  chipText: { ...TYPE.bodyStrong },
   /* Dark on warm — white on the accent fails contrast. */
-  chipTextOn: { fontFamily: EMBER_FONTS.bodyBold, color: EMBER.onGradientChip },
+  chipTextOn: { color: EMBER.onGradientChip },
   hint: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textSecondary,
-    marginTop: 8,
+    ...TYPE.meta,
+    marginTop: SPACE.sm,
   },
 })

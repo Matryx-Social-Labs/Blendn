@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
-import { Typography } from './Typography'
-import { APP_COLORS } from '../lib/theme'
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
+import { Text } from './ui/Text'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 
 interface ChatHeaderProps {
   groupName: string
@@ -53,19 +53,19 @@ function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHea
             onPress={onBack}
             style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
           >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         )}
 
         {/* Center content */}
         <View style={styles.chatHeaderCenter}>
-          <Typography variant="h3" style={styles.chatHeaderTitle} numberOfLines={1}>
+          <Text variant="heading" style={styles.chatHeaderTitle} numberOfLines={1}>
             {groupName}
-          </Typography>
+          </Text>
           {participantCount && (
-            <Typography variant="caption" style={styles.chatHeaderSubtitle}>
+            <Text variant="meta" style={styles.chatHeaderSubtitle}>
               {participantCount} members
-            </Typography>
+            </Text>
           )}
         </View>
 
@@ -75,7 +75,7 @@ function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHea
             onPress={onSettings}
             style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
           >
-            <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+            <Ionicons name="settings-outline" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         )}
       </View>
@@ -127,9 +127,10 @@ export function AppHeader(props: AppHeaderProps) {
   return (
     <View style={[
       {
-        paddingHorizontal: 14,
-        paddingTop: 8,
-        paddingBottom: 12,
+        // 12 plus the icon button's own 12 inset puts the chevron on the 24 gutter.
+        paddingHorizontal: SPACE.md,
+        paddingTop: SPACE.sm,
+        paddingBottom: SPACE.md,
         backgroundColor: 'transparent',
         shadowOpacity: 0,
         elevation: 0,
@@ -145,27 +146,19 @@ export function AppHeader(props: AppHeaderProps) {
             onPress={onBack}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name="chevron-back" size={24} color={APP_COLORS.textPrimary} />
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         ) : null}
 
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
-          <Typography
-            variant="h2"
-            style={[styles.title, { color: APP_COLORS.textPrimary }]}
-            numberOfLines={1}
-          >
+          <Text variant="display" numberOfLines={1}>
             {title}
-          </Typography>
+          </Text>
           {!!subtitle && (
-            <Typography
-              variant="caption"
-              style={[styles.subtitle, { color: '#E6E6E6' }]}
-              numberOfLines={1}
-            >
+            <Text variant="meta" style={styles.subtitle} numberOfLines={1}>
               {subtitle}
-            </Typography>
+            </Text>
           )}
         </View>
 
@@ -177,9 +170,9 @@ export function AppHeader(props: AppHeaderProps) {
             style={({ pressed }) => [styles.ctaBtn, (rightTextButton.disabled || rightTextButton.loading) && styles.ctaDisabled, pressed && styles.pressed]}
           >
             {rightTextButton.loading ? (
-              <ActivityIndicator size="small" color={APP_COLORS.textPrimary} />
+              <ActivityIndicator size="small" color={EMBER.onGradient} />
             ) : (
-              <Typography variant="button" uppercaseButton style={styles.ctaText}>{rightTextButton.label}</Typography>
+              <Text variant="button" color={EMBER.onGradient}>{rightTextButton.label}</Text>
             )}
           </Pressable>
         ) : rightIconButton ? (
@@ -189,7 +182,7 @@ export function AppHeader(props: AppHeaderProps) {
             onPress={rightIconButton.onPress}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           >
-            <Ionicons name={rightIconButton.name} size={24} color={APP_COLORS.textPrimary} />
+            <Ionicons name={rightIconButton.name} size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         ) : null}
       </View>
@@ -206,32 +199,32 @@ const styles = StyleSheet.create({
   },
   segmentedPill: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.20)',
+    borderColor: EMBER.separator,
     overflow: 'hidden',
   },
   segmentedItem: {
     flex: 1,
-    paddingVertical: 10,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   segmentedItemActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: EMBER.surface,
   },
   segmentedText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#CFCFCF',
+    ...TYPE.bodyStrong,
+    color: EMBER.textSecondary,
   },
   segmentedTextActive: {
-    color: '#FFFFFF',
+    color: EMBER.textPrimary,
   },
 
   // ChatHeader styles
   chatHeaderContainer: {
-    backgroundColor: '#000000',
+    backgroundColor: EMBER.bg,
     paddingBottom: 0,
     paddingHorizontal: 0,
   },
@@ -241,8 +234,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: CONTROL.md,
+    height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -251,19 +244,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chatHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
     textAlign: 'center',
   },
   chatHeaderSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
   settingsButton: {
-    width: 40,
-    height: 40,
+    width: CONTROL.md,
+    height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -275,14 +263,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: CONTROL.md,
+    height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconBtnDark: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 20,
   },
   titleWrap: {
     flex: 1,
@@ -290,35 +274,20 @@ const styles = StyleSheet.create({
   centerTitle: {
     alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  titleShadow: {
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
   subtitle: {
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '500',
+    marginTop: SPACE.xxs,
   },
   ctaBtn: {
-    backgroundColor: APP_COLORS.accent,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: EMBER.accent,
+    paddingHorizontal: SPACE.lg,
+    height: CONTROL.md,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
     minWidth: 60,
     alignItems: 'center',
   },
   ctaDisabled: {
     opacity: 0.6,
-  },
-  ctaText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
   },
   pressed: {
     opacity: 0.6,

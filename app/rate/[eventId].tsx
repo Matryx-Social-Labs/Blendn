@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,11 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+// The library one: react-native's own left the Submit button under the home
+// indicator, where taps are the system's (SCRUM-201).
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { useToast } from '../../components/Toast'
-import { APP_COLORS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * Rate the people you met.
@@ -135,7 +137,7 @@ export default function RatePeers() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={APP_COLORS.textPrimary} style={styles.loader} />
+        <ActivityIndicator color={EMBER.textPrimary} style={styles.loader} />
       </SafeAreaView>
     )
   }
@@ -163,9 +165,11 @@ export default function RatePeers() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.placeholderBanner}>
-          PLACEHOLDER DESIGN — logic is final, layout is not
-        </Text>
+        {__DEV__ ? (
+          <Text style={styles.placeholderBanner}>
+            PLACEHOLDER DESIGN — logic is final, layout is not
+          </Text>
+        ) : null}
 
         <Text style={styles.h1}>How was meeting them?</Text>
         <Text style={styles.body}>
@@ -188,7 +192,7 @@ export default function RatePeers() {
               accessibilityRole="button"
               accessibilityLabel={`Rate ${n} out of 5`}
             >
-              <Text style={styles.chipText}>{n}</Text>
+              <Text style={[styles.chipText, rating === n && styles.chipTextSelected]}>{n}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -201,7 +205,7 @@ export default function RatePeers() {
             onPress={() => setIssue(opt.value)}
             accessibilityRole="button"
           >
-            <Text style={styles.optionText}>{opt.label}</Text>
+            <Text style={[styles.optionText, issue === opt.value && styles.optionTextSelected]}>{opt.label}</Text>
           </TouchableOpacity>
         ))}
 
@@ -219,7 +223,7 @@ export default function RatePeers() {
           onChangeText={setNote}
           multiline
           placeholder="Only we read this"
-          placeholderTextColor={APP_COLORS.textSecondary}
+          placeholderTextColor={EMBER.textPlaceholder}
           maxLength={500}
         />
 
@@ -242,57 +246,57 @@ export default function RatePeers() {
 
 /** Placeholder styling. Replace wholesale; nothing here is a decision. */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: APP_COLORS.backgroundBase },
-  scroll: { padding: 20, gap: 12 },
-  centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
-  loader: { marginTop: 64 },
-  placeholderBanner: {
-    color: APP_COLORS.destructive,
-    fontSize: 11,
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  h1: { color: APP_COLORS.textPrimary, fontSize: 24, fontWeight: '700' },
-  h2: { color: APP_COLORS.textPrimary, fontSize: 16, fontWeight: '500', marginTop: 16 },
-  body: { color: APP_COLORS.textSecondary, fontSize: 14, lineHeight: 20 },
-  row: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  container: { flex: 1, backgroundColor: EMBER.bg },
+  scroll: { padding: GUTTER, gap: SPACE.md },
+  centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: GUTTER, gap: SPACE.md },
+  loader: { marginTop: SPACE.xxxl },
+  placeholderBanner: { ...TYPE.label, color: EMBER.destructive, marginBottom: SPACE.sm },
+  h1: { ...TYPE.display },
+  h2: { ...TYPE.heading, marginTop: SPACE.lg },
+  body: { ...TYPE.body, color: EMBER.textSecondary },
+  row: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md },
   chip: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: APP_COLORS.backgroundCard,
+    width: CONTROL.md,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipSelected: { backgroundColor: APP_COLORS.accent },
-  chipText: { color: APP_COLORS.textPrimary, fontSize: 16 },
+  chipSelected: { backgroundColor: EMBER.textPrimary },
+  chipText: { ...TYPE.bodyStrong },
+  chipTextSelected: { color: EMBER.bg },
   option: {
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: APP_COLORS.backgroundCard,
-    marginTop: 8,
+    padding: SPACE.lg,
+    borderRadius: EMBER_RADIUS.md,
+    backgroundColor: EMBER.surface,
+    marginTop: SPACE.xs,
   },
-  optionSelected: { backgroundColor: APP_COLORS.accent },
-  optionText: { color: APP_COLORS.textPrimary, fontSize: 15 },
-  warning: { color: APP_COLORS.destructive, fontSize: 13, marginTop: 10, lineHeight: 18 },
+  optionSelected: { backgroundColor: EMBER.textPrimary },
+  optionText: { ...TYPE.body },
+  optionTextSelected: { color: EMBER.bg },
+  warning: { ...TYPE.meta, color: EMBER.destructive, marginTop: SPACE.sm },
   input: {
-    backgroundColor: APP_COLORS.backgroundCard,
-    color: APP_COLORS.textPrimary,
-    borderRadius: 10,
-    padding: 14,
-    minHeight: 90,
+    ...TYPE.body,
+    backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.md,
+    padding: SPACE.lg,
+    minHeight: 96,
     textAlignVertical: 'top',
-    marginTop: 8,
+    marginTop: SPACE.sm,
   },
   primaryButton: {
-    backgroundColor: APP_COLORS.accent,
-    borderRadius: 24,
-    paddingVertical: 15,
+    backgroundColor: EMBER.accent,
+    borderRadius: EMBER_RADIUS.pill,
+    height: CONTROL.lg,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
+    alignSelf: 'stretch',
+    paddingHorizontal: SPACE.xl,
+    marginTop: SPACE.xl,
   },
-  primaryButtonText: { color: APP_COLORS.textPrimary, fontSize: 16, fontWeight: '600' },
+  primaryButtonText: { ...TYPE.button, color: EMBER.onGradient },
   buttonDisabled: { opacity: 0.4 },
-  skipButton: { alignItems: 'center', paddingVertical: 14 },
-  skipButtonText: { color: APP_COLORS.textSecondary, fontSize: 14 },
+  skipButton: { alignItems: 'center', justifyContent: 'center', height: CONTROL.md },
+  skipButtonText: { ...TYPE.button, color: EMBER.textSecondary },
 })

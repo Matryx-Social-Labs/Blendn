@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
+import { checkOutOf } from '../lib/checkIn'
 import { getDistanceMetres } from '../lib/geo'
 import { Logger } from '../lib/logger'
 import {
@@ -132,7 +133,7 @@ export function PresenceMonitor() {
   const checkOut = useCallback(
     async (eventId: string, automatic: boolean) => {
       try {
-        await apiClient.checkOut(eventId)
+        await checkOutOf(eventId)
       } catch (e) {
         Logger.error('presence', 'check-out failed', { error: e })
       }

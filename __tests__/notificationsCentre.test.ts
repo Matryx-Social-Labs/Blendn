@@ -91,8 +91,8 @@ describe('every kind the server can send goes somewhere', () => {
 
   it('has a case in the switch for all eleven', () => {
     const switchBody = SRC().slice(
-      SRC().indexOf('export function navigateFromNotificationData'),
-      SRC().indexOf('export function setupNotificationResponseListener')
+      SRC().indexOf('export function notificationTarget'),
+      SRC().indexOf('export function navigateFromNotificationData')
     )
     const missing = KINDS.filter((k) => !switchBody.includes(`case '${k}'`))
     // Listed rather than counted, so a failure names the kind to write up.
@@ -127,7 +127,7 @@ describe('every kind the server can send goes somewhere', () => {
     const req = src.slice(src.indexOf("case 'message_request':"))
     const block = codeOnly(req.slice(0, req.indexOf('break')))
     expect(block).not.toContain('/user/')
-    expect(block).toContain("router.push('/(tabs)/chat')")
+    expect(block).toContain("target = '/(tabs)/chat'")
   })
 })
 
@@ -205,6 +205,6 @@ describe('a notification about a person opens the person, not a place', () => {
      */
     const src = codeOnly(SRC())
     const branch = src.slice(src.indexOf("case 'match'"))
-    expect(branch.slice(0, branch.indexOf('break'))).toContain("router.push('/(tabs)/chat')")
+    expect(branch.slice(0, branch.indexOf('break'))).toContain("target = '/(tabs)/chat'")
   })
 })

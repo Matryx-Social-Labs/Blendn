@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * "Featured" with a VIEW ALL, or "Upcoming" with a pair of arrows.
@@ -101,7 +101,7 @@ function Arrow({
     >
       <Ionicons
         name={direction === 'back' ? 'chevron-back' : 'chevron-forward'}
-        size={16}
+        size={ICON.sm}
         color={EMBER.textPrimary}
       />
     </Pressable>
@@ -113,19 +113,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
   },
-  heading: { ...EMBER_TYPE.sectionHeading, flexShrink: 1 },
-  action: EMBER_TYPE.link,
-  arrows: { flexDirection: 'row', gap: 8 },
+  heading: { ...TYPE.heading, flexShrink: 1 },
+  // Neutral, not accent: the screen's one accent is its title.
+  action: { ...TYPE.label, color: EMBER.textPrimary },
+  arrows: { flexDirection: 'row', gap: SPACE.sm },
   arrow: {
-    // 44, not the frame's 40. The frame draws a 40pt circle and 40 is under the
-    // touch-target floor on both platforms; the visible disc can be smaller than
-    // the target, but here they are the same view, so the view grows.
-    width: 44,
-    height: 44,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

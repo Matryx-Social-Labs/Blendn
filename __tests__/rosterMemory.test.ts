@@ -94,8 +94,11 @@ describe('it can be forgotten, and both callers matter', () => {
      * Leaving the venue ends your claim on the roster. Without this, reopening
      * the room would repaint the one you just left.
      */
+    // Every check-out goes through `checkOutOf`, which forgets the roster.
     const room = readFileSync(join(__dirname, '..', 'app', 'room.tsx'), 'utf8')
-    expect(room).toContain('forgetRoster(eventId)')
+    expect(room).toContain('checkOutOf(eventId)')
+    const helper = readFileSync(join(__dirname, '..', 'lib', 'checkIn.ts'), 'utf8')
+    expect(helper).toContain('forgetRoster(eventId)')
   })
 })
 

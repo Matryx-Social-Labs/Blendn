@@ -144,15 +144,29 @@ export const EMPTY_PROGRESS: OnboardingProgress = { step: 'basics', completed: [
  *    five and coming back land on step five instead of step one.
  *
  * A brand-new account with neither starts at the beginning.
+ *
+ *  - `mayParticipate` is the server's own gate (`mayParticipate` in the API's
+ *    `lib/age.ts`). An account it says no to cannot RSVP, check in or message,
+ *    so sending it to the events tab is sending it somewhere every button
+ *    refuses. That is the account that quit onboarding and then reinstalled,
+ *    or signed in on a second phone: `stored` is gone with the old install and
+ *    `isNewAccount` only lasts the sign-up session, so without this it skipped
+ *    onboarding for good.
+ *
+ *    It is not `!finishedOnServer`. Accounts from before 2026-08-10 are
+ *    `onboarded: false` and were never backfilled, and they have an age, so
+ *    the server lets them take part and so does this.
  */
 export function resumeStep(args: {
   finishedOnServer: boolean
   stored: OnboardingProgress | null
   isNewAccount: boolean
+  mayParticipate?: boolean
 }): OnboardingStep | null {
   if (args.finishedOnServer) return null
   if (args.stored) return args.stored.step
-  return args.isNewAccount ? 'basics' : null
+  if (args.isNewAccount || args.mayParticipate === false) return 'basics'
+  return null
 }
 
 /**
@@ -377,6 +391,23 @@ export function isAccountAge(years: number | null | undefined): boolean {
     years >= ACCOUNT_MIN_AGE &&
     years <= ACCOUNT_MAX_AGE
   )
+}
+
+/**
+ * Whether the server will let this account take part — RSVP, check in, post,
+ * message. The client copy of `mayParticipate` in the API's `lib/age.ts`
+ * (SCRUM-331): finished onboarding, or an adult age on the profile. No profile
+ * is a no.
+ *
+ * The server reads the birth date first and this only sees `age`, so where the
+ * two could disagree this errs permissive: the server's refusal is still there.
+ */
+export function mayParticipate(
+  profile: { onboarded?: boolean | null; age?: number | null } | null | undefined
+): boolean {
+  const age = profile?.age
+  // The server's `isAdult`: no ceiling and no integer check, unlike `isAccountAge`.
+  return !!profile && (profile.onboarded === true || (typeof age === 'number' && age >= ACCOUNT_MIN_AGE))
 }
 
 /**

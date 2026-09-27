@@ -48,82 +48,65 @@ describe('the CTA pays for its own height', () => {
   })
 })
 
-describe('the pill is glass, and the glass is the pill', () => {
-  it('has no opaque fill left', () => {
-    /*
-     * `rgba(15,14,14,0.9)` was the fill. At 90% the pill is paint, and the
-     * photograph it docks over may as well not be there.
-     */
-    expect(SRC()).not.toContain("backgroundColor: 'rgba(15,14,14,0.9)'")
+describe('the pill is solid, and nothing glows around it', () => {
+  /*
+   * It was frosted glass: a BlurView, a warm tint, a lit white hairline and an
+   * orange bloom under it. Every effect at once, and it read as generated. The
+   * event apps that get this right (Luma, District) use a flat, high-contrast
+   * pill with no shadow, blur or gradient, and let contrast lift it.
+   */
+  const cta = () => {
+    const src = SRC()
+    return src.slice(src.indexOf('export function SceneCTA'), src.indexOf('export function SceneDetails'))
+  }
+  const style = (name: string) => {
+    const src = SRC()
+    const from = src.slice(src.indexOf(`${name}: {`))
+    return from.slice(0, from.indexOf('},'))
+  }
+
+  it('has no blur, tint or glow left', () => {
+    expect(cta()).not.toContain('BlurView')
+    expect(SRC()).not.toContain('ctaTint')
+    expect(SRC()).not.toContain('ctaGlow')
+    expect(SRC()).not.toContain("'rgba(75,47,38,0.74)'")
   })
 
-  it('clips its blur, or the blur is a rectangle behind a round pill', () => {
-    const fill = SRC().slice(SRC().indexOf('ctaFill:'))
-    expect(fill).toContain("overflow: 'hidden'")
-    expect(fill).toContain('borderRadius: 9999')
+  it('fills the to-do states with the accent and the done states with a dark surface', () => {
+    expect(style('ctaFillLoud')).toContain('backgroundColor: EMBER.accent')
+    expect(style('ctaFillQuiet')).toContain('backgroundColor: EMBER.surfaceSunken')
+    // Dark text on the accent — white on it fails contrast.
+    expect(SRC()).toContain('ctaLabelLoud: { color: EMBER.onGradient }')
   })
 
-  it('has no gradient rectangle behind a translucent fill', () => {
-    /*
-     * The regression this exists for: the pill used to be a `LinearGradient`
-     * with `padding: 1` wrapping an opaque child — a standard fake gradient
-     * border. It works *only* while the child is opaque. Make the child glass
-     * and the whole gradient rectangle shows through, which rendered a
-     * brown-to-purple wash inside the pill instead of a stroke around it.
-     *
-     * RN has no gradient `borderColor` and no masking without a new dependency,
-     * so the ring is a hairline of white and the warmth lives in the tint.
-     */
-    expect(SRC()).not.toContain('ctaBorder')
-    const fill = SRC().slice(SRC().indexOf('ctaFill:'))
-    expect(fill).toContain('borderColor:')
+  it('keeps a border in both states, so the height never changes between them', () => {
+    // SCENE_CTA_HEIGHT counts 1 + 14 + 28 + 14 + 1.
+    expect(style('ctaFill')).toContain('borderWidth: 1')
+    expect(style('ctaFillLoud')).toContain('borderColor:')
+    expect(style('ctaFillQuiet')).toContain('borderColor:')
   })
 
-  it('tints warm, because neutral glass on this screen is a black slab', () => {
-    /*
-     * The pill docks over the bottom of a dark map on a `#0F0E0E` page. There
-     * is nothing luminous behind it to refract, so a neutral frost renders as
-     * near-black and reads as a *disabled* control in the primary position.
-     * `#4B2F26` is `gradientFrom` at 25% over the page background.
-     */
-    expect(SRC()).toContain("'rgba(75,47,38,0.74)'")
+  it('casts no shadow', () => {
+    const fill = style('ctaFill')
+    expect(fill).not.toContain('shadow')
+    expect(fill).not.toContain('elevation')
   })
 
   it('is content-width, not screen-width', () => {
     // A full-bleed pill is a bar, and a bar is chrome. The node is named
     // "Floating CTA"; padded to its label it can actually float.
-    const fill = SRC().slice(SRC().indexOf('ctaFill:'))
-    expect(fill).toContain('paddingHorizontal: 32')
+    expect(style('ctaFill')).toContain('paddingHorizontal: 32')
     expect(PREVIEW()).toContain("alignItems: 'center'")
   })
 
-  it('the dock carries no second sheet of glass', () => {
-    /*
-     * The dock had a full-bleed blur and scrim. That was right while the pill
-     * was opaque — the band was the pill's bleed. With a glass pill it is a
-     * second full-width sheet behind the first one, which is a toolbar, not
-     * glassmorphism.
-     */
-    const preview = PREVIEW()
-    expect(preview).not.toContain('ctaDockFill')
-    expect(preview).not.toContain('ctaDockHairline')
-    expect(preview).not.toContain('BlurView')
+  it('separates from the page with a fade behind the dock, not a glow around the pill', () => {
+    const screen = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
+    const dock = screen.slice(screen.indexOf('<View style={styles.ctaDock}'))
+    expect(dock.slice(0, dock.indexOf('<SceneCTA'))).toContain("colors={['rgba(15,14,14,0)', EMBER.bg]}")
   })
 
-  it('does not clip the pill shadow', () => {
-    // `overflow: 'hidden'` on the dock existed to clip a blur the dock no
-    // longer has; leaving it on cuts the shadow that separates a floating
-    // control from the page.
-    const preview = PREVIEW()
-    const dock = preview.slice(preview.indexOf('ctaDock: {'))
-    const block = dock.slice(0, dock.indexOf('},'))
-    // Declarations only — the block's comment explains why the property is
-    // absent, so a plain substring match would find the word and fail.
-    const declared = block
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => !l.startsWith('*') && !l.startsWith('/*') && !l.startsWith('//'))
-    expect(declared.some((l) => l.startsWith('overflow:'))).toBe(false)
+  it('does not pop on saying yes — the label and the fill are the confirmation', () => {
+    expect(cta()).not.toContain('withSequence')
   })
 })
 
@@ -249,7 +232,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      * somebody tidies the room's top bar.
      */
     const room = read('app', 'room.tsx')
-    expect(room).toContain('apiClient.checkOut(eventId)')
+    expect(room).toContain('checkOutOf(eventId)')
     expect(room).toContain('Check out')
   })
 
@@ -286,15 +269,15 @@ describe('the Location card matches 1141:4900', () => {
     expect(SECTIONS()).toContain('...EMBER_TYPE.cardValue, paddingTop: 16')
   })
 
-  it('draws both lines in Plus Jakarta Regular', () => {
+  it('draws both lines from the type scale', () => {
     /*
-     * `1141:4903` and `1141:4905` are both `font-normal`, and both were built
-     * Bold — because Regular was not loaded, and a `fontFamily` naming an
-     * unloaded family renders the system font without throwing or warning.
+     * The frame sets both in Plus Jakarta Regular; the design system maps them
+     * to `label` and `body` (docs/DESIGN_SYSTEM.md), so the Regular weight is
+     * no longer loaded.
      */
     const theme = THEME()
-    expect(theme).toContain("displayRegular: 'PlusJakartaSans_400Regular'")
-    expect(theme).toContain('cardEyebrow')
+    expect(theme).toContain('cardEyebrow: TYPE.label')
+    expect(theme).toContain('cardValue: TYPE.body')
     expect(theme).toContain('cardValue')
     expect(SECTIONS()).toContain('eyebrow: EMBER_TYPE.cardEyebrow')
   })

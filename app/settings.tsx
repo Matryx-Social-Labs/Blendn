@@ -8,7 +8,7 @@ import { AppHeader } from '../components/AppHeader'
 import { apiClient } from '../lib/apiClient'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { Logger } from '../lib/logger'
-import { APP_COLORS, EMBER } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing'
@@ -354,7 +354,7 @@ export default function SettingsScreen() {
           key={`h-${idx}`}
           style={[styles.sectionHeader, item.spaced && styles.sectionHeaderSpaced]}
         >
-          {item.header}
+          {item.header.toUpperCase()}
         </Text>
       )
     }
@@ -363,7 +363,7 @@ export default function SettingsScreen() {
       return (
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name={item.icon} size={20} color={APP_COLORS.textPrimary} />
+            <Ionicons name={item.icon} size={ICON.md} color={EMBER.textPrimary} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.title}</Text>
               {item.hint ? <Text style={styles.rowHint}>{item.hint}</Text> : null}
@@ -371,7 +371,7 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.switchWrap}>
             {saving[keyName] && (
-              <ActivityIndicator size="small" color={APP_COLORS.textSecondary} style={styles.switchLoader} />
+              <ActivityIndicator size="small" color={EMBER.textSecondary} style={styles.switchLoader} />
             )}
             <Switch
               value={preferences[keyName]}
@@ -383,8 +383,8 @@ export default function SettingsScreen() {
                * was the only purple left in the app -- on the one control whose
                * whole job is to read as "on".
                */
-              trackColor={{ false: APP_COLORS.textTertiary, true: EMBER.accent }}
-              thumbColor={APP_COLORS.textPrimary}
+              trackColor={{ false: EMBER.textTertiary, true: EMBER.accent }}
+              thumbColor={EMBER.textPrimary}
             />
           </View>
         </View>
@@ -401,10 +401,10 @@ export default function SettingsScreen() {
         accessibilityState={item.disabled ? { disabled: true, busy: true } : undefined}
       >
         <View style={styles.rowLeft}>
-          <Ionicons name={item.icon} size={20} color={item.danger ? APP_COLORS.destructive : APP_COLORS.textPrimary} />
-          <Text style={[styles.rowTitle, item.danger && { color: APP_COLORS.destructive }]}>{item.title}</Text>
+          <Ionicons name={item.icon} size={ICON.md} color={item.danger ? EMBER.destructive : EMBER.textPrimary} />
+          <Text style={[styles.rowTitle, item.danger && { color: EMBER.destructive }]}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={APP_COLORS.textSecondary} />
+        <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
       </TouchableOpacity>
     )
   }
@@ -443,26 +443,25 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  prefsError: { color: '#e74c3c', fontSize: 13, paddingHorizontal: 16, paddingBottom: 8 },
+  prefsError: { ...TYPE.meta, color: EMBER.destructive, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
   container: { flex: 1, backgroundColor: 'transparent' },
   
-  content: { padding: 16 },
-  // Translucent-white overlay, not an opaque card token — kept as a literal;
-  // see the same note in about-you.tsx.
-  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, borderWidth: 1, borderColor: APP_COLORS.separator },
-  sectionHeader: { fontSize: 14, fontWeight: '700', color: APP_COLORS.textSecondary, marginTop: 14, marginBottom: 8, paddingHorizontal: 8 },
+  content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg },
+  // Translucent-white overlay, not an opaque card token — kept as a literal.
+  card: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: EMBER_RADIUS.md, borderWidth: 1, borderColor: EMBER.separator },
+  sectionHeader: { ...TYPE.label, marginTop: SPACE.lg, marginBottom: SPACE.sm, paddingHorizontal: SPACE.lg },
   /*
    * The gap that separates Delete account from everything above it. 40 rather
-   * than the usual 14, because the whole point is that the thumb has to travel
+   * than the usual 16, because the whole point is that the thumb has to travel
    * to reach it -- it used to sit one row under Sign out.
    */
-  sectionHeaderSpaced: { marginTop: 40 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14 },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, paddingRight: 12 },
+  sectionHeaderSpaced: { marginTop: SPACE.xxxl },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.lg, paddingVertical: SPACE.lg },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, flex: 1, paddingRight: SPACE.md },
   switchWrap: { flexDirection: 'row', alignItems: 'center' },
-  switchLoader: { marginRight: 6 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: APP_COLORS.textPrimary },
-  rowText: { flexShrink: 1, gap: 2 },
-  rowHint: { fontSize: 13, lineHeight: 18, color: APP_COLORS.textSecondary },
-  divider: { height: 1, backgroundColor: APP_COLORS.separator, marginLeft: 44 },
+  switchLoader: { marginRight: SPACE.sm },
+  rowTitle: { ...TYPE.bodyStrong },
+  rowText: { flexShrink: 1, gap: SPACE.xxs },
+  rowHint: { ...TYPE.meta },
+  divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
 })

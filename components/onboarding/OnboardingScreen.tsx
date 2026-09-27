@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import {
   KeyboardAvoidingView,
   Pressable,
@@ -9,16 +9,27 @@ import {
   Text,
   View,
 } from 'react-native'
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AtmosphericBackground } from './AtmosphericBackground'
 
 import {
   EMBER,
-  EMBER_GLOW,
   EMBER_GRADIENT,
   EMBER_RADIUS,
   EMBER_TYPE,
+  GUTTER,
+  ICON,
+  SPACE,
+  TYPE,
 } from '../../lib/theme'
 import { progressPercent, type OnboardingStep } from '../../lib/onboarding'
 import { EmberButton } from './EmberControls'
@@ -68,6 +79,10 @@ interface Props {
   onBack?: () => void
 }
 
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+/** The width the bar last showed, so the next step's bar can start from it. */
+let lastShownPercent = 0
+
 export function OnboardingScreen({
   step,
   title,
@@ -85,6 +100,29 @@ export function OnboardingScreen({
 }: Props) {
   const insets = useSafeAreaInsets()
   const percent = progressPercent(step)
+  const reduceMotion = useReducedMotion()
+  /*
+   * The bar fills from where the last step left it.
+   *
+   * Every step is its own screen, so each mounted with the fill already at
+   * its new width — the bar never visibly moved, and "you are further along"
+   * went unsaid. Now it starts at the previous step's width (going back, it
+   * drains) and eases to this one once the push has mostly landed.
+   *
+   * `width`, which is normally off-limits: the fill is absolutely positioned
+   * and has no children that lay out, so nothing else re-flows — and `scaleX`
+   * would squash its rounded end. Reduce Motion: it is simply at its width.
+   */
+  const fill = useSharedValue(reduceMotion ? percent : lastShownPercent)
+  useEffect(() => {
+    lastShownPercent = percent
+    if (reduceMotion) {
+      fill.set(percent)
+      return
+    }
+    fill.set(withDelay(200, withTiming(percent, { duration: 300, easing: EASE_OUT })))
+  }, [percent, reduceMotion, fill])
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get()}%` }))
 
   return (
     <View style={styles.root}>
@@ -108,7 +146,7 @@ export function OnboardingScreen({
           accessibilityLabel="Go back"
           style={styles.backButton}
         >
-          {onBack ? <Ionicons name="arrow-back" size={20} color={EMBER.accent} /> : null}
+          {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.accent} /> : null}
         </Pressable>
 
         <View
@@ -116,12 +154,14 @@ export function OnboardingScreen({
           accessibilityRole="progressbar"
           accessibilityValue={{ min: 0, max: 100, now: percent }}
         >
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={[styles.progressFill, { width: `${percent}%` }]}
-          />
+          <Animated.View style={[styles.progressFill, fillStyle]}>
+            <LinearGradient
+              colors={[...EMBER_GRADIENT.colors]}
+              start={EMBER_GRADIENT.start}
+              end={EMBER_GRADIENT.end}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
         </View>
 
         <Text style={styles.progressLabel}>{percent}%</Text>
@@ -172,7 +212,7 @@ export function OnboardingScreen({
        * screen with six fields a button that scrolls away is a button people
        * think is missing.
        */}
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}>
         <EmberButton
           label={ctaLabel}
           onPress={onContinue}
@@ -186,8 +226,8 @@ export function OnboardingScreen({
         ) : null}
         {footerNote ? (
           <View style={styles.footerNoteRow}>
-            <Ionicons name="lock-closed" size={11} color={EMBER.textTertiary} />
-            <Text style={styles.footerNote}>{footerNote}</Text>
+            <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
+            <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>
           </View>
         ) : null}
       </View>
@@ -203,11 +243,11 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    gap: SPACE.lg,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
   },
-  backButton: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: ICON.md, height: ICON.md, alignItems: 'center', justifyContent: 'center' },
   progressTrack: {
     flex: 1,
     height: 6,
@@ -215,24 +255,29 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     overflow: 'hidden',
   },
+  // No glow: the track clips it anyway (`overflow: hidden`), and a shadow on
+  // an element whose width animates re-renders the shadow every frame.
   progressFill: {
-    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     borderRadius: EMBER_RADIUS.pill,
-    ...EMBER_GLOW.progress,
+    overflow: 'hidden',
   },
   progressLabel: EMBER_TYPE.progress,
 
-  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32 },
-  headlineBlock: { gap: 8, marginBottom: 40 },
+  scrollContent: { paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
+  headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
   title: EMBER_TYPE.display,
   titleAccent: { color: EMBER.accent },
   subtitle: { ...EMBER_TYPE.subtitle, maxWidth: 300 },
-  body: { gap: 40 },
+  body: { gap: SPACE.xxl },
 
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    gap: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.lg,
+    gap: SPACE.md,
     // The design's `backdrop-blur` again — same substitution as the blobs, and
     // here the near-opaque background is what actually stops text showing
     // through, not the blur.
@@ -242,19 +287,13 @@ const styles = StyleSheet.create({
     ...EMBER_TYPE.subtitle,
     textAlign: 'center',
     color: EMBER.textTertiary,
-    paddingVertical: 4,
+    paddingVertical: SPACE.xs,
   },
   footerNoteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: SPACE.xs,
   },
-  footerNote: {
-    ...EMBER_TYPE.helper,
-    fontSize: 11,
-    letterSpacing: 0.5,
-    color: EMBER.textTertiary,
-    textTransform: 'uppercase',
-  },
+  footerNote: { ...TYPE.label, color: EMBER.textTertiary },
 })

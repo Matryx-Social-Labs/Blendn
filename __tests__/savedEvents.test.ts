@@ -1,4 +1,4 @@
-import { savedEventRows } from '../lib/savedEvents'
+import { savedEventRows, goingItems, rsvpEventRows } from '../lib/savedEvents'
 
 /**
  * The Going tab read the favourites payload as an array and showed "No saved
@@ -104,5 +104,58 @@ describe('the Going card poster', () => {
   it('is null — the placeholder — when there is nothing to show', () => {
     expect(poster(null)).toBeNull()
     expect(poster({ type: 'document', url: 'https://x.test/menu.pdf', order: 0 })).toBeNull()
+  })
+})
+
+describe('the Going tab sections', () => {
+  const api = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    title: `Event ${id}`,
+    venueName: 'Venue',
+    address: 'Somewhere',
+    startTime: '2026-10-01T18:00:00.000Z',
+    endTime: '2026-10-01T22:00:00.000Z',
+    coverImageUrl: null,
+    status: 'published' as const,
+    ...extra,
+  })
+  const NOW = Date.parse('2026-09-27T12:00:00.000Z')
+  const attended = (id: string, end: string) => ({
+    id,
+    title: `Past ${id}`,
+    cover_image_url: null,
+    start_time: '2026-09-01T18:00:00.000Z',
+    end_time: end,
+    venue_name: null,
+    city: null,
+    attendedAt: '2026-09-01T18:05:00.000Z',
+  })
+
+  it('keeps each RSVP status on its row', () => {
+    const rows = rsvpEventRows({
+      events: [api('a', { rsvpStatus: 'going' }), api('b', { rsvpStatus: 'waitlisted' })] as never,
+    })
+    expect(rows.map((r) => [r.id, r.rsvpStatus])).toEqual([
+      ['a', 'going'],
+      ['b', 'waitlisted'],
+    ])
+  })
+
+  it('lists Going, then Saved without the ones already going, then Past', () => {
+    const going = rsvpEventRows({ events: [api('a', { rsvpStatus: 'going' })] as never })
+    const saved = savedEventRows({ events: [api('a'), api('b')] })
+    const items = goingItems(going, saved, [attended('p', '2026-09-02T01:00:00.000Z')], NOW)
+    expect(items.map((i) => i.key)).toEqual(['h:going', 'g:a', 'h:saved', 's:b', 'h:past', 'p:p'])
+  })
+
+  it('leaves Past to events that have ended', () => {
+    // Checked in tonight is attendance, but there is nobody to rate until it is over.
+    const items = goingItems([], [], [attended('now', '2026-09-27T23:00:00.000Z')], NOW)
+    expect(items).toEqual([])
+  })
+
+  it('drops an empty section, header and all', () => {
+    const saved = savedEventRows({ events: [api('b')] })
+    expect(goingItems([], saved, [], NOW).map((i) => i.key)).toEqual(['h:saved', 's:b'])
   })
 })

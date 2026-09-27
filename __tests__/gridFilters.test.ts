@@ -242,7 +242,7 @@ describe('the room carries the shared header', () => {
      * bug rather than the fix.
      */
     const src = ROOM_SCREEN()
-    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + 8')
+    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + SPACE.sm')
     // And the safe area must not inset the screen a second time.
     expect(src).toContain("edges={['left', 'right']}")
   })
@@ -291,7 +291,7 @@ describe('the sheet does not pay for the notch twice', () => {
      */
     const src = ROOM_SCREEN()
     expect(src).toContain('topInset={0}')
-    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + 8')
+    expect(src).toContain('paddingTop: TOP_BAR_HEIGHT + SPACE.sm')
     expect(src).not.toContain('insets.top + TOP_BAR_HEIGHT')
   })
 
@@ -317,15 +317,15 @@ describe('the toggle is the frame’s pill', () => {
     expect(src).toContain('styles.segmentTrack')
     const track = src.slice(src.indexOf('segmentTrack: {'))
     const body = track.slice(0, track.indexOf('},'))
-    expect(body).toContain('padding: 6')
+    expect(body).toContain('padding: SPACE.xs')
     expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
   })
 
-  it('raises only the selected side, and accents its label', () => {
+  it('raises only the selected side, and brightens its label', () => {
     // Frame `1141:4961`: `#2D2C2C` with a drop shadow; `1141:4963`: the accent.
     const src = ROOM_SCREEN()
     expect(src.slice(src.indexOf('segmentOn: {'))).toContain("backgroundColor: '#2D2C2C'")
-    expect(src).toContain('segmentTextOn: { color: EMBER.accent }')
+    expect(src).toContain('segmentTextOn: { color: EMBER.textPrimary }')
   })
 
   it('does not stretch the buttons', () => {

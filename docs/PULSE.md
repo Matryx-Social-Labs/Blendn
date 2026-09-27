@@ -375,6 +375,30 @@ which is a **claim** — it says the organiser has not chosen one, when what
 actually happened is that the response did not carry the field. Absent data gets
 no sentence.
 
+### 11. The design-system pass (2026-09-27)
+
+The frame set nearly everything at 16pt with a 48pt title, and the screen read
+as flat and loose on a phone. The Pulse now follows `docs/DESIGN_SYSTEM.md`;
+these are the departures from `1141:*` for the designer to fold back in:
+
+| | Frame | Now |
+|---|---|---|
+| "The Pulse" | 48/48 ExtraBold | `display` 34/40 |
+| Section heading ("Featured") | 16/24 Bold | `heading` 20/26 |
+| Featured card title | 36/45, 3 lines | `title` 24/30, 2 lines |
+| Card date / venue | 16/24 | `meta` 13/18 |
+| Category tag | 16/24 Bold accent, 17/5 padding | `label` 12/16, white on a dark backing |
+| Tab labels | 16/24 Medium | `caption` 11/14 |
+| Page margin | 12 + 12 per child | one `GUTTER` of 24 |
+| Title → search | 29 | 16 |
+| Between sections | 48 | 32 |
+| Featured card position | centred (~55pt in) | starts at the 24pt margin, next card peeks |
+| Featured card shape | 331.5 × 450 | 4:5, fitted above the tab bar |
+| Search / city / filter | 56 field, 27 chip, "FILTER" text | 48 field + 48 icon button, 32 chip, one fill |
+| Wordmark "Blend'n" | accent | white — the title carries the one accent |
+| "VIEW ALL", "FILTER" | accent | neutral |
+| Filter sheet "Show results" | gradient | flat accent |
+
 ---
 
 ## Still not built

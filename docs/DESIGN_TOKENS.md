@@ -1,3 +1,5 @@
+> **Superseded for type, spacing and sizes by [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).** The palette notes below still describe `EMBER`; `APP_*` is no longer used by any screen.
+
 # Liquid Ember — the token layer
 
 For designers and for whoever builds the next screen against it. The tokens

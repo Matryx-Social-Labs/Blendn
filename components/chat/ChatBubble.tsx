@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * One message in the event room. Frame `1141:5535` (inbound), `1141:5546`
@@ -10,7 +10,7 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
  *
  * ## The tail is the whole idea
  *
- * Every corner is 24 except one, which is 4: bottom-left on an inbound bubble,
+ * Every corner is 16 except one, which is 4: bottom-left on an inbound bubble,
  * bottom-right on an outbound one. That single square corner is what points the
  * bubble at its sender, and it is why the two directions do not need a colour
  * difference to be told apart at a glance — though they have one anyway
@@ -265,7 +265,7 @@ export const ChatBubble = memo(ChatBubbleBase)
 const BUBBLE_MAX = '78%'
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.lg },
   rowMine: { justifyContent: 'flex-end' },
 
   avatar: {
@@ -275,36 +275,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // design-exception: an emoji glyph sized to fill the 40pt disc, not text
   avatarGlyph: { fontSize: 20, lineHeight: 26 },
 
-  column: { gap: 6, maxWidth: BUBBLE_MAX, alignItems: 'flex-start' },
+  column: { gap: SPACE.xs, maxWidth: BUBBLE_MAX, alignItems: 'flex-start' },
   columnMine: { alignItems: 'flex-end' },
 
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   metaMine: { justifyContent: 'flex-end' },
 
-  name: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-    flexShrink: 1,
-  },
-  nameMine: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.accent,
-  },
+  name: { ...TYPE.bodyStrong, flexShrink: 1 },
+  nameMine: { ...TYPE.bodyStrong, color: EMBER.accent },
   time: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
+    ...TYPE.caption,
     // `1141:5542` — the timestamp is deliberately the quietest thing on the row.
     color: 'rgba(174,170,170,0.6)',
   },
 
-  bubble: { padding: 16, borderRadius: 24 },
+  bubble: { paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.md },
   /* The tail. One square corner, on the side the sender is. */
   bubbleTheirs: { backgroundColor: '#1B1919', borderBottomLeftRadius: 4 },
   bubbleMine: {
@@ -327,69 +315,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  removedText: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    fontStyle: 'italic',
-    color: EMBER.textTertiary,
-  },
+  removedText: { ...TYPE.body, fontStyle: 'italic', color: EMBER.textTertiary },
 
-  text: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    /* 26, not the 24 body uses elsewhere: `1141:5544` opens chat text up. */
-    lineHeight: 26,
-    color: EMBER.textPrimary,
-  },
-  receipt: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 11,
-    lineHeight: 15,
-    color: 'rgba(174,170,170,0.6)',
-  },
+  text: TYPE.body,
+  receipt: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)' },
   /* Read is the accent, so "they saw it" is a colour change and not a glyph count. */
   receiptRead: { color: EMBER.accent },
-  edited: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
-    color: 'rgba(174,170,170,0.6)',
-    marginTop: 4,
-  },
+  edited: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)', marginTop: SPACE.xs },
 
-  quote: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
   quoteBar: { width: 2, borderRadius: 9999, backgroundColor: EMBER.accent, opacity: 0.6 },
-  quoteBody: { flex: 1, gap: 2 },
-  quoteName: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 10,
-    lineHeight: 15,
-    color: EMBER.accent,
-  },
-  quoteText: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 10,
-    lineHeight: 15,
-    color: EMBER.textSecondary,
-  },
+  quoteBody: { flex: 1, gap: SPACE.xxs },
+  quoteName: { ...TYPE.caption, color: EMBER.accent },
+  quoteText: TYPE.caption,
 
-  reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs },
   reactionsMine: { justifyContent: 'flex-end' },
   reaction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    gap: SPACE.xs,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xxs,
     borderRadius: 9999,
     backgroundColor: EMBER.surfaceSunken,
   },
-  reactionEmoji: { fontSize: 12, lineHeight: 18 },
-  reactionCount: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
-    color: EMBER.textSecondary,
-  },
+  reactionEmoji: TYPE.meta,
+  reactionCount: TYPE.caption,
 })

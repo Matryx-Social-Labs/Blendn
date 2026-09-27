@@ -5,7 +5,6 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated as RNAnimated,
   Dimensions,
   AppState,
   FlatList,
@@ -69,18 +68,10 @@ import {
   placeLabel,
   upcomingDayLabel,
 } from '../../lib/pulse'
-import { revealPromptText, revealReadiness } from '../../lib/reveal'
-import {
-  PUBLIC_CHECKIN_WARNING,
-  shouldWarnBeforePublicCheckIn,
-} from '../../lib/roomVisibility'
-import {
-  hasSeenPublicCheckInWarning,
-  markPublicCheckInWarningSeen,
-} from '../../lib/roomVisibilityStorage'
+import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
+import { openInMaps } from '../../lib/openInMaps'
 import { apiClient } from '../../lib/apiClient'
 import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -90,7 +81,10 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { RisingSheet } from '../../components/motion/RisingSheet'
+import Animated from 'react-native-reanimated'
+import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
 
 /*
  * Distance in METRES, not kilometres.
@@ -125,23 +119,19 @@ type EventsTrayState = {
 const COORDINATE_PATTERN = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 /**
- * Frame `1141:4643` — `Main`, and the two gaps its children use.
+ * The page's rhythm, from the design system (`docs/DESIGN_SYSTEM.md`).
  *
- * Named rather than inlined because the render site needs two of them as well:
- * the safe-area insets are added **there**, so the frame's numbers stay literal
- * here and the device's corrections stay visibly separate from them.
- *
- * `MAIN_PADDING_TOP` is 96 on a 390pt artboard whose overlay header occupies
- * the first 64 — so it is `TOP_BAR_HEIGHT + 32`, and it is written that way at
- * the render site because the 32 is the part that means anything.
+ * One side margin for everything; 32 between sections, 16 from a heading to
+ * its content, 24 between stacked cards. The top bar's clearance is added at
+ * the render site with the safe-area insets.
  */
 const SCREEN_HEIGHT = Dimensions.get('window').height
-const MAIN_PADDING_HORIZONTAL = 12
+const MAIN_PADDING_HORIZONTAL = GUTTER
 const MAIN_PADDING_BOTTOM = 128
-const MAIN_GAP = 48
+const MAIN_GAP = SPACE.xxl
 /** A section's own rows; a vertical stack of cards inside one. */
-const SECTION_GAP = 24
-const STACK_GAP = 32
+const SECTION_GAP = SPACE.lg
+const STACK_GAP = SPACE.xl
 
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
@@ -207,7 +197,7 @@ function EventsInner() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
   const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
 
@@ -279,9 +269,7 @@ function EventsInner() {
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
-  const { setScrollProgress } = useGradientOverlay()
   const listRef = useRef<any>(null)
-  const scrollY = useRef(new RNAnimated.Value(0)).current
   const [netError, setNetError] = useState<string | null>(null)
 
   /*
@@ -578,32 +566,62 @@ function EventsInner() {
         setCheckedInEvents((prev) => [event, ...prev])
       }
       
-      // Call standardized production check-in RPC
       Logger.journey('checkin', 'api:checkIn:call', { eventId: event.id })
-      const result = await apiClient.checkIn(event.id, {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        deviceInfo: { gpsAccuracy: 50 },
-      })
+      const outcome = await submitCheckIn(event.id, userLocation)
 
-      if (!result.success) {
-        // Rollback optimistic update
-        setCheckinStatuses((prev) => {
-          const next = { ...prev }
-          if (previousStatus) next[event.id] = previousStatus
-          else delete next[event.id]
-          return next
-        })
-        if (!hadCheckedInEvent) {
-          setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+      if (outcome.kind !== 'checkedIn') {
+        const alreadyIn = outcome.kind === 'refused' && outcome.alreadyCheckedIn
+        if (!alreadyIn) {
+          // Rollback optimistic update
+          setCheckinStatuses((prev) => {
+            const next = { ...prev }
+            if (previousStatus) next[event.id] = previousStatus
+            else delete next[event.id]
+            return next
+          })
+          if (!hadCheckedInEvent) {
+            setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
+          }
+          feedback.error()
         }
-        Logger.error('events', 'Check-in error', { error: result.error })
-        feedback.error()
+        if (outcome.kind === 'timeout') {
+          Logger.warn('events', 'Check-in timed out', { eventId: event.id })
+          showTray({
+            title: 'Still checking you in',
+            message: 'This is taking longer than expected. Please try again.',
+            buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          })
+          return
+        }
+        /*
+         * The server's refusal, named — the same words and the same map the
+         * event screen offers (lib/checkInRefusal.ts). This tray used to say
+         * "Check-in failed" over the raw sentence for every refusal, and never
+         * offered directions to somebody standing in the wrong place.
+         */
+        const { refusal } = outcome
+        Logger.error('events', 'Check-in refused', { title: refusal.title })
         showTray({
-          title: 'Check-in failed',
-          message: result.error || 'Unknown error',
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+          title: refusal.title,
+          message: refusal.message,
+          buttons: refusal.offerDirections
+            ? [
+                { label: 'Done', onPress: closeTray },
+                {
+                  label: 'Open Maps',
+                  variant: 'primary',
+                  onPress: () => {
+                    closeTray()
+                    void openInMaps(event)
+                  },
+                },
+              ]
+            : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
         })
+        if (alreadyIn) {
+          loadCheckinStatusesBatch()
+          loadCheckedInEvents()
+        }
         return
       }
 
@@ -621,15 +639,10 @@ function EventsInner() {
        * check-in, not instead of it — the reveal warning is the more
        * important sentence and goes first.
        */
-      const askIntent = result.data?.intentNeeded === true
+      const { askIntent } = outcome
       const closeAndAsk = () => {
         closeTray()
-        if (askIntent) {
-          router.push({
-            pathname: '/event-preferences/[eventId]',
-            params: { eventId: event.id, revealed: '0', askIntent: '1' },
-          })
-        }
+        if (askIntent) router.push(askIntentRoute(event.id))
       }
 
       /*
@@ -640,43 +653,17 @@ function EventsInner() {
        * you, and someone visible at a work meetup in March was visible at a
        * club in August without touching anything. The server now always creates
        * `revealed: false` and hands the preference back for the app to ask
-       * about.
-       *
-       * Asking rather than undoing is the point: there is no moment at which
-       * they are named before answering. Dismissing writes nothing, because the
-       * row is already false — and so does killing the app mid-prompt, which is
-       * the right way for this to fail.
-       *
-       * **The first one explains; the rest just ask.** Someone who set this in
-       * onboarding has agreed to a sentence on a settings screen, which is not
-       * the same as picturing their name and face in a room full of strangers.
-       * The first prompt spells out what becomes visible and to whom; after
-       * that the banner carries it, continuously, which is the better teacher
-       * anyway. `shouldWarnBeforePublicCheckIn` holds the three conditions.
+       * about. Dismissing writes nothing, because the row is already false.
+       * `revealOffer` decides whether this is the first, explaining, one.
        */
-      if (result.data?.revealSuggestion) {
-        const firstTime =
-          !!user?.id &&
-          shouldWarnBeforePublicCheckIn({
-            revealByDefault: true,
-            hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-            // Nothing to reveal means nothing to warn about — the same check
-            // the reveal switch makes before it offers itself.
-            // `User.image` is a mirror of `photos[0]`, written only by the
-            // profile PUT — so it is the same photo a reveal would show.
-            canReveal: revealReadiness({
-              name: userFirstName,
-              photos: user?.image ? [user.image] : [],
-            }).ok,
-          })
-        if (firstTime && user?.id) await markPublicCheckInWarningSeen(user.id)
-
+      if (outcome.revealSuggestion && user?.id) {
+        const offer = await revealOffer({ id: user.id, firstName: userFirstName, image: user.image })
         showTray({
-          title: firstTime ? PUBLIC_CHECKIN_WARNING.title : 'Show your name here?',
-          message: firstTime ? PUBLIC_CHECKIN_WARNING.body : revealPromptText(userFirstName),
+          title: offer.title,
+          message: offer.message,
           buttons: [
             {
-              label: firstTime ? PUBLIC_CHECKIN_WARNING.confirm : 'Yes, show my name',
+              label: offer.confirm,
               variant: 'primary',
               onPress: () => {
                 closeAndAsk()
@@ -685,11 +672,11 @@ function EventsInner() {
                   .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
               },
             },
-            // Deliberately not "No" — nothing is being refused. Staying
-            // anonymous is the state they are already in.
-            { label: PUBLIC_CHECKIN_WARNING.cancel, onPress: closeAndAsk },
+            { label: offer.cancel, onPress: closeAndAsk },
           ],
         })
+        loadCheckinStatusesBatch()
+        loadCheckedInEvents()
         return
       }
 
@@ -844,7 +831,7 @@ function EventsInner() {
     setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
 
     try {
-      const result = await apiClient.checkOut(String(event.id))
+      const result = await checkOutOf(String(event.id))
       if (result.success) {
         feedback.success()
         showTray({
@@ -1014,7 +1001,7 @@ function EventsInner() {
       }
       setLocationStatus('granted')
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
@@ -1037,12 +1024,10 @@ function EventsInner() {
 
   const onScroll = useCallback((e: any) => {
     const y = e.nativeEvent.contentOffset.y
-    scrollY.setValue(y)
-    setScrollProgress(y, 320)
     if (!locationRequestedRef.current && y > 180) {
       requestLocationIfNeeded(false)
     }
-  }, [setScrollProgress, requestLocationIfNeeded, scrollY])
+  }, [requestLocationIfNeeded])
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -1055,7 +1040,7 @@ function EventsInner() {
           try {
             const lastKnown = await Location.getLastKnownPositionAsync()
             if (lastKnown?.coords) {
-              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude })
+              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude, accuracy: lastKnown.coords.accuracy })
             }
           } catch {}
           // Defer live GPS to avoid blocking startup render
@@ -1713,25 +1698,19 @@ function EventsInner() {
      * bar read as a floating overlay. It is only this one card, the thing the
      * screen opens on, that is sized to clear it.
      */
-    const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
+    const featured = featuredCardLayout(
+      insets,
+      tabBarTop(SCREEN_HEIGHT, insets.bottom),
+      featuredItems.length === 1
+    )
     return (
       <View style={styles.pulseSection}>
-        <SectionHeader
-          title="Featured"
-          /*
-           * "VIEW ALL" only once there is more than the row already shows.
-           *
-           * With four featured events and four on screen it is a link to the
-           * same four, which is the kind of control that teaches people the
-           * app's links do nothing.
-           */
-          actionLabel={upcomingItems.length > featuredItems.length ? 'VIEW ALL' : undefined}
-          onAction={
-            upcomingItems.length > featuredItems.length
-              ? () => router.push('/nearby-events')
-              : undefined
-          }
-        />
+        {/*
+          No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
+          not the featured events it sat above; and every event not in a section
+          is already in the list further down this screen.
+        */}
+        <SectionHeader title="Featured" />
         {/*
           A row of one is not a row.
 
@@ -1788,7 +1767,6 @@ function EventsInner() {
                 isActive={index === featuredActiveIndex}
                 dateLabel={item.dateLabel}
                 placeLabel={item.placeLabel}
-                accentIndex={item.accentIndex}
                 width={featured.width}
                 onPress={item.onPress}
               />
@@ -1822,7 +1800,9 @@ function EventsInner() {
               imageUrl={item.cover_image_url}
               dayLabel={upcomingDayLabel(item.start_time)}
               joinedCount={joinedCount(item)}
-              distanceLabel={formatDistance(item.distance)}
+              // Distance from you only means something in the city you are in;
+              // browsing elsewhere it read "6412km away". Same rule as Nearby.
+              distanceLabel={browsingHere ? formatDistance(item.distance) : null}
               description={item.short_description || null}
               onPress={() => handleEventPress(item)}
               isFavorited={!!interestStatuses[item.id]}
@@ -1936,6 +1916,12 @@ function EventsInner() {
             requestLocationIfNeeded(true)
           }
         }}
+        accessibilityRole="button"
+        accessibilityHint={
+          locationStatus === 'denied'
+            ? 'Opens Settings so you can allow location'
+            : 'Asks for your location to show events near you'
+        }
       >
         <Text style={styles.nearbyCtaText}>
           {locationStatus === 'denied' ? 'Open Settings' : 'Enable Location'}
@@ -2015,14 +2001,13 @@ function EventsInner() {
    */
   const featuredCards = useMemo(
     () =>
-      featuredItems.map((item, index) => ({
+      featuredItems.map((item) => ({
         id: item.id,
         title: item.title,
         tag: item.category || null,
         playlist: feedPlaylist(item.media, item.cover_image_url),
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
-        accentIndex: index,
         onPress: () => handleEventPress(item),
       })),
     [featuredItems, handleEventPress]
@@ -2059,10 +2044,10 @@ function EventsInner() {
      */
     const shown = new Set<string>()
     featuredItems.forEach(e => shown.add(e.id))
-    upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
+    upcomingStackItems.forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
     return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
@@ -2090,7 +2075,7 @@ function EventsInner() {
   const banners = (
           <View style={styles.filtersBar}>
             {showPreviewHint && (
-              <View style={styles.bannerInfo}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
                   Tip: Long-press any event card for quick actions.
                 </Text>
@@ -2102,7 +2087,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Got it</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {/*
               Offline is worth saying here. A dead socket is not.
@@ -2125,7 +2110,7 @@ function EventsInner() {
               showSocketIssues={false}
             />
             {switchSuggestion && (
-              <View style={styles.bannerInfo}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
                   You&apos;re in {switchSuggestion}. Browse events here?
                 </Text>
@@ -2137,7 +2122,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Switch</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {/*
               Where you are, when there is nothing to be done about it.
@@ -2159,15 +2144,19 @@ function EventsInner() {
               every combination rather than leaving it to inspection.
             */}
             {away && (
-              <View style={styles.bannerNeutral}>
-                <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerNeutral}>
+                <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
                 <Text style={styles.bannerNeutralText}>
                   You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
                 </Text>
-              </View>
+              </Animated.View>
             )}
-            {locationStatus === 'denied' && (
-              <View style={styles.bannerWarn}>
+            {/*
+              Not while the Nearby section is showing its own "Open Settings"
+              prompt (unnarrowed, no location): one ask, not two on one screen.
+            */}
+            {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerWarn}>
                 <Text style={styles.bannerText}>
                   Enable Location to show nearby events and check-in.
                 </Text>
@@ -2179,10 +2168,10 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Enable</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
             {!!netError && (
-              <View style={styles.bannerError}>
+              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerError}>
                 <Text style={styles.bannerText}>{netError}</Text>
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -2192,7 +2181,7 @@ function EventsInner() {
                 >
                   <Text style={styles.bannerCtaText}>Retry</Text>
                 </TouchableOpacity>
-              </View>
+              </Animated.View>
             )}
           </View>
   )
@@ -2223,17 +2212,6 @@ function EventsInner() {
    * independent.
    */
   const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
-
-  const sectionLiftY = scrollY.interpolate({
-    inputRange: [0, 300],
-    outputRange: [0, -8],
-    extrapolate: 'clamp',
-  })
-  const sectionOpacity = scrollY.interpolate({
-    inputRange: [0, 320],
-    outputRange: [1, 0.94],
-    extrapolate: 'clamp',
-  })
 
   return (
     /*
@@ -2286,10 +2264,8 @@ function EventsInner() {
               // nav plus the home indicator at the bottom. Padding, not layout,
               // so the feed still scrolls under all four.
               //
-              // The frame's `Main` starts at y=96 on a 390pt artboard whose bar
-              // occupies the first 64 — so the 32 is the clearance, and the
-              // status bar is what the artboard does not have.
-              paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
+              // Kept in step with `CHROME_ABOVE_CARD`, which sizes the hero card.
+              paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg,
               // The frame's 128 already clears the 88pt nav. `Math.max` so it
               // still does if the nav grows — the bar's height has changed
               // twice, and a feed that ends underneath it is not a visible
@@ -2354,9 +2330,9 @@ function EventsInner() {
                 */}
                 {isNarrowed ? (
                   [...Array(4)].map((_, i) => (
-                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? 24 : STACK_GAP }}>
+                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? SPACE.xl : STACK_GAP }}>
                       <SkeletonBlock width={'100%'} height={200} borderRadius={20} />
-                      <View style={{ marginTop: 10, gap: 6 }}>
+                      <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
                         <SkeletonLine width={'60%'} />
                         <SkeletonLine width={'40%'} />
                       </View>
@@ -2385,7 +2361,7 @@ function EventsInner() {
                         {[...Array(2)].map((_, i) => (
                           <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
                             <SkeletonBlock width={'100%'} height={165} borderRadius={20} />
-                            <View style={{ gap: 10 }}>
+                            <View style={{ gap: SPACE.sm }}>
                               <SkeletonLine width={'70%'} />
                               <SkeletonLine width={'45%'} />
                             </View>
@@ -2433,7 +2409,7 @@ function EventsInner() {
                   picker is the primary action, and it is reachable even when
                   every other section is empty.
                 */}
-                {events.length === 0 && (
+                {events.length === 0 && !netError && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       <View style={styles.emptyGlyph}>
@@ -2545,37 +2521,29 @@ function EventsInner() {
                   comes back as a section the day it has a frame.
                 */}
                 {!isNarrowed ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
-                      {renderFeaturedRow()}
-                    </FadeInUp>
-                  </RNAnimated.View>
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
+                    {renderFeaturedRow()}
+                  </FadeInUp>
                 ) : null}
 
                 {!isNarrowed && upcomingItems.length > 0 ? (
-                  <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
-                      {renderUpcomingStack()}
-                    </FadeInUp>
-                  </RNAnimated.View>
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
+                    {renderUpcomingStack()}
+                  </FadeInUp>
                 ) : null}
 
                 {isNarrowed
                   ? null
                   : userLocation
                   ? (nearbyItems.length > 0 ? (
-                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                        {renderNearbyList(nearbyItems.slice(0, 4))}
-                      </FadeInUp>
-                    </RNAnimated.View>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                      {renderNearbyList(nearbyItems.slice(0, 4))}
+                    </FadeInUp>
                   ) : null)
                   : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? (
-                    <RNAnimated.View style={{ transform: [{ translateY: sectionLiftY }], opacity: sectionOpacity }}>
-                      <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                        {renderNearbyPrompt()}
-                      </FadeInUp>
-                    </RNAnimated.View>
+                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
+                      {renderNearbyPrompt()}
+                    </FadeInUp>
                   ) : null)}
                 <View style={{ height: 8 }} />
               </View>
@@ -2596,18 +2564,24 @@ function EventsInner() {
       */}
       <Modal
         visible={cityPickerOpen}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setCityPickerOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.cityPickerBackdrop}
-          activeOpacity={1}
-          onPress={() => setCityPickerOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close city picker"
-        >
-          <View style={styles.cityPickerSheet}>
+        {/*
+          The dismiss target is a sibling behind the sheet, not its parent.
+          Wrapping the sheet made it one accessible element (VoiceOver could
+          not reach a single city) and closed it on any tap on its padding.
+        */}
+        <View style={styles.cityPickerBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setCityPickerOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close city picker"
+          />
+          <RisingSheet style={styles.cityPickerSheet}>
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
             </Text>
@@ -2634,8 +2608,8 @@ function EventsInner() {
                 accessibilityRole="button"
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="navigate-outline" size={17} color={EMBER.accent} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.accent} />
                   <View>
                     <Text style={styles.cityPickerCity}>Use my current location</Text>
                     <Text style={styles.cityPickerCount}>{deviceCity}</Text>
@@ -2671,7 +2645,7 @@ function EventsInner() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.cityPickerCity}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={13} color={EMBER.accent} />
+                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.accent} />
                         ) : null}
                       </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
@@ -2680,8 +2654,8 @@ function EventsInner() {
                 }}
               />
             )}
-          </View>
-        </TouchableOpacity>
+          </RisingSheet>
+        </View>
       </Modal>
 
       <FilterSheet
@@ -2815,7 +2789,7 @@ const styles = StyleSheet.create({
   },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
-    ...EMBER_TYPE.meta,
+    ...TYPE.meta,
   },
   /**
    * Skeletons only. The real headings are `SectionHeader`, which carries its
@@ -2823,7 +2797,7 @@ const styles = StyleSheet.create({
    * stands in for rather than drifting a few points off it.
    */
   sectionHeaderRow: {
-    marginBottom: 10,
+    marginBottom: SPACE.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2837,12 +2811,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-start',
     backgroundColor: EMBER.accent,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 18,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
+    borderRadius: EMBER_RADIUS.pill,
   },
   nearbyCtaText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
     // Dark on warm. White on `#FF906D` fails contrast — see `EMBER.onGradient`.
     color: EMBER.onGradient,
   },
@@ -2856,16 +2830,16 @@ const styles = StyleSheet.create({
    */
 
   filtersBar: {
-    paddingBottom: 10,
-    gap: 10,
+    paddingBottom: SPACE.sm,
+    gap: SPACE.sm,
   },
   bannerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: 'rgba(255,144,109,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,144,109,0.45)',
@@ -2874,9 +2848,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     // Was `APP_COLORS.separator`, which is the old blue palette's hairline. On
@@ -2887,9 +2861,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -2905,33 +2879,30 @@ const styles = StyleSheet.create({
   bannerNeutral: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    gap: SPACE.sm,
+    paddingVertical: SPACE.sm,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   bannerNeutralText: {
-    ...EMBER_TYPE.helper,
-    color: EMBER.textSecondary,
+    ...TYPE.meta,
     flex: 1,
   },
   bannerText: {
-    ...EMBER_TYPE.cardBody,
-    color: EMBER.textPrimary,
+    ...TYPE.body,
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACE.md,
   },
   bannerCta: {
     minHeight: 44,
     justifyContent: 'center',
     backgroundColor: EMBER.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
   },
   bannerCtaText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
     color: EMBER.onGradient,
   },
 
@@ -2943,27 +2914,28 @@ const styles = StyleSheet.create({
    */
 
   emptyState: {
-    paddingHorizontal: 32,
-    paddingVertical: 32,
+    paddingHorizontal: SPACE.xxl,
+    paddingVertical: SPACE.xxl,
     alignItems: 'center',
   },
   emptyGlyph: {
     width: 80,
     height: 80,
-    borderRadius: 22,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 18,
+    borderColor: EMBER.separator,
+    marginBottom: SPACE.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    ...EMBER_TYPE.cardTitle,
-    marginBottom: 8,
+    ...TYPE.title,
+    marginBottom: SPACE.sm,
   },
   emptySub: {
-    ...EMBER_TYPE.cardBody,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
     textAlign: 'center',
   },
   ctaGhost: {
@@ -2972,12 +2944,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
   },
   ctaGhostText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
   },
 
   /* ---- The city picker -------------------------------------------------- */
@@ -2994,29 +2966,30 @@ const styles = StyleSheet.create({
   },
   cityPickerSheet: {
     backgroundColor: EMBER.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.xl,
+    paddingBottom: SPACE.xxl,
     maxHeight: '70%',
   },
   cityPickerTitle: {
-    ...EMBER_TYPE.sectionHeading,
-    marginBottom: 14,
+    ...TYPE.heading,
+    marginBottom: SPACE.lg,
   },
   cityPickerEmpty: {
-    ...EMBER_TYPE.cardBody,
-    paddingVertical: 12,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
+    paddingVertical: SPACE.md,
   },
   cityPickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.md,
+    marginBottom: SPACE.sm,
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   /*
@@ -3032,7 +3005,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
     borderStyle: 'dashed',
-    marginBottom: 14,
+    marginBottom: SPACE.lg,
   },
   cityPickerRowActive: {
     backgroundColor: 'rgba(255,255,255,0.14)',
@@ -3040,10 +3013,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
   },
   cityPickerCity: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.bodyStrong,
   },
   cityPickerCount: {
-    ...EMBER_TYPE.meta,
+    ...TYPE.meta,
   },
 })
 

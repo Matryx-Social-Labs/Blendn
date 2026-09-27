@@ -5,7 +5,6 @@ import {
   roomButtonAccessibilityLabel,
   roomButtonGlow,
   roomButtonLabel,
-  roomButtonPulses,
   pickInsideEvent,
   pickTodayEvents,
   roomButtonTarget,
@@ -101,23 +100,6 @@ describe('the label names where the tap goes', () => {
   })
 })
 
-describe('pulsing is rationed', () => {
-  it('only pulses when something is time-critical', () => {
-    expect(roomButtonPulses('live')).toBe(true)
-    expect(roomButtonPulses('checkin')).toBe(true)
-  })
-
-  it('does not pulse when nothing is happening', () => {
-    /*
-     * An idle button that pulses is an app tugging at somebody for no reason,
-     * and the cost is not the annoyance — it is that the pulse stops meaning
-     * anything on the night it does.
-     */
-    expect(roomButtonPulses('today')).toBe(false)
-    expect(roomButtonPulses('idle')).toBe(false)
-  })
-})
-
 describe('the glow carries the checked-in state on its own', () => {
   /*
    * The Pulse's "You're checked in" strip is gone -- a section header, a
@@ -127,9 +109,9 @@ describe('the glow carries the checked-in state on its own', () => {
    */
   it('tells being in a room apart from standing outside one', () => {
     /*
-     * The failure this exists to catch: `roomButtonPulses` is true for BOTH, so
-     * a glow that is only a breath looks identical whether you are checked in
-     * or merely near a door. That was survivable while the strip named the
+     * The failure this exists to catch: a mark that only says "something is
+     * happening" looks identical whether you are checked in or merely near a
+     * door. That was survivable while the strip named the
      * event and is not now.
      */
     expect(roomButtonGlow('live')).toBe('live')
@@ -141,52 +123,43 @@ describe('the glow carries the checked-in state on its own', () => {
     expect(roomButtonGlow('today')).toBe('none')
     expect(roomButtonGlow('idle')).toBe('none')
   })
-
-  it('glows in exactly the states that pulse', () => {
-    /*
-     * One rule, two readers. If a state ever pulses without glowing (or the
-     * reverse) the button animates around a ring that is not there, or draws a
-     * ring nothing is animating -- both read as a rendering fault.
-     */
-    const states = ['live', 'checkin', 'today', 'idle'] as const
-    for (const s of states) {
-      expect(roomButtonGlow(s) !== 'none').toBe(roomButtonPulses(s))
-    }
-  })
 })
 
-describe('the ring is drawn, not merely animated', () => {
+describe('the live state is a still dot, not a glow', () => {
   const bar = readFileSync(join(__dirname, '..', 'app/(tabs)/_layout.tsx'), 'utf8')
+  const style = (name: string) => {
+    const from = bar.slice(bar.indexOf(`${name}: {`))
+    return from.slice(0, from.indexOf('},'))
+  }
 
-  it('renders a static ring for live, outside the animated halo', () => {
+  it('draws nothing on a loop', () => {
     /*
-     * Motion cannot carry a state: it is invisible in a screenshot, with Reduce
-     * Motion on, and to anyone not looking at the instant it swells. So the
-     * ring is a plain View gated on the glow, not another interpolation.
+     * It was a halo breathing out to 1.42x for as long as somebody was in a
+     * room, around a ring, over a warm bloom. Motion cannot carry a state —
+     * it is invisible in a screenshot and with Reduce Motion on — and the
+     * stack of glows read as generated.
      */
-    expect(bar).toContain("glow === 'live' ? <View pointerEvents=\"none\" style={styles.liveRing} /> : null")
-    expect(bar).toContain('liveRing: {')
+    expect(bar).not.toContain('Animated.loop')
+    expect(bar).not.toContain('styles.halo')
+    expect(bar).not.toContain('liveRing')
   })
 
-  it('keeps the ring off the button, so the disc is not eaten', () => {
-    /*
-     * RN grows borders inward. A border on `centreButton` would shrink the
-     * gradient and the mark sitting on it -- the same arithmetic that made the
-     * Banter's unread dot an 8pt core inside a 12pt footprint.
-     */
-    const ring = bar.slice(bar.indexOf('liveRing: {'))
-    const body = ring.slice(0, ring.indexOf('},'))
-    expect(body).toContain('position: \'absolute\'')
-    expect(body).toContain('CENTRE_SIZE + 8')
-    const button = bar.slice(bar.indexOf('centreButton: {'))
-    expect(button.slice(0, button.indexOf('},'))).not.toContain('borderWidth')
+  it('casts no bloom under the button', () => {
+    const button = style('centreButton')
+    expect(button).not.toContain('shadowColor')
+    expect(button).not.toContain('elevation')
   })
 
-  it('makes the halo big enough to see', () => {
-    // At the old 1.06 it grew 52 -> 55 and showed as a 1.5pt rim under a disc
-    // already casting a 16pt shadow. It was invisible, which only became a
-    // problem when it stopped being the second-best signal.
-    expect(bar).toContain('outputRange: [1, 1.42]')
+  it('tells being in a room apart from standing outside one, in colour', () => {
+    expect(bar).toContain("dot === 'live' ? styles.liveDotLive : styles.liveDotInvite")
+    expect(style('liveDotLive')).not.toBe(style('liveDotInvite'))
+  })
+
+  it('keeps the dot off the button, so the disc is not eaten', () => {
+    // RN grows borders inward; a border on `centreButton` would shrink the
+    // gradient and the mark on it. The dot is its own absolute view.
+    expect(style('liveDot')).toContain("position: 'absolute'")
+    expect(style('centreButton')).not.toContain('borderWidth')
   })
 })
 
@@ -208,7 +181,7 @@ describe('the Pulse no longer carries the checked-in strip', () => {
     expect(pulse).toContain("label: 'Check Out'")
     expect(pulse).toContain('void handleCheckOut(event)')
     expect(readFileSync(join(__dirname, '..', 'app/room.tsx'), 'utf8')).toContain(
-      'apiClient.checkOut(eventId)'
+      'checkOutOf(eventId)'
     )
   })
 })

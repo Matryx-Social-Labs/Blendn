@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
+import { useReducedMotion } from 'react-native-reanimated'
 
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * Three dots and a name. Frame `1141:5574`.
@@ -22,12 +23,21 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
  *
  * A static row of three dots is indistinguishable from a decoration, and this
  * has to read as *live*. Native-driven opacity, staggered by 160ms — cheap
- * enough to leave running, and it stops when the row unmounts.
+ * enough to leave running, and it stops when the row unmounts. Both halves of
+ * the breath are ease-in-out: the dots are changing in place, not arriving.
+ *
+ * Reduce Motion holds them still at 0.6. The label already says who is typing;
+ * the dots are the ambience, not the message.
  */
 export function TypingIndicator({ label }: { label: string }) {
   const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current]
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reduceMotion) {
+      dots.forEach((value) => value.setValue(0.6))
+      return
+    }
     const loops = dots.map((value, i) =>
       Animated.loop(
         Animated.sequence([
@@ -35,13 +45,13 @@ export function TypingIndicator({ label }: { label: string }) {
           Animated.timing(value, {
             toValue: 1,
             duration: 320,
-            easing: Easing.out(Easing.quad),
+            easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
           Animated.timing(value, {
             toValue: 0.3,
             duration: 320,
-            easing: Easing.in(Easing.quad),
+            easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
           Animated.delay((2 - i) * 160),
@@ -51,7 +61,7 @@ export function TypingIndicator({ label }: { label: string }) {
     loops.forEach((l) => l.start())
     return () => loops.forEach((l) => l.stop())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [reduceMotion])
 
   return (
     <View style={styles.row} accessibilityLiveRegion="polite">
@@ -61,27 +71,22 @@ export function TypingIndicator({ label }: { label: string }) {
         ))}
       </View>
       <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-        {label}
+        {label.toUpperCase()}
       </Text>
     </View>
   )
 }
 
+/** `ChatBubble`'s avatar disc. */
+const AVATAR = 40
+
 const styles = StyleSheet.create({
   /*
-   * 56 = a 40pt avatar plus the 16pt gap beside it, so the dots start exactly
+   * A 40pt avatar plus the 16pt gap beside it, so the dots start exactly
    * where the next inbound bubble will.
    */
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingLeft: 56, opacity: 0.6 },
-  dots: { flexDirection: 'row', gap: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: 0.6 },
+  dots: { flexDirection: 'row', gap: SPACE.xs },
   dot: { width: 4, height: 4, borderRadius: 9999, backgroundColor: EMBER.textSecondary },
-  label: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: EMBER.textSecondary,
-    flexShrink: 1,
-  },
+  label: { ...TYPE.label, flexShrink: 1 },
 })

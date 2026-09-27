@@ -144,12 +144,19 @@ On every app foreground, `_layout.tsx` calls `queryCache.clear()` and `apiClient
 
 ### Theme System (`lib/theme.ts`)
 
-All styling uses constants from `lib/theme.ts` — **do not use raw hex values**.
+All styling uses constants from `lib/theme.ts` — **do not use raw hex values,
+font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
 
-**`EMBER` is the current palette. `APP_COLORS` is legacy and is being removed** —
-every rebuilt screen is on `EMBER`, and tests assert that specific files no
-longer mention `APP_COLORS`. New code uses `EMBER`; touching a screen that still
-uses `APP_COLORS` is an opportunity to move it.
+- `TYPE` (9 roles) or `<Text variant>` from `components/ui/Text` for all text —
+  never `fontSize`/`fontWeight`. `SPACE` for padding/margin/gap, `GUTTER` (24)
+  for screen margins, `ICON` for icon sizes, `CONTROL` for control heights.
+- `npm run lint:design [files]` checks this; `__tests__/designTokens.test.ts`
+  fails `npm test` on any violation. Escape hatch:
+  `// design-exception: <reason>`.
+- One accent (orange) per screen, plus the active tab.
+
+**`EMBER` is the palette. `APP_*` tokens are legacy** and banned in `app/` and
+`components/` by the design-token check.
 
 - `EMBER` — `bg` (`#0F0E0E`), `surface`, `surfaceSunken`, `surfaceMedia`,
   `textPrimary/Secondary/Tertiary`, `accent` (`#FF906D`), `gradientFrom/To`,

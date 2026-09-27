@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../../components/RoomVisibilityBanner'
-import { EMBER, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The room's visibility banner, in every state it can be drawn in.
@@ -51,11 +51,11 @@ export default function RoomPreview() {
       */}
       <PulseTopBar
         title="The Grid"
-        leading={<Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />}
+        leading={<Ionicons name="chevron-down" size={ICON.lg} color={EMBER.textPrimary} />}
         actions={
           <>
             <Text style={styles.checkOut}>Check out</Text>
-            <Ionicons name="options-outline" size={20} color={EMBER.textPrimary} />
+            <Ionicons name="options-outline" size={ICON.lg} color={EMBER.textPrimary} />
             <NotificationBell />
           </>
         }
@@ -64,10 +64,10 @@ export default function RoomPreview() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: TOP_BAR_HEIGHT + 16, paddingBottom: insets.bottom + 32 },
+          { paddingTop: TOP_BAR_HEIGHT + SPACE.lg, paddingBottom: insets.bottom + SPACE.xxl },
         ]}
       >
-        <Case label="WORST CASE — long pseudonym, both fields missing">
+        <Case label="WORST CASE — LONG PSEUDONYM, BOTH FIELDS MISSING">
           <RoomVisibilityBanner
             revealed={false}
             pseudonym={LONG_PSEUDONYM}
@@ -77,7 +77,7 @@ export default function RoomPreview() {
           />
         </Case>
 
-        <Case label="Blocked on one field">
+        <Case label="BLOCKED ON ONE FIELD">
           <RoomVisibilityBanner
             revealed={false}
             pseudonym="Quiet Otter"
@@ -87,23 +87,23 @@ export default function RoomPreview() {
           />
         </Case>
 
-        <Case label="Anonymous, long pseudonym — the action must not clip">
+        <Case label="ANONYMOUS, LONG PSEUDONYM — THE ACTION MUST NOT CLIP">
           <RoomVisibilityBanner revealed={false} pseudonym={LONG_PSEUDONYM} onToggle={noop} />
         </Case>
 
-        <Case label="Anonymous, no pseudonym yet">
+        <Case label="ANONYMOUS, NO PSEUDONYM YET">
           <RoomVisibilityBanner revealed={false} onToggle={noop} />
         </Case>
 
-        <Case label="Named — the warm border is the one worth noticing">
+        <Case label="NAMED — THE WARM BORDER IS THE ONE WORTH NOTICING">
           <RoomVisibilityBanner revealed onToggle={noop} />
         </Case>
 
-        <Case label="SAFETY — named AND blocked: leaving is still offered">
+        <Case label="SAFETY — NAMED AND BLOCKED: LEAVING IS STILL OFFERED">
           <RoomVisibilityBanner revealed onToggle={noop} canReveal={false} missing="a photo" />
         </Case>
 
-        <Case label="Busy">
+        <Case label="BUSY">
           <RoomVisibilityBanner revealed={false} pseudonym="Quiet Otter" onToggle={noop} busy />
         </Case>
       </ScrollView>
@@ -113,8 +113,8 @@ export default function RoomPreview() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  content: { paddingHorizontal: 16, gap: 20 },
-  case: { gap: 8 },
-  caseLabel: { ...EMBER_TYPE.helper, color: EMBER.textTertiary, fontSize: 11, letterSpacing: 0.6 },
-  checkOut: { ...EMBER_TYPE.helper, color: EMBER.textSecondary, fontSize: 13 },
+  content: { paddingHorizontal: GUTTER, gap: SPACE.xl },
+  case: { gap: SPACE.sm },
+  caseLabel: { ...TYPE.label, color: EMBER.textTertiary },
+  checkOut: { ...TYPE.button, color: EMBER.textSecondary },
 })

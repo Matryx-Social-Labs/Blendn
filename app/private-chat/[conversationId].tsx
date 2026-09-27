@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
@@ -14,6 +15,7 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -36,12 +38,14 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { matchOpener } from '../../lib/matchOpener'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import Animated from 'react-native-reanimated'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface PrivateMessage {
   id: string
@@ -104,7 +108,7 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
   return (
     <View style={headerStyles.container}>
       <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="chevron-back" size={24} color={EMBER.textPrimary} />
+        <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
@@ -135,7 +139,7 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
       </View>
 
       <Pressable onPress={onOptions} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="ellipsis-vertical" size={22} color={EMBER.textPrimary} />
+        <Ionicons name="ellipsis-vertical" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
     </View>
   )
@@ -145,22 +149,22 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+    paddingHorizontal: SPACE.xs,
+    paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
-    gap: 8,
+    gap: SPACE.sm,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: { position: 'relative' },
   avatar: { width: 38, height: 38, borderRadius: 19 },
   avatarFallback: { backgroundColor: '#2C4A3E', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 14, fontWeight: '700', color: EMBER.textPrimary },
+  avatarText: TYPE.bodyStrong,
   titleArea: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: EMBER.textPrimary },
-  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
-  typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
+  name: TYPE.bodyStrong,
+  subtitle: { ...TYPE.meta, color: 'rgba(255,255,255,0.6)' },
+  typing: { ...TYPE.meta, color: '#4CAF91' },
 })
 
 /**
@@ -196,7 +200,7 @@ function RevealBar({
       >
         <Ionicons
           name={action.kind === 'reveal' ? 'eye-outline' : 'hand-left-outline'}
-          size={16}
+          size={ICON.sm}
           color={EMBER.textPrimary}
         />
         <Text style={revealStyles.buttonText}>{action.label}</Text>
@@ -207,23 +211,23 @@ function RevealBar({
 
 const revealStyles = StyleSheet.create({
   bar: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: GUTTER,
+    paddingVertical: SPACE.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
-    gap: 8,
+    gap: SPACE.sm,
   },
-  nudge: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
+  nudge: { ...TYPE.meta, color: 'rgba(255,255,255,0.75)' },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    gap: SPACE.sm,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
-  buttonText: { color: EMBER.textPrimary, fontSize: 14, fontWeight: '600' },
+  buttonText: TYPE.button,
 })
 
 function PrivateChatInner() {
@@ -561,6 +565,9 @@ function PrivateChatInner() {
    * mounted bubble each time.
    */
   const reportMessage = useCallback((messageId: string) => {
+    // The same press-and-hold answer the room's message menu gives, on the
+    // frame the tray opens — the hold has "caught".
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
     showTray('Message options', 'What would you like to do?', [
       { label: 'Cancel', onPress: closeTray },
       {
@@ -701,6 +708,12 @@ function PrivateChatInner() {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          /*
+           * Drag the conversation down to put the keyboard away — on iOS the
+           * keyboard follows the finger, the Messages behaviour people expect.
+           * Android has no interactive mode, so a drag dismisses it.
+           */
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}
@@ -751,9 +764,18 @@ function PrivateChatInner() {
         />
 
         {showScrollToBottom && (
-          <TouchableOpacity style={styles.scrollToBottomBtn} onPress={() => scrollToBottom(true)} activeOpacity={0.8}>
-            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
-          </TouchableOpacity>
+          <Animated.View entering={popIn} exiting={popOut} style={styles.scrollToBottomBtn}>
+            <TouchableOpacity
+              style={styles.scrollToBottomHit}
+              onPress={() => scrollToBottom(true)}
+              activeOpacity={0.8}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to the newest message"
+            >
+              <Ionicons name="chevron-down" size={ICON.md} color={EMBER.textPrimary} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
         <ChatComposer
@@ -784,41 +806,29 @@ function PrivateChatInner() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   flex: { flex: 1 },
-  banner: { marginHorizontal: 16, marginTop: 4, marginBottom: 2 },
+  banner: { marginHorizontal: GUTTER, marginTop: SPACE.xs, marginBottom: SPACE.xxs },
 
-  listContent: { paddingHorizontal: 12, paddingVertical: 8 },
+  listContent: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm, gap: SPACE.lg },
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
 
-  loadingIndicator: { marginVertical: 24 },
-  loadMoreBtn: { alignItems: 'center', paddingVertical: 12 },
+  loadingIndicator: { marginVertical: SPACE.xl },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
   /*
    * Frame-less by necessity -- the design has no thread header for this. Built
-   * from the Banter's own card idiom (radius 32, p16) so it reads as part of
+   * from the Banter's own card idiom (radius 32, p24) so it reads as part of
    * the product rather than a banner bolted on. Flagged in docs/BANTER.md for
    * a designer pass.
    */
   matchOpener: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 32,
+    marginTop: SPACE.lg,
+    padding: SPACE.xl,
+    borderRadius: EMBER_RADIUS.card,
     backgroundColor: EMBER.surfaceSunken,
-    gap: 4,
+    gap: SPACE.xs,
   },
-  matchOpenerTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 15,
-    lineHeight: 22,
-    color: EMBER.textPrimary,
-  },
-  matchOpenerBody: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 21,
-    color: EMBER.textSecondary,
-  },
-  loadMoreText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  matchOpenerTitle: TYPE.heading,
+  matchOpenerBody: { ...TYPE.body, color: EMBER.textSecondary },
+  loadMoreText: { ...TYPE.meta, color: 'rgba(255,255,255,0.45)' },
 
   // Messages
 
@@ -830,14 +840,15 @@ const styles = StyleSheet.create({
   // Input bar — WhatsApp style: simple, no icons
 
   // Scroll to bottom
+  scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
     position: 'absolute',
-    right: 16,
+    right: GUTTER,
     bottom: 80,
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -848,30 +859,31 @@ const styles = StyleSheet.create({
   },
 
   // Empty state
-  emptyContainer: { alignItems: 'center', paddingHorizontal: 40, paddingTop: 40 },
+  emptyContainer: { alignItems: 'center', paddingHorizontal: SPACE.xxl, paddingTop: SPACE.xxxl },
   emptyGlyph: {
     width: 80,
     height: 80,
-    borderRadius: 22,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surface,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.3)',
-    marginBottom: 18,
+    marginBottom: SPACE.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: EMBER.textPrimary, marginBottom: 8 },
-  emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm },
+  emptyText: { ...TYPE.body, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
   emptyCta: {
-    marginTop: 16,
+    marginTop: SPACE.lg,
     backgroundColor: EMBER.accent,
     borderRadius: 999,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    height: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
   },
   // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
   // `lib/theme.ts` is explicit that white fails contrast there.
-  emptyCtaText: { color: EMBER.onGradient, fontSize: 14, fontWeight: '600' },
+  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
 })
 
 

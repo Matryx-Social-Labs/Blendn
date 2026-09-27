@@ -2,8 +2,9 @@ import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
+import { HeartIcon } from '../motion/HeartIcon'
 
 // Frame: 165.38 in a 390pt frame.
 const IMAGE_HEIGHT = 165
@@ -116,10 +117,11 @@ function UpcomingCardImpl({
               pressed && styles.pressed,
             ]}
           >
-            <Ionicons
-              name={isFavorited ? 'heart' : 'heart-outline'}
+            <HeartIcon
+              on={Boolean(isFavorited)}
               size={18}
-              color={isFavorited ? EMBER.accent : EMBER.textPrimary}
+              onColor={EMBER.accent}
+              offColor={EMBER.textPrimary}
             />
           </Pressable>
         ) : null}
@@ -139,13 +141,13 @@ function UpcomingCardImpl({
           <View style={styles.metaRow}>
             {showJoined ? (
               <View style={styles.metaItem}>
-                <Ionicons name="people-outline" size={15} color={EMBER.textSecondary} />
+                <Ionicons name="people-outline" size={ICON.sm} color={EMBER.textSecondary} />
                 <Text style={styles.metaText}>{`${joinedCount} joined`}</Text>
               </View>
             ) : null}
             {distanceLabel ? (
               <View style={styles.metaItem}>
-                <Ionicons name="navigate-outline" size={15} color={EMBER.textSecondary} />
+                <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textSecondary} />
                 <Text style={styles.metaText}>{distanceLabel}</Text>
               </View>
             ) : null}
@@ -182,8 +184,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
-    padding: 24,
-    gap: 24,
+    padding: SPACE.xl,
+    gap: SPACE.lg,
   },
   media: {
     height: IMAGE_HEIGHT,
@@ -194,21 +196,21 @@ const styles = StyleSheet.create({
   mediaFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceSunken },
   categoryPill: {
     position: 'absolute',
-    left: 12,
-    top: 12,
-    backgroundColor: 'rgba(39,37,37,0.75)',
+    left: SPACE.md,
+    top: SPACE.md,
+    backgroundColor: 'rgba(15,14,14,0.6)',
     borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.xs,
     maxWidth: '70%',
   },
-  categoryText: EMBER_TYPE.categoryPill,
+  categoryText: { ...TYPE.label, color: EMBER.textPrimary },
   favorite: {
     position: 'absolute',
-    right: 12,
-    top: 12,
-    width: 32,
-    height: 32,
+    right: SPACE.md,
+    top: SPACE.md,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: 'rgba(39,37,37,0.75)',
     alignItems: 'center',
@@ -219,32 +221,28 @@ const styles = StyleSheet.create({
   // the state you just chose vanish for the length of a round trip.
   favoriteBusy: { opacity: 0.5 },
 
-  body: { gap: 16 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  body: { gap: SPACE.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
   // Only the title flexes. The date is short and must never be the thing that
   // truncates — "Nov" is not a date.
-  title: { ...EMBER_TYPE.cardTitle, flex: 1 },
-  day: { ...EMBER_TYPE.meta, color: EMBER.accent },
+  title: { ...TYPE.title, flex: 1 },
+  // Aligned to the title's first line: `title` is 30 tall, `meta` 18.
+  day: { ...TYPE.meta, color: EMBER.textPrimary, marginTop: SPACE.xs },
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText: EMBER_TYPE.meta,
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  metaText: TYPE.meta,
 
-  description: EMBER_TYPE.cardBody,
+  description: { ...TYPE.body, color: EMBER.textSecondary },
 
   action: {
+    height: CONTROL.md,
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.pill,
-    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionText: {
-    fontFamily: EMBER_TYPE.tag.fontFamily,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
+  actionText: TYPE.button,
   pressed: { opacity: 0.7 },
 })
 

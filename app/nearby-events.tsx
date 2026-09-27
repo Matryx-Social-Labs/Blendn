@@ -21,7 +21,7 @@ import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
 import { formatTimeRange } from '../lib/time'
-import { APP_COLORS } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -49,6 +49,7 @@ export default function NearbyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -116,11 +117,13 @@ export default function NearbyEventsScreen() {
           .sort((a: any, b: any) => a._distance - b._distance)
 
         setEvents(withDistance)
+        setLoadFailed(false)
       } else {
-        setEvents([])
+        setLoadFailed(true)
       }
     } catch {
-      if (mountedRef.current) setEvents([])
+      // Keep what is on screen: a network error is not "no events near you".
+      if (mountedRef.current) setLoadFailed(true)
     } finally {
       if (mountedRef.current) setLoading(false)
     }
@@ -165,9 +168,9 @@ export default function NearbyEventsScreen() {
     })
   }, [userLocation])
 
-  const containerPadding = 14 * 2
+  const containerPadding = GUTTER * 2
   const innerW = Math.max(0, screenW - containerPadding)
-  const cardWidth = Math.min(420, Math.round(innerW * 0.96))
+  const cardWidth = Math.min(420, innerW)
 
   const renderItem = useCallback(({ item }: { item: Event }) => {
     const dist = (item as any)._distance
@@ -193,20 +196,26 @@ export default function NearbyEventsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nearby Events</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle} accessibilityRole="header">Nearby Events</Text>
+        {/* The back button's width less its negative margin, so the title stays centred. */}
+        <View style={{ width: CONTROL.md - SPACE.md }} />
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={EMBER.textPrimary} />
         </View>
       ) : locationDenied ? (
         <View style={styles.empty}>
-          <Ionicons name="location-outline" size={48} color={APP_COLORS.textSecondary} style={{ marginBottom: 12 }} />
+          <Ionicons name="location-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
           <Text style={styles.emptyTitle}>Location access needed</Text>
           <Text style={styles.emptySub}>Enable location to see events near you.</Text>
           <TouchableOpacity
@@ -216,9 +225,25 @@ export default function NearbyEventsScreen() {
             <Text style={styles.settingsBtnText}>Open Settings</Text>
           </TouchableOpacity>
         </View>
+      ) : events.length === 0 && loadFailed ? (
+        <View style={styles.empty}>
+          <Ionicons name="cloud-offline-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => {
+              setLoading(true)
+              void loadEvents(true)
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : events.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="calendar-outline" size={48} color={APP_COLORS.textSecondary} style={{ marginBottom: 12 }} />
+          <Ionicons name="calendar-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
           <Text style={styles.emptyTitle}>No nearby events</Text>
           <Text style={styles.emptySub}>There are no events near your current location.</Text>
         </View>
@@ -242,33 +267,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.sm,
+    paddingBottom: SPACE.md,
   },
-  backBtn: { padding: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  // 48pt target; the negative margin puts the chevron on the gutter.
+  backBtn: { width: CONTROL.md, height: CONTROL.md, marginLeft: -SPACE.md, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...TYPE.heading },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  emptyTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
-  emptySub: { color: '#CCCCCC', fontSize: 14, textAlign: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
+  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
+  emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   settingsBtn: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: APP_COLORS.accent,
-    borderRadius: 12,
+    marginTop: SPACE.xl,
+    height: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
+    justifyContent: 'center',
+    backgroundColor: EMBER.accent,
+    borderRadius: EMBER_RADIUS.pill,
   },
-  settingsBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  settingsBtnText: { ...TYPE.button, color: EMBER.onGradient },
   listContent: {
-    paddingHorizontal: 14,
-    paddingBottom: 24,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
   },
+  // The card carries SPACE.lg below it; this makes the gap between cards GUTTER.
   cardWrapper: {
-    marginBottom: 12,
+    marginBottom: SPACE.sm,
   },
 })

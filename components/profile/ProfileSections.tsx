@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
+import { APP_ELEVATION, CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
 import { SceneHeroMedia } from '../scene/SceneHeroMedia'
 
@@ -37,9 +37,6 @@ import { SceneHeroMedia } from '../scene/SceneHeroMedia'
 
 /** Frame `1141:5165`: 751 on a 390 artboard. */
 export const PROFILE_HERO_ASPECT = 751 / 390
-/** Frame `1141:5177`: `px-[12px]`, `gap-[64px]`. */
-export const PROFILE_GUTTER = 12
-export const PROFILE_SECTION_GAP = 64
 
 /**
  * The hero: their media, cycling, under a gradient with the name on it.
@@ -143,7 +140,6 @@ export function ProfileHero({
       />
 
       <View style={styles.heroText} pointerEvents="none">
-        {/* Frame `1141:5171`: Plus Jakarta Bold 60/60, tracking -3. */}
         <Text style={styles.heroTitle} maxFontSizeMultiplier={1.2} accessibilityRole="header">
           {title}
         </Text>
@@ -157,7 +153,7 @@ export function ProfileHero({
   )
 }
 
-/** Frame `1141:5180`: Plus Jakarta Bold 16/24, tracking -0.4. */
+/** A section heading, `TYPE.heading`. */
 export function ProfileHeading({ title, trailing }: { title: string; trailing?: string | null }) {
   return (
     <View style={styles.headingRow}>
@@ -266,7 +262,7 @@ export function ProfileDetail({
   )
 }
 
-/** Frame `1141:5221`: two columns, gap 16, radius 32, 163pt cells. */
+/** Two columns, gap 16, 163pt cells. */
 export function ProfileGallery({
   photos,
   columnWidth,
@@ -438,6 +434,7 @@ export function ProfileActions({
 
 const styles = StyleSheet.create({
 
+
   pressed: { opacity: 0.75 },
 
   markFill: { alignItems: 'center', justifyContent: 'center' },
@@ -446,158 +443,87 @@ const styles = StyleSheet.create({
    * to its `lineHeight`, so a scaled emoji is a cropped one. The name below it
    * scales, which is where the accessibility lives.
    */
-  markGlyph: { fontSize: 128, lineHeight: 150 },
+  markGlyph: { fontSize: 128, lineHeight: 150 }, // design-exception: emoji hero sized to fill the portrait, not text
 
-  // Frame `1141:5168`: p32, gap 8, anchored to the foot of the hero.
-  heroText: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 32, gap: 8 },
-  heroTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 60,
-    lineHeight: 60,
-    letterSpacing: -3,
-    color: EMBER.textPrimary,
-  },
-  // Frame `1141:5176`: Manrope Medium 16/24, accent, tracking 0.4.
-  heroSubtitle: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 0.4,
-    color: EMBER.accent,
-  },
+  // Anchored to the foot of the hero, on the screen gutter.
+  heroText: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: GUTTER, paddingVertical: SPACE.xxl, gap: SPACE.sm },
+  heroTitle: { ...TYPE.display },
+  heroSubtitle: { ...TYPE.body, color: EMBER.textSecondary },
 
   headingRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  heading: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: -0.4,
-    color: EMBER.textPrimary,
-  },
-  headingTrailing: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
+  heading: { ...TYPE.heading },
+  headingTrailing: { ...TYPE.meta },
 
   bio: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
+    ...TYPE.body,
     // 26, not the 24 every other body line uses. The frame gives the bio more
     // air than the rest because it is the only long-form text on the screen.
     lineHeight: 26,
     color: EMBER.textSecondary,
   },
 
-  // Frame `1141:5187`: px24 py12, radius full, `rgba(45,44,44,0.4)`.
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
   chip: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 9999,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
     overflow: 'hidden',
   },
-  chipPlain: { backgroundColor: 'rgba(45,44,44,0.4)' },
-  chipLabel: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
-  chipLabelShared: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.onGradient,
-  },
+  chipPlain: { backgroundColor: EMBER.surface },
+  chipLabel: { ...TYPE.bodyStrong },
+  chipLabelShared: { ...TYPE.bodyStrong, color: EMBER.onGradient },
 
   detailCard: {
     backgroundColor: EMBER.surfaceMedia,
-    borderRadius: 32,
-    padding: 32,
-    gap: 16,
+    borderRadius: EMBER_RADIUS.card,
+    padding: SPACE.xl,
+    gap: SPACE.lg,
   },
-  // Frame `1141:5207`: no fill, a left hairline, `pl-[33px]`.
+  // No fill, a left hairline.
   detailRuled: {
     borderLeftWidth: 1,
-    borderLeftColor: 'rgba(73,71,71,0.1)',
-    paddingLeft: 33,
-    paddingRight: 32,
-    paddingVertical: 32,
-    gap: 16,
+    borderLeftColor: EMBER.separator,
+    paddingHorizontal: SPACE.xl,
+    paddingVertical: SPACE.xl,
+    gap: SPACE.lg,
   },
-  detailLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 1.2,
-    color: EMBER.accent,
-  },
-  detailValue: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 24,
-    lineHeight: 32,
-    color: EMBER.textPrimary,
-  },
+  detailLabel: { ...TYPE.label },
+  detailValue: { ...TYPE.title },
 
-  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.lg },
   galleryCell: {
     height: 163,
-    borderRadius: 32,
+    borderRadius: EMBER_RADIUS.lg,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceSunken,
   },
   galleryImage: { width: '100%', height: '100%' },
 
   actionsWrap: { alignItems: 'center' },
-  // Frame `1141:5237`: p8, radius full, `rgba(45,44,44,0.4)`.
+  // A neutral lift off the page, not a glow.
   actionsPill: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACE.sm,
     alignSelf: 'stretch',
-    marginHorizontal: PROFILE_GUTTER,
-    padding: 8,
-    borderRadius: 9999,
+    padding: SPACE.sm,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: 'rgba(45,44,44,0.9)',
-    shadowColor: EMBER.gradientFrom,
-    shadowOpacity: 0.2,
-    shadowRadius: 25,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 8,
+    ...APP_ELEVATION.medium,
   },
-  // Frame `1141:5239`: px32 py16.
   actionButton: {
     flex: 1,
-    minHeight: 60,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 9999,
+    minHeight: CONTROL.lg,
+    paddingHorizontal: SPACE.xl,
+    paddingVertical: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  actionLabel: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.onGradient,
-    textAlign: 'center',
-  },
+  actionLabel: { ...TYPE.button, color: EMBER.onGradient, textAlign: 'center' },
   actionSecondary: { backgroundColor: EMBER.surface },
-  actionSecondaryLabel: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-    textAlign: 'center',
-  },
+  actionSecondaryLabel: { ...TYPE.button, textAlign: 'center' },
   actionLiked: { backgroundColor: EMBER.surfaceSunken },
-  actionLikedLabel: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.accent,
-    textAlign: 'center',
-  },
+  actionLikedLabel: { ...TYPE.button, color: EMBER.accent, textAlign: 'center' },
 })

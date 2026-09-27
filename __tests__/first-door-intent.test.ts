@@ -17,9 +17,10 @@ const prefs = strip(readFileSync(join(__dirname, '..', 'app', 'event-preferences
 
 describe('after a check-in that says intentNeeded', () => {
   it('every way out of the post-check-in tray leads to the question', () => {
-    const handler = events.slice(events.indexOf("Logger.journey('checkin', 'success'"), events.indexOf('loadCheckinStatusesBatch()'))
-    expect(handler).toContain('const askIntent = result.data?.intentNeeded === true')
-    expect(handler).toMatch(/params: \{ eventId: event\.id, revealed: '0', askIntent: '1' \}/)
+    const start = events.indexOf("Logger.journey('checkin', 'success'")
+    const handler = events.slice(start, events.indexOf('} catch (error) {', start))
+    expect(handler).toContain('const { askIntent } = outcome')
+    expect(handler).toContain('router.push(askIntentRoute(event.id))')
     // The reveal warning's two buttons, "Stay here", "Done" — and "Go to Chat"
     // stacks the question on top of the chat.
     expect(handler.match(/onPress: closeAndAsk/g)).toHaveLength(3)
@@ -57,9 +58,16 @@ describe('both doors ask', () => {
     'app/(tabs)/events.tsx',
     'components/screens/EventDetailScreen.tsx',
   ])('%s routes to the intent screen when the server says intentNeeded', (file) => {
+    // One helper reads the server's answer; both doors act on it.
     const src = readFileSync(join(__dirname, '..', file), 'utf8')
-    expect(src).toContain('intentNeeded === true')
-    expect(src).toContain("askIntent: '1'")
-    expect(src).toContain('revealSuggestion')
+    expect(src).toContain('submitCheckIn(')
+    expect(src).toContain('askIntentRoute(')
+    expect(src).toContain('outcome.revealSuggestion')
+  })
+
+  it('the helper reads intentNeeded and routes to the question', () => {
+    const helper = readFileSync(join(__dirname, '..', 'lib', 'checkIn.ts'), 'utf8')
+    expect(helper).toContain("askIntent: result.data?.intentNeeded === true")
+    expect(helper).toContain("params: { eventId, revealed: '0', askIntent: '1' }")
   })
 })

@@ -2,7 +2,7 @@ import { BlurView } from 'expo-blur'
 import { StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
 export const TOP_BAR_HEIGHT = 64
@@ -108,12 +108,9 @@ export function PulseTopBar({
         <View style={styles.leadingGroup} pointerEvents={interactive ? 'box-none' : 'none'}>
           {leading}
           {/*
-            The wordmark, in the accent rather than white.
-
-            Frame: Plus Jakarta Bold 16/24, `#FF906D`, `letterSpacing: -0.8`. It
-            is the only warm text in the bar, which is what makes it read as a
-            mark rather than as a heading — the screen's own title is "The Pulse"
-            in 48pt, in the feed below.
+            The wordmark, in white. The frame sets it in the accent, but the
+            screen title below already carries the one accent, and two orange
+            headings stacked that close read as two titles.
           */}
           <Text style={styles.wordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
             {title}
@@ -140,20 +137,13 @@ const styles = StyleSheet.create({
   },
   row: {
     height: TOP_BAR_HEIGHT,
-    // Frame: the left group starts at x=24.
-    paddingHorizontal: 24,
+    paddingHorizontal: GUTTER,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   // Frame `1141:4931`: the glyph and the wordmark, 16pt apart.
-  leadingGroup: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  wordmark: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: -0.8,
-    color: EMBER.accent,
-  },
+  leadingGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  wordmark: { ...TYPE.button, letterSpacing: -0.4 },
 })

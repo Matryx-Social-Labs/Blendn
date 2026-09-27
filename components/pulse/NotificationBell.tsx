@@ -17,7 +17,8 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { RisingSheet } from '../motion/RisingSheet'
 
 /**
  * The bell in The Pulse's top bar — frame `1141:4819`'s right glyph.
@@ -129,12 +130,12 @@ export function NotificationBell() {
         accessibilityLabel={
           unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'
         }
-        // 36pt glyph box inside a 44pt hit area — the frame's control is small
-        // and the minimum tappable target is not.
-        hitSlop={8}
+        // The box is the glyph, so its right edge lands on the page margin like
+        // the city chip below it; `hitSlop` makes the target 48pt.
+        hitSlop={12}
         style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
       >
-        <Ionicons name="notifications-outline" size={22} color={EMBER.textPrimary} />
+        <Ionicons name="notifications-outline" size={ICON.lg} color={EMBER.textPrimary} />
         {badge ? (
           <View style={styles.badge} pointerEvents="none">
             <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
@@ -146,7 +147,7 @@ export function NotificationBell() {
 
       <Modal
         visible={open}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setOpen(false)}
       >
@@ -155,7 +156,7 @@ export function NotificationBell() {
           the most common way a modal traps somebody.
         */}
         <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={styles.sheetTint} pointerEvents="none" />
           <View style={styles.grabber} />
@@ -230,7 +231,7 @@ export function NotificationBell() {
               }}
             />
           )}
-        </View>
+        </RisingSheet>
       </Modal>
     </>
   )
@@ -238,19 +239,19 @@ export function NotificationBell() {
 
 const styles = StyleSheet.create({
   bell: {
-    width: 36,
-    height: 36,
+    width: ICON.lg,
+    height: ICON.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pressed: { opacity: 0.6 },
   badge: {
     position: 'absolute',
-    top: 2,
-    right: 0,
+    top: -SPACE.sm,
+    right: -SPACE.sm,
     minWidth: 18,
     height: 18,
-    paddingHorizontal: 4,
+    paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
     alignItems: 'center',
@@ -260,12 +261,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: EMBER.bg,
   },
-  badgeText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 10,
-    lineHeight: 13,
-    color: EMBER.onGradient,
-  },
+  badgeText: { ...TYPE.caption, color: EMBER.onGradient },
 
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: {
@@ -274,8 +270,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     maxHeight: '75%',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
     overflow: 'hidden',
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -290,48 +286,31 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.22)',
-    marginTop: 10,
+    marginTop: SPACE.sm,
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.lg,
+    paddingBottom: SPACE.sm,
   },
-  sheetTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 20,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-  },
-  clear: {
-    ...EMBER_TYPE.meta,
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 12,
-    letterSpacing: 1.2,
-    color: EMBER.accent,
-  },
+  sheetTitle: TYPE.heading,
+  clear: { ...TYPE.label, color: EMBER.accent },
 
   loading: { paddingVertical: 48 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 48, paddingHorizontal: 32 },
-  emptyText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
-  emptyHint: { ...EMBER_TYPE.meta, textAlign: 'center', color: EMBER.textTertiary },
+  emptyText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
+  emptyHint: { ...TYPE.meta, textAlign: 'center', color: EMBER.textTertiary },
 
   list: { flexGrow: 0 },
-  listContent: { paddingHorizontal: 20, paddingBottom: 8 },
+  listContent: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    gap: SPACE.md,
+    paddingVertical: SPACE.md,
   },
   rowPressed: { opacity: 0.6 },
   dot: {
@@ -339,16 +318,11 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: EMBER.accent,
-    marginTop: 7,
+    marginTop: SPACE.sm,
   },
   dotRead: { backgroundColor: 'transparent' },
   rowBody: { flex: 1, gap: 2 },
-  rowTitle: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 15,
-    lineHeight: 21,
-    color: EMBER.textPrimary,
-  },
-  rowText: { ...EMBER_TYPE.meta, color: EMBER.textSecondary },
-  age: { ...EMBER_TYPE.meta, color: EMBER.textTertiary, fontSize: 12 },
+  rowTitle: TYPE.bodyStrong,
+  rowText: TYPE.meta,
+  age: { ...TYPE.caption, color: EMBER.textTertiary },
 })

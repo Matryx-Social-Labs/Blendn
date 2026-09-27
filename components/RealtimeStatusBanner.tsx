@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
+import Animated from 'react-native-reanimated'
+import { EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
+import { fadeInFast, fadeOutFast } from './motion/presence'
 
 /**
  * Two different failures wearing one banner.
@@ -61,44 +64,41 @@ export default function RealtimeStatusBanner({
   }
 
   return (
-    <View style={[styles.container, isOffline && styles.offlineContainer, style]}>
+    <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={[styles.container, isOffline && styles.offlineContainer, style]}>
       <Text style={styles.text}>{message}</Text>
       {!isOffline && !isReconnecting && (
         <TouchableOpacity onPress={handleRetry} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText} accessibilityLabel="Retry">RETRY</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </Animated.View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,107,107,0.16)',
+    paddingVertical: SPACE.sm,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
+    backgroundColor: 'rgba(255,69,58,0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.35)',
+    borderColor: 'rgba(255,69,58,0.35)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   offlineContainer: {
-    backgroundColor: 'rgba(255,80,80,0.22)',
-    borderColor: 'rgba(255,80,80,0.5)',
+    backgroundColor: 'rgba(255,69,58,0.22)',
+    borderColor: 'rgba(255,69,58,0.5)',
   },
   text: {
+    ...TYPE.meta,
     color: '#FFDADA',
-    fontSize: 12,
-    fontWeight: '600',
     flex: 1,
   },
   retryText: {
+    ...TYPE.label,
     color: '#FFDADA',
-    fontSize: 12,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-    marginLeft: 8,
+    marginLeft: SPACE.sm,
   },
 })

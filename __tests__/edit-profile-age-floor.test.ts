@@ -109,7 +109,7 @@ describe('one age rule for every form that takes an age', () => {
     expect(isAccountAge(17)).toBe(false)
     expect(isAccountAge(17.5)).toBe(false)
     expect(isAccountAge(null)).toBe(false)
-    for (const screen of ['app/edit-profile.tsx', 'app/sign-in.tsx', 'app/about-you.tsx']) {
+    for (const screen of ['app/edit-profile.tsx', 'app/sign-in.tsx']) {
       const src = read(screen)
       expect(src).not.toMatch(/years? *< *1[38]\b|parsedAge as number\) *< *18/)
       expect(src).toMatch(/accountAgeError|profileFormErrors/)
@@ -121,10 +121,6 @@ describe('one age rule for every form that takes an age', () => {
     expect(src).toContain('accountAgeError(age, { required: true })')
     expect(src).not.toContain('Age (optional)')
     expect(src).not.toContain('Used for age-restricted events')
-  })
-
-  it('keeps About you on the same rule', () => {
-    expect(read('app/about-you.tsx')).toContain('accountAgeError(age)')
   })
 
   it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {

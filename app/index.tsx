@@ -11,7 +11,7 @@ import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Logger } from '../lib/logger'
-import { APP_COLORS, EMBER } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
 import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
@@ -291,7 +291,7 @@ function IndexInner() {
               <ActivityIndicator color="#1F1F1F" />
             ) : (
               <>
-                <AntDesign name="google" size={18} color="#1F1F1F" style={styles.googleMark} />
+                <AntDesign name="google" size={ICON.md} color="#1F1F1F" style={styles.googleMark} />
                 <Text style={styles.googleLabel}>Continue with Google</Text>
               </>
             )}
@@ -306,7 +306,7 @@ function IndexInner() {
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
               buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-              cornerRadius={28}
+              cornerRadius={CONTROL.lg / 2}
               style={styles.appleButton}
               onPress={handleAppleSignIn}
             />
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 28,
+    paddingHorizontal: GUTTER,
     // Transparent so the root BackgroundGradient shows through, rather than
     // this screen owning a fourth background of its own.
     backgroundColor: 'transparent',
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
+    gap: SPACE.xl,
     width: '100%',
   },
   lockup: {
@@ -380,43 +380,26 @@ const styles = StyleSheet.create({
     // letterbox, never crop or overflow.
     maxWidth: '86%',
   },
-  tagline: {
-    color: EMBER.textSecondary,
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
+  tagline: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
 
   actions: {
     width: '100%',
-    gap: 12,
-    paddingBottom: 8,
+    gap: SPACE.md,
+    paddingBottom: SPACE.sm,
   },
-  error: {
-    color: APP_COLORS.destructive,
-    fontSize: 14,
-    lineHeight: 19,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  notice: {
-    color: EMBER.textSecondary,
-    fontSize: 14,
-    lineHeight: 19,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
+  error: { ...TYPE.meta, color: EMBER.destructive, textAlign: 'center', marginBottom: SPACE.xs },
+  notice: { ...TYPE.meta, textAlign: 'center', marginBottom: SPACE.xs },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    height: 56,
-    borderRadius: 28,
+    gap: SPACE.sm,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: '#FFFFFF',
   },
   googleMark: {
-    marginRight: 2,
+    marginRight: SPACE.xxs,
   },
   /*
    * 20, to sit level with the Apple button beside it.
@@ -430,56 +413,40 @@ const styles = StyleSheet.create({
    * ever changes size, this is the number that has to follow it — and the way
    * to check is to measure a screenshot, not to look at one.
    */
-  googleLabel: {
-    color: '#1F1F1F',
-    fontSize: 21,
-    fontWeight: '500',
-  },
+  // design-exception: sized to the system-drawn Apple button label, which has no size prop
+  googleLabel: { color: '#1F1F1F', fontSize: 21, fontWeight: '500' },
   appleButton: {
     width: '100%',
-    height: 56,
+    height: CONTROL.lg,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginVertical: 4,
+    gap: SPACE.md,
+    marginVertical: SPACE.xs,
   },
   divider: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: APP_COLORS.separator,
+    backgroundColor: EMBER.separator,
   },
-  dividerText: {
-    color: EMBER.textTertiary,
-    fontSize: 13,
-  },
+  dividerText: { ...TYPE.meta, color: EMBER.textTertiary },
   // Outlined rather than filled: email is the third option, and giving it the
   // same weight as the two OAuth buttons would make the screen three shouts.
   emailButton: {
-    height: 56,
-    borderRadius: 28,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.24)',
   },
-  emailLabel: {
-    color: EMBER.textPrimary,
-    // Level with `googleLabel` and the Apple button — see the note there.
-    fontSize: 21,
-    fontWeight: '500',
-  },
+  // design-exception: level with `googleLabel` and the system-drawn Apple button — see the note there
+  emailLabel: { color: EMBER.textPrimary, fontSize: 21, fontWeight: '500' },
   pressed: {
     opacity: 0.85,
   },
-  legal: {
-    color: EMBER.textTertiary,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  legal: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center', marginTop: SPACE.sm },
 })
 
 

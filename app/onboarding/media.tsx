@@ -15,8 +15,10 @@ import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
 import { selectAndUploadPhoto } from '../../lib/photoUtils'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, EMBER_TYPE, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
+import Animated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import { MOTION_DURATION } from '../../lib/motion'
 
 /**
  * Step seven — photos.
@@ -57,8 +59,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
 
 const SLOTS = 6
 
-const GRID_GAP = 16
-const SLOT = Math.floor((Dimensions.get('window').width - 24 * 2 - GRID_GAP) / 2)
+const GRID_GAP = SPACE.lg
+const SLOT = Math.floor((Dimensions.get('window').width - GUTTER * 2 - GRID_GAP) / 2)
 
 /**
  * A plus drawn as two rectangles, not as a glyph.
@@ -139,6 +141,8 @@ function MediaScreenInner() {
     if (result.success && result.url) setPhotos((current) => [...current, result.url!])
   }
 
+  const reduceMotion = useReducedMotion()
+
   const remove = (index: number) =>
     setPhotos((current) => current.filter((_, i) => i !== index))
 
@@ -169,8 +173,17 @@ function MediaScreenInner() {
           const primary = index === 0
 
           return (
-            <Pressable
+            /*
+             * "Make main" moves the photo to the front and grows it; removing
+             * one lets the rest slide up. Both animate (250ms ease-in-out) so
+             * you can see where your photo went instead of it teleporting.
+             * The tiles hold one image and no shadow, which keeps the layout
+             * transition cheap. Reduce Motion: they simply land.
+             */
+            <AnimatedPressable
               key={url}
+              layout={reduceMotion ? undefined : TILE_MOVE}
+              exiting={reduceMotion ? undefined : TILE_OUT}
               onPress={() => (primary ? undefined : makePrimary(index))}
               disabled={uploadingSlot !== null || primary}
               accessibilityRole="button"
@@ -228,9 +241,9 @@ function MediaScreenInner() {
                 accessibilityLabel={`Remove photo ${index + 1}`}
                 style={styles.removeBadge}
               >
-                <Ionicons name="close" size={14} color={EMBER.onGradientChip} />
+                <Ionicons name="close" size={ICON.sm} color={EMBER.onGradientChip} />
               </Pressable>
-            </Pressable>
+            </AnimatedPressable>
           )
         })}
 
@@ -258,8 +271,12 @@ function MediaScreenInner() {
   )
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
+const TILE_MOVE = LinearTransition.duration(250).easing(Easing.bezier(0.77, 0, 0.175, 1))
+const TILE_OUT = FadeOut.duration(MOTION_DURATION.fast)
+
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   slot: {
     // Explicit, for the reason `LookingForCards` explains: a slot holding only
     // absolutely-positioned children has no intrinsic height, and `aspectRatio`
@@ -287,30 +304,30 @@ const styles = StyleSheet.create({
   primaryScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 88 },
   makeMain: {
     position: 'absolute',
-    bottom: 8,
+    bottom: SPACE.sm,
     alignSelf: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: 'rgba(15,14,14,0.75)',
   },
-  makeMainText: { ...EMBER_TYPE.helper, fontSize: 10, color: EMBER.textPrimary },
+  makeMainText: { ...TYPE.caption, color: EMBER.textPrimary },
   primaryTag: {
     position: 'absolute',
-    left: 12,
-    bottom: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    left: SPACE.md,
+    bottom: SPACE.md,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
-  primaryTagText: { ...EMBER_TYPE.helper, color: EMBER.onGradientChip, fontSize: 10 },
+  primaryTagText: { ...TYPE.caption, color: EMBER.onGradientChip },
   removeBadge: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 24,
-    height: 24,
+    top: SPACE.md,
+    right: SPACE.md,
+    width: ICON.lg,
+    height: ICON.lg,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
     alignItems: 'center',

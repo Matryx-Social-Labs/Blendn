@@ -22,10 +22,9 @@ import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { useGradientOverlay } from '../lib/gradientOverlay'
 import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
-import { EMBER, EMBER_FONTS } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
@@ -120,7 +119,6 @@ export default function EditProfile() {
   const [tagInputTitle, setTagInputTitle] = useState('')
   const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
   const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
-  const { setScrollProgress } = useGradientOverlay()
   const scrollRef = useRef<ScrollView>(null)
   const basicInfoY = useRef(0)
   const nameInputRef = useRef<TextInput>(null)
@@ -432,11 +430,11 @@ export default function EditProfile() {
           accessibilityLabel={`Remove ${item}`}
         >
           <Text style={styles.tagText}>{item}</Text>
-          <Ionicons name="close" size={14} color={EMBER.textSecondary} />
+          <Ionicons name="close" size={ICON.sm} color={EMBER.textSecondary} />
         </TouchableOpacity>
       ))}
       <TouchableOpacity style={styles.addTag} onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel}>
-        <Ionicons name="add" size={16} color={EMBER.accent} />
+        <Ionicons name="add" size={ICON.sm} color={EMBER.textPrimary} />
         <Text style={styles.addTagText}>{addLabel}</Text>
       </TouchableOpacity>
     </View>
@@ -463,8 +461,6 @@ export default function EditProfile() {
           ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
-          onScroll={(e) => setScrollProgress(e.nativeEvent.contentOffset.y, 320)}
-          scrollEventThrottle={16}
         >
           {/* Photos Card */}
           <View style={styles.card}>
@@ -486,19 +482,19 @@ export default function EditProfile() {
             <Text style={styles.cardTitle}>BASIC INFORMATION</Text>
             {isLoading ? (
               <>
-                <SkeletonLine width={'30%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
-                <SkeletonLine width={'20%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
-                <SkeletonLine width={'25%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={48} borderRadius={12} style={{ marginBottom: 16 }} />
-                <SkeletonLine width={'22%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={48} borderRadius={12} />
+                <SkeletonLine width={'30%'} style={{ marginBottom: SPACE.sm }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonLine width={'20%'} style={{ marginBottom: SPACE.sm }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonLine width={'25%'} style={{ marginBottom: SPACE.sm }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonLine width={'22%'} style={{ marginBottom: SPACE.sm }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} />
               </>
             ) : (
               <>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Name *</Text>
+                  <Text style={styles.label}>NAME *</Text>
                   <TextInput
                     ref={nameInputRef}
                     accessibilityLabel="Name"
@@ -509,14 +505,14 @@ export default function EditProfile() {
                       if (nameError && value.trim()) setNameError(null)
                     }}
                     placeholder="Enter your name"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     maxLength={50}
                   />
                   {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Age</Text>
+                  <Text style={styles.label}>AGE</Text>
                   <TextInput
                     ref={ageInputRef}
                     accessibilityLabel="Age"
@@ -528,7 +524,7 @@ export default function EditProfile() {
                       if (ageError && sanitized) setAgeError(null)
                     }}
                     placeholder="Enter your age"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     keyboardType="numeric"
                     maxLength={3}
                   />
@@ -536,53 +532,53 @@ export default function EditProfile() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Location</Text>
+                  <Text style={styles.label}>LOCATION</Text>
                   <TextInput
                     accessibilityLabel="Location"
                     style={styles.input}
                     value={location}
                     onChangeText={setLocation}
                     placeholder="City, State"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     maxLength={100}
                   />
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Occupation</Text>
+                  <Text style={styles.label}>OCCUPATION</Text>
                   <TextInput
                     accessibilityLabel="Occupation"
                     style={styles.input}
                     value={occupation}
                     onChangeText={setOccupation}
                     placeholder="e.g. Software Engineer"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     maxLength={100}
                   />
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Education</Text>
+                  <Text style={styles.label}>EDUCATION</Text>
                   <TextInput
                     accessibilityLabel="Education"
                     style={styles.input}
                     value={education}
                     onChangeText={setEducation}
                     placeholder="e.g. University of California"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     maxLength={100}
                   />
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Phone</Text>
+                  <Text style={styles.label}>PHONE</Text>
                   <TextInput
                     accessibilityLabel="Phone"
                     style={styles.input}
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="Phone number"
-                    placeholderTextColor={EMBER.textTertiary}
+                    placeholderTextColor={EMBER.textPlaceholder}
                     keyboardType="phone-pad"
                     maxLength={20}
                   />
@@ -596,19 +592,19 @@ export default function EditProfile() {
             <Text style={styles.cardTitle}>ABOUT YOU</Text>
             {isLoading ? (
               <>
-                <SkeletonLine width={'20%'} style={{ marginBottom: 8 }} />
-                <SkeletonBlock width={'100%'} height={100} borderRadius={12} />
+                <SkeletonLine width={'20%'} style={{ marginBottom: SPACE.sm }} />
+                <SkeletonBlock width={'100%'} height={100} borderRadius={EMBER_RADIUS.lg} />
               </>
             ) : (
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Bio</Text>
+                <Text style={styles.label}>BIO</Text>
                 <TextInput
                   accessibilityLabel="Bio"
                   style={[styles.input, styles.bioInput]}
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Tell people about yourself..."
-                  placeholderTextColor={EMBER.textTertiary}
+                  placeholderTextColor={EMBER.textPlaceholder}
                   multiline
                   numberOfLines={4}
                   maxLength={500}
@@ -624,7 +620,7 @@ export default function EditProfile() {
             {isLoading ? (
               <View style={styles.tagsContainer}>
                 {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-i-${i}`} width={100} height={32} borderRadius={14} />
+                  <SkeletonBlock key={`sk-i-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
                 ))}
               </View>
             ) : (
@@ -662,7 +658,7 @@ export default function EditProfile() {
             {isLoading ? (
               <View style={styles.tagsContainer}>
                 {[...Array(3)].map((_, i) => (
-                  <SkeletonBlock key={`sk-g-${i}`} width={100} height={32} borderRadius={14} />
+                  <SkeletonBlock key={`sk-g-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
                 ))}
               </View>
             ) : (
@@ -676,7 +672,7 @@ export default function EditProfile() {
             {isLoading ? (
               <View style={styles.tagsContainer}>
                 {[...Array(3)].map((_, i) => (
-                  <SkeletonBlock key={`sk-l-${i}`} width={100} height={32} borderRadius={14} />
+                  <SkeletonBlock key={`sk-l-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
                 ))}
               </View>
             ) : (
@@ -701,7 +697,7 @@ export default function EditProfile() {
                 value={tagInputValue}
                 onChangeText={setTagInputValue}
                 placeholder={tagInputPlaceholder}
-                placeholderTextColor={EMBER.textTertiary}
+                placeholderTextColor={EMBER.textPlaceholder}
                 autoFocus
                 maxLength={60}
                 returnKeyType="done"
@@ -736,116 +732,98 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: GUTTER,
   },
 
   // Card sections
-  /* 32 and 24, the radii every rebuilt card in the app uses. */
   card: {
     backgroundColor: EMBER.surfaceSunken,
-    borderRadius: 32,
-    padding: 24,
-    marginTop: 16,
+    borderRadius: EMBER_RADIUS.card,
+    padding: SPACE.xl,
+    marginTop: SPACE.xl,
   },
   cardTitle: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 10,
-    lineHeight: 15,
-    letterSpacing: 1.6,
-    color: EMBER.accent,
-    marginBottom: 16,
+    ...TYPE.label,
+    color: EMBER.textPrimary,
+    marginBottom: SPACE.lg,
   },
 
   // Form inputs
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: SPACE.lg,
   },
   label: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 12,
-    lineHeight: 18,
-    color: EMBER.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 8,
+    ...TYPE.label,
+    marginBottom: SPACE.sm,
   },
+  /* Size and family only: a lineHeight on a single-line TextInput misplaces the text on iOS. */
   input: {
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.3)',
-    /* 20, not 12: the app's inputs are softer than its cards, never squarer. */
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
+    borderColor: EMBER.separator,
+    borderRadius: EMBER_RADIUS.lg,
+    minHeight: CONTROL.lg,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    fontFamily: TYPE.body.fontFamily,
+    fontSize: TYPE.body.fontSize,
     backgroundColor: EMBER.surfaceMedia,
     color: EMBER.textPrimary,
   },
   inputError: {
-    borderColor: '#FF3B30',
+    borderColor: EMBER.destructive,
   },
   errorText: {
-    marginTop: 6,
-    color: '#FF3B30',
-    fontSize: 12,
-    fontWeight: '500',
+    ...TYPE.meta,
+    marginTop: SPACE.xs,
+    color: EMBER.destructive,
   },
   bioInput: {
     height: 100,
     textAlignVertical: 'top',
   },
   characterCount: {
+    ...TYPE.caption,
     textAlign: 'right',
-    fontSize: 12,
-    color: EMBER.textSecondary,
-    marginTop: 4,
+    marginTop: SPACE.xs,
   },
 
-  // Tags (matching profile tab style)
+  // Tags: the same chip as MatchingFields, one height and one fill.
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: SPACE.md,
   },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(45,44,44,0.4)',
+    backgroundColor: EMBER.surface,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    /* Fully round, like every other chip in the app. */
-    borderRadius: 9999,
-    marginRight: 8,
-    marginBottom: 8,
-    gap: 4,
+    borderColor: EMBER.separator,
+    paddingHorizontal: SPACE.lg,
+    minHeight: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
+    gap: SPACE.xs,
   },
   tagText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: EMBER.textPrimary,
+    ...TYPE.bodyStrong,
   },
   addTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderColor: EMBER.accent,
+    borderColor: EMBER.textTertiary,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderRadius: 9999,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    marginRight: 8,
-    marginBottom: 8,
-    gap: 4,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: SPACE.lg,
+    minHeight: CONTROL.md,
+    gap: SPACE.xs,
   },
   addTagText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: EMBER.accent,
+    ...TYPE.bodyStrong,
   },
 
   bottomPadding: {
-    height: 32,
+    height: SPACE.xxl,
   },
 
   // Modal
@@ -853,60 +831,59 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: GUTTER,
   },
   modalCard: {
-    borderRadius: 32,
-    padding: 16,
+    borderRadius: EMBER_RADIUS.lg,
+    padding: SPACE.xl,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(73,71,71,0.3)',
+    borderColor: EMBER.separator,
   },
   modalTitle: {
-    color: EMBER.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
+    ...TYPE.title,
+    marginBottom: SPACE.lg,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.3)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    borderColor: EMBER.separator,
+    borderRadius: EMBER_RADIUS.lg,
+    minHeight: CONTROL.lg,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    fontFamily: TYPE.body.fontFamily,
+    fontSize: TYPE.body.fontSize,
     color: EMBER.textPrimary,
     backgroundColor: EMBER.surfaceMedia,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 14,
+    gap: SPACE.md,
+    marginTop: SPACE.lg,
   },
   modalCancelButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginRight: 8,
-    backgroundColor: EMBER.surfaceMedia,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
   modalCancelText: {
-    color: EMBER.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPE.button,
   },
   modalSubmitButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xl,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
   modalSubmitButtonDisabled: {
     opacity: 0.5,
   },
   modalSubmitText: {
-    color: EMBER.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
+    ...TYPE.button,
+    color: EMBER.onGradient,
   },
 })

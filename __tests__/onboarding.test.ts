@@ -23,6 +23,7 @@ import {
   parseStoredOnboarding,
   previousStep,
   progressPercent,
+  mayParticipate,
   resumeStep,
   splitDateOfBirth,
   stepPayload,
@@ -111,6 +112,39 @@ describe('resuming', () => {
       resumeStep({ finishedOnServer: true, stored: stored('media'), isNewAccount: false })
     ).toBeNull()
     expect(resumeStep({ finishedOnServer: true, stored: null, isNewAccount: true })).toBeNull()
+  })
+
+  it('sends back an account the server will not let take part', () => {
+    /*
+     * Quit on step three, reinstall: nothing stored, not a new account this
+     * session. Without this it landed on the events tab, where RSVP and
+     * check-in refuse it (SCRUM-331), and never saw onboarding again.
+     */
+    expect(
+      resumeStep({ finishedOnServer: false, stored: null, isNewAccount: false, mayParticipate: false })
+    ).toBe('basics')
+    // Stored progress still wins over starting again.
+    expect(
+      resumeStep({ finishedOnServer: false, stored: stored('media'), isNewAccount: false, mayParticipate: false })
+    ).toBe('media')
+  })
+
+  it('leaves an older account with an age alone', () => {
+    // Pre-2026-08-10 accounts are `onboarded: false` and never backfilled.
+    expect(
+      resumeStep({ finishedOnServer: false, stored: null, isNewAccount: false, mayParticipate: true })
+    ).toBeNull()
+  })
+})
+
+describe('mayParticipate', () => {
+  it('matches the server gate', () => {
+    expect(mayParticipate(null)).toBe(false)
+    expect(mayParticipate({ onboarded: true, age: null })).toBe(true)
+    expect(mayParticipate({ onboarded: false, age: 30 })).toBe(true)
+    expect(mayParticipate({ onboarded: false, age: 18 })).toBe(true)
+    expect(mayParticipate({ onboarded: false, age: 17 })).toBe(false)
+    expect(mayParticipate({ onboarded: false, age: null })).toBe(false)
   })
 })
 

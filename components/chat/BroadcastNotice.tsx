@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * An organiser announcement, or a sponsored message.
@@ -87,33 +87,17 @@ export function BroadcastNotice({
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    borderRadius: 24,
+    gap: SPACE.md,
+    padding: SPACE.lg,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
     overflow: 'hidden',
   },
   rail: { width: 3, borderRadius: 9999 },
   railSponsored: { width: 3, borderRadius: 9999, backgroundColor: EMBER.textSecondary, opacity: 0.4 },
-  body: { flex: 1, gap: 6 },
-  label: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 10,
-    lineHeight: 15,
-    letterSpacing: 1.6,
-    color: EMBER.accent,
-  },
+  body: { flex: 1, gap: SPACE.sm },
+  label: { ...TYPE.label, color: EMBER.accent },
   labelSponsored: { color: EMBER.textSecondary },
-  text: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 26,
-    color: EMBER.textPrimary,
-  },
-  time: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 10,
-    lineHeight: 15,
-    color: 'rgba(174,170,170,0.6)',
-  },
+  text: TYPE.body,
+  time: { ...TYPE.caption, color: 'rgba(174,170,170,0.6)' },
 })
