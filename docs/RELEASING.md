@@ -90,8 +90,7 @@ xcrun simctl boot <udid>                       # e.g. iPhone 17 Pro, iOS 26.5
 SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild \
   -workspace ios/blendn.xcworkspace -scheme blendn \
   -configuration Release -sdk iphonesimulator \
-  -destination "id=<udid>" -derivedDataPath ios/build -quiet \
-  IPHONEOS_DEPLOYMENT_TARGET=15.1 build
+  -destination "id=<udid>" -derivedDataPath ios/build -quiet build
 xcrun simctl install <udid> ios/build/Build/Products/Release-iphonesimulator/blendn.app
 xcrun simctl launch  <udid> com.matryxsociallabs.blendn
 ```
@@ -722,6 +721,9 @@ Play's figures for bundle 15, against a local R8 build of `dev` at 5390f5b
 | Optimised | – | 83% |
 | Shrunk | – | 83% |
 
+On **SDK 57** (React Native 0.86, Expo modules 57) the same build is 13.8 MB of
+DEX, about 82% obfuscated / optimised / shrunk: more Kotlin ships, the ratio holds.
+
 **The first R8 build crashed before its first screen, and the error pointed at
 the wrong thing.** The crash read:
 
@@ -770,7 +772,17 @@ it. Two things a local release build cannot show, whatever R8 does. It is signed
 with the debug keystore, so Google Maps logs `Authorization failure` and draws
 an empty grid: the Android key only accepts the Play signing certificate. And it
 has no Firebase config, so there is no push token. Check both on the Play
-internal-track build. If it crashes:
+internal-track build.
+
+**On SDK 57 the emulator cannot soak the Pulse.** Media3 1.9 decodes feed video
+with the emulator's host-side decoder (`c2.goldfish.h264.decoder`; the host log
+prints `[h264 @ …] no frame!`), and after a few minutes of it the emulator's
+network and then the guest hang, and the emulator exits. The app is doing
+what it should — one player at a time, released between clips, visible in logcat
+as `ExoPlayerImpl Init` / `Release` pairs. Sign-in, the Pulse and navigation can
+be driven on the emulator; leave long feed-video sessions to a phone. While a
+video plays, `uiautomator dump` (and Maestro's view hierarchy) also stall, because
+the screen never goes idle. If it crashes:
 
 - **Build a control without R8** from the same checkout:
   `-Pandroid.enableProguardInReleaseBuilds=false -Pandroid.enableShrinkResourcesInReleaseBuilds=false`
@@ -875,8 +887,7 @@ old capability set does not acquire the new entitlement.
 
 Since **28 April 2026**, Apple refuses **any upload to App Store Connect** built
 with anything older than Xcode 26. EAS's default `image: auto` chooses by Expo
-SDK version, and this project is on **SDK 53**, so `auto` resolves to
-`macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
+SDK version; on **SDK 53** it resolved to `macos-sequoia-15.6-xcode-16.4`. Every build made that way carries:
 
 > *This build can no longer be submitted to the App Store.*
 
@@ -894,27 +905,19 @@ Connect or submitted for distribution.
 Nothing in the CLI output tells you. Build 102 went through the whole pipeline —
 built, submitted, "scheduled" — and died in App Store Connect afterwards.
 
-**Upgrading the SDK is not the fix here.** SDK 54 was tried on 2026-08-11 and
-rolled back with reasons — it raised the advisory count from 25 to 29 and
-Reanimated 4 removed `sharedTransitionTag`, which six components use. See
-`SECURITY_RELIABILITY_BACKLOG.md`.
-
-Pin the image instead, on both profiles in `eas.json`:
+**On SDK 57 the pin is `macos-tahoe-26.5-xcode-26.6`, on both profiles in
+`eas.json`.** SDK 57 needs Xcode 26.4 or newer (`expo-doctor` checks
+`>=26.4.0`), so the Xcode 26.0 image that carried SDK 53 through Apple's deadline
+can no longer build it. This is the image Expo pairs with SDK 57.
 
 ```json
-"ios": { "image": "macos-sequoia-15.6-xcode-26.0" }
+"ios": { "image": "macos-tahoe-26.5-xcode-26.6" }
 ```
 
-**The lowest Xcode 26 image, deliberately.** Newer ones exist —
-`macos-tahoe-26.5-xcode-26.6` is paired with SDK 57 — and the further the jump
-from SDK 53, the likelier some native module fails to compile. Take the smallest
-step that satisfies Apple.
-
-**Confirmed working, 2026-08-12.** SDK 53 / React Native 0.79.6 compiles cleanly
-under Xcode 26.0, submits without 90725, and reaches TestFlight. The pairing was
-an open question when the pin was made (#79) and is not one any more — so an SDK
-upgrade is not required to satisfy Apple's deadline, and the rollback recorded in
-`SECURITY_RELIABILITY_BACKLOG.md` stands.
+SDK 57 also raised the iOS deployment target to **16.4** (`ExpoModulesCore`
+requires it), which is set in `project.pbxproj` and the Podfile. Do not pass
+`IPHONEOS_DEPLOYMENT_TARGET=15.1` to a local `xcodebuild` any more: Swift pods
+built for 16.4 will not link into a 15.1 target.
 
 ## The native directories are committed, and that has a cost
 
