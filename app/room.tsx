@@ -9,6 +9,7 @@ import MatchScreen from '../components/screens/MatchScreen'
 import { NotificationBell } from '../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
+import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { forgetRoster } from '../lib/rosterMemory'
 import { revealReadiness } from '../lib/reveal'
@@ -93,6 +94,7 @@ function RoomInner() {
     }
   }, [user?.id])
   const [checkOutBusy, setCheckOutBusy] = useState(false)
+  const { showToast } = useToast()
 
   /*
    * Which room, from the server rather than from navigation.
@@ -242,14 +244,17 @@ function RoomInner() {
         // goes too -- otherwise reopening would repaint the room you just left.
         forgetRoster(eventId)
         router.back()
+      } else {
+        Logger.warn('presence', 'check out refused', { error: result.error })
+        showToast(result.error || "Couldn't check you out. You're still in this room.", 'error')
       }
-      else Logger.warn('presence', 'check out refused', { error: result.error })
     } catch (e) {
       Logger.error('presence', 'check out failed', { error: e })
+      showToast("Couldn't check you out. You're still in this room.", 'error')
     } finally {
       setCheckOutBusy(false)
     }
-  }, [eventId, checkOutBusy])
+  }, [eventId, checkOutBusy, showToast])
 
   return (
     /*
