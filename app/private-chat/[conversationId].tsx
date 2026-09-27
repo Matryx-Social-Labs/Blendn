@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -701,6 +702,12 @@ function PrivateChatInner() {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          /*
+           * Drag the conversation down to put the keyboard away — on iOS the
+           * keyboard follows the finger, the Messages behaviour people expect.
+           * Android has no interactive mode, so a drag dismisses it.
+           */
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}
