@@ -158,7 +158,7 @@ describe('the stylesheet, frame 1141:4643', () => {
 
   it('is on the shared type scale, with no local one beside it', () => {
     const src = SCREEN()
-    expect(src).toContain('EMBER_TYPE')
+    expect(src).toContain('...TYPE.')
     expect(src).not.toContain('TYPE_CARD_TITLE_SIZE')
     expect(src).not.toContain('TYPE_BODY_SIZE')
     expect(src).not.toContain('TYPE_META_SIZE')
