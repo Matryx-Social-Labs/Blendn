@@ -149,7 +149,9 @@ describe('the profile carries the Grid\'s two actions', () => {
     const src = SECTIONS()
     const actions = src.slice(src.indexOf('export function ProfileActions'))
     expect(actions.indexOf('onPress={onLike}')).toBeLessThan(actions.indexOf('onPress={onPress}'))
-    expect(actions.slice(0, actions.indexOf('onPress={onPress}'))).toContain('EMBER_GRADIENT')
+    // The Like is the flat accent fill (no gradient: see tasks/lessons.md).
+    expect(actions.slice(0, actions.indexOf('onPress={onPress}'))).toContain('styles.actionPrimary')
+    expect(src).toContain('actionPrimary: { backgroundColor: EMBER.accent }')
   })
 
   it('rolls a failed like back, and never a failed request', () => {
@@ -228,11 +230,13 @@ describe('measurements that came off the frame', () => {
     expect(SECTIONS()).toContain('PROFILE_HERO_ASPECT = 751 / 390')
   })
 
-  it('gives the bio 26pt leading, which nothing else on the screen gets', () => {
-    // The frame's own choice: it is the only long-form text here.
+  it('sets the bio as body text, leading and all, from the type scale', () => {
+    // The frame's 26pt leading was a one-off; the TYPE role sets line height.
     const src = SECTIONS()
     const bio = src.slice(src.indexOf('bio: {'))
-    expect(bio.slice(0, bio.indexOf('},'))).toContain('lineHeight: 26')
+    const rule = bio.slice(0, bio.indexOf('},'))
+    expect(rule).toContain('...TYPE.body')
+    expect(rule).not.toContain('lineHeight')
   })
 
   it('keeps occupation and education asymmetric', () => {

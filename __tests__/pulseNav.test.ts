@@ -41,8 +41,9 @@ describe('the overlay header, frame 1141:4819', () => {
   it('carries the frame height and fill, on the page margin', () => {
     const src = TOP_BAR()
     expect(src).toContain('TOP_BAR_HEIGHT = 64')
-    expect(src).toContain("backgroundColor: 'rgba(15,14,14,0.8)'")
-    expect(src).toContain('intensity={12}')
+    // Flat and opaque: no glass (tasks/lessons.md).
+    expect(src).toContain('backgroundColor: EMBER.bg')
+    expect(src).not.toContain('<BlurView')
     expect(src).toContain('paddingHorizontal: GUTTER')
   })
 
@@ -254,8 +255,17 @@ describe('the bar does not clip the button that overhangs it', () => {
     const src = NAV()
     const surface = src.slice(src.indexOf('  barSurface: {'), src.indexOf('  item: {'))
     expect(surface).toContain("overflow: 'hidden'")
-    expect(surface).toContain('borderTopLeftRadius: 48')
-    expect(surface).toContain('borderTopRightRadius: 48')
+    expect(surface).toContain('borderTopLeftRadius: EMBER_RADIUS.card')
+    expect(surface).toContain('borderTopRightRadius: EMBER_RADIUS.card')
+  })
+
+  it('the surface is flat and opaque: no blur, no glow', () => {
+    const src = NAV()
+    const surface = src.slice(src.indexOf('  barSurface: {'), src.indexOf('  item: {'))
+    expect(surface).toContain('backgroundColor: EMBER.surfaceSunken')
+    expect(surface).not.toContain('shadowColor')
+    expect(surface).not.toContain('elevation')
+    expect(src).not.toContain('<BlurView')
   })
 })
 
@@ -310,7 +320,7 @@ describe('the centre is the brand mark', () => {
      * thin outline logo look smudged.
      *
      * `#1B1931` is sampled from the artwork: both the mono lockup and the full
-     * lockup draw the mark in it, byte-identical. 7.69:1 on `gradientFrom`.
+     * lockup draw the mark in it, byte-identical. 7.69:1 on `EMBER.accent`.
      * Pinned because it is a value nobody can re-derive by reading the code —
      * it came from measuring two PNGs.
      */
@@ -352,8 +362,8 @@ describe('the centre is the brand mark', () => {
      * `monogram-white.png` strokes measure 5.0% of the mark's width, so 28pt
      * drew a 1.18pt line against ~2pt for every other glyph in the bar — the
      * lightest thing in the row while being the most important control in it.
-     * 32 puts it at 1.35pt and fits the 36.8pt square inscribed in the 52pt
-     * disc, holding the same ~61% fill the disc had at 56.
+     * 32 puts it at 1.35pt and fits the 39.6pt square inscribed in the 56pt
+     * disc.
      */
     const mark = NAV().slice(NAV().indexOf('centreMark: {'))
     const block = mark.slice(0, mark.indexOf('},'))
@@ -361,27 +371,33 @@ describe('the centre is the brand mark', () => {
     expect(block).toContain('height: 32')
   })
 
-  it('the bar is 88pt, the number TAB_BAR_CLEARANCE has always claimed', () => {
+  it('the bar is 92pt, the same number TAB_BAR_CLEARANCE claims', () => {
     /*
      * Seating the centre button made the disc — not the 48pt icon-plus-label
      * column — the row's tallest child, so the bar grew from 100 to 108 while
      * `TAB_BAR_CLEARANCE` stayed 88. Padding tolerated the drift; the Pulse's
      * hero card, which is sized against the bar's real top edge, did not.
      *
-     * 8 + 52 + max(inset - 6, 20) = 88 on a home-indicator phone.
+     * The disc is `CONTROL.lg`: 8 + 56 + max(inset - 6, 20) = 92 on a
+     * home-indicator phone.
      */
     const nav = NAV()
     expect(nav).toContain('TAB_BAR_PADDING_TOP = 8')
-    expect(nav).toContain('const CENTRE_SIZE = 52')
+    expect(nav).toContain('const CENTRE_SIZE = CONTROL.lg')
+    expect(nav).toContain('export const TAB_BAR_CLEARANCE = 92')
     expect(nav).toContain('export function tabBarTop')
-    expect(8 + 52 + Math.max(34 - 6, 20)).toBe(88)
+    expect(8 + 56 + Math.max(34 - 6, 20)).toBe(92)
   })
 
-  it('is gradient in every state, not only when something is live', () => {
+  it('is a flat accent disc in every state, not only when something is live', () => {
     // It was a status light and is now a logo; a mark that changes colour with
     // your proximity to an event is not a mark. The status it used to carry is
-    // in the badge and the breath instead.
+    // in the badge and the still dot instead.
     expect(NAV()).not.toContain('live ? (')
+    const src = NAV()
+    const button = src.slice(src.indexOf('  centreButton: {'), src.indexOf('  centreMark: {'))
+    expect(button).toContain('backgroundColor: EMBER.accent')
+    expect(src).not.toContain('LinearGradient')
   })
 })
 

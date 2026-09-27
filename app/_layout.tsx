@@ -87,7 +87,7 @@ function RootLayout() {
    * Weight comes from the family name, not from `fontWeight` — a custom font
    * on Android ignores `fontWeight` and silently renders regular, so
    * `Manrope_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
-   * Android from identical code. Every weight `EMBER_TYPE` names is loaded.
+   * Android from identical code. Every weight `TYPE` names is loaded.
    *
    * `useFonts` returns `[loaded, error]`, and a font that fails to load is not
    * a reason to hold the app behind the splash forever — the system font is a
@@ -227,11 +227,12 @@ function RootLayout() {
        * to do with whether a card is the right height, and each of them can
        * blank the screen on its own.
        */
+      const isPreview = __DEV__ && pathname.startsWith('/preview');
       const isAuthRoute =
         isIndex ||
         pathname === '/sign-in' ||
         pathname === '/forgot-password' ||
-        (__DEV__ && pathname.startsWith('/preview'));
+        isPreview;
 
       if (!user) {
         setRouteReady(false);
@@ -315,7 +316,10 @@ function RootLayout() {
        * `isAuthRoute` is a superset of `isIndex`, so this covers what it did
        * plus the two screens that were missing.
        */
-      if (isAuthRoute) {
+      // The design harness is open to both states: bouncing a signed-in
+      // session off `/preview` to the events tab made the fixtures reachable
+      // only after signing out.
+      if (isAuthRoute && !isPreview) {
         /*
          * A brand-new account is asked about itself once, here.
          *

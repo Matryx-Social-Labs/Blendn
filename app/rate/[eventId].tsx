@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
@@ -12,10 +13,19 @@ import {
 // The library one: react-native's own left the Submit button under the home
 // indicator, where taps are the system's (SCRUM-201).
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  useReducedMotion,
+  withTiming,
+} from 'react-native-reanimated'
 
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { useToast } from '../../components/Toast'
+import ScalePress from '../../components/motion/ScalePress'
+import { fadeInFast } from '../../components/motion/presence'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -59,6 +69,47 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/the
  * of nagging: someone who does not want to rate is giving us information too.
  */
 
+/*
+ * Motion, and why there is so little of it.
+ *
+ * This is a private note, not an achievement: no celebration, no confetti, no
+ * sound. What motion there is exists to stop the screen jumping.
+ *
+ * - **Between people, and into the done state**, the form fades out (120ms)
+ *   while the next one fades in rising 8pt (220ms, strong ease-out). Without
+ *   it Submit swapped one person's answers for a blank form in a single frame,
+ *   which reads as "did that save, or did it reset?". Both layers are absolute
+ *   in one stage, so the overlap is a crossfade and never a layout jump.
+ * - **A choice** eases its fill over 150ms, fires a selection tick and presses
+ *   to 0.97. It fires only when the answer changes, so tapping the chosen one
+ *   again does nothing.
+ *
+ * Reduce Motion: the rise goes, the fades and the fill stay. They are what say
+ * that something changed.
+ */
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
+
+const riseIn = () => {
+  'worklet'
+  const t = { duration: 220, easing: EASE_OUT }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 8 }] },
+    animations: {
+      opacity: withTiming(1, t),
+      transform: [{ translateY: withTiming(0, t) }],
+    },
+  }
+}
+const fadeInStage = FadeIn.duration(220).easing(EASE_OUT)
+const fadeOutStage = FadeOut.duration(120).easing(EASE_OUT)
+
+// A state change on a control someone is looking at: short, and ease-out.
+// The `transition` shorthand, not `transitionProperty` & co.: SDK 53's
+// react-native-web types declare those as CSS strings, which collide with
+// Reanimated's; the shorthand string satisfies both (see FilterControl).
+const FILL_TRANSITION = { transition: 'background-color 150ms cubic-bezier(0.23, 1, 0.32, 1)' }
+const LABEL_TRANSITION = { transition: 'color 150ms cubic-bezier(0.23, 1, 0.32, 1)' }
+
 const ISSUES: { value: PeerRatingIssue; label: string }[] = [
   { value: 'none', label: 'Nothing went wrong' },
   { value: 'uncomfortable', label: 'They made me uncomfortable' },
@@ -79,6 +130,22 @@ export default function RatePeers() {
   const [rating, setRating] = useState<number | null>(null)
   const [issue, setIssue] = useState<PeerRatingIssue>('none')
   const [note, setNote] = useState('')
+  const reduceMotion = useReducedMotion()
+  const entering = reduceMotion ? fadeInStage : riseIn
+
+  // One tick per changed answer. Re-tapping the current choice is not a change.
+  const chooseRating = useCallback((n: number) => {
+    setRating((prev) => {
+      if (prev !== n) Haptics.selectionAsync().catch(() => {})
+      return n
+    })
+  }, [])
+  const chooseIssue = useCallback((value: PeerRatingIssue) => {
+    setIssue((prev) => {
+      if (prev !== value) Haptics.selectionAsync().catch(() => {})
+      return value
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -144,102 +211,122 @@ export default function RatePeers() {
 
   const done = index >= peerIds.length
 
-  if (done) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centred}>
-          <Text style={styles.h1}>{peerIds.length === 0 ? 'Nothing to rate' : 'Thanks'}</Text>
-          <Text style={styles.body}>
-            {peerIds.length === 0
-              ? 'You can rate people you connected with, once the event has finished.'
-              : 'This is only ever seen by us. Nobody you rated will know.'}
-          </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => router.back()}>
-            <Text style={styles.primaryButtonText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    )
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {__DEV__ ? (
-          <Text style={styles.placeholderBanner}>
-            PLACEHOLDER DESIGN — logic is final, layout is not
-          </Text>
-        ) : null}
+      <View style={styles.stage}>
+        {done ? (
+          <Animated.View key="done" style={styles.layer} entering={entering}>
+            <View style={styles.centred}>
+              <Text style={styles.h1}>{peerIds.length === 0 ? 'Nothing to rate' : 'Thanks'}</Text>
+              <Text style={styles.body}>
+                {peerIds.length === 0
+                  ? 'You can rate people you connected with, once the event has finished.'
+                  : 'This is only ever seen by us. Nobody you rated will know.'}
+              </Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => router.back()}>
+                <Text style={styles.primaryButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        ) : (
+          /*
+            Keyed by person, so Submit and Skip both swap the whole form: the
+            old one fades out and the next rises in, and the new ScrollView
+            starts at the top rather than wherever the last one was left.
+          */
+          <Animated.View key={`peer-${index}`} style={styles.layer} entering={entering} exiting={fadeOutStage}>
+            <ScrollView contentContainerStyle={styles.scroll}>
+              {__DEV__ ? (
+                <Text style={styles.placeholderBanner}>
+                  PLACEHOLDER DESIGN — logic is final, layout is not
+                </Text>
+              ) : null}
 
-        <Text style={styles.h1}>How was meeting them?</Text>
-        <Text style={styles.body}>
-          {index + 1} of {peerIds.length}. Only we see this. They will never know you rated
-          them, or what you said.
-        </Text>
+              <Text style={styles.h1}>How was meeting them?</Text>
+              <Text style={styles.body}>
+                {index + 1} of {peerIds.length}. Only we see this. They will never know you rated
+                them, or what you said.
+              </Text>
 
-        {/*
-          * Deliberately not stars. A five-star row reads as a public review and
-          * that is the tone this must not have. Numbers are a placeholder for
-          * whatever the designer chooses -- the constraint is that it must not
-          * look like something the other person will read.
-          */}
-        <View style={styles.row}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <TouchableOpacity
-              key={n}
-              style={[styles.chip, rating === n && styles.chipSelected]}
-              onPress={() => setRating(n)}
-              accessibilityRole="button"
-              accessibilityLabel={`Rate ${n} out of 5`}
-            >
-              <Text style={[styles.chipText, rating === n && styles.chipTextSelected]}>{n}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {/*
+                * Deliberately not stars. A five-star row reads as a public review and
+                * that is the tone this must not have. Numbers are a placeholder for
+                * whatever the designer chooses -- the constraint is that it must not
+                * look like something the other person will read.
+                */}
+              <View style={styles.row}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <ScalePress
+                    key={n}
+                    haptic={false}
+                    onPress={() => chooseRating(n)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: rating === n }}
+                    accessibilityLabel={`Rate ${n} out of 5`}
+                  >
+                    <Animated.View style={[styles.chip, rating === n && styles.chipSelected, FILL_TRANSITION]}>
+                      <Animated.Text style={[styles.chipText, rating === n && styles.chipTextSelected, LABEL_TRANSITION]}>
+                        {n}
+                      </Animated.Text>
+                    </Animated.View>
+                  </ScalePress>
+                ))}
+              </View>
 
-        <Text style={styles.h2}>Did anything go wrong?</Text>
-        {ISSUES.map((opt) => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.option, issue === opt.value && styles.optionSelected]}
-            onPress={() => setIssue(opt.value)}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.optionText, issue === opt.value && styles.optionTextSelected]}>{opt.label}</Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.h2}>Did anything go wrong?</Text>
+              {ISSUES.map((opt) => (
+                <ScalePress
+                  key={opt.value}
+                  haptic={false}
+                  onPress={() => chooseIssue(opt.value)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: issue === opt.value }}
+                >
+                  <Animated.View style={[styles.option, issue === opt.value && styles.optionSelected, FILL_TRANSITION]}>
+                    <Animated.Text
+                      style={[styles.optionText, issue === opt.value && styles.optionTextSelected, LABEL_TRANSITION]}
+                    >
+                      {opt.label}
+                    </Animated.Text>
+                  </Animated.View>
+                </ScalePress>
+              ))}
 
-        {issue === 'harassment' && (
-          <Text style={styles.warning}>
-            This goes straight to our moderation team, not into any score. Someone will read
-            it.
-          </Text>
+              {/* Faded, not popped: it lands mid-form, under the finger's eye line. */}
+              {issue === 'harassment' && (
+                <Animated.Text style={styles.warning} entering={fadeInFast}>
+                  This goes straight to our moderation team, not into any score. Someone will read
+                  it.
+                </Animated.Text>
+              )}
+
+              <Text style={styles.h2}>Anything you want to tell us? (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={note}
+                onChangeText={setNote}
+                multiline
+                placeholder="Only we read this"
+                placeholderTextColor={EMBER.textPlaceholder}
+                maxLength={500}
+              />
+
+              <TouchableOpacity
+                style={[styles.primaryButton, (rating === null || submitting) && styles.buttonDisabled]}
+                onPress={submit}
+                disabled={rating === null || submitting}
+              >
+                <Text style={styles.primaryButtonText}>{submitting ? 'Saving…' : 'Submit'}</Text>
+              </TouchableOpacity>
+
+              {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
+              <TouchableOpacity style={styles.skipButton} onPress={advance} disabled={submitting}>
+                <Text style={styles.skipButtonText}>Skip this person</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </Animated.View>
         )}
-
-        <Text style={styles.h2}>Anything you want to tell us? (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={note}
-          onChangeText={setNote}
-          multiline
-          placeholder="Only we read this"
-          placeholderTextColor={EMBER.textPlaceholder}
-          maxLength={500}
-        />
-
-        <TouchableOpacity
-          style={[styles.primaryButton, (rating === null || submitting) && styles.buttonDisabled]}
-          onPress={submit}
-          disabled={rating === null || submitting}
-        >
-          <Text style={styles.primaryButtonText}>{submitting ? 'Saving…' : 'Submit'}</Text>
-        </TouchableOpacity>
-
-        {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
-        <TouchableOpacity style={styles.skipButton} onPress={advance} disabled={submitting}>
-          <Text style={styles.skipButtonText}>Skip this person</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   )
 }
@@ -247,6 +334,9 @@ export default function RatePeers() {
 /** Placeholder styling. Replace wholesale; nothing here is a decision. */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
+  // Outgoing and incoming layers overlap here during a swap, so both are absolute.
+  stage: { flex: 1 },
+  layer: { ...StyleSheet.absoluteFill },
   scroll: { padding: GUTTER, gap: SPACE.md },
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: GUTTER, gap: SPACE.md },
   loader: { marginTop: SPACE.xxxl },
@@ -281,7 +371,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.md,
     padding: SPACE.lg,
-    minHeight: 96,
+    minHeight: CONTROL.lg * 2,
     textAlignVertical: 'top',
     marginTop: SPACE.sm,
   },

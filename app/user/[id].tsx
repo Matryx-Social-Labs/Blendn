@@ -1,5 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -20,7 +21,7 @@ import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -46,9 +47,8 @@ interface UserProfileView {
   /**
    * The subset you both picked, already intersected by the server.
    *
-   * Drives the frame's one gradient chip. On the artboard that accent is
-   * decoration; here it marks the reason you might talk to them, which is the
-   * most useful thing on the screen.
+   * Drives the outlined chips. They mark the reason you might talk to them,
+   * which is the most useful thing on the screen.
    */
   sharedInterests?: string[]
   photos?: string[]
@@ -317,7 +317,9 @@ function UserProfileInner() {
     setConnectSending(true)
     try {
       const result = await apiClient.createMessageRequest(profile.user_id, message)
-      if (!result.success) {
+      if (result.success) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+      } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
       }
       /*
@@ -390,7 +392,7 @@ function UserProfileInner() {
     : profile?.name || 'Attendee'
 
   /*
-   * The frame's accent line is "PRO MEMBER • @blendn_julia". Neither exists --
+   * The frame's line under the name is "PRO MEMBER • @blendn_julia". Neither exists --
    * there is no membership tier and no username column -- so it carries what is
    * real and, in an unrevealed profile, is the whole point of `work_field`
    * living outside the identity gate: an attribute rather than an address.
@@ -612,10 +614,10 @@ const styles = StyleSheet.create({
   barButton: {
     width: CONTROL.md,
     height: CONTROL.md,
-    borderRadius: CONTROL.md / 2,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15,14,14,0.55)',
+    backgroundColor: EMBER.scrim,
   },
   pressed: { opacity: 0.6 },
 })

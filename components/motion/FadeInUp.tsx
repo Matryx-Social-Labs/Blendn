@@ -30,21 +30,23 @@ export default function FadeInUp({
 
   useEffect(() => {
     if (reduceMotion) {
-      progress.value = 1
+      progress.set(1)
       return
     }
-    progress.value = withDelay(
-      Math.max(0, delay),
-      withTiming(1, {
-        duration,
-        easing: Easing.bezier(...MOTION_EASING.entrance),
-      })
+    progress.set(
+      withDelay(
+        Math.max(0, delay),
+        withTiming(1, {
+          duration,
+          easing: Easing.bezier(...MOTION_EASING.entrance),
+        })
+      )
     )
   }, [delay, duration, progress, reduceMotion])
 
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [{ translateY: distance * (1 - progress.value) }],
+    opacity: progress.get(),
+    transform: [{ translateY: distance * (1 - progress.get()) }],
   }))
 
   return <Animated.View style={[{ opacity: reduceMotion ? 1 : 0 }, style, animatedStyle]}>{children}</Animated.View>

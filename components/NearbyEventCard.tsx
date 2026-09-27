@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
 import { Image } from 'expo-image'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
+import { StyleSheet, Text, View } from 'react-native'
+import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE, tint } from '../lib/theme'
+import ScalePress from './motion/ScalePress'
 
 type NearbyEvent = {
   id: string
@@ -32,8 +33,11 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
 
   const radiusImage = EMBER_RADIUS.lg
 
+  // Shrinks under the finger, no haptic: a card in a scrolling list is touched
+  // on the way into every scroll.
   return (
-    <Pressable
+    <ScalePress
+      haptic={false}
       onPress={() => onPress?.(event)}
       onLongPress={() => onLongPress?.(event)}
       delayLongPress={320}
@@ -96,7 +100,7 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
             </View>
           </View>
       </Frame>
-    </Pressable>
+    </ScalePress>
   )
 }
 
@@ -124,7 +128,7 @@ function Frame({
 }) {
   const gradient = (
     <LinearGradient
-      colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.42)', 'rgba(0,0,0,0.74)']}
+      colors={[tint(EMBER.bg, 0.08), tint(EMBER.bg, 0.42), tint(EMBER.bg, 0.74)]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
       style={{ ...StyleSheet.absoluteFill, borderRadius: radius }}

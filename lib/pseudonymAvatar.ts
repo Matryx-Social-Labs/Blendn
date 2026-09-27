@@ -37,8 +37,9 @@
 
 /**
  * A palette that stays legible on `EMBER.surface` and never reads as the
- * accent — the accent means "live" or "selected" everywhere else, and an avatar
- * that borrowed it would look like a state rather than a person.
+ * accent, `success` or white — the accent is a screen's primary action,
+ * `success` means live and a white fill means selected, and an avatar that
+ * borrowed any of them would look like a state rather than a person.
  */
 const HUES = [
   ['#3E5C76', '#5C89A8'],

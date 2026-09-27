@@ -465,7 +465,7 @@ export default function EditProfile() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>PHOTOS</Text>
             {isLoading ? (
-              <SkeletonBlock width={'100%'} height={160} borderRadius={12} />
+              <SkeletonBlock width={'100%'} height={160} borderRadius={EMBER_RADIUS.md} />
             ) : authUser ? (
               <PhotoManager
                 userId={authUser.id}
@@ -482,13 +482,13 @@ export default function EditProfile() {
             {isLoading ? (
               <>
                 <SkeletonLine width={'30%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
                 <SkeletonLine width={'20%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
                 <SkeletonLine width={'25%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} style={{ marginBottom: SPACE.lg }} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
                 <SkeletonLine width={'22%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.lg} />
+                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} />
               </>
             ) : (
               <>
@@ -759,7 +759,8 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: EMBER.separator,
-    borderRadius: EMBER_RADIUS.lg,
+    // Pill, like the sign-in and onboarding inputs. The multiline bio overrides it.
+    borderRadius: EMBER_RADIUS.pill,
     minHeight: CONTROL.lg,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
@@ -776,8 +777,10 @@ const styles = StyleSheet.create({
     marginTop: SPACE.xs,
     color: EMBER.destructive,
   },
+  // A box, not a control: a pill radius on a 100pt multiline field is a stadium.
   bioInput: {
     height: 100,
+    borderRadius: EMBER_RADIUS.lg,
     textAlignVertical: 'top',
   },
   characterCount: {
@@ -809,6 +812,7 @@ const styles = StyleSheet.create({
   addTag: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: EMBER.surface,
     borderColor: EMBER.textTertiary,
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -828,7 +832,7 @@ const styles = StyleSheet.create({
   // Modal
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: EMBER.backdrop,
     justifyContent: 'center',
     paddingHorizontal: GUTTER,
   },
@@ -846,7 +850,7 @@ const styles = StyleSheet.create({
   modalInput: {
     borderWidth: 1,
     borderColor: EMBER.separator,
-    borderRadius: EMBER_RADIUS.lg,
+    borderRadius: EMBER_RADIUS.pill,
     minHeight: CONTROL.lg,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,

@@ -20,7 +20,7 @@ import {
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { useAuth } from '../../lib/useAuth'
 
@@ -239,7 +239,7 @@ function BasicsScreenInner() {
           cachePolicy="memory-disk"
         />
         <LinearGradient
-          colors={['rgba(15,14,14,0)', '#0F0E0E']}
+          colors={[EMBER.bgClear, EMBER.bg]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: SPACE.md },
   dateSmall: { flex: 1 },
   dateLarge: { flex: 1.5 },
-  error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
+  error: { ...TYPE.meta, color: EMBER.destructive },
 
   curationCard: {
     width: '100%',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
   curationText: { padding: SPACE.xl, gap: SPACE.xs },
-  curationEyebrow: { ...TYPE.label, color: EMBER.accent },
+  curationEyebrow: { ...TYPE.label, color: EMBER.textSecondary },
   curationCaption: TYPE.meta,
 })
 

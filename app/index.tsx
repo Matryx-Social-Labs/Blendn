@@ -58,6 +58,15 @@ const MONOGRAM_HEIGHT = 96
 /** ~200pt wide at this ratio — the hero of the signed-out screen. */
 const LOCKUP_HEIGHT = 60
 
+/*
+ * Google's own button chrome — white fill, #1F1F1F ink — from its sign-in
+ * branding guidelines. Brand colours, not ours, so they stay literal.
+ */
+// design-exception: Google sign-in button fill, per Google's branding guidelines
+const GOOGLE_FILL = '#FFFFFF'
+// design-exception: Google sign-in button text and mark, per Google's branding guidelines
+const GOOGLE_INK = '#1F1F1F'
+
 function IndexInner() {
   const { user, loading } = useAuth()
   const [signingIn, setSigningIn] = useState(false)
@@ -288,10 +297,10 @@ function IndexInner() {
             ]}
           >
             {signingIn ? (
-              <ActivityIndicator color="#1F1F1F" />
+              <ActivityIndicator color={GOOGLE_INK} />
             ) : (
               <>
-                <AntDesign name="google" size={ICON.md} color="#1F1F1F" style={styles.googleMark} />
+                <AntDesign name="google" size={ICON.md} color={GOOGLE_INK} style={styles.googleMark} />
                 <Text style={styles.googleLabel}>Continue with Google</Text>
               </>
             )}
@@ -350,8 +359,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: GUTTER,
-    // Transparent so the root BackgroundGradient shows through, rather than
-    // this screen owning a fourth background of its own.
+    // Transparent so the root's flat `EMBER.bg` shows through, rather than
+    // this screen owning a background of its own.
     backgroundColor: 'transparent',
   },
   splashContainer: {
@@ -396,25 +405,27 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     height: CONTROL.lg,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: GOOGLE_FILL,
   },
   googleMark: {
     marginRight: SPACE.xxs,
   },
   /*
-   * 20, to sit level with the Apple button beside it.
+   * 21, to sit level with the Apple button beside it.
    *
    * `AppleAuthentication.AppleAuthenticationButton` draws its own label — the
    * system renders it and there is no prop for the type. Measured on device at
-   * 56pt tall it puts 20pt of glyph on screen; ours at `fontSize: 16` put 15.
-   * A third smaller, side by side, on the first screen anybody sees.
+   * 56pt tall it puts 20pt of glyph on screen; ours at `fontSize: 16` put 15,
+   * a third smaller, side by side, on the first screen anybody sees. Glyphs
+   * render about a point under the font size, so `fontSize: 21` is what draws
+   * the Apple button's 20.
    *
    * So the two we control move to meet the one we do not. If the Apple button
    * ever changes size, this is the number that has to follow it — and the way
    * to check is to measure a screenshot, not to look at one.
    */
   // design-exception: sized to the system-drawn Apple button label, which has no size prop
-  googleLabel: { color: '#1F1F1F', fontSize: 21, fontWeight: '500' },
+  googleLabel: { color: GOOGLE_INK, fontSize: 21, fontWeight: '500' },
   appleButton: {
     width: '100%',
     height: CONTROL.lg,
@@ -439,7 +450,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
+    borderColor: EMBER.separator,
   },
   // design-exception: level with `googleLabel` and the system-drawn Apple button — see the note there
   emailLabel: { color: EMBER.textPrimary, fontSize: 21, fontWeight: '500' },

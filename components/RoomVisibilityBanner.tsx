@@ -20,9 +20,9 @@ import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
  *  - **The action is the opposite state**, not a settings link. The way out is
  *    in the thing that tells you where you are; sending someone to Settings to
  *    change it means they will not.
- *  - **Anonymous is the quiet one.** The named state gets the warm border,
- *    because it is the one worth noticing. Styling both loudly would make the
- *    safe state feel like a warning.
+ *  - **Anonymous is the quiet one.** The named state gets the `surface`
+ *    fill and a `separator` border, because it is the one worth noticing.
+ *    Styling both loudly would make the safe state feel like a warning.
  *
  * ## The capability gate, and why it is one-directional
  *
@@ -80,7 +80,7 @@ export function RoomVisibilityBanner({
       <Ionicons
         name={hidden ? 'cloud-offline-outline' : named ? 'eye-outline' : 'eye-off-outline'}
         size={ICON.md}
-        color={named ? EMBER.accent : EMBER.textSecondary}
+        color={named ? EMBER.textPrimary : EMBER.textSecondary}
       />
       <View style={styles.copy}>
         <Text style={styles.title} numberOfLines={2}>
@@ -131,13 +131,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   anonymous: { backgroundColor: EMBER.surfaceSunken, borderColor: 'transparent' },
-  named: { backgroundColor: EMBER.surface, borderColor: 'rgba(255,144,109,0.4)' },
+  named: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
   // `flex: 1` so a long pseudonym wraps rather than pushing the action off the
   // right edge — the way out must never be the thing that gets clipped.
   copy: { flex: 1, gap: SPACE.xxs },
   title: { ...TYPE.meta, color: EMBER.textPrimary },
   reason: { ...TYPE.meta, color: EMBER.textTertiary },
-  action: { ...TYPE.meta, color: EMBER.accent },
+  action: { ...TYPE.label, color: EMBER.textPrimary },
   actionBlocked: { color: EMBER.textTertiary },
   pressed: { opacity: 0.7 },
 })

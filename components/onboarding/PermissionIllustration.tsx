@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, tint, TYPE } from '../../lib/theme'
 
 /**
  * The picture in the middle of a permission screen.
@@ -55,20 +55,15 @@ export function NotificationIllustration() {
       <Image source={NOTIFICATION_ART} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
       {/* Bottom-to-top scrim so the card reads against a bright patch of art. */}
       <LinearGradient
-        colors={['rgba(15,14,14,0)', 'rgba(15,14,14,0.75)']}
+        colors={[EMBER.bgClear, tint(EMBER.bg, 0.75)]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
 
       <View style={styles.bubble}>
-        <LinearGradient
-          colors={[...EMBER_GRADIENT.colors]}
-          start={EMBER_GRADIENT.start}
-          end={EMBER_GRADIENT.end}
-          style={styles.bubbleIcon}
-        >
-          <Ionicons name="flash" size={ICON.md} color={EMBER.onGradientChip} />
-        </LinearGradient>
+        <View style={styles.bubbleIcon}>
+          <Ionicons name="flash" size={ICON.md} color={EMBER.textPrimary} />
+        </View>
 
         <View style={styles.bubbleText}>
           <View style={styles.bubbleTop}>
@@ -130,13 +125,13 @@ export function LocationIllustration() {
       </View>
 
       <LinearGradient
-        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']}
+        colors={[EMBER.bgClear, tint(EMBER.bg, 0.8)]}
         style={styles.mapFooter}
         pointerEvents="none"
       />
       <View style={styles.mapFooterText}>
         <View style={styles.zoneRow}>
-          <Ionicons name="location" size={ICON.sm} color={EMBER.accent} />
+          <Ionicons name="location" size={ICON.sm} color={EMBER.textPrimary} />
           <Text style={styles.zone}>CURRENT ZONE: OLD GOA</Text>
         </View>
         <View style={styles.divider} />
@@ -154,7 +149,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: EMBER.separator,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -169,14 +164,16 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     padding: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(45,44,44,0.85)',
+    backgroundColor: EMBER.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: EMBER.separator,
   },
   bubbleIcon: {
-    width: 44,
-    height: 44,
+    width: CONTROL.md,
+    height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
+    // One step darker than the `surface` bubble it sits in, or the well vanishes.
+    backgroundColor: EMBER.surfaceSunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -184,17 +181,17 @@ const styles = StyleSheet.create({
   bubbleTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bubbleTitle: TYPE.bodyStrong,
   bubbleWhen: { ...TYPE.caption, color: EMBER.textTertiary },
-  bubbleBody: EMBER_TYPE.helper,
+  bubbleBody: { ...TYPE.meta, color: EMBER.textTertiary },
 
   mapDim: { opacity: 0.4 },
-  // 32px in from every edge — the frame measures its pin positions against
+  // 32pt in from every edge — the frame measures its pin positions against
   // this box, not against the card.
-  pinField: { position: 'absolute', top: 32, left: 32, right: 32, bottom: 32 },
+  pinField: { position: 'absolute', top: SPACE.xxl, left: SPACE.xxl, right: SPACE.xxl, bottom: SPACE.xxl },
 
   nearby: {
     position: 'absolute',
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: 'rgba(45,44,44,0.8)',
+    backgroundColor: EMBER.surface,
     padding: 2,
     overflow: 'hidden',
   },
@@ -206,7 +203,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
     padding: 4,
   },
   youPhoto: {
@@ -221,9 +218,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.sm,
     paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
   },
-  youTagText: { ...TYPE.caption, color: EMBER.onGradientChip },
+  youTagText: { ...TYPE.caption, color: EMBER.bg },
 
   ring: {
     position: 'absolute',
@@ -235,22 +232,22 @@ const styles = StyleSheet.create({
     height: 192,
     borderRadius: EMBER_RADIUS.pill,
     borderWidth: 1,
-    borderColor: 'rgba(255,144,109,0.2)',
-    opacity: 0.5,
+    // `separator` at full strength: the hairline is already a 10% white, and
+    // the outer ring fades it further.
+    borderColor: EMBER.separator,
   },
   ringOuter: {
     width: 288,
     height: 288,
     // design-exception: half the ring's 288pt size, to centre it — geometry, not spacing
     marginTop: -144,
-    borderColor: 'rgba(255,144,109,0.1)',
-    opacity: 0.3,
+    opacity: 0.5,
   },
 
   mapFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 },
   mapFooterText: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl, gap: SPACE.sm },
   zoneRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   zone: { ...TYPE.label, color: EMBER.textPrimary },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
-  zoneSub: EMBER_TYPE.helper,
+  divider: { height: 1, backgroundColor: EMBER.separator },
+  zoneSub: { ...TYPE.meta, color: EMBER.textTertiary },
 })

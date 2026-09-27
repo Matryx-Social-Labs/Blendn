@@ -28,10 +28,11 @@ import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme
  *
  * The frame fills "Pulse" with the 135° gradient. React Native cannot gradient
  * a glyph without `@react-native-masked-view`, which is a native module and
- * therefore a new dev client for everyone testing. The onboarding headlines
- * already print their accent half in flat `EMBER.accent` for the same reason,
- * so this matches eight screens that shipped rather than introducing a ninth
- * treatment. Noted in `docs/PULSE.md`.
+ * therefore a new dev client for everyone testing, so the accent word is flat
+ * `EMBER.accent`. The Pulse has no primary action, so its title's accent word
+ * is the screen's one accent (docs/DESIGN_SYSTEM.md). The onboarding headlines
+ * print their second half in `textPrimary` instead: there the accent is the
+ * CTA's. Noted in `docs/PULSE.md`.
  */
 /** The block's height: the headline row, the gap, and the search row. */
 export const PULSE_HEADER_HEIGHT = TYPE.display.lineHeight + SPACE.lg + CONTROL.md
@@ -258,15 +259,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    minWidth: 18,
-    height: 18,
+    minWidth: CONTROL.badge,
+    height: CONTROL.badge,
     paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterCountText: { ...TYPE.caption, color: EMBER.onGradientChip },
+  filterCountText: { ...TYPE.caption, color: EMBER.bg },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',

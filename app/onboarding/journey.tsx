@@ -11,6 +11,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Dimensions } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
+import { GUTTER, SPACE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -129,7 +130,8 @@ export default function JourneyScreen() {
             label="Field of work"
             helper="The only part of this shown in a room. Your job title and employer are not."
           >
-            <EmberChipRow pack width={Dimensions.get('window').width - 48 - 32}>
+            {/* The page gutters, less the card's own SPACE.lg padding each side. */}
+            <EmberChipRow pack width={Dimensions.get('window').width - GUTTER * 2 - SPACE.lg * 2}>
               {fields.map((field) => (
                 <EmberChip
                   key={field.slug}

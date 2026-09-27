@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import { Logger } from '../lib/logger'
 import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
-import { CONTROL, EMBER, GUTTER, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../lib/theme'
 
 export default function BlockedUsers() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
   avatar: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: EMBER_RADIUS.pill,
   },
   avatarPlaceholder: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     alignItems: 'center',
     justifyContent: 'center',

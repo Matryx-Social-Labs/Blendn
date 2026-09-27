@@ -195,8 +195,8 @@ const styles = StyleSheet.create({
    * The same chip as `profile/MatchingFields`, which is one card below this one
    * on the same screen.
    *
-   * They disagreed: work field filled with the accent when picked, interests
-   * went to a white outline — two answers to "what does chosen look like",
+   * They disagreed: work field filled when picked, interests went to a white
+   * outline — two answers to "what does chosen look like",
    * a thumb-scroll apart. This file also carried six raw colour values, where
    * the other is on `EMBER` throughout, so aligning to it is the direction that
    * removes literals rather than adding them.
@@ -207,15 +207,16 @@ const styles = StyleSheet.create({
    * is built, these two are its first callers.
    */
   chipIdle: {
-    backgroundColor: 'rgba(45,44,44,0.4)',
-    borderColor: 'rgba(73,71,71,0.1)',
+    backgroundColor: EMBER.surface,
+    borderColor: EMBER.separator,
   },
+  // Selected is the neutral answer every screen uses: white fill, page-colour
+  // text. The accent is the screen's primary action (docs/DESIGN_SYSTEM.md).
   chipSelected: {
-    backgroundColor: EMBER.accent,
-    borderColor: EMBER.accent,
+    backgroundColor: EMBER.textPrimary,
+    borderColor: EMBER.textPrimary,
   },
   // One weight in both states, so selecting a chip does not change its width.
   chipText: TYPE.bodyStrong,
-  /* Dark on warm — white on the accent fails contrast. */
-  chipTextSelected: { color: EMBER.onGradientChip },
+  chipTextSelected: { color: EMBER.bg },
 })

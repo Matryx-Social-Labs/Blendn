@@ -851,7 +851,11 @@ export default function Match({
       setConnectSending(true)
       try {
         const result = await apiClient.createMessageRequest(target.user_id, message)
-        if (!result.success) {
+        if (result.success) {
+          // The "Requested" crossfade and this tap land on the same frame.
+          // Success only: a request that already existed is not a new send.
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        } else {
           Logger.warn('match', 'connect request failed', { error: result.error })
         }
         setRequested((prev) => ({ ...prev, [target.user_id]: true }))
@@ -933,7 +937,7 @@ export default function Match({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onPullToRefresh}
-            tintColor={EMBER.accent}
+            tintColor={EMBER.textSecondary}
           />
         }
         /*
@@ -1063,7 +1067,7 @@ export default function Match({
               style={({ pressed }) => [styles.more, pressed && styles.pressed]}
             >
               {loadingMoreAttendees ? (
-                <ActivityIndicator color={EMBER.accent} />
+                <ActivityIndicator color={EMBER.textSecondary} />
               ) : (
                 <Text style={styles.moreLabel}>Show more</Text>
               )}
@@ -1155,13 +1159,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    backgroundColor: EMBER.surface,
   },
-  chipOn: { backgroundColor: EMBER.surface, borderColor: EMBER.textSecondary },
+  // The design system's selected chip: a `textPrimary` fill with `bg` text.
+  chipOn: { backgroundColor: EMBER.textPrimary },
   chipLabel: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
-  chipLabelOn: { color: EMBER.textPrimary },
+  chipLabelOn: { color: EMBER.bg },
 
   // The screen gutter, cards 24 apart.
   list: { paddingHorizontal: GUTTER, gap: SPACE.xl },

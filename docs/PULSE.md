@@ -4,7 +4,7 @@ The home screen. Frame `1141:4643` in Figma file `HO0UnAEV5djzo0h4q7Y2vi`,
 canvas **🕓 Updates**. For designers, for testers, and for whoever changes it
 next.
 
-Design tokens are in [`DESIGN_TOKENS.md`](./DESIGN_TOKENS.md). The frame-by-frame
+Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md). The frame-by-frame
 audit of all nine screens is [`HOMEPAGE_AUDIT.md`](./HOMEPAGE_AUDIT.md).
 
 ---
@@ -40,13 +40,38 @@ strip, below.
 | "Featured" + VIEW ALL | `SectionHeader` | — |
 | Featured cards | `FeaturedCard` | `events` with a cover image |
 | "Upcoming" | `SectionHeader` | — |
-| Upcoming cards | `UpcomingCard` | `events` |
+| Upcoming day headings + rows | `groupByDay` + `UpcomingCard` | `events` |
 | Card labels | `lib/pulse.ts` | `startTime`, `currentCapacity`, `distance` |
 
 Every number on a card comes from a real column. The frame's `142 Joined`,
 `1.2 mi` and `28` are invented values, but each has something behind it —
 `currentCapacity`, `distance`, `startTime` — which is what separates these two
 sections from the Nearby one below.
+
+---
+
+## The cards, after a look at Luma (2026-09-28)
+
+Researched on Refero against Luma's event list, District, Airbnb and Apple
+Invites. Two changes need nothing from the server and are built:
+
+- **Upcoming is grouped by day.** "Today · Saturday", "Tomorrow · Sunday",
+  "Nov 2 · Monday" — said once above each day's events (`groupByDay`,
+  `dayGroupLabel`), so each card carries only its time (`timeLabel`). Each card
+  is now a row: time and category, title, venue, joined and distance on the
+  left; a 96pt square photo with the heart on the right; the whole row opens the
+  event. The description and the "Details" button are gone — the event page
+  has both.
+- **Featured puts its words under the photo, not on it.** None of the strong
+  references print text on an organiser's photograph behind a scrim. The photo
+  is square (a 4:5 photo plus the words no longer fits above the tab bar), and
+  `featuredCardLayout` budgets the two-line title and meta line
+  (`FEATURED_BODY_HEIGHT`) into the fit.
+
+Not built, because the events response doesn't carry the data: "By {host}"
+with the organiser's avatar, a stack of attendee faces beside the joined count,
+and a live "● 18 checked in now" line for events in progress (the thing no
+event app in the research could show, and Blendn can, from check-ins).
 
 ---
 

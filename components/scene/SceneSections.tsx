@@ -27,7 +27,7 @@ import Animated, {
 import ScalePress from '../motion/ScalePress'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
-import { CONTROL, EMBER, EMBER_RADIUS, EMBER_TYPE, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The Scene's body sections — frame `1141:4875` and `1227:2903`.
@@ -54,7 +54,7 @@ export const MAP_HEIGHT = 256
  * became the last thing on a ~1900pt page, which put the only action this
  * screen has as far from the reader as the layout allows.
  *
- * `SCENE_CTA_INSET` is the same 24 gutter as the content grid.
+ * `SCENE_CTA_INSET` is the same `GUTTER` as the content grid.
  *
  * ## 56, not the frame's 74 — a deliberate deviation
  *
@@ -72,11 +72,11 @@ export const MAP_HEIGHT = 256
  * Recorded in `docs/SCENE.md` so the
  * frame and the build disagreeing here is a decision and not drift.
  */
-export const SCENE_CTA_HEIGHT = 56
-export const SCENE_CTA_INSET = 24
+export const SCENE_CTA_HEIGHT = CONTROL.lg
+export const SCENE_CTA_INSET = GUTTER
 
 /** The CTA's icon. Sized here, not at the call site, because it sets the pill's height. */
-export const SCENE_CTA_ICON = 24
+export const SCENE_CTA_ICON = ICON.lg
 
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
@@ -89,12 +89,10 @@ export function SceneHeading({ children }: { children: string }) {
 /**
  * The prose under a heading. `TYPE.body` on `textSecondary`.
  *
- * The frame accents the event's own name inside the paragraph in #FF906D. That
- * is a *designed* sentence, not something derivable from an arbitrary
- * organiser's description, so it is not reproduced by pattern-matching the
- * title into the body — which would highlight the word "The" in
- * "The Warehouse" and read as a rendering fault. `accent` exists for when a
- * caller genuinely has a phrase to lift.
+ * A caller with a phrase to lift (the event's own name, matched exactly)
+ * wraps it in `SceneBodyAccent`, which raises it from `textSecondary` to
+ * `textPrimary`. Not the orange the frame draws: that belongs to the CTA, the
+ * screen's one accent (docs/DESIGN_SYSTEM.md).
  */
 export function SceneBody({ children }: { children: React.ReactNode }) {
   return <Text style={styles.body}>{children}</Text>
@@ -294,12 +292,11 @@ export function SceneMap({
       <Marker
         coordinate={{ latitude, longitude }}
         /*
-         * The accent's flat end, as the static version used. The frame draws a
-         * 48pt gradient circle with a white glyph, which neither the static API
-         * nor a default marker can render; a flat accent pin reads as ours
-         * rather than as Google's default red, without shipping an icon.
+         * `textPrimary`, not the accent: the accent is the CTA's on this screen
+         * (docs/DESIGN_SYSTEM.md). A white pin still reads as ours rather than
+         * as Google's default red, without shipping an icon.
          */
-        pinColor={EMBER.gradientFrom}
+        pinColor={EMBER.textPrimary}
       />
     </MapView>
   ) : null
@@ -453,35 +450,29 @@ export function SceneGallery({
  * `house_rules` is still free text and still a different thing.
  */
 /**
- * The frame's two tile tints, in its order.
+ * The tile tints, in order.
  *
- * `1141:4919` is `#F79EFF` and `1141:4925` is `#FF6D8D` — the violet and rose
- * stops, deliberately not the orange end, so a pair of tiles reads as two
+ * `1141:4919` is `#F79EFF` and `1141:4925` is `#FF6D8D`. The violet stays
+ * (`EMBER.violet`); the rose was the brand gradient's pink end and is now
+ * `textSecondary`, because the accent family is the CTA's on this screen
+ * (docs/DESIGN_SYSTEM.md). Two tones still keep a pair of tiles reading as two
  * things rather than one element repeated.
  *
  * Alternated by index rather than mapped per amenity: the vocabulary is
  * curated and open-ended, and a per-slug colour map would leave every amenity
  * added later with no colour, or send somebody to the client to add one.
- *
- * The rose is `EMBER.gradientTo` exactly. The violet has no token — it is the
- * one literal here, and it stays a literal rather than being swapped for
- * `gradientFrom`, which is the orange the frame specifically avoids.
  */
-export const AMENITY_TINTS = ['#F79EFF', EMBER.gradientTo] as const
+export const AMENITY_TINTS = [EMBER.violet, EMBER.textSecondary] as const
 
 export function SceneAmenity({
   icon,
   title,
   subtitle,
   /**
-   * The frame gives each tile its **own** colour, not the accent.
-   *
-   * `local_bar` is `#F79EFF` and `camera` is `#FF6D8D` — the violet and rose
-   * stops of the brand gradient rather than its orange end. Painting them both
-   * `EMBER.accent`, which is what this did, collapses a deliberate two-colour
-   * pair into one and makes the row look like a repeated element.
+   * The glyph colour. Callers alternate `AMENITY_TINTS` so a pair of tiles
+   * reads as two things; alone, a tile is `textSecondary`, never the accent.
    */
-  color = EMBER.accent,
+  color = EMBER.textSecondary,
   /**
    * The frame's two icons are **different sizes** — `1141:4919` is 18 and
    * `1141:4925` is 20 — and both were built at 20.
@@ -532,10 +523,8 @@ export function SceneAmenity({
 /**
  * The sticky call to action. Frame `1227:2904`.
  *
- * A gradient-bordered pill: the gradient is the border, and a near-opaque fill
- * sits inside it at 1pt inset. Drawn as two views because React Native has no
- * gradient border — the outer LinearGradient with 1pt of padding *is* the
- * stroke.
+ * A flat pill: the screen's one accent fill while there is something still to
+ * do, a quiet `surfaceSunken` pill with a hairline once it is done.
  *
  * ## The price is not drawn
  *
@@ -635,7 +624,7 @@ export function SceneCTA({
   onPress,
 }: {
   state?: SceneCTAState
-  /** Drawn in the colour the pill hands it — dark on the accent fill, accent on the quiet one. */
+  /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
   onPress?: () => void
 }) {
@@ -678,11 +667,10 @@ export function SceneCTA({
         a flat, high-contrast pill with no shadow, no blur and no gradient:
         contrast alone lifts it off the page. So the to-do states are the
         accent, solid, with the dark on-accent text; the done states step back
-        to a dark surface with a hairline edge, and the accent moves into the
-        icon.
+        to a dark surface with a hairline edge and a `textPrimary` icon.
       */}
       <View style={[styles.ctaFill, quiet ? styles.ctaFillQuiet : styles.ctaFillLoud]}>
-        {icon?.(quiet ? EMBER.accent : EMBER.onGradient)}
+        {icon?.(quiet ? EMBER.textPrimary : EMBER.onGradient)}
         {/* Skips the entrance on first paint; only a *change* of label animates. */}
         <LayoutAnimationConfig skipEntering>
           <Animated.Text
@@ -775,7 +763,7 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
 const styles = StyleSheet.create({
   heading: { ...TYPE.heading },
   body: { ...TYPE.body, color: EMBER.textSecondary },
-  bodyAccent: { color: EMBER.accent },
+  bodyAccent: { color: EMBER.textPrimary },
 
   detailGroup: { gap: SPACE.xxl },
   detailBlock: { gap: SPACE.lg },
@@ -820,7 +808,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarOverlap: { marginLeft: -16 },
+  avatarOverlap: { marginLeft: -SPACE.lg },
   /*
    * 26 inside a 48pt inner circle — the disc is 56 with a 4pt border, so the
    * usable area is 48 and this fills 54% of it, which centres a glyph without
@@ -832,8 +820,7 @@ const styles = StyleSheet.create({
    */
   avatarCharacter: {
     // design-exception: emoji glyph sized to fill the 48pt inner disc
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 26, lineHeight: 32,
     textAlign: 'center',
   },
   avatarMore: { backgroundColor: EMBER.surfaceSunken },
@@ -842,7 +829,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.1)',
+    borderColor: EMBER.separator,
     borderRadius: EMBER_RADIUS.card,
     overflow: 'hidden',
   },
@@ -863,7 +850,7 @@ const styles = StyleSheet.create({
    * work — bold at 16pt with wide tracking reads as a heading competing with
    * "The Experience" above it, which is a heading.
    */
-  eyebrow: EMBER_TYPE.cardEyebrow,
+  eyebrow: TYPE.label,
   /*
    * `1141:4904` is `pt-[16px]`, and `1141:4905` is Plus Jakarta **Regular**.
    *
@@ -871,7 +858,7 @@ const styles = StyleSheet.create({
    * its own top padding on top of that gap, so the venue name sits 24 below the
    * eyebrow rather than 16.
    */
-  venue: { ...EMBER_TYPE.cardValue, paddingTop: 16 },
+  venue: { ...TYPE.body, paddingTop: SPACE.lg },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   address: { ...TYPE.body, color: EMBER.textSecondary, flexShrink: 1 },
   map: { height: MAP_HEIGHT, backgroundColor: EMBER.surfaceSunken },
@@ -897,7 +884,7 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15,14,14,0.7)',
+    backgroundColor: EMBER.scrim,
   },
 
   /*
@@ -917,7 +904,7 @@ const styles = StyleSheet.create({
     height: 126,
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
-    borderColor: 'rgba(73,71,71,0.05)',
+    borderColor: EMBER.separator,
     borderRadius: EMBER_RADIUS.card,
     padding: SPACE.xl,
   },
@@ -938,7 +925,7 @@ const styles = StyleSheet.create({
      * called "Floating CTA" is, and it stops claiming the whole width of a
      * screen whose job is to show an event.
      */
-    paddingHorizontal: 32,
+    paddingHorizontal: SPACE.xxl,
     // 15, with a 24pt icon and a 24pt line: 1 + 15 + 24 + 15 + 1 = 56, which is
     // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
     // design-exception: 15 lands the bordered pill on CONTROL.lg (56)
@@ -953,14 +940,11 @@ const styles = StyleSheet.create({
   },
   ctaFillQuiet: {
     backgroundColor: EMBER.surfaceSunken,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: EMBER.separator,
   },
   ctaDisabled: { opacity: 0.45 },
-  ctaLabel: {
-    ...TYPE.button,
-    // TYPE.button's own line, restated because SCENE_CTA_HEIGHT is summed from it.
-    lineHeight: 24,
-  },
+  // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
+  ctaLabel: { ...TYPE.button },
   ctaLabelLoud: { color: EMBER.onGradient },
   ctaLabelQuiet: { color: EMBER.textPrimary },
 })

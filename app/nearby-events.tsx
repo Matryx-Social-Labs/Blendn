@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   settingsBtn: {
     marginTop: SPACE.xl,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     justifyContent: 'center',
     backgroundColor: EMBER.accent,

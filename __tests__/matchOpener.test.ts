@@ -130,13 +130,14 @@ describe('Connection Success shows no faces', () => {
     expect(src).toContain('const AVATAR_DROP = 16')
   })
 
-  it('sizes buttons by minHeight, not the frame’s fixed 68', () => {
+  it('sizes buttons by minHeight on the scale, not the frame’s fixed 68', () => {
     /*
      * 68 is `py-20` around an 18/28 line. Pinned, it clips the label at large
      * Dynamic Type and in any language whose translation runs to two lines.
      */
     const src = SHEET()
-    expect(src).toContain('minHeight: 68')
+    expect(src).toContain('minHeight: CONTROL.lg')
+    expect(src).not.toMatch(/[^n]height: CONTROL\.lg/)
     expect(src).not.toContain('height: 68')
   })
 })

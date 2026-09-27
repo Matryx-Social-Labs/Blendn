@@ -13,7 +13,6 @@ import {
   InteractionManager,
   Linking,
   Modal,
-  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
@@ -184,6 +184,18 @@ const CHECKIN_RULES_TEXT = [
 export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
+  /*
+   * The scroll position, for the hero's parallax and pull-down stretch.
+   *
+   * A shared value written by a worklet scroll handler, so every frame of the
+   * scroll reaches `SceneHero` on the UI thread and React never re-renders for
+   * it. A JS `onScroll` with state would render this 1,800-line screen 60-120
+   * times a second.
+   */
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+  })
   const { user } = useAuth()
   const feedback = useInteractionFeedback()
 
@@ -1319,10 +1331,9 @@ export default function EventDetail() {
         The Pulse's bar, not a second one that looks like it.
 
         The Scene's header (`1141:4930`) and the Pulse's (`1141:4819`) are the
-        same component in the design -- same 64pt height, same 80% #0F0E0E, same
-        12pt backdrop blur, same accent wordmark. A lookalike here would be two
-        things to keep in sync, and they would drift the first time one of them
-        was touched.
+        same component in the design -- same 64pt height, same flat page-colour
+        band, same wordmark. A lookalike here would be two things to keep in
+        sync, and they would drift the first time one of them was touched.
       */}
       <PulseTopBar
         /*
@@ -1350,7 +1361,7 @@ export default function EventDetail() {
             <SceneBarButton
               icon={userInterested ? 'heart' : 'heart-outline'}
               glyph={
-                <HeartIcon on={userInterested} size={20} onColor={EMBER.accent} offColor={EMBER.textPrimary} />
+                <HeartIcon on={userInterested} size={ICON.md} onColor={EMBER.textPrimary} offColor={EMBER.textPrimary} />
               }
               label={userInterested ? 'Remove from interested events' : 'Save this event'}
               active={userInterested}
@@ -1377,8 +1388,10 @@ export default function EventDetail() {
         }
       />
 
-      <ScrollView
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         /*
           Room for the floating CTA, and no more.
 
@@ -1419,6 +1432,7 @@ export default function EventDetail() {
               goingCount,
             })}
             onPressMedia={(i) => setLightbox(i)}
+            scrollY={scrollY}
           />
         )}
 
@@ -1518,7 +1532,7 @@ export default function EventDetail() {
             the day `EventDetailSchema` returns them.
           */}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/*
         Outside the ScrollView, as frame `1227:2903` has it -- a sibling of
@@ -1533,7 +1547,7 @@ export default function EventDetail() {
         */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(15,14,14,0)', EMBER.bg]}
+          colors={[EMBER.bgClear, EMBER.bg]}
           locations={[0, 0.55]}
           style={StyleSheet.absoluteFill}
         />
@@ -1741,11 +1755,12 @@ export default function EventDetail() {
 }
 
 /**
- * A top-bar button — a `CONTROL.sm` disc at 8% white, as `app/preview/scene.tsx` draws it.
+ * A top-bar button — a `CONTROL.sm` disc on `EMBER.surface`.
  *
- * Bare glyphs on the blur is what made the header read as unfinished: the bar
- * is translucent over photography, so an icon with no disc behind it has no
- * consistent contrast and no apparent hit target.
+ * The bar is the opaque page colour (`PulseTopBar`), so the disc is a control
+ * on a page, not a pill on a photo: `surface`, not `scrim`. Without it a bare
+ * glyph has no apparent hit target. The glyph is always `textPrimary`; the
+ * saved heart says "on" by filling, not by turning orange.
  */
 /*
  * Shrinks to 0.9 on press-in: at 32pt, the 0.97 a full-width button uses is
@@ -1774,9 +1789,10 @@ function SceneBarButton({
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={active === undefined ? undefined : { selected: active }}
       style={styles.barButton}
     >
-      {glyph ?? <Ionicons name={icon} size={ICON.md} color={active ? EMBER.accent : EMBER.textPrimary} />}
+      {glyph ?? <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />}
     </ScalePress>
   )
 }
@@ -1793,7 +1809,7 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: EMBER.surface,
   },
   content: {
     paddingHorizontal: SCENE_PADDING_HORIZONTAL,
@@ -1855,7 +1871,7 @@ const styles = StyleSheet.create({
 
   announcementOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: EMBER.backdrop,
     alignItems: 'center',
     justifyContent: 'center',
     padding: GUTTER,
@@ -1871,8 +1887,8 @@ const styles = StyleSheet.create({
   announcementSubtitle: { ...TYPE.meta },
   announcementInput: {
     ...TYPE.body,
-    minHeight: 108,
-    borderRadius: EMBER_RADIUS.lg,
+    minHeight: CONTROL.lg * 2,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
     padding: SPACE.lg,
     textAlignVertical: 'top',

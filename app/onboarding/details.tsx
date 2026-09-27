@@ -162,8 +162,8 @@ const styles = StyleSheet.create({
   promptCard: {
     backgroundColor: EMBER.surfaceMedia,
     borderLeftWidth: 4,
-    borderLeftColor: 'rgba(255,144,109,0.4)',
-    borderRadius: EMBER_RADIUS.card,
+    borderLeftColor: EMBER.textTertiary,
+    borderRadius: EMBER_RADIUS.md,
     paddingVertical: SPACE.lg,
     paddingHorizontal: SPACE.xl,
   },

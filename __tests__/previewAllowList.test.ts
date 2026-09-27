@@ -38,4 +38,10 @@ describe("the signed-out preview allow-list", () => {
     expect(code).toContain("'/sign-in'")
     expect(code).toContain("'/forgot-password'")
   })
+
+  it("does not bounce a signed-in session off the harness", () => {
+    // Signed in, `/preview` counted as a sign-in screen and was replaced with
+    // the events tab, so the fixtures opened only after signing out.
+    expect(code).toContain("if (isAuthRoute && !isPreview)")
+  })
 })

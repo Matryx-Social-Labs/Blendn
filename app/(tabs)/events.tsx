@@ -8,6 +8,7 @@ import {
   Dimensions,
   AppState,
   FlatList,
+  type LayoutChangeEvent,
   Linking,
   Modal,
   RefreshControl,
@@ -33,8 +34,9 @@ import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { DayHeading } from '../../components/ui/DayHeading'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
-import { UpcomingCard } from '../../components/pulse/UpcomingCard'
+import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
@@ -66,7 +68,8 @@ import {
   featuredDateLabel,
   joinedCount,
   placeLabel,
-  upcomingDayLabel,
+  groupByDay,
+  timeLabel,
 } from '../../lib/pulse'
 import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
 import { openInMaps } from '../../lib/openInMaps'
@@ -81,7 +84,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet } from '../../components/motion/RisingSheet'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
@@ -308,6 +311,12 @@ function EventsInner() {
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
+  /** Height of the banners above the header, so the Featured card still clears the bar. */
+  const [bannersHeight, setBannersHeight] = useState(0)
+  const onBannersLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = Math.round(e.nativeEvent.layout.height)
+    setBannersHeight((prev) => (prev === h ? prev : h))
+  }, [])
   const [netError, setNetError] = useState<string | null>(null)
 
   /*
@@ -946,7 +955,8 @@ function EventsInner() {
       },
       {
         label: 'View Details',
-        variant: 'primary',
+        // One primary per tray: Check In takes it when it is on offer.
+        variant: canCheckIn ? 'secondary' : 'primary',
         onPress: () => {
           closeTray()
           handleEventPress(event)
@@ -1356,12 +1366,13 @@ function EventsInner() {
    *
    * That bit now lives on the Blend'n button in the tab bar, which is where the
    * app already keeps this state — `roomButtonTarget` reads the same active
-   * check-in and the button is on every screen rather than only this one. It
-   * draws a steady ring when you are in a room; see `roomButtonGlow`.
+   * check-in and the button is on every screen rather than only this one. The
+   * disc stays flat; a still status dot on its edge says you are in a room
+   * (see `roomButtonGlow`, which picks the dot).
    *
    * **Check out moved with it, it was not dropped.** The strip carried the only
    * one-tap check-out and that is worth protecting, so it is now in the room
-   * screen's top bar — the place the glowing button takes you. `handleCheckOut`
+   * screen's top bar — the place that button takes you. `handleCheckOut`
    * below stays for the long-press action tray, which is the other caller.
    */
 
@@ -1834,7 +1845,8 @@ function EventsInner() {
     const featured = featuredCardLayout(
       insets,
       tabBarTop(SCREEN_HEIGHT, insets.bottom),
-      featuredItems.length === 1
+      featuredItems.length === 1,
+      bannersHeight
     )
     return (
       <View style={styles.pulseSection}>
@@ -1924,24 +1936,33 @@ function EventsInner() {
           are passed, which is why they are absent rather than inert.
         */}
         <SectionHeader title="Upcoming" />
-        <View style={styles.pulseStack}>
-          {upcomingStackItems.map((item) => (
-            <UpcomingCard
-              key={`up-${item.id}`}
-              title={item.title}
-              category={item.category || null}
-              imageUrl={item.cover_image_url}
-              dayLabel={upcomingDayLabel(item.start_time)}
-              joinedCount={joinedCount(item)}
-              // Distance from you only means something in the city you are in;
-              // browsing elsewhere it read "6412km away". Same rule as Nearby.
-              distanceLabel={browsingHere ? formatDistance(item.distance) : null}
-              description={item.short_description || null}
-              onPress={() => handleEventPress(item)}
-              isFavorited={!!interestStatuses[item.id]}
-              favoriteBusy={!!interestPending[item.id]}
-              onToggleFavorite={() => toggleInterest(item)}
-            />
+        {/*
+          Grouped by day, the way a calendar is (and Luma's event list): the
+          date is said once, above its events, so each card only needs a time.
+        */}
+        <View style={styles.dayGroups}>
+          {groupByDay(upcomingStackItems).map((group) => (
+            <View key={group.key} style={styles.dayGroup}>
+              <DayHeading title={group.title} detail={group.weekday} />
+              {group.items.map((item) => (
+                <UpcomingCard
+                  key={`up-${item.id}`}
+                  title={item.title}
+                  category={item.category || null}
+                  imageUrl={item.cover_image_url}
+                  timeLabel={timeLabel(item.start_time)}
+                  placeLabel={placeLabel(item)}
+                  joinedCount={joinedCount(item)}
+                  // Distance from you only means something in the city you are in;
+                  // browsing elsewhere it read "6412km away". Same rule as Nearby.
+                  distanceLabel={browsingHere ? formatDistance(item.distance) : null}
+                  onPress={() => handleEventPress(item)}
+                  isFavorited={!!interestStatuses[item.id]}
+                  favoriteBusy={!!interestPending[item.id]}
+                  onToggleFavorite={() => toggleInterest(item)}
+                />
+              ))}
+            </View>
           ))}
         </View>
       </View>
@@ -2087,7 +2108,7 @@ function EventsInner() {
    * `pulseHeader` is.
    */
   const banners = (
-          <View style={styles.filtersBar}>
+          <View style={styles.filtersBar} onLayout={onBannersLayout}>
             {showPreviewHint && (
               <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
                 <Text style={styles.bannerText}>
@@ -2225,7 +2246,7 @@ function EventsInner() {
    * as a prop would couple two render paths that would otherwise stay
    * independent.
    */
-  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
+  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
 
   return (
     /*
@@ -2269,7 +2290,7 @@ function EventsInner() {
           onEndReachedThreshold={0.5}
           onEndReached={fetchMore}
           refreshControl={
-            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
           }
           contentContainerStyle={[
             styles.listContainer,
@@ -2292,11 +2313,10 @@ function EventsInner() {
           scrollEventThrottle={16}
           enableVirtualization={!isLoading && mainListData.length > 20}
           /*
-           * 4, not 10 — arithmetic, not a guess.
+           * 4, not 10.
            *
-           * A row here is an `UpcomingCard`: a 165pt image plus a 200pt body
-           * inside 24pt of padding, ~437pt, with `STACK_GAP` 32 between them.
-           * On a 956pt screen roughly **two** are ever visible at once.
+           * The rows below the header are `EventCard`s, tall enough that
+           * only a few are ever visible at once.
            *
            * `initialNumToRender` is rendered *synchronously before first
            * paint*. At 10 that is ~4,700pt of content — five screens — and ten
@@ -2345,7 +2365,7 @@ function EventsInner() {
                 {isNarrowed ? (
                   [...Array(4)].map((_, i) => (
                     <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? SPACE.xl : STACK_GAP }}>
-                      <SkeletonBlock width={'100%'} height={200} borderRadius={20} />
+                      <SkeletonBlock width={'100%'} height={200} borderRadius={EMBER_RADIUS.lg} />
                       <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
                         <SkeletonLine width={'60%'} />
                         <SkeletonLine width={'40%'} />
@@ -2354,31 +2374,39 @@ function EventsInner() {
                   ))
                 ) : (
                   <>
-                    {/* Featured — one hero card at the real card's own size, with the next peeking. */}
+                    {/* Featured — the real card's photo and words, with the next photo peeking. */}
                     <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
                       <View style={styles.sectionHeaderRow}>
                         <SkeletonLine width={100} />
                         <SkeletonLine width={64} />
                       </View>
                       <View style={[styles.featuredBleed, { flexDirection: 'row', paddingHorizontal: featuredSkeleton.inset, gap: FEATURED_CARD_GAP }]}>
-                        <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.height} borderRadius={32} />
-                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.height} borderRadius={32} />
+                        <View style={{ gap: SPACE.lg }}>
+                          <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
+                          <View style={{ gap: SPACE.sm }}>
+                            <SkeletonLine width={featuredSkeleton.width * 0.8} />
+                            <SkeletonLine width={featuredSkeleton.width * 0.5} />
+                          </View>
+                        </View>
+                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
                       </View>
                     </View>
 
-                    {/* Upcoming — a vertical stack, matching `pulseStack` and `UpcomingCard`'s own image-plus-body shape. */}
+                    {/* Upcoming — one day heading over `UpcomingCard` rows: words left, square photo right. */}
                     <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
                       <View style={styles.sectionHeaderRow}>
                         <SkeletonLine width={120} />
                       </View>
-                      <View style={{ gap: STACK_GAP }}>
-                        {[...Array(2)].map((_, i) => (
+                      <View style={styles.dayGroup}>
+                        <SkeletonLine width={80} />
+                        {[...Array(3)].map((_, i) => (
                           <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
-                            <SkeletonBlock width={'100%'} height={165} borderRadius={20} />
-                            <View style={{ gap: SPACE.sm }}>
-                              <SkeletonLine width={'70%'} />
-                              <SkeletonLine width={'45%'} />
+                            <View style={{ flex: 1, gap: SPACE.sm }}>
+                              <SkeletonLine width={'40%'} />
+                              <SkeletonLine width={'85%'} />
+                              <SkeletonLine width={'55%'} />
                             </View>
+                            <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
                           </View>
                         ))}
                       </View>
@@ -2397,14 +2425,14 @@ function EventsInner() {
                             key={`s-near-${i}`}
                             width={'100%'}
                             height={(SCREEN_WIDTH - MAIN_PADDING_HORIZONTAL * 2) * (249 / 363)}
-                            borderRadius={24}
+                            borderRadius={EMBER_RADIUS.lg}
                           />
                         ))}
                       </View>
                     </View>
                   </>
                 )}
-                <View style={{ height: 8 }} />
+                <View style={{ height: SPACE.sm }} />
               </View>
             ) : (
               <View>
@@ -2559,7 +2587,7 @@ function EventsInner() {
                       {renderNearbyPrompt()}
                     </FadeInUp>
                   ) : null)}
-                <View style={{ height: 8 }} />
+                <View style={{ height: SPACE.sm }} />
               </View>
             )
           )}
@@ -2623,7 +2651,7 @@ function EventsInner() {
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.accent} />
+                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.textSecondary} />
                   <View>
                     <Text style={styles.cityPickerCity}>Use my current location</Text>
                     <Text style={styles.cityPickerCount}>{deviceCity}</Text>
@@ -2659,7 +2687,7 @@ function EventsInner() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.cityPickerCity}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.accent} />
+                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
                         ) : null}
                       </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
@@ -2723,7 +2751,7 @@ function EventsInner() {
  * `fontWeight: '700'` on Manrope gave bold on iOS and regular on Android from
  * identical code — which the old sheet did in thirty places, and which no
  * simulator screenshot would ever show. Every text style spreads an
- * `EMBER_TYPE` entry; the sizes are the scale's, not the call site's.
+ * `TYPE` role; the sizes are the scale's, not the call site's.
  *
  * `APP_COLORS` is gone from this file entirely. It is the old blue palette, and
  * one import of it is enough to put a blue separator on a warm-black page.
@@ -2785,21 +2813,26 @@ const styles = StyleSheet.create({
   featuredBleed: {
     marginHorizontal: -MAIN_PADDING_HORIZONTAL,
   },
-  /** A vertical column of cards inside a section — Upcoming, Nearby. */
+  /** A vertical column of cards inside a section — Nearby. */
   pulseStack: {
     gap: STACK_GAP,
   },
+  /** Upcoming: days a section's gap apart, rows within a day close together. */
+  dayGroups: { gap: SPACE.xl },
+  dayGroup: { gap: SPACE.md },
   /**
-   * The loading skeleton's Upcoming card — `UpcomingCard`'s own `card` style
-   * (`surfaceMedia`, `EMBER_RADIUS.card`, 24 padding, 24 gap), so the
+   * The loading skeleton's Upcoming row — `UpcomingCard`'s own `card` style
+   * (`surfaceSunken`, `EMBER_RADIUS.md`, 16 padding, 16 gap), so the
    * placeholder is the same box the real card fades into rather than a
    * differently-shaped one it has to replace.
    */
   upcomingSkeletonCard: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.card,
-    padding: 24,
-    gap: 24,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
+    padding: SPACE.lg,
+    gap: SPACE.lg,
   },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
@@ -2820,27 +2853,28 @@ const styles = StyleSheet.create({
   /* ---- Nearby, when there is no location -------------------------------- */
 
   nearbyCta: {
-    marginTop: 12,
-    minHeight: 44,
+    marginTop: SPACE.md,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
     borderRadius: EMBER_RADIUS.pill,
   },
   nearbyCtaText: {
     ...TYPE.button,
-    // Dark on warm. White on `#FF906D` fails contrast — see `EMBER.onGradient`.
-    color: EMBER.onGradient,
+    // Neutral: the screen's one accent is the title (docs/DESIGN_SYSTEM.md).
+    color: EMBER.textPrimary,
   },
 
   /* ---- The rows with behaviour and no frame ----------------------------- */
   /*
    * The offline banner, the switch-city offer, the away notice, and the
-   * location and network errors. Undesigned, so they are deliberately plain:
-   * one shape, three colours, and the colour is the only thing that says how
-   * much the row matters.
+   * location and network errors. One shape, flat fills: info sits on
+   * `surface` with a `separator` hairline, warnings and errors on a faint
+   * tint of `warning` / `destructive` with a stronger tint for the border.
+   * The copy stays `textPrimary` so it reads on every fill.
    */
 
   filtersBar: {
@@ -2854,9 +2888,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: 'rgba(255,144,109,0.18)',
+    backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,144,109,0.45)',
+    borderColor: EMBER.separator,
   },
   bannerWarn: {
     flexDirection: 'row',
@@ -2865,11 +2899,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: tint(EMBER.warning, 0.16),
     borderWidth: StyleSheet.hairlineWidth,
-    // Was `APP_COLORS.separator`, which is the old blue palette's hairline. On
-    // a warm-black page it reads as a cold edge around a warm card.
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: tint(EMBER.warning, 0.4),
   },
   bannerError: {
     flexDirection: 'row',
@@ -2878,17 +2910,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: tint(EMBER.destructive, 0.16),
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: tint(EMBER.destructive, 0.4),
   },
   /*
    * Neutral, not a warning.
    *
-   * The other banners are warm or sunken because something is wrong and an
-   * action is owed. This one is a statement of fact — you are somewhere we do
-   * not serve yet — and dressing it as an alert would make an ordinary
-   * situation read as a fault.
+   * The other banners carry a border and an action because something is
+   * wrong and an action is owed. This one is a statement of fact — you are
+   * somewhere we do not serve yet — and dressing it as an alert would make an
+   * ordinary situation read as a fault.
    */
   bannerNeutral: {
     flexDirection: 'row',
@@ -2897,7 +2929,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: EMBER.surfaceSunken,
   },
   bannerNeutralText: {
     ...TYPE.meta,
@@ -2909,15 +2941,15 @@ const styles = StyleSheet.create({
     marginRight: SPACE.md,
   },
   bannerCta: {
-    minHeight: 44,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
-    backgroundColor: EMBER.accent,
+    backgroundColor: EMBER.surface,
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
   },
   bannerCtaText: {
     ...TYPE.button,
-    color: EMBER.onGradient,
+    color: EMBER.textPrimary,
   },
 
   /* ---- Empty states ----------------------------------------------------- */
@@ -2953,11 +2985,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   ctaGhost: {
-    marginTop: 12,
-    minHeight: 44,
+    marginTop: SPACE.md,
+    minHeight: CONTROL.md,
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: tint(EMBER.textPrimary, 0.3),
     borderRadius: EMBER_RADIUS.pill,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
@@ -2975,7 +3007,7 @@ const styles = StyleSheet.create({
 
   cityPickerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: EMBER.backdrop,
     justifyContent: 'flex-end',
   },
   cityPickerSheet: {
@@ -3004,7 +3036,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.md,
     marginBottom: SPACE.sm,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: EMBER.surfaceSunken,
   },
   /*
    * Dashed, and above the list rather than in it.
@@ -3015,16 +3047,16 @@ const styles = StyleSheet.create({
    * to say where they are. The dash is what marks it as the odd one out.
    */
   cityPickerRowLocate: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: tint(EMBER.textPrimary, 0.18),
     borderStyle: 'dashed',
     marginBottom: SPACE.lg,
   },
   cityPickerRowActive: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: tint(EMBER.textPrimary, 0.14),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: tint(EMBER.textPrimary, 0.35),
   },
   cityPickerCity: {
     ...TYPE.bodyStrong,

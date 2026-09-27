@@ -3,7 +3,7 @@
 Eight screens, built against the Figma file `Zi2KcUzhEcLRdqyit22LdQ`, canvas
 **🕓 Updates**. For designers, for testers, and for whoever changes a step next.
 
-Design tokens are in [`DESIGN_TOKENS.md`](./DESIGN_TOKENS.md).
+Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
 
 ---
 

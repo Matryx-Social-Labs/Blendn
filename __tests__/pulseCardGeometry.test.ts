@@ -52,10 +52,26 @@ describe('the Featured row sits on the page margin', () => {
 
   it('draws its interior from the design system', () => {
     const card = CARD()
-    expect(card).toContain('padding: SPACE.xl')
+    expect(card).toContain('body: { paddingTop: SPACE.lg')
     expect(card).toContain('title: TYPE.title')
     expect(card).toContain('numberOfLines={2}')
     expect(card).toContain('tagText: { ...TYPE.label')
+  })
+
+  it('puts the words under the photo, not on it', () => {
+    /*
+     * The title used to sit on a dark scrim over the photograph. An
+     * organiser's upload can be anything, and a scrim strong enough to
+     * guarantee contrast greys out the picture — so the words moved below it,
+     * as Luma, District and Airbnb do.
+     */
+    const card = CARD()
+    expect(card).not.toContain('LinearGradient')
+    expect(card).not.toContain("position: 'absolute', left: 0, right: 0, bottom: 0")
+    expect(card).toContain('export const FEATURED_PHOTO_ASPECT = 1')
+    expect(card).toContain(
+      'SPACE.lg + TYPE.title.lineHeight * 2 + SPACE.xs + TYPE.meta.lineHeight'
+    )
   })
 
   it('cancels the page margin so the row runs edge to edge', () => {
@@ -71,15 +87,17 @@ describe('the card clears the tab bar', () => {
    * 26 heading + 16 heading gap.
    */
   const CHROME = 64 + 16 + 104 + 32 + 26 + 16
-  const ASPECT = 5 / 4
+  const ASPECT = 1
+  // The words under the photo: 16 gap + two 30pt title lines + 4 + an 18pt meta line.
+  const BODY = 16 + 60 + 4 + 18
   const BREATH = 24
   const barTopOf = (screenH: number, insetBottom: number) =>
-    screenH - (8 + 52 + Math.max(insetBottom - 6, 20))
+    screenH - (8 + 56 + Math.max(insetBottom - 6, 20))
 
   const layout = (screenH: number, insetTop: number, insetBottom: number, screenW: number) => {
     const available = barTopOf(screenH, insetBottom) - (insetTop + CHROME) - BREATH
-    const width = Math.min(screenW - 24 - 16 - 32, Math.round(available / ASPECT))
-    return { width, height: Math.round(width * ASPECT), inset: 24 }
+    const width = Math.min(screenW - 24 - 16 - 32, Math.round((available - BODY) / ASPECT))
+    return { width, height: Math.round(width * ASPECT) + BODY, inset: 24 }
   }
 
   it('sums the chrome from the constants that draw it', () => {
@@ -104,8 +122,8 @@ describe('the card clears the tab bar', () => {
   })
 
   it('the bar is the size it claims to be', () => {
-    expect(8 + 52 + Math.max(34 - 6, 20)).toBe(88)
-    expect(956 - barTopOf(956, 34)).toBe(88)
+    expect(8 + 56 + Math.max(34 - 6, 20)).toBe(92)
+    expect(956 - barTopOf(956, 34)).toBe(92)
   })
 
   it('is exported as one function both call sites use', () => {
@@ -114,6 +132,14 @@ describe('the card clears the tab bar', () => {
     expect(screen).toContain('tabBarTop(SCREEN_HEIGHT, insets.bottom)')
     expect(screen.match(/width=\{featured\.width\}/g)?.length).toBe(2)
     expect(screen.match(/paddingHorizontal: featured\.inset/g)?.length).toBe(2)
+  })
+
+  it('counts the banners above the header, which the chrome constant cannot know', () => {
+    // "You're in San Francisco — nothing here yet" pushed the card's date and
+    // venue under the bar: the fit assumed nothing sat above the header.
+    expect(CARD()).toContain('insets.top + CHROME_ABOVE_CARD + above')
+    expect(SCREEN()).toContain('onLayout={onBannersLayout}')
+    expect(SCREEN().match(/bannersHeight\s*\)/g)?.length).toBeGreaterThanOrEqual(2)
   })
 
   it('snaps by the width it actually drew, not the unclamped one', () => {
@@ -127,15 +153,22 @@ describe('the card clears the tab bar', () => {
 })
 
 describe('the Upcoming card', () => {
-  it('is padded from the design system and keeps its 165 image', () => {
+  it('is a row: words on the left, a square photo on the right', () => {
     const up = UPCOMING()
-    expect(up).toContain('const IMAGE_HEIGHT = 165')
-    expect(up).toContain('padding: SPACE.xl')
-    expect(up).toContain('title: { ...TYPE.title')
+    expect(up).toContain('export const UPCOMING_THUMB = CONTROL.md * 2')
+    expect(up).toContain("flexDirection: 'row'")
+    expect(up).toContain('padding: SPACE.lg')
+    expect(up).toContain('title: TYPE.bodyStrong')
+    // Nothing printed on the photograph but the heart.
+    expect(up).not.toContain('LinearGradient')
   })
 
-  it('stacks 24 apart', () => {
-    expect(SCREEN()).toContain('const STACK_GAP = SPACE.xl')
+  it('is grouped by day, so each card carries only its time', () => {
+    const screen = SCREEN()
+    expect(screen).toContain('groupByDay(upcomingStackItems)')
+    expect(screen).toContain('timeLabel={timeLabel(item.start_time)}')
+    expect(screen).toContain('dayGroups: { gap: SPACE.xl }')
+    expect(screen).toContain('dayGroup: { gap: SPACE.md }')
   })
 })
 

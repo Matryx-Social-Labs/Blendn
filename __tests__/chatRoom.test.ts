@@ -31,14 +31,14 @@ describe('the bubble points at its sender', () => {
 
   it('squares the corner on the sender’s side, and only that one', () => {
     /*
-     * Every corner is 24 except one, which is 4. That single square corner is
+     * Every corner is `md` except one, which is `sm`. That single square corner is
      * what tells the two directions apart -- backwards, it reads as *wrong*
      * rather than as *different*, because the message points at the wrong
      * person.
      */
     const src = codeOnly(BUBBLE())
-    expect(src).toContain('bubbleTheirs: { backgroundColor: \'#1B1919\', borderBottomLeftRadius: 4 }')
-    expect(src).toContain('borderBottomRightRadius: 4')
+    expect(src).toContain('bubbleTheirs: { backgroundColor: EMBER.surfaceSunken, borderBottomLeftRadius: EMBER_RADIUS.sm }')
+    expect(src).toContain('borderBottomRightRadius: EMBER_RADIUS.sm')
   })
 
   it('never draws a photograph', () => {
@@ -115,23 +115,24 @@ describe('a paid message cannot be mistaken for the room’s own voice', () => {
     expect(src).toContain('text.slice(from[0].length)')
   })
 
-  it('keeps the room’s gradient off sponsored content', () => {
+  it('keeps the room’s bright rail off sponsored content', () => {
     /*
-     * The warm rail is the room's own colour and marks an organiser speaking.
-     * Sponsored gets a deliberately cooler treatment so it cannot borrow it --
-     * so the gradient must be reachable only on the announcement branch.
+     * The bright rail is the room's own voice and marks an organiser speaking.
+     * Sponsored gets a deliberately dimmer treatment so it cannot borrow it --
+     * so the bright rail must be reachable only on the announcement branch.
      */
     const src = codeOnly(BROADCAST())
-    /*
-     * The branch itself, not the order the two names happen to appear in the
-     * file -- `LinearGradient` shows up in the import first, which made an
-     * index comparison pass for the wrong reason.
-     */
+    // The branch itself, not the order the two names happen to appear in.
     expect(src).toMatch(
-      /sponsored \? \([\s\S]{0,200}railSponsored[\s\S]{0,200}\) : \([\s\S]{0,300}<LinearGradient/
+      /sponsored \? \([\s\S]{0,200}railSponsored[\s\S]{0,200}\) : \([\s\S]{0,300}styles\.rail\b/
     )
-    // And the warm rail is reachable from nowhere else on this surface.
-    expect(src.match(/<LinearGradient/g)).toHaveLength(1)
+    // The rail is full-strength text colour; the sponsored rail is not.
+    expect(src).toMatch(/rail: \{[^}]*backgroundColor: EMBER\.textPrimary/)
+    expect(src).not.toMatch(/railSponsored: \{[^}]*EMBER\.textPrimary/)
+    // Neither borrows the accent: the composer's send is this screen's one.
+    expect(src).not.toMatch(/EMBER\.accent/)
+    // And the bright rail is reachable from nowhere else on this surface.
+    expect(src.match(/styles\.rail\b/g)).toHaveLength(1)
   })
 })
 
@@ -284,10 +285,20 @@ describe('the Me tab is a control panel, not a second profile', () => {
     expect(src).not.toMatch(/<ProfileHero|<ProfileOwnCta|<ProfileBio/)
   })
 
-  it('offers Edit profile and Settings', () => {
+  it('offers Edit profile and Settings, with Settings last', () => {
     const src = OWN()
     expect(src).toContain("router.push('/edit-profile')")
     expect(src).toContain("router.push('/settings')")
+    const content = src.slice(src.indexOf('const renderContent'))
+    expect(content.indexOf("router.push('/settings')")).toBeGreaterThan(content.indexOf('title="Recent"'))
+  })
+
+  it('puts the header flat on the page: one display line, and an Edit/Preview pair with no accent', () => {
+    const src = OWN()
+    expect(src.match(/variant="display"/g)).toHaveLength(1)
+    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.md[^}]*backgroundColor: EMBER\.surface,/)
+    // The old identity card sat on `surfaceMedia`; the header has no card now.
+    expect(src).not.toContain('surfaceMedia')
   })
 
   it('has left APP_COLORS behind', () => {
@@ -295,27 +306,55 @@ describe('the Me tab is a control panel, not a second profile', () => {
     expect(OWN()).not.toContain('APP_COLORS.')
   })
 
-  it('shows counts, and hides a role you do not have', () => {
-    /*
-     * `stats` is three numbers and no endpoint returns the events behind them,
-     * so the frame's `CIRCLE PRESENCE` gallery stays unbuilt. `eventsOrganized`
-     * is hidden at zero: a permanent "0 Hosted" reads as something you failed
-     * to do rather than a role you do not have.
-     */
-    expect(OWN()).toContain('stats.eventsOrganized > 0')
+  it('lists what is missing as rows, never a meter, with the photo row the only accent', () => {
+    const src = OWN()
+    expect(src).toContain('profileGaps(')
+    expect(src).not.toMatch(/percent|progress|completeness/i)
+    // The error state's Retry is its own screen; on the panel the one accent is the photo row's icon.
+    const content = src.slice(src.indexOf('const renderContent'), src.indexOf('const styles'))
+    expect(content.match(/EMBER\.accent/g)).toHaveLength(1)
+    expect(content).toContain("gap.key === 'photo' ? EMBER.accent")
   })
 
-  it('does not invent a handle, a tier, or an event history', () => {
+  it('shows counts in one container, opens Going from them, and hides a role you do not have', () => {
     /*
-     * The frame draws `@blendn_julia`, a `PRO` badge and three attended-event
-     * cards. Nothing backs any of them -- there is no username field, no
-     * subscription, and no endpoint returning attended events. See
-     * `docs/PROFILE.md`.
+     * `eventsOrganized` is hidden at zero: a permanent "0 Hosted" reads as
+     * something you failed to do rather than a role you do not have.
+     */
+    const src = OWN()
+    expect(src).toContain('stats.eventsOrganized > 0')
+    expect(src).toContain('label="Attended" onPress={openGoing}')
+    expect(src).toContain('label="Saved" onPress={openGoing}')
+    expect(src).toContain("router.navigate('/going')")
+    expect(src).toContain('backgroundColor: EMBER.separator')
+  })
+
+  it('lists recent events from the same attendance route and helper as Going', () => {
+    /*
+     * `/me/attendance` through `pastEventRows`, so the Me tab and Going's Past
+     * section cannot disagree about what counts as past. Its own request, not
+     * awaited by the profile load, and a failure only leaves Recent out.
+     */
+    const src = OWN()
+    expect(src).toContain('apiClient.getMyAttendance()')
+    expect(src).toContain('pastEventRows(result.data.events)')
+    expect(src).toContain('<UpcomingCard')
+    expect(src).not.toContain('onToggleFavorite')
+    expect(src).toContain("pathname: '/event/[id]'")
+    expect(src).not.toMatch(/await loadRecent|Promise\.all/)
+  })
+
+  it('does not invent a handle, a tier, or read fields the server never sends', () => {
+    /*
+     * The frame draws `@blendn_julia` and a `PRO` badge. Nothing backs either
+     * -- there is no username field and no subscription. `goals` and
+     * `looking_for` were mapped from a response that never carries them.
      */
     const src = OWN()
     expect(src).not.toMatch(/@blendn|handle|username/i)
     expect(src).not.toMatch(/\bPRO\b/)
     expect(src).not.toMatch(/CIRCLE PRESENCE/i)
+    expect(src).not.toMatch(/goals|looking_for/)
   })
 })
 

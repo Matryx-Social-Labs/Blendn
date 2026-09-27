@@ -127,21 +127,23 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACE.xs,
+    // 12 + (48 − 24) / 2 puts the back chevron's glyph on GUTTER.
+    paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: EMBER.separator,
     gap: SPACE.sm,
   },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: {},
-  avatar: { width: 38, height: 38, borderRadius: 19 },
-  avatarGroupFallback: { backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
+  avatarGroupFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
   name: TYPE.bodyStrong,
-  typing: { ...TYPE.meta, color: '#4CAF91' },
-  subtitle: { ...TYPE.meta, color: 'rgba(255,255,255,0.5)' },
+  // Primary, so a live "typing…" never reads as the secondary subtitle.
+  typing: { ...TYPE.meta, color: EMBER.textPrimary },
+  subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
 })
 
 /**
@@ -594,6 +596,12 @@ function GroupChatInner(props?: {
     return (
       <ChatBubble
         mine={isMe}
+        /*
+         * Only the optimistic copy of something you just sent. When the server
+         * confirms it the id changes, the row remounts with this false, and it
+         * does not rise a second time; history never had a `temp-` id.
+         */
+        animateIn={item.message_id.startsWith('temp-')}
         senderId={item.sender_id}
         roomId={String(params.id)}
         senderName={item.sender_name}
@@ -618,7 +626,7 @@ function GroupChatInner(props?: {
   }
 
   const ListHeader = loading ? (
-    <ActivityIndicator style={styles.loadingIndicator} color={EMBER.accent} />
+    <ActivityIndicator style={styles.loadingIndicator} color={EMBER.textSecondary} />
   ) : hasMore ? (
     <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
       <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
@@ -739,7 +747,7 @@ function GroupChatInner(props?: {
               <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
             </View>
             <TouchableOpacity style={styles.replyBarClose} onPress={() => setReplyingTo(null)}>
-              <Ionicons name="close" size={ICON.sm} color="rgba(255,255,255,0.6)" />
+              <Ionicons name="close" size={ICON.sm} color={EMBER.textSecondary} />
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -833,7 +841,7 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
-  loadMoreText: { ...TYPE.meta, color: 'rgba(255,255,255,0.45)' },
+  loadMoreText: { ...TYPE.meta, color: EMBER.textTertiary },
 
   // System / announcement messages
 
@@ -850,14 +858,14 @@ const styles = StyleSheet.create({
   replyBar: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: GUTTER, paddingVertical: SPACE.sm,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: EMBER.surfaceSunken,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: EMBER.separator,
     gap: SPACE.md,
   },
-  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.accent, borderRadius: 2 },
+  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.textSecondary, borderRadius: EMBER_RADIUS.pill },
   replyBarContent: { flex: 1 },
-  replyBarLabel: { ...TYPE.caption, color: EMBER.accent },
-  replyBarMessage: { ...TYPE.meta, color: 'rgba(255,255,255,0.6)' },
+  replyBarLabel: { ...TYPE.caption, color: EMBER.textPrimary },
+  replyBarMessage: { ...TYPE.meta, color: EMBER.textSecondary },
   replyBarClose: { padding: SPACE.xs },
 
   // Input bar
@@ -866,28 +874,26 @@ const styles = StyleSheet.create({
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
     position: 'absolute', right: GUTTER, bottom: 80,
-    width: 36, height: 36, borderRadius: 18,
+    width: CONTROL.md, height: CONTROL.md, borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
 
   // Empty
   emptyContainer: { alignItems: 'center', paddingHorizontal: SPACE.xxl },
   emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm },
-  emptyText: { ...TYPE.body, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
+  emptyText: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   emptyCta: {
-    marginTop: SPACE.lg, backgroundColor: EMBER.accent,
-    borderRadius: 999, height: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.xl,
+    marginTop: SPACE.lg, backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.pill, height: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.xl,
   },
-  // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
-  // `lib/theme.ts` is explicit that white fails contrast there.
-  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
+  // A secondary button: the composer's send is this screen's one accent.
+  emptyCtaText: { ...TYPE.button, color: EMBER.textPrimary },
 
   // Message menu modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: EMBER.backdrop, justifyContent: 'center', alignItems: 'center' },
   messageMenu: {
     backgroundColor: EMBER.surface, borderRadius: EMBER_RADIUS.md, padding: SPACE.sm, minWidth: 200,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: EMBER.separator,
   },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.md, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.sm },
   // An emoji standing in for a row icon, so it takes the icon size.

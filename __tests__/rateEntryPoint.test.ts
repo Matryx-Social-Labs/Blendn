@@ -24,6 +24,7 @@ const read = (...p: string[]) =>
 
 const DETAIL = read("components", "screens", "EventDetailScreen.tsx")
 const CTA = read("components", "scene", "SceneSections.tsx")
+const GOING = read("app", "(tabs)", "going.tsx")
 
 /*
  * The `ctaState` expression, isolated.
@@ -88,5 +89,19 @@ describe("the entry point to peer rating", () => {
     // SceneCTA disables `ended` alone; `rate` must not be swept in with it.
     expect(CTA).toMatch(/const disabled = state === 'ended'/)
     expect(DETAIL).toMatch(/isEnded && attended \? false/)
+  })
+})
+
+describe("the Going tab's way in to peer rating", () => {
+  /*
+   * The second entry point: every Past row on Going carries the action, so
+   * rating does not depend on reopening an old event. Past is only events you
+   * attended that have ended (`pastEventRows`), the same gate as the CTA above.
+   */
+  it("puts RATE PEOPLE YOU MET on the Past row, to the rating screen", () => {
+    const past = GOING.slice(GOING.indexOf("item.kind === 'past'"))
+    expect(past).toMatch(/label: 'RATE PEOPLE YOU MET'/)
+    expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
+    expect(past).toMatch(/accessibilityLabel: `Rate people you met at \$\{row\.title\}`/)
   })
 })
