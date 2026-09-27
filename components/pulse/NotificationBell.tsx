@@ -3,8 +3,6 @@ import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
-  FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -19,7 +17,8 @@ import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/no
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { popIn, popOut } from '../motion/presence'
-import { RisingSheet } from '../motion/RisingSheet'
+import ScalePress from '../motion/ScalePress'
+import { RisingSheet, SheetFlatList, SheetModal } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
 
 /**
@@ -126,7 +125,10 @@ export function NotificationBell() {
 
   return (
     <>
-      <Pressable
+      {/* Scales like the Scene's top-bar icons; no haptic, the sheet is the answer. */}
+      <ScalePress
+        haptic={false}
+        pressedScale={0.9}
         onPress={openSheet}
         accessibilityRole="button"
         accessibilityLabel={
@@ -135,7 +137,7 @@ export function NotificationBell() {
         // The box is the glyph, so its right edge lands on the page margin like
         // the city chip below it; `hitSlop` makes the target 48pt.
         hitSlop={12}
-        style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
+        style={styles.bell}
       >
         <Ionicons name="notifications-outline" size={ICON.lg} color={EMBER.textPrimary} />
         {/*
@@ -151,12 +153,10 @@ export function NotificationBell() {
             </Text>
           </Animated.View>
         ) : null}
-      </Pressable>
+      </ScalePress>
 
-      <Modal
+      <SheetModal
         visible={open}
-        animationType="fade"
-        transparent
         onRequestClose={() => setOpen(false)}
       >
         {/*
@@ -202,13 +202,15 @@ export function NotificationBell() {
               </Text>
             </View>
           ) : (
-            <FlatList
+            /*
+              No pull-to-refresh: at the top of the list a downward pull closes
+              the sheet, and opening it again reloads (`openSheet`).
+            */
+            <SheetFlatList
               data={items}
               keyExtractor={(n) => n.id}
               style={styles.list}
               contentContainerStyle={styles.listContent}
-              refreshing={loading}
-              onRefresh={load}
               renderItem={({ item }) => {
                 return (
                   <Pressable
@@ -238,7 +240,7 @@ export function NotificationBell() {
             />
           )}
         </RisingSheet>
-      </Modal>
+      </SheetModal>
     </>
   )
 }
@@ -250,7 +252,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
   badge: {
     position: 'absolute',
     top: -SPACE.sm,
@@ -269,7 +270,8 @@ const styles = StyleSheet.create({
   },
   badgeText: { ...TYPE.caption, color: EMBER.bg },
 
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.backdrop },
+  // Transparent: `SheetModal` draws the dim and fades it on its own.
+  scrim: { ...StyleSheet.absoluteFill },
   sheet: {
     position: 'absolute',
     left: 0,

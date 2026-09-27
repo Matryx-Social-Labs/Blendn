@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useState } from 'react'
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native'
+import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import ScalePress from '../motion/ScalePress'
+import { fadeInFast, fadeOutFast } from '../motion/presence'
 
 /**
  * The top of The Pulse — the headline, where you are, and the search field.
@@ -34,6 +38,14 @@ import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme
  * print their second half in `textPrimary` instead: there the accent is the
  * CTA's. Noted in `docs/PULSE.md`.
  */
+/*
+ * The search field's focus ring fades in rather than snapping. A colour
+ * change, so it is already the reduced form and runs under Reduce Motion; the
+ * shorthand for the same typing reason as `FilterControl`'s chips, and the
+ * same 150ms curve, so the two controls in this row change state alike.
+ */
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)'
+
 /** The block's height: the headline row, the gap, and the search row. */
 export const PULSE_HEADER_HEIGHT = TYPE.display.lineHeight + SPACE.lg + CONTROL.md
 
@@ -77,6 +89,7 @@ export function PulseHeader({
   onPressFilter,
   activeFilterCount = 0,
 }: Props) {
+  const [focused, setFocused] = useState(false)
   return (
     <View style={styles.wrap}>
       {/*
@@ -102,12 +115,14 @@ export function PulseHeader({
           <Text style={styles.titleAccent}>{titleAccent}</Text>
         </Text>
 
-        <Pressable
+        {/* No haptic on either control here: each opens a sheet, and the sheet is the answer. */}
+        <ScalePress
+          haptic={false}
           onPress={onPressCity}
           accessibilityRole="button"
           accessibilityLabel={city ? `Browsing ${city}. Change city` : 'Choose a city'}
           hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          style={({ pressed }) => [styles.cityChip, pressed && styles.pressed]}
+          style={styles.cityChip}
         >
           <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
           {/*
@@ -120,7 +135,7 @@ export function PulseHeader({
             {city ?? 'Choose city'}
           </Text>
           <Ionicons name="chevron-down" size={ICON.sm} color={EMBER.textSecondary} />
-        </Pressable>
+        </ScalePress>
       </View>
 
       {/*
@@ -132,21 +147,39 @@ export function PulseHeader({
         the thing being drawn.
       */}
       <View style={styles.searchRow}>
-        <View style={[styles.searchBox, styles.searchBoxFlex]}>
-        {searching ? (
-          <ActivityIndicator
-            size="small"
-            color={EMBER.textPlaceholder}
-            style={styles.searchIcon}
-          />
-        ) : (
-          <Ionicons
-            name="search"
-            size={ICON.md}
-            color={EMBER.textPlaceholder}
-            style={styles.searchIcon}
-          />
-        )}
+        {/*
+          Focus is the one state the field had no way to show: the cursor alone
+          is easy to miss on a dark fill. A 1pt ring, always there and only
+          coloured when focused, so the box never changes size. `textTertiary`,
+          not the accent — the accent is the title's — and one clear step from
+          the `surface` it outlines.
+        */}
+        <Animated.View
+          style={[
+            styles.searchBox,
+            styles.searchBoxFlex,
+            {
+              borderColor: focused ? EMBER.textTertiary : 'transparent',
+              transition: `border-color 150ms ${EASE_OUT}`,
+            },
+          ]}
+        >
+        {/*
+          The glyph and the spinner crossfade in the same spot: both are
+          absolutely placed, so the outgoing one fades over the incoming one
+          without either pushing the field. Nothing animates on first paint.
+        */}
+        <LayoutAnimationConfig skipEntering>
+          {searching ? (
+            <Animated.View key="searching" entering={fadeInFast} exiting={fadeOutFast} style={styles.searchIcon}>
+              <ActivityIndicator size="small" color={EMBER.textPlaceholder} />
+            </Animated.View>
+          ) : (
+            <Animated.View key="idle" entering={fadeInFast} exiting={fadeOutFast} style={styles.searchIcon}>
+              <Ionicons name="search" size={ICON.md} color={EMBER.textPlaceholder} />
+            </Animated.View>
+          )}
+        </LayoutAnimationConfig>
         <TextInput
           value={query}
           onChangeText={onChangeQuery}
@@ -156,19 +189,26 @@ export function PulseHeader({
           returnKeyType="search"
           autoCorrect={false}
           accessibilityLabel="Search experiences"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           style={styles.searchInput}
         />
+          {/* Fades rather than pops as the first character lands and the last one goes. */}
           {query.length > 0 ? (
-            <Pressable
-              onPress={() => onChangeQuery('')}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
-            >
-              <Ionicons name="close-circle" size={ICON.md} color={EMBER.textTertiary} />
-            </Pressable>
+            <Animated.View entering={fadeInFast} exiting={fadeOutFast}>
+              <ScalePress
+                haptic={false}
+                pressedScale={0.9}
+                onPress={() => onChangeQuery('')}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
+              >
+                <Ionicons name="close-circle" size={ICON.md} color={EMBER.textTertiary} />
+              </ScalePress>
+            </Animated.View>
           ) : null}
-        </View>
+        </Animated.View>
 
         {/*
           FILTER, beside the search field rather than floating over the feed.
@@ -188,7 +228,9 @@ export function PulseHeader({
           failure that actually matters.
         */}
         {onPressFilter ? (
-          <Pressable
+          <ScalePress
+            haptic={false}
+            pressedScale={0.9}
             onPress={onPressFilter}
             accessibilityRole="button"
             accessibilityLabel={
@@ -196,7 +238,7 @@ export function PulseHeader({
                 ? `Filters, ${activeFilterCount} active. Change filters`
                 : 'Filter events'
             }
-            style={({ pressed }) => [styles.filterAction, pressed && styles.pressed]}
+            style={styles.filterAction}
           >
             <Ionicons name="options-outline" size={ICON.md} color={EMBER.textPrimary} />
             {activeFilterCount > 0 ? (
@@ -204,7 +246,7 @@ export function PulseHeader({
                 <Text style={styles.filterCountText}>{activeFilterCount}</Text>
               </View>
             ) : null}
-          </Pressable>
+          </ScalePress>
         ) : null}
       </View>
     </View>
@@ -241,7 +283,6 @@ const styles = StyleSheet.create({
     // call site rather than a box taller than the headline beside it.
   },
   cityText: { ...TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
-  pressed: { opacity: 0.6 },
 
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   // Only the field flexes; the filter button is a fixed square.
@@ -275,6 +316,7 @@ const styles = StyleSheet.create({
     height: CONTROL.md,
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.pill,
+    borderWidth: 1,
     // The search glyph sits inside this inset: 16 + a 20pt icon + 12 of air.
     paddingLeft: SPACE.xxxl,
     paddingRight: SPACE.lg,

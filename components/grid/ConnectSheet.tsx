@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   KeyboardAvoidingView,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -12,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
-import { RisingSheet } from '../motion/RisingSheet'
+import { RisingSheet, SheetModal } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
 
 /**
@@ -87,10 +86,8 @@ export function ConnectSheet({
   const canSend = trimmed.length > 0 && message.length <= CONNECT_MESSAGE_MAX && !sending
 
   return (
-    <Modal
+    <SheetModal
       visible={visible}
-      animationType="fade"
-      transparent
       onRequestClose={onDismiss}
       accessibilityViewIsModal
     >
@@ -173,12 +170,13 @@ export function ConnectSheet({
           </Text>
         </RisingSheet>
       </KeyboardAvoidingView>
-    </Modal>
+    </SheetModal>
   )
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: EMBER.backdrop },
+  // Transparent: `SheetModal` draws the dim and fades it on its own.
+  scrim: { flex: 1 },
   sheet: {
     backgroundColor: EMBER.bg,
     borderTopLeftRadius: EMBER_RADIUS.lg,

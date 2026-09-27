@@ -19,15 +19,44 @@ import MapView, { Marker } from 'react-native-maps'
 import Animated, {
   Easing,
   FadeIn,
+  cubicBezier,
   LayoutAnimationConfig,
   ReduceMotion,
   useReducedMotion,
   withTiming,
 } from 'react-native-reanimated'
 import ScalePress from '../motion/ScalePress'
+import { fadeInFast, popIn } from '../motion/presence'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+
+/*
+ * A value that changed rises 6pt into place and fades in; the old one simply
+ * goes. Used by the CTA's label and icon and by the attendee count — anything
+ * that swaps in place inside a content-width row, where crossfading two copies
+ * would have each push the other's layout. Always keyed, and always under
+ * `LayoutAnimationConfig skipEntering`, so only a *change* animates, never the
+ * first paint.
+ *
+ * Reduce Motion keeps the fade, which is what says the value changed, and
+ * drops the rise.
+ */
+const RISE_EASE_OUT = Easing.bezier(...MOTION_EASING.entrance)
+/** The same curve, in the form a CSS transition takes. */
+const RISE_EASE_OUT_CSS = cubicBezier(...MOTION_EASING.entrance)
+
+const riseIn = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 6 }] },
+    animations: {
+      opacity: withTiming(1, { duration: MOTION_DURATION.normal, easing: RISE_EASE_OUT }),
+      transform: [{ translateY: withTiming(0, { duration: MOTION_DURATION.normal, easing: RISE_EASE_OUT }) }],
+    },
+  }
+}
+const changeFade = FadeIn.duration(MOTION_DURATION.fast).reduceMotion(ReduceMotion.Never)
 
 /**
  * The Scene's body sections — frame `1141:4875` and `1227:2903`.
@@ -143,11 +172,24 @@ export function SceneAttendees({
   label?: string
 }) {
   const { shown, remainder } = avatarStack(count)
+  const reduceMotion = useReducedMotion()
   return (
     <View style={styles.attendeesSection}>
       <View style={styles.attendees}>
         <SceneHeading>{label}</SceneHeading>
-        <Text style={styles.attendeeCount}>{count > 0 ? `${count}+` : '—'}</Text>
+        {/*
+          Keyed by the number, so a save or a check-in arriving over the socket
+          rises in as the new figure. The first paint does not animate.
+        */}
+        <LayoutAnimationConfig skipEntering>
+          <Animated.Text
+            key={count}
+            entering={reduceMotion ? changeFade : riseIn}
+            style={styles.attendeeCount}
+          >
+            {count > 0 ? `${count}+` : '—'}
+          </Animated.Text>
+        </LayoutAnimationConfig>
       </View>
       {shown > 0 ? (
         /*
@@ -217,6 +259,10 @@ export function SceneAttendees({
   )
 }
 
+const MAP_FADE_IN = FadeIn.duration(MOTION_DURATION.normal)
+  .easing(RISE_EASE_OUT)
+  .reduceMotion(ReduceMotion.Never)
+
 /**
  * The map inside the Location card — a `MapView` with every gesture off.
  *
@@ -262,43 +308,50 @@ export function SceneMap({
    */
   const hasCoords = !!latitude && !!longitude
 
+  /*
+   * The map mounts late (after interactions settle), so it fades in rather
+   * than popping onto a card that is already on screen. A fade is already the
+   * reduced form, so it stays under Reduce Motion.
+   */
   const body = hasCoords ? (
-    <MapView
-      style={StyleSheet.absoluteFill}
-      customMapStyle={DARK_MAP_STYLE}
-      initialRegion={{
-        latitude,
-        longitude,
-        latitudeDelta: LOCATION_CARD_DELTA,
-        longitudeDelta: LOCATION_CARD_DELTA,
-      }}
-      /*
-       * Every gesture off. This is a picture, not a map you steer — the tap
-       * belongs to the card, which opens external maps.
-       */
-      scrollEnabled={false}
-      zoomEnabled={false}
-      rotateEnabled={false}
-      pitchEnabled={false}
-      toolbarEnabled={false}
-      /*
-       * Android's lite mode renders a single bitmap instead of a live map
-       * surface. Cheaper, and correct here for the same reason the gestures are
-       * off: nothing about this slot needs a live map.
-       */
-      liteMode
-      pointerEvents="none"
-    >
-      <Marker
-        coordinate={{ latitude, longitude }}
+    <Animated.View style={StyleSheet.absoluteFill} entering={MAP_FADE_IN} pointerEvents="none">
+      <MapView
+        style={StyleSheet.absoluteFill}
+        customMapStyle={DARK_MAP_STYLE}
+        initialRegion={{
+          latitude,
+          longitude,
+          latitudeDelta: LOCATION_CARD_DELTA,
+          longitudeDelta: LOCATION_CARD_DELTA,
+        }}
         /*
-         * `textPrimary`, not the accent: the accent is the CTA's on this screen
-         * (docs/DESIGN_SYSTEM.md). A white pin still reads as ours rather than
-         * as Google's default red, without shipping an icon.
+         * Every gesture off. This is a picture, not a map you steer — the tap
+         * belongs to the card, which opens external maps.
          */
-        pinColor={EMBER.textPrimary}
-      />
-    </MapView>
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        /*
+         * Android's lite mode renders a single bitmap instead of a live map
+         * surface. Cheaper, and correct here for the same reason the gestures are
+         * off: nothing about this slot needs a live map.
+         */
+        liteMode
+        pointerEvents="none"
+      >
+        <Marker
+          coordinate={{ latitude, longitude }}
+          /*
+           * `textPrimary`, not the accent: the accent is the CTA's on this screen
+           * (docs/DESIGN_SYSTEM.md). A white pin still reads as ours rather than
+           * as Google's default red, without shipping an icon.
+           */
+          pinColor={EMBER.textPrimary}
+        />
+      </MapView>
+    </Animated.View>
   ) : null
 
   if (!onPress) return <View style={styles.map}>{body}</View>
@@ -591,11 +644,13 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
 const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going', 'ended']
 
 /*
- * The CTA's motion: a press scale, and a label that rises into place when the
- * state changes. Nothing else.
+ * The CTA's motion: a press scale, a label that rises into place when the
+ * state changes (`riseIn`), and an icon that pops in when it swaps. Nothing else.
  *
  * - The new label rises 6pt and fades in; the old one simply goes. Two labels
  *   crossfading in a content-width pill would each push the other's layout.
+ * - The icon — spinner, radio, tick — pops (opacity, 0.9 → 1) rather than
+ *   rising: it is a glyph changing, not a line of text being replaced.
  * - The pill's width and colour snap. A `LinearTransition` on the width
  *   stuttered on device (layout transitions under Reanimated 3 on the New
  *   Architecture flicker), and a 1.04 "pop" on saying yes read as decoration —
@@ -604,28 +659,17 @@ const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going', 'ended']
  * Reduce Motion keeps the label fade, which is what says the state changed,
  * and drops the rise.
  */
-const CTA_EASE_OUT = Easing.bezier(...MOTION_EASING.entrance)
-
-const ctaLabelIn = () => {
-  'worklet'
-  return {
-    initialValues: { opacity: 0, transform: [{ translateY: 6 }] },
-    animations: {
-      opacity: withTiming(1, { duration: MOTION_DURATION.normal, easing: CTA_EASE_OUT }),
-      transform: [{ translateY: withTiming(0, { duration: MOTION_DURATION.normal, easing: CTA_EASE_OUT }) }],
-    },
-  }
-}
-const ctaLabelFade = FadeIn.duration(MOTION_DURATION.fast).reduceMotion(ReduceMotion.Never)
-
 export function SceneCTA({
   state = 'join',
   icon,
+  iconKey,
   onPress,
 }: {
   state?: SceneCTAState
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
+  /** Names which glyph `icon` is drawing; a new key is what pops the new one in. */
+  iconKey?: string
   onPress?: () => void
 }) {
   const disabled = state === 'ended'
@@ -670,12 +714,16 @@ export function SceneCTA({
         to a dark surface with a hairline edge and a `textPrimary` icon.
       */}
       <View style={[styles.ctaFill, quiet ? styles.ctaFillQuiet : styles.ctaFillLoud]}>
-        {icon?.(quiet ? EMBER.textPrimary : EMBER.onGradient)}
-        {/* Skips the entrance on first paint; only a *change* of label animates. */}
+        {/* Skips the entrance on first paint; only a *change* of icon or label animates. */}
         <LayoutAnimationConfig skipEntering>
+          {icon ? (
+            <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
+              {icon(quiet ? EMBER.textPrimary : EMBER.onGradient)}
+            </Animated.View>
+          ) : null}
           <Animated.Text
             key={state}
-            entering={reduceMotion ? ctaLabelFade : ctaLabelIn}
+            entering={reduceMotion ? changeFade : riseIn}
             style={[styles.ctaLabel, quiet ? styles.ctaLabelQuiet : styles.ctaLabelLoud]}
             numberOfLines={1}
           >
@@ -707,6 +755,7 @@ export function SceneCTA({
  */
 export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
   const [open, setOpen] = useState<string | null>(null)
+  const reduceMotion = useReducedMotion()
   if (!blocks.length) return null
 
   return (
@@ -733,8 +782,17 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                 const id = `${block.key}:${item.question}`
                 const isOpen = open === id
                 return (
-                  <Pressable
+                  /*
+                    A toggle, so the selection tick ScalePress fires by default
+                    is the right haptic. The chevron turns rather than swapping
+                    glyphs, so it reads as the same control changing state; the
+                    answer fades in, and the row's height snaps (tasks/lessons.md —
+                    no layout transitions). No exit fade: the height has already
+                    snapped shut, so a fading answer would sit on the row below.
+                  */
+                  <ScalePress
                     key={id}
+                    pressedScale={0.98}
                     onPress={() => setOpen(isOpen ? null : id)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: isOpen }}
@@ -743,14 +801,23 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                   >
                     <View style={styles.detailQuestionRow}>
                       <Text style={styles.detailQuestionText}>{item.question}</Text>
-                      <MaterialIcons
-                        name={isOpen ? 'expand-less' : 'expand-more'}
-                        size={ICON.md}
-                        color={EMBER.textSecondary}
-                      />
+                      <Animated.View
+                        style={{
+                          transform: [{ rotate: isOpen ? '180deg' : '0deg' }],
+                          transitionProperty: 'transform',
+                          transitionDuration: reduceMotion ? 0 : MOTION_DURATION.normal,
+                          transitionTimingFunction: RISE_EASE_OUT_CSS,
+                        }}
+                      >
+                        <MaterialIcons name="expand-more" size={ICON.md} color={EMBER.textSecondary} />
+                      </Animated.View>
                     </View>
-                    {isOpen ? <Text style={styles.detailAnswer}>{item.answer}</Text> : null}
-                  </Pressable>
+                    {isOpen ? (
+                      <Animated.Text entering={fadeInFast} style={styles.detailAnswer}>
+                        {item.answer}
+                      </Animated.Text>
+                    ) : null}
+                  </ScalePress>
                 )
               })
             : null}

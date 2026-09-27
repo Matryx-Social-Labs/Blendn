@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import ScalePress from '../motion/ScalePress'
 
 /**
  * "Featured" with a VIEW ALL, or "Upcoming" with a pair of arrows.
@@ -44,15 +45,16 @@ export function SectionHeader({
       </Text>
 
       {actionLabel && onAction ? (
-        <Pressable
+        // Scales, no haptic: VIEW ALL navigates, and the arrows only scroll.
+        <ScalePress
+          haptic={false}
           onPress={onAction}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
           hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={({ pressed }) => pressed && styles.pressed}
         >
           <Text style={styles.action}>{actionLabel}</Text>
-        </Pressable>
+        </ScalePress>
       ) : null}
 
       {hasArrows ? (
@@ -87,24 +89,22 @@ function Arrow({
   label: string
 }) {
   return (
-    <Pressable
+    <ScalePress
+      haptic={false}
+      pressedScale={0.9}
       onPress={onPress}
       disabled={disabled || !onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(disabled) }}
-      style={({ pressed }) => [
-        styles.arrow,
-        disabled && styles.arrowDisabled,
-        pressed && styles.pressed,
-      ]}
+      style={[styles.arrow, disabled && styles.arrowDisabled]}
     >
       <Ionicons
         name={direction === 'back' ? 'chevron-back' : 'chevron-forward'}
         size={ICON.sm}
         color={EMBER.textPrimary}
       />
-    </Pressable>
+    </ScalePress>
   )
 }
 
@@ -129,5 +129,4 @@ const styles = StyleSheet.create({
   // Opacity, so a disabled arrow keeps its footprint and the heading beside it
   // does not shift when you reach the end of the row.
   arrowDisabled: { opacity: 0.35 },
-  pressed: { opacity: 0.6 },
 })
