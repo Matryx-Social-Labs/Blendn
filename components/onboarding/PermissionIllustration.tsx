@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The picture in the middle of a permission screen.
@@ -67,7 +67,7 @@ export function NotificationIllustration() {
           end={EMBER_GRADIENT.end}
           style={styles.bubbleIcon}
         >
-          <Ionicons name="flash" size={18} color={EMBER.onGradientChip} />
+          <Ionicons name="flash" size={ICON.md} color={EMBER.onGradientChip} />
         </LinearGradient>
 
         <View style={styles.bubbleText}>
@@ -136,7 +136,7 @@ export function LocationIllustration() {
       />
       <View style={styles.mapFooterText}>
         <View style={styles.zoneRow}>
-          <Ionicons name="location" size={12} color={EMBER.accent} />
+          <Ionicons name="location" size={ICON.sm} color={EMBER.accent} />
           <Text style={styles.zone}>CURRENT ZONE: OLD GOA</Text>
         </View>
         <View style={styles.divider} />
@@ -162,12 +162,12 @@ const styles = StyleSheet.create({
 
   bubble: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: SPACE.lg,
+    right: SPACE.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 14,
+    gap: SPACE.md,
+    padding: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: 'rgba(45,44,44,0.85)',
     borderWidth: 1,
@@ -180,10 +180,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bubbleText: { flex: 1, gap: 2 },
+  bubbleText: { flex: 1, gap: SPACE.xxs },
   bubbleTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bubbleTitle: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textPrimary },
-  bubbleWhen: { ...EMBER_TYPE.helper, fontSize: 10 },
+  bubbleTitle: TYPE.bodyStrong,
+  bubbleWhen: { ...TYPE.caption, color: EMBER.textTertiary },
   bubbleBody: EMBER_TYPE.helper,
 
   mapDim: { opacity: 0.4 },
@@ -217,23 +217,19 @@ const styles = StyleSheet.create({
     borderColor: EMBER.bg,
   },
   youTag: {
-    marginTop: -8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    marginTop: -SPACE.sm,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
-  youTagText: {
-    ...EMBER_TYPE.helper,
-    fontSize: 10,
-    letterSpacing: -0.5,
-    color: EMBER.onGradientChip,
-  },
+  youTagText: { ...TYPE.caption, color: EMBER.onGradientChip },
 
   ring: {
     position: 'absolute',
     alignSelf: 'center',
     top: '50%',
+    // design-exception: half the ring's 192pt size, to centre it — geometry, not spacing
     marginTop: -96,
     width: 192,
     height: 192,
@@ -245,15 +241,16 @@ const styles = StyleSheet.create({
   ringOuter: {
     width: 288,
     height: 288,
+    // design-exception: half the ring's 288pt size, to centre it — geometry, not spacing
     marginTop: -144,
     borderColor: 'rgba(255,144,109,0.1)',
     opacity: 0.3,
   },
 
   mapFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 },
-  mapFooterText: { position: 'absolute', left: 20, right: 20, bottom: 20, gap: 8 },
-  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  zone: { ...EMBER_TYPE.helper, fontSize: 11, letterSpacing: 1.2, color: EMBER.textPrimary },
+  mapFooterText: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl, gap: SPACE.sm },
+  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  zone: { ...TYPE.label, color: EMBER.textPrimary },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
-  zoneSub: { ...EMBER_TYPE.helper, fontSize: 11 },
+  zoneSub: EMBER_TYPE.helper,
 })

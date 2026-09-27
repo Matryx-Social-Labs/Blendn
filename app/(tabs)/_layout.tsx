@@ -19,7 +19,7 @@ import {
 } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { MOTION_DURATION } from '../../lib/motion'
-import { APP_COLORS, EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -115,7 +115,7 @@ const TabButton = memo(({
     accessibilityState={isFocused ? { selected: true } : {}}
     onPress={onPress}
     onLongPress={onLongPress}
-    style={({ pressed }) => [styles.item, isFocused && styles.itemOn, pressed && styles.pressed]}
+    style={({ pressed }) => [styles.item, pressed && styles.pressed]}
   >
     <View style={styles.iconBox}>
       {avatarUrl ? (
@@ -127,7 +127,7 @@ const TabButton = memo(({
       ) : (
         <Ionicons
           name={icon}
-          size={22}
+          size={ICON.lg}
           color={isFocused ? EMBER.accent : EMBER.textSecondary}
         />
       )}
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     paddingTop: TAB_BAR_PADDING_TOP,
     // Frame: first item's left edge is 27.51, last item's right edge is 359.64
     // in a 390pt frame.
-    paddingHorizontal: 27.5,
+    paddingHorizontal: SPACE.xl,
   },
   // The surface, separate from the layout — see the note at the render site.
   barSurface: {
@@ -610,7 +610,6 @@ const styles = StyleSheet.create({
    * 26.4 against 24. Both are exactly ×1.1, so one transform reproduces it and
    * there is no second set of sizes to keep in step.
    */
-  itemOn: { transform: [{ scale: 1.1 }] },
   // A fixed box, so glyphs of different natural heights (the frame's are 24.2,
   // 18, 22×16 and 16) all put their label on the same line.
   iconBox: { height: 24, alignItems: 'center', justifyContent: 'center' },
@@ -624,13 +623,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   avatarFocused: { borderColor: EMBER.accent },
-  itemLabel: {
-    ...EMBER_TYPE.meta,
-    // 16/24 medium, as drawn. 11 was a guess that made every label a caption.
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-  },
+  // The caption role: tab labels name the icon above them and should not
+  // compete with the content (the frame's 16/24 did).
+  itemLabel: { ...TYPE.caption, marginTop: SPACE.xs },
   itemLabelOn: { color: EMBER.accent },
 
   /*
@@ -732,7 +727,7 @@ const styles = StyleSheet.create({
     borderColor: EMBER.bg,
   },
   liveDotInvite: { backgroundColor: EMBER.textPrimary },
-  liveDotLive: { backgroundColor: APP_COLORS.success },
+  liveDotLive: { backgroundColor: EMBER.success },
 
   badge: {
     position: 'absolute',
@@ -740,13 +735,13 @@ const styles = StyleSheet.create({
     right: 6,
     minWidth: 18,
     height: 18,
-    paddingHorizontal: 4,
+    paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { ...EMBER_TYPE.meta, color: EMBER.accent, fontSize: 11, lineHeight: 14 },
+  badgeText: { ...TYPE.caption, color: EMBER.accent },
 
   pressed: { opacity: 0.7 },
 })

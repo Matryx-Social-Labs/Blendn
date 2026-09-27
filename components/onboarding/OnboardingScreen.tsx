@@ -26,6 +26,10 @@ import {
   EMBER_GRADIENT,
   EMBER_RADIUS,
   EMBER_TYPE,
+  GUTTER,
+  ICON,
+  SPACE,
+  TYPE,
 } from '../../lib/theme'
 import { progressPercent, type OnboardingStep } from '../../lib/onboarding'
 import { EmberButton } from './EmberControls'
@@ -142,7 +146,7 @@ export function OnboardingScreen({
           accessibilityLabel="Go back"
           style={styles.backButton}
         >
-          {onBack ? <Ionicons name="arrow-back" size={20} color={EMBER.accent} /> : null}
+          {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.accent} /> : null}
         </Pressable>
 
         <View
@@ -208,7 +212,7 @@ export function OnboardingScreen({
        * screen with six fields a button that scrolls away is a button people
        * think is missing.
        */}
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}>
         <EmberButton
           label={ctaLabel}
           onPress={onContinue}
@@ -222,8 +226,8 @@ export function OnboardingScreen({
         ) : null}
         {footerNote ? (
           <View style={styles.footerNoteRow}>
-            <Ionicons name="lock-closed" size={11} color={EMBER.textTertiary} />
-            <Text style={styles.footerNote}>{footerNote}</Text>
+            <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
+            <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>
           </View>
         ) : null}
       </View>
@@ -239,11 +243,11 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    gap: SPACE.lg,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
   },
-  backButton: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: ICON.md, height: ICON.md, alignItems: 'center', justifyContent: 'center' },
   progressTrack: {
     flex: 1,
     height: 6,
@@ -263,17 +267,17 @@ const styles = StyleSheet.create({
   },
   progressLabel: EMBER_TYPE.progress,
 
-  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32 },
-  headlineBlock: { gap: 8, marginBottom: 40 },
+  scrollContent: { paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
+  headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
   title: EMBER_TYPE.display,
   titleAccent: { color: EMBER.accent },
   subtitle: { ...EMBER_TYPE.subtitle, maxWidth: 300 },
-  body: { gap: 40 },
+  body: { gap: SPACE.xxl },
 
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    gap: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.lg,
+    gap: SPACE.md,
     // The design's `backdrop-blur` again — same substitution as the blobs, and
     // here the near-opaque background is what actually stops text showing
     // through, not the blur.
@@ -283,19 +287,13 @@ const styles = StyleSheet.create({
     ...EMBER_TYPE.subtitle,
     textAlign: 'center',
     color: EMBER.textTertiary,
-    paddingVertical: 4,
+    paddingVertical: SPACE.xs,
   },
   footerNoteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: SPACE.xs,
   },
-  footerNote: {
-    ...EMBER_TYPE.helper,
-    fontSize: 11,
-    letterSpacing: 0.5,
-    color: EMBER.textTertiary,
-    textTransform: 'uppercase',
-  },
+  footerNote: { ...TYPE.label, color: EMBER.textTertiary },
 })

@@ -2,25 +2,25 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Dimensions, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
-import { Typography } from '../../components/Typography'
+import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { queryCache } from '../../lib/queryCache'
 import { useAuth } from '../../lib/useAuth'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /** One number and what it counts. */
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     // One element, read as "3 Attended" rather than "3" and then "Attended".
     <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
-      <Text style={styles.statValue} maxFontSizeMultiplier={1.2}>{value}</Text>
-      <Text style={styles.statLabel} maxFontSizeMultiplier={1.3}>{label}</Text>
+      <Text variant="title" maxFontSizeMultiplier={1.2}>{value}</Text>
+      <Text variant="label" maxFontSizeMultiplier={1.3}>{label.toUpperCase()}</Text>
     </View>
   )
 }
@@ -44,9 +44,9 @@ function PanelRow({
       accessibilityLabel={label}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <Ionicons name={icon} size={20} color={EMBER.textPrimary} />
-      <Text style={styles.rowLabel} maxFontSizeMultiplier={1.4}>{label}</Text>
-      <Ionicons name="chevron-forward" size={18} color={EMBER.textSecondary} />
+      <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />
+      <Text variant="bodyStrong" style={styles.rowLabel} maxFontSizeMultiplier={1.4}>{label}</Text>
+      <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
     </Pressable>
   )
 }
@@ -200,13 +200,13 @@ function ProfileInner() {
       <View style={styles.identity}>
         <SkeletonBlock width={72} height={72} borderRadius={9999} />
         <View style={styles.identityText}>
-          <SkeletonLine width={'70%'} style={{ marginBottom: 8 }} />
+          <SkeletonLine width={'70%'} style={{ marginBottom: SPACE.sm }} />
           <SkeletonLine width={'45%'} />
         </View>
       </View>
       <View style={styles.rows}>
         {[0, 1, 2].map((i) => (
-          <SkeletonBlock key={`skr_${i}`} width={WINDOW_WIDTH - 32} height={56} borderRadius={20} />
+          <SkeletonBlock key={`skr_${i}`} width={WINDOW_WIDTH - GUTTER * 2} height={CONTROL.lg} borderRadius={EMBER_RADIUS.md} />
         ))}
       </View>
     </View>
@@ -248,16 +248,16 @@ function ProfileInner() {
         )}
 
         <View style={styles.identityText}>
-          <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          <Text variant="title" numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {profile?.name || 'You'}
             {profile?.age ? `, ${profile.age}` : ''}
           </Text>
-          <Text style={styles.identityHint} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          <Text variant="meta" numberOfLines={1} maxFontSizeMultiplier={1.3}>
             See your profile as others do
           </Text>
         </View>
 
-        <Ionicons name="chevron-forward" size={20} color={EMBER.textSecondary} />
+        <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
       </Pressable>
 
       {/*
@@ -324,14 +324,14 @@ function ProfileInner() {
   if (error && !profile) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
-        <Typography variant="body1" style={styles.errorText}>{error}</Typography>
+        <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity
           style={styles.retryButton}
           onPress={() => getUserAndProfile(true)}
           accessibilityRole="button"
           accessibilityLabel="Retry loading your profile"
         >
-          <Typography variant="button" style={styles.retryButtonText}>Retry</Typography>
+          <Text variant="button" color={EMBER.onGradient}>Retry</Text>
         </TouchableOpacity>
       </SafeAreaView>
     )
@@ -349,76 +349,43 @@ function ProfileInner() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
 
-  /* 16 gutter and 24 between blocks -- the app's ordinary page rhythm. */
-  panel: { padding: 16, gap: 24 },
+  /* The screen gutter, and 24 between blocks. */
+  panel: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xl },
 
   identity: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    padding: 16,
-    borderRadius: 32,
+    gap: SPACE.lg,
+    padding: SPACE.lg,
+    borderRadius: EMBER_RADIUS.card,
     backgroundColor: EMBER.surfaceMedia,
   },
-  avatar: { width: 72, height: 72, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
-  avatarGlyph: { fontSize: 34, lineHeight: 42 },
-  identityText: { flex: 1, gap: 2 },
-  name: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.8,
-    color: EMBER.textPrimary,
-  },
-  identityHint: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
+  avatar: { width: 72, height: 72, borderRadius: EMBER_RADIUS.pill, alignItems: 'center', justifyContent: 'center' },
+  avatarGlyph: { ...TYPE.display },
+  identityText: { flex: 1, gap: SPACE.xxs },
 
-  stats: { flexDirection: 'row', gap: 12 },
+  stats: { flexDirection: 'row', gap: SPACE.md },
   stat: {
     flex: 1,
-    gap: 2,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 24,
+    gap: SPACE.xxs,
+    paddingVertical: SPACE.lg,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
   },
-  statValue: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 24,
-    lineHeight: 30,
-    color: EMBER.textPrimary,
-  },
-  statLabel: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 12,
-    lineHeight: 18,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: EMBER.textSecondary,
-  },
 
-  rows: { gap: 8 },
+  rows: { gap: SPACE.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 18,
+    gap: SPACE.md,
+    paddingHorizontal: SPACE.lg,
     /* 56 tall: comfortably over the 44pt touch minimum without feeling like a form. */
-    minHeight: 56,
-    borderRadius: 20,
+    minHeight: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
   },
-  rowLabel: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
+  rowLabel: { flex: 1 },
   pressed: { opacity: 0.7 },
 
   errorContainer: {
@@ -426,12 +393,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: EMBER.bg,
-    padding: 20,
+    padding: GUTTER,
   },
-  // EMBER has no destructive token; this surface is the only one that needs one.
-  errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, minHeight: 44, justifyContent: 'center', borderRadius: 9999 },
-  retryButtonText: { color: EMBER.onGradient, fontWeight: '600', fontSize: 16 },
+  errorText: { color: EMBER.destructive, textAlign: 'center', marginBottom: SPACE.xl },
+  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: SPACE.xl, minHeight: CONTROL.md, justifyContent: 'center', borderRadius: EMBER_RADIUS.pill },
 })
 
 /*

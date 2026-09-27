@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { APP_COLORS } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
 /**
@@ -95,12 +95,12 @@ export default function ForgotPassword() {
             accessibilityLabel="Go back"
             hitSlop={12}
           >
-            <Ionicons name="chevron-back" size={26} color={APP_COLORS.textPrimary} />
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
 
           {sent ? (
             <View style={styles.done}>
-              <Ionicons name="mail-outline" size={40} color={APP_COLORS.textSecondary} />
+              <Ionicons name="mail-outline" size={40} color={EMBER.textSecondary} />
               <Text style={styles.title}>Check your email</Text>
               <Text style={styles.body}>
                 If that address has an account, a reset link is on its way. The link opens in your
@@ -126,13 +126,13 @@ export default function ForgotPassword() {
               </Text>
 
               <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>EMAIL</Text>
                 <TextInput
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="you@example.com"
-                  placeholderTextColor={APP_COLORS.textTertiary}
+                  placeholderTextColor={EMBER.textPlaceholder}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
@@ -156,7 +156,7 @@ export default function ForgotPassword() {
                 style={({ pressed }) => [styles.primary, (pressed || busy) && styles.pressed]}
               >
                 {busy ? (
-                  <ActivityIndicator color="#1B1931" />
+                  <ActivityIndicator color={EMBER.onGradient} />
                 ) : (
                   <Text style={styles.primaryLabel}>Send reset link</Text>
                 )}
@@ -172,41 +172,35 @@ export default function ForgotPassword() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
-  scroll: { paddingHorizontal: 28, paddingBottom: 40, gap: 16 },
-  back: { alignSelf: 'flex-start', paddingVertical: 8, marginLeft: -6 },
+  scroll: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.lg },
+  back: { alignSelf: 'flex-start', paddingVertical: SPACE.sm, marginLeft: -SPACE.xs },
 
-  placeholderBanner: {
-    color: APP_COLORS.destructive,
-    fontSize: 11,
-    letterSpacing: 1,
-    marginTop: 8,
-  },
-  title: { color: APP_COLORS.textPrimary, fontSize: 26, fontWeight: '700', marginTop: 12 },
-  body: { color: APP_COLORS.textSecondary, fontSize: 15, lineHeight: 21 },
+  placeholderBanner: { ...TYPE.label, color: EMBER.destructive, marginTop: SPACE.sm },
+  title: { ...TYPE.display, marginTop: SPACE.md },
+  body: { ...TYPE.body, color: EMBER.textSecondary },
 
-  field: { gap: 8, marginTop: 8 },
-  label: { color: APP_COLORS.textSecondary, fontSize: 13 },
+  field: { gap: SPACE.sm, marginTop: SPACE.sm },
+  label: TYPE.label,
   input: {
-    backgroundColor: APP_COLORS.backgroundElevated,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: APP_COLORS.textPrimary,
-    fontSize: 16,
+    height: CONTROL.lg,
+    backgroundColor: EMBER.surface,
+    borderRadius: EMBER_RADIUS.input,
+    paddingHorizontal: SPACE.xl,
+    ...TYPE.body,
   },
 
-  error: { color: APP_COLORS.destructive, fontSize: 14, lineHeight: 19 },
+  error: { ...TYPE.meta, color: EMBER.destructive },
 
   primary: {
-    height: 56,
-    borderRadius: 28,
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    marginTop: 8,
+    backgroundColor: EMBER.accent,
+    marginTop: SPACE.sm,
   },
-  primaryLabel: { color: '#1B1931', fontSize: 16, fontWeight: '600' },
+  primaryLabel: { ...TYPE.button, color: EMBER.onGradient },
   pressed: { opacity: 0.85 },
 
-  done: { alignItems: 'center', gap: 14, marginTop: 48, width: '100%' },
+  done: { alignItems: 'center', gap: SPACE.md, marginTop: SPACE.xxxl, width: '100%' },
 })

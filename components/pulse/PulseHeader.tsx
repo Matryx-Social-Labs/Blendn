@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The top of The Pulse — the headline, where you are, and the search field.
@@ -17,9 +17,8 @@ import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
  * So it stays — but **on** the headline rather than under it. As its own row it
  * cost 70pt and pushed the search field away from the title it belongs to,
  * which is what made the top of this screen read as loose beside the design.
- * The heading row is 366 wide and "The Pulse" uses about 250 of it; the chip
- * goes in the dead space that was already there, and the block stays exactly
- * 133pt.
+ * "The Pulse" uses about two thirds of the heading row; the chip goes in the
+ * space that was already there, and adds no height.
  *
  * The date went with the row. It was decoration — every card carries the date
  * that matters, and today's is on the status bar three inches above. Raised for
@@ -34,6 +33,9 @@ import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
  * so this matches eight screens that shipped rather than introducing a ninth
  * treatment. Noted in `docs/PULSE.md`.
  */
+/** The block's height: the headline row, the gap, and the search row. */
+export const PULSE_HEADER_HEIGHT = TYPE.display.lineHeight + SPACE.lg + CONTROL.md
+
 interface Props {
   /** Second half of the headline, in the accent colour. */
   title: string
@@ -79,16 +81,13 @@ export function PulseHeader({
       {/*
         The city sits **on** the headline, not under it.
 
-        Frame `1141:4644` makes `Section - Header & Search` exactly 133pt —
-        heading 48, gap 29, input 56 — and draws no city line at all. We need
-        one anyway: it is the way out of "Nothing on in Bengaluru", and it is the
+        The frame (`1141:4644`) draws no city line at all. We need one anyway: it is the way out of "Nothing on in Bengaluru", and it is the
         only control that answers "why is this screen empty".
 
         A third row cost 70pt and pushed the search field away from the title it
         belongs to, which is what made the top of the screen read as loose next
-        to the design. The heading row is 366 wide and "The Pulse" only uses
-        about 250 of it, so the control goes in the ~116pt of dead space that was
-        already there. Zero added height, and it reads as "The Pulse *in*
+        to the design. The control goes in the dead space beside the title.
+        Zero added height, and it reads as "The Pulse *in*
         Bengaluru" — which is what it means.
 
         Right-aligned with a pin and a chevron so it reads as a control rather
@@ -109,7 +108,7 @@ export function PulseHeader({
           hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
           style={({ pressed }) => [styles.cityChip, pressed && styles.pressed]}
         >
-          <Ionicons name="location-outline" size={13} color={EMBER.textSecondary} />
+          <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
           {/*
             Truncated rather than wrapped. "Thiruvananthapuram" would otherwise
             take a second line and reintroduce the height this change removes;
@@ -119,7 +118,7 @@ export function PulseHeader({
           <Text style={styles.cityText} numberOfLines={1}>
             {city ?? 'Choose city'}
           </Text>
-          <Ionicons name="chevron-down" size={13} color={EMBER.textSecondary} />
+          <Ionicons name="chevron-down" size={ICON.sm} color={EMBER.textSecondary} />
         </Pressable>
       </View>
 
@@ -142,7 +141,7 @@ export function PulseHeader({
         ) : (
           <Ionicons
             name="search"
-            size={18}
+            size={ICON.md}
             color={EMBER.textPlaceholder}
             style={styles.searchIcon}
           />
@@ -165,7 +164,7 @@ export function PulseHeader({
               accessibilityLabel="Clear search"
               hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
             >
-              <Ionicons name="close-circle" size={18} color={EMBER.textTertiary} />
+              <Ionicons name="close-circle" size={ICON.md} color={EMBER.textTertiary} />
             </Pressable>
           ) : null}
         </View>
@@ -179,9 +178,8 @@ export function PulseHeader({
           with a nav that is itself an overlay.
 
           Search and filter are the same job — narrowing — so they belong
-          together, and `SectionHeader`'s "VIEW ALL" already gives the pattern
-          for an accent text action. The block stays 133pt because this shares
-          the search field's 56.
+          together: an icon button at the search field's height and fill, so
+          the row reads as one control group rather than a pill and a word.
 
           The cost, stated rather than hidden: this scrolls away, so somebody
           deep in the feed must scroll up to change a filter. Accepted, because
@@ -197,10 +195,9 @@ export function PulseHeader({
                 ? `Filters, ${activeFilterCount} active. Change filters`
                 : 'Filter events'
             }
-            hitSlop={{ top: 12, right: 8, bottom: 12, left: 8 }}
             style={({ pressed }) => [styles.filterAction, pressed && styles.pressed]}
           >
-            <Text style={styles.filterLabel}>FILTER</Text>
+            <Ionicons name="options-outline" size={ICON.md} color={EMBER.textPrimary} />
             {activeFilterCount > 0 ? (
               <View style={styles.filterCount}>
                 <Text style={styles.filterCountText}>{activeFilterCount}</Text>
@@ -214,71 +211,73 @@ export function PulseHeader({
 }
 
 const styles = StyleSheet.create({
-  // Frame: heading 48 → **29** → input 56, for a block of exactly 133.
-  wrap: { gap: 29, paddingHorizontal: 12 },
+  // The page supplies the side margin (`GUTTER`); this block adds none.
+  wrap: { gap: SPACE.lg },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACE.md,
   },
   // Only the title flexes. The city must never be the thing that truncates
   // first: a clipped headline is cosmetic, a clipped city is the control you
   // cannot read.
-  title: { ...EMBER_TYPE.screenTitle, flexShrink: 1 },
+  title: { ...TYPE.display, flexShrink: 1 },
   titleAccent: { color: EMBER.accent },
 
   cityChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: SPACE.xs,
     // Bounded so a long name cannot squeeze the headline to nothing; the text
     // truncates inside it instead.
     maxWidth: '42%',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    // The chip is 27pt tall on its own, under the 44pt touch floor. It is the
-    // only way out of "Nothing on in Bengaluru", so it gets `hitSlop` at the
-    // call site rather than a taller box that would break the 48pt heading row.
+    backgroundColor: EMBER.surface,
+    // `CONTROL.sm` is under the 44pt touch floor, so it gets `hitSlop` at the
+    // call site rather than a box taller than the headline beside it.
   },
-  cityText: { ...EMBER_TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
+  cityText: { ...TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
   pressed: { opacity: 0.6 },
 
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  // Only the field flexes; FILTER is sized by its word.
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  // Only the field flexes; the filter button is a fixed square.
   searchBoxFlex: { flex: 1 },
-  filterAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  filterLabel: EMBER_TYPE.link,
+  // Same height and fill as the search field beside it: one row, one control style.
+  filterAction: {
+    width: CONTROL.md,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filterCount: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
     minWidth: 18,
     height: 18,
-    paddingHorizontal: 5,
+    paddingHorizontal: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterCountText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 11,
-    lineHeight: 14,
-    color: EMBER.onGradientChip,
-  },
+  filterCountText: { ...TYPE.caption, color: EMBER.onGradientChip },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACE.md,
+    height: CONTROL.md,
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.pill,
-    // Frame: `pl-[48px] pr-[24px] py-[17px]`. The left inset is wide because
-    // the search glyph sits inside it at `left-[16px]`; 20 put the icon and the
-    // placeholder almost on top of each other.
-    paddingLeft: 48,
-    paddingRight: 24,
-    paddingVertical: 17,
+    // The search glyph sits inside this inset: 16 + a 20pt icon + 12 of air.
+    paddingLeft: SPACE.xxxl,
+    paddingRight: SPACE.lg,
   },
-  searchIcon: { position: 'absolute', left: 16 },
-  searchInput: { ...EMBER_TYPE.input, flex: 1, padding: 0 },
+  searchIcon: { position: 'absolute', left: SPACE.lg },
+  searchInput: { ...TYPE.body, flex: 1, padding: 0 },
 })

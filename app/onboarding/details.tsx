@@ -10,7 +10,7 @@ import {
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -152,18 +152,18 @@ const styles = StyleSheet.create({
   bio: {
     height: 160,
     borderRadius: EMBER_RADIUS.card,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingTop: SPACE.lg,
+    paddingBottom: SPACE.lg,
     textAlignVertical: 'top',
   },
-  prompts: { gap: 12 },
+  prompts: { gap: SPACE.md },
   promptCard: {
     backgroundColor: EMBER.surfaceMedia,
     borderLeftWidth: 4,
     borderLeftColor: 'rgba(255,144,109,0.4)',
     borderRadius: EMBER_RADIUS.card,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: SPACE.lg,
+    paddingHorizontal: SPACE.xl,
   },
-  promptText: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textSecondary, lineHeight: 22 },
+  promptText: TYPE.meta,
 })

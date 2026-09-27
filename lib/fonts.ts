@@ -15,13 +15,10 @@
 
 import {
   Manrope_400Regular,
-  Manrope_500Medium,
   Manrope_600SemiBold,
   Manrope_700Bold,
 } from '@expo-google-fonts/manrope'
 import {
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans'
@@ -35,18 +32,15 @@ import {
  * identical code. The weight is part of the family name.
  */
 export const EMBER_FONT_MODULES = {
-  PlusJakartaSans_400Regular,
   /*
    * Added for Connection Success (`1141:5403`) and the Banter's empty state,
    * both of which were written against it before it was loaded — and an
    * unloaded family does not throw, it silently renders the system font. Two
    * screens were quietly not in the product's typeface.
    */
-  PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
   Manrope_400Regular,
-  Manrope_500Medium,
   Manrope_600SemiBold,
   Manrope_700Bold,
 } as const

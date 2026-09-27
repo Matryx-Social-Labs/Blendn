@@ -13,6 +13,7 @@ import {
   ViewToken,
 } from 'react-native'
 import { SwipeToDismiss } from './motion/SwipeToDismiss'
+import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -91,7 +92,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
         {/* Close button */}
         <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <View style={styles.closeBtnInner}>
-            <Ionicons name="close" size={22} color="#fff" />
+            <Ionicons name="close" size={ICON.md} color={EMBER.textPrimary} />
           </View>
         </TouchableOpacity>
 
@@ -122,13 +123,13 @@ const styles = StyleSheet.create({
   closeBtn: {
     position: 'absolute',
     top: 56,
-    right: 20,
+    right: GUTTER,
     zIndex: 10,
   },
   closeBtnInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: CONTROL.sm / 2,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -138,21 +139,20 @@ const styles = StyleSheet.create({
     top: 60,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.xs,
     borderRadius: 12,
   },
   counterText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPE.caption,
+    color: EMBER.textPrimary,
   },
   dots: {
     position: 'absolute',
     bottom: 48,
     alignSelf: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: SPACE.sm,
   },
   dot: {
     width: 6,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   dotActive: {
-    backgroundColor: '#fff',
+    backgroundColor: EMBER.textPrimary,
     width: 18,
   },
 })

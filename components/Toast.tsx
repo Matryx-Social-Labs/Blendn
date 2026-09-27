@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
-import { APP_COLORS, APP_RADIUS, APP_SPACING } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
@@ -46,25 +46,25 @@ export function useToast() {
 const VARIANT_CONFIG: Record<ToastVariant, { icon: string; bg: string; border: string }> = {
   success: {
     icon: 'checkmark-circle',
-    bg: 'rgba(52,199,89,0.15)',
-    border: 'rgba(52,199,89,0.4)',
+    bg: 'rgba(48,209,88,0.15)',
+    border: 'rgba(48,209,88,0.4)',
   },
   error: {
     icon: 'alert-circle',
-    bg: 'rgba(255,59,48,0.15)',
-    border: 'rgba(255,59,48,0.4)',
+    bg: 'rgba(255,69,58,0.15)',
+    border: 'rgba(255,69,58,0.4)',
   },
   info: {
     icon: 'information-circle',
-    bg: 'rgba(10,132,255,0.15)',
-    border: 'rgba(10,132,255,0.4)',
+    bg: 'rgba(255,144,109,0.15)',
+    border: 'rgba(255,144,109,0.4)',
   },
 }
 
 const VARIANT_ICON_COLOR: Record<ToastVariant, string> = {
-  success: APP_COLORS.success,
-  error: APP_COLORS.destructive,
-  info: APP_COLORS.accent,
+  success: EMBER.success,
+  error: EMBER.destructive,
+  info: EMBER.accent,
 }
 
 let nextId = 0
@@ -129,7 +129,7 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
     >
       <Ionicons
         name={config.icon as any}
-        size={18}
+        size={ICON.md}
         color={VARIANT_ICON_COLOR[toast.variant]}
         style={styles.icon}
       />
@@ -171,7 +171,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <View style={[styles.container, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <View style={[styles.container, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
         {toasts.map(toast => (
           <ToastItem key={toast.id} toast={toast} onHide={() => hideToast(toast.id)} />
         ))}
@@ -183,17 +183,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: APP_SPACING.md,
-    right: APP_SPACING.md,
+    left: GUTTER,
+    right: GUTTER,
     zIndex: 9999,
-    gap: 8,
+    gap: SPACE.sm,
   },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: APP_SPACING.sm,
-    paddingHorizontal: APP_SPACING.md,
-    borderRadius: APP_RADIUS.md,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.md,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -202,25 +202,20 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   icon: {
-    marginRight: 8,
+    marginRight: SPACE.sm,
     flexShrink: 0,
   },
   message: {
     flex: 1,
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
+    ...TYPE.body,
   },
   action: {
-    marginLeft: 12,
-    minHeight: 32,
+    marginLeft: SPACE.md,
+    minHeight: CONTROL.sm,
     justifyContent: 'center',
   },
   actionText: {
-    color: APP_COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
+    ...TYPE.button,
     textDecorationLine: 'underline',
   },
 })

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type View
 
 import { OptimizedImage } from '../OptimizedImage'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The Banter's pieces — frame `1141:5247`.
@@ -30,9 +30,9 @@ import { EMBER, EMBER_FONTS, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '..
  * the thing every chat client shows.
  */
 
-/** Frame `1141:5248` — `Main` is `px-[12px]`, `gap-[32px]`. */
-export const BANTER_PADDING_HORIZONTAL = 12
-export const BANTER_SECTION_GAP = 32
+/** The screen gutter, and the design system's gap between sections. */
+export const BANTER_PADDING_HORIZONTAL = GUTTER
+export const BANTER_SECTION_GAP = SPACE.xxl
 
 /** Frame `1141:5264` — a pinned avatar. `1141:5294` — a conversation's. */
 export const PINNED_AVATAR = 64
@@ -59,7 +59,7 @@ export function BanterSearch({
   if (!onChangeText) {
     return (
       <View style={styles.search}>
-        <Ionicons name="search" size={18} color={EMBER.textSecondary} />
+        <Ionicons name="search" size={ICON.md} color={EMBER.textSecondary} />
         <Text style={styles.searchPlaceholder} maxFontSizeMultiplier={1.4} numberOfLines={1}>
           Search conversations...
         </Text>
@@ -68,7 +68,7 @@ export function BanterSearch({
   }
   return (
     <View style={styles.search}>
-      <Ionicons name="search" size={18} color={EMBER.textSecondary} />
+      <Ionicons name="search" size={ICON.md} color={EMBER.textSecondary} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -86,7 +86,7 @@ export function BanterSearch({
   )
 }
 
-/** "Pinned" / "Recent" — frame `1141:5258`, Plus Jakarta Bold 16/24, -0.4. */
+/** "Pinned" / "Recent" — frame `1141:5258`, the `heading` role. */
 export function BanterHeading({
   title,
   action,
@@ -94,7 +94,7 @@ export function BanterHeading({
   trailingIcon,
 }: {
   title: string
-  /** "Mark all read" — `1141:5291`, accent, Manrope Bold. */
+  /** "Mark all read" — `1141:5291`, a text action in the `label` role. */
   action?: string
   onAction?: () => void
   trailingIcon?: React.ComponentProps<typeof MaterialIcons>['name']
@@ -105,19 +105,19 @@ export function BanterHeading({
         {title}
       </Text>
       {action ? (
-        // 24pt of text + 10 above and below is the 44pt minimum, without
-        // growing the heading row the frame draws at 24.
+        // 16pt of text + 14 above and below is the 44pt minimum, without
+        // growing the heading row.
         <Pressable
           onPress={onAction}
           accessibilityRole="button"
-          hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+          hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
         >
           <Text style={styles.headingAction} maxFontSizeMultiplier={1.4}>
-            {action}
+            {action.toUpperCase()}
           </Text>
         </Pressable>
       ) : trailingIcon ? (
-        <MaterialIcons name={trailingIcon} size={16} color={EMBER.textSecondary} />
+        <MaterialIcons name={trailingIcon} size={ICON.sm} color={EMBER.textSecondary} />
       ) : null}
     </View>
   )
@@ -162,7 +162,7 @@ export function BanterPinned({ item, onPress }: { item: PinnedItem; onPress?: ()
             end={EMBER_GRADIENT.end}
             style={styles.pinnedAvatar}
           >
-            <MaterialIcons name="groups" size={24} color={EMBER.onGradient} />
+            <MaterialIcons name="groups" size={ICON.lg} color={EMBER.onGradient} />
           </LinearGradient>
         ) : (
           <OptimizedImage
@@ -267,8 +267,8 @@ export function BanterConversation({
           <View style={styles.roomAvatar}>
             <MaterialIcons
               name={item.kind === 'event' ? 'event' : 'groups'}
-              size={20}
-              color={EMBER.accent}
+              size={ICON.md}
+              color={EMBER.textSecondary}
             />
           </View>
         ) : item.pseudonymous ? (
@@ -331,48 +331,26 @@ export function BanterConversation({
 const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
 
-  // Frame `1141:5249`: #211F1F, radius 48, px 20 / py 12, gap 12.
+  // A search field: `CONTROL.md` tall, a pill on `EMBER.surface`.
   search: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 48,
-    backgroundColor: EMBER.surfaceSunken,
+    gap: SPACE.md,
+    height: CONTROL.md,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
-  searchPlaceholder: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    color: SEARCH_PLACEHOLDER,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    color: EMBER.textPrimary,
-    padding: 0,
-  },
+  searchPlaceholder: { ...TYPE.body, flex: 1, color: SEARCH_PLACEHOLDER },
+  searchInput: { ...TYPE.body, flex: 1, padding: 0 },
 
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  heading: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: -0.4,
-    color: EMBER.textPrimary,
-  },
-  headingAction: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.accent,
-  },
+  heading: TYPE.heading,
+  headingAction: { ...TYPE.label, color: EMBER.textPrimary },
 
   // Frame `1141:5262`: gap 8 between avatar and name, 24 between items.
   /*
@@ -383,7 +361,7 @@ const styles = StyleSheet.create({
    * wide as its label needs. A pinned row that abbreviates the thing it is
    * pinning is doing the opposite of its job.
    */
-  pinned: { alignItems: 'center', gap: 8, minWidth: PINNED_AVATAR },
+  pinned: { alignItems: 'center', gap: SPACE.sm, minWidth: PINNED_AVATAR },
   pinnedMuted: { opacity: 0.8 },
   pinnedAvatar: {
     width: PINNED_AVATAR,
@@ -396,12 +374,7 @@ const styles = StyleSheet.create({
   // Frame: `shadow-[0_0_0_2px_#ff906d]` — a ring, drawn as a border because RN
   // has no spread-only shadow.
   pinnedRing: { borderWidth: 2, borderColor: EMBER.accent },
-  pinnedName: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
+  pinnedName: TYPE.bodyStrong,
   pinnedNameMuted: { color: EMBER.textSecondary },
 
   // Frame `1141:5265`: 16pt, #FF6D8D, 2pt page-colour ring, bottom-right.
@@ -421,29 +394,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: '#F79EFF',
   },
-  eventBadgeText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 10,
-    lineHeight: 15,
-    color: '#570066',
-  },
+  eventBadgeText: { ...TYPE.caption, color: '#570066' },
 
-  // Frame `1141:5292` / `1141:5304`: radius 32, p 16, gap 16.
+  /*
+   * No fill, so no side padding: the avatar lines up with the gutter like the
+   * search field and the headings above it.
+   */
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    padding: 16,
-    borderRadius: 32,
+    gap: SPACE.lg,
+    paddingVertical: SPACE.lg,
+    borderRadius: EMBER_RADIUS.card,
   },
-  // The unread row is taller — `pt-[28px] pb-[16px]` — which is what makes it
+  // The unread row is taller — 24 above, 16 below — which is what makes it
   // sit up out of the list rather than needing a fill behind it.
-  rowUnread: { paddingTop: 28, paddingBottom: 16 },
+  rowUnread: { paddingTop: SPACE.xl, paddingBottom: SPACE.lg },
   rowAvatar: {
     width: ROW_AVATAR,
     height: ROW_AVATAR,
@@ -459,6 +430,7 @@ const styles = StyleSheet.create({
    * scaled emoji is a cropped emoji rather than a bigger one. The name beside
    * it scales, which is where the accessibility actually lives.
    */
+  // design-exception: an emoji glyph sized to fill the 56pt disc, not text
   pseudonymGlyph: { fontSize: 26, lineHeight: 32 },
   // Frame `1141:5306`: a room has no face, so it gets a surface disc + glyph.
   roomAvatar: {
@@ -510,36 +482,20 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.accent,
   },
 
-  rowBody: { flex: 1, gap: 2 },
+  rowBody: { flex: 1, gap: SPACE.xxs },
   // Only the *read* rows are ruled. The unread one is a card; a border under
   // it would make it look like part of the list it is supposed to leave.
   rowBodyRuled: {
-    paddingBottom: 5,
+    paddingBottom: SPACE.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(73,71,71,0.1)',
   },
-  rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowTitle: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
-  },
-  rowTime: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 11,
-    lineHeight: 16.5,
-    color: EMBER.textSecondary,
-  },
-  rowTimeUnread: { fontFamily: EMBER_FONTS.bodyBold, color: EMBER.accent },
-  rowPreview: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textSecondary,
-  },
-  rowPreviewUnread: { fontFamily: EMBER_FONTS.bodySemiBold, color: EMBER.textPrimary },
+  rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  rowTitle: { ...TYPE.bodyStrong, flex: 1 },
+  rowTime: TYPE.meta,
+  rowTimeUnread: { color: EMBER.accent },
+  rowPreview: { ...TYPE.body, color: EMBER.textSecondary },
+  rowPreviewUnread: TYPE.bodyStrong,
 })
 
 /** The generated mark for an unrevealed match, at the row's avatar size. */
@@ -583,7 +539,7 @@ export function BanterRequest({
     <View style={requestStyles.request}>
       <View style={requestStyles.requestHead}>
         <View style={styles.roomAvatar}>
-          <MaterialIcons name="person-add-alt" size={20} color={EMBER.accent} />
+          <MaterialIcons name="person-add-alt" size={ICON.md} color={EMBER.textSecondary} />
         </View>
         <View style={requestStyles.requestBody}>
           <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
@@ -624,15 +580,10 @@ export function BanterRequest({
           accessibilityState={{ disabled: !!pending }}
           style={({ pressed }) => [
             requestStyles.requestButton,
+            requestStyles.requestAccept,
             (pressed || pending) && styles.pressed,
           ]}
         >
-          <LinearGradient
-            colors={[...EMBER_GRADIENT.colors]}
-            start={EMBER_GRADIENT.start}
-            end={EMBER_GRADIENT.end}
-            style={StyleSheet.absoluteFill}
-          />
           <Text style={requestStyles.requestAcceptLabel} maxFontSizeMultiplier={1.3}>
             Accept
           </Text>
@@ -643,26 +594,21 @@ export function BanterRequest({
 }
 
 const requestStyles = StyleSheet.create({
-  // The conversation row's own card — radius 32, p16, gap 16.
-  request: { borderRadius: 32, padding: 16, gap: 16, backgroundColor: '#1A1818' },
-  requestHead: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  requestBody: { flex: 1, gap: 4 },
-  requestActions: { flexDirection: 'row', gap: 12 },
+  // A card — radius 32, p16, gap 16.
+  request: { borderRadius: EMBER_RADIUS.card, padding: SPACE.lg, gap: SPACE.lg, backgroundColor: '#1A1818' },
+  requestHead: { flexDirection: 'row', gap: SPACE.lg, alignItems: 'center' },
+  requestBody: { flex: 1, gap: SPACE.xs },
+  requestActions: { flexDirection: 'row', gap: SPACE.md },
   requestButton: {
     flex: 1,
-    height: 44,
-    borderRadius: 22,
+    height: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  requestDecline: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
-  requestDeclineLabel: {
-    ...EMBER_TYPE.cardEyebrow,
-    color: EMBER.textPrimary,
-  },
-  requestAcceptLabel: {
-    ...EMBER_TYPE.cardEyebrow,
-    color: EMBER.onGradient,
-  },
+  requestDecline: { backgroundColor: EMBER.surface },
+  requestAccept: { backgroundColor: EMBER.accent },
+  requestDeclineLabel: TYPE.button,
+  requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient },
 })

@@ -14,7 +14,7 @@ import {
 } from '../../components/banter/BanterSections'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
-import { EMBER } from '../../lib/theme'
+import { EMBER, ICON, SPACE } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from '../(tabs)/_layout'
 
 /**
@@ -127,8 +127,8 @@ export default function BanterPreview() {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
-            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 24,
+            paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.xxl,
+            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -183,7 +183,7 @@ function BarButton({
       hitSlop={8}
       style={({ pressed }) => [styles.barButton, pressed && { opacity: 0.6 }]}
     >
-      <Ionicons name={icon} size={18} color={EMBER.textPrimary} />
+      <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />
     </Pressable>
   )
 }
@@ -195,9 +195,9 @@ const styles = StyleSheet.create({
     gap: BANTER_SECTION_GAP,
   },
   // Frame `1141:5255`: the heading and its rail are 16 apart, not 32.
-  section: { gap: 16 },
+  section: { gap: SPACE.lg },
   railBleed: { marginHorizontal: -BANTER_PADDING_HORIZONTAL },
   // Frame `1141:5261`: gap 24, `pb-[8px]`.
-  rail: { gap: 24, paddingBottom: 8, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
+  rail: { gap: SPACE.xl, paddingBottom: SPACE.sm, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
   barButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 })

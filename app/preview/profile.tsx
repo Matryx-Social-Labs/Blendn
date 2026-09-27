@@ -3,8 +3,6 @@ import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
-  PROFILE_GUTTER,
-  PROFILE_SECTION_GAP,
   ProfileActions,
   ProfileBio,
   ProfileDetail,
@@ -13,7 +11,7 @@ import {
   ProfileHero,
   ProfileInterests,
 } from '../../components/profile/ProfileSections'
-import { EMBER, EMBER_FONTS } from '../../lib/theme'
+import { EMBER, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The attendee profile against fixtures — frame `1141:5163`.
@@ -54,7 +52,7 @@ export default function ProfilePreview() {
   const [revealed, setRevealed] = useState(true)
 
   const photos = PHOTOS
-  const columnWidth = (W - PROFILE_GUTTER * 2 - 16) / 2
+  const columnWidth = (W - GUTTER * 2 - SPACE.lg) / 2
 
   return (
     <View style={styles.container}>
@@ -116,11 +114,11 @@ export default function ProfilePreview() {
 
       <Pressable
         onPress={() => setRevealed((r) => !r)}
-        style={[styles.toggle, { top: insets.top + 12 }]}
+        style={[styles.toggle, { top: insets.top + SPACE.md }]}
         accessibilityRole="button"
         accessibilityLabel="Toggle revealed state"
       >
-        <Text style={styles.toggleLabel}>{revealed ? 'revealed' : 'anonymous'}</Text>
+        <Text style={styles.toggleLabel}>{revealed ? 'REVEALED' : 'ANONYMOUS'}</Text>
       </Pressable>
     </View>
   )
@@ -128,22 +126,17 @@ export default function ProfilePreview() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  canvas: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 32, gap: PROFILE_SECTION_GAP },
-  section: { gap: 24 },
-  details: { gap: 48 },
-  action: { paddingHorizontal: PROFILE_GUTTER, paddingTop: 48 },
+  canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
+  section: { gap: SPACE.lg },
+  details: { gap: SPACE.xl },
+  action: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxxl },
   toggle: {
     position: 'absolute',
-    right: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    right: GUTTER,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.sm,
     borderRadius: 999,
     backgroundColor: 'rgba(15,14,14,0.7)',
   },
-  toggleLabel: {
-    fontFamily: EMBER_FONTS.bodySemiBold,
-    fontSize: 12,
-    lineHeight: 16,
-    color: EMBER.accent,
-  },
+  toggleLabel: { ...TYPE.label, color: EMBER.textPrimary },
 })

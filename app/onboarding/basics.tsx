@@ -20,7 +20,7 @@ import {
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
-import { EMBER, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, EMBER_TYPE, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { useAuth } from '../../lib/useAuth'
 
@@ -262,7 +262,7 @@ function digits(value: string, max: number): string {
 }
 
 const styles = StyleSheet.create({
-  dateRow: { flexDirection: 'row', gap: 12 },
+  dateRow: { flexDirection: 'row', gap: SPACE.md },
   dateSmall: { flex: 1 },
   dateLarge: { flex: 1.5 },
   error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
@@ -276,16 +276,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   curationArt: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.6 },
-  curationText: { padding: 24, gap: 4 },
-  curationEyebrow: {
-    ...EMBER_TYPE.helper,
-    fontSize: 10,
-    letterSpacing: 3,
-    fontWeight: '700',
-    color: EMBER.accent,
-    textTransform: 'uppercase',
-  },
-  curationCaption: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textSecondary },
+  curationText: { padding: SPACE.xl, gap: SPACE.xs },
+  curationEyebrow: { ...TYPE.label, color: EMBER.accent },
+  curationCaption: TYPE.meta,
 })
 
 

@@ -88,7 +88,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import type { TraySize } from '../../lib/uxStandards'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet } from '../../components/motion/RisingSheet'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
@@ -126,23 +126,19 @@ type EventsTrayState = {
 const COORDINATE_PATTERN = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 /**
- * Frame `1141:4643` — `Main`, and the two gaps its children use.
+ * The page's rhythm, from the design system (`docs/DESIGN_SYSTEM.md`).
  *
- * Named rather than inlined because the render site needs two of them as well:
- * the safe-area insets are added **there**, so the frame's numbers stay literal
- * here and the device's corrections stay visibly separate from them.
- *
- * `MAIN_PADDING_TOP` is 96 on a 390pt artboard whose overlay header occupies
- * the first 64 — so it is `TOP_BAR_HEIGHT + 32`, and it is written that way at
- * the render site because the 32 is the part that means anything.
+ * One side margin for everything; 32 between sections, 16 from a heading to
+ * its content, 24 between stacked cards. The top bar's clearance is added at
+ * the render site with the safe-area insets.
  */
 const SCREEN_HEIGHT = Dimensions.get('window').height
-const MAIN_PADDING_HORIZONTAL = 12
+const MAIN_PADDING_HORIZONTAL = GUTTER
 const MAIN_PADDING_BOTTOM = 128
-const MAIN_GAP = 48
+const MAIN_GAP = SPACE.xxl
 /** A section's own rows; a vertical stack of cards inside one. */
-const SECTION_GAP = 24
-const STACK_GAP = 32
+const SECTION_GAP = SPACE.lg
+const STACK_GAP = SPACE.xl
 
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
@@ -1710,7 +1706,11 @@ function EventsInner() {
      * bar read as a floating overlay. It is only this one card, the thing the
      * screen opens on, that is sized to clear it.
      */
-    const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
+    const featured = featuredCardLayout(
+      insets,
+      tabBarTop(SCREEN_HEIGHT, insets.bottom),
+      featuredItems.length === 1
+    )
     return (
       <View style={styles.pulseSection}>
         {/*
@@ -1775,7 +1775,6 @@ function EventsInner() {
                 isActive={index === featuredActiveIndex}
                 dateLabel={item.dateLabel}
                 placeLabel={item.placeLabel}
-                accentIndex={item.accentIndex}
                 width={featured.width}
                 onPress={item.onPress}
               />
@@ -2010,14 +2009,13 @@ function EventsInner() {
    */
   const featuredCards = useMemo(
     () =>
-      featuredItems.map((item, index) => ({
+      featuredItems.map((item) => ({
         id: item.id,
         title: item.title,
         tag: item.category || null,
         playlist: feedPlaylist(item.media, item.cover_image_url),
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
-        accentIndex: index,
         onPress: () => handleEventPress(item),
       })),
     [featuredItems, handleEventPress]
@@ -2155,7 +2153,7 @@ function EventsInner() {
             */}
             {away && (
               <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerNeutral}>
-                <Ionicons name="location-outline" size={14} color={EMBER.textSecondary} />
+                <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
                 <Text style={styles.bannerNeutralText}>
                   You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
                 </Text>
@@ -2274,10 +2272,8 @@ function EventsInner() {
               // nav plus the home indicator at the bottom. Padding, not layout,
               // so the feed still scrolls under all four.
               //
-              // The frame's `Main` starts at y=96 on a 390pt artboard whose bar
-              // occupies the first 64 — so the 32 is the clearance, and the
-              // status bar is what the artboard does not have.
-              paddingTop: insets.top + TOP_BAR_HEIGHT + 32,
+              // Kept in step with `CHROME_ABOVE_CARD`, which sizes the hero card.
+              paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg,
               // The frame's 128 already clears the 88pt nav. `Math.max` so it
               // still does if the nav grows — the bar's height has changed
               // twice, and a feed that ends underneath it is not a visible
@@ -2342,9 +2338,9 @@ function EventsInner() {
                 */}
                 {isNarrowed ? (
                   [...Array(4)].map((_, i) => (
-                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? 24 : STACK_GAP }}>
+                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? SPACE.xl : STACK_GAP }}>
                       <SkeletonBlock width={'100%'} height={200} borderRadius={20} />
-                      <View style={{ marginTop: 10, gap: 6 }}>
+                      <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
                         <SkeletonLine width={'60%'} />
                         <SkeletonLine width={'40%'} />
                       </View>
@@ -2373,7 +2369,7 @@ function EventsInner() {
                         {[...Array(2)].map((_, i) => (
                           <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
                             <SkeletonBlock width={'100%'} height={165} borderRadius={20} />
-                            <View style={{ gap: 10 }}>
+                            <View style={{ gap: SPACE.sm }}>
                               <SkeletonLine width={'70%'} />
                               <SkeletonLine width={'45%'} />
                             </View>
@@ -2620,8 +2616,8 @@ function EventsInner() {
                 accessibilityRole="button"
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <Ionicons name="navigate-outline" size={17} color={EMBER.accent} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
+                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.accent} />
                   <View>
                     <Text style={styles.cityPickerCity}>Use my current location</Text>
                     <Text style={styles.cityPickerCount}>{deviceCity}</Text>
@@ -2657,7 +2653,7 @@ function EventsInner() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={styles.cityPickerCity}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={13} color={EMBER.accent} />
+                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.accent} />
                         ) : null}
                       </View>
                       <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
@@ -2801,7 +2797,7 @@ const styles = StyleSheet.create({
   },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
-    ...EMBER_TYPE.meta,
+    ...TYPE.meta,
   },
   /**
    * Skeletons only. The real headings are `SectionHeader`, which carries its
@@ -2809,7 +2805,7 @@ const styles = StyleSheet.create({
    * stands in for rather than drifting a few points off it.
    */
   sectionHeaderRow: {
-    marginBottom: 10,
+    marginBottom: SPACE.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2823,12 +2819,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-start',
     backgroundColor: EMBER.accent,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 18,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
+    borderRadius: EMBER_RADIUS.pill,
   },
   nearbyCtaText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
     // Dark on warm. White on `#FF906D` fails contrast — see `EMBER.onGradient`.
     color: EMBER.onGradient,
   },
@@ -2842,16 +2838,16 @@ const styles = StyleSheet.create({
    */
 
   filtersBar: {
-    paddingBottom: 10,
-    gap: 10,
+    paddingBottom: SPACE.sm,
+    gap: SPACE.sm,
   },
   bannerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: 'rgba(255,144,109,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,144,109,0.45)',
@@ -2860,9 +2856,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     // Was `APP_COLORS.separator`, which is the old blue palette's hairline. On
@@ -2873,9 +2869,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -2891,33 +2887,30 @@ const styles = StyleSheet.create({
   bannerNeutral: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    gap: SPACE.sm,
+    paddingVertical: SPACE.sm,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   bannerNeutralText: {
-    ...EMBER_TYPE.helper,
-    color: EMBER.textSecondary,
+    ...TYPE.meta,
     flex: 1,
   },
   bannerText: {
-    ...EMBER_TYPE.cardBody,
-    color: EMBER.textPrimary,
+    ...TYPE.body,
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACE.md,
   },
   bannerCta: {
     minHeight: 44,
     justifyContent: 'center',
     backgroundColor: EMBER.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
   },
   bannerCtaText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
     color: EMBER.onGradient,
   },
 
@@ -2929,27 +2922,28 @@ const styles = StyleSheet.create({
    */
 
   emptyState: {
-    paddingHorizontal: 32,
-    paddingVertical: 32,
+    paddingHorizontal: SPACE.xxl,
+    paddingVertical: SPACE.xxl,
     alignItems: 'center',
   },
   emptyGlyph: {
     width: 80,
     height: 80,
-    borderRadius: 22,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 18,
+    borderColor: EMBER.separator,
+    marginBottom: SPACE.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    ...EMBER_TYPE.cardTitle,
-    marginBottom: 8,
+    ...TYPE.title,
+    marginBottom: SPACE.sm,
   },
   emptySub: {
-    ...EMBER_TYPE.cardBody,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
     textAlign: 'center',
   },
   ctaGhost: {
@@ -2958,12 +2952,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
   },
   ctaGhostText: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.button,
   },
 
   /* ---- The city picker -------------------------------------------------- */
@@ -2980,29 +2974,30 @@ const styles = StyleSheet.create({
   },
   cityPickerSheet: {
     backgroundColor: EMBER.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.xl,
+    paddingBottom: SPACE.xxl,
     maxHeight: '70%',
   },
   cityPickerTitle: {
-    ...EMBER_TYPE.sectionHeading,
-    marginBottom: 14,
+    ...TYPE.heading,
+    marginBottom: SPACE.lg,
   },
   cityPickerEmpty: {
-    ...EMBER_TYPE.cardBody,
-    paddingVertical: 12,
+    ...TYPE.body,
+    color: EMBER.textSecondary,
+    paddingVertical: SPACE.md,
   },
   cityPickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.md,
+    marginBottom: SPACE.sm,
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   /*
@@ -3018,7 +3013,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
     borderStyle: 'dashed',
-    marginBottom: 14,
+    marginBottom: SPACE.lg,
   },
   cityPickerRowActive: {
     backgroundColor: 'rgba(255,255,255,0.14)',
@@ -3026,10 +3021,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
   },
   cityPickerCity: {
-    ...EMBER_TYPE.categoryPill,
+    ...TYPE.bodyStrong,
   },
   cityPickerCount: {
-    ...EMBER_TYPE.meta,
+    ...TYPE.meta,
   },
 })
 

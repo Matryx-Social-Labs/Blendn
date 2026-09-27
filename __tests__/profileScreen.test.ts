@@ -222,11 +222,10 @@ describe('the shared interest is the point, not an accent', () => {
 })
 
 describe('measurements that came off the frame', () => {
-  it('keeps the hero aspect, the gutter and the section rhythm', () => {
-    const src = SECTIONS()
-    expect(src).toContain('PROFILE_HERO_ASPECT = 751 / 390')
-    expect(src).toContain('PROFILE_GUTTER = 12')
-    expect(src).toContain('PROFILE_SECTION_GAP = 64')
+  it('keeps the hero aspect', () => {
+    // The gutter and section rhythm now come from the design system
+    // (`GUTTER`, `SPACE.xxl`), not the frame's 12 and 64.
+    expect(SECTIONS()).toContain('PROFILE_HERO_ASPECT = 751 / 390')
   })
 
   it('gives the bio 26pt leading, which nothing else on the screen gets', () => {

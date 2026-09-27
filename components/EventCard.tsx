@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons'
 import type { BlendnEvent } from '../lib/api'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useMemo } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { formatEventDateTime } from '../lib/time'
-import { APP_COLORS, EMBER } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { OptimizedImage } from './OptimizedImage'
-import { Typography } from './Typography'
+import { Text } from './ui/Text'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -90,33 +90,33 @@ const EventCard = memo<EventCardProps>(({
       </View>
       
       <View style={styles.eventContent}>
-        <Text style={styles.eventTitle}>
+        <Text variant="title" style={styles.eventTitle}>
           {event.title}
         </Text>
-        <Typography variant="body2" style={styles.eventVenue}>{event.venue_name}</Typography>
-        <Typography variant="body2" style={styles.eventDescription} numberOfLines={2}>
+        <Text variant="meta" style={styles.eventVenue}>{event.venue_name}</Text>
+        <Text variant="body" color={EMBER.textSecondary} style={styles.eventDescription} numberOfLines={2}>
           {event.short_description || event.description}
-        </Typography>
+        </Text>
         
         <View style={styles.eventMeta}>
-          <Text style={styles.eventTime}>
+          <Text variant="meta" color={EMBER.textTertiary} style={styles.eventTime}>
             {formattedStart}
           </Text>
-          <Typography variant="body2" style={styles.eventPrice}>
+          <Text variant="meta" color={EMBER.textPrimary}>
             {event.price_cents > 0 ? `₹${event.price_cents / 100}` : 'Free'}
-          </Typography>
+          </Text>
         </View>
 
         {/* Quick metadata row */}
         <View style={styles.metaChipsRow}>
           {!!distanceLabel && (
             <View style={[styles.chip, styles.chipNeutral]}>
-              <Typography variant="caption" style={styles.chipText}>📍 {distanceLabel} away</Typography>
+              <Text variant="caption" style={styles.chipText}>📍 {distanceLabel} away</Text>
             </View>
           )}
           {typeof proximity?.within_radius === 'boolean' && !proximity.within_radius && (
             <View style={[styles.chip, styles.chipWarning]}>
-              <Typography variant="caption" style={[styles.chipText, styles.chipWarningText]}>Move closer to venue</Typography>
+              <Text variant="caption" style={[styles.chipText, styles.chipWarningText]}>Move closer to venue</Text>
             </View>
           )}
         </View>
@@ -125,7 +125,7 @@ const EventCard = memo<EventCardProps>(({
         <View style={styles.statusRow}>
           {isCheckedIn && (
             <View style={styles.statusBadge}>
-              <Typography variant="caption" style={styles.statusText}>✅ Checked In</Typography>
+              <Text variant="caption" style={styles.statusText}>✅ Checked In</Text>
             </View>
           )}
           
@@ -149,22 +149,22 @@ const EventCard = memo<EventCardProps>(({
                  */
                 <ActivityIndicator size="small" color={EMBER.onGradient} />
               ) : (
-                <Typography variant="button" uppercaseButton style={styles.checkinButtonText}>Check In</Typography>
+                <Text variant="button" color={EMBER.onGradient}>Check In</Text>
               )}
             </TouchableOpacity>
           )}
           
           {proximity && typeof proximity.distance_km === 'number' && !proximity.within_radius && (
             <View style={[styles.statusBadge, styles.distanceBadge]}>
-              <Typography variant="caption" style={[styles.statusText, styles.distanceText]}>
+              <Text variant="caption" style={[styles.statusText, styles.distanceText]}>
                 📍 {distanceLabel} away • within {Math.round(event.check_in_radius)}m required
-              </Typography>
+              </Text>
             </View>
           )}
 
           {!isEnded && (
             <TouchableOpacity 
-              style={[styles.interestButton, interested && styles.interestButtonActive, interestLoading && styles.actionDisabled]}
+              style={[styles.interestButton, interestLoading && styles.actionDisabled]}
               onPress={handleToggleInterest}
               disabled={interestLoading}
               accessibilityRole="button"
@@ -172,12 +172,12 @@ const EventCard = memo<EventCardProps>(({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {interestLoading ? (
-                <ActivityIndicator size="small" color={EMBER.accent} />
+                <ActivityIndicator size="small" color={EMBER.textPrimary} />
               ) : (
                 <Ionicons
                   name={interested ? 'heart' : 'heart-outline'}
-                  size={16}
-                  color={EMBER.accent}
+                  size={ICON.md}
+                  color={EMBER.textPrimary}
                 />
               )}
             </TouchableOpacity>
@@ -189,19 +189,19 @@ const EventCard = memo<EventCardProps>(({
           <View style={styles.inlineChips}>
             {typeof interestCount === 'number' && (
               <View style={[styles.chip, styles.chipNeutral]}>
-                <Typography variant="caption" style={styles.chipText}>⭐ {interestCount}</Typography>
+                <Text variant="caption" style={styles.chipText}>⭐ {interestCount}</Text>
               </View>
             )}
             {(event.max_capacity > 0) && (
               <View style={[styles.chip, (event.current_capacity / event.max_capacity) > 0.7 ? styles.chipWarning : styles.chipNeutral]}>
-                <Typography variant="caption" style={(event.current_capacity / event.max_capacity) > 0.7 ? [styles.chipText, styles.chipWarningText] : styles.chipText}>
+                <Text variant="caption" style={(event.current_capacity / event.max_capacity) > 0.7 ? [styles.chipText, styles.chipWarningText] : styles.chipText}>
                   {capacityLabel(event.current_capacity, event.max_capacity)}
-                </Typography>
+                </Text>
               </View>
             )}
             {(event as any).tags?.slice?.(0, 3)?.map((t: string) => (
               <View key={t} style={[styles.chip, styles.chipNeutral]}>
-                <Typography variant="caption" style={styles.chipText}>{t}</Typography>
+                <Text variant="caption" style={styles.chipText}>{t}</Text>
               </View>
             ))}
           </View>
@@ -216,11 +216,11 @@ EventCard.displayName = 'EventCard'
 const styles = StyleSheet.create({
   eventCard: {
     backgroundColor: EMBER.surfaceSunken,
-    borderRadius: 24,
+    borderRadius: EMBER_RADIUS.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
-    marginHorizontal: 16,
-    marginVertical: 10,
+    borderColor: EMBER.separator,
+    marginHorizontal: GUTTER,
+    marginVertical: SPACE.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
@@ -231,68 +231,53 @@ const styles = StyleSheet.create({
   eventImage: {
     width: '100%',
     height: 200,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
   },
   eventContent: {
-    padding: 16,
+    padding: SPACE.lg,
   },
   eventTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
-    color: EMBER.textPrimary,
-    marginBottom: 6,
+    marginBottom: SPACE.xs,
   },
   eventVenue: {
-    fontSize: 13,
-    color: EMBER.textSecondary,
-    marginBottom: 10,
+    marginBottom: SPACE.sm,
   },
   eventDescription: {
-    fontSize: 14,
-    color: EMBER.textSecondary,
-    lineHeight: 20,
-    marginBottom: 14,
+    marginBottom: SPACE.md,
   },
   eventMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACE.md,
   },
   eventTime: {
-    fontSize: 13,
-    color: EMBER.textTertiary,
     flex: 1,
-  },
-  eventPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: EMBER.textPrimary,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACE.sm,
     flexWrap: 'wrap',
   },
   metaChipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: SPACE.sm,
+    marginBottom: SPACE.sm,
     flexWrap: 'wrap',
   },
   chip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.md,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
   },
   chipNeutral: {
     backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    borderColor: EMBER.separator,
   },
   chipWarning: {
     backgroundColor: 'rgba(255,188,92,0.16)',
@@ -301,71 +286,51 @@ const styles = StyleSheet.create({
     color: EMBER.textPrimary,
   },
   chipText: {
-    fontSize: 12,
-    color: EMBER.textSecondary,
+    ...TYPE.caption,
   },
   statusBadge: {
     backgroundColor: 'rgba(52,199,89,0.18)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.md,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
   },
   statusText: {
-    fontSize: 12,
-    color: APP_COLORS.success,
-    fontWeight: '500',
+    ...TYPE.caption,
+    color: EMBER.success,
   },
   distanceBadge: {
     backgroundColor: EMBER.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: APP_COLORS.separator,
+    borderColor: EMBER.separator,
   },
   distanceText: {
     color: EMBER.textSecondary,
   },
+  // The check-in and heart buttons share a row, so they share a height.
   checkinButton: {
     backgroundColor: EMBER.accent,
-    paddingHorizontal: 16,
-    minHeight: 44,
+    paddingHorizontal: SPACE.lg,
+    height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-  },
-  checkinButtonText: {
-    // Dark on warm, per `EMBER.onGradient`. `textPrimary` is white and was
-    // legible on the old blue; it is not on this one.
-    color: EMBER.onGradient,
-    fontSize: 14,
-    fontWeight: '600',
+    borderRadius: EMBER_RADIUS.pill,
   },
   interestButton: {
-    // The accent at low alpha, so the heart sits in a tint of the colour it is
-    // drawn in rather than a tint of the previous design's.
-    backgroundColor: 'rgba(255,144,109,0.15)',
-    paddingHorizontal: 12,
-    minHeight: 44,
+    backgroundColor: EMBER.surface,
+    width: CONTROL.md,
+    height: CONTROL.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-  },
-  interestButtonActive: {
-    backgroundColor: 'rgba(255,144,109,0.26)',
-  },
-  interestButtonText: {
-    color: '#FF7BA2',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  interestButtonTextActive: {
-    color: '#FF8FB3',
+    borderRadius: EMBER_RADIUS.pill,
   },
   secondaryRow: {
-    marginTop: 8,
+    marginTop: SPACE.sm,
   },
   inlineChips: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACE.sm,
     flexWrap: 'wrap',
   },
   actionDisabled: {

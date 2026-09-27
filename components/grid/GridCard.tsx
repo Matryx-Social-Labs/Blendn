@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { gridCardBox } from '../../lib/gridCardContent'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_GRADIENT, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
 
 /**
@@ -147,7 +147,7 @@ export function GridCard({
         hitSlop={12}
         style={({ pressed }) => [styles.safety, pressed && styles.pressed]}
       >
-        <MaterialIcons name="more-horiz" size={20} color={EMBER.textTertiary} />
+        <MaterialIcons name="more-horiz" size={ICON.md} color={EMBER.textTertiary} />
       </Pressable>
 
       <View style={styles.head}>
@@ -181,13 +181,14 @@ export function GridCard({
           */}
           {person.insideNow ? (
             <View style={styles.presence} accessibilityLabel="Here now">
+              {/* design-exception: glyph inside the 16pt well of a 24pt ringed dot */}
               <MaterialIcons name="place" size={12} color={EMBER.onGradient} />
             </View>
           ) : null}
         </View>
 
         <View style={styles.headText}>
-          {/* Frame `1141:4990`: Plus Jakarta Bold 24/32, tracking -0.6. */}
+          {/* The card's title: `TYPE.title`. */}
           <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {title}
           </Text>
@@ -232,15 +233,15 @@ export function GridCard({
                         ? 'work-outline'
                         : 'place'
               }
-              size={14}
-              color={EMBER.accent}
+              size={ICON.sm}
+              color={EMBER.textSecondary}
             />
             <Text style={styles.boxLabel} maxFontSizeMultiplier={1.3}>
               {box.label}
             </Text>
           </View>
 
-          {/* Frame `1141:5045`: Manrope Regular 14/20, `#AEAAAA`, wraps. */}
+          {/* `TYPE.meta`, wraps. */}
           <Text style={styles.boxValue} maxFontSizeMultiplier={1.4}>
             {box.value}
           </Text>
@@ -320,22 +321,19 @@ export function GridCard({
 const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
 
-  // Frame `1141:4978`: radius 32, p32.
-  card: { borderRadius: 32, padding: 32, gap: 24, overflow: 'hidden' },
-  // Frame `1141:4979`'s corner, p16 from the edge.
+  card: { borderRadius: EMBER_RADIUS.card, padding: SPACE.xl, gap: SPACE.xl, overflow: 'hidden' },
   safety: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 40,
-    height: 40,
+    top: SPACE.sm,
+    right: SPACE.sm,
+    width: CONTROL.sm,
+    height: CONTROL.sm,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
 
-  // Frame `1141:4982`: gap 24.
-  head: { flexDirection: 'row', gap: 24, alignItems: 'center' },
+  head: { flexDirection: 'row', gap: SPACE.xl, alignItems: 'center' },
   avatar: {
     width: AVATAR,
     height: AVATAR,
@@ -346,6 +344,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // design-exception: emoji glyph sized to the 80pt avatar disc
   avatarGlyph: { fontSize: 36, lineHeight: 44 },
   // Frame `1141:4985`: 24pt, 4pt `#0F0E0E` ring, offset -4.
   presence: {
@@ -354,94 +353,38 @@ const styles = StyleSheet.create({
     bottom: -4,
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: EMBER_RADIUS.pill,
     borderWidth: 4,
     borderColor: EMBER.bg,
     backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headText: { flex: 1, gap: 4 },
-  name: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 24,
-    lineHeight: 32,
-    letterSpacing: -0.6,
-    color: EMBER.textPrimary,
-  },
-  workField: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
+  headText: { flex: 1, gap: SPACE.xs },
+  name: { ...TYPE.title },
+  workField: { ...TYPE.meta },
 
-  // Frame `1141:5002`: `#141313`, radius 32, p16, gap 8.
-  overlap: { backgroundColor: EMBER.surfaceMedia, borderRadius: 32, padding: 16, gap: 12 },
-  overlapHead: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  // Frame `1141:5043`: Manrope Bold 12/16, tracking 0.3, uppercase, white.
-  boxLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.3,
-    color: EMBER.textPrimary,
-  },
-  // Frame `1141:5045`: Manrope Regular 14/20, `#AEAAAA`.
-  boxValue: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
-
-  // Frame `1141:4998`: `#272525`, px12 py4, radius full.
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: {
-    backgroundColor: EMBER.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 9999,
-  },
-  tagLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 12,
-    lineHeight: 16,
-    // The frame's first tag is `#FF6D8D`. Every tag here is a shared interest,
-    // so every one earns the accent rather than the first one arbitrarily.
-    color: EMBER.gradientTo,
-  },
+  overlap: { backgroundColor: EMBER.surfaceMedia, borderRadius: EMBER_RADIUS.lg, padding: SPACE.lg, gap: SPACE.md },
+  overlapHead: { flexDirection: 'row', gap: SPACE.sm, alignItems: 'center' },
+  // Uppercase in the string (`lib/gridCardContent.ts`).
+  boxLabel: { ...TYPE.label, color: EMBER.textPrimary },
+  boxValue: { ...TYPE.meta },
 
   // Frame `1141:5018` is one full-width button; this is two, so they share the row.
-  actions: { flexDirection: 'row', gap: 12 },
+  actions: { flexDirection: 'row', gap: SPACE.md },
   button: {
     flex: 1,
-    minHeight: 52,
-    borderRadius: 9999,
+    minHeight: CONTROL.md,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.md,
     overflow: 'hidden',
   },
   secondary: { backgroundColor: EMBER.surface },
-  secondaryLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textPrimary,
-  },
-  likeLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.onGradient,
-  },
-  liked: { backgroundColor: EMBER.surfaceSunken },
-  likedLabel: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.accent,
-  },
+  secondaryLabel: { ...TYPE.button },
+  likeLabel: { ...TYPE.button, color: EMBER.onGradient },
+  liked: { backgroundColor: EMBER.surface },
+  likedLabel: { ...TYPE.button, color: EMBER.textSecondary },
 })

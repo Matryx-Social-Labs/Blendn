@@ -7,7 +7,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE } from '../../lib/theme'
+import { EMBER, EMBER_GRADIENT, EMBER_RADIUS, EMBER_TYPE, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -71,7 +71,7 @@ export default function ReadyScreen() {
           importantForAccessibility="no-hide-descendants"
           style={styles.badge}
         >
-          <Ionicons name="checkmark" size={20} color={EMBER.accent} />
+          <Ionicons name="checkmark" size={ICON.md} color={EMBER.accent} />
         </View>
 
         {/*
@@ -172,7 +172,7 @@ function Summary({
   return (
     <View style={styles.summary}>
       <View style={styles.summaryIcon}>
-        <Ionicons name={icon} size={22} color={EMBER.textSecondary} />
+        <Ionicons name={icon} size={ICON.md} color={EMBER.textSecondary} />
       </View>
       <View style={styles.summaryText}>
         <Text style={styles.summaryLabel}>{label}</Text>
@@ -191,14 +191,14 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
-    padding: 24,
+    padding: SPACE.xl,
     alignItems: 'flex-start',
-    gap: 12,
+    gap: SPACE.md,
   },
   badge: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: SPACE.lg,
+    right: SPACE.lg,
     width: 40,
     height: 40,
     borderRadius: EMBER_RADIUS.pill,
@@ -223,36 +223,36 @@ const styles = StyleSheet.create({
   },
   avatar: { width: '100%', height: '100%' },
   avatarEmpty: { backgroundColor: EMBER.surfaceSunken },
-  name: { ...EMBER_TYPE.subtitle, fontSize: 28, lineHeight: 34, color: EMBER.textPrimary },
-  role: { ...EMBER_TYPE.subtitle, fontSize: 18, color: EMBER.accent },
+  name: TYPE.title,
+  role: { ...TYPE.body, color: EMBER.accent },
   divider: { width: 96, height: 1, backgroundColor: 'rgba(238,131,97,0.2)' },
   bio: { ...EMBER_TYPE.subtitle, color: EMBER.textSecondary },
 
   interestsCard: {
     backgroundColor: EMBER.surfaceSunken,
     borderRadius: EMBER_RADIUS.card,
-    padding: 24,
-    gap: 16,
+    padding: SPACE.xl,
+    gap: SPACE.lg,
   },
-  interestsHeading: { ...EMBER_TYPE.subtitle, fontSize: 18, color: EMBER.textPrimary },
-  interestsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  interestsHeading: TYPE.heading,
+  interestsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   chip: {
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
     overflow: 'hidden',
   },
-  chipText: { ...EMBER_TYPE.helper, fontSize: 14, color: EMBER.textPrimary },
-  chipAccentText: { ...EMBER_TYPE.helper, fontSize: 14, fontWeight: '700', color: EMBER.onGradientChip },
+  chipText: TYPE.bodyStrong,
+  chipAccentText: { ...TYPE.bodyStrong, color: EMBER.onGradientChip },
 
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: SPACE.lg,
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
-    padding: 20,
+    padding: SPACE.xl,
   },
   summaryIcon: {
     width: 48,
@@ -262,9 +262,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  summaryText: { flex: 1, gap: 2 },
-  summaryLabel: { ...EMBER_TYPE.helper, fontSize: 13, color: EMBER.textSecondary },
-  summaryValue: { ...EMBER_TYPE.subtitle, fontSize: 17, color: EMBER.textPrimary },
+  summaryText: { flex: 1, gap: SPACE.xxs },
+  summaryLabel: TYPE.meta,
+  summaryValue: TYPE.bodyStrong,
 
   error: { ...EMBER_TYPE.helper, color: '#FF6D8D' },
 })

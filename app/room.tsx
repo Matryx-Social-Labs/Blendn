@@ -15,7 +15,7 @@ import { forgetRoster } from '../lib/rosterMemory'
 import { revealReadiness } from '../lib/reveal'
 import { useAuth } from '../lib/useAuth'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 const REVEAL_FAILED = "Couldn't change who can see you. Nothing has changed."
 
@@ -295,7 +295,7 @@ function RoomInner() {
             hitSlop={12}
             style={({ pressed }) => pressed && styles.pressed}
           >
-            <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+            <Ionicons name="chevron-down" size={ICON.lg} color={EMBER.textPrimary} />
           </Pressable>
         }
         actions={
@@ -352,7 +352,7 @@ function RoomInner() {
                 hitSlop={12}
                 style={({ pressed }) => pressed && styles.pressed}
               >
-                <Ionicons name="options-outline" size={20} color={EMBER.textPrimary} />
+                <Ionicons name="options-outline" size={ICON.lg} color={EMBER.textPrimary} />
               </Pressable>
             ) : null}
             <NotificationBell />
@@ -361,12 +361,12 @@ function RoomInner() {
       />
 
       {/*
-        Frame `1141:4954`: Plus Jakarta ExtraBold 36/40 tracking -1.8, over a
-        Manrope 18/28 line that names the count and the event — the count is the
+        Frame `1141:4954`: the display title over a body line that names the
+        count and the event — the count is the
         reason to look, and the accent falls on the event because that is the
         part that changes.
       */}
-      <View style={[styles.pageHead, { paddingTop: TOP_BAR_HEIGHT + 8 }]}>
+      <View style={[styles.pageHead, { paddingTop: TOP_BAR_HEIGHT + SPACE.sm }]}>
         <Text style={styles.pageTitle} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
           The Grid
         </Text>
@@ -464,7 +464,7 @@ function SegmentButton({
       ]}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={EMBER.accent} />
+        <ActivityIndicator size="small" color={EMBER.textSecondary} />
       ) : (
         <Text style={[styles.segmentText, selected && styles.segmentTextOn]}>{label}</Text>
       )}
@@ -478,36 +478,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.sm,
   },
-  title: { ...EMBER_TYPE.cardTitle, fontSize: 22 },
+  title: { ...TYPE.heading },
   titleAccent: { color: EMBER.accent },
-  headerSpacer: { width: 24 },
+  headerSpacer: { width: ICON.lg },
 
   /*
    * Frame `1141:4959`: the pair is a pill, centred, not two full-width segments.
    *
-   * `#211F1F` at `p-6` around the buttons, with an inset shadow — so the
+   * `surfaceSunken` around the buttons, with an inset shadow — so the
    * unselected side is a hole in the track rather than a second button, and
    * only the selected one is raised. Content-width, because two 32pt-padded
    * labels are narrower than the screen and stretching them would make the
    * track read as a tab bar.
    */
-  segments: { alignItems: 'center', paddingVertical: 12 },
+  segments: { alignItems: 'center', paddingVertical: SPACE.md },
   segmentTrack: {
     flexDirection: 'row',
-    padding: 6,
+    padding: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
   },
-  // Frame `1141:4961`: `px-32 py-8`, `#2d2c2c`, raised.
+  // Frame `1141:4961`: `px-32`, `#2d2c2c`, raised.
   segment: {
-    minHeight: 36,
+    minHeight: CONTROL.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 8,
+    paddingHorizontal: SPACE.xxl,
+    paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
   },
   segmentOn: {
@@ -518,70 +518,45 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 3,
   },
-  // Frame `1141:4963`: Manrope Bold 14/20, accent when selected, `#AEAAAA` when not.
-  segmentText: {
-    fontFamily: EMBER_FONTS.bodyBold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: EMBER.textSecondary,
-  },
-  segmentTextOn: { color: EMBER.accent },
+  // Primary when selected, secondary when not; the raised pill carries the state.
+  segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
+  segmentTextOn: { color: EMBER.textPrimary },
 
   /*
    * Quiet, and next to the bell rather than in the page.
    *
    * A secondary-coloured pill on the surface, not an accent one: leaving is the
    * least interesting thing you can do in a room you just walked into, and the
-   * warm palette is spent on the reveal toggle and the segments, which are the
-   * two decisions worth making here.
+   * warm palette is spent on the event name under the title.
    */
   checkOut: {
-    minHeight: 32,
+    minHeight: CONTROL.sm,
     minWidth: 84,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
   },
-  checkOutText: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textSecondary,
-  },
+  checkOutText: { ...TYPE.button, color: EMBER.textSecondary },
 
   body: { flex: 1 },
 
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
-  emptyTitle: { ...EMBER_TYPE.cardTitle, fontSize: 18, textAlign: 'center' },
-  emptyBody: { ...EMBER_TYPE.meta, textAlign: 'center' },
+  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.xxl, gap: SPACE.sm },
+  emptyTitle: { ...TYPE.title, textAlign: 'center' },
+  emptyBody: { ...TYPE.meta, textAlign: 'center' },
 
-  // Frame `1141:4953`: the heading block sits 12 in from the page edge.
+  // The heading block sits on the gutter.
   // `paddingTop` is applied inline — it depends on the notch and the overlay bar.
-  pageHead: { paddingHorizontal: 12, paddingBottom: 16, gap: 8 },
-  // Frame `1141:4956`: Plus Jakarta ExtraBold 36/40, tracking -1.8.
-  pageTitle: {
-    fontFamily: EMBER_FONTS.displayExtraBold,
-    fontSize: 36,
-    lineHeight: 40,
-    letterSpacing: -1.8,
-    color: EMBER.textPrimary,
-  },
-  // Frame `1141:4958`: Manrope Regular 18/28, the event in `#FF6D8D`.
-  pageSubtitle: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 18,
-    lineHeight: 28,
-    color: EMBER.textSecondary,
-  },
-  pageSubtitleAccent: { color: EMBER.gradientTo },
+  pageHead: { paddingHorizontal: GUTTER, paddingBottom: SPACE.lg, gap: SPACE.sm },
+  pageTitle: { ...TYPE.display },
+  // The event name is the screen's one accent.
+  pageSubtitle: { ...TYPE.body, color: EMBER.textSecondary },
+  pageSubtitleAccent: { color: EMBER.accent },
   chatMissing: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 13,
-    lineHeight: 18,
+    ...TYPE.meta,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.sm,
     color: EMBER.textTertiary,
   },
   pressed: { opacity: 0.6 },

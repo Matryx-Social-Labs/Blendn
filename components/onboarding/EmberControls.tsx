@@ -24,13 +24,16 @@ import {
 
 import { isCatchAll, packChips } from '../../lib/chipPacking'
 import {
+  CONTROL,
   EMBER,
   EMBER_CONTROL_HEIGHT,
-  EMBER_FONTS,
-  EMBER_GLOW,
   EMBER_GRADIENT,
   EMBER_RADIUS,
   EMBER_TYPE,
+  GUTTER,
+  ICON,
+  SPACE,
+  TYPE,
 } from '../../lib/theme'
 
 /**
@@ -38,9 +41,9 @@ import {
  *
  * One file rather than four, because they are small and always imported
  * together — and because they share the one rule that matters: **the gradient
- * means "chosen"**. It is on the primary button and on a selected chip, and
- * nowhere else. A gradient used decoratively would make the selected state
- * unreadable, which on a chip row is the entire information.
+ * means "chosen"**. It is on a selected chip and nowhere else. A gradient used
+ * decoratively would make the selected state unreadable, which on a chip row is
+ * the entire information.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -52,7 +55,7 @@ interface ButtonProps {
   busy?: boolean
 }
 
-/** The primary action. Gradient, dark text, a warm glow under it. */
+/** The primary action. Flat accent fill, dark text, no glow. */
 export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
   const inactive = disabled || busy
   return (
@@ -71,18 +74,13 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
         pressed && !inactive && styles.pressed,
       ]}
     >
-      <LinearGradient
-        colors={[...EMBER_GRADIENT.colors]}
-        start={EMBER_GRADIENT.start}
-        end={EMBER_GRADIENT.end}
-        style={styles.button}
-      >
+      <View style={styles.button}>
         {/*
           The label is capped because this button is a fixed
           `EMBER_CONTROL_HEIGHT` box. React Native clips a glyph to its line
           height rather than letting it overflow, so at Accessibility XXXL an
           uncapped label renders as a row of sliced letterforms inside a button
-          that is still 64pt tall. 1.3 is the largest step that fits.
+          that is still 56pt tall. 1.3 is the largest step that fits.
 
           Text in a *growing* container is deliberately left alone — capping
           everything would defeat the setting for the people who need it.
@@ -94,7 +92,7 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
             {label}
           </Text>
         )}
-      </LinearGradient>
+      </View>
     </Pressable>
   )
 }
@@ -276,7 +274,7 @@ export function EmberChipRow({
         withMeasurement.filter((c) => !isEnd(c)),
         // The measured pill, plus the margin the row spaces them with.
         (child) => measured[labelOf(child)] + CHIP_SPACING,
-        width ?? Dimensions.get('window').width - 48
+        width ?? Dimensions.get('window').width - GUTTER * 2
       ),
       ...withMeasurement.filter(isEnd),
     ]
@@ -374,12 +372,12 @@ export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps
 }
 
 /**
- * A section heading, in the accent colour, with a caption and an optional
+ * A section heading with a caption and an optional
  * control on the right.
  *
  * `EmberFieldGroup` puts a small uppercase grey label over a control, which is
  * the treatment the form *fields* use. The design gives its sections something
- * louder: a 20pt accent-coloured title with a sentence under it, and room for
+ * louder: a heading-role title with a sentence under it, and room for
  * a control on the same line — the "Show on profile" pill sits there rather
  * than becoming a row of its own underneath.
  *
@@ -485,7 +483,7 @@ export function EmberCardSection({
     <View style={styles.cardSection}>
       <View style={styles.cardHead}>
         <View style={styles.cardBadge}>
-          <Ionicons name={icon} size={18} color={EMBER.accent} />
+          <Ionicons name={icon} size={ICON.md} color={EMBER.accent} />
         </View>
         <View style={styles.cardHeadText}>
           <Text style={styles.cardTitle}>{title}</Text>
@@ -517,20 +515,21 @@ export function EmberFieldGroup({
 }
 
 /** Space between chips. Applied as margin, halved — see `EmberChipRow`. */
-const CHIP_SPACING = 12
+const CHIP_SPACING = SPACE.md
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
 
-  buttonShadow: { borderRadius: EMBER_RADIUS.pill, ...EMBER_GLOW.button },
+  buttonShadow: { borderRadius: EMBER_RADIUS.pill },
   buttonInactive: { opacity: 0.45 },
   button: {
     height: EMBER_CONTROL_HEIGHT,
     borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACE.md,
   },
   buttonLabel: EMBER_TYPE.button,
 
@@ -563,7 +562,7 @@ const styles = StyleSheet.create({
      * picking "Asexual" appeared to tidy the layout up. It was not tidying; it
      * was re-packing around a chip that had just shrunk.
      *
-     * 24/12 padding is the frame's 25/13 rounded to the spacing scale.
+     * 16/12 padding: the frame's 25/13 snapped to the spacing scale.
      */
     borderWidth: 1,
     borderColor: 'transparent',
@@ -581,15 +580,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: '100%',
     /*
-     * 20, not the frame's 25.
+     * 16, not the frame's 25.
      *
      * The frame lays its chips out at fixed positions on a 390pt artboard; a
      * real screen has to wrap them, and 25 each side puts "Prefer not to say"
-     * at roughly half the usable width on its own. 20 keeps the pill shape and
+     * at roughly half the usable width on its own. 16 keeps the pill shape and
      * fits noticeably more per line.
      */
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -598,13 +597,12 @@ const styles = StyleSheet.create({
     // A wrap container stretches on the cross axis. A chip should be its own
     // height, not the height of the tallest one sharing its line.
     alignSelf: 'flex-start',
-    // Comfortably over the 44pt floor once the 24/12 padding is applied to
-    // 24pt of line height, and stated so a shorter label cannot shrink below it.
-    minHeight: 48,
+    // Over the 44pt floor, and stated so a shorter label cannot shrink below it.
+    minHeight: CONTROL.md,
   },
   // `#141313` with a hairline border, per the frame — a shade below the cards
   // around it, so an unselected chip recedes rather than competing.
-  chipIdle: { backgroundColor: '#141313', borderColor: 'rgba(73,71,71,0.2)' },
+  chipIdle: { backgroundColor: EMBER.surfaceMedia, borderColor: 'rgba(73,71,71,0.2)' },
   // Opacity only, so the chip keeps its measured width and the row does not
   // re-pack every time the cap is reached or released.
   chipDisabled: { opacity: 0.35 },
@@ -615,33 +613,31 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: SPACE.lg,
     backgroundColor: EMBER.surfaceSunken,
     borderRadius: EMBER_RADIUS.card,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: SPACE.lg,
+    paddingHorizontal: SPACE.xl,
   },
   // `flex: 1` so a two-line helper wraps instead of squeezing the switch off
   // the right edge, which is what a row of three fixed children does on a
   // narrow phone.
-  toggleText: { flex: 1, gap: 4 },
+  toggleText: { flex: 1, gap: SPACE.xs },
   toggleLabel: { ...EMBER_TYPE.subtitle, color: EMBER.textPrimary },
 
-  // 12 between the heading block and the caption, 24 before the content —
-  // so the caption reads as belonging to the heading rather than floating
-  // between two things.
+  // The caption sits under the title inside the head; 16 before the content.
   cardSection: {
     backgroundColor: EMBER.surfaceMedia,
     borderRadius: EMBER_RADIUS.card,
     borderWidth: 1,
     borderColor: 'rgba(73,71,71,0.2)',
-    // 16 rather than 20: the card already costs the chips inside it 40pt of
-    // width against the open sections elsewhere, and work-field labels are the
-    // longest in the app. Eight points back is a chip per row.
-    padding: 16,
-    gap: 20,
+    // 16 rather than 24: the card already costs the chips inside it width
+    // against the open sections elsewhere, and work-field labels are the
+    // longest in the app.
+    padding: SPACE.lg,
+    gap: SPACE.lg,
   },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   cardBadge: {
     width: 40,
     height: 40,
@@ -650,22 +646,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardHeadText: { flex: 1, gap: 2 },
-  cardTitle: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 18,
-    lineHeight: 26,
-    color: EMBER.textPrimary,
-  },
-  cardCaption: { ...EMBER_TYPE.helper, fontSize: 13, lineHeight: 18 },
-  cardBody: { gap: 16 },
+  cardHeadText: { flex: 1, gap: SPACE.xxs },
+  cardTitle: TYPE.heading,
+  cardCaption: { ...TYPE.meta, color: EMBER.textTertiary },
+  cardBody: { gap: SPACE.lg },
 
-  section: { gap: 12 },
+  section: { gap: SPACE.md },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACE.md,
     /*
      * A floor, not a fix. The real guarantee is that callers keep the control
      * mounted and hide it — see `preferences.tsx` — because `transform: scale`
@@ -675,37 +666,31 @@ const styles = StyleSheet.create({
      */
     minHeight: 40,
   },
-  sectionTitle: {
-    flex: 1,
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 20,
-    lineHeight: 28,
-    color: EMBER.accent,
-  },
-  sectionCaption: { ...EMBER_TYPE.helper, fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  sectionTitle: { ...TYPE.heading, flex: 1 },
+  sectionCaption: { ...TYPE.meta, color: EMBER.textTertiary, marginBottom: SPACE.md },
 
   inlinePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: SPACE.sm,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.xs,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: '#141313',
+    backgroundColor: EMBER.surfaceMedia,
   },
-  inlineLabel: { ...EMBER_TYPE.helper, fontSize: 12, color: EMBER.textSecondary },
-  // Scaled down: a stock switch beside 12pt text is nearly twice its height.
+  inlineLabel: TYPE.meta,
+  // Scaled down: a stock switch beside 13pt text is nearly twice its height.
   inlineSwitch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
 
-  fieldBlock: { gap: 12 },
+  fieldBlock: { gap: SPACE.md },
   fieldLabel: EMBER_TYPE.fieldLabel,
   input: {
     height: EMBER_CONTROL_HEIGHT,
     borderRadius: EMBER_RADIUS.input,
     backgroundColor: EMBER.surface,
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACE.xl,
     ...EMBER_TYPE.input,
   },
-  inputCompact: { paddingHorizontal: 12, ...EMBER_TYPE.inputCentered },
+  inputCompact: { paddingHorizontal: SPACE.md, ...EMBER_TYPE.inputCentered },
   helper: EMBER_TYPE.helper,
 })

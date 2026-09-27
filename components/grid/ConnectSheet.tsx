@@ -9,9 +9,8 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 
-import { EMBER, EMBER_FONTS, EMBER_GRADIENT } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { RisingSheet } from '../motion/RisingSheet'
 
@@ -97,7 +96,7 @@ export function ConnectSheet({
       <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Cancel" />
 
       <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR}>
-        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.xl }]}>
           <View style={styles.grabber} />
 
           <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
@@ -156,14 +155,6 @@ export function ConnectSheet({
               pressed && styles.pressed,
             ]}
           >
-            {canSend ? (
-              <LinearGradient
-                colors={[...EMBER_GRADIENT.colors]}
-                start={EMBER_GRADIENT.start}
-                end={EMBER_GRADIENT.end}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
             <Text
               style={[styles.sendLabel, !canSend && styles.sendLabelOff]}
               maxFontSizeMultiplier={1.3}
@@ -189,81 +180,47 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
     backgroundColor: EMBER.bg,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    gap: 12,
+    borderTopLeftRadius: EMBER_RADIUS.lg,
+    borderTopRightRadius: EMBER_RADIUS.lg,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.md,
+    gap: SPACE.md,
   },
   grabber: {
     width: 36,
     height: 4,
-    borderRadius: 2,
+    borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: SPACE.md,
   },
-  title: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 20,
-    lineHeight: 28,
-    color: EMBER.textPrimary,
-  },
-  disclosure: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 14,
-    lineHeight: 21,
-    color: EMBER.accent,
-  },
+  title: { ...TYPE.title },
+  disclosure: { ...TYPE.body, color: EMBER.textSecondary },
   input: {
+    ...TYPE.body,
     minHeight: 108,
     maxHeight: 200,
-    borderRadius: 24,
+    borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
-    padding: 16,
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.textPrimary,
+    padding: SPACE.lg,
     textAlignVertical: 'top',
   },
   meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  hint: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textTertiary,
-  },
-  counter: {
-    fontFamily: EMBER_FONTS.bodyMedium,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textTertiary,
-  },
-  counterLow: { color: EMBER.accent },
+  hint: { ...TYPE.meta, color: EMBER.textTertiary },
+  counter: { ...TYPE.meta, color: EMBER.textTertiary },
+  counterLow: { color: EMBER.textPrimary },
   send: {
-    minHeight: 56,
-    borderRadius: 9999,
+    minHeight: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    marginTop: 4,
-    overflow: 'hidden',
+    paddingVertical: SPACE.lg,
+    marginTop: SPACE.xs,
+    backgroundColor: EMBER.accent,
   },
   sendOff: { backgroundColor: EMBER.surface },
   pressed: { opacity: 0.75 },
-  sendLabel: {
-    fontFamily: EMBER_FONTS.displayBold,
-    fontSize: 16,
-    lineHeight: 24,
-    color: EMBER.onGradient,
-  },
+  sendLabel: { ...TYPE.button, color: EMBER.onGradient },
   sendLabelOff: { color: EMBER.textTertiary },
-  footnote: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 12,
-    lineHeight: 18,
-    color: EMBER.textTertiary,
-    textAlign: 'center',
-  },
+  footnote: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center' },
 })

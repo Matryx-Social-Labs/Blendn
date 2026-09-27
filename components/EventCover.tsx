@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
-import { EMBER } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE } from '../lib/theme'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
 
@@ -31,7 +31,7 @@ interface EventCoverProps {
  * Either way this draws the brand mark on the surface colour instead, and the
  * title, venue and time stay readable over it.
  */
-export function EventCover({ uri, height, radius = 12, retry = 0, children }: EventCoverProps) {
+export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0, children }: EventCoverProps) {
   const attempt = `${uri}#${retry}`
   const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
@@ -84,6 +84,6 @@ const styles = StyleSheet.create({
   },
   // Faint and above centre, so it reads as a mark and not as content, and the
   // title at the bottom never sits on it.
-  mark: { width: 72, height: 72, opacity: 0.35, marginBottom: 40 },
+  mark: { width: 72, height: 72, opacity: 0.35, marginBottom: SPACE.xxl },
   overlay: { backgroundColor: 'rgba(0,0,0,0.4)' },
 })

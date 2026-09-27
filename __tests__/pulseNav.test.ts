@@ -38,20 +38,19 @@ describe('the overlay header, frame 1141:4819', () => {
     expect(src).toContain('top: 0')
   })
 
-  it('carries the frame values, unadjusted', () => {
+  it('carries the frame height and fill, on the page margin', () => {
     const src = TOP_BAR()
     expect(src).toContain('TOP_BAR_HEIGHT = 64')
     expect(src).toContain("backgroundColor: 'rgba(15,14,14,0.8)'")
     expect(src).toContain('intensity={12}')
-    expect(src).toContain('paddingHorizontal: 24')
+    expect(src).toContain('paddingHorizontal: GUTTER')
   })
 
-  it('the wordmark is the accent, not white', () => {
+  it('the wordmark is white, not a second accent', () => {
     const src = TOP_BAR()
-    // Plus Jakarta Bold 16/24, `#FF906D`, letterSpacing -0.8.
-    expect(src).toContain('fontFamily: EMBER_FONTS.displayBold')
-    expect(src).toContain('letterSpacing: -0.8')
-    expect(src).toContain('color: EMBER.accent')
+    // The screen title below carries the one accent (docs/DESIGN_SYSTEM.md).
+    expect(src).toContain('wordmark: { ...TYPE.button')
+    expect(src).not.toContain('EMBER.accent')
     expect(src).not.toContain("color: '#FFFFFF'")
   })
 
@@ -99,7 +98,7 @@ describe('the overlay header, frame 1141:4819', () => {
   it('the feed clears it with padding, not with a spacer', () => {
     const src = SCREEN()
     expect(src).toContain('<PulseTopBar')
-    expect(src).toContain('paddingTop: insets.top + TOP_BAR_HEIGHT + 32')
+    expect(src).toContain('paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg')
   })
 })
 
@@ -110,15 +109,13 @@ describe('the stylesheet, frame 1141:4643', () => {
     return src.slice(src.indexOf('const styles = StyleSheet.create({'))
   }
 
-  it("carries Main's four numbers, unadjusted", () => {
+  it("takes the page's rhythm from the design system", () => {
     const src = SCREEN()
-    expect(src).toContain('const MAIN_PADDING_HORIZONTAL = 12')
+    expect(src).toContain('const MAIN_PADDING_HORIZONTAL = GUTTER')
     expect(src).toContain('const MAIN_PADDING_BOTTOM = 128')
-    expect(src).toContain('const MAIN_GAP = 48')
-    expect(src).toContain('const SECTION_GAP = 24')
-    expect(src).toContain('const STACK_GAP = 32')
-    // 96 is the fourth, written as `TOP_BAR_HEIGHT + 32` at the render site
-    // because the 32 is the part that means anything.
+    expect(src).toContain('const MAIN_GAP = SPACE.xxl')
+    expect(src).toContain('const SECTION_GAP = SPACE.lg')
+    expect(src).toContain('const STACK_GAP = SPACE.xl')
   })
 
   it('the page is one flat surface', () => {
@@ -161,7 +158,7 @@ describe('the stylesheet, frame 1141:4643', () => {
 
   it('is on the shared type scale, with no local one beside it', () => {
     const src = SCREEN()
-    expect(src).toContain('EMBER_TYPE')
+    expect(src).toContain('...TYPE.')
     expect(src).not.toContain('TYPE_CARD_TITLE_SIZE')
     expect(src).not.toContain('TYPE_BODY_SIZE')
     expect(src).not.toContain('TYPE_META_SIZE')

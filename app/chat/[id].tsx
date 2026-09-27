@@ -32,7 +32,7 @@ import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
-import { EMBER } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -98,7 +98,7 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
   return (
     <View style={headerStyles.container}>
       <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
-        <Ionicons name="chevron-back" size={24} color={EMBER.textPrimary} />
+        <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
@@ -106,7 +106,7 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
           <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
-            <Ionicons name="people" size={18} color={EMBER.textPrimary} />
+            <Ionicons name="people" size={ICON.md} color={EMBER.textPrimary} />
           </View>
         )}
       </View>
@@ -127,11 +127,11 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+    paddingHorizontal: SPACE.xs,
+    paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
-    gap: 8,
+    gap: SPACE.sm,
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
@@ -139,9 +139,9 @@ const headerStyles = StyleSheet.create({
   avatar: { width: 38, height: 38, borderRadius: 19 },
   avatarGroupFallback: { backgroundColor: '#1A3A5C', alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: EMBER.textPrimary },
-  typing: { fontSize: 12, color: '#4CAF91', marginTop: 1 },
-  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  name: TYPE.bodyStrong,
+  typing: { ...TYPE.meta, color: '#4CAF91' },
+  subtitle: { ...TYPE.meta, color: 'rgba(255,255,255,0.5)' },
 })
 
 /**
@@ -715,7 +715,7 @@ function GroupChatInner(props?: {
               accessibilityRole="button"
               accessibilityLabel="Jump to the newest message"
             >
-              <Ionicons name="chevron-down" size={20} color={EMBER.textPrimary} />
+              <Ionicons name="chevron-down" size={ICON.md} color={EMBER.textPrimary} />
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -728,7 +728,7 @@ function GroupChatInner(props?: {
               <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
             </View>
             <TouchableOpacity style={styles.replyBarClose} onPress={() => setReplyingTo(null)}>
-              <Ionicons name="close" size={16} color="rgba(255,255,255,0.6)" />
+              <Ionicons name="close" size={ICON.sm} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -815,14 +815,14 @@ function GroupChatInner(props?: {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   flex: { flex: 1 },
-  banner: { marginHorizontal: 16, marginTop: 4, marginBottom: 2 },
+  banner: { marginHorizontal: GUTTER, marginTop: SPACE.xs, marginBottom: SPACE.xxs },
 
-  listContent: { paddingHorizontal: 12, paddingVertical: 8 },
+  listContent: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm, gap: SPACE.lg },
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
 
-  loadingIndicator: { marginVertical: 24 },
-  loadMoreBtn: { alignItems: 'center', paddingVertical: 12 },
-  loadMoreText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  loadingIndicator: { marginVertical: SPACE.xl },
+  loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
+  loadMoreText: { ...TYPE.meta, color: 'rgba(255,255,255,0.45)' },
 
   // System / announcement messages
 
@@ -838,53 +838,51 @@ const styles = StyleSheet.create({
   // Reply bar above input
   replyBar: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 8,
+    paddingHorizontal: GUTTER, paddingVertical: SPACE.sm,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)',
-    gap: 10,
+    gap: SPACE.md,
   },
   replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.accent, borderRadius: 2 },
   replyBarContent: { flex: 1 },
-  replyBarLabel: { fontSize: 12, fontWeight: '600', color: EMBER.accent },
-  replyBarMessage: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
-  replyBarClose: { padding: 4 },
+  replyBarLabel: { ...TYPE.caption, color: EMBER.accent },
+  replyBarMessage: { ...TYPE.meta, color: 'rgba(255,255,255,0.6)' },
+  replyBarClose: { padding: SPACE.xs },
 
   // Input bar
 
   // Scroll to bottom
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollToBottomBtn: {
-    position: 'absolute', right: 16, bottom: 80,
+    position: 'absolute', right: GUTTER, bottom: 80,
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: EMBER.accent, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
 
   // Empty
-  emptyContainer: { alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: EMBER.textPrimary, marginBottom: 8 },
-  emptyText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
+  emptyContainer: { alignItems: 'center', paddingHorizontal: SPACE.xxl },
+  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm },
+  emptyText: { ...TYPE.body, color: 'rgba(255,255,255,0.6)', textAlign: 'center' },
   emptyCta: {
-    marginTop: 16, backgroundColor: EMBER.accent,
-    borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10,
+    marginTop: SPACE.lg, backgroundColor: EMBER.accent,
+    borderRadius: 999, height: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.xl,
   },
   // `onGradient`, not `textPrimary` — this sits on the warm accent fill, and
   // `lib/theme.ts` is explicit that white fails contrast there.
-  emptyCtaText: { color: EMBER.onGradient, fontSize: 14, fontWeight: '600' },
+  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
 
   // Message menu modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   messageMenu: {
-    backgroundColor: EMBER.surface, borderRadius: 14, padding: 8, minWidth: 200,
+    backgroundColor: EMBER.surface, borderRadius: EMBER_RADIUS.md, padding: SPACE.sm, minWidth: 200,
     borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.1)',
   },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8 },
-  menuIcon: { fontSize: 18, marginRight: 12 },
-  menuText: { fontSize: 16, color: EMBER.textPrimary, fontWeight: '500' },
-  // `gradientTo`, not an arbitrary red — the same flat colour onboarding's
-  // error text uses for the same reason: no dedicated destructive token
-  // exists in EMBER yet, and this converges on the one already in use.
-  menuTextDestructive: { color: EMBER.gradientTo },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.md, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.sm },
+  // An emoji standing in for a row icon, so it takes the icon size.
+  menuIcon: { fontSize: ICON.md, marginRight: SPACE.md },
+  menuText: TYPE.body,
+  menuTextDestructive: { color: EMBER.destructive },
 })
 
 

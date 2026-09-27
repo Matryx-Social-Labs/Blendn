@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { EMBER, EMBER_FONTS } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     AccessibilityInfo,
@@ -47,7 +47,7 @@ export default function PhotoManager({
   // Measure available width to compute exact 3-col sizing
   const [containerWidth, setContainerWidth] = useState<number>(width - 32)
   const NUM_COLUMNS = 3
-  const GAP = 8
+  const GAP = SPACE.sm
   const itemSize = Math.max(80, Math.floor((containerWidth - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS))
 
   useEffect(() => {
@@ -295,7 +295,7 @@ export default function PhotoManager({
               accessibilityLabel={`Remove photo ${index + 1}`}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="close-circle" size={24} color="#FF3B30" />
+              <Ionicons name="close-circle" size={ICON.lg} color={EMBER.destructive} />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
@@ -313,10 +313,10 @@ export default function PhotoManager({
         disabled={uploading}
       >
         {uploading ? (
-          <ActivityIndicator size="small" color={EMBER.accent} />
+          <ActivityIndicator size="small" color={EMBER.textSecondary} />
         ) : (
           <>
-            <Ionicons name="add" size={32} color={EMBER.accent} />
+            <Ionicons name="add" size={32} color={EMBER.textSecondary} />
             <Text style={styles.addPhotoText}>Add Photo</Text>
           </>
         )}
@@ -327,7 +327,7 @@ export default function PhotoManager({
   if (loading) {
     return (
       <View style={[styles.container, styles.loadingContainer, style]}>
-        <ActivityIndicator size="large" color={EMBER.accent} />
+        <ActivityIndicator size="large" color={EMBER.textSecondary} />
         <Text style={styles.loadingText}>Loading photos...</Text>
       </View>
     )
@@ -379,35 +379,31 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: SPACE.xxl,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    ...TYPE.body,
+    marginTop: SPACE.lg,
     color: EMBER.textSecondary,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACE.lg,
   },
   caption: {
-    fontFamily: EMBER_FONTS.bodyRegular,
-    fontSize: 13,
-    lineHeight: 18,
-    color: EMBER.textSecondary,
-    marginBottom: 12,
+    ...TYPE.meta,
+    marginBottom: SPACE.md,
   },
   hint: {
-    fontSize: 12,
-    color: EMBER.textSecondary,
+    ...TYPE.meta,
     fontStyle: 'italic',
   },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACE.sm,
   },
   photoGridContent: {
     padding: 0,
@@ -416,7 +412,7 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   photo: {
-    borderRadius: 12,
+    borderRadius: EMBER_RADIUS.sm,
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceSunken,
     elevation: 2,
@@ -431,62 +427,52 @@ const styles = StyleSheet.create({
   },
   makePrimaryButton: {
     position: 'absolute',
-    bottom: 6,
-    left: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    bottom: SPACE.sm,
+    left: SPACE.sm,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xs,
+    borderRadius: EMBER_RADIUS.sm,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  makePrimaryText: { color: '#fff', fontSize: 10, fontWeight: '600' },
+  makePrimaryText: { ...TYPE.caption, color: EMBER.textPrimary },
   primaryBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: EMBER.accent,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    top: SPACE.sm,
+    left: SPACE.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: SPACE.xxs,
+    borderRadius: EMBER_RADIUS.sm,
   },
-  primaryText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  primaryText: { ...TYPE.caption, color: EMBER.textPrimary },
   removeButton: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: SPACE.xs,
+    right: SPACE.xs,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 12,
   },
   dragHandle: {
     position: 'absolute',
-    bottom: 4,
-    right: 4,
+    bottom: SPACE.xs,
+    right: SPACE.xs,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: 4,
-    padding: 2,
+    padding: SPACE.xxs,
   },
-  dragText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '500',
-  },
+  dragText: { ...TYPE.caption, color: EMBER.textPrimary },
   addPhoto: {
-    borderRadius: 12,
+    borderRadius: EMBER_RADIUS.sm,
     borderWidth: 2,
-    borderColor: EMBER.accent,
+    borderColor: EMBER.textTertiary,
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: EMBER.surfaceMedia,
-    margin: 4,
+    marginTop: SPACE.sm,
   },
   addPhotoText: {
-    marginTop: 4,
-    fontSize: 12,
-    color: EMBER.accent,
-    fontWeight: '500',
+    ...TYPE.meta,
+    marginTop: SPACE.xs,
   },
 })

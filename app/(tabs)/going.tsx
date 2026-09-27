@@ -19,7 +19,7 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedEvents'
 import { formatEventDateTime } from '../../lib/time'
-import { APP_COLORS } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -227,26 +227,26 @@ function GoingScreenInner() {
           <Text style={styles.venue} numberOfLines={1}>{item.venue_name}</Text>
           <Text style={styles.time}>{formatEventDateTime(item.start_time)}</Text>
           {item.status === 'cancelled' ? (
-            <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">Cancelled</Text>
+            <Text style={styles.cancelled} accessibilityLabel="Cancelled by the organiser">CANCELLED</Text>
           ) : null}
         </View>
       </EventCover>
       </TouchableOpacity>
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel={`Remove ${item.title} from saved`}>
-          <Ionicons name="heart-dislike" size={16} color={APP_COLORS.destructive} />
+          <Ionicons name="heart-dislike" size={ICON.sm} color={EMBER.destructive} />
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
-          <Ionicons name="navigate" size={16} color={APP_COLORS.accent} />
+          <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
           <Text style={styles.actionText}>Open in Maps</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
-          <Ionicons name="calendar" size={16} color={APP_COLORS.accent} />
+          <Ionicons name="calendar" size={ICON.sm} color={EMBER.textSecondary} />
           <Text style={styles.actionText}>Add to calendar</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
-          <Ionicons name="share-social" size={16} color={APP_COLORS.accent} />
+          <Ionicons name="share-social" size={ICON.sm} color={EMBER.textSecondary} />
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
@@ -268,7 +268,7 @@ function GoingScreenInner() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={APP_COLORS.textPrimary} />
+          <ActivityIndicator color={EMBER.textPrimary} />
         </View>
       ) : events.length === 0 && loadFailed ? (
         <View style={styles.empty}>
@@ -307,7 +307,7 @@ function GoingScreenInner() {
           onRefresh={onRefresh}
           // The container already insets the home indicator; this clears the
           // absolutely positioned tab bar on top of that.
-          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 24 }}
+          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
         />
       )}
     </SafeAreaView>
@@ -331,34 +331,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.sm,
+    paddingBottom: SPACE.lg,
   },
-  backBtn: { padding: 4 },
-  headerTitle: { color: APP_COLORS.textPrimary, fontSize: 20, fontWeight: '800' },
+  backBtn: { padding: SPACE.xs },
+  headerTitle: { ...TYPE.display },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  emptyTitle: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
-  emptySub: { color: APP_COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
+  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
+  emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   retryButton: {
-    marginTop: 16,
-    minHeight: 44,
-    paddingHorizontal: 24,
+    marginTop: SPACE.xl,
+    height: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
     justifyContent: 'center',
-    borderRadius: 22,
-    backgroundColor: APP_COLORS.backgroundCard,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
   },
-  retryText: { color: APP_COLORS.textPrimary, fontSize: 15, fontWeight: '600' },
-  card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: APP_COLORS.backgroundElevated, borderRadius: 12, overflow: 'hidden' },
-  overlayContent: { position: 'absolute', left: 12, right: 12, bottom: 12 },
-  title: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '800' },
-  venue: { color: APP_COLORS.textPrimary, marginTop: 2 },
-  time: { color: APP_COLORS.textSecondary, marginTop: 2, fontSize: 12 },
-  cancelled: { color: APP_COLORS.destructive, marginTop: 4, fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: APP_COLORS.backgroundElevated },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 12, minHeight: 44, borderRadius: 22 },
-  actionText: { color: APP_COLORS.textPrimary, fontSize: 12 },
+  retryText: { ...TYPE.button },
+  card: { marginHorizontal: GUTTER, marginBottom: SPACE.lg, backgroundColor: EMBER.surfaceSunken, borderRadius: EMBER_RADIUS.md, overflow: 'hidden' },
+  overlayContent: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
+  title: { ...TYPE.title },
+  venue: { ...TYPE.meta, color: EMBER.textPrimary, marginTop: SPACE.xxs },
+  time: { ...TYPE.meta, marginTop: SPACE.xxs },
+  cancelled: { ...TYPE.label, color: EMBER.destructive, marginTop: SPACE.xs },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, padding: SPACE.md, backgroundColor: EMBER.surfaceSunken },
+  actionChip: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, backgroundColor: EMBER.surface, paddingHorizontal: SPACE.md, height: CONTROL.md, borderRadius: EMBER_RADIUS.pill },
+  actionText: { ...TYPE.bodyStrong },
 })
 
 
