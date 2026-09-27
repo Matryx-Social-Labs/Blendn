@@ -23,7 +23,6 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 const LIST_SURFACES = [
   ['components', 'pulse', 'FeedMedia.tsx'],
   ['components', 'pulse', 'UpcomingCard.tsx'],
-  ['components', 'EventCard.tsx'],
   ['components', 'screens', 'MatchScreen.tsx'],
   ['app', '(tabs)', 'events.tsx'],
   ['app', '(tabs)', 'chat.tsx'],

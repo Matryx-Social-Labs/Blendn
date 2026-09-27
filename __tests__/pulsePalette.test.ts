@@ -24,7 +24,6 @@ import { APP_COLORS, EMBER } from '../lib/theme'
 const PULSE_SURFACE = [
   'app/(tabs)/events.tsx',
   'components/NearbyEventCard.tsx',
-  'components/EventCard.tsx',
   'components/pulse/PulseHeader.tsx',
   'components/pulse/SectionHeader.tsx',
   'components/pulse/FeaturedCard.tsx',

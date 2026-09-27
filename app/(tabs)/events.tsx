@@ -18,7 +18,6 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
-import EventCard from '../../components/EventCard'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import NearbyEventCard from '../../components/NearbyEventCard'
@@ -66,6 +65,7 @@ import { publishRoomSignal } from '../../lib/roomSignal'
 import {
   featuredDateLabel,
   joinedCount,
+  nextUpLabel,
   placeLabel,
   groupByDay,
   timeLabel,
@@ -315,7 +315,6 @@ function EventsInner() {
     }))
   }
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
-  const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
   /*
    * Browse scope, and the two things that are *not* it.
    *
@@ -634,7 +633,6 @@ function EventsInner() {
       }
 
       checkInFlightRef.current.add(event.id)
-      setCheckInPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
       previousStatus = latestCheckinStatusesRef.current[event.id]
       hadCheckedInEvent = latestCheckedInEventsRef.current.some((e) => e.id === event.id)
@@ -827,7 +825,6 @@ function EventsInner() {
       })
     } finally {
       checkInFlightRef.current.delete(event.id)
-      setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
   }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
@@ -1699,35 +1696,44 @@ function EventsInner() {
   // Cleared once the first content has committed; see `RevealRow`.
   const mainRowsRevealPending = useRef(true)
 
-  // Memoized render function for event items
+  /*
+   * The rows under the sections — everything Featured, Upcoming and Nearby did
+   * not draw, and the whole result while searching or filtering.
+   *
+   * The same `UpcomingCard` row as the Upcoming section. This used to be
+   * `EventCard`, the photo-on-top card from before the redesign, with its own
+   * check-in button and "move closer" chips — so scrolling past Nearby dropped
+   * you into the old app. Check-in lives on the event screen, where the
+   * geofence is explained; a row only needs to say when, where and how far.
+   *
+   * Not grouped by day, so the eyebrow carries the date as well as the time.
+   */
   const renderEventItem = useCallback(({ item: event, index }: { item: Event; index: number }) => {
-    const checkinStatus = checkinStatuses[event.id]
-    const proximity = proximityData[event.id]
-    const isCheckedIn = checkinStatus?.status === 'checked_in'
-    const canCheckIn = proximity?.within_radius && !isCheckedIn
-    const interested = !!interestStatuses[event.id]
+    const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
     const isEnded = new Date(event.end_time).getTime() < Date.now()
+    const note = isCheckedIn ? 'Checked in' : isEnded ? 'Ended' : null
 
     return (
       <RevealRow index={index} pending={mainRowsRevealPending}>
-        <EventCard
-          event={event}
-          isCheckedIn={isCheckedIn}
-          canCheckIn={canCheckIn}
-          interested={interested}
-          isEnded={isEnded}
-          proximity={proximity}
-          interestCount={interestCounts[event.id]}
-          checkInLoading={!!checkInPending[event.id]}
-          interestLoading={!!interestPending[event.id]}
-          onPress={handleEventPress}
-          onLongPress={handleEventPreview}
-          onCheckIn={handleCheckIn}
-          onToggleInterest={toggleInterest}
-        />
+        <View style={styles.mainRow}>
+          <UpcomingCard
+            title={event.title}
+            category={event.category || null}
+            imageUrl={event.cover_image_url}
+            timeLabel={nextUpLabel(event.start_time, event.end_time)}
+            placeLabel={placeLabel(event)}
+            joinedCount={joinedCount(event)}
+            distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
+            note={note}
+            onPress={() => handleEventPress(event)}
+            isFavorited={!!interestStatuses[event.id]}
+            favoriteBusy={!!interestPending[event.id]}
+            onToggleFavorite={() => toggleInterest(event)}
+          />
+        </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestCounts, checkInPending, interestPending, handleEventPress, handleEventPreview, handleCheckIn, toggleInterest])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, toggleInterest])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -2356,7 +2362,7 @@ function EventsInner() {
           /*
            * 4, not 10.
            *
-           * The rows below the header are `EventCard`s, tall enough that
+           * The rows below the header are `UpcomingCard`s, and
            * only a few are ever visible at once.
            *
            * `initialNumToRender` is rendered *synchronously before first
@@ -2628,6 +2634,12 @@ function EventsInner() {
                       {renderNearbyPrompt()}
                     </FadeInUp>
                   ) : null)}
+                {/* Names the rows that follow, so they read as a section rather than as overflow. */}
+                {!isNarrowed && mainListData.length > 0 ? (
+                  <View style={[styles.pulseSection, { marginBottom: SECTION_GAP }]}>
+                    <SectionHeader title="More events" />
+                  </View>
+                ) : null}
                 <View style={{ height: SPACE.sm }} />
               </View>
             )
@@ -2860,6 +2872,8 @@ const styles = StyleSheet.create({
   /** Upcoming: days a section's gap apart, rows within a day close together. */
   dayGroups: { gap: SPACE.xl },
   dayGroup: { gap: SPACE.md },
+  /** A row in the list under the sections: the Upcoming stack's spacing. */
+  mainRow: { paddingBottom: SPACE.md },
   /**
    * The loading skeleton's Upcoming row — `UpcomingCard`'s own `card` style
    * (`surfaceSunken`, `EMBER_RADIUS.md`, 16 padding, 16 gap), so the

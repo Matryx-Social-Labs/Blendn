@@ -1,51 +1,23 @@
-# Bengaluru scenario reseed (2026-09-28) — PLAN, awaiting sign-off
+# Bengaluru scenario reseed (2026-09-28)
 
-Goal: remove every Bangalore/Bengaluru event on staging, seed a fresh, fully-detailed set covering every lifecycle state the backend + app distinguish.
+Script: `blendn-admin/scripts/seed-blr-scenarios.ts` (+ `seed-blr-photos.json`). Dry run by default, `--apply` writes, staging/localhost only.
 
-## Script: `blendn-admin/scripts/seed-blr-scenarios.ts` (new)
-- [ ] Dry run by default; `--apply` writes; `--refresh-times` re-anchors times to now (live/ended states drift)
-- [ ] Guard: `environmentRefusal` (staging or localhost only), prints DB host first
-- [ ] Purge: soft-delete (`deleted_at = now()`) every event where `city ILIKE 'bengaluru' OR 'bangalore'` (matches seed-qa convention; no cascade through check-ins/chat). Print count + slugs before writing
-- [ ] Seed via Prisma, slugs prefixed `blr-`, idempotent upserts; city spelled `Bengaluru`, tz `Asia/Kolkata`
-- [ ] Reuse, don't re-implement: `syncOccurrences` (check-in needs occurrence rows), `cover`/`mirrorToTigris` from seed-media, test accounts + seed-qa attendees, existing categories/amenities vocab
+- [x] Soft-delete every other Bangalore/Bengaluru event (QA world included — re-running seed:qa brings its events back)
+- [x] 26 events (`blr-*`): upcoming, tomorrow, tonight, check-in open, reminder due, just started, live+busy, ending soon, locked room, multi-day w/ cancelled day, ended <24h (rate), ended >24h (archived room), ended last week, cancelled, almost full, full→waitlist, 21+ guest list, 18+ members-only, curated unclaimed, curated claimed, video, recurring/uncapped; negatives: draft, private, unlisted, deleted
+- [x] Every event: 4 verified Unsplash photos (cover + 3 gallery), full copy, event_details (all fields), categories, amenities, linked venue + geofence, occurrences; RSVPs/interest/check-ins/presence/ratings/rooms/announcements/feedback/sponsors where the scenario needs them
+- [x] Tested on a throwaway local Postgres (migrations + seed-categories + seed-qa, then this script, twice)
+- [x] Applied to staging 2026-09-28 ~02:40 IST: 35 events soft-deleted, 26 seeded; staging-api feed shows the 18 visible blr- events, nothing else
 
-## Every event gets
-title, description, short_description, address, postal_code, venue_name, lat/lng inside Bengaluru, geofence/radius, cover, 2-4 `event_media` images, primary+secondary category, 3-6 amenities, `event_details` (full_description, house_rules, cancellation_policy, FAQ, accessibility_info, additional_info), max_capacity, organiser + org, occurrences
+- [x] Crowd: 48 non-login profiles (`scripts/seed-blr-crowd.ts`, `@crowd.blendn.invalid`), full profiles + age-matched Unsplash portraits, spread across events within capacity; applied to staging
+- [x] Fixed: purge had hidden 12 `me-demo-*` Me-tab events another session seeded — restored, and `me-demo-` is now excluded
 
-## Scenario matrix (offsets from now)
-| # | Scenario | Start / end | Extra data |
-|---|---|---|---|
-| 1 | Upcoming, next week | +6d / +6d3h | RSVPs, favourites |
-| 2 | Tomorrow | +1d / +1d3h | |
-| 3 | Tonight (today, ≥17:00 IST) | today 20:00 | |
-| 4 | Starting soon — check-in window open (<90 min) | +45m / +3h | reminder window (60–75 min) not claimed |
-| 5 | Reminder due | +65m / +4h | `reminded_at` null |
-| 6 | Just started | −10m / +3h | check-ins |
-| 7 | Live, mid-way, busy | −2h / +2h | 6 check-ins, open chat room, messages, announcement |
-| 8 | Ending soon | −3h / +15m | |
-| 9 | Ended <24h ago (room still open, rate CTA) | −6h / −2h | check-ins, ratings from some attendees |
-| 10 | Ended >24h ago (room archived) | −3d / −3d+3h | archived chat group |
-| 11 | Cancelled (with RSVPs → shows on Going) | +2d | status cancelled |
-| 12 | Almost full (≤10 spots) | +3d | capacity 20, 12 going |
-| 13 | Full → waitlist | +3d | capacity 6, 6 going, 1 waitlisted |
-| 14 | 18+ / 21+ age gated | +4d | min_age 21 (teen tester must not see) |
-| 15 | Multi-day, one day cancelled, currently on day 2 | −1d / +2d | occurrence `cancelled_at` on day 3 |
-| 16 | No cover image | +2d | coverless card, excluded from Featured |
-| 17 | Video media | +1d | video `event_media` with thumbnail |
-| 18 | Locked chat (read-only) | −1h / +2h | chat_group status locked |
-| 19 | Curated / unclaimed | +5d | curated_at, source_url |
-| 20 | Door policy guest-list | +5d | door_policy guest_list |
-| NEG | Draft, private, unlisted, soft-deleted | +2d | must NOT appear in feed/search |
-
-## Sheets (follow-up)
-- [x] Search field: focus ring fades in; clear button scales
-- [x] Sheets slide back down on close instead of fading (`SheetModal` holds the Modal until `RisingSheet`'s exit ends) — filter, bell, city picker, both connect sheets
-- [x] Grab anywhere and drag down to dismiss; lists hand the finger to the sheet at their top (`SheetScrollView`/`SheetFlatList`); the dim thins with the drag; bell loses pull-to-refresh (it reloads on open)
-
-## Verify
-- [ ] Dry run output reviewed; apply on staging; re-run is a no-op
-- [ ] API: `/api/mobile/events?city=Bengaluru` returns expected set, negatives absent (30s cache)
-- [ ] App: Pulse sections, detail CTAs (rsvp / join / rate / ended), Going (cancelled, waitlist, rate), rooms (open / locked / archived), check-in on live event
+## Review
+- Idempotent: second `--apply` left identical row counts
+- Feed as Ananya: 18 events, no negatives, all with cover + gallery. Teen tester: 13 (5 age-gated hidden)
+- Detail: unlisted 200, private/draft/deleted 404, cancelled 200
+- Going: cancelled + waitlisted RSVPs; attendance: 3 past events
+- Check-in: too early refused, 653m out refused, live at pin OK, pre-start in 90-min window OK
+- Known app gaps (not seeded wrong): doorPolicy not passed to the detail hero, no 18+/completed UI, is_featured unused
 
 # Motion: Pulse + event screens (2026-09-28)
 
