@@ -3,6 +3,13 @@
 Push to `stage` → TestFlight and Play internal, against the staging API.
 Push to `prod` → both stores, against production, waiting for a human.
 
+**A push means a promotion PR merged with a merge commit.** Since 2026-09-27 a
+ruleset makes `stage` and `prod` take changes only through a pull request from
+`dev` (or `stage` → `prod`), checked by `promotion source`
+(`.github/workflows/promotion.yml`). Nobody can push to them directly, delete
+them, or force-push them, admins included. Every `stage` merge spends EAS
+builds, so promote when a build is wanted, not on every dev merge.
+
 Nobody downloads an `.ipa` or an `.aab`, and nobody opens Transporter.
 
 ```
