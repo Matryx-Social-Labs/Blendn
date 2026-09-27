@@ -4,7 +4,6 @@ import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useState } from 'react'
 import {
     ActivityIndicator,
-    FlatList,
     Linking,
     Share,
     StyleSheet,
@@ -12,6 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native'
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
 import { useToast } from '../../components/Toast'
@@ -21,6 +21,7 @@ import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedE
 import { formatEventDateTime } from '../../lib/time'
 import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { MOTION_DURATION } from '../../lib/motion'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -44,6 +45,9 @@ function GoingScreenInner() {
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const { showToast } = useToast()
+  const reduceMotion = useReducedMotion()
+  // The row Undo just restored — the only one that gets an entrance.
+  const [restoredId, setRestoredId] = useState<string | null>(null)
   // Pull-to-refresh also retries a cover that failed to load (EventCover).
   const [refreshCount, setRefreshCount] = useState(0)
 
@@ -109,6 +113,7 @@ function GoingScreenInner() {
 
   /** Back into the list where it was, rather than at the end. */
   const restoreRow = useCallback((event: EventRow, index: number) => {
+    setRestoredId(event.id)
     setEvents(prev => {
       if (prev.some(e => e.id === event.id)) return prev
       const next = [...prev]
@@ -123,6 +128,7 @@ function GoingScreenInner() {
    */
   const removeSave = useCallback(async (event: EventRow) => {
     const index = events.findIndex(e => e.id === event.id)
+    setRestoredId(null)
     setEvents(prev => prev.filter(e => e.id !== event.id))
     try {
       // DELETE, not the POST upsert this used to send — that one never
@@ -196,7 +202,14 @@ function GoingScreenInner() {
     // The cover is the "open" target and the chips are its siblings: a card that
     // was itself a touchable made VoiceOver read it as one element, so the four
     // actions inside it could not be reached.
-    <View style={styles.card}>
+    //
+    // `exiting` on every row; `entering` only on the one Undo just put back —
+    // an entrance on every row would replay as the list virtualises.
+    <Animated.View
+      style={styles.card}
+      exiting={reduceMotion ? undefined : ROW_OUT}
+      entering={!reduceMotion && item.id === restoredId ? ROW_BACK : undefined}
+    >
       <TouchableOpacity
         onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}
         accessibilityRole="button"
@@ -237,8 +250,8 @@ function GoingScreenInner() {
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
-    </View>
-  ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount])
+    </Animated.View>
+  ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount, reduceMotion, restoredId])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
 
@@ -285,8 +298,9 @@ function GoingScreenInner() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={events}
+          itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           refreshing={refreshing}
@@ -299,6 +313,17 @@ function GoingScreenInner() {
     </SafeAreaView>
   )
 }
+
+/*
+ * Removing a save: the card fades out while the ones below close the gap,
+ * instead of vanishing and letting the list snap up — the snap hid where the
+ * card went. Undo fades it back in at its old place and the list opens for it.
+ * The cards carry no blur or shadow, which is what makes a layout transition
+ * safe here (see tasks/lessons.md). Reduce Motion: the list simply updates.
+ */
+const ROW_OUT = FadeOut.duration(MOTION_DURATION.fast)
+const ROW_BACK = FadeIn.duration(MOTION_DURATION.normal)
+const ROW_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(Easing.bezier(0.77, 0, 0.175, 1))
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },

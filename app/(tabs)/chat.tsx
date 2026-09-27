@@ -4,8 +4,6 @@ import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated,
-  Easing,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -13,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import Reanimated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
@@ -46,6 +45,7 @@ import {
   subscribeToChatMessage,
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
+import { MOTION_DURATION } from '../../lib/motion'
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
@@ -223,6 +223,7 @@ function ChatInner() {
   const insets = useSafeAreaInsets()
   const { user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
+  const reduceMotion = useReducedMotion()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
@@ -230,7 +231,6 @@ function ChatInner() {
   const [listFailed, setListFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
-  const requestAnimRefs = useRef<Record<string, Animated.Value>>({})
   const latestLoadIdRef = useRef(0)
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ list: 0, requests: 0 })
@@ -736,34 +736,18 @@ function ChatInner() {
     }
   }
 
-  const getRequestAnimValue = useCallback((requestId: string) => {
-    const existing = requestAnimRefs.current[requestId]
-    if (existing) return existing
-    const next = new Animated.Value(1)
-    requestAnimRefs.current[requestId] = next
-    return next
-  }, [])
-
-  const animateRequestRemoval = useCallback((requestId: string) => (
-    new Promise<void>((resolve) => {
-      Animated.timing(getRequestAnimValue(requestId), {
-        toValue: 0,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => resolve())
-    })
-  ), [getRequestAnimValue])
-
   const respondToRequest = useCallback(async (request: MessageRequest, action: 'accept' | 'decline') => {
     const requestId = request.request_id
     if (requestPending[requestId]) return
     setRequestPending((prev) => ({ ...prev, [requestId]: true }))
 
+    /*
+     * The card leaves now and the request goes out now — together. It used to
+     * wait for a 220ms fade before sending, so every accept was a fifth of a
+     * second slower than it had to be. The fade is the row's `exiting`.
+     */
+    setIncomingRequests((prev) => prev.filter((r) => r.request_id !== requestId))
     try {
-      await animateRequestRemoval(requestId)
-      setIncomingRequests((prev) => prev.filter((r) => r.request_id !== requestId))
-
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
@@ -794,10 +778,9 @@ function ChatInner() {
         delete next[requestId]
         return next
       })
-      delete requestAnimRefs.current[requestId]
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animateRequestRemoval, requestPending, showToast])
+  }, [requestPending, showToast])
 
   useEffect(() => {
     if (!authLoading && user) loadChats(false, false)
@@ -849,9 +832,15 @@ function ChatInner() {
           <BanterHeading title="Requests" trailingIcon="mark-email-unread" />
           <View style={styles.requestList}>
             {incomingRequests.map((r) => (
-              <Animated.View
+              /*
+               * Fades out while the requests below close the gap, rather than
+               * fading to an empty slot that then snaps shut. No blur or
+               * shadow in the card, so the layout transition is cheap.
+               */
+              <Reanimated.View
                 key={r.request_id}
-                style={{ opacity: getRequestAnimValue(r.request_id) }}
+                exiting={reduceMotion ? undefined : REQUEST_OUT}
+                layout={reduceMotion ? undefined : REQUEST_REFLOW}
               >
                 <BanterRequest
                   name={r.sender_name || 'Someone'}
@@ -860,7 +849,7 @@ function ChatInner() {
                   onAccept={() => respondToRequest(r, 'accept')}
                   onDecline={() => respondToRequest(r, 'decline')}
                 />
-              </Animated.View>
+              </Reanimated.View>
             ))}
           </View>
         </View>
@@ -992,6 +981,9 @@ function EmptyInbox() {
     </View>
   )
 }
+
+const REQUEST_OUT = FadeOut.duration(MOTION_DURATION.fast)
+const REQUEST_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(Easing.bezier(0.77, 0, 0.175, 1))
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
