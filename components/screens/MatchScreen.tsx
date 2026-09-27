@@ -4,7 +4,6 @@ import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -12,8 +11,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -27,7 +24,6 @@ import { SkeletonBlock } from '../Skeleton'
 import { pickActiveRoom, type CheckinLike } from '../../lib/activeRoom'
 import { recallRoster, rememberRoster } from '../../lib/rosterMemory'
 import { apiClient } from '../../lib/apiClient'
-import { useGradientOverlay } from '../../lib/gradientOverlay'
 import {
   applyGridFilters,
   availableWorkFields,
@@ -324,9 +320,6 @@ export default function Match({
   const [requested, setRequested] = useState<Record<string, boolean>>({})
 
   const [newJoinsCount, setNewJoinsCount] = useState(0)
-  const { setScrollProgress } = useGradientOverlay()
-  const contentOpacity = useRef(new Animated.Value(0)).current
-  const contentTranslate = useRef(new Animated.Value(8)).current
   const attendeeLoadIdRef = useRef(0)
   const joinPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -357,28 +350,6 @@ export default function Match({
    * Recommended carousel. The frame has one vertical list, so both went with it
    * rather than being kept alive by a constant nothing measures.
    */
-
-  useEffect(() => {
-    if (loading) {
-      contentOpacity.setValue(0)
-      contentTranslate.setValue(8)
-      return
-    }
-
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentTranslate, {
-        toValue: 0,
-        duration: 260,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [loading, contentOpacity, contentTranslate])
-
 
   useEffect(() => {
     eventInfoRef.current = eventInfo
@@ -943,18 +914,6 @@ export default function Match({
           { paddingBottom: insets.bottom + 120 },
         ]}
         showsVerticalScrollIndicator={false}
-        /*
-          Feeds the shared gradient overlay, the same way the Pulse and the
-          Banter do. Clamped to 0..1 here rather than in the overlay, so a short
-          list that cannot scroll reports 0 instead of a NaN from dividing by a
-          zero-height content area.
-        */
-        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-          const scrollable = contentSize.height - layoutMeasurement.height
-          setScrollProgress(scrollable > 0 ? Math.min(1, Math.max(0, contentOffset.y / scrollable)) : 0)
-        }}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

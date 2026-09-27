@@ -6,6 +6,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from '
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
+import { useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
@@ -167,14 +168,27 @@ TabButton.displayName = 'TabButton'
  * Seated in the bar rather than raised above it — see `centreSlot` for why the
  * frame's `y=-16` does not survive contact with a real screen.
  */
+/** Where the halo rests under Reduce Motion: ~1.17x, ~0.3 opacity — a glow clear of the button, not a pulse. */
+const REDUCED_HALO_PROGRESS = 0.4
+
 const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
   const pulses = roomButtonPulses(target.state)
   const glow = roomButtonGlow(target.state)
   const pulse = useRef(new Animated.Value(0)).current
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     if (!pulses) {
       pulse.setValue(0)
+      return
+    }
+    /*
+     * Reduce Motion holds the halo still instead of removing it. In `checkin`
+     * there is no live ring, so the halo is the only thing saying "there is a
+     * room here" — a static glow keeps that without the loop.
+     */
+    if (reduceMotion) {
+      pulse.setValue(REDUCED_HALO_PROGRESS)
       return
     }
     /*
@@ -202,7 +216,7 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
     )
     loop.start()
     return () => loop.stop()
-  }, [pulses, pulse])
+  }, [pulses, pulse, reduceMotion])
 
   /*
    * 1.42, up from 1.06.

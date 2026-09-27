@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
+import { useReducedMotion } from 'react-native-reanimated'
 
 import { EMBER, EMBER_FONTS } from '../../lib/theme'
 
@@ -22,12 +23,21 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
  *
  * A static row of three dots is indistinguishable from a decoration, and this
  * has to read as *live*. Native-driven opacity, staggered by 160ms — cheap
- * enough to leave running, and it stops when the row unmounts.
+ * enough to leave running, and it stops when the row unmounts. Both halves of
+ * the breath are ease-in-out: the dots are changing in place, not arriving.
+ *
+ * Reduce Motion holds them still at 0.6. The label already says who is typing;
+ * the dots are the ambience, not the message.
  */
 export function TypingIndicator({ label }: { label: string }) {
   const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current]
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reduceMotion) {
+      dots.forEach((value) => value.setValue(0.6))
+      return
+    }
     const loops = dots.map((value, i) =>
       Animated.loop(
         Animated.sequence([
@@ -35,13 +45,13 @@ export function TypingIndicator({ label }: { label: string }) {
           Animated.timing(value, {
             toValue: 1,
             duration: 320,
-            easing: Easing.out(Easing.quad),
+            easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
           Animated.timing(value, {
             toValue: 0.3,
             duration: 320,
-            easing: Easing.in(Easing.quad),
+            easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
           Animated.delay((2 - i) * 160),
@@ -51,7 +61,7 @@ export function TypingIndicator({ label }: { label: string }) {
     loops.forEach((l) => l.start())
     return () => loops.forEach((l) => l.stop())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [reduceMotion])
 
   return (
     <View style={styles.row} accessibilityLiveRegion="polite">

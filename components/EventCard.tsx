@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import type { BlendnEvent } from '../lib/api'
 import * as Haptics from 'expo-haptics'
-import React, { memo, useEffect, useMemo, useRef } from 'react'
-import { ActivityIndicator, Animated as RNAnimated, StyleSheet, TouchableOpacity, View } from 'react-native'
-import Reanimated from 'react-native-reanimated'
+import React, { memo, useMemo } from 'react'
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { formatEventDateTime } from '../lib/time'
 import { APP_COLORS, EMBER } from '../lib/theme'
 import { OptimizedImage } from './OptimizedImage'
@@ -72,20 +71,9 @@ const EventCard = memo<EventCardProps>(({
     return `${km.toFixed(km >= 10 ? 0 : 1)} km`
   }, [proximity])
 
-  const fadeIn = useRef(new RNAnimated.Value(0)).current
-
-  useEffect(() => {
-    RNAnimated.timing(fadeIn, {
-      toValue: 1,
-      duration: 220,
-      useNativeDriver: true,
-    }).start()
-  }, [fadeIn])
-
   return (
-    <RNAnimated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
-      <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
-      <Reanimated.View sharedTransitionTag={`event-image-${event.id}`}>
+    <TouchableOpacity style={styles.eventCard} onPress={handlePress} onLongPress={handleLongPress} delayLongPress={320} accessibilityRole="button" accessibilityLabel={event.title}>
+      <View>
         {event.cover_image_url ? (
           <OptimizedImage
             source={event.cover_image_url}
@@ -99,21 +87,21 @@ const EventCard = memo<EventCardProps>(({
         ) : (
           <View style={[styles.eventImage, { backgroundColor: EMBER.surface }]} />
         )}
-      </Reanimated.View>
+      </View>
       
       <View style={styles.eventContent}>
-        <Reanimated.Text sharedTransitionTag={`event-title-${event.id}`} style={styles.eventTitle}>
+        <Text style={styles.eventTitle}>
           {event.title}
-        </Reanimated.Text>
+        </Text>
         <Typography variant="body2" style={styles.eventVenue}>{event.venue_name}</Typography>
         <Typography variant="body2" style={styles.eventDescription} numberOfLines={2}>
           {event.short_description || event.description}
         </Typography>
         
         <View style={styles.eventMeta}>
-          <Reanimated.Text sharedTransitionTag={`event-date-${event.id}`} style={styles.eventTime}>
+          <Text style={styles.eventTime}>
             {formattedStart}
-          </Reanimated.Text>
+          </Text>
           <Typography variant="body2" style={styles.eventPrice}>
             {event.price_cents > 0 ? `₹${event.price_cents / 100}` : 'Free'}
           </Typography>
@@ -220,7 +208,6 @@ const EventCard = memo<EventCardProps>(({
         </View>
       </View>
     </TouchableOpacity>
-    </RNAnimated.View>
   )
 })
 

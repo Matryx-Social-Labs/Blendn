@@ -208,11 +208,25 @@ describe('the previous designs are gone, not merely uncalled', () => {
   })
 
   it('the hero interpolations went with the hero', () => {
-    // `sectionLiftY`/`sectionOpacity` stay — the three sections still use them.
     const src = SCREEN()
     expect(src).not.toContain('heroParallaxY')
     expect(src).not.toContain('heroOpacity')
-    expect(src).toContain('sectionLiftY')
+  })
+
+  /*
+   * The sections used to lift 8pt and dim to 0.94 as the feed scrolled, driven
+   * by `scrollY.setValue` in a JS `onScroll` — a bridge crossing and a native
+   * update every frame on the most-scrolled screen, for motion nobody could
+   * name a purpose for. Scrolling is a 100+/day interaction; it does not
+   * animate. If scroll-linked motion ever comes back, it belongs in a
+   * Reanimated `useAnimatedScrollHandler`, not here.
+   */
+  it('scrolling the feed drives no animation from the JS thread', () => {
+    const src = SCREEN()
+    expect(src).not.toContain('sectionLiftY')
+    expect(src).not.toContain('sectionOpacity')
+    expect(src).not.toMatch(/scrollY\.setValue/)
+    expect(src).not.toContain('setScrollProgress')
   })
 
   it('nothing is fetched that nothing reads', () => {

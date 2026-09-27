@@ -3,10 +3,10 @@ import { router, Stack, usePathname } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
-import { GradientOverlayProvider } from '../lib/gradientOverlay';
 import { ToastProvider } from '../components/Toast';
 import {
     initializePushNotifications,
@@ -395,8 +395,12 @@ function RootLayout() {
         })
       }}
     >
-      <GradientOverlayProvider>
-        <ToastProvider>
+      {/*
+        Outermost, so every screen and the toast layer sit inside it. Without
+        it, a `GestureDetector` anywhere in the app silently does nothing.
+      */}
+      <GestureHandlerRootView style={styles.gestureRoot}>
+      <ToastProvider>
         <View style={styles.root}>
           {/*
             * Rendered last in the tree but drawn on top, so it covers whatever
@@ -631,8 +635,8 @@ function RootLayout() {
           */}
           {user ? <PresenceMonitor /> : null}
         </View>
-        </ToastProvider>
-      </GradientOverlayProvider>
+      </ToastProvider>
+      </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }
@@ -640,6 +644,7 @@ function RootLayout() {
 export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
+  gestureRoot: { flex: 1 },
   root: {
     flex: 1,
     /*
