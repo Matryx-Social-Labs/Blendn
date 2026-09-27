@@ -7,7 +7,6 @@ import {
   Animated,
   Easing,
   FlatList,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
+import { useToast } from '../../components/Toast'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
@@ -222,10 +222,12 @@ const displayPreview = (text?: string, fallback: string = 'Start chatting'): str
 function ChatInner() {
   const insets = useSafeAreaInsets()
   const { user, loading: authLoading } = useAuth()
+  const { showToast } = useToast()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
+  const [listFailed, setListFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
   const requestAnimRefs = useRef<Record<string, Animated.Value>>({})
@@ -305,13 +307,44 @@ function ChatInner() {
     return merged.sort((a, b) => b.sortTime - a.sortTime)
   }, [personalChats, groupChats, handlePersonalChatPress, handleGroupChatPress])
 
+  const [query, setQuery] = useState('')
+  const trimmedQuery = query.trim().toLowerCase()
+  const visibleRows = useMemo(
+    () =>
+      trimmedQuery
+        ? rows.filter(
+            (r) =>
+              r.title?.toLowerCase().includes(trimmedQuery) ||
+              r.preview?.toLowerCase().includes(trimmedQuery)
+          )
+        : rows,
+    [rows, trimmedQuery]
+  )
+
   const hasUnread = useMemo(() => personalChats.some((c) => c.unread_count > 0), [personalChats])
 
+  /*
+   * Optimistic, then written to the server. The local caches alone were undone
+   * by the next background refresh, which reloads the server's counts.
+   */
   const handleMarkAllRead = useCallback(async () => {
-    if (personalChats.length === 0) return
+    if (personalChats.length === 0 || !user) return
+    const before = personalChats
+    const cleared = personalChats.map((c) => ({ ...c, unread_count: 0 }))
+    setPersonalChats(cleared)
     await Promise.all(personalChats.map((c) => setConversationLastRead(c.conversation_id)))
-    setPersonalChats((prev) => prev.map((c) => ({ ...c, unread_count: 0 })))
-  }, [personalChats])
+
+    try {
+      const result = await apiClient.markAllConversationsRead()
+      if (!result.success) throw new Error(result.error || 'mark all read refused')
+      queryCache.set(`personal_chats_${user.id}`, cleared, PERSONAL_CHAT_CACHE_TTL)
+    } catch (e) {
+      Logger.warn('chat', 'mark all read failed', { error: e })
+      setPersonalChats(before)
+      syncUnreadCache(before)
+      showToast("Couldn't mark your chats as read. Try again.", 'error')
+    }
+  }, [personalChats, user, showToast])
 
   const onRefresh = useCallback(async () => {
     if (isLoadingRef.current) return
@@ -504,10 +537,11 @@ function ChatInner() {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
         // internal SWR response cache so we don't get stale data from it either.
         const bypassApiCache = force || !hasCachedList
-        await Promise.all([
+        const [groupsOk, personalOk] = await Promise.all([
           loadGroupChats(loadId, groupCacheKey, bypassApiCache),
           loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
         ])
+        if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
         lastFetchRef.current.list = now
       }
       if (shouldFetchRequests) {
@@ -579,14 +613,18 @@ function ChatInner() {
     }
   }
 
-  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false) => {
+  /*
+   * Both list loaders return whether they succeeded, and on failure leave what
+   * is on screen alone: clearing it turned a network error into "No
+   * conversations yet", or silently dropped every room.
+   */
+  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
     try {
       const result = await apiClient.getChatGroups({ force })
 
       if (!result.success || !result.data) {
         Logger.error('chat', 'Error fetching group chats', { error: result.error })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
+        return false
       }
 
       // Normalize API response shape (array vs wrapped payload)
@@ -596,8 +634,7 @@ function ChatInner() {
 
       if (!Array.isArray(rooms)) {
         Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
+        return false
       }
 
       const groupChatData: GroupChat[] = rooms
@@ -622,17 +659,18 @@ function ChatInner() {
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
       if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
+      return true
     } catch (error) {
       Logger.error('chat', 'Error loading group chats', { error })
-      setGroupChats([])
+      return false
     }
   }
 
-  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false) => {
+  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
     try {
       const result = await apiClient.getConversations({ force })
 
-      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
+      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return true
 
       if (result.success && result.data) {
         const conversations = result.data
@@ -688,14 +726,13 @@ function ChatInner() {
             preloadImages(firstScreenUrls, 'low')
           }
         } catch {}
-      } else {
-        setPersonalChats([])
+        return true
       }
+      Logger.error('chat', 'Error fetching personal chats', { error: result.error })
+      return false
     } catch (error) {
       Logger.error('chat', 'Error loading personal chats', { error })
-      if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setPersonalChats([])
-      }
+      return false
     }
   }
 
@@ -730,6 +767,7 @@ function ChatInner() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
+        showToast(result.error || `Couldn't ${action} that request. Try again.`, 'error')
         await loadChats(true, true)
         return
       }
@@ -748,6 +786,7 @@ function ChatInner() {
       await loadChats(true, true)
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
+      showToast(`Couldn't ${action} that request. Try again.`, 'error')
       await loadChats(true, true)
     } finally {
       setRequestPending((prev) => {
@@ -758,7 +797,7 @@ function ChatInner() {
       delete requestAnimRefs.current[requestId]
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animateRequestRemoval, requestPending])
+  }, [animateRequestRemoval, requestPending, showToast])
 
   useEffect(() => {
     if (!authLoading && user) loadChats(false, false)
@@ -772,7 +811,13 @@ function ChatInner() {
 
   const header = (
     <View style={styles.header}>
-      <BanterSearch />
+      <BanterSearch value={query} onChangeText={setQuery} />
+
+      {listFailed && rows.length > 0 ? (
+        <Text style={styles.partialFailure} maxFontSizeMultiplier={1.4}>
+          Some chats couldn&apos;t load. Pull down to try again.
+        </Text>
+      ) : null}
 
       {liveRooms.length > 0 ? (
         <View style={styles.section}>
@@ -834,27 +879,38 @@ function ChatInner() {
       <StatusBar style="light" />
       <PulseTopBar
         title="The Banter"
-        actions={
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Search conversations"
-              hitSlop={8}
-              style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="search" size={18} color={EMBER.textPrimary} />
-            </Pressable>
-            <NotificationBell />
-          </>
-        }
+        actions={<NotificationBell />}
+      />
+
+      {/*
+        Just under the bar, where the event chat puts it. At the foot of the
+        column it sat behind the absolutely positioned tab bar.
+      */}
+      <RealtimeStatusBanner
+        status={socketStatus}
+        style={{ ...styles.statusBanner, top: insets.top + TOP_BAR_HEIGHT + 8 }}
       />
 
       <FlatList
-        data={rows}
+        data={visibleRows}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={header}
-        ListEmptyComponent={loading ? <InboxSkeleton /> : <EmptyInbox />}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        ListEmptyComponent={
+          loading ? (
+            <InboxSkeleton />
+          ) : trimmedQuery ? (
+            <Text style={styles.noMatches} maxFontSizeMultiplier={1.4}>
+              No chats match “{query.trim()}”
+            </Text>
+          ) : listFailed ? (
+            <InboxLoadFailed onRetry={() => void loadChats(true, true)} />
+          ) : (
+            <EmptyInbox />
+          )
+        }
         contentContainerStyle={[
           styles.content,
           {
@@ -872,9 +928,6 @@ function ChatInner() {
           />
         }
       />
-
-      <RealtimeStatusBanner status={socketStatus} />
-
     </View>
   )
 }
@@ -892,6 +945,30 @@ function InboxSkeleton() {
           </View>
         </View>
       ))}
+    </View>
+  )
+}
+
+function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.empty}>
+      <View style={styles.emptyGlyph}>
+        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
+      </View>
+      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+        Couldn&apos;t load your chats
+      </Text>
+      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+        Check your connection and try again.
+      </Text>
+      <ScalePress
+        style={styles.emptyCta}
+        onPress={onRetry}
+        pressedScale={0.97}
+        accessibilityRole="button"
+      >
+        <Text style={styles.emptyCtaText}>Retry</Text>
+      </ScalePress>
     </View>
   )
 }
@@ -927,7 +1004,27 @@ const styles = StyleSheet.create({
   railBleed: { marginHorizontal: -BANTER_PADDING_HORIZONTAL },
   // Frame `1141:5261`: gap 24, `pb-[8px]`.
   rail: { gap: 24, paddingBottom: 8, paddingHorizontal: BANTER_PADDING_HORIZONTAL },
-  barButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  // Above the list and level with the top bar's own zIndex.
+  statusBanner: {
+    position: 'absolute',
+    left: BANTER_PADDING_HORIZONTAL,
+    right: BANTER_PADDING_HORIZONTAL,
+    zIndex: 10,
+  },
+  partialFailure: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
+  },
+  noMatches: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: EMBER.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 32,
+  },
 
   skeleton: { gap: 8 },
   skeletonRow: { flexDirection: 'row', gap: 16, padding: 16, alignItems: 'center' },

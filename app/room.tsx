@@ -9,12 +9,15 @@ import MatchScreen from '../components/screens/MatchScreen'
 import { NotificationBell } from '../components/pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../components/pulse/PulseTopBar'
 import { RoomVisibilityBanner } from '../components/RoomVisibilityBanner'
+import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { forgetRoster } from '../lib/rosterMemory'
 import { revealReadiness } from '../lib/reveal'
 import { useAuth } from '../lib/useAuth'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
+
+const REVEAL_FAILED = "Couldn't change who can see you. Nothing has changed."
 
 
 /**
@@ -93,6 +96,7 @@ function RoomInner() {
     }
   }, [user?.id])
   const [checkOutBusy, setCheckOutBusy] = useState(false)
+  const { showToast } = useToast()
 
   /*
    * Which room, from the server rather than from navigation.
@@ -201,6 +205,7 @@ function RoomInner() {
       if (!result.success) {
         setRevealed(!next)
         Logger.warn('match', 'reveal toggle refused', { error: result.error })
+        showToast(result.error || REVEAL_FAILED, 'error')
       } else if (typeof result.data?.revealed === 'boolean') {
         // The server's answer wins over the optimistic one.
         setRevealed(result.data.revealed)
@@ -208,10 +213,11 @@ function RoomInner() {
     } catch (e) {
       setRevealed(!next)
       Logger.error('match', 'reveal toggle failed', { error: e })
+      showToast(REVEAL_FAILED, 'error')
     } finally {
       setRevealBusy(false)
     }
-  }, [eventId, revealed, revealBusy])
+  }, [eventId, revealed, revealBusy, showToast])
 
   /*
    * Leaving the room.
@@ -242,14 +248,17 @@ function RoomInner() {
         // goes too -- otherwise reopening would repaint the room you just left.
         forgetRoster(eventId)
         router.back()
+      } else {
+        Logger.warn('presence', 'check out refused', { error: result.error })
+        showToast(result.error || "Couldn't check you out. You're still in this room.", 'error')
       }
-      else Logger.warn('presence', 'check out refused', { error: result.error })
     } catch (e) {
       Logger.error('presence', 'check out failed', { error: e })
+      showToast("Couldn't check you out. You're still in this room.", 'error')
     } finally {
       setCheckOutBusy(false)
     }
-  }, [eventId, checkOutBusy])
+  }, [eventId, checkOutBusy, showToast])
 
   return (
     /*

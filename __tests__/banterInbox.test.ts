@@ -172,7 +172,15 @@ describe('the list is still a list', () => {
   })
 
   it('offers an empty state and a skeleton, and tells them apart', () => {
-    expect(SCREEN()).toContain('ListEmptyComponent={loading ? <InboxSkeleton /> : <EmptyInbox />}')
+    const src = SCREEN()
+    expect(src).toMatch(/ListEmptyComponent=\{\s*loading \? \(\s*<InboxSkeleton \/>/)
+    expect(src).toContain('<EmptyInbox />')
+  })
+
+  it('says a search found nothing, rather than that the inbox is empty', () => {
+    const src = SCREEN()
+    expect(src).toContain('<BanterSearch value={query} onChangeText={setQuery} />')
+    expect(src).toMatch(/trimmedQuery \? \(\s*<Text style=\{styles\.noMatches\}/)
   })
 
   it('recycles avatars by key', () => {

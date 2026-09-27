@@ -2210,6 +2210,16 @@ class ApiClientClass {
     )
   }
 
+  /** "Mark all read" on the inbox: every unread message across your live conversations. */
+  async markAllConversationsRead(): Promise<ApiResponse<{ marked: number }>> {
+    return this.queuedRequest<{ marked: number }>(
+      '/api/mobile/conversations/read',
+      { method: 'POST', body: '{}' },
+      true,
+      4
+    )
+  }
+
   async clearNotifications(): Promise<ApiResponse<{ deleted: number }>> {
     return this.queuedRequest<{ deleted: number }>(
       '/api/mobile/notifications',

@@ -49,6 +49,7 @@ export default function NearbyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -116,11 +117,13 @@ export default function NearbyEventsScreen() {
           .sort((a: any, b: any) => a._distance - b._distance)
 
         setEvents(withDistance)
+        setLoadFailed(false)
       } else {
-        setEvents([])
+        setLoadFailed(true)
       }
     } catch {
-      if (mountedRef.current) setEvents([])
+      // Keep what is on screen: a network error is not "no events near you".
+      if (mountedRef.current) setLoadFailed(true)
     } finally {
       if (mountedRef.current) setLoading(false)
     }
@@ -193,11 +196,17 @@ export default function NearbyEventsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nearby Events</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle} accessibilityRole="header">Nearby Events</Text>
+        {/* The back button's width less its -6 margin, so the title stays centred. */}
+        <View style={{ width: 38 }} />
       </View>
 
       {loading ? (
@@ -214,6 +223,22 @@ export default function NearbyEventsScreen() {
             onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
           >
             <Text style={styles.settingsBtnText}>Open Settings</Text>
+          </TouchableOpacity>
+        </View>
+      ) : events.length === 0 && loadFailed ? (
+        <View style={styles.empty}>
+          <Ionicons name="cloud-offline-outline" size={48} color={APP_COLORS.textSecondary} style={{ marginBottom: 12 }} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => {
+              setLoading(true)
+              void loadEvents(true)
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : events.length === 0 ? (
@@ -246,7 +271,9 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 10,
   },
-  backBtn: { padding: 4 },
+  // 44pt target; the negative margin keeps the chevron where the old 4pt
+  // padding put it.
+  backBtn: { width: 44, height: 44, marginLeft: -6, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },

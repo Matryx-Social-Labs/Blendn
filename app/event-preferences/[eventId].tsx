@@ -258,9 +258,11 @@ export default function EventPreferences() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.placeholderBanner}>
-          PLACEHOLDER DESIGN — logic is final, layout is not
-        </Text>
+        {__DEV__ ? (
+          <Text style={styles.placeholderBanner}>
+            PLACEHOLDER DESIGN — logic is final, layout is not
+          </Text>
+        ) : null}
 
         {/*
           * Reveal leads, intent follows — and that ordering is a decision.

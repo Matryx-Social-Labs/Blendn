@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+// The library one: react-native's own left the Submit button under the home
+// indicator, where taps are the system's (SCRUM-201).
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
@@ -163,9 +165,11 @@ export default function RatePeers() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.placeholderBanner}>
-          PLACEHOLDER DESIGN — logic is final, layout is not
-        </Text>
+        {__DEV__ ? (
+          <Text style={styles.placeholderBanner}>
+            PLACEHOLDER DESIGN — logic is final, layout is not
+          </Text>
+        ) : null}
 
         <Text style={styles.h1}>How was meeting them?</Text>
         <Text style={styles.body}>

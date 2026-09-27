@@ -17,7 +17,8 @@ import { EMBER, EMBER_FONTS } from '../../lib/theme'
 /** One number and what it counts. */
 function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <View style={styles.stat}>
+    // One element, read as "3 Attended" rather than "3" and then "Attended".
+    <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
       <Text style={styles.statValue} maxFontSizeMultiplier={1.2}>{value}</Text>
       <Text style={styles.statLabel} maxFontSizeMultiplier={1.3}>{label}</Text>
     </View>
@@ -149,6 +150,7 @@ function ProfileInner() {
 
       Logger.debug('profile', 'Profile loaded successfully')
       setProfile(viewModel)
+      setError(null)
       queryCache.set(cacheKey, viewModel, PROFILE_CACHE_TTL)
 
     } catch (error) {
@@ -279,6 +281,19 @@ function ProfileInner() {
       ) : null}
 
       <View style={styles.rows}>
+        {/*
+          Only while there is no photo. Revealing yourself in a room shows your
+          name and photo and nothing else, so without one there is nothing to
+          reveal. A row, not a badge or a completeness meter: staying without a
+          photo is a legitimate choice (see `event-preferences`).
+        */}
+        {photoList.length === 0 ? (
+          <PanelRow
+            icon="camera-outline"
+            label="Add a photo"
+            onPress={() => router.push('/edit-profile')}
+          />
+        ) : null}
         <PanelRow
           icon="create-outline"
           label="Edit profile"
@@ -293,7 +308,9 @@ function ProfileInner() {
     </View>
   )
 
-  if (authLoading || loading) {
+  // Only before there is something to show: a background refresh of a loaded
+  // profile updates it in place rather than flashing the skeleton.
+  if ((authLoading || loading) && !profile) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -303,11 +320,17 @@ function ProfileInner() {
     )
   }
 
-  if (error) {
+  // A failed refresh of a profile already on screen keeps it there.
+  if (error && !profile) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         <Typography variant="body1" style={styles.errorText}>{error}</Typography>
-        <TouchableOpacity style={styles.retryButton} onPress={() => getUserAndProfile(true)}>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => getUserAndProfile(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading your profile"
+        >
           <Typography variant="button" style={styles.retryButtonText}>Retry</Typography>
         </TouchableOpacity>
       </SafeAreaView>
@@ -407,7 +430,7 @@ const styles = StyleSheet.create({
   },
   // EMBER has no destructive token; this surface is the only one that needs one.
   errorText: { fontSize: 16, color: '#FF3B30', textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 9999 },
+  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: 20, minHeight: 44, justifyContent: 'center', borderRadius: 9999 },
   retryButtonText: { color: EMBER.onGradient, fontWeight: '600', fontSize: 16 },
 })
 

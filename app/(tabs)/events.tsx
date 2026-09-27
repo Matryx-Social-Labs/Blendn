@@ -1716,22 +1716,12 @@ function EventsInner() {
     const featured = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom))
     return (
       <View style={styles.pulseSection}>
-        <SectionHeader
-          title="Featured"
-          /*
-           * "VIEW ALL" only once there is more than the row already shows.
-           *
-           * With four featured events and four on screen it is a link to the
-           * same four, which is the kind of control that teaches people the
-           * app's links do nothing.
-           */
-          actionLabel={upcomingItems.length > featuredItems.length ? 'VIEW ALL' : undefined}
-          onAction={
-            upcomingItems.length > featuredItems.length
-              ? () => router.push('/nearby-events')
-              : undefined
-          }
-        />
+        {/*
+          No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
+          not the featured events it sat above; and every event not in a section
+          is already in the list further down this screen.
+        */}
+        <SectionHeader title="Featured" />
         {/*
           A row of one is not a row.
 
@@ -1822,7 +1812,9 @@ function EventsInner() {
               imageUrl={item.cover_image_url}
               dayLabel={upcomingDayLabel(item.start_time)}
               joinedCount={joinedCount(item)}
-              distanceLabel={formatDistance(item.distance)}
+              // Distance from you only means something in the city you are in;
+              // browsing elsewhere it read "6412km away". Same rule as Nearby.
+              distanceLabel={browsingHere ? formatDistance(item.distance) : null}
               description={item.short_description || null}
               onPress={() => handleEventPress(item)}
               isFavorited={!!interestStatuses[item.id]}
@@ -1936,6 +1928,12 @@ function EventsInner() {
             requestLocationIfNeeded(true)
           }
         }}
+        accessibilityRole="button"
+        accessibilityHint={
+          locationStatus === 'denied'
+            ? 'Opens Settings so you can allow location'
+            : 'Asks for your location to show events near you'
+        }
       >
         <Text style={styles.nearbyCtaText}>
           {locationStatus === 'denied' ? 'Open Settings' : 'Enable Location'}
@@ -2059,10 +2057,10 @@ function EventsInner() {
      */
     const shown = new Set<string>()
     featuredItems.forEach(e => shown.add(e.id))
-    upcomingItems.slice(0, 10).forEach(e => shown.add(e.id))
+    upcomingStackItems.forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
     return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingItems, nearbyItems])
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
@@ -2166,7 +2164,11 @@ function EventsInner() {
                 </Text>
               </View>
             )}
-            {locationStatus === 'denied' && (
+            {/*
+              Not while the Nearby section is showing its own "Open Settings"
+              prompt (unnarrowed, no location): one ask, not two on one screen.
+            */}
+            {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
               <View style={styles.bannerWarn}>
                 <Text style={styles.bannerText}>
                   Enable Location to show nearby events and check-in.
@@ -2433,7 +2435,7 @@ function EventsInner() {
                   picker is the primary action, and it is reachable even when
                   every other section is empty.
                 */}
-                {events.length === 0 && (
+                {events.length === 0 && !netError && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       <View style={styles.emptyGlyph}>
@@ -2600,13 +2602,19 @@ function EventsInner() {
         transparent
         onRequestClose={() => setCityPickerOpen(false)}
       >
-        <TouchableOpacity
-          style={styles.cityPickerBackdrop}
-          activeOpacity={1}
-          onPress={() => setCityPickerOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close city picker"
-        >
+        {/*
+          The dismiss target is a sibling behind the sheet, not its parent.
+          Wrapping the sheet made it one accessible element (VoiceOver could
+          not reach a single city) and closed it on any tap on its padding.
+        */}
+        <View style={styles.cityPickerBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setCityPickerOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close city picker"
+          />
           <View style={styles.cityPickerSheet}>
             <Text style={styles.cityPickerTitle} accessibilityRole="header">
               Browse events in
@@ -2681,7 +2689,7 @@ function EventsInner() {
               />
             )}
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       <FilterSheet

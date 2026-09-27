@@ -4,7 +4,6 @@ import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     Linking,
     Share,
@@ -15,12 +14,14 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
+import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { savedEventRows, type SavedEventRow as EventRow } from '../../lib/savedEvents'
 import { formatEventDateTime } from '../../lib/time'
 import { APP_COLORS } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
  * Going — the events that are yours.
@@ -41,12 +42,15 @@ function GoingScreenInner() {
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const { showToast } = useToast()
   // Pull-to-refresh also retries a cover that failed to load (EventCover).
   const [refreshCount, setRefreshCount] = useState(0)
 
   const loadInterestedEvents = useCallback(async () => {
+    // No `setLoading(true)` here: `loading` starts true for the first load, and
+    // later focus refreshes update the list in place instead of blanking it.
     try {
-      setLoading(true)
       if (!authUser) {
         setEvents([])
         setLoading(false)
@@ -58,16 +62,17 @@ function GoingScreenInner() {
 
       if (!result.success || !result.data) {
         Logger.debug('interested', 'Failed to load favorites', { error: result.error })
-        setEvents([])
-        setLoading(false)
+        setLoadFailed(true)
         return
       }
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
       setEvents(savedEventRows(result.data))
+      setLoadFailed(false)
     } catch {
-      setEvents([])
+      // Keep whatever is already on screen; a failed refresh is not an empty list.
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -102,20 +107,53 @@ function GoingScreenInner() {
     setRefreshing(false)
   }, [loadInterestedEvents])
 
+  /** Back into the list where it was, rather than at the end. */
+  const restoreRow = useCallback((event: EventRow, index: number) => {
+    setEvents(prev => {
+      if (prev.some(e => e.id === event.id)) return prev
+      const next = [...prev]
+      next.splice(Math.min(index, next.length), 0, event)
+      return next
+    })
+  }, [])
+
+  /*
+   * Optimistic, with an Undo. The card goes at once; a refused DELETE puts it
+   * back and says so, and Undo saves it again.
+   */
   const removeSave = useCallback(async (event: EventRow) => {
+    const index = events.findIndex(e => e.id === event.id)
+    setEvents(prev => prev.filter(e => e.id !== event.id))
     try {
       // DELETE, not the POST upsert this used to send — that one never
       // removed anything, and the card came back on the next refresh.
       const result = await apiClient.removeFavorite(event.id)
-      if (!result.success) {
-        Alert.alert("Couldn't remove", result.error || 'Try again in a moment.')
-        return
-      }
-      setEvents(prev => prev.filter(e => e.id !== event.id))
-    } catch {
-      Alert.alert("Couldn't remove", 'Try again in a moment.')
+      if (!result.success) throw new Error(result.error || 'remove refused')
+    } catch (e) {
+      Logger.warn('interested', 'Failed to remove favorite', { error: e })
+      restoreRow(event, index)
+      showToast(`Couldn't remove ${event.title}. Try again.`, 'error')
+      return
     }
-  }, [])
+
+    showToast(`Removed ${event.title}`, 'info', {
+      action: {
+        label: 'Undo',
+        onPress: () => {
+          restoreRow(event, index)
+          apiClient
+            .addFavorite(event.id)
+            .then((res) => {
+              if (!res.success) throw new Error(res.error || 'save refused')
+            })
+            .catch(() => {
+              setEvents(prev => prev.filter(e => e.id !== event.id))
+              showToast(`Couldn't save ${event.title} again.`, 'error')
+            })
+        },
+      },
+    })
+  }, [events, restoreRow, showToast])
 
   const openInMaps = useCallback(async (event: EventRow) => {
     const lat = event.latitude
@@ -155,7 +193,21 @@ function GoingScreenInner() {
   }, [])
 
   const renderItem = useCallback(({ item }: { item: EventRow }) => (
-    <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}>
+    // The cover is the "open" target and the chips are its siblings: a card that
+    // was itself a touchable made VoiceOver read it as one element, so the four
+    // actions inside it could not be reached.
+    <View style={styles.card}>
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: '/event/[id]', params: { id: item.id } as any })}
+        accessibilityRole="button"
+        accessibilityLabel={[
+          item.title,
+          item.venue_name,
+          formatEventDateTime(item.start_time),
+          item.status === 'cancelled' ? 'Cancelled by the organiser' : null,
+        ].filter(Boolean).join(', ')}
+        accessibilityHint="Opens the event"
+      >
       <EventCover uri={item.cover_image_url} height={180} retry={refreshCount}>
         <View style={styles.overlayContent}>
           <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
@@ -166,25 +218,26 @@ function GoingScreenInner() {
           ) : null}
         </View>
       </EventCover>
+      </TouchableOpacity>
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel="Remove from saved">
+        <TouchableOpacity style={styles.actionChip} onPress={() => removeSave(item)} accessibilityRole="button" accessibilityLabel={`Remove ${item.title} from saved`}>
           <Ionicons name="heart-dislike" size={16} color={APP_COLORS.destructive} />
           <Text style={styles.actionText}>Remove</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => openInMaps(item)} accessibilityRole="button" accessibilityLabel={`Open ${item.venue_name || item.title} in Maps`}>
           <Ionicons name="navigate" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Open in Maps</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => addToCalendar(item)} accessibilityRole="button" accessibilityLabel={`Add ${item.title} to calendar`}>
           <Ionicons name="calendar" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Add to calendar</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)}>
+        <TouchableOpacity style={styles.actionChip} onPress={() => shareEvent(item)} accessibilityRole="button" accessibilityLabel={`Share ${item.title}`}>
           <Ionicons name="share-social" size={16} color={APP_COLORS.accent} />
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   ), [removeSave, openInMaps, addToCalendar, shareEvent, refreshCount])
 
   const keyExtractor = useCallback((item: EventRow) => item.id, [])
@@ -204,10 +257,32 @@ function GoingScreenInner() {
         <View style={styles.center}>
           <ActivityIndicator color={APP_COLORS.textPrimary} />
         </View>
+      ) : events.length === 0 && loadFailed ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Couldn&apos;t load your events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setLoading(true)
+              void loadInterestedEvents()
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : events.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No saved events yet</Text>
           <Text style={styles.emptySub}>Tap the heart on events to save them here.</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => router.navigate('/(tabs)/events' as any)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.retryText}>Browse events</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -216,7 +291,9 @@ function GoingScreenInner() {
           keyExtractor={keyExtractor}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          // The container already insets the home indicator; this clears the
+          // absolutely positioned tab bar on top of that.
+          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 24 }}
         />
       )}
     </SafeAreaView>
@@ -239,6 +316,15 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   emptyTitle: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
   emptySub: { color: APP_COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
+  retryButton: {
+    marginTop: 16,
+    minHeight: 44,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  retryText: { color: APP_COLORS.textPrimary, fontSize: 15, fontWeight: '600' },
   card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: APP_COLORS.backgroundElevated, borderRadius: 12, overflow: 'hidden' },
   overlayContent: { position: 'absolute', left: 12, right: 12, bottom: 12 },
   title: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '800' },
@@ -246,7 +332,7 @@ const styles = StyleSheet.create({
   time: { color: APP_COLORS.textSecondary, marginTop: 2, fontSize: 12 },
   cancelled: { color: APP_COLORS.destructive, marginTop: 4, fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: APP_COLORS.backgroundElevated },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 16 },
+  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: APP_COLORS.backgroundCard, paddingHorizontal: 12, minHeight: 44, borderRadius: 22 },
   actionText: { color: APP_COLORS.textPrimary, fontSize: 12 },
 })
 

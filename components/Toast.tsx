@@ -1,20 +1,31 @@
 import { Ionicons } from '@expo/vector-icons'
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { APP_COLORS, APP_RADIUS, APP_SPACING } from '../lib/theme'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
+interface ToastAction {
+  label: string
+  onPress: () => void
+}
+
 interface ToastMessage {
   id: number
   message: string
   variant: ToastVariant
+  action?: ToastAction
 }
 
 interface ToastContextValue {
-  showToast: (message: string, variant?: ToastVariant) => void
+  showToast: (message: string, variant?: ToastVariant, options?: { action?: ToastAction }) => void
 }
+
+// Longer with an action: the toast is then a control, and 3s is too short to
+// read the message and reach the button.
+const DURATION_MS = 3000
+const DURATION_WITH_ACTION_MS = 5000
 
 const ToastContext = createContext<ToastContextValue>({ showToast: () => {} })
 
@@ -64,7 +75,7 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
         Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
         Animated.timing(translateY, { toValue: -12, duration: 250, useNativeDriver: true }),
       ]).start(onHide)
-    }, 3000)
+    }, toast.action ? DURATION_WITH_ACTION_MS : DURATION_MS)
 
     return () => clearTimeout(timer)
     // onHide is a fresh closure from the parent on every render; including it
@@ -75,6 +86,8 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
 
   return (
     <Animated.View
+      // Only a toast with an action takes touches; the rest stay see-through.
+      pointerEvents={toast.action ? 'auto' : 'none'}
       style={[
         styles.toast,
         { backgroundColor: config.bg, borderColor: config.border },
@@ -88,6 +101,20 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
         style={styles.icon}
       />
       <Text style={styles.message} numberOfLines={3}>{toast.message}</Text>
+      {toast.action ? (
+        <Pressable
+          onPress={() => {
+            toast.action?.onPress()
+            onHide()
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={toast.action.label}
+          hitSlop={8}
+          style={styles.action}
+        >
+          <Text style={styles.actionText}>{toast.action.label}</Text>
+        </Pressable>
+      ) : null}
     </Animated.View>
   )
 }
@@ -96,10 +123,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const insets = useSafeAreaInsets()
 
-  const showToast = useCallback((message: string, variant: ToastVariant = 'info') => {
-    const id = ++nextId
-    setToasts(prev => [...prev.slice(-2), { id, message, variant }])
-  }, [])
+  const showToast = useCallback(
+    (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction }) => {
+      const id = ++nextId
+      setToasts(prev => [...prev.slice(-2), { id, message, variant, action: options?.action }])
+    },
+    []
+  )
 
   const hideToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id))
@@ -108,7 +138,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <View style={[styles.container, { top: insets.top + 8 }]} pointerEvents="none">
+      <View style={[styles.container, { top: insets.top + 8 }]} pointerEvents="box-none">
         {toasts.map(toast => (
           <ToastItem key={toast.id} toast={toast} onHide={() => hideToast(toast.id)} />
         ))}
@@ -148,5 +178,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
+  },
+  action: {
+    marginLeft: 12,
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  actionText: {
+    color: APP_COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 })
