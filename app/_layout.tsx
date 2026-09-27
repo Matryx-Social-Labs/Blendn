@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import { router, Stack, usePathname } from "expo-router";
+import { router, Stack, usePathname, type Href } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
@@ -16,7 +16,7 @@ import {
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
-import { setRouteReady, takePendingRoute } from '../lib/pendingRoute';
+import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
@@ -239,6 +239,12 @@ function RootLayout() {
         // Not authenticated → send to login index, unless already somewhere
         // a signed-out user is meant to be
         if (!isAuthRoute) {
+          /*
+           * An invite link tapped while signed out: hold it, and it opens the
+           * moment they are in — after sign-in, or after onboarding for a new
+           * account. Without this the link was lost at the sign-in screen.
+           */
+          if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort
@@ -347,6 +353,28 @@ function RootLayout() {
         });
         replaceIfNeeded(resume ? ONBOARDING_ROUTES[resume] : '/(tabs)/events');
       } else {
+        /*
+         * An invite link opened by a signed-in account that has not finished
+         * onboarding: hold it and finish onboarding first, exactly as a
+         * signed-out tap is held until sign-in. The link opens once they are
+         * through. Other deep links keep the behaviour below.
+         */
+        if (pathname.startsWith('/f/')) {
+          const stored = user?.id ? await readOnboarding(user.id) : null;
+          if (superseded) return;
+          const resume = resumeStep({
+            finishedOnServer: user.profile?.onboarded === true,
+            stored: stored?.progress ?? null,
+            isNewAccount,
+            mayParticipate: mayParticipate(user.profile),
+          });
+          if (resume) {
+            setRouteReady(false);
+            openWhenReady(pathname as Href);
+            replaceIfNeeded(ONBOARDING_ROUTES[resume]);
+            return;
+          }
+        }
         // Clear last target if user navigated to a normal screen
         lastRedirectRef.current = null;
         /*
@@ -635,6 +663,11 @@ function RootLayout() {
           animation: routeTransition,
         }}
       />
+      {/* Friends. Declared so none of them inherits the native header. */}
+      <Stack.Screen name="friends/index" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,
