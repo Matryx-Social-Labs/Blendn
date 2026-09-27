@@ -33,7 +33,7 @@ export default function ScalePress({
   const handlePressIn: PressableProps['onPressIn'] = useCallback(
     (event: GestureResponderEvent) => {
       if (!reduceMotion) {
-        scale.value = withSpring(pressedScale, MOTION_SPRING.snappy)
+        scale.set(withSpring(pressedScale, MOTION_SPRING.snappy))
       }
       if (haptic) {
         Haptics.selectionAsync().catch(() => {})
@@ -46,7 +46,7 @@ export default function ScalePress({
   const handlePressOut: PressableProps['onPressOut'] = useCallback(
     (event: GestureResponderEvent) => {
       if (!reduceMotion) {
-        scale.value = withSpring(1, MOTION_SPRING.gentle)
+        scale.set(withSpring(1, MOTION_SPRING.gentle))
       }
       onPressOut?.(event)
     },

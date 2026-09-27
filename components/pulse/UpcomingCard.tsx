@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceSunken,
   },
-  mediaFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceSunken },
+  mediaFallback: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.surfaceSunken },
   categoryPill: {
     position: 'absolute',
     left: SPACE.md,

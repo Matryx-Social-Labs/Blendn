@@ -146,57 +146,25 @@ function UserProfileInner() {
     setCtaMessage('Send a request to start chatting.')
   }, [authUser])
 
-  const load = useCallback(async () => {
+  // State is set only in the callbacks, once the requests have settled; the
+  // spinner for a reload is switched on in render, below.
+  const load = useCallback(() => {
     if (!id) return
-    setLoading(true)
-    try {
-      let nextProfile: UserProfileView | null = null
+    return apiClient.getPublicProfile(id)
+      .then(async (result) => {
+        let nextProfile: UserProfileView | null = null
 
-      const result = await apiClient.getPublicProfile(id)
-      if (result.success && result.data) {
-        const data = result.data
-        const photos = data.photos || data.profile_photos || []
-        // Map interests: API returns objects {id, name, slug, icon} — extract names
-        const interests = Array.isArray(data.interests)
-          ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
-              .filter((n: string) => n)
-          : []
-        nextProfile = {
-          user_id: id,
-          name: data.name || data.display_name,
-          age: data.age,
-          bio: data.bio,
-          location: data.location,
-          occupation: data.occupation,
-          education: data.education,
-          interests,
-          photos,
-          /*
-           * Both are optional on the payload and typed loosely upstream, so they
-           * are read defensively rather than asserted -- an older server build
-           * simply yields no shared chips and no subtitle, which degrades to the
-           * plain design rather than to a crash.
-           */
-          workField: (data as { work_field?: string }).work_field,
-          blurPhoto: (data as { blurPhoto?: string | null }).blurPhoto ?? null,
-          sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
-            ? (data as { sharedInterests?: string[] }).sharedInterests
-            : [],
-          stats: data.stats,
-          memberSince: data.memberSince,
-        }
-      } else {
-        const fallbackResult = await apiClient.getProfile(id)
-        if (fallbackResult.success && fallbackResult.data) {
-          const data = fallbackResult.data
+        if (result.success && result.data) {
+          const data = result.data
           const photos = data.photos || data.profile_photos || []
+          // Map interests: API returns objects {id, name, slug, icon} — extract names
           const interests = Array.isArray(data.interests)
             ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
                 .filter((n: string) => n)
             : []
           nextProfile = {
             user_id: id,
-            name: data.name,
+            name: data.name || data.display_name,
             age: data.age,
             bio: data.bio,
             location: data.location,
@@ -204,21 +172,63 @@ function UserProfileInner() {
             education: data.education,
             interests,
             photos,
+            /*
+             * Both are optional on the payload and typed loosely upstream, so they
+             * are read defensively rather than asserted -- an older server build
+             * simply yields no shared chips and no subtitle, which degrades to the
+             * plain design rather than to a crash.
+             */
+            workField: (data as { work_field?: string }).work_field,
+            blurPhoto: (data as { blurPhoto?: string | null }).blurPhoto ?? null,
+            sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
+              ? (data as { sharedInterests?: string[] }).sharedInterests
+              : [],
+            stats: data.stats,
+            memberSince: data.memberSince,
+          }
+        } else {
+          const fallbackResult = await apiClient.getProfile(id)
+          if (fallbackResult.success && fallbackResult.data) {
+            const data = fallbackResult.data
+            const photos = data.photos || data.profile_photos || []
+            const interests = Array.isArray(data.interests)
+              ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
+                  .filter((n: string) => n)
+              : []
+            nextProfile = {
+              user_id: id,
+              name: data.name,
+              age: data.age,
+              bio: data.bio,
+              location: data.location,
+              occupation: data.occupation,
+              education: data.education,
+              interests,
+              photos,
+            }
           }
         }
-      }
 
-      setProfile(nextProfile)
-      if (nextProfile?.user_id) {
-        await hydrateCtaState(nextProfile.user_id)
-      }
-    } catch (e) {
-      Logger.error('profile', 'User profile load failed', { error: e })
-      Alert.alert('Error', 'Failed to load profile')
-    } finally {
-      setLoading(false)
-    }
+        setProfile(nextProfile)
+        if (nextProfile?.user_id) {
+          await hydrateCtaState(nextProfile.user_id)
+        }
+      })
+      .catch((e) => {
+        Logger.error('profile', 'User profile load failed', { error: e })
+        Alert.alert('Error', 'Failed to load profile')
+      })
+      .finally(() => setLoading(false))
   }, [id, hydrateCtaState])
+
+  // A new `load` is a new profile to fetch, and it shows as loading from this
+  // render rather than one commit later. The first `load` rides on the
+  // initial `loading: true`.
+  const [loadingFor, setLoadingFor] = useState(() => load)
+  if (loadingFor !== load) {
+    setLoadingFor(() => load)
+    if (id) setLoading(true)
+  }
 
   useEffect(() => {
     load()

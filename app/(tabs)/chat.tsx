@@ -346,235 +346,8 @@ function ChatInner() {
     }
   }, [personalChats, user, showToast])
 
-  const onRefresh = useCallback(async () => {
-    if (isLoadingRef.current) return
-    setRefreshing(true)
-    await loadChats(true, true)
-    setRefreshing(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Real-time private message updates via Socket.io
-  useEffect(() => {
-    if (!user) return
-
-    Logger.info('chat', 'Setting up real-time message subscription')
-
-    const handleNewMessage: PrivateMessageCallback = (data) => {
-      Logger.debug('chat', 'New message received', { conversationId: data.conversationId })
-
-      setPersonalChats(prev => {
-        const idx = prev.findIndex(c => c.conversation_id === data.conversationId)
-
-        if (idx === -1) {
-          // New conversation - reload the list to get full details
-          loadPersonalChats(undefined, undefined, true)
-          return prev
-        }
-
-        const updated = [...prev]
-        const isFromMe = data.message.senderId === user.id
-        const nextPreview = previewFromMessage(data.message) || '[Message]'
-        updated[idx] = {
-          ...updated[idx],
-          last_message: nextPreview,
-          last_message_time: data.message.createdAt,
-          // Only increment unread if message is from other user
-          unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
-        }
-        return updated
-      })
-    }
-
-    const unsubscribe = subscribeToUserNotifications(user.id, handleNewMessage)
-
-    return () => {
-      Logger.debug('chat', 'Cleaning up message subscription')
-      unsubscribe()
-    }
-  }, [user])
-
-  // Real-time group chat updates — subscribe to loaded group chat rooms.
-  // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
-  useEffect(() => {
-    if (!user) return
-
-    const handleGroupMessage: ChatMessageCallback = (data) => {
-      Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
-
-      setGroupChats(prev => {
-        const idx = prev.findIndex(c => c.chat_room_id === data.chatGroupId)
-        if (idx === -1) return prev
-
-        const updated = [...prev]
-        updated[idx] = {
-          ...updated[idx],
-          last_message: data.message.content,
-          last_message_time: data.message.createdAt,
-          last_sender_name: data.message.userName,
-        }
-        return updated
-      })
-    }
-
-    const newIds = new Set(groupChats.map(c => c.chat_room_id))
-    const oldIds = new Set(groupChatUnsubsRef.current.keys())
-
-    for (const id of oldIds) {
-      if (!newIds.has(id)) {
-        groupChatUnsubsRef.current.get(id)?.()
-        groupChatUnsubsRef.current.delete(id)
-      }
-    }
-
-    for (const id of newIds) {
-      if (!oldIds.has(id)) {
-        groupChatUnsubsRef.current.set(id, subscribeToChatMessage(id, handleGroupMessage))
-      }
-    }
-  }, [user, groupChats])
-
-  // Cleanup all group chat subscriptions on unmount
-  useEffect(() => {
-    const subs = groupChatUnsubsRef.current
-    return () => {
-      subs.forEach(unsub => unsub())
-      subs.clear()
-    }
-  }, [])
-
-  // Instant local updates from chat screens — fires the moment a message is sent,
-  // so the list is already up-to-date before the user finishes swiping back.
-  useEffect(() => {
-    const unsub = subscribeChatListUpdates((update) => {
-      if (update.type === 'personal' && update.conversationId) {
-        setPersonalChats(prev => {
-          const idx = prev.findIndex(c => c.conversation_id === update.conversationId)
-          if (idx === -1) return prev
-          const updated = [...prev]
-          updated[idx] = {
-            ...updated[idx],
-            last_message: update.lastMessage,
-            last_message_time: update.lastMessageTime,
-          }
-          return updated
-        })
-      } else if (update.type === 'group' && update.chatGroupId) {
-        setGroupChats(prev => {
-          const idx = prev.findIndex(c => c.chat_room_id === update.chatGroupId)
-          if (idx === -1) return prev
-          const updated = [...prev]
-          updated[idx] = {
-            ...updated[idx],
-            last_message: update.lastMessage,
-            last_message_time: update.lastMessageTime,
-            last_sender_name: update.senderName,
-          }
-          return updated
-        })
-      }
-    })
-
-    return unsub
-  }, [])
-
-  /*
-   * Both lists, always.
-   *
-   * The tabbed version fetched one and left the other stale, which is why
-   * switching tabs used to show yesterday's preview for a second. With one
-   * list there is one throttle and one cache decision, and the two requests
-   * go out together.
-   */
-  const loadChats = async (force = false, refreshEvenIfCached = false) => {
-    if (!user) return
-
-    const perfStart = Date.now()
-    const userId = user.id
-    const groupCacheKey = `group_chats_${userId}`
-    const personalCacheKey = `personal_chats_${userId}`
-    const requestsCacheKey = `message_requests_${userId}`
-
-    const cachedGroupChats = force ? null : queryCache.get<GroupChat[]>(groupCacheKey)
-    const cachedPersonalChats = force ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
-    const cachedRequests = force
-      ? null
-      : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
-
-    if (cachedGroupChats) setGroupChats(cachedGroupChats)
-    if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
-    if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
-
-    const hasCachedList = !!cachedGroupChats && !!cachedPersonalChats
-    const hasCachedRequests = !!cachedRequests
-    if (!force && (hasCachedList || hasCachedRequests)) {
-      setLoading(false)
-    }
-
-    const now = Date.now()
-    // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
-    // and navigated back) so stale data is never shown after a known change.
-    const chatDirty = hasDirtyDomain(['chat'])
-    const shouldFetchList = force
-      || !hasCachedList
-      || chatDirty
-      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
-    const shouldFetchRequests = force
-      || !hasCachedRequests
-      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
-
-    if (!shouldFetchList && !shouldFetchRequests) return
-
-    const loadId = ++latestLoadIdRef.current
-    try {
-      isLoadingRef.current = true
-      const hasRenderedData = rows.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
-      if (!hasRenderedData && (force || (!hasCachedList && shouldFetchList))) {
-        setLoading(true)
-      }
-
-      if (shouldFetchList) {
-        // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
-        // internal SWR response cache so we don't get stale data from it either.
-        const bypassApiCache = force || !hasCachedList
-        const [groupsOk, personalOk] = await Promise.all([
-          loadGroupChats(loadId, groupCacheKey, bypassApiCache),
-          loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
-        ])
-        if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
-        lastFetchRef.current.list = now
-      }
-      if (shouldFetchRequests) {
-        await loadMessageRequests(loadId, requestsCacheKey, force)
-        lastFetchRef.current.requests = now
-      }
-    } catch (error) {
-      Logger.error('chat', 'Error loading chats', { error })
-    } finally {
-      if (latestLoadIdRef.current === loadId) {
-        setLoading(false)
-        isLoadingRef.current = false
-      }
-      Logger.info('chat', 'loadChats timing', {
-        force,
-        refreshEvenIfCached,
-        durationMs: Date.now() - perfStart,
-        fetchedList: shouldFetchList,
-        fetchedRequests: shouldFetchRequests,
-      })
-    }
-  }
-
-  const socketStatus = useLiveSync({
-    enabled: !!user && !authLoading,
-    // Background sync should not force blocking skeleton UI.
-    onSync: () => loadChats(false, true),
-    domains: ['chat'],
-    connectedIntervalMs: 20000,
-    disconnectedIntervalMs: 8000,
-    maxDisconnectedIntervalMs: 30000,
-  })
-
+  // The loaders sit above every callback and effect that calls them: React
+  // Compiler rejects a closure that reads a binding before its declaration.
   const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false) => {
     if (cacheKey && !force) {
       const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
@@ -736,6 +509,235 @@ function ChatInner() {
     }
   }
 
+  /*
+   * Both lists, always.
+   *
+   * The tabbed version fetched one and left the other stale, which is why
+   * switching tabs used to show yesterday's preview for a second. With one
+   * list there is one throttle and one cache decision, and the two requests
+   * go out together.
+   */
+  const loadChats = async (force = false, refreshEvenIfCached = false) => {
+    if (!user) return
+
+    const perfStart = Date.now()
+    const userId = user.id
+    const groupCacheKey = `group_chats_${userId}`
+    const personalCacheKey = `personal_chats_${userId}`
+    const requestsCacheKey = `message_requests_${userId}`
+
+    const cachedGroupChats = force ? null : queryCache.get<GroupChat[]>(groupCacheKey)
+    const cachedPersonalChats = force ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
+    const cachedRequests = force
+      ? null
+      : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
+
+    if (cachedGroupChats) setGroupChats(cachedGroupChats)
+    if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
+    if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
+
+    const hasCachedList = !!cachedGroupChats && !!cachedPersonalChats
+    const hasCachedRequests = !!cachedRequests
+    if (!force && (hasCachedList || hasCachedRequests)) {
+      setLoading(false)
+    }
+
+    const now = Date.now()
+    // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
+    // and navigated back) so stale data is never shown after a known change.
+    const chatDirty = hasDirtyDomain(['chat'])
+    const shouldFetchList = force
+      || !hasCachedList
+      || chatDirty
+      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+    const shouldFetchRequests = force
+      || !hasCachedRequests
+      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+
+    if (!shouldFetchList && !shouldFetchRequests) return
+
+    const loadId = ++latestLoadIdRef.current
+    try {
+      isLoadingRef.current = true
+      const hasRenderedData = rows.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
+      if (!hasRenderedData && (force || (!hasCachedList && shouldFetchList))) {
+        setLoading(true)
+      }
+
+      if (shouldFetchList) {
+        // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
+        // internal SWR response cache so we don't get stale data from it either.
+        const bypassApiCache = force || !hasCachedList
+        const [groupsOk, personalOk] = await Promise.all([
+          loadGroupChats(loadId, groupCacheKey, bypassApiCache),
+          loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
+        ])
+        if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
+        lastFetchRef.current.list = now
+      }
+      if (shouldFetchRequests) {
+        await loadMessageRequests(loadId, requestsCacheKey, force)
+        lastFetchRef.current.requests = now
+      }
+    } catch (error) {
+      Logger.error('chat', 'Error loading chats', { error })
+    } finally {
+      if (latestLoadIdRef.current === loadId) {
+        setLoading(false)
+        isLoadingRef.current = false
+      }
+      Logger.info('chat', 'loadChats timing', {
+        force,
+        refreshEvenIfCached,
+        durationMs: Date.now() - perfStart,
+        fetchedList: shouldFetchList,
+        fetchedRequests: shouldFetchRequests,
+      })
+    }
+  }
+
+  const onRefresh = useCallback(async () => {
+    if (isLoadingRef.current) return
+    setRefreshing(true)
+    await loadChats(true, true)
+    setRefreshing(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Real-time private message updates via Socket.io
+  useEffect(() => {
+    if (!user) return
+
+    Logger.info('chat', 'Setting up real-time message subscription')
+
+    const handleNewMessage: PrivateMessageCallback = (data) => {
+      Logger.debug('chat', 'New message received', { conversationId: data.conversationId })
+
+      setPersonalChats(prev => {
+        const idx = prev.findIndex(c => c.conversation_id === data.conversationId)
+
+        if (idx === -1) {
+          // New conversation - reload the list to get full details
+          loadPersonalChats(undefined, undefined, true)
+          return prev
+        }
+
+        const updated = [...prev]
+        const isFromMe = data.message.senderId === user.id
+        const nextPreview = previewFromMessage(data.message) || '[Message]'
+        updated[idx] = {
+          ...updated[idx],
+          last_message: nextPreview,
+          last_message_time: data.message.createdAt,
+          // Only increment unread if message is from other user
+          unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
+        }
+        return updated
+      })
+    }
+
+    const unsubscribe = subscribeToUserNotifications(user.id, handleNewMessage)
+
+    return () => {
+      Logger.debug('chat', 'Cleaning up message subscription')
+      unsubscribe()
+    }
+  }, [user])
+
+  // Real-time group chat updates — subscribe to loaded group chat rooms.
+  // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
+  useEffect(() => {
+    if (!user) return
+
+    const handleGroupMessage: ChatMessageCallback = (data) => {
+      Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
+
+      setGroupChats(prev => {
+        const idx = prev.findIndex(c => c.chat_room_id === data.chatGroupId)
+        if (idx === -1) return prev
+
+        const updated = [...prev]
+        updated[idx] = {
+          ...updated[idx],
+          last_message: data.message.content,
+          last_message_time: data.message.createdAt,
+          last_sender_name: data.message.userName,
+        }
+        return updated
+      })
+    }
+
+    const newIds = new Set(groupChats.map(c => c.chat_room_id))
+    const oldIds = new Set(groupChatUnsubsRef.current.keys())
+
+    for (const id of oldIds) {
+      if (!newIds.has(id)) {
+        groupChatUnsubsRef.current.get(id)?.()
+        groupChatUnsubsRef.current.delete(id)
+      }
+    }
+
+    for (const id of newIds) {
+      if (!oldIds.has(id)) {
+        groupChatUnsubsRef.current.set(id, subscribeToChatMessage(id, handleGroupMessage))
+      }
+    }
+  }, [user, groupChats])
+
+  // Cleanup all group chat subscriptions on unmount
+  useEffect(() => {
+    const subs = groupChatUnsubsRef.current
+    return () => {
+      subs.forEach(unsub => unsub())
+      subs.clear()
+    }
+  }, [])
+
+  // Instant local updates from chat screens — fires the moment a message is sent,
+  // so the list is already up-to-date before the user finishes swiping back.
+  useEffect(() => {
+    const unsub = subscribeChatListUpdates((update) => {
+      if (update.type === 'personal' && update.conversationId) {
+        setPersonalChats(prev => {
+          const idx = prev.findIndex(c => c.conversation_id === update.conversationId)
+          if (idx === -1) return prev
+          const updated = [...prev]
+          updated[idx] = {
+            ...updated[idx],
+            last_message: update.lastMessage,
+            last_message_time: update.lastMessageTime,
+          }
+          return updated
+        })
+      } else if (update.type === 'group' && update.chatGroupId) {
+        setGroupChats(prev => {
+          const idx = prev.findIndex(c => c.chat_room_id === update.chatGroupId)
+          if (idx === -1) return prev
+          const updated = [...prev]
+          updated[idx] = {
+            ...updated[idx],
+            last_message: update.lastMessage,
+            last_message_time: update.lastMessageTime,
+            last_sender_name: update.senderName,
+          }
+          return updated
+        })
+      }
+    })
+
+    return unsub
+  }, [])
+
+  const socketStatus = useLiveSync({
+    enabled: !!user && !authLoading,
+    // Background sync should not force blocking skeleton UI.
+    onSync: () => loadChats(false, true),
+    domains: ['chat'],
+    connectedIntervalMs: 20000,
+    disconnectedIntervalMs: 8000,
+    maxDisconnectedIntervalMs: 30000,
+  })
+
   const respondToRequest = useCallback(async (request: MessageRequest, action: 'accept' | 'decline') => {
     const requestId = request.request_id
     if (requestPending[requestId]) return
@@ -783,6 +785,11 @@ function ChatInner() {
   }, [requestPending, showToast])
 
   useEffect(() => {
+    // loadChats paints the cached lists before its first await, which is the
+    // synchronous setState flagged here. Moving that into render means splitting
+    // loadChats across its seven callers and changing the inbox's first frame.
+    // That is a change to the inbox, not a lint fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!authLoading && user) loadChats(false, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading])

@@ -263,43 +263,49 @@ function GroupChatInner(props?: {
     }))
   }
 
-  const loadMessages = async (force = false, refreshEvenIfCached = false) => {
-    try {
-      if (!authUser) return
+  /*
+   * Starts a microtask after it is called, so every write, the cache restore
+   * included, comes from a callback and the load effect below can start it.
+   * The room still opens on the spinner, as it did when the restore ran
+   * inside the effect.
+   */
+  const loadMessages = (force = false, refreshEvenIfCached = false) =>
+    Promise.resolve(authUser)
+      .then(async (user) => {
+        if (!user) return
 
-      if (!force && messagesCacheKey) {
-        const cached = queryCache.get<Message[]>(messagesCacheKey)
-        if (cached) {
-          setMessages(cached)
-          setLoading(false)
-          // Instant jump to bottom when restoring from cache
-          setTimeout(() => scrollToBottom(false), 50)
-          if (!refreshEvenIfCached) return
+        if (!force && messagesCacheKey) {
+          const cached = queryCache.get<Message[]>(messagesCacheKey)
+          if (cached) {
+            setMessages(cached)
+            setLoading(false)
+            // Instant jump to bottom when restoring from cache
+            setTimeout(() => scrollToBottom(false), 50)
+            if (!refreshEvenIfCached) return
+          }
         }
-      }
 
-      const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
-      if (!result.success || !result.data) { setLoading(false); return }
+        const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
+        if (!result.success || !result.data) { setLoading(false); return }
 
-      const raw = Array.isArray(result.data)
-        ? result.data
-        : (result.data as any)?.messages || (result.data as any)?.data || []
+        const raw = Array.isArray(result.data)
+          ? result.data
+          : (result.data as any)?.messages || (result.data as any)?.data || []
 
-      const pagination = (result.data as any)?.pagination
-      setHasMore(pagination?.hasMore || false)
-      setOldestCursor(pagination?.nextCursor || null)
+        const pagination = (result.data as any)?.pagination
+        setHasMore(pagination?.hasMore || false)
+        setOldestCursor(pagination?.nextCursor || null)
 
-      const msgs = transformRawMessages(Array.isArray(raw) ? raw : [], authUser.id)
-      setMessages(msgs)
-      if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
-      // Scroll to bottom instantly on initial load
-      setTimeout(() => scrollToBottom(false), 50)
-    } catch (err) {
-      Logger.error('chat', 'Error loading messages', { error: err })
-    } finally {
-      setLoading(false)
-    }
-  }
+        const msgs = transformRawMessages(Array.isArray(raw) ? raw : [], user.id)
+        setMessages(msgs)
+        if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
+        // Scroll to bottom instantly on initial load
+        setTimeout(() => scrollToBottom(false), 50)
+      })
+      .catch((err) => {
+        Logger.error('chat', 'Error loading messages', { error: err })
+      })
+      .finally(() => setLoading(false))
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMore || !oldestCursor || !authUser) return
@@ -333,9 +339,14 @@ function GroupChatInner(props?: {
     return () => { if (cacheWriteTimerRef.current) clearTimeout(cacheWriteTimerRef.current) }
   }, [messages, messagesCacheKey])
 
+  // Follows the signed-in user once the room can load, and keeps the last one
+  // otherwise. Adjusted in render, on the same changes the load effect sees.
+  if (chatRoomId && authUser && !authLoading && currentUser !== authUser) {
+    setCurrentUser(authUser)
+  }
+
   useEffect(() => {
     if (chatRoomId && authUser && !authLoading) {
-      setCurrentUser(authUser)
       loadMessages(false, true)
     }
     // loadMessages is redefined every render; only the listed values should
@@ -623,7 +634,7 @@ function GroupChatInner(props?: {
       edges={embedded ? ['bottom'] : ['top', 'bottom']}
     >
       {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
-      <StatusBar style="light" backgroundColor={EMBER.bg} />
+      <StatusBar style="light" />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         {embedded ? null : (

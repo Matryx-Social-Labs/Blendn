@@ -132,6 +132,26 @@ a platform requirement, an SDK 53 deprecation deadline, or a feature only newer
 Expo has. Doing it *for* the audit is the wrong reason, and now there is a
 measurement saying so rather than an opinion.
 
+**Revisited 2026-09-27: SDK 53 → 57 in one step** (branch `chore/sdk-57`), for
+the reasons above — Xcode 26.4, React Native's new-architecture-only line, and
+four SDKs of drift. Measured the same way:
+
+| | SDK 53 | SDK 54 (rolled back) | SDK 57 |
+|---|---|---|---|
+| advisories | 25 | 29 | **16** |
+| of which high | 7 | 14 | **0** |
+
+All 16 are moderate. Fifteen are build tooling again (`uuid` through `xcode` and
+`@expo/config-plugins`). One chain is different: `expo-router` → `query-string`
+→ `decode-uri-component`, a denial-of-service advisory in URL decoding that does
+reach the app bundle. Worth an `overrides` entry once a fixed
+`decode-uri-component` is confirmed compatible — tracked on the SDK 57 PR.
+
+`sharedTransitionTag` still type-checks under Reanimated 4.5 and does nothing
+without a static feature flag. Its destination tags went with the old event
+screen in #207; today only `EventCard.tsx` carries source tags, with nothing to
+transition to, so no transition is lost.
+
 ### Deprecation warnings
 
 Three (`abab`, `domexception`, `whatwg-encoding`) came from `jest-environment-jsdom`,

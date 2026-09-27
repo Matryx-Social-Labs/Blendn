@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
   },
   pressed: { opacity: 0.9 },
-  imageFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: EMBER.surfaceMedia },
+  imageFallback: { ...StyleSheet.absoluteFill, backgroundColor: EMBER.surfaceMedia },
 
   body: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACE.xl, gap: SPACE.sm },
 

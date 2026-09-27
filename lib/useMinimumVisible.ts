@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 
 export function useMinimumVisible(active: boolean, minVisibleMs: number = 650): boolean {
   const [visible, setVisible] = useState(active)
-  const shownAtRef = useRef<number>(active ? Date.now() : 0)
+  // Stamped by the effect below, which runs on mount and on every change of `active`.
+  const shownAtRef = useRef<number>(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Show in the same render `active` turns on, rather than one commit later from the effect.
+  if (active && !visible) setVisible(true)
 
   useEffect(() => {
     if (hideTimerRef.current) {
@@ -13,7 +17,6 @@ export function useMinimumVisible(active: boolean, minVisibleMs: number = 650): 
 
     if (active) {
       shownAtRef.current = Date.now()
-      setVisible(true)
       return
     }
 

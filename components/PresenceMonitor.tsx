@@ -72,50 +72,50 @@ export function PresenceMonitor() {
    */
   const askingRef = useRef(false)
 
-  /*
-   * Which room, and how big its fence is.
-   *
-   * Two calls, because `/checkins/active` returns the event's title and cover
-   * but not its coordinates or radius — a shape that made sense when nothing
-   * needed the geometry after check-in.
-   */
-  const loadFence = useCallback(async () => {
-    try {
-      const active = await apiClient.getActiveCheckins({ force: true })
-      const checkIn = active.success ? active.data?.checkIns?.[0] : null
-      if (!checkIn?.eventId) {
-        setFence(null)
-        return
-      }
-
-      const event = await apiClient.getEvent(checkIn.eventId)
-      const data = event.data as
-        | { latitude?: number | null; longitude?: number | null; checkInRadius?: number | null }
-        | undefined
-      if (
-        !event.success ||
-        typeof data?.latitude !== 'number' ||
-        typeof data?.longitude !== 'number'
-      ) {
-        // An event without coordinates cannot be geofenced, and inventing a
-        // centre would evict on the first reading. Online events land here.
-        setFence(null)
-        return
-      }
-
-      setFence({
-        eventId: checkIn.eventId,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        radiusM: typeof data.checkInRadius === 'number' ? data.checkInRadius : 100,
-      })
-    } catch (e) {
-      Logger.warn('presence', 'could not resolve the fence', { error: e })
-      setFence(null)
-    }
-  }, [])
-
   useEffect(() => {
+    /*
+     * Which room, and how big its fence is.
+     *
+     * Two calls, because `/checkins/active` returns the event's title and cover
+     * but not its coordinates or radius — a shape that made sense when nothing
+     * needed the geometry after check-in.
+     */
+    const loadFence = async () => {
+      try {
+        const active = await apiClient.getActiveCheckins({ force: true })
+        const checkIn = active.success ? active.data?.checkIns?.[0] : null
+        if (!checkIn?.eventId) {
+          setFence(null)
+          return
+        }
+
+        const event = await apiClient.getEvent(checkIn.eventId)
+        const data = event.data as
+          | { latitude?: number | null; longitude?: number | null; checkInRadius?: number | null }
+          | undefined
+        if (
+          !event.success ||
+          typeof data?.latitude !== 'number' ||
+          typeof data?.longitude !== 'number'
+        ) {
+          // An event without coordinates cannot be geofenced, and inventing a
+          // centre would evict on the first reading. Online events land here.
+          setFence(null)
+          return
+        }
+
+        setFence({
+          eventId: checkIn.eventId,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          radiusM: typeof data.checkInRadius === 'number' ? data.checkInRadius : 100,
+        })
+      } catch (e) {
+        Logger.warn('presence', 'could not resolve the fence', { error: e })
+        setFence(null)
+      }
+    }
+
     void loadFence()
     /*
      * Re-resolve on foreground.
@@ -128,7 +128,7 @@ export function PresenceMonitor() {
       if (next === 'active') void loadFence()
     })
     return () => sub.remove()
-  }, [loadFence])
+  }, [])
 
   const checkOut = useCallback(
     async (eventId: string, automatic: boolean) => {

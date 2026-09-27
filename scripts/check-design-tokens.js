@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 /*
  * Fails on UI values that bypass the design system in `lib/theme.ts`.
  *

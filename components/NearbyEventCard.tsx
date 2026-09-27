@@ -127,7 +127,7 @@ function Frame({
       colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.42)', 'rgba(0,0,0,0.74)']}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={{ ...StyleSheet.absoluteFillObject, borderRadius: radius }}
+      style={{ ...StyleSheet.absoluteFill, borderRadius: radius }}
     />
   )
 

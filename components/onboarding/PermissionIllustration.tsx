@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  art: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  art: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
 
   bubble: {
     position: 'absolute',

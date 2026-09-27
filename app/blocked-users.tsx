@@ -22,21 +22,19 @@ export default function BlockedUsers() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  // State is set only in the callbacks, once the request has settled.
+  const loadBlockedUsers = () =>
+    getBlockedUsers()
+      .then(setBlockedUsers)
+      .catch((error) => {
+        Logger.error('profile', 'Error loading blocked users', { error })
+        Alert.alert('Error', 'Failed to load blocked users')
+      })
+      .finally(() => setLoading(false))
+
   useEffect(() => {
     loadBlockedUsers()
   }, [])
-
-  const loadBlockedUsers = async () => {
-    try {
-      const users = await getBlockedUsers()
-      setBlockedUsers(users)
-    } catch (error) {
-      Logger.error('profile', 'Error loading blocked users', { error })
-      Alert.alert('Error', 'Failed to load blocked users')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleUnblock = (user: BlockedUser) => {
     Alert.alert(
