@@ -127,9 +127,17 @@ describe('one age rule for every form that takes an age', () => {
     expect(read('app/about-you.tsx')).toContain('accountAgeError(age)')
   })
 
-  it('tells "The basics" why Continue is off for someone under 18', () => {
+  it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
-    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \([^<]{0,300}<Text style=\{styles\.error\}>\{ADULTS_ONLY\}<\/Text>/)
+    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}>\{ADULTS_ONLY\}<\/Text>/)
+    // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
+    expect(src).toMatch(
+      /dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}>That is not a date we recognise\.<\/Text>/
+    )
+    expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
+    // The two cases are disjoint: an impossible date is never "under 18".
+    expect(isUnderAccountAge('2010-02-30')).toBe(false)
+    expect(isCompleteDateOfBirth('2010-02-30')).toBe(false)
   })
 
   it('saves the age the form checked, against the age already on file', () => {

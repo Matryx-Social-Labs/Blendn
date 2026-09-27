@@ -14,6 +14,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ADULTS_ONLY,
   canContinue,
+  isCompleteDateOfBirth,
   isUnderAccountAge,
   joinDateOfBirth,
   splitDateOfBirth,
@@ -201,16 +202,20 @@ function BasicsScreenInner() {
           </View>
         </View>
         {/*
-         * Shown only once all three boxes are full. Complaining "that is not a
-         * real date" while someone is halfway through typing 1998 is nagging,
-         * not helping.
+         * Why Continue is off, shown only once all three boxes are full
+         * (`joinDateOfBirth` is undefined until then) — complaining while
+         * someone is halfway through typing 1998 is nagging, not helping.
+         *
+         * Under 18 first: Blend'n is 18+ (SCRUM-330), and every Google and
+         * Apple account passes this screen before it can finish onboarding.
+         * Anything else that is not a usable birth date — 30 February, the
+         * future — is "not a date". That branch used to test `!dateOfBirth`,
+         * which is never true once the boxes are full, so it never showed.
          */}
-        {dob.day && dob.month && dob.year.length === 4 && !dateOfBirth ? (
-          <Text style={styles.error}>That is not a date we recognise.</Text>
-        ) : isUnderAccountAge(dateOfBirth) ? (
-          // Why Continue is off: Blend'n is 18+ (SCRUM-330). Every Google and
-          // Apple account passes this screen before it can finish onboarding.
+        {isUnderAccountAge(dateOfBirth) ? (
           <Text style={styles.error}>{ADULTS_ONLY}</Text>
+        ) : dateOfBirth && !isCompleteDateOfBirth(dateOfBirth) ? (
+          <Text style={styles.error}>That is not a date we recognise.</Text>
         ) : null}
       </EmberFieldGroup>
 
