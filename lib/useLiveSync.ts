@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clearDirtyDomains, hasDirtyDomain, LiveSyncDomain, subscribeDirtyDomains } from './liveSyncState'
 import { getConnectionStatus, SocketConnectionStatus, subscribeConnectionStatus } from './socketClient'
+import { useLatest } from './useLatest'
 
 interface UseLiveSyncOptions {
   enabled?: boolean
@@ -29,36 +30,39 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
   const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>(() => getConnectionStatus())
   const lastSocketStateRef = useRef(socketStatus.state)
   const socketStateRef = useRef(socketStatus.state)
-  const onSyncRef = useRef(onSync)
-  const domainsRef = useRef(domains)
+  // Stale closures read the newest values through these. Declared before every
+  // effect below, so their sync runs first in each commit.
+  const onSyncRef = useLatest(onSync)
+  const domainsRef = useLatest(domains)
   const inFlightRef = useRef(false)
   const pendingRef = useRef(false)
 
-  // Update refs synchronously so stale closures always see current values
-  onSyncRef.current = onSync
-  domainsRef.current = domains
-
-  const runSync = useCallback(async () => {
-    if (!enabled) return
-    if (inFlightRef.current) {
-      pendingRef.current = true
-      return
-    }
-    inFlightRef.current = true
-    try {
-      await onSyncRef.current()
-      if (domainsRef.current.length > 0) {
-        clearDirtyDomains(domainsRef.current)
+  const runSync = useCallback(() => {
+    // Named inner function so the pending re-run can call itself without
+    // runSync referencing its own binding. The re-run stays un-awaited.
+    const run = async (): Promise<void> => {
+      if (!enabled) return
+      if (inFlightRef.current) {
+        pendingRef.current = true
+        return
       }
-    } catch {}
-    finally {
-      inFlightRef.current = false
-      if (pendingRef.current) {
-        pendingRef.current = false
-        void runSync()
+      inFlightRef.current = true
+      try {
+        await onSyncRef.current()
+        if (domainsRef.current.length > 0) {
+          clearDirtyDomains(domainsRef.current)
+        }
+      } catch {}
+      finally {
+        inFlightRef.current = false
+        if (pendingRef.current) {
+          pendingRef.current = false
+          void run()
+        }
       }
     }
-  }, [enabled])
+    return run()
+  }, [domainsRef, enabled, onSyncRef])
 
   useFocusEffect(
     useCallback(() => {
@@ -121,6 +125,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     }, [
       connectedIntervalMs,
       disconnectedIntervalMs,
+      domainsRef,
       enabled,
       maxDisconnectedIntervalMs,
       runSync,
@@ -157,7 +162,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     return () => {
       unsub()
     }
-  }, [enabled, runSync])
+  }, [domainsRef, enabled, runSync])
 
   return socketStatus
 }

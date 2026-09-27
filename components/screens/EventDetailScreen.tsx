@@ -4,7 +4,7 @@ import { HeartIcon } from '../motion/HeartIcon'
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -71,6 +71,22 @@ const LOCATION_FIX_TIMEOUT_MS = 15_000
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
+
+const NO_CLOCK_SUBSCRIPTION = () => () => {}
+
+/**
+ * Whether the clock has passed `ms` (`inclusive`: reached it), fresh on every
+ * render -- exactly what the inline `Date.now()` comparisons this replaces did.
+ *
+ * The clock is a value outside React, so it is read the way React reads one:
+ * `useSyncExternalStore`. Nothing subscribes, so as before the screen does not
+ * re-render on its own when the doors open; the next render picks it up.
+ */
+function useClockPassed(ms: number | null, inclusive = false): boolean {
+  return useSyncExternalStore(NO_CLOCK_SUBSCRIPTION, () =>
+    ms === null ? false : inclusive ? ms <= Date.now() : ms < Date.now()
+  )
+}
 
 interface EventDetailData {
   /** Curated facilities, already in the vocabulary's `sort_order`. */
@@ -233,7 +249,6 @@ export default function EventDetail() {
     buttons: [],
   })
   const lastFetchRef = React.useRef<number>(0)
-  const checkedInMorphTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
   const [isOrganizer, setIsOrganizer] = useState(false)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
@@ -259,9 +274,132 @@ export default function EventDetail() {
     })
   }, [closeTray])
 
-  useEffect(() => {
+  // Above the effects that call them: React Compiler rejects a closure that
+  // reads a binding before its declaration.
+  const checkProximityStatus = async () => {
+    if (!userLocation || !event) return
+
+    try {
+      Logger.journey('proximity', 'detail:check:start', { eventId: event.id, lat: userLocation.latitude, lon: userLocation.longitude })
+      if (!user) return
+
+      // Calculate distance client-side for now
+      // TODO: Add proximity check API endpoint if needed
+      const distance = getDistanceMetres(
+        userLocation.latitude,
+        userLocation.longitude,
+        event.latitude,
+        event.longitude
+      )
+
+      /*
+       * Logged, not stored.
+       *
+       * `proximityStatus` was written here and read by nothing -- the old
+       * render showed a distance readout, the frame has none, and the CTA
+       * derives availability from the clock while the server re-validates the
+       * GPS on the actual check-in. Keeping the journey log: it is how a failed
+       * check-in gets diagnosed after the fact.
+       */
+      const isNearby = distance <= (event.check_in_radius || 100)
+      Logger.journey('proximity', 'detail:check:success', { distance, isNearby })
+    } catch (error) {
+      Logger.error('events', 'detail:check:exception', { error: error as any })
+    }
+  }
+
+  const applyEventDetails = (result: Awaited<ReturnType<typeof apiClient.getEvent>>) => {
+    if (!result.success || !result.data) {
+      Logger.error('events', 'detail:fetch:error', { error: result.error })
+      showTray('Error', 'Failed to load event details.')
+    } else {
+      // Map API response (camelCase) to EventDetailData interface (snake_case)
+      const d = result.data
+      lastFetchRef.current = Date.now()
+      setEventDetailCache(String(id), d)
+      setEvent({
+        id: d.id,
+        title: d.title,
+        description: d.description || '',
+        short_description: d.shortDescription || d.short_description || '',
+        city: d.city || '',
+        venue_name: d.venueName || d.venue_name || '',
+        address: d.address || '',
+        start_time: d.startTime || d.start_time || '',
+        end_time: d.endTime || d.end_time || '',
+        timezone: d.timezone,
+        category: d.categories?.[0]?.name || '',
+        price_cents: d.priceCents || d.price_cents || 0,
+        max_capacity: d.maxCapacity || d.max_capacity || 0,
+        current_capacity: d.currentCapacity || d.current_capacity || 0,
+        cover_image_url: d.coverImageUrl || d.cover_image_url || '',
+        organizer: d.organizer?.name || '',
+        latitude: d.latitude ?? 0,
+        longitude: d.longitude ?? 0,
+        check_in_radius: d.checkInRadius || d.check_in_radius || 100,
+        media: Array.isArray(d.media) ? d.media : [],
+        amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
+        details: (d.details ?? undefined) as ServerEventDetails | undefined,
+      })
+      // Set interest info and check-in status from userStatus
+      if (d.userStatus) {
+        setUserInterested(d.userStatus.isFavorited || false)
+        // Set check-in status from event detail response - no separate API call needed
+        setCheckInStatus({
+          success: true,
+          checked_in: d.userStatus.isCheckedIn || false,
+          status: d.userStatus.checkInStatus ?? null,
+          check_in_id: d.userStatus.checkInId,
+        })
+        setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
+      }
+      if (d.stats) {
+        setInterestCount(d.stats.favoriteCount || 0)
+      }
+      // Set chat group ID if available
+      if (d.chatGroup?.id) {
+        setEventChatGroupId(d.chatGroup.id)
+      }
+      // Determine if current user is the organizer
+      if (user && d.organizer?.id) {
+        setIsOrganizer(d.organizer.id === user.id)
+      }
+      Logger.journey('events', 'detail:fetch:success', { eventId: d.id, isCheckedIn: d.userStatus?.isCheckedIn })
+    }
+  }
+
+  /*
+   * A promise chain rather than async/await, so every state write sits in the
+   * request's continuation where the effect lint can see it: the mount effect
+   * calls this, and that lint reads a write after `await` as a synchronous one.
+   */
+  const fetchEventDetails = () => {
+    Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
+    return apiClient
+      .getEvent(String(id), {
+        include: 'interestedUsers',
+        interestedLimit: 6,
+      })
+      .then(applyEventDetails)
+      .catch((error) => {
+        Logger.error('events', 'detail:fetch:exception', { error: error as any })
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }
+
+  /*
+   * A new id, handled during render rather than in the effect below, so the
+   * first frame for it is already right: the cached detail in place of the
+   * params' outline, and the map hidden until interactions settle. The effect
+   * keeps the logging and the fetch.
+   */
+  const [renderedId, setRenderedId] = useState<typeof id | null>(null)
+  if (renderedId !== id) {
+    setRenderedId(id)
+    setShowMapImage(false)
     if (id && String(id).trim()) {
-      Logger.journey('events', 'detail:mount', { eventId: String(id) })
       // Params are already handled in initial state - just check cache for more complete data
       const cached = getEventDetailCache<any>(String(id))
       if (cached) {
@@ -315,11 +453,18 @@ export default function EventDetail() {
         }
         setLoading(false)
       }
-      // fetchEventDetails returns all user status info (isCheckedIn, isFavorited) - single API call
-      fetchEventDetails()
     } else {
       // No valid ID provided, show error immediately
       setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (id && String(id).trim()) {
+      Logger.journey('events', 'detail:mount', { eventId: String(id) })
+      // fetchEventDetails returns all user status info (isCheckedIn, isFavorited) - single API call
+      fetchEventDetails()
+    } else {
       Logger.error('events', 'detail:noValidId', { id })
     }
     // fetchEventDetails is redefined every render, and `user` there is only
@@ -330,7 +475,7 @@ export default function EventDetail() {
 
   // Deferred loading for smoother navigation - reduced delays for faster perceived loading
   useEffect(() => {
-    setShowMapImage(false)
+    // Hidden again on an id change during render, above.
     // Show map immediately after navigation completes
     const task = InteractionManager.runAfterInteractions(() => {
       setShowMapImage(true)
@@ -506,110 +651,6 @@ export default function EventDetail() {
       showTray('Error', 'Failed to update RSVP.')
     }
   }, [id, user, rsvpStatus, showTray, closeTray, feedback])
-
-  const checkProximityStatus = async () => {
-    if (!userLocation || !event) return
-
-    try {
-      Logger.journey('proximity', 'detail:check:start', { eventId: event.id, lat: userLocation.latitude, lon: userLocation.longitude })
-      if (!user) return
-
-      // Calculate distance client-side for now
-      // TODO: Add proximity check API endpoint if needed
-      const distance = getDistanceMetres(
-        userLocation.latitude,
-        userLocation.longitude,
-        event.latitude,
-        event.longitude
-      )
-
-      /*
-       * Logged, not stored.
-       *
-       * `proximityStatus` was written here and read by nothing -- the old
-       * render showed a distance readout, the frame has none, and the CTA
-       * derives availability from the clock while the server re-validates the
-       * GPS on the actual check-in. Keeping the journey log: it is how a failed
-       * check-in gets diagnosed after the fact.
-       */
-      const isNearby = distance <= (event.check_in_radius || 100)
-      Logger.journey('proximity', 'detail:check:success', { distance, isNearby })
-    } catch (error) {
-      Logger.error('events', 'detail:check:exception', { error: error as any })
-    }
-  }
-
-  const fetchEventDetails = async () => {
-    try {
-      Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
-      const result = await apiClient.getEvent(String(id), {
-        include: 'interestedUsers',
-        interestedLimit: 6,
-      })
-
-      if (!result.success || !result.data) {
-        Logger.error('events', 'detail:fetch:error', { error: result.error })
-        showTray('Error', 'Failed to load event details.')
-      } else {
-        // Map API response (camelCase) to EventDetailData interface (snake_case)
-        const d = result.data
-        lastFetchRef.current = Date.now()
-        setEventDetailCache(String(id), d)
-        setEvent({
-          id: d.id,
-          title: d.title,
-          description: d.description || '',
-          short_description: d.shortDescription || d.short_description || '',
-          city: d.city || '',
-          venue_name: d.venueName || d.venue_name || '',
-          address: d.address || '',
-          start_time: d.startTime || d.start_time || '',
-          end_time: d.endTime || d.end_time || '',
-          timezone: d.timezone,
-          category: d.categories?.[0]?.name || '',
-          price_cents: d.priceCents || d.price_cents || 0,
-          max_capacity: d.maxCapacity || d.max_capacity || 0,
-          current_capacity: d.currentCapacity || d.current_capacity || 0,
-          cover_image_url: d.coverImageUrl || d.cover_image_url || '',
-          organizer: d.organizer?.name || '',
-          latitude: d.latitude ?? 0,
-          longitude: d.longitude ?? 0,
-          check_in_radius: d.checkInRadius || d.check_in_radius || 100,
-          media: Array.isArray(d.media) ? d.media : [],
-          amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
-          details: (d.details ?? undefined) as ServerEventDetails | undefined,
-        })
-        // Set interest info and check-in status from userStatus
-        if (d.userStatus) {
-          setUserInterested(d.userStatus.isFavorited || false)
-          // Set check-in status from event detail response - no separate API call needed
-          setCheckInStatus({
-            success: true,
-            checked_in: d.userStatus.isCheckedIn || false,
-            status: d.userStatus.checkInStatus ?? null,
-            check_in_id: d.userStatus.checkInId,
-          })
-          setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
-        }
-        if (d.stats) {
-          setInterestCount(d.stats.favoriteCount || 0)
-        }
-        // Set chat group ID if available
-        if (d.chatGroup?.id) {
-          setEventChatGroupId(d.chatGroup.id)
-        }
-        // Determine if current user is the organizer
-        if (user && d.organizer?.id) {
-          setIsOrganizer(d.organizer.id === user.id)
-        }
-        Logger.journey('events', 'detail:fetch:success', { eventId: d.id, isCheckedIn: d.userStatus?.isCheckedIn })
-      }
-    } catch (error) {
-      Logger.error('events', 'detail:fetch:exception', { error: error as any })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Refresh event data (including check-in status) on focus
   useFocusEffect(
@@ -1102,12 +1143,15 @@ export default function EventDetail() {
    * by the time the event ends.
    */
   const attended = !!checkInStatus?.status
-  const isEnded = event ? (new Date(event.end_time).getTime() < Date.now()) : false
+  const isEnded = useClockPassed(event ? new Date(event.end_time).getTime() : null)
+  // Explained with the CTA below; read here, above the early return, because it is a hook.
+  const hasStarted = useClockPassed(event ? new Date(event.start_time).getTime() : null, true)
 
+  const eventTitle = event?.title
   const openEventChat = useCallback(async () => {
     try {
       let chatId = eventChatGroupId
-      let chatName = event?.title || 'Event Chat'
+      let chatName = eventTitle || 'Event Chat'
 
       if (!chatId && id) {
         const chatResult = await apiClient.getEventChat(String(id))
@@ -1118,7 +1162,7 @@ export default function EventDetail() {
       }
 
       if (chatId) {
-        const query = `?roomName=${encodeURIComponent(chatName)}&eventTitle=${encodeURIComponent(event?.title || '')}`
+        const query = `?roomName=${encodeURIComponent(chatName)}&eventTitle=${encodeURIComponent(eventTitle || '')}`
         router.replace(`/chat/${chatId}${query}` as any)
         return
       }
@@ -1127,30 +1171,27 @@ export default function EventDetail() {
     }
 
     router.replace('/(tabs)/chat' as any)
-  }, [eventChatGroupId, event?.title, id])
+  }, [eventChatGroupId, eventTitle, id])
+
+  /*
+   * Checking in morphs the CTA: 'checked' at once, 'chat' 900ms later; checking
+   * out puts it back to 'blend'. The immediate step is taken during render when
+   * `isCheckedIn` changes; the effect owns only the delayed one. Starts from
+   * `false` because `actionStage` starts at 'blend', so a screen that mounts
+   * checked in still goes through 'checked'.
+   */
+  const [stageCheckedIn, setStageCheckedIn] = useState(false)
+  if (stageCheckedIn !== isCheckedIn) {
+    setStageCheckedIn(isCheckedIn)
+    setActionStage(isCheckedIn ? 'checked' : 'blend')
+  }
 
   useEffect(() => {
-    if (checkedInMorphTimeoutRef.current) {
-      clearTimeout(checkedInMorphTimeoutRef.current)
-      checkedInMorphTimeoutRef.current = null
-    }
-
-    if (!isCheckedIn) {
-      setActionStage('blend')
-      return
-    }
-
-    setActionStage('checked')
-    checkedInMorphTimeoutRef.current = setTimeout(() => {
+    if (!isCheckedIn) return
+    const timeout = setTimeout(() => {
       setActionStage('chat')
     }, 900)
-
-    return () => {
-      if (checkedInMorphTimeoutRef.current) {
-        clearTimeout(checkedInMorphTimeoutRef.current)
-        checkedInMorphTimeoutRef.current = null
-      }
-    }
+    return () => clearTimeout(timeout)
   }, [isCheckedIn])
 
 
@@ -1237,7 +1278,6 @@ export default function EventDetail() {
    * this screen briefly grew: RSVP was never a second action alongside
    * checking in, it is the same slot at an earlier hour.
    */
-  const hasStarted = event ? new Date(event.start_time).getTime() <= Date.now() : false
   const rsvpd = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
 
   /*

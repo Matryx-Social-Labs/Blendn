@@ -17,6 +17,10 @@ import { CONTROL, EMBER, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
+// Module-level so its identity never changes: FlatList throws if
+// `viewabilityConfig` changes after mount.
+const VIEWABILITY_CONFIG = { viewAreaCoveragePercentThreshold: 50 }
+
 interface PhotoLightboxProps {
   photos: string[]
   initialIndex?: number
@@ -41,8 +45,6 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
       setCurrentIndex(viewableItems[0].index)
     }
   }, [])
-
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current
 
   const renderItem = useCallback(({ item }: { item: string }) => (
     <View style={styles.page}>
@@ -77,7 +79,7 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
+          viewabilityConfig={VIEWABILITY_CONFIG}
           initialScrollIndex={initialIndex}
           getItemLayout={(_, index) => ({ length: SCREEN_W, offset: SCREEN_W * index, index })}
         />

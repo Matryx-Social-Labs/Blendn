@@ -32,11 +32,11 @@ describe("the Pulse handlers keep their identity", () => {
 
   it("reads the volatile maps through refs inside handlers", () => {
     for (const ref of [
-      "latestCheckinStatuses",
-      "latestCheckedInEvents",
-      "latestProximityData",
-      "latestInterestStatuses",
-      "latestInterestCounts",
+      "latestCheckinStatusesRef",
+      "latestCheckedInEventsRef",
+      "latestProximityDataRef",
+      "latestInterestStatusesRef",
+      "latestInterestCountsRef",
     ]) {
       expect(src).toContain(`const ${ref} = useLatest(`)
       expect(src).toContain(`${ref}.current`)

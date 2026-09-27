@@ -137,13 +137,14 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
   // see the effect below — so a reduce-motion device never starts a travel
   // it would have to cancel mid-flight.
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null)
-  const opacity = useRef(new Animated.Value(1)).current
-  const travel = useRef(new Animated.Value(0)).current
+  const [opacity] = useState(() => new Animated.Value(1))
+  const [travel] = useState(() => new Animated.Value(0))
   const finished = useRef(false)
 
   // One shot. `onDone` is called exactly once however this ends — timer, error,
   // tap, or unmount — so a caller can treat it as "the intro is over, for good".
-  const finish = useRef(() => {
+  // Created once, on mount: the initializer *returns* `finish`.
+  const [finish] = useState(() => () => {
     if (finished.current) return
     finished.current = true
     Animated.timing(opacity, {
@@ -154,7 +155,7 @@ export function IntroAnimation({ onDone }: { onDone: () => void }) {
       setVisible(false)
       onDone()
     })
-  }).current
+  })
 
   useEffect(() => {
     let cancelled = false

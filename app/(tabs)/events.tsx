@@ -190,6 +190,34 @@ const getFirstName = (value?: string | null): string | null => {
   return trimmed.split(/\s+/)[0] || null
 }
 
+/*
+ * Which events are close enough to check in to, and how far each one is.
+ *
+ * Calculated client-side, since there is no proximity endpoint. Pure, so the
+ * screen derives it during render. It used to be stored by an effect, which
+ * left it one render behind the list it describes.
+ */
+const proximityFor = (
+  events: Event[],
+  at: { latitude: number; longitude: number }
+): { [eventId: string]: any } => {
+  const proximityMap: { [eventId: string]: any } = {}
+  for (const event of events) {
+    if (!event.latitude || !event.longitude) continue
+    const distanceMetres = getDistanceMetres(at.latitude, at.longitude, event.latitude, event.longitude)
+    // Metres, matching what the API returns. The old default of 0.5 was a
+    // kilometre value standing in for "500m" and made the mismatch invisible.
+    const checkInRadiusMetres = event.check_in_radius || 500
+    proximityMap[event.id] = {
+      within_radius: distanceMetres <= checkInRadiusMetres,
+      // The field name is the contract: kilometres here, metres above.
+      distance_km: distanceMetres / 1000,
+      can_check_in: distanceMetres <= checkInRadiusMetres,
+    }
+  }
+  return proximityMap
+}
+
 function EventsInner() {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
@@ -198,7 +226,10 @@ function EventsInner() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
-  const [proximityData, setProximityData] = useState<{ [eventId: string]: any }>({})
+  const proximityData = useMemo(
+    () => (userLocation ? proximityFor(events, userLocation) : {}),
+    [events, userLocation]
+  )
   const [checkinStatuses, setCheckinStatuses] = useState<{ [eventId: string]: any }>({})
 
   /*
@@ -219,12 +250,16 @@ function EventsInner() {
   /*
    * The five maps every action handler reads, held so they do not force the
    * handlers to change identity. See lib/useLatest.ts for what that was costing.
+   *
+   * The `Ref` suffix is load-bearing. The React Compiler cannot see through
+   * `useLatest`, and it only recognises a ref by its name. Without the suffix
+   * it reads `.current` as a dependency of every handler.
    */
-  const latestCheckinStatuses = useLatest(checkinStatuses)
-  const latestCheckedInEvents = useLatest(checkedInEvents)
-  const latestProximityData = useLatest(proximityData)
-  const latestInterestStatuses = useLatest(interestStatuses)
-  const latestInterestCounts = useLatest(interestCounts)
+  const latestCheckinStatusesRef = useLatest(checkinStatuses)
+  const latestCheckedInEventsRef = useLatest(checkedInEvents)
+  const latestProximityDataRef = useLatest(proximityData)
+  const latestInterestStatusesRef = useLatest(interestStatuses)
+  const latestInterestCountsRef = useLatest(interestCounts)
 
   const checkedInEventId =
     Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
@@ -233,13 +268,16 @@ function EventsInner() {
   // The server has ended this check-in -- the user walked out and the grace
   // period expired, or the sweeper got there first. Reflect it rather than
   // leaving a stale "checked in" chip on screen.
-  useEffect(() => {
-    if (!presence.finished || !checkedInEventId) return
+  //
+  // Done during render, not in an effect, so the stale chip is never painted.
+  // It cannot loop: marking the event checked out takes it out of
+  // `checkedInEventId`, and that is the condition that brought us here.
+  if (presence.finished && checkedInEventId) {
     setCheckinStatuses((prev) => ({
       ...prev,
       [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
     }))
-  }, [presence.finished, checkedInEventId])
+  }
   const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   const [checkInPending, setCheckInPending] = useState<Record<string, boolean>>({})
   /*
@@ -307,9 +345,11 @@ function EventsInner() {
    * down a player for every card it crossed.
    */
   const [featuredActiveIndex, setFeaturedActiveIndex] = useState(0)
-  const featuredViewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 })
-  const onFeaturedViewable = useRef(
-    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+  // Held in state so the identities are guaranteed never to change. FlatList
+  // throws if either one changes on a mounted list.
+  const [featuredViewability] = useState(() => ({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 }))
+  const [onFeaturedViewable] = useState(
+    () => ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       const first = viewableItems.find((v) => v.index !== null)
       if (first?.index != null) setFeaturedActiveIndex(first.index)
     }
@@ -331,15 +371,18 @@ function EventsInner() {
    */
   const isNarrowed = isSearching || hasActiveFilters(filters)
 
-  useEffect(() => {
-    const trimmed = searchInput.trim()
+  const changeSearchInput = useCallback((next: string) => {
+    setSearchInput(next)
     // No wait when clearing. Emptying the box is a request to see the normal
     // screen again, and making somebody watch a spinner for a third of a second
     // to get back to where they started reads as the app being slow.
-    if (trimmed.length === 0) {
-      setSearchTerm('')
-      return
-    }
+    if (next.trim().length === 0) setSearchTerm('')
+  }, [])
+
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    // Clearing has already happened, with no wait, in `changeSearchInput`.
+    if (trimmed.length === 0) return
     const id = setTimeout(() => setSearchTerm(trimmed), 350)
     return () => clearTimeout(id)
   }, [searchInput])
@@ -450,10 +493,10 @@ function EventsInner() {
         end: event.end_time,
         category: event.category || '',
         description: event.description || '',
-        interestCount: String(latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0),
+        interestCount: String(latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0),
       } as any,
     })
-  }, [userLocation, latestInterestCounts])
+  }, [userLocation, latestInterestCountsRef])
 
   const loadCheckedInEvents = useCallback(async () => {
     if (!user) return
@@ -551,8 +594,8 @@ function EventsInner() {
       checkInFlightRef.current.add(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      previousStatus = latestCheckinStatuses.current[event.id]
-      hadCheckedInEvent = latestCheckedInEvents.current.some((e) => e.id === event.id)
+      previousStatus = latestCheckinStatusesRef.current[event.id]
+      hadCheckedInEvent = latestCheckedInEventsRef.current.some((e) => e.id === event.id)
 
       // Optimistic UI update
       setCheckinStatuses((prev) => ({
@@ -744,7 +787,7 @@ function EventsInner() {
       checkInFlightRef.current.delete(event.id)
       setCheckInPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
+  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -766,8 +809,8 @@ function EventsInner() {
       interestInFlightRef.current.add(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       feedback.tap()
-      prevInterested = !!latestInterestStatuses.current[event.id]
-      prevCount = latestInterestCounts.current[event.id] ?? event.favorite_count ?? 0
+      prevInterested = !!latestInterestStatusesRef.current[event.id]
+      prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
       // Optimistic update
       setInterestStatuses(prev => ({ ...prev, [event.id]: !prevInterested }))
@@ -816,15 +859,15 @@ function EventsInner() {
       interestInFlightRef.current.delete(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, feedback, showTray, closeTray, latestInterestStatuses, latestInterestCounts])
+  }, [user, feedback, showTray, closeTray, latestInterestStatusesRef, latestInterestCountsRef])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
     feedback.tap()
 
-    const previousStatus = latestCheckinStatuses.current[event.id]
-    const previousCheckedInEvents = latestCheckedInEvents.current
+    const previousStatus = latestCheckinStatusesRef.current[event.id]
+    const previousCheckedInEvents = latestCheckedInEventsRef.current
 
     // Optimistic removal from checked-in state
     setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
@@ -877,15 +920,15 @@ function EventsInner() {
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [feedback, showTray, closeTray, latestCheckinStatuses, latestCheckedInEvents, loadCheckedInEvents, loadCheckinStatusesBatch])
+  }, [feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()
-    const checkinStatus = latestCheckinStatuses.current[event.id]
-    const proximity = latestProximityData.current[event.id]
+    const checkinStatus = latestCheckinStatusesRef.current[event.id]
+    const proximity = latestProximityDataRef.current[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
     const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!latestInterestStatuses.current[event.id]
+    const interested = !!latestInterestStatusesRef.current[event.id]
     const summary = [
       formatCarouselCardDate(event.start_time),
       event.venue_name || event.display_city || 'Location TBA',
@@ -947,32 +990,7 @@ function EventsInner() {
       buttons,
       size: 'expanded',
     })
-  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatuses, latestProximityData, latestInterestStatuses])
-
-  /*
-   * NOT memoised, and that is the fix.
-   *
-   * This was `useCallback(..., [])`. `fetchEvents` is a plain arrow function
-   * redefined on every render, so an empty dependency array froze the copy
-   * created on the FIRST render — the one whose closure captured
-   * `userLocation` while it was still `null`, before the GPS fix arrived.
-   *
-   * The result was two refresh paths that disagreed forever. Pull-to-refresh
-   * ran the stale copy, sent no `lat`/`lon`, and the server applied no bounding
-   * box at all — so it returned **every event on the platform**, while the
-   * Refresh button ran the live copy and correctly returned the ones nearby.
-   * A device in Germany saw a Bengaluru event by pulling and nothing by
-   * tapping, which reads as a broken button rather than a leaked query.
-   *
-   * A `RefreshControl` handler is called once per gesture, so there is nothing
-   * to memoise for. Re-creating it per render is the cheap, obviously-correct
-   * option, and it cannot go stale again.
-   */
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await fetchEvents({ silent: true, force: true })
-    setRefreshing(false)
-  }
+  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
 
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
@@ -1107,6 +1125,145 @@ function EventsInner() {
     }
   }, [])
 
+  // Pagination, declared ahead of `fetchEvents` because it resets the page.
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+  /*
+   * When `events` was last written. "Upcoming" means not started as of the
+   * load, so this is set beside every `setEvents` and not read from the clock
+   * during render.
+   */
+  const [eventsLoadedAt, setEventsLoadedAt] = useState(() => Date.now())
+
+  const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
+    try {
+      const isInitial = !initialLoadedRef.current
+      const shouldShowLoading = isInitial || !options?.silent
+      if (shouldShowLoading) {
+        setLoading(true)
+      }
+      setNetError(null)
+      Logger.journey('events', 'fetch:start')
+
+      /*
+       * `city` scopes; `lat`/`lon` only sort and label.
+       *
+       * No `radius` is sent, and the server no longer supplies one. That
+       * default — 10 km around the device — is what made this screen blank:
+       * every section below is a `useMemo` over this one array, so an empty
+       * result took the whole page with it, carousels and heroes included.
+       */
+      const lat = userLocation?.latitude
+      const lon = userLocation?.longitude
+      const { data: eventsData, meta, error } = await fetchEventsApi({
+        page: 0,
+        limit: PAGE_SIZE,
+        city: selectedCity ?? undefined,
+        lat,
+        lon,
+        include: 'checkins,activeCheckins,profile',
+        search: searchTerm || undefined,
+        // `categorySlug`, `startDate`, `endDate` and `radius` — every one of
+        // them a parameter this endpoint has always accepted.
+        ...filtersToQuery(filters),
+      }, { force: !!options?.force })
+
+      if (error) {
+        Logger.error('events', 'Error fetching events', { error })
+        setNetError('Failed to load events')
+        return
+      }
+
+      const normalized = (eventsData || []).map(normalizeEvent)
+      setEvents(normalized)
+      setEventsLoadedAt(Date.now())
+      /*
+       * Hand the centre button what this fetch already knows.
+       *
+       * This screen asks for events with a location and gets `distance` back on
+       * every one. The tab bar needs two facts derived from exactly that —
+       * whether you are standing inside a fence, and what you said you were
+       * going to tonight — and re-deriving them there would mean a second
+       * location permission dance and a second copy of this list on a timer.
+       */
+      publishRoomSignal(normalized)
+      setPage(0)
+      lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
+      initialLoadedRef.current = true
+      if (eventsData) {
+        const interestMap: { [eventId: string]: boolean } = {}
+        const countMap: Record<string, number> = {}
+        const checkinMap: { [eventId: string]: any } = {}
+        eventsData.forEach((event) => {
+          interestMap[event.id] = !!event.is_favorited
+          countMap[event.id] = event.favorite_count || 0
+          if (event.user_checkin) {
+            checkinMap[event.id] = {
+              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
+              checkInId: event.user_checkin.checkInId,
+              checkInTime: event.user_checkin.checkInTime,
+            }
+          }
+        })
+        setInterestStatuses(interestMap)
+        setInterestCounts(countMap)
+        setCheckinStatuses(checkinMap)
+      }
+      if (meta?.activeCheckins?.length) {
+        const activeEvents: Event[] = meta.activeCheckins
+          .filter((c: any) => c.event)
+          .map((c: any) => eventFromApi(c.event))
+          .map(normalizeEvent)
+        setCheckedInEvents(activeEvents)
+      } else {
+        setCheckedInEvents([])
+      }
+      if (meta?.profile?.profile) {
+        const profile = meta.profile.profile
+        const profileFirstName = getFirstName(profile.name)
+        if (profileFirstName) {
+          setUserFirstName(profileFirstName)
+        }
+        // `profile.location` does not set the browse city — see the note where
+        // the profile is loaded above.
+      }
+      // Image preloading is handled by useEffect when events change
+      Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
+    } catch (error) {
+      Logger.error('events', 'Unexpected error', { error: error as any })
+      setNetError('Failed to load events')
+    } finally {
+      if (!options?.silent || !initialLoadedRef.current) {
+        setLoading(false)
+      }
+    }
+  }, [userLocation, selectedCity, searchTerm, filters])
+
+  /*
+   * NOT memoised, and that is the fix.
+   *
+   * This was `useCallback(..., [])`. `fetchEvents` is a plain arrow function
+   * redefined on every render, so an empty dependency array froze the copy
+   * created on the FIRST render — the one whose closure captured
+   * `userLocation` while it was still `null`, before the GPS fix arrived.
+   *
+   * The result was two refresh paths that disagreed forever. Pull-to-refresh
+   * ran the stale copy, sent no `lat`/`lon`, and the server applied no bounding
+   * box at all — so it returned **every event on the platform**, while the
+   * Refresh button ran the live copy and correctly returned the ones nearby.
+   * A device in Germany saw a Bengaluru event by pulling and nothing by
+   * tapping, which reads as a broken button rather than a leaked query.
+   *
+   * A `RefreshControl` handler is called once per gesture, so there is nothing
+   * to memoise for. Re-creating it per render is the cheap, obviously-correct
+   * option, and it cannot go stale again.
+   */
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await fetchEvents({ silent: true, force: true })
+    setRefreshing(false)
+  }
+
   /*
    * Which of the four dependencies actually changed, so a search keystroke
    * or a filter change can be told apart from a city switch.
@@ -1152,12 +1309,17 @@ function EventsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading, selectedCity, searchTerm, filters])
 
-  useEffect(() => {
+  // A changed sign-in name replaces the first name. The profile fetch in
+  // `fetchEvents` writes it too, and whichever wrote last wins. Adjusted
+  // during render, against the name last seen, rather than in an effect.
+  const [seenAuthName, setSeenAuthName] = useState(user?.name)
+  if (seenAuthName !== user?.name) {
+    setSeenAuthName(user?.name)
     const authFirstName = getFirstName(user?.name)
     if (authFirstName) {
       setUserFirstName(authFirstName)
     }
-  }, [user?.name])
+  }
 
   // Preload images - use a ref to track already preloaded URLs and avoid redundant work
   const preloadedUrlsRef = useRef<Set<string>>(new Set())
@@ -1203,63 +1365,13 @@ function EventsInner() {
    * below stays for the long-press action tray, which is the other caller.
    */
 
-  const checkEventProximity = useCallback(async () => {
-    if (!userLocation || !user) return
-
-    try {
-      Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
-
-      // Use the actual function that exists: check_user_proximity_status
-      // TODO: Add API endpoint for proximity check
-      // For now, calculate distance client-side
-      const proximityResults = events.map(event => {
-        if (!event.latitude || !event.longitude) return null
-        const distanceMetres = getDistanceMetres(userLocation.latitude, userLocation.longitude, event.latitude, event.longitude)
-        // Metres, matching what the API returns. The old default of 0.5 was a
-        // kilometre value standing in for "500m" and made the mismatch invisible.
-        const checkInRadiusMetres = event.check_in_radius || 500
-        return {
-          event_id: event.id,
-          within_radius: distanceMetres <= checkInRadiusMetres,
-          // The field name is the contract: kilometres here, metres above.
-          distance_km: distanceMetres / 1000,
-          can_check_in: distanceMetres <= checkInRadiusMetres
-        }
-      }).filter(Boolean)
-
-      const proximityData = { nearby_events: proximityResults }
-      const error = null
-
-      if (error) {
-        Logger.error('events', 'Error checking proximity', { error })
-        return
-      }
-
-      // Transform the response to match our expected format
-      const proximityMap: { [eventId: string]: any } = {}
-
-      if (proximityData?.nearby_events) {
-        proximityData.nearby_events.forEach((event: any) => {
-          proximityMap[event.event_id] = {
-            within_radius: event.within_radius,
-            distance_km: event.distance_km,
-            can_check_in: event.can_check_in
-          }
-        })
-      }
-
-      setProximityData(proximityMap)
-      Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: proximityData?.nearby_events?.length || 0 })
-    } catch (error) {
-      Logger.error('events', 'Proximity check failed', { error: error as any })
-    }
-  }, [userLocation, user, events])
-
+  // The journey log the proximity pass has always written, on the same
+  // conditions. `proximityData` itself is derived near the top (`proximityFor`).
   useEffect(() => {
-    if (userLocation && events.length > 0) {
-      checkEventProximity()
-    }
-  }, [userLocation, events, checkEventProximity])
+    if (!userLocation || !user || events.length === 0) return
+    Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
+    Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: Object.keys(proximityData).length })
+  }, [userLocation, user, events, proximityData])
 
   /*
    * Decide which city to browse, once, before the first fetch.
@@ -1331,17 +1443,24 @@ function EventsInner() {
    * selection exactly where it is.
    *
    * The replacement stays `inferred`, so it can be improved again next time.
+   *
+   * Run during render when either input changes, not in an effect. An effect
+   * committed the old selection first, and that fetched the old city before
+   * the new one.
    */
-  useEffect(() => {
-    if (!deviceCity || cityOptions.length === 0) return
-    setSelection((current) => {
-      if (!current) {
-        return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions })
-      }
-      const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
-      return next ? { city: next, source: 'inferred' } : current
-    })
-  }, [deviceCity, cityOptions])
+  const [cityInputsSeen, setCityInputsSeen] = useState({ deviceCity, cityOptions })
+  if (cityInputsSeen.deviceCity !== deviceCity || cityInputsSeen.cityOptions !== cityOptions) {
+    setCityInputsSeen({ deviceCity, cityOptions })
+    if (deviceCity && cityOptions.length > 0) {
+      setSelection((current) => {
+        if (!current) {
+          return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions })
+        }
+        const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
+        return next ? { city: next, source: 'inferred' } : current
+      })
+    }
+  }
 
   /*
    * Re-check where the phone is when the app comes back to the foreground.
@@ -1454,109 +1573,6 @@ function EventsInner() {
    */
   const notLiveHere = cityOptions.length > 0 && !isServedCity(selectedCity, cityOptions)
 
-  const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
-    try {
-      const isInitial = !initialLoadedRef.current
-      const shouldShowLoading = isInitial || !options?.silent
-      if (shouldShowLoading) {
-        setLoading(true)
-      }
-      setNetError(null)
-      Logger.journey('events', 'fetch:start')
-
-      /*
-       * `city` scopes; `lat`/`lon` only sort and label.
-       *
-       * No `radius` is sent, and the server no longer supplies one. That
-       * default — 10 km around the device — is what made this screen blank:
-       * every section below is a `useMemo` over this one array, so an empty
-       * result took the whole page with it, carousels and heroes included.
-       */
-      const lat = userLocation?.latitude
-      const lon = userLocation?.longitude
-      const { data: eventsData, meta, error } = await fetchEventsApi({
-        page: 0,
-        limit: PAGE_SIZE,
-        city: selectedCity ?? undefined,
-        lat,
-        lon,
-        include: 'checkins,activeCheckins,profile',
-        search: searchTerm || undefined,
-        // `categorySlug`, `startDate`, `endDate` and `radius` — every one of
-        // them a parameter this endpoint has always accepted.
-        ...filtersToQuery(filters),
-      }, { force: !!options?.force })
-
-      if (error) {
-        Logger.error('events', 'Error fetching events', { error })
-        setNetError('Failed to load events')
-        return
-      }
-
-      const normalized = (eventsData || []).map(normalizeEvent)
-      setEvents(normalized)
-      /*
-       * Hand the centre button what this fetch already knows.
-       *
-       * This screen asks for events with a location and gets `distance` back on
-       * every one. The tab bar needs two facts derived from exactly that —
-       * whether you are standing inside a fence, and what you said you were
-       * going to tonight — and re-deriving them there would mean a second
-       * location permission dance and a second copy of this list on a timer.
-       */
-      publishRoomSignal(normalized)
-      setPage(0)
-      lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
-      initialLoadedRef.current = true
-      if (eventsData) {
-        const interestMap: { [eventId: string]: boolean } = {}
-        const countMap: Record<string, number> = {}
-        const checkinMap: { [eventId: string]: any } = {}
-        eventsData.forEach((event) => {
-          interestMap[event.id] = !!event.is_favorited
-          countMap[event.id] = event.favorite_count || 0
-          if (event.user_checkin) {
-            checkinMap[event.id] = {
-              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
-              checkInId: event.user_checkin.checkInId,
-              checkInTime: event.user_checkin.checkInTime,
-            }
-          }
-        })
-        setInterestStatuses(interestMap)
-        setInterestCounts(countMap)
-        setCheckinStatuses(checkinMap)
-      }
-      if (meta?.activeCheckins?.length) {
-        const activeEvents: Event[] = meta.activeCheckins
-          .filter((c: any) => c.event)
-          .map((c: any) => eventFromApi(c.event))
-          .map(normalizeEvent)
-        setCheckedInEvents(activeEvents)
-      } else {
-        setCheckedInEvents([])
-      }
-      if (meta?.profile?.profile) {
-        const profile = meta.profile.profile
-        const profileFirstName = getFirstName(profile.name)
-        if (profileFirstName) {
-          setUserFirstName(profileFirstName)
-        }
-        // `profile.location` does not set the browse city — see the note where
-        // the profile is loaded above.
-      }
-      // Image preloading is handled by useEffect when events change
-      Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
-    } catch (error) {
-      Logger.error('events', 'Unexpected error', { error: error as any })
-      setNetError('Failed to load events')
-    } finally {
-      if (!options?.silent || !initialLoadedRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [userLocation, selectedCity, searchTerm, filters])
-
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
     /*
@@ -1585,8 +1601,6 @@ function EventsInner() {
   }, [user, authLoading, userLocation, loading, fetchEvents])
 
   // Basic pagination: fetch next page after current items
-  const [page, setPage] = useState(0)
-  const PAGE_SIZE = 20
   const fetchMore = useCallback(async () => {
     try {
       if (loading) return
@@ -1616,6 +1630,7 @@ function EventsInner() {
         publishRoomSignal(merged)
         return merged
       })
+      setEventsLoadedAt(Date.now())
       setPage(prev => prev + 1)
       const interestMap: { [eventId: string]: boolean } = {}
       const countMap: Record<string, number> = {}
@@ -1668,6 +1683,57 @@ function EventsInner() {
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
 
+  // Compute all distances once and cache - avoids O(n^2) recalculations
+  const distanceMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    if (!userLocation) return map
+    for (const ev of events) {
+      // Use proximity data if available, otherwise calculate
+      const prox = proximityData[ev.id]
+      if (prox && typeof prox.distance_km === 'number') {
+        map[ev.id] = prox.distance_km
+      } else if (ev.latitude && ev.longitude) {
+        // This map is in kilometres -- it sits alongside `prox.distance_km`
+        // and feeds sorting, not the check-in gate. Converting explicitly
+        // rather than keeping a second helper in a different unit.
+        map[ev.id] =
+          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
+      } else {
+        map[ev.id] = Number.POSITIVE_INFINITY
+      }
+    }
+    return map
+  }, [events, userLocation, proximityData])
+
+  const upcomingItems = useMemo(() => {
+    return events
+      .filter(e => new Date(e.start_time).getTime() >= eventsLoadedAt)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [events, eventsLoadedAt])
+
+  /*
+   * `happeningNowItems` is gone. It was recomputed on every render and
+   * rendered nowhere — its only remaining use was seeding the "already shown"
+   * set below, which the sections that *do* render already cover.
+   *
+   * If a "happening now" section is wanted, it should be built deliberately
+   * against the checked-in strip, which already knows what you are at.
+   */
+
+  const nearbyItems = useMemo(() => {
+    if (!userLocation) return [] as Event[]
+    return events
+      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
+      .filter(x => Number.isFinite(x.d))
+      .sort((a, b) => a.d - b.d)
+      .map(x => x.e)
+  }, [events, userLocation, distanceMap])
+
+  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
+
+  const filteredSortedEvents = useMemo(() => events, [events])
+
   /*
    * Featured, then Upcoming — the frame's two sections, from one sorted list.
    *
@@ -1681,6 +1747,73 @@ function EventsInner() {
    * which is the same subtraction `mainListData` does further down for the same
    * reason.
    */
+  const featuredItems = useMemo(
+    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
+    [upcomingItems]
+  )
+  /*
+   * The Featured cards' props, computed once per data change.
+   *
+   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
+   * and a fresh `() => handleEventPress(item)` closure for **every card on
+   * every parent render**. Two allocations per card is not the cost -- the cost
+   * is that both are props, so a new identity defeats any memoisation the card
+   * could have, and these are the most expensive components on the screen:
+   * full-bleed heroes carrying images and a video player.
+   *
+   * `handleEventPress` is already a `useCallback` and `featuredItems` is
+   * already a `useMemo`, so binding here is stable for as long as the data is.
+   */
+  const featuredCards = useMemo(
+    () =>
+      featuredItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.category || null,
+        playlist: feedPlaylist(item.media, item.cover_image_url),
+        dateLabel: featuredDateLabel(item.start_time),
+        placeLabel: placeLabel(item),
+        onPress: () => handleEventPress(item),
+      })),
+    [featuredItems, handleEventPress]
+  )
+
+  const upcomingStackItems = useMemo(() => {
+    const featuredIds = new Set(featuredItems.map(e => e.id))
+    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
+  }, [upcomingItems, featuredItems])
+
+  const mainListData = useMemo(() => {
+    /*
+     * A search is a flat list, not a magazine.
+     *
+     * Normally this holds only what the sections above did not already show,
+     * because a carousel and the list beneath it repeating the same event reads
+     * as a bug. Under a search that subtraction becomes the bug: the sections
+     * are hidden, so every id they claim is an id that appears nowhere — and
+     * searching a venue's name would return it and then not show it.
+     */
+    if (isNarrowed) return filteredSortedEvents
+
+    /*
+     * Subtract exactly what the three sections draw, and nothing else.
+     *
+     * This used to subtract Interested, city-top and nightlife as well. Those
+     * sections are gone, so every id they claimed became an id that appears
+     * **nowhere** — the event is not in a carousel, because there is no
+     * carousel, and it is filtered out of the list underneath for being in one.
+     *
+     * The same bug in the other direction is why `isSearching` returns early
+     * above. Keeping this list in step with what actually renders is the whole
+     * job of this memo, so it now names the three and only the three.
+     */
+    const shown = new Set<string>()
+    featuredItems.forEach(e => shown.add(e.id))
+    upcomingStackItems.forEach(e => shown.add(e.id))
+    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
+    return filteredSortedEvents.filter(e => !shown.has(e.id))
+  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
+
   const renderFeaturedRow = () => {
     if (featuredItems.length === 0) return null
     /*
@@ -1757,8 +1890,8 @@ function EventsInner() {
             snapToAlignment="start"
             snapToInterval={featured.width + FEATURED_CARD_GAP}
             decelerationRate="fast"
-            viewabilityConfig={featuredViewability.current}
-            onViewableItemsChanged={onFeaturedViewable.current}
+            viewabilityConfig={featuredViewability}
+            onViewableItemsChanged={onFeaturedViewable}
             renderItem={({ item, index }) => (
               <FeaturedCard
                 title={item.title}
@@ -1930,125 +2063,6 @@ function EventsInner() {
     </View>
   )
 
-  // Compute all distances once and cache - avoids O(n^2) recalculations
-  const distanceMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    if (!userLocation) return map
-    for (const ev of events) {
-      // Use proximity data if available, otherwise calculate
-      const prox = proximityData[ev.id]
-      if (prox && typeof prox.distance_km === 'number') {
-        map[ev.id] = prox.distance_km
-      } else if (ev.latitude && ev.longitude) {
-        // This map is in kilometres -- it sits alongside `prox.distance_km`
-        // and feeds sorting, not the check-in gate. Converting explicitly
-        // rather than keeping a second helper in a different unit.
-        map[ev.id] =
-          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
-      } else {
-        map[ev.id] = Number.POSITIVE_INFINITY
-      }
-    }
-    return map
-  }, [events, userLocation, proximityData])
-
-  const upcomingItems = useMemo(() => {
-    const now = Date.now()
-    return events
-      .filter(e => new Date(e.start_time).getTime() >= now)
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events])
-
-  /*
-   * `happeningNowItems` is gone. It was recomputed on every render and
-   * rendered nowhere — its only remaining use was seeding the "already shown"
-   * set below, which the sections that *do* render already cover.
-   *
-   * If a "happening now" section is wanted, it should be built deliberately
-   * against the checked-in strip, which already knows what you are at.
-   */
-
-  const nearbyItems = useMemo(() => {
-    if (!userLocation) return [] as Event[]
-    return events
-      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
-      .filter(x => Number.isFinite(x.d))
-      .sort((a, b) => a.d - b.d)
-      .map(x => x.e)
-  }, [events, userLocation, distanceMap])
-
-  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
-
-  const filteredSortedEvents = useMemo(() => events, [events])
-
-  const featuredItems = useMemo(
-    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
-    [upcomingItems]
-  )
-  /*
-   * The Featured cards' props, computed once per data change.
-   *
-   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
-   * and a fresh `() => handleEventPress(item)` closure for **every card on
-   * every parent render**. Two allocations per card is not the cost -- the cost
-   * is that both are props, so a new identity defeats any memoisation the card
-   * could have, and these are the most expensive components on the screen:
-   * full-bleed heroes carrying images and a video player.
-   *
-   * `handleEventPress` is already a `useCallback` and `featuredItems` is
-   * already a `useMemo`, so binding here is stable for as long as the data is.
-   */
-  const featuredCards = useMemo(
-    () =>
-      featuredItems.map((item) => ({
-        id: item.id,
-        title: item.title,
-        tag: item.category || null,
-        playlist: feedPlaylist(item.media, item.cover_image_url),
-        dateLabel: featuredDateLabel(item.start_time),
-        placeLabel: placeLabel(item),
-        onPress: () => handleEventPress(item),
-      })),
-    [featuredItems, handleEventPress]
-  )
-
-  const upcomingStackItems = useMemo(() => {
-    const featuredIds = new Set(featuredItems.map(e => e.id))
-    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
-  }, [upcomingItems, featuredItems])
-
-  const mainListData = useMemo(() => {
-    /*
-     * A search is a flat list, not a magazine.
-     *
-     * Normally this holds only what the sections above did not already show,
-     * because a carousel and the list beneath it repeating the same event reads
-     * as a bug. Under a search that subtraction becomes the bug: the sections
-     * are hidden, so every id they claim is an id that appears nowhere — and
-     * searching a venue's name would return it and then not show it.
-     */
-    if (isNarrowed) return filteredSortedEvents
-
-    /*
-     * Subtract exactly what the three sections draw, and nothing else.
-     *
-     * This used to subtract Interested, city-top and nightlife as well. Those
-     * sections are gone, so every id they claimed became an id that appears
-     * **nowhere** — the event is not in a carousel, because there is no
-     * carousel, and it is filtered out of the list underneath for being in one.
-     *
-     * The same bug in the other direction is why `isSearching` returns early
-     * above. Keeping this list in step with what actually renders is the whole
-     * job of this memo, so it now names the three and only the three.
-     */
-    const shown = new Set<string>()
-    featuredItems.forEach(e => shown.add(e.id))
-    upcomingStackItems.forEach(e => shown.add(e.id))
-    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
-    return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
-
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
 
@@ -2193,7 +2207,7 @@ function EventsInner() {
       city={selectedCity}
       onPressCity={() => setCityPickerOpen(true)}
       query={searchInput}
-      onChangeQuery={setSearchInput}
+      onChangeQuery={changeSearchInput}
       searching={refining}
       activeFilterCount={activeFilterCount(filters)}
       onPressFilter={() => {
@@ -2464,7 +2478,7 @@ function EventsInner() {
                       {isSearching && (
                         <ScalePress
                           style={styles.ctaGhost}
-                          onPress={() => setSearchInput('')}
+                          onPress={() => changeSearchInput('')}
                           accessibilityRole="button"
                           accessibilityLabel="Clear search"
                         >

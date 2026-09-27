@@ -266,33 +266,33 @@ function PrivateChatInner() {
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
 
-  const loadReveal = useCallback(async () => {
-    if (!conversationId) return
-    const r = await apiClient.getConversation(conversationId as string)
-    if (!r.success || !r.data) return
-    setReveal({
-      displayName: r.data.otherUser?.name || 'Someone',
-      youRevealed: r.data.youRevealed ?? false,
-      theyRevealed: r.data.theyRevealed ?? false,
-      revealRequested: r.data.revealRequested ?? false,
-      /*
-       * Server-supplied. Replaces the guess below for anything that needs to
-       * know "did this come from a match" rather than "is this pseudonymous" --
-       * a revealed match is no longer pseudonymous but is still a match.
-       */
-      fromMatch: r.data.fromMatch === true,
-      // Server-supplied. This used to be inferred from the reveal fields being
-      // absent, and the server always sent them — so an accepted message
-      // request drew "You can see their name. They can't see yours." and a
-      // reveal button the server refuses. An older server without the field
-      // falls back to the old inference.
-      pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
-    })
-  }, [conversationId])
-
+  // Declared inside the effect: it sets state only after the request returns.
   useEffect(() => {
+    const loadReveal = async () => {
+      if (!conversationId) return
+      const r = await apiClient.getConversation(conversationId as string)
+      if (!r.success || !r.data) return
+      setReveal({
+        displayName: r.data.otherUser?.name || 'Someone',
+        youRevealed: r.data.youRevealed ?? false,
+        theyRevealed: r.data.theyRevealed ?? false,
+        revealRequested: r.data.revealRequested ?? false,
+        /*
+         * Server-supplied. Replaces the guess below for anything that needs to
+         * know "did this come from a match" rather than "is this pseudonymous" --
+         * a revealed match is no longer pseudonymous but is still a match.
+         */
+        fromMatch: r.data.fromMatch === true,
+        // Server-supplied. This used to be inferred from the reveal fields being
+        // absent, and the server always sent them — so an accepted message
+        // request drew "You can see their name. They can't see yours." and a
+        // reveal button the server refuses. An older server without the field
+        // falls back to the old inference.
+        pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
+      })
+    }
     void loadReveal()
-  }, [loadReveal])
+  }, [conversationId])
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
@@ -375,38 +375,38 @@ function PrivateChatInner() {
     flatListRef.current?.scrollToEnd({ animated })
   }
 
-  const loadMessages = async (cursor?: string) => {
-    try {
-      const result = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
-      if (!result.success && result.errorCode === 'NOT_FOUND') {
-        setEnded(true)
-        return
-      }
-      if (result.success && result.data) {
-        const msgs = result.data.messages.map(mapMessage).reverse()
-        if (cursor) {
-          setMessages(prev => {
-            const existingIds = new Set(prev.map(m => m.id))
-            return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
-          })
-        } else {
-          setMessages(msgs)
-          // Scroll to bottom instantly on initial load — no animation so there's no visible jump
-          setTimeout(() => scrollToBottom(false), 50)
-          initialLoadDoneRef.current = true
+  // State is set only in the callbacks, once the request has settled.
+  const loadMessages = (cursor?: string) =>
+    apiClient.getConversationMessages(String(conversationId), { limit: 50, before: cursor })
+      .then((result) => {
+        if (!result.success && result.errorCode === 'NOT_FOUND') {
+          setEnded(true)
+          return
         }
-        setHasMore(result.data.hasMore)
-        setOldestCursor(result.data.nextCursor)
-        if (conversationId && !cursor) {
-          setConversationLastRead(String(conversationId)).catch(() => {})
+        if (result.success && result.data) {
+          const msgs = result.data.messages.map(mapMessage).reverse()
+          if (cursor) {
+            setMessages(prev => {
+              const existingIds = new Set(prev.map(m => m.id))
+              return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
+            })
+          } else {
+            setMessages(msgs)
+            // Scroll to bottom instantly on initial load — no animation so there's no visible jump
+            setTimeout(() => scrollToBottom(false), 50)
+            initialLoadDoneRef.current = true
+          }
+          setHasMore(result.data.hasMore)
+          setOldestCursor(result.data.nextCursor)
+          if (conversationId && !cursor) {
+            setConversationLastRead(String(conversationId)).catch(() => {})
+          }
         }
-      }
-    } catch (err) {
-      Logger.error('private-chat', 'Failed to load messages', { error: err })
-    } finally {
-      setLoading(false)
-    }
-  }
+      })
+      .catch((err) => {
+        Logger.error('private-chat', 'Failed to load messages', { error: err })
+      })
+      .finally(() => setLoading(false))
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMore || !oldestCursor) return

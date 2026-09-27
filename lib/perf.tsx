@@ -174,11 +174,16 @@ export function resetPerf(): void {
  * Dev-only and cheap — a shallow compare over a handful of keys — but it is a
  * diagnostic, not a permanent fixture. Leave it behind only where a screen has
  * a standing reason to be watched.
+ *
+ * Compared after each commit rather than during render, so a render React
+ * throws away (or Strict Mode's second pass) does not log.
  */
 export function useWhyRender(id: string, watched: Record<string, unknown>): void {
   const previous = React.useRef<Record<string, unknown> | null>(null)
 
-  if (__DEV__) {
+  // No dependency list: every commit is a render worth explaining.
+  React.useEffect(() => {
+    if (!__DEV__) return
     const before = previous.current
     if (before) {
       const changed = Object.keys(watched).filter((k) => watched[k] !== before[k])
@@ -188,5 +193,5 @@ export function useWhyRender(id: string, watched: Record<string, unknown>): void
       }
     }
     previous.current = { ...watched }
-  }
+  })
 }
