@@ -17,6 +17,8 @@ import { useAuth } from '../lib/useAuth'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_FONTS, EMBER_RADIUS, EMBER_TYPE } from '../lib/theme'
 
+const REVEAL_FAILED = "Couldn't change who can see you. Nothing has changed."
+
 
 /**
  * The Room — what the Blend'n button in the middle of the bar opens.
@@ -203,6 +205,7 @@ function RoomInner() {
       if (!result.success) {
         setRevealed(!next)
         Logger.warn('match', 'reveal toggle refused', { error: result.error })
+        showToast(result.error || REVEAL_FAILED, 'error')
       } else if (typeof result.data?.revealed === 'boolean') {
         // The server's answer wins over the optimistic one.
         setRevealed(result.data.revealed)
@@ -210,10 +213,11 @@ function RoomInner() {
     } catch (e) {
       setRevealed(!next)
       Logger.error('match', 'reveal toggle failed', { error: e })
+      showToast(REVEAL_FAILED, 'error')
     } finally {
       setRevealBusy(false)
     }
-  }, [eventId, revealed, revealBusy])
+  }, [eventId, revealed, revealBusy, showToast])
 
   /*
    * Leaving the room.

@@ -149,6 +149,7 @@ function ProfileInner() {
 
       Logger.debug('profile', 'Profile loaded successfully')
       setProfile(viewModel)
+      setError(null)
       queryCache.set(cacheKey, viewModel, PROFILE_CACHE_TTL)
 
     } catch (error) {
@@ -305,7 +306,8 @@ function ProfileInner() {
     )
   }
 
-  if (error) {
+  // A failed refresh of a profile already on screen keeps it there.
+  if (error && !profile) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         <Typography variant="body1" style={styles.errorText}>{error}</Typography>

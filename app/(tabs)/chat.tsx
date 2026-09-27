@@ -227,6 +227,7 @@ function ChatInner() {
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
+  const [listFailed, setListFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
   const requestAnimRefs = useRef<Record<string, Animated.Value>>({})
@@ -536,10 +537,11 @@ function ChatInner() {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
         // internal SWR response cache so we don't get stale data from it either.
         const bypassApiCache = force || !hasCachedList
-        await Promise.all([
+        const [groupsOk, personalOk] = await Promise.all([
           loadGroupChats(loadId, groupCacheKey, bypassApiCache),
           loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
         ])
+        if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
         lastFetchRef.current.list = now
       }
       if (shouldFetchRequests) {
@@ -611,14 +613,18 @@ function ChatInner() {
     }
   }
 
-  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false) => {
+  /*
+   * Both list loaders return whether they succeeded, and on failure leave what
+   * is on screen alone: clearing it turned a network error into "No
+   * conversations yet", or silently dropped every room.
+   */
+  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
     try {
       const result = await apiClient.getChatGroups({ force })
 
       if (!result.success || !result.data) {
         Logger.error('chat', 'Error fetching group chats', { error: result.error })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
+        return false
       }
 
       // Normalize API response shape (array vs wrapped payload)
@@ -628,8 +634,7 @@ function ChatInner() {
 
       if (!Array.isArray(rooms)) {
         Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
-        if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats([])
-        return
+        return false
       }
 
       const groupChatData: GroupChat[] = rooms
@@ -654,17 +659,18 @@ function ChatInner() {
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
       if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
+      return true
     } catch (error) {
       Logger.error('chat', 'Error loading group chats', { error })
-      setGroupChats([])
+      return false
     }
   }
 
-  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false) => {
+  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
     try {
       const result = await apiClient.getConversations({ force })
 
-      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
+      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return true
 
       if (result.success && result.data) {
         const conversations = result.data
@@ -720,14 +726,13 @@ function ChatInner() {
             preloadImages(firstScreenUrls, 'low')
           }
         } catch {}
-      } else {
-        setPersonalChats([])
+        return true
       }
+      Logger.error('chat', 'Error fetching personal chats', { error: result.error })
+      return false
     } catch (error) {
       Logger.error('chat', 'Error loading personal chats', { error })
-      if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setPersonalChats([])
-      }
+      return false
     }
   }
 
@@ -762,6 +767,7 @@ function ChatInner() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
+        showToast(result.error || `Couldn't ${action} that request. Try again.`, 'error')
         await loadChats(true, true)
         return
       }
@@ -780,6 +786,7 @@ function ChatInner() {
       await loadChats(true, true)
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
+      showToast(`Couldn't ${action} that request. Try again.`, 'error')
       await loadChats(true, true)
     } finally {
       setRequestPending((prev) => {
@@ -790,7 +797,7 @@ function ChatInner() {
       delete requestAnimRefs.current[requestId]
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [animateRequestRemoval, requestPending])
+  }, [animateRequestRemoval, requestPending, showToast])
 
   useEffect(() => {
     if (!authLoading && user) loadChats(false, false)
@@ -805,6 +812,12 @@ function ChatInner() {
   const header = (
     <View style={styles.header}>
       <BanterSearch value={query} onChangeText={setQuery} />
+
+      {listFailed && rows.length > 0 ? (
+        <Text style={styles.partialFailure} maxFontSizeMultiplier={1.4}>
+          Some chats couldn&apos;t load. Pull down to try again.
+        </Text>
+      ) : null}
 
       {liveRooms.length > 0 ? (
         <View style={styles.section}>
@@ -892,6 +905,8 @@ function ChatInner() {
             <Text style={styles.noMatches} maxFontSizeMultiplier={1.4}>
               No chats match “{query.trim()}”
             </Text>
+          ) : listFailed ? (
+            <InboxLoadFailed onRetry={() => void loadChats(true, true)} />
           ) : (
             <EmptyInbox />
           )
@@ -934,6 +949,30 @@ function InboxSkeleton() {
   )
 }
 
+function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View style={styles.empty}>
+      <View style={styles.emptyGlyph}>
+        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
+      </View>
+      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
+        Couldn&apos;t load your chats
+      </Text>
+      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
+        Check your connection and try again.
+      </Text>
+      <ScalePress
+        style={styles.emptyCta}
+        onPress={onRetry}
+        pressedScale={0.97}
+        accessibilityRole="button"
+      >
+        <Text style={styles.emptyCtaText}>Retry</Text>
+      </ScalePress>
+    </View>
+  )
+}
+
 function EmptyInbox() {
   return (
     <View style={styles.empty}>
@@ -971,6 +1010,12 @@ const styles = StyleSheet.create({
     left: BANTER_PADDING_HORIZONTAL,
     right: BANTER_PADDING_HORIZONTAL,
     zIndex: 10,
+  },
+  partialFailure: {
+    fontFamily: EMBER_FONTS.bodyRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: EMBER.textSecondary,
   },
   noMatches: {
     fontFamily: EMBER_FONTS.bodyRegular,

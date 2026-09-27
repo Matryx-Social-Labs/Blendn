@@ -42,6 +42,7 @@ function GoingScreenInner() {
   const [loading, setLoading] = useState(true)
   const [events, setEvents] = useState<EventRow[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   // Pull-to-refresh also retries a cover that failed to load (EventCover).
   const [refreshCount, setRefreshCount] = useState(0)
 
@@ -60,16 +61,17 @@ function GoingScreenInner() {
 
       if (!result.success || !result.data) {
         Logger.debug('interested', 'Failed to load favorites', { error: result.error })
-        setEvents([])
-        setLoading(false)
+        setLoadFailed(true)
         return
       }
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
       setEvents(savedEventRows(result.data))
+      setLoadFailed(false)
     } catch {
-      setEvents([])
+      // Keep whatever is already on screen; a failed refresh is not an empty list.
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -206,6 +208,21 @@ function GoingScreenInner() {
         <View style={styles.center}>
           <ActivityIndicator color={APP_COLORS.textPrimary} />
         </View>
+      ) : events.length === 0 && loadFailed ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Couldn&apos;t load your events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setLoading(true)
+              void loadInterestedEvents()
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : events.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No saved events yet</Text>
@@ -243,6 +260,15 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   emptyTitle: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
   emptySub: { color: APP_COLORS.textSecondary, fontSize: 14, textAlign: 'center' },
+  retryButton: {
+    marginTop: 16,
+    minHeight: 44,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: APP_COLORS.backgroundCard,
+  },
+  retryText: { color: APP_COLORS.textPrimary, fontSize: 15, fontWeight: '600' },
   card: { marginHorizontal: 16, marginBottom: 12, backgroundColor: APP_COLORS.backgroundElevated, borderRadius: 12, overflow: 'hidden' },
   overlayContent: { position: 'absolute', left: 12, right: 12, bottom: 12 },
   title: { color: APP_COLORS.textPrimary, fontSize: 18, fontWeight: '800' },

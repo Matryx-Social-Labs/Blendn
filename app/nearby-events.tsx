@@ -49,6 +49,7 @@ export default function NearbyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -116,11 +117,13 @@ export default function NearbyEventsScreen() {
           .sort((a: any, b: any) => a._distance - b._distance)
 
         setEvents(withDistance)
+        setLoadFailed(false)
       } else {
-        setEvents([])
+        setLoadFailed(true)
       }
     } catch {
-      if (mountedRef.current) setEvents([])
+      // Keep what is on screen: a network error is not "no events near you".
+      if (mountedRef.current) setLoadFailed(true)
     } finally {
       if (mountedRef.current) setLoading(false)
     }
@@ -214,6 +217,22 @@ export default function NearbyEventsScreen() {
             onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
           >
             <Text style={styles.settingsBtnText}>Open Settings</Text>
+          </TouchableOpacity>
+        </View>
+      ) : events.length === 0 && loadFailed ? (
+        <View style={styles.empty}>
+          <Ionicons name="cloud-offline-outline" size={48} color={APP_COLORS.textSecondary} style={{ marginBottom: 12 }} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => {
+              setLoading(true)
+              void loadEvents(true)
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : events.length === 0 ? (
