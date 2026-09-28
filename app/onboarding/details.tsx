@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import {
@@ -7,9 +7,11 @@ import {
   EmberField,
   EmberFieldGroup,
 } from '../../components/onboarding/EmberControls'
+import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
+import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -51,6 +53,7 @@ export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
+  const [groupsStatus, setGroupsStatus] = useState<ListStatus>('loading')
   /*
    * Names and ids, together.
    *
@@ -73,13 +76,26 @@ export default function DetailsScreen() {
     setBio(draft.bio ?? '')
   }
 
-  useEffect(() => {
-    apiClient.getCategories().then((result) => {
+  const loadGroups = useCallback(async () => {
+    setGroupsStatus('loading')
+    try {
+      const result = await apiClient.getCategories()
       if (result.success && result.data) {
         setGroups(toPickerTree(result.data as unknown as CategoryNode[]))
+        setGroupsStatus('ready')
+        return
       }
-    })
+      Logger.warn('profile', 'Interest categories did not load', { error: result.error })
+    } catch (error) {
+      Logger.warn('profile', 'Interest categories threw', { error })
+    }
+    setGroupsStatus('error')
   }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fetch's own loading flag
+    void loadGroups()
+  }, [loadGroups])
 
   const toggle = (id: string, name: string) => {
     setInterests((current) =>
@@ -129,6 +145,10 @@ export default function DetailsScreen() {
           </View>
         ))}
       </View>
+
+      {groupsStatus !== 'ready' ? (
+        <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} />
+      ) : null}
 
       {groups.map((group) => (
         <EmberFieldGroup key={group.id} label={group.name}>

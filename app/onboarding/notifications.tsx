@@ -1,8 +1,8 @@
 import * as Notifications from 'expo-notifications'
 import { useState } from 'react'
-import { Alert, Linking } from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -24,11 +24,13 @@ const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wa
 export default function NotificationsScreen() {
   const { saving, commit, goBack } = useOnboarding('notifications')
   const [asking, setAsking] = useState(false)
+  const [settingsPrompt, setSettingsPrompt] = useState(false)
 
   const ask = async () => {
     setAsking(true)
     let granted = false
     let canAskAgain = true
+    let broken = false
     try {
       // Existing permission first: asking again when it is already decided
       // returns the standing answer without a dialog, and calling `request`
@@ -45,6 +47,7 @@ export default function NotificationsScreen() {
       // Settings prompt either — we do not know that Settings is the problem.
       granted = false
       canAskAgain = false
+      broken = true
     }
     setAsking(false)
 
@@ -57,15 +60,10 @@ export default function NotificationsScreen() {
      * `canAskAgain` is false in exactly that case, and Settings is the only
      * way back.
      */
-    if (!granted && !canAskAgain) {
-      Alert.alert(
-        'Turn this on in Settings',
-        `${SETTINGS_HINT}\n\nYour phone only asks once, and it was answered before. You can change it in Settings at any time.`,
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
-        ]
-      )
+    if (!granted && !canAskAgain && !broken) {
+      // The answer comes from the tray; the step waits for it.
+      setSettingsPrompt(true)
+      return
     }
 
     await commit({ push_enabled: granted })
@@ -99,6 +97,15 @@ export default function NotificationsScreen() {
       onBack={goBack}
     >
       <NotificationIllustration />
+      <SettingsTray
+        visible={settingsPrompt}
+        hint={SETTINGS_HINT}
+        onClose={() => setSettingsPrompt(false)}
+        onNotNow={() => {
+          setSettingsPrompt(false)
+          void commit({ push_enabled: false })
+        }}
+      />
     </OnboardingScreen>
   )
 }
