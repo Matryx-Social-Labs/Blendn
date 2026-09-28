@@ -384,7 +384,8 @@ const styles = StyleSheet.create({
 
   quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
   quoteBar: { width: 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },
-  quoteBody: { flex: 1, gap: SPACE.xxs },
+  // Its own width, capped by the bubble's: `flex: 1` wrapped a quote to the width of a two-letter reply.
+  quoteBody: { flexShrink: 1, gap: SPACE.xxs },
   quoteName: { ...TYPE.caption, color: EMBER.textSecondary },
   quoteText: TYPE.caption,
 

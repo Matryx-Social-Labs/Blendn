@@ -1,21 +1,33 @@
-# TQ-C09 (SCRUM-409). Reply to a message from a little way up a long DM: the
-# sent reply must be in view, not below the composer (build 121 left it there,
-# driven 2026-09-28), and a drag must put the keyboard away.
+# TQ-C09 (SCRUM-409). Reply from older messages in a long DM: the sent reply
+# must come into view and stay there, and a drag must put the keyboard away.
+# Build 121 (driven 2026-09-28) left the reply below the composer: the send's
+# own echo re-read the newest page and put it in place of the list, dropping
+# the older page loaded above it, and the view jumped.
 # Env: EMAIL, PASSWORD, PEER (a regex for the other person's name in the
-# Banter), QUOTE (a regex for a message to reply to, a few rows up), MESSAGE.
+# Banter), QUOTE (a regex for any message in the older page), MESSAGE.
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c09
 ---
 - launchApp:
     clearState: true
+# clearState keeps the iOS Keychain session: signed in already, or not.
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
 - runFlow:
+    when:
+      visible: "Continue with email"
     file: ../subflows/sign-in.yaml
+# iOS offers to save the password over the first screen.
+- tapOn:
+    text: "Not Now"
+    optional: true
 - extendedWaitUntil:
     visible: "The Pulse"
     timeout: 60000
 - runFlow: ../subflows/dismiss-tip.yaml
-- tapOn: "Banter tab"
+- tapOn: "Banter"
 - extendedWaitUntil:
     visible: ${PEER}
     timeout: 30000
@@ -23,14 +35,21 @@ tags:
 - extendedWaitUntil:
     visible: ".*Share your thoughts.*"
     timeout: 20000
-# Up a few rows, so the newest messages are off screen.
-- swipe:
-    start: 50%, 35%
-    end: 50%, 75%
-    duration: 600
+# An older page above the newest, so a refresh that replaced the list whole
+# would shrink it.
+- repeat:
+    while:
+      notVisible: "Load older messages"
+    times: 15
+    commands:
+      - swipe:
+          start: 50%, 25%
+          end: 50%, 85%
+          duration: 300
+- tapOn: "Load older messages"
 - extendedWaitUntil:
     visible: ${QUOTE}
-    timeout: 10000
+    timeout: 15000
 - longPressOn: ${QUOTE}
 - tapOn: "Reply"
 - extendedWaitUntil:
@@ -40,12 +59,23 @@ tags:
 - inputText: ${MESSAGE}
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: ${MESSAGE}
+    visible: ".*${MESSAGE}.*"
     timeout: 10000
+# The echo's sync lands within a second or two; the reply must still be there.
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertVisible: ".*${MESSAGE}.*"
 - takeScreenshot: c09-sent-in-view
-# A drag through the conversation puts the keyboard away.
+# A drag through the conversation puts the keyboard away. From a fresh focus:
+# straight after inputText, Maestro's drag on iOS 27 never reached the list
+# (the same drag, next run, did).
+- tapOn: ".*Share your thoughts.*"
+- waitForAnimationToEnd:
+    timeout: 1500
+- assertVisible: "Q"
 - swipe:
-    start: 50%, 30%
-    end: 50%, 55%
-    duration: 500
+    start: 20%, 20%
+    end: 20%, 50%
+    duration: 1500
+- assertNotVisible: "Q"
 - takeScreenshot: c09-keyboard-away

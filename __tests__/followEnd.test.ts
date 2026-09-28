@@ -94,6 +94,14 @@ describe('both chat screens use it', () => {
   })
 })
 
+describe('the reply quote', () => {
+  it('widens a short reply to fit, rather than wrapping in the width "Ok" leaves', () => {
+    // flex: 1 is a zero basis: the quote never asked for width, and a reply
+    // saying "Repro" drew its quote as "Vikra… / unrea / d se…" (simulator, 2026-09-28).
+    expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/quoteBody: \{ flexShrink: 1,/)
+  })
+})
+
 describe('the read tick', () => {
   it('is white, not the grey delivered wears — two greys a step apart read as one on the phone', () => {
     expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/receiptRead: \{ color: EMBER\.textPrimary \}/)
