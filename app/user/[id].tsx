@@ -4,9 +4,12 @@ import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { MatchMoment } from '../../components/blendn/MatchMoment'
+import { LoadError } from '../../components/LoadError'
+import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import {
   ProfileActions,
@@ -19,6 +22,8 @@ import {
 } from '../../components/profile/ProfileSections'
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
+import { likeRefusal } from '../../lib/likeRefusal'
+import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
@@ -76,8 +81,18 @@ function UserProfileInner() {
   const { id, eventId } = useLocalSearchParams<{ id: string; eventId?: string }>()
   const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
+  /*
+   * Why there is no profile: `gone` is the server's 404, `failed` is anything
+   * else. The screen used to raise a native "Error" alert over "Profile not
+   * found" for both, with the top bar hidden, so a dropped connection read as
+   * a deleted person and the only way out was the edge swipe.
+   */
+  const [loadError, setLoadError] = useState<'gone' | 'failed' | null>(null)
+  /* A mutual like made here, for the match moment. */
+  const [match, setMatch] = useState<{ conversationId: string; you: string | null } | null>(null)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -181,6 +196,7 @@ function UserProfileInner() {
       .then(async (result) => {
         let nextProfile: UserProfileView | null = null
         let connection: ProfileConnection | undefined
+        let gone = isGone(result)
 
         if (result.success && result.data) {
           const data = result.data
@@ -217,6 +233,8 @@ function UserProfileInner() {
           }
         } else {
           const fallbackResult = await apiClient.getProfile(id)
+          // Gone only if the fallback agrees: it exists for older servers.
+          gone = gone && isGone(fallbackResult)
           if (fallbackResult.success && fallbackResult.data) {
             const data = fallbackResult.data
             const photos = data.photos || data.profile_photos || []
@@ -239,13 +257,14 @@ function UserProfileInner() {
         }
 
         setProfile(nextProfile)
+        setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }
       })
       .catch((e) => {
         Logger.error('profile', 'User profile load failed', { error: e })
-        Alert.alert('Error', 'Failed to load profile')
+        setLoadError('failed')
       })
       .finally(() => setLoading(false))
   }, [id, hydrateCtaState])
@@ -257,6 +276,11 @@ function UserProfileInner() {
   if (loadingFor !== load) {
     setLoadingFor(() => load)
     if (id) setLoading(true)
+  }
+
+  const retryLoad = () => {
+    setLoading(true)
+    void load()
   }
 
   useEffect(() => {
@@ -297,20 +321,26 @@ function UserProfileInner() {
       const result = await apiClient.likeAtEvent(String(eventId), profile.user_id)
       if (!result.success) {
         setLiked(false)
+        // Said, the way the room says it: about the room or the network, never about them.
+        const refusal = likeRefusal(result.errorCode, result.error)
+        showToast(refusal.message, refusal.variant)
         return
       }
       if (result.data?.mutual && result.data.conversationId) {
         setConversationId(result.data.conversationId)
         setCtaMode('message')
         setCtaMessage('You are connected. Open the chat.')
+        // The moment the room gives a mutual like, rather than a button quietly changing.
+        setMatch({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null })
       }
     } catch (e) {
       setLiked(false)
       Logger.error('profile', 'like failed', { error: e })
+      showToast("That didn't go through. Try again.", 'error')
     } finally {
       setLikeBusy(false)
     }
-  }, [eventId, profile, liked, likeBusy])
+  }, [eventId, profile, liked, likeBusy, showToast])
 
   /* Sending reveals you. `ConnectSheet` says so before anything is typed. */
   const sendConnect = useCallback(async (message: string) => {
@@ -318,30 +348,36 @@ function UserProfileInner() {
     setConnectSending(true)
     try {
       const result = await apiClient.createMessageRequest(profile.user_id, message)
-      if (result.success) {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+      /*
+       * "Requested" only when a request exists: this one was sent, or the
+       * server's 409 says one already does (one per pair, for all time, so
+       * re-offering Connect then would invite an attempt that can never land).
+       *
+       * Every other failure — offline, a timeout, a refusal — used to flip to
+       * "Requested" too, promising a request nobody received. It says so now,
+       * and the sheet stays open with the message still in it.
+       */
+      if (result.success || result.errorCode === 'CONFLICT') {
+        if (result.success) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        setCtaMode('requested')
+        setCtaMessage('Request pending. You can chat after acceptance.')
+        setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
+        showToast("Your request didn't send. Try again.", 'error')
       }
-      /*
-       * Never rolled back: one request per pair for all time, so a failure can
-       * mean one already exists and re-offering would invite an attempt that
-       * can never succeed.
-       */
-      setCtaMode('requested')
-      setCtaMessage('Request pending. You can chat after acceptance.')
     } catch (e) {
       Logger.error('profile', 'connect request error', { error: e })
-      setCtaMode('requested')
+      showToast("Your request didn't send. Try again.", 'error')
     } finally {
       setConnectSending(false)
-      setConnectOpen(false)
     }
-  }, [profile])
+  }, [profile, showToast])
 
   const openSafety = () => {
     if (!profile) return
-    showUserSafetyActions(profile.name || 'User', profile.user_id)
+    // Blocked: there is nothing left to look at here.
+    showUserSafetyActions(profile.name || 'User', profile.user_id, () => router.back())
   }
 
   const isLoading = loading
@@ -355,8 +391,24 @@ function UserProfileInner() {
 
   if (!loading && !profile) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.muted}>Profile not found</Text>
+      <View style={[styles.center, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        {loadError === 'gone' ? (
+          <Text style={styles.muted}>This profile isn&apos;t available.</Text>
+        ) : (
+          <LoadError title="This profile didn't load" onRetry={retryLoad} />
+        )}
+        <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={12}
+            style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
+          </Pressable>
+        </View>
       </View>
     )
   }
@@ -544,6 +596,21 @@ function UserProfileInner() {
         onClose={() => setLightboxVisible(false)}
       />
 
+      {/*
+        A mutual like made from here. Your side is your pseudonym in that room,
+        as the room's own moment draws it; theirs is what this page shows.
+      */}
+      <MatchMoment
+        visible={match !== null}
+        me={{ name: match?.you ?? 'You', photo: null }}
+        them={{ name: heroTitle, photo: revealed ? photos[0] ?? null : null }}
+        onClose={() => setMatch(null)}
+        onSayHi={() => {
+          setMatch(null)
+          handleConnect()
+        }}
+      />
+
       <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
         <Pressable
           onPress={() => router.back()}
@@ -592,7 +659,7 @@ function ProfileSkeleton({ width }: { width: number }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: EMBER.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER, backgroundColor: EMBER.bg },
   muted: { ...TYPE.body, color: EMBER.textSecondary },
   scroll: { backgroundColor: EMBER.bg },
   // The screen gutter, 32 clear of the hero and between sections.
