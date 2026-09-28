@@ -85,7 +85,10 @@ describe("the entry point to peer rating", () => {
   })
 
   it("is a live control", () => {
-    expect(CTA).toContain("rate: 'Rate the people you met'")
+    expect(CTA).toContain("rate: 'Rate who you met'")
+    // Nobody else there: the prompt is the night, not people.
+    expect(CTA).toMatch(/state === 'rate' && alone \? 'Rate the night'/)
+    expect(DETAIL).toMatch(/alone=\{checkInCount <= 1\}/)
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
     expect(DETAIL).toMatch(/const primaryActionDisabled = isEnded \? false/)
