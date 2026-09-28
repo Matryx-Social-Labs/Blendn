@@ -21,7 +21,7 @@ import { popIn, popOut } from '../../components/motion/presence'
 import ScalePress from '../../components/motion/ScalePress'
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { openBlendn, useBlendnOpen } from '../../lib/blendnOverlay'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -790,5 +790,5 @@ const styles = StyleSheet.create({
   },
   badgeText: { ...TYPE.caption, color: EMBER.bg },
 
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 })

@@ -7,7 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 
 import { startsLabel } from '../../lib/roomMoments'
 import type { TonightEvent } from '../../lib/useTonight'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
 import { SwipeDeck, type DeckFan } from '../motion/SwipeDeck'
 import { OptimizedImage } from '../OptimizedImage'
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   head: { paddingHorizontal: GUTTER, gap: SPACE.xs, paddingBottom: SPACE.xl },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   skeletonWrap: { paddingHorizontal: GUTTER + SPACE.lg },
   skeleton: { aspectRatio: 1 / 1.22, borderRadius: EMBER_RADIUS.card, backgroundColor: EMBER.skeleton },
   deckWrap: { alignItems: 'center' },

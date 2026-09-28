@@ -12,7 +12,7 @@ import {
   type EventFilters,
   type When,
 } from '../../lib/eventFilters'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet, SheetModal, SheetScrollView } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
 
@@ -268,5 +268,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   applyText: { ...TYPE.button, color: EMBER.onGradient },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 })

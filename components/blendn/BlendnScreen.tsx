@@ -14,7 +14,7 @@ import { Logger } from '../../lib/logger'
 import { meetNext, reasonLine } from '../../lib/roomMoments'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   centred: { flex: 1, alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER },
   retry: {
     marginTop: SPACE.md,

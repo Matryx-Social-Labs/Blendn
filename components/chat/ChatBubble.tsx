@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useReducedMotion, withTiming } from 'react-native-reanimated'
 
 import { markSeed, pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { fadeInFast } from '../motion/presence'
 
 /**
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     borderBottomRightRadius: EMBER_RADIUS.sm,
   },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   /* No fill, a dashed edge: the outline of a message that is not there. */
   bubbleRemoved: {
     backgroundColor: 'transparent',

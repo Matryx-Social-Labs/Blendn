@@ -35,7 +35,7 @@ import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useLatest } from '../../lib/useLatest'
 import { userMessage } from '../../lib/userMessage'
@@ -184,7 +184,7 @@ const headerStyles = StyleSheet.create({
     gap: SPACE.sm,
   },
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.5 },
+  pressed: { opacity: OPACITY.pressed },
   avatarWrap: {},
   avatar: { width: HEADER_AVATAR, height: HEADER_AVATAR, borderRadius: EMBER_RADIUS.sm, overflow: 'hidden' },
   avatarGroupFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
@@ -1133,7 +1133,7 @@ const styles = StyleSheet.create({
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
   // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
   loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 
   // System / announcement messages
 

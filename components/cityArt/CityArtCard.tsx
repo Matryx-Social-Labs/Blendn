@@ -89,6 +89,9 @@ export function CityArtBanner({ art, height }: { art: CityArtInfo; height: numbe
   )
 }
 
+/** The city's name in its own script sits a step behind the English name, over the art. */
+const SCRIPT_OPACITY = 0.75
+
 const styles = StyleSheet.create({
   card: {
     borderRadius: EMBER_RADIUS.md,
@@ -103,7 +106,7 @@ const styles = StyleSheet.create({
   label: { position: 'absolute', left: SPACE.lg, top: SPACE.md, right: SPACE.xxxl },
   name: { ...TYPE.title, fontFamily: EMBER_FONTS.displayExtraBold },
   // The script line is system-drawn: neither app family carries Kannada or Devanagari.
-  script: { ...TYPE.meta, fontFamily: undefined, opacity: 0.75 },
+  script: { ...TYPE.meta, fontFamily: undefined, opacity: SCRIPT_OPACITY },
   check: {
     position: 'absolute',
     top: SPACE.md,

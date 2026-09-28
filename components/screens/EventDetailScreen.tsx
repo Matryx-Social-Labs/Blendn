@@ -50,7 +50,7 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient';
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme';
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme';
 import { PulseTopBar } from '../pulse/PulseTopBar';
 import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
@@ -1852,6 +1852,6 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
   },
-  announcementSendOff: { opacity: 0.5 },
+  announcementSendOff: { opacity: OPACITY.disabled },
   announcementSendText: { ...TYPE.button, color: EMBER.onGradient },
 })

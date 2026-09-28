@@ -26,7 +26,7 @@ import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * After the night: how it was, and how the people you met were.
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   iconButton: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
   stage: { flex: 1 },
   fill: { flex: 1 },
@@ -637,6 +637,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.xl,
     marginTop: SPACE.xl,
   },
-  buttonDisabled: { opacity: 0.4 },
+  buttonDisabled: { opacity: OPACITY.disabled },
   skipButton: { alignItems: 'center', justifyContent: 'center', height: CONTROL.md },
 })

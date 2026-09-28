@@ -52,7 +52,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { matchOpener } from '../../lib/matchOpener'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -201,7 +201,7 @@ const headerStyles = StyleSheet.create({
     gap: SPACE.sm,
   },
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.5 },
+  pressed: { opacity: OPACITY.pressed },
   // The avatar and the name are one target: either one opens the profile.
   identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   avatarWrap: { position: 'relative' },
@@ -1049,7 +1049,7 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   /*
    * Frame-less by necessity -- the design has no thread header for this. Built
    * from the Banter's own card idiom (radius 32, p24) so it reads as part of

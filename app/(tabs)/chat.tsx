@@ -49,7 +49,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -1105,7 +1105,7 @@ const REQUEST_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
   header: { gap: BANTER_SECTION_GAP, marginBottom: BANTER_SECTION_GAP },
   // A heading and its content are 16 apart, not 32.

@@ -26,7 +26,7 @@ import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
@@ -990,7 +990,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.accent,
   },
   modalSubmitButtonDisabled: {
-    opacity: 0.5,
+    opacity: OPACITY.disabled,
   },
   modalSubmitText: {
     ...TYPE.button,

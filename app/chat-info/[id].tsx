@@ -27,7 +27,7 @@ import {
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { showSheet, type SheetAction, type SheetOutcome } from '../../lib/sheet'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 type Member = {
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   actionLabel: TYPE.bodyStrong,
 
   member: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg, paddingVertical: SPACE.md },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill, alignItems: 'center', justifyContent: 'center' },
   // design-exception: an emoji glyph sized to fill the 40pt disc, as in ChatBubble
   avatarGlyph: { fontSize: 20, lineHeight: 26 },

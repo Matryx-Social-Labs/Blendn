@@ -9,7 +9,7 @@ import {
   roomGuidelinesKey,
 } from '../../lib/communityGuidelines'
 import { Logger } from '../../lib/logger'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { Text } from '../ui/Text'
 
 /**
@@ -103,5 +103,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'space-between' },
   // Text actions, not buttons: the composer's send is this screen's one accent.
   action: { ...TYPE.label, color: EMBER.textPrimary },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 })

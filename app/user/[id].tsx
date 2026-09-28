@@ -26,7 +26,7 @@ import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentit
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: EMBER.scrim,
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 })
 
 
