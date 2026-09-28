@@ -18,7 +18,7 @@ import {
   ProfileInterests,
 } from '../../components/profile/ProfileSections'
 import PhotoLightbox from '../../components/PhotoLightbox'
-import { apiClient } from '../../lib/apiClient'
+import { apiClient, type UserProfileData } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
@@ -61,6 +61,7 @@ interface UserProfileView {
 }
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
+type ProfileConnection = NonNullable<UserProfileData['connection']>
 
 function UserProfileInner() {
   /*
@@ -77,7 +78,6 @@ function UserProfileInner() {
   const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -88,7 +88,7 @@ function UserProfileInner() {
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [connectSending, setConnectSending] = useState(false)
 
-  const hydrateCtaState = useCallback(async (targetUserId: string) => {
+  const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection) => {
     if (!authUser) {
       setCtaMode('connect')
       setCtaMessage('Sign in to connect.')
@@ -102,6 +102,33 @@ function UserProfileInner() {
       return
     }
 
+    /*
+     * The server's answer, when it gave one (SCRUM-371).
+     *
+     * Opened from a room, `targetUserId` is an `rh_` handle, and the lists
+     * below carry real ids — so matching against them misses an existing
+     * conversation and offers Connect, which the server then refuses. Only
+     * the server can join a handle to a person, so it says where you stand.
+     * An incoming request reads as "Requested", as the lists always did.
+     */
+    if (connection) {
+      if (connection.conversationId) {
+        setConversationId(connection.conversationId)
+        setCtaMode('message')
+        setCtaMessage('You are connected. Open the chat.')
+      } else if (connection.request) {
+        setConversationId(null)
+        setCtaMode('requested')
+        setCtaMessage('Request pending. You can chat after acceptance.')
+      } else {
+        setConversationId(null)
+        setCtaMode('connect')
+        setCtaMessage('Send a request to start chatting.')
+      }
+      return
+    }
+
+    // An older server, or a profile still anonymous to you: the lists.
     try {
       // Cached: this runs on mount, and the conversation list changes far more
       // slowly than the screen is opened.
@@ -153,9 +180,11 @@ function UserProfileInner() {
     return apiClient.getPublicProfile(id)
       .then(async (result) => {
         let nextProfile: UserProfileView | null = null
+        let connection: ProfileConnection | undefined
 
         if (result.success && result.data) {
           const data = result.data
+          connection = data.connection
           const photos = data.photos || data.profile_photos || []
           // Map interests: API returns objects {id, name, slug, icon} — extract names
           const interests = Array.isArray(data.interests)
@@ -211,7 +240,7 @@ function UserProfileInner() {
 
         setProfile(nextProfile)
         if (nextProfile?.user_id) {
-          await hydrateCtaState(nextProfile.user_id)
+          await hydrateCtaState(nextProfile.user_id, connection)
         }
       })
       .catch((e) => {
@@ -234,50 +263,22 @@ function UserProfileInner() {
     load()
   }, [load])
 
-  const handleConnect = async () => {
-    if (!authUser || !profile) return
-    if (ctaMode === 'self') return
-    setActionLoading(true)
-    try {
-      if (ctaMode === 'message') {
-        if (conversationId) {
-          router.push({
-            pathname: '/private-chat/[conversationId]',
-            params: {
-              conversationId,
-              otherUserName: profile.name || 'User',
-              otherUserId: profile.user_id,
-            } as any,
-          })
-        }
-        return
-      }
-
-      if (ctaMode === 'requested') {
-        return
-      }
-
-      const result = await apiClient.createMessageRequest(profile.user_id)
-      if (result.success) {
-        setCtaMode('requested')
-        setCtaMessage(`Request sent to ${profile.name || 'this user'}.`)
-      } else {
-        const err = String(result.error || '').toLowerCase()
-        if (err.includes('already have') || err.includes('conversation already exists')) {
-          await hydrateCtaState(profile.user_id)
-        } else if (err.includes('already sent') || err.includes('pending')) {
-          setCtaMode('requested')
-          setCtaMessage('Request pending. You can chat after acceptance.')
-        } else {
-          setCtaMessage(result.error || 'Failed to send connection request.')
-        }
-      }
-    } catch (e) {
-      Logger.error('profile', 'Connect request error', { error: e })
-      setCtaMessage('Something went wrong. Try again.')
-    } finally {
-      setActionLoading(false)
-    }
+  /*
+   * Message only. Connect opens `ConnectSheet` (`sendConnect` below), and
+   * Requested is disabled — so this never sends a request itself.
+   */
+  const handleConnect = () => {
+    if (!profile || ctaMode !== 'message' || !conversationId) return
+    router.push({
+      pathname: '/private-chat/[conversationId]',
+      params: {
+        conversationId,
+        otherUserName: profile.name || 'User',
+        // May be a room handle. The thread compares nothing with it, and
+        // its only use — block or report — takes a handle as readily as an id.
+        otherUserId: profile.user_id,
+      } as any,
+    })
   }
 
   /*
@@ -345,13 +346,12 @@ function UserProfileInner() {
 
   const isLoading = loading
   const ctaLabel = useMemo(() => {
-    if (actionLoading) return 'Working...'
     if (ctaMode === 'self') return 'You'
     if (ctaMode === 'requested') return 'Requested'
     if (ctaMode === 'message') return 'Message'
     return 'Connect'
-  }, [ctaMode, actionLoading])
-  const ctaDisabled = actionLoading || ctaMode === 'self' || ctaMode === 'requested'
+  }, [ctaMode])
+  const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
 
   if (!loading && !profile) {
     return (

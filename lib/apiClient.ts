@@ -714,6 +714,14 @@ export interface UserProfileData {
   }
   isOwnProfile?: boolean
   onboarded?: boolean
+  /**
+   * `GET /users/:id` only: where you stand with them, decided by the server
+   * (SCRUM-371). A profile opened from a room is keyed on an `rh_` handle,
+   * which no conversation or request list carries, so the client cannot work
+   * this out itself. Sent only when you may see who they are; absent
+   * otherwise, and from an older server.
+   */
+  connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
     /*

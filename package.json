@@ -13,6 +13,7 @@
     "build:all": "eas build --platform all",
     "submit:ios": "eas submit --platform ios",
     "submit:android": "eas submit --platform android",
+    "ship:local": "bash scripts/ship-local.sh",
     "lint": "expo lint",
     "test": "jest",
     "test:watch": "jest --watch",

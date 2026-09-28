@@ -16,10 +16,11 @@ on:
     # absent, so the two branches that reach real testers were the two nothing
     # checked.
     #
-    # `stage` ships from here: the `ship` job below starts the EAS build and
-    # submit only after `verify` passes on the pushed commit. `prod` still has
-    # an EAS workflow that triggers itself and runs its own tests first
-    # (`.eas/workflows/prod-appstore.yml`).
+    # `stage` can ship from here: the `ship` job below starts the EAS build and
+    # submit only after `verify` passes on the pushed commit. It is off for now,
+    # behind a repository variable, and `npm run ship:local` ships `stage`
+    # instead; see the job. `prod` still has an EAS workflow that triggers
+    # itself and runs its own tests first (`.eas/workflows/prod-appstore.yml`).
     branches: [dev, stage, prod]
     paths-ignore: ["**.md", "docs/**"]
 
@@ -88,9 +89,20 @@ jobs:
     #
     # A docs-only push to `stage` runs no CI (`paths-ignore` above), so it ships
     # nothing, which spares a build from the free tier's fifteen a month.
+    #
+    # Off unless the repository variable EAS_CLOUD_SHIP is 'true', and it is
+    # unset, so this job skips. The Expo free plan's builds for the month are
+    # spent (fifteen a platform, and sixty workflow minutes), so a run started
+    # here cannot build anything. `stage` ships from a Mac instead:
+    # `npm run ship:local` builds the same `staging` profile with
+    # `eas build --local`, which spends no build credit, and submits it. It
+    # refuses unless HEAD is origin/stage and `verify` above passed on that
+    # SHA, so the tested commit is still the shipped one. docs/RELEASING.md has
+    # the route. To turn this job back on, set EAS_CLOUD_SHIP to `true` under
+    # the repository's Actions variables. Nothing else here changes.
     name: ship to TestFlight + Play internal
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stage' && vars.EAS_CLOUD_SHIP == 'true'
     runs-on: ubuntu-latest
     # The free tier queues each build and submit for a slot, sometimes 90+
     # minutes each. Public repository: waiting costs no Actions minutes.

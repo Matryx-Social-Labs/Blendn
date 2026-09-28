@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { apiClient } from '../lib/apiClient'
+import { COMMUNITY_GUIDELINES_URL } from '../lib/communityGuidelines'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
@@ -46,7 +47,7 @@ const toBoolean = (value: unknown, fallback: boolean) =>
 
 const BLENDN_LINKS = {
   safety: 'https://blendn.app/safety',
-  guidelines: 'https://blendn.app/community-guidelines',
+  guidelines: COMMUNITY_GUIDELINES_URL,
   help: 'https://blendn.app/help',
   terms: 'https://blendn.app/terms',
   privacy: 'https://blendn.app/privacy',

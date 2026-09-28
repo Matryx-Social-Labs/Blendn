@@ -15,6 +15,25 @@ tests. Onboarding complete: eight screens, design fidelity done.
 the original `Zi2KcUzhEcLRdqyit22LdQ` is on a friend's account and rate-limits).
 Canvas **🕓 Updates**. The Prototype canvas is an older purple design; ignore it.
 
+**Shipping `stage` (since 2026-09-28).** A `stage` push no longer reaches
+TestFlight or Play by itself. The Expo free plan's builds for the month are
+spent, so CI's `ship` job is off and `stage` ships from a Mac:
+
+```bash
+git fetch origin && git switch --detach origin/stage && npm ci
+npm run ship:local -- --dry-run     # the checks and the commands, nothing built
+npm run ship:local                  # both platforms; or `-- ios`, `-- android`
+```
+
+It needs Xcode 26+ (not a beta), CocoaPods, fastlane, the Android SDK with an
+NDK (`ANDROID_HOME`), JDK 17 or 21, `gh` logged in, and eas-cli logged in to the
+org. It refuses anything but a clean `origin/stage` whose `typecheck + test +
+lint` check passed. The `.ipa`, the `.aab`, R8's `mapping.txt` and the run's
+log land in `dist/` (gitignored). To put the cloud route back, set the
+repository variable `EAS_CLOUD_SHIP` to `true`. The rest, including why Sentry
+uploads are off unless `SENTRY_AUTH_TOKEN` is in the shell, is in
+[`RELEASING.md`](RELEASING.md#shipping-stage-from-a-mac).
+
 ---
 
 ## The work, in order
