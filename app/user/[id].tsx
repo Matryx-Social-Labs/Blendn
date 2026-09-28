@@ -78,7 +78,6 @@ function UserProfileInner() {
   const { user: authUser } = useAuth()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -264,53 +263,22 @@ function UserProfileInner() {
     load()
   }, [load])
 
-  const handleConnect = async () => {
-    if (!authUser || !profile) return
-    if (ctaMode === 'self') return
-    setActionLoading(true)
-    try {
-      if (ctaMode === 'message') {
-        if (conversationId) {
-          router.push({
-            pathname: '/private-chat/[conversationId]',
-            params: {
-              conversationId,
-              otherUserName: profile.name || 'User',
-              // May be a room handle. The thread compares nothing with it, and
-              // its only use — block or report — takes a handle as readily as an id.
-              otherUserId: profile.user_id,
-            } as any,
-          })
-        }
-        return
-      }
-
-      if (ctaMode === 'requested') {
-        return
-      }
-
-      const result = await apiClient.createMessageRequest(profile.user_id)
-      if (result.success) {
-        setCtaMode('requested')
-        setCtaMessage(`Request sent to ${profile.name || 'this user'}.`)
-      } else {
-        const err = String(result.error || '').toLowerCase()
-        if (err.includes('already have') || err.includes('conversation already exists')) {
-          // Re-read the profile: its `connection` is the answer, and the lists cannot match a handle.
-          await load()
-        } else if (err.includes('already sent') || err.includes('pending')) {
-          setCtaMode('requested')
-          setCtaMessage('Request pending. You can chat after acceptance.')
-        } else {
-          setCtaMessage(result.error || 'Failed to send connection request.')
-        }
-      }
-    } catch (e) {
-      Logger.error('profile', 'Connect request error', { error: e })
-      setCtaMessage('Something went wrong. Try again.')
-    } finally {
-      setActionLoading(false)
-    }
+  /*
+   * Message only. Connect opens `ConnectSheet` (`sendConnect` below), and
+   * Requested is disabled — so this never sends a request itself.
+   */
+  const handleConnect = () => {
+    if (!profile || ctaMode !== 'message' || !conversationId) return
+    router.push({
+      pathname: '/private-chat/[conversationId]',
+      params: {
+        conversationId,
+        otherUserName: profile.name || 'User',
+        // May be a room handle. The thread compares nothing with it, and
+        // its only use — block or report — takes a handle as readily as an id.
+        otherUserId: profile.user_id,
+      } as any,
+    })
   }
 
   /*
@@ -378,13 +346,12 @@ function UserProfileInner() {
 
   const isLoading = loading
   const ctaLabel = useMemo(() => {
-    if (actionLoading) return 'Working...'
     if (ctaMode === 'self') return 'You'
     if (ctaMode === 'requested') return 'Requested'
     if (ctaMode === 'message') return 'Message'
     return 'Connect'
-  }, [ctaMode, actionLoading])
-  const ctaDisabled = actionLoading || ctaMode === 'self' || ctaMode === 'requested'
+  }, [ctaMode])
+  const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
 
   if (!loading && !profile) {
     return (
