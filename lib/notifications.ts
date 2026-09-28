@@ -434,6 +434,27 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       target = '/friends'
       break
     }
+    /*
+     * "The night's over — rate who you met." The server sends no such push
+     * yet (`NotificationData["type"]` in blendn-admin has no rating kind), so
+     * these are the names it is likeliest to use, routed ahead of time: the
+     * alternative is a tap that opens nothing the day it ships. Without an
+     * event id there is nothing to rate, and Going's Past rows carry the way
+     * in for every event you attended.
+     */
+    case 'event_ended':
+    case 'event_rating':
+    case 'rate_event':
+    case 'peer_rating':
+    case 'rate_peers':
+    case 'rating_request': {
+      if (data.eventId) {
+        target = { pathname: '/rate/[eventId]', params: { eventId: String(data.eventId) } as any }
+      } else {
+        target = '/(tabs)/going'
+      }
+      break
+    }
     case 'waitlist_promoted': {
       // "A place opened up" is only actionable on the event itself.
       if (data.eventId) {

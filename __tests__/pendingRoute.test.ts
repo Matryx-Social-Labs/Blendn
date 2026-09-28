@@ -62,6 +62,17 @@ describe('notificationTarget', () => {
     })
   })
 
+  it('opens the rating screen for an event-ended or rating push, whatever the server names it', () => {
+    for (const type of ['event_ended', 'event_rating', 'rate_event', 'peer_rating', 'rate_peers', 'rating_request']) {
+      expect(notificationTarget({ type, eventId: 'e1' })).toEqual({
+        pathname: '/rate/[eventId]',
+        params: { eventId: 'e1' },
+      })
+    }
+    // No event, nothing to rate: Going's Past rows are the way in.
+    expect(notificationTarget({ type: 'event_ended' })).toBe('/(tabs)/going')
+  })
+
   it('goes nowhere for an unknown or empty payload', () => {
     expect(notificationTarget(undefined)).toBeNull()
     expect(notificationTarget({})).toBeNull()

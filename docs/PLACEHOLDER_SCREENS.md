@@ -140,12 +140,17 @@ React Native.
 
 ## 1. `app/rate/[eventId].tsx` — peer rating
 
-**Route:** `/rate/{eventId}` · **Reached from:** nothing yet. Needs an entry
-point after an event ends.
+**Route:** `/rate/{eventId}` · **Reached from:** the Scene's CTA after an event
+you attended, Going's Past rows, the Room's end-of-night recap, and a rating push
+(no push kind exists server-side yet; the app routes the likely names).
 
-**What it does.** Loads the people you may rate (`GET /events/:id/peer-ratings`),
-walks them one at a time, and submits a 1–5, an optional issue, and an optional
-note.
+**What it does.** Asks about the night first — one tap on a 1–5, sent with
+`POST /events/:id/rating`, skipped if `userStatus.userRating` says you already
+did. Then loads the people you may rate (`GET /events/:id/peer-ratings`), shows
+each with the face and name you know them by (from the conversation list, never
+the public profile — `lib/ratePeople.ts`), and submits a 1–5, an optional issue,
+and an optional note. A failed load says so and offers Try again; "Nothing to
+rate" is only the server's real answer.
 
 ### Rules the design must not break
 
@@ -160,10 +165,10 @@ note.
 
 ### Design notes
 
-The current 1–5 number row is a placeholder and probably wrong: a five-star row
-reads as a public review, which is the one tone this must not have. The brief is
-"a private note to us". Worth exploring something that does not resemble a
-rating widget at all.
+No longer a placeholder (2026-09-28). The scale is five plain steps with a word
+at each end ("Not for me" / "Would meet again"), not stars: a five-star row reads
+as a public review, which is the one tone this must not have. Still open for the
+designer: whether it should resemble a rating widget at all.
 
 ---
 
