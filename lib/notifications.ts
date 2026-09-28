@@ -2,21 +2,104 @@ import Constants from 'expo-constants'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
-import type { Href } from 'expo-router'
+import { useCallback } from 'react'
+import { useFocusEffect, type Href } from 'expo-router'
 import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 
-// Configure how notifications are handled when the app is in the foreground
+/**
+ * The conversation or room on screen, spelled the way the server spells a
+ * push's `threadId`: `dm:{conversationId}`, `room:{chatGroupId}`.
+ *
+ * A DM you were reading dropped a banner over itself for every message, because
+ * this handler showed everything. It is the server's burst rule's other half:
+ * the server decides what is worth a push, and the phone does not show you a
+ * push about the thing you are looking at.
+ */
+let activeThread: string | null = null
+
+export function setActiveThread(thread: string | null): void {
+  activeThread = thread
+}
+
+/**
+ * Marks `thread` as on screen; the returned function gives it back.
+ *
+ * Gives back only its own. Going from one chat straight to another, the next
+ * screen can claim before this one lets go — clearing unconditionally would
+ * leave nothing on screen and let the new conversation's pushes drop banners
+ * over it.
+ */
+export function claimThread(thread: string): () => void {
+  activeThread = thread
+  return () => {
+    if (activeThread === thread) activeThread = null
+  }
+}
+
+/** Marks `thread` as on screen while the calling screen has focus. */
+export function useActiveThread(thread: string): void {
+  useFocusEffect(useCallback(() => claimThread(thread), [thread]))
+}
+
+function threadOf(data: Record<string, unknown> | undefined): string | null {
+  if (data?.type === 'private_message' && data.conversationId) return `dm:${String(data.conversationId)}`
+  if (data?.type === 'group_message' && data.chatGroupId) return `room:${String(data.chatGroupId)}`
+  return null
+}
+
+// How a push that arrives while the app is open is shown.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const thread = threadOf(notification.request.content.data)
+    const onScreen = thread !== null && thread === activeThread
+    return {
+      shouldShowBanner: !onScreen,
+      shouldShowList: !onScreen,
+      shouldPlaySound: !onScreen,
+      shouldSetBadge: false,
+    }
+  },
 })
+
+/**
+ * The Android channels the server sends on — `deliveryFor` in blendn-admin's
+ * `lib/push-notifications.ts` picks one of these for every kind.
+ *
+ * Only `default` existed, at the highest importance, and the server sent DMs,
+ * friend requests and matches on `messages`: Android filed those under
+ * "Miscellaneous" at normal importance while room chatter rode `default` as a
+ * heads-up. People and events pop up; a room reply does not.
+ *
+ * Android fixes a channel's importance when it is created, so these are the
+ * first and last word on it — a person changes it in system settings after
+ * that. A no-op on iOS.
+ */
+export async function ensureNotificationChannels(): Promise<void> {
+  const base = { vibrationPattern: [0, 250, 250, 250], lightColor: '#FF6B6B' }
+  await Promise.all([
+    Notifications.setNotificationChannelAsync('messages', {
+      ...base,
+      name: 'Messages and people',
+      description: 'Direct messages, friend requests and matches',
+      importance: Notifications.AndroidImportance.HIGH,
+    }),
+    Notifications.setNotificationChannelAsync('events', {
+      ...base,
+      name: 'Events',
+      description: 'Changes to events you are going to, reminders and organiser announcements',
+      importance: Notifications.AndroidImportance.HIGH,
+    }),
+    Notifications.setNotificationChannelAsync('rooms', {
+      ...base,
+      name: 'Room replies',
+      description: 'Someone replied to you in an event room',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    }),
+  ])
+}
 
 // Types for different notification types
 export interface NotificationData {
@@ -31,12 +114,15 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   let token: string | null = null
 
   if (Platform.OS === 'android') {
+    // `default` carries only a payload with no type; kept because installs
+    // already have it and nothing can lower its importance now.
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF6B6B',
     })
+    await ensureNotificationChannels()
   }
 
   if (Device.isDevice) {
@@ -273,8 +359,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       }
       break
     }
-    // The local one-hour reminder (`scheduleEventReminder`) had no case and
-    // opened nothing.
+    // An earlier build's local one-hour reminder, which may still be in the
+    // tray after an update. It had no case here and opened nothing.
     case 'event_reminder':
     case 'event': {
       if (data.eventId) {
@@ -420,94 +506,28 @@ export function setupNotificationResponseListener(
   return subscription
 }
 
-// === EVENT REMINDER NOTIFICATIONS ===
-
-const REMINDER_IDENTIFIER_PREFIX = 'event-reminder-'
-
 /**
- * Schedule a local notification 1 hour before an event starts.
- * Safe to call multiple times — cancels any existing reminder first.
- */
-export async function scheduleEventReminder(event: {
-  id: string
-  title: string
-  start_time: string
-  venue_name?: string
-}): Promise<boolean> {
-  try {
-    const { status } = await Notifications.getPermissionsAsync()
-    if (status !== 'granted') return false
-
-    const startMs = new Date(event.start_time).getTime()
-    const reminderMs = startMs - 60 * 60 * 1000 // 1 hour before
-    const nowMs = Date.now()
-
-    // Cancel any existing reminder for this event first
-    await cancelEventReminder(event.id)
-
-    if (reminderMs <= nowMs) {
-      // Event starts in < 1 hour or already started — skip
-      return false
-    }
-
-    const identifier = `${REMINDER_IDENTIFIER_PREFIX}${event.id}`
-    await Notifications.scheduleNotificationAsync({
-      identifier,
-      content: {
-        title: `${event.title} starts in 1 hour`,
-        body: event.venue_name ? `At ${event.venue_name}` : "Don't miss it!",
-        data: { type: 'event_reminder', eventId: event.id },
-        sound: true,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: new Date(reminderMs),
-      },
-    })
-
-    Logger.info('notifications', 'Event reminder scheduled', {
-      eventId: event.id,
-      reminderAt: new Date(reminderMs).toISOString(),
-    })
-    return true
-  } catch (error) {
-    Logger.warn('notifications', 'Failed to schedule event reminder', { error })
-    return false
-  }
-}
-
-/** Cancel a scheduled event reminder. */
-export async function cancelEventReminder(eventId: string): Promise<void> {
-  try {
-    await Notifications.cancelScheduledNotificationAsync(
-      `${REMINDER_IDENTIFIER_PREFIX}${eventId}`
-    )
-  } catch {
-    // Ignore — identifier may not exist
-  }
-}
-
-/**
- * The one-hour reminder, on for an event somebody has said they care about —
- * interested, going, or waitlisted — and off otherwise.
+ * The one-hour reminder is the server's (`sendEventReminders`, blendn-admin).
  *
- * Only the Pulse's heart used to schedule it, so "I'm going" — the strongest
- * commitment the app records — got no reminder at all. Both calls are
- * idempotent (`scheduleEventReminder` cancels first), so calling this on every
- * change, rollbacks included, is safe.
+ * This file scheduled its own as well, for the same people — interested,
+ * going, waitlisted — so "starts in an hour" arrived twice. The server's also
+ * follows a time change and honours the notifications switch; a local one did
+ * neither. This clears the ones an earlier build left scheduled.
+ *
+ * ponytail: delete once no install predates this build.
  */
-export function syncEventReminder(
-  event: { id: string; title: string; start_time: string; venue_name?: string | null },
-  wanted: boolean
-): void {
-  const done = wanted
-    ? scheduleEventReminder({ ...event, venue_name: event.venue_name ?? undefined })
-    : cancelEventReminder(event.id)
-  done.catch(() => {})
+export async function cancelLegacyEventReminders(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync()
+  await Promise.all(
+    scheduled
+      .filter((n) => n.identifier.startsWith('event-reminder-'))
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+  )
 }
 
 // Initialize push notifications (call this on app startup)
 export async function initializePushNotifications(): Promise<string | null> {
+  cancelLegacyEventReminders().catch(() => {})
   try {
     const token = await registerForPushNotificationsAsync()
 

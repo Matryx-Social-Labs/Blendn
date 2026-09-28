@@ -150,6 +150,8 @@ export interface ServerToClientEvents {
   }) => void
   /** Somebody in the room waved at you. `fromName` is how they appear to you. */
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
+  /** A row landed in your notifications bell (blendn-admin `announceToBell`). The kind only. */
+  "notification:new": (data: { kind: string }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -198,6 +200,7 @@ type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] exten
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
+type BellCallback = (data: ServerToClientEvents["notification:new"] extends (data: infer D) => void ? D : never) => void
 
 // Connection state
 let socket: TypedSocket | null = null
@@ -287,6 +290,7 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
  */
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
+const bellSubscriptions = new Set<BellCallback>()
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -656,6 +660,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("room:wave", (data) => {
     roomWaveSubscriptions.forEach((cb) => cb(data))
+  })
+
+  sock.on("notification:new", (data) => {
+    bellSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("private:typing", (data) => {
@@ -1054,6 +1062,15 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   roomWaveSubscriptions.add(callback)
   return () => {
     roomWaveSubscriptions.delete(callback)
+  }
+}
+
+/** A row landed in your bell. Same delivery as `subscribeToRoomMatch`. */
+export function subscribeToBell(callback: BellCallback): () => void {
+  if (!socket?.connected) connect()
+  bellSubscriptions.add(callback)
+  return () => {
+    bellSubscriptions.delete(callback)
   }
 }
 
