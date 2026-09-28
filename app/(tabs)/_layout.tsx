@@ -113,11 +113,23 @@ const TabButton = memo(({
   avatarUrl?: string | null
 }) => (
   <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={`${label} tab`}
-    accessibilityState={isFocused ? { selected: true } : {}}
+    /*
+     * A tab, named by its name: VoiceOver adds "tab, 2 of 5" itself, so the
+     * old "Pulse tab" label was read as "Pulse tab, tab". `selected` is always
+     * stated, so an unselected tab says so too.
+     */
+    accessibilityRole="tab"
+    accessibilityLabel={label}
+    accessibilityState={{ selected: isFocused }}
     onPress={onPress}
     onLongPress={onLongPress}
+    /*
+     * The items are content-sized (see `bar`), so "Me" alone was a 23pt-wide
+     * target. The slop reaches into the gaps either side and up to the bar's
+     * edge without moving anything: equal-width `flex: 1` cells would reach
+     * the same area but re-space the measured row.
+     */
+    hitSlop={TAB_HIT_SLOP}
     style={({ pressed }) => [styles.item, pressed && styles.pressed]}
   >
     <View style={styles.iconBox}>
@@ -444,6 +456,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     <View
       style={[styles.bar, { paddingBottom: tabBarBottomPadding(insets.bottom) }]}
       pointerEvents="box-none"
+      accessibilityRole="tablist"
     >
       {/* Opaque and flat: no glass (tasks/lessons.md). */}
       <View style={styles.barSurface} pointerEvents="none" />
@@ -543,6 +556,13 @@ export const TAB_BAR_CLEARANCE = 92
  */
 export const TAB_BAR_PADDING_TOP = 8
 export const TAB_BAR_LINE = CENTRE_SIZE
+
+/**
+ * Each tab's touch area past its drawn box: up to the bar's top edge, and 12
+ * into the ~27pt gap either side, so neighbours do not overlap. Takes "Me"
+ * from 23pt wide to 47.
+ */
+const TAB_HIT_SLOP = { top: TAB_BAR_PADDING_TOP, bottom: SPACE.md, left: SPACE.md, right: SPACE.md }
 
 /**
  * The bar's bottom padding.
