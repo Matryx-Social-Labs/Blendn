@@ -458,3 +458,78 @@ describe('both chat screens have left the old theme', () => {
     }
   })
 })
+
+describe('the send button does not pretend the message is still in flight', () => {
+  const COMPOSER = () => codeOnly(read('components/chat/ChatComposer.tsx'))
+  const ROOM = () => codeOnly(read('app/chat/[id].tsx'))
+  const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
+
+  it('has no spinner, and no prop that would drive one', () => {
+    /*
+     * `sendMessage` draws the optimistic bubble and clears the field in the
+     * same tick it starts the request, so by the time a spinner could paint,
+     * the room has already shown the message as sent. It was the only element
+     * on screen claiming otherwise.
+     */
+    const src = COMPOSER()
+    expect(src).not.toContain('ActivityIndicator')
+    expect(src).not.toMatch(/\bsending\b/)
+    // Neither screen hands it a send-in-flight state any more.
+    expect(ROOM()).not.toMatch(/sending=\{/)
+    expect(DM()).not.toMatch(/sending=\{/)
+  })
+
+  it('disables the button only for a reason it can name', () => {
+    const src = COMPOSER()
+    // Every lock the type allows has a sentence; a disabled control that does
+    // not say why is the bug this replaced.
+    expect(src).toMatch(/const canSend = value\.trim\(\)\.length > 0 && !lock/)
+    for (const lock of ['muted', 'locked', 'closed', 'rate_limited']) {
+      expect(src).toMatch(new RegExp(`${lock}:\\s*['"\`]`))
+    }
+    expect(src).toContain('editable={!lock}')
+    expect(src).toContain('{LOCK_COPY[lock]}')
+  })
+
+  it('still refuses a double tap, without rendering anything for it', () => {
+    // The guard moved from state to a ref precisely so nothing draws from it.
+    const src = ROOM()
+    expect(src).toContain('if (sendInFlightRef.current) return')
+    expect(src).toContain('sendInFlightRef.current = true')
+    expect(src).toMatch(/await deliver\(optimistic\)\s*sendInFlightRef\.current = false/)
+  })
+
+  it('turns the server’s refusal into a lock, alongside the kept failed bubble', () => {
+    const src = ROOM()
+    const lock = src.slice(src.indexOf('const applyComposerLock'), src.indexOf('const deliver'))
+    // These codes have been on the wire the whole time and were thrown away.
+    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'locked'], ['CHAT_CLOSED', 'closed'], ['RATE_LIMITED', 'rate_limited']]) {
+      expect(lock).toMatch(new RegExp(`case '${code}':[\\s\\S]*?setComposerLock\\('${state}'\\)`))
+    }
+    // A rate limit lifts on its own, and the server says when.
+    expect(lock).toMatch(/setTimeout\(\(\) => setComposerLock\(null\), ms\)/)
+    expect(lock).toMatch(/retryAfter \?\? 5/)
+    // `deliver` is the one path for first sends and retries (#312), so the lock
+    // is decided there -- and a send that got through lifts it.
+    const deliver = src.slice(src.indexOf('const deliver'), src.indexOf('const sendMessage'))
+    expect(deliver).toContain('applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)')
+    expect(src).toContain('lock={composerLock}')
+  })
+
+  it('locks a DM for the server’s cooldown when it rate-limits or spam-blocks', () => {
+    const src = DM()
+    const deliver = src.slice(src.indexOf('const deliver'), src.indexOf('const sendMessage'))
+    expect(deliver).toMatch(/result\.errorCode === 'RATE_LIMITED' \|\| result\.errorCode === 'SPAM_BLOCKED'/)
+    expect(deliver).toContain("setComposerLock('rate_limited')")
+    expect(deliver).toMatch(/result\.retryAfter \?\? 5/)
+    expect(src).toContain('lock={composerLock}')
+  })
+
+  it('carries retryAfter through the client so the cooldown is not guessed', () => {
+    const src = codeOnly(read('lib/apiClient.ts'))
+    expect(src).toMatch(/retryAfter\?: number/)
+    // Body first, then the header a proxy may strip.
+    expect(src).toMatch(/retryAfter: typeof parsed\.retryAfter === 'number'/)
+    expect(src).toContain("response.headers.get('Retry-After')")
+  })
+})
