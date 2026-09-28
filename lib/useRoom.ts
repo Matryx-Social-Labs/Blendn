@@ -294,6 +294,15 @@ export function useRoom(): RoomState & RoomActions {
           return
         }
 
+        /*
+         * Belt and braces, and no longer load-bearing. The server leaves
+         * blocked people out of the roster and out of every room emit, and
+         * that filter is the real one. Since SCRUM-371 the room names other
+         * people by per-event `rh_` handles while `blocked_id` is a real id,
+         * so this set matches nobody on a current server; it only still bites
+         * against an older one. Somebody you block from the room is hidden by
+         * `removed`, which is keyed on the room's own ids.
+         */
         let blocked = new Set<string>()
         try {
           blocked = new Set((await getBlockedUsers()).map((b) => b.blocked_id))

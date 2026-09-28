@@ -175,6 +175,8 @@ export async function pickActiveRoom(
       continue
     }
 
+    // `isBlocked` is a backstop: the server filters blocked people, and room
+    // ids are handles that real blocked ids never equal. See `lib/useRoom.ts`.
     const attendees = result.matches.filter(
       (m) =>
         m.userId !== options.excludeUserId && !(options.isBlocked?.(m.userId) ?? false)
