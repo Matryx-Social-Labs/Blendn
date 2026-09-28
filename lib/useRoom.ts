@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
+import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal } from './likeRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
@@ -526,6 +527,17 @@ export function useRoom(): RoomState & RoomActions {
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
           setChatGroupId(String(id))
+          // Served as a member: back in, and the room's mute as the server has it.
+          markRoomJoined(String(id))
+          rememberRoomMute(String(id), result.data?.mute)
+        } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
+          /*
+           * You left this room, and the server no longer rejoins you by
+           * reading it. The id still comes back so the chat can open on
+           * "You left" with its Rejoin, rather than on "not open yet".
+           */
+          markRoomLeft(result.chatGroupId)
+          setChatGroupId(result.chatGroupId)
         } else {
           chatResolvedForRef.current = null
           setChatGroupId(null)

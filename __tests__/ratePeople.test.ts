@@ -1,7 +1,23 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { ratePeople, UNKNOWN_MATCH } from '../lib/ratePeople'
+import { askAboutNight, ratePeople, UNKNOWN_MATCH } from '../lib/ratePeople'
+
+describe('askAboutNight', () => {
+  it('asks when your own rating says you have not rated', () => {
+    expect(askAboutNight({ success: true, data: { rating: null } }, 4)).toBe(true)
+  })
+
+  it('skips to the people when you already rated — whatever the event guessed', () => {
+    expect(askAboutNight({ success: true, data: { rating: 3 } }, undefined)).toBe(false)
+  })
+
+  it("falls back to the event's userStatus when your rating could not be read", () => {
+    expect(askAboutNight({ success: false }, 5)).toBe(false)
+    expect(askAboutNight({ success: false }, undefined)).toBe(true)
+    expect(askAboutNight(null, null)).toBe(true)
+  })
+})
 
 describe('ratePeople', () => {
   const conversations = [
@@ -42,5 +58,10 @@ describe('the rating screen', () => {
 
   it('asks about the night itself, through rateEvent', () => {
     expect(SRC).toContain('apiClient.rateEvent(')
+  })
+
+  it('decides whether to ask from your own rating', () => {
+    expect(SRC).toContain('apiClient.getMyEventRating(')
+    expect(SRC).toContain('askAboutNight(own, event?.data?.userStatus?.userRating)')
   })
 })

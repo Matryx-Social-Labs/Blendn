@@ -14,6 +14,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
+import { useRoomMembership } from '../../lib/roomMembership'
 import { Logger } from '../../lib/logger'
 import { MOTION_SPRING } from '../../lib/motion'
 import { subscribeToChatMessage } from '../../lib/socketClient'
@@ -87,9 +88,11 @@ export function ChatDock({
   const reduceMotion = useReducedMotion()
   const [messages, setMessages] = useState<DockLine[]>([])
   const [count, setCount] = useState(0)
+  // Left: the server refuses the history and the socket, so neither is asked.
+  const left = useRoomMembership().left.has(chatGroupId ?? '')
 
   useEffect(() => {
-    if (!chatGroupId) return
+    if (!chatGroupId || left) return
     let cancelled = false
     apiClient
       .getChatMessages(chatGroupId, { limit: 8 })
@@ -122,7 +125,7 @@ export function ChatDock({
       cancelled = true
       unsubscribe()
     }
-  }, [chatGroupId, myId])
+  }, [chatGroupId, myId, left])
 
   const lines = useMemo(
     () => [...messages, ...system].sort((a, b) => a.at - b.at).slice(-SHOWN),
@@ -150,7 +153,11 @@ export function ChatDock({
       <Animated.View style={[styles.dock, { paddingBottom: bottomInset + SPACE.md }, liftStyle]}>
         <View style={styles.handle} />
         <View style={styles.lines} accessibilityLiveRegion="polite">
-          {lines.length === 0 ? (
+          {left ? (
+            <Text variant="meta" color={EMBER.textTertiary}>
+              You left this room&apos;s chat. Open it to rejoin.
+            </Text>
+          ) : lines.length === 0 ? (
             <Text variant="meta" color={EMBER.textTertiary}>
               Nobody has said anything yet. Be the first.
             </Text>

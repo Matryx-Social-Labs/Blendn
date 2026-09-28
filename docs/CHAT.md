@@ -19,7 +19,8 @@ than swapping a pane — the chat is one place you are standing in, not a tab.
 ## Composition
 
 ```
-GroupChatHeader     back · room name · subtitle · options (→ Room info)
+GroupChatHeader     back · room name (+ bell-slash if you muted it) · subtitle · options (→ Room info)
+RoomLeftState       instead of everything below, while you are not in the room
 RealtimeStatusBanner
 RoomGuidelinesBanner  once per room until "Got it" — in the column, never over a message
 FlatList
@@ -35,8 +36,44 @@ ActionTray
 
 **Room info** (`app/chat-info/[id].tsx`): the room, its members as the room
 shows them (pseudonym + the bubble's own mark; tap opens the same gated profile
-the Grid opens), community guidelines, and *Report this event*. No Leave or
-Mute: neither has an endpoint.
+the Grid opens), then four rows:
+
+- **Mute notifications** — 1 hour, 8 hours, until tomorrow (8am), or until you
+  turn it back on (`POST/DELETE /chat/groups/:id/mute`). Silences the room's
+  pushes to you and nothing else; nobody is told. The row says until when, and
+  the sheet offers Unmute. Not the organiser's mute (`room_state: 'muted'`,
+  which stops you posting), so the chat header and the Banter row show a
+  bell-slash glyph rather than the word.
+- **Community guidelines**.
+- **Report this room** (`POST /chat/groups/:id/report`) — for what no single
+  message shows: a pile-on, a host letting it happen. *Report this event* moved
+  out: the event page has its own, and two report rows here made a moderator
+  guess which one was meant.
+- **Leave room** — a confirmation that says you stop getting its messages and
+  can rejoin by checking in again; then back out to the Banter with a toast.
+
+Mute and left state live in `lib/roomMembership.ts`, a small store every
+screen reads: the Banter list and `GET /events/:id/chat` write the server's
+`mute`, Room info writes what it changes, and a room left on this phone drops
+out of the Banter at once.
+
+**Somebody not in the room.** Leaving is enforced by the server: history is
+refused (403), posts and reactions answer `LEFT_ROOM`, the socket join is
+refused, and `GET /events/:id/chat` answers `LEFT_ROOM` with the `chatGroupId`
+instead of rejoining you. The room draws `RoomLeftState` in place of the feed
+and composer — *You left this room* when the app knows you did, *You're not in
+this room* for a plain 403 (which is also what a leave made on another phone
+looks like) — with **Rejoin** (`DELETE /chat/groups/:id/leave`). The server's
+refusal (banned, closed, locked) is the toast when a rejoin is refused. A send
+or reaction refused with `LEFT_ROOM` turns the screen into the same state.
+The Room's chat dock says "You left this room's chat. Open it to rejoin."
+
+**The header's subtitle** is the event's title when the room is named
+something else. Most rooms are named after their event, and repeating the
+title said nothing, so then it is "38 in the room" (from the room list's
+`memberCount`, less anyone who leaves while you watch — `chat:memberLeft`), or
+nothing until that is known. Room info's member list drops people on the same
+event.
 
 **The message menu** offers a reaction row (the six `CHAT_REACTIONS` the
 server accepts — optimistic, rolled back with a toast if refused), Reply, Copy,

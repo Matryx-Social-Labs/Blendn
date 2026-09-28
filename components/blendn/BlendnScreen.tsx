@@ -8,6 +8,7 @@ import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
+import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
 import { meetNext, reasonLine } from '../../lib/roomMoments'
@@ -246,6 +247,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       try {
         const r = await apiClient.getEventChat(eventId)
         id = (r.success && (r.data?.chatGroupId ?? r.data?.id)) || null
+        // Left it: the chat opens on "You left this room" and its Rejoin.
+        if (!id && r.errorCode === 'LEFT_ROOM' && r.chatGroupId) {
+          markRoomLeft(r.chatGroupId)
+          id = r.chatGroupId
+        }
       } catch (e) {
         Logger.warn('chat', 'room chat lookup failed', { error: e })
       }

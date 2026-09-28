@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
+import { RoomLeftState } from '../../components/chat/RoomLeftState'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
 import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
@@ -34,7 +35,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useLatest } from '../../lib/useLatest'
@@ -45,6 +46,7 @@ import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { useActiveThread } from '../../lib/notifications'
+import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
@@ -97,17 +99,24 @@ const formatTime = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo }: {
+function GroupChatHeader({ name, imageUrl, subtitle, typingCount, muted, onBack, onInfo }: {
   name: string
   imageUrl: string | null
   subtitle?: string
   typingCount: number
+  /** You muted this room's notifications: a still bell-slash beside the name. */
+  muted: boolean
   onBack: () => void
   onInfo: () => void
 }) {
   return (
     <View style={headerStyles.container}>
-      <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
         <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
@@ -122,7 +131,17 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo
       </View>
 
       <View style={headerStyles.titleArea}>
-        <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+        <View style={headerStyles.nameRow}>
+          <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+          {muted ? (
+            <Ionicons
+              name="notifications-off-outline"
+              size={ICON.sm}
+              color={EMBER.textSecondary}
+              accessibilityLabel="Notifications muted"
+            />
+          ) : null}
+        </View>
         {typingCount > 0 ? (
           <Text style={headerStyles.typing}>{typingCount === 1 ? 'someone is typing…' : `${typingCount} people typing…`}</Text>
         ) : subtitle ? (
@@ -163,7 +182,8 @@ const headerStyles = StyleSheet.create({
   avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
   avatarGroupFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: TYPE.bodyStrong,
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  name: { ...TYPE.bodyStrong, flexShrink: 1 },
   // Primary, so a live "typing…" never reads as the secondary subtitle.
   typing: { ...TYPE.meta, color: EMBER.textPrimary },
   subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
@@ -224,6 +244,19 @@ function GroupChatInner(props?: {
    * failed background refresh over messages already shown changes nothing.
    */
   const [loadError, setLoadError] = useState(false)
+  /*
+   * Not in the room. `left` is a leave the app knows about — made here, or
+   * the server's LEFT_ROOM — and lives in `lib/roomMembership.ts` so Room info
+   * and the Banter agree. `outOfRoom` is history refused as a non-member,
+   * which is also what the server says to a leave made on another phone.
+   */
+  const [outOfRoom, setOutOfRoom] = useState(false)
+  const [rejoining, setRejoining] = useState(false)
+  const left = useRoomMembership().left.has(String(chatRoomId))
+  const outside = left || outOfRoom
+  const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
+  /** From the room list (`memberCount`), for the header when the title says nothing new. */
+  const [memberCount, setMemberCount] = useState<number | null>(null)
   const { showToast } = useToast()
   const [trayVisible, setTrayVisible] = useState(false)
   const [trayTitle, setTrayTitle] = useState('')
@@ -329,8 +362,17 @@ function GroupChatInner(props?: {
         }
 
         const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
+        /*
+         * Refused as somebody not in the room: the left state, not "Couldn't
+         * load" — Try again would be refused the same way for ever.
+         */
+        if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
+        if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
+        // Served as a member, so whatever this phone thought, you are in.
+        setOutOfRoom(false)
+        markRoomJoined(String(chatRoomId))
 
         const raw = Array.isArray(result.data)
           ? result.data
@@ -406,6 +448,26 @@ function GroupChatInner(props?: {
     // trigger a reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, authUser, authLoading])
+
+  /*
+   * The room's row in the Banter's list — usually already cached, so free —
+   * is where its mute and its member count arrive.
+   */
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    apiClient.getChatGroups().then((result) => {
+      if (!live || !result.success || !result.data) return
+      const data = result.data as unknown as Record<string, any>
+      const rooms: Record<string, any>[] = Array.isArray(data) ? data : data.groups || data.rooms || data.data || []
+      const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
+      if (!room) return
+      rememberRoomMute(String(chatRoomId), room.mute)
+      const count = Number(room.memberCount ?? room.participant_count)
+      if (count > 0) setMemberCount(count)
+    }).catch(() => {})
+    return () => { live = false }
+  }, [chatRoomId])
 
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
@@ -499,20 +561,29 @@ function GroupChatInner(props?: {
     const u3 = subscribeToChatReaction(String(chatRoomId), handleReaction)
     const u4 = subscribeToChatMessageDeleted(String(chatRoomId), handleDeleted)
     const u5 = subscribeToChatMemberBanned(String(chatRoomId), handleBanned)
+    // Somebody left: one fewer in the header's count.
+    const u6 = subscribeToChatMemberLeft(String(chatRoomId), () => {
+      setMemberCount((n) => (n && n > 0 ? n - 1 : n))
+    })
     return () => {
-      u1(); u2(); u3(); u4(); u5()
+      u1(); u2(); u3(); u4(); u5(); u6()
       typingCleanupRefs.current.forEach(t => clearTimeout(t))
       typingCleanupRefs.current.clear()
     }
   }
 
+  /*
+   * Not while outside the room: the server refuses the join. `outside` is a
+   * dependency so a rejoin subscribes again, which is what re-joins the
+   * socket room (`join:chat`).
+   */
   useEffect(() => {
-    if (!chatRoomId || !currentUser) return
+    if (!chatRoomId || !currentUser || outside) return
     return subscribeToMessages()
     // subscribeToMessages is redefined every render; only the listed values
     // should re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRoomId, currentUser])
+  }, [chatRoomId, currentUser, outside])
 
   /**
    * Turn the server's refusal into a locked composer.
@@ -566,6 +637,8 @@ function GroupChatInner(props?: {
        * bubble is the one send left -- so its success has to unlock the field.
        */
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
+      // Left on another phone, or here a moment ago: the room becomes the left state.
+      if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
       if (!result.success) throw new Error(result.error || 'Failed to send')
 
       /*
@@ -669,8 +742,36 @@ function GroupChatInner(props?: {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: tally } : m))
     } else {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: before } : m))
+      if (result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      else if (result.errorCode === 'CHAT_CLOSED' || result.errorCode === 'CHAT_LOCKED') applyComposerLock(result.errorCode)
       showToast(result.error || "Couldn't add your reaction. Try again.", 'error')
     }
+  }
+
+  /*
+   * Back in. The server answers the refusals in its own words — banned, the
+   * room has closed, the organiser locked it — and a room you were never in
+   * is its 404, which means checking in is the way.
+   */
+  const rejoin = async () => {
+    if (rejoining || !chatRoomId) return
+    setRejoining(true)
+    const result = await apiClient.rejoinChatGroup(String(chatRoomId))
+    setRejoining(false)
+    if (!result.success) {
+      showToast(
+        result.errorCode === 'NOT_FOUND'
+          ? 'Check in at the event to join its room.'
+          : result.error || "Couldn't rejoin this room. Try again.",
+        'error'
+      )
+      return
+    }
+    markRoomJoined(String(chatRoomId))
+    setOutOfRoom(false)
+    setLoading(true)
+    showToast("You're back in the room", 'success')
+    void loadMessages(true)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -685,7 +786,7 @@ function GroupChatInner(props?: {
   }, [messages])
 
   const socketStatus = useLiveSync({
-    enabled: !!chatRoomId && !!currentUser,
+    enabled: !!chatRoomId && !!currentUser && !outside,
     onSync: () => loadMessages(false, true),
     domains: ['chat'],
     syncOnReconnect: true,
@@ -856,8 +957,9 @@ function GroupChatInner(props?: {
           <GroupChatHeader
             name={(roomName as string) || 'Event Chat'}
             imageUrl={(eventImage as string) || null}
-            subtitle={(eventTitle as string) || undefined}
+            subtitle={roomSubtitle((roomName as string) || 'Event Chat', (eventTitle as string) || undefined, memberCount)}
             typingCount={typingUsers.size}
+            muted={muted}
             onBack={() => router.back()}
             onInfo={() => router.push({
               pathname: '/chat-info/[id]',
@@ -870,6 +972,9 @@ function GroupChatInner(props?: {
             } as never)}
           />
         )}
+        {outside ? (
+          <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
+        ) : (<>
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
         <RoomGuidelinesBanner userId={authUser?.id} chatRoomId={chatRoomId ? String(chatRoomId) : undefined} />
 
@@ -998,6 +1103,7 @@ function GroupChatInner(props?: {
             }
           }}
         />
+        </>)}
       </KeyboardAvoidingView>
 
       <ActionTray visible={trayVisible} title={trayTitle} message={trayMessage} buttons={trayButtons} onClose={closeTray} />
