@@ -51,6 +51,7 @@ const BLENDN_LINKS = {
   help: 'https://blendn.app/help',
   terms: 'https://blendn.app/terms',
   privacy: 'https://blendn.app/privacy',
+  deleteAccount: 'https://www.blendn.app/delete-account',
 } as const
 
 export default function SettingsScreen() {
@@ -247,9 +248,18 @@ export default function SettingsScreen() {
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
       'Delete Account',
-      'This permanently deletes your profile, photos, and personal info. This cannot be undone.',
+      // What the deletion route actually does (app/api/mobile/account in the
+      // API): the profile goes, messages stay under a deleted account, and
+      // registration details are held 180 days (IT Rules 2021, r.3(1)(h)).
+      'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
+        {
+          text: "What's kept",
+          onPress: () => {
+            Linking.openURL(BLENDN_LINKS.deleteAccount).catch(() => {})
+          },
+        },
         {
           text: 'Delete',
           style: 'destructive',

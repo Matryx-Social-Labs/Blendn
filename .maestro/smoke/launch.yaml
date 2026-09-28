@@ -1,0 +1,15 @@
+# Release smoke test. scripts/ship-local.sh runs this on every build before it
+# submits it: a fresh launch reaches the signed-out entry screen (app/index.tsx).
+# Outside journeys/, so `maestro test .maestro` does not pick it up.
+# One launch and one assertion: on iOS the Maestro driver has crashed the app
+# when a flow does more.
+appId: com.matryxsociallabs.blendn
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 60000
+- takeScreenshot: launch

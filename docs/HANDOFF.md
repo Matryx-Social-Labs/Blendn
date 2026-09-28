@@ -25,14 +25,41 @@ npm run ship:local -- --dry-run     # the checks and the commands, nothing built
 npm run ship:local                  # both platforms; or `-- ios`, `-- android`
 ```
 
-It needs Xcode 26+ (not a beta), CocoaPods, fastlane, the Android SDK with an
-NDK (`ANDROID_HOME`), JDK 17 or 21, `gh` logged in, and eas-cli logged in to the
-org. It refuses anything but a clean `origin/stage` whose `typecheck + test +
-lint` check passed. The `.ipa`, the `.aab`, R8's `mapping.txt` and the run's
-log land in `dist/` (gitignored). To put the cloud route back, set the
-repository variable `EAS_CLOUD_SHIP` to `true`. The rest, including why Sentry
-uploads are off unless `SENTRY_AUTH_TOKEN` is in the shell, is in
+It needs **the Xcode that `eas.json`'s image names (26.6)**, CocoaPods,
+fastlane, the Android SDK with an NDK (`ANDROID_HOME`), JDK 17 or 21,
+bundletool, Maestro, an emulator or the `Blendn_A34` AVD, `gh` logged in, and eas-cli
+logged in to the org. It refuses anything but a clean `origin/stage` whose
+`typecheck + test + lint` check passed. The `.ipa`, the `.aab`, R8's
+`mapping.txt`, the smoke-test screenshots and the run's log land in `dist/`
+(gitignored). To put the cloud route back, set the repository variable
+`EAS_CLOUD_SHIP` to `true`. The rest, including why Sentry uploads are off
+unless `SENTRY_AUTH_TOKEN` is in the shell, is in
 [`RELEASING.md`](RELEASING.md#shipping-stage-from-a-mac).
+
+**Build 118 on TestFlight crashes at launch on iOS 27.** The first
+local run built it with the Mac's only Xcode, 27.0: `eas build --local` ignores
+`image`, so it linked the iOS 27 SDK, which requires the UIScene lifecycle that
+our AppDelegate-window app has not adopted (`EXC_BREAKPOINT` in
+`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`). Nobody launched
+it before it was submitted. Since then the script:
+
+- **builds iOS only with the Xcode in `eas.json`'s image**, found by version
+  and exported as `DEVELOPER_DIR`, and refuses iOS if it is not installed
+  (`xcodes install 26.6`). `--allow-xcode <v>` overrides it, only after the
+  smoke test passes on a device on the newest iOS;
+- **launches every build before submitting it**: a universal APK on the
+  emulator, and a Release simulator build of the same commit with the same Xcode
+  and EAS environment, each opened by the Maestro flow
+  `.maestro/smoke/launch.yaml` to the signed-out screen. Then up 30 seconds more
+  with no crash, or no submit.
+  `--skip-smoke` needs `--i-launched-it-myself` too. Keep the newest iOS
+  simulator runtime installed: on iOS 27.0 the smoke test reproduces build
+  118's crash for an Xcode 27 build, and on iOS 26 it could not.
+
+**Follow-up, not done:** adopt the UIScene lifecycle before Apple requires the
+iOS 27 SDK for App Store Connect uploads. Until then Xcode 27 cannot build
+this app for release. See
+[Build 118, and the Xcode rule](RELEASING.md#build-118-and-the-xcode-rule).
 
 ---
 

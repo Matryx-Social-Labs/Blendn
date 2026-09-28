@@ -27,6 +27,11 @@ people your session creates get a passphrase you choose.
 | `c08-room-post` | SCRUM-228 | `EMAIL PASSWORD ROOM MESSAGE` (needs a live event) |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
+`smoke/launch.yaml` is not a journey: it is the release smoke test that
+`npm run ship:local` runs on every build before submitting it (launch from
+clean, see the signed-out screen). It sits outside `journeys/` so
+`maestro test .maestro` skips it. See `docs/RELEASING.md`.
+
 Subflows: `sign-in`, `sign-out`, `dismiss-tip` (the Pulse tip and RN's LogBox
 eat taps), `keyboard-done` (the keyboard's bottom-right key after every typed
 field, per platform — Maestro's `hideKeyboard` sends BACK on Android when no
