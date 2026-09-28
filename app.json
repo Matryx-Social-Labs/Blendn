@@ -27,7 +27,18 @@
               "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
             ]
           }
-        ]
+        ],
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
       }
     },
     "android": {

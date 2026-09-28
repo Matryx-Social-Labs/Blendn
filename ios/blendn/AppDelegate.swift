@@ -4,7 +4,7 @@ import React
 import ReactAppDependencyProvider
 
 @main
-class AppDelegate: ExpoAppDelegate {
+class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -19,7 +19,7 @@ class AppDelegate: ExpoAppDelegate {
 
      `GMSServices.provideAPIKey` must run before any GMSMapView is created, and
      the first one can be created as soon as a screen mounts — so this belongs
-     ahead of `startReactNative` rather than beside it.
+     ahead of React Native, which `SceneDelegate` starts once the scene connects.
 
      The key is committed on purpose. A Maps SDK key is restricted to an app
      identity — this bundle identifier — and Google checks that server-side on
@@ -42,16 +42,16 @@ class AppDelegate: ExpoAppDelegate {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
-#if os(iOS) || os(tvOS)
-    window = UIWindow(frame: UIScreen.main.bounds)
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
-#endif
-
+    // The window is created and React Native is started by `SceneDelegate` under the
+    // scene-based life cycle (required by the iOS 27 SDK).
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+
+  /*
+   Under the scene life cycle UIKit no longer calls the two methods below.
+   `ExpoAppSceneDelegate` forwards every URL and user activity to them, cold
+   start included, and does not notify `RCTLinkingManager` a second time.
+   */
 
   // Linking API
   public override func application(
