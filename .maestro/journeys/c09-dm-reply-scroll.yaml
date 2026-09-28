@@ -1,0 +1,51 @@
+# TQ-C09 (SCRUM-409). Reply to a message from a little way up a long DM: the
+# sent reply must be in view, not below the composer (build 121 left it there,
+# driven 2026-09-28), and a drag must put the keyboard away.
+# Env: EMAIL, PASSWORD, PEER (a regex for the other person's name in the
+# Banter), QUOTE (a regex for a message to reply to, a few rows up), MESSAGE.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c09
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../subflows/sign-in.yaml
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Banter tab"
+- extendedWaitUntil:
+    visible: ${PEER}
+    timeout: 30000
+- tapOn: ${PEER}
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# Up a few rows, so the newest messages are off screen.
+- swipe:
+    start: 50%, 35%
+    end: 50%, 75%
+    duration: 600
+- extendedWaitUntil:
+    visible: ${QUOTE}
+    timeout: 10000
+- longPressOn: ${QUOTE}
+- tapOn: "Reply"
+- extendedWaitUntil:
+    visible: ".*Replying to.*"
+    timeout: 5000
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: ${MESSAGE}
+    timeout: 10000
+- takeScreenshot: c09-sent-in-view
+# A drag through the conversation puts the keyboard away.
+- swipe:
+    start: 50%, 30%
+    end: 50%, 55%
+    duration: 500
+- takeScreenshot: c09-keyboard-away
