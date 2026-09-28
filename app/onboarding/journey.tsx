@@ -92,8 +92,8 @@ export default function JourneyScreen() {
       step="journey"
       title="Your "
       titleAccent="journey"
-      subtitle="Almost there. Fill in your professional and educational milestones."
-      ctaLabel="Continue Exploration"
+      subtitle="Where you live, what you do and where you studied. All optional."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
       // "Skip", because that is what `skip()` does: it advances and persists the
@@ -114,8 +114,8 @@ export default function JourneyScreen() {
       */}
       <EmberCardSection
         icon="location-outline"
-        title="Current Base"
-        caption="Where you are making your impact"
+        title="Where you live"
+        caption="Used to show you events nearby"
       >
         <EmberField
           label="City"
@@ -130,11 +130,11 @@ export default function JourneyScreen() {
       <EmberCardSection
         icon="briefcase-outline"
         title="Occupation"
-        caption="Your professional identity and role"
+        caption="Your job title and where you work"
       >
         <EmberField
           label="Job title"
-          placeholder="e.g. Creative Director"
+          placeholder="e.g. Product designer"
           value={occupation}
           onChangeText={setOccupation}
           autoCapitalize="sentences"
@@ -170,7 +170,7 @@ export default function JourneyScreen() {
       <EmberCardSection
         icon="school-outline"
         title="Education"
-        caption="The foundation of your knowledge"
+        caption="Where you studied, if you want to say"
       >
         <EmberField
           label="School / University"

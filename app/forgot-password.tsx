@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -18,15 +17,16 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { EmberButton } from '../components/onboarding/EmberControls'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
-const lockup = require('../assets/logo/lockup-white.png')
+const lockup = require('../assets/logo/lockup-hero.png')
 // Same lockup, same arithmetic as `sign-in.tsx`: this is the next screen of
 // that form and should look like it, not like a different app.
 const LOCKUP_ASPECT = (() => {
   const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 816 / 242
+  return s?.width && s?.height ? s.width / s.height : 674 / 202
 })()
 const LOCKUP_HEIGHT = 40
 
@@ -72,6 +72,8 @@ export default function ForgotPassword() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
+  // The keyboard's "go" and the button can land in one frame; one request.
+  const inFlight = useRef(false)
 
   const address = email.trim().toLowerCase()
 
@@ -84,11 +86,13 @@ export default function ForgotPassword() {
 
   /** Returns whether the request landed. Both the form and Resend use it. */
   const send = async (): Promise<boolean> => {
+    if (inFlight.current) return false
     if (!address.includes('@')) {
       setError('Enter a valid email address.')
       return false
     }
 
+    inFlight.current = true
     setBusy(true)
     setError(null)
     try {
@@ -101,16 +105,17 @@ export default function ForgotPassword() {
        * forever.
        */
       if (!result.success) {
-        setError(result.error || "Couldn't send the reset link. Please try again.")
+        setError(result.error || "Couldn't send the reset link. Try again.")
         return false
       }
       setCooldown(RESEND_COOLDOWN_S)
       return true
     } catch (e) {
       Logger.error('auth', 'Forgot password request failed', { error: e })
-      setError("Couldn't send the reset link. Please try again.")
+      setError("Couldn't send the reset link. Try again.")
       return false
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -193,33 +198,16 @@ export default function ForgotPassword() {
                 </Text>
               )}
 
-              <Pressable
-                onPress={() => void openMail()}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-              >
-                <Text style={styles.primaryLabel}>Open mail app</Text>
-              </Pressable>
+              <EmberButton label="Open mail app" onPress={() => void openMail()} style={styles.primary} />
 
-              <Pressable
+              {/* Counting down: still readable, plainly not ready. */}
+              <EmberButton
+                variant="secondary"
+                label={cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
                 onPress={() => void resend()}
-                disabled={busy || cooldown > 0}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy || cooldown > 0, busy }}
-                style={({ pressed }) => [
-                  styles.secondary,
-                  (pressed || busy) && styles.pressed,
-                  cooldown > 0 && styles.waiting,
-                ]}
-              >
-                {busy ? (
-                  <ActivityIndicator color={EMBER.textSecondary} />
-                ) : (
-                  <Text style={styles.secondaryLabel}>
-                    {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
-                  </Text>
-                )}
-              </Pressable>
+                disabled={cooldown > 0}
+                busy={busy}
+              />
 
               <Pressable
                 onPress={() => {
@@ -252,6 +240,8 @@ export default function ForgotPassword() {
                   onChangeText={setEmail}
                   placeholder="you@example.com"
                   placeholderTextColor={EMBER.textPlaceholder}
+                  accessibilityLabel="Email"
+                  maxFontSizeMultiplier={MAX_FONT_SCALE.button}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
@@ -269,18 +259,7 @@ export default function ForgotPassword() {
                 </Text>
               )}
 
-              <Pressable
-                onPress={() => void submit()}
-                disabled={busy}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.primary, (pressed || busy) && styles.pressed]}
-              >
-                {busy ? (
-                  <ActivityIndicator color={EMBER.onGradient} />
-                ) : (
-                  <Text style={styles.primaryLabel}>Send reset link</Text>
-                )}
-              </Pressable>
+              <EmberButton label="Send reset link" onPress={() => void submit()} busy={busy} style={styles.primary} />
             </>
           )}
         </ScrollView>
@@ -320,27 +299,7 @@ const styles = StyleSheet.create({
 
   error: { ...TYPE.meta, color: EMBER.destructive },
 
-  primary: {
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.accent,
-    marginTop: SPACE.sm,
-  },
-  // Dark on the accent, never white — white on the orange fails AA.
-  primaryLabel: { ...TYPE.button, color: EMBER.onGradient },
-  secondary: {
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.surface,
-  },
-  secondaryLabel: { ...TYPE.button, color: EMBER.textPrimary },
-  // Counting down: still readable, plainly not ready.
-  waiting: { opacity: 0.6 },
-  pressed: { opacity: 0.85 },
+  primary: { marginTop: SPACE.sm },
 
   sent: { gap: SPACE.lg },
   // A decorative well: `surface` fill, `textPrimary` glyph (DESIGN_SYSTEM.md).

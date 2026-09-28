@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native'
 
-import { closeSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
+import { closeSheet, dismissSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
+import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../lib/theme'
 import ActionTray, { type ActionTrayButton } from './ActionTray'
 import { useToast } from './Toast'
 import { Text } from './ui/Text'
@@ -65,7 +65,7 @@ export function SheetHost() {
   }
 
   const perform = (action: SheetAction, index: number) => {
-    if ('cancel' in action) return closeSheet()
+    if ('cancel' in action) return dismissSheet()
     if ('next' in action) return showSheet(action.next())
     if ('then' in action) {
       closeSheet()
@@ -90,7 +90,7 @@ export function SheetHost() {
         message={current.message}
         buttons={buttons}
         layout="stack"
-        onClose={closeSheet}
+        onClose={dismissSheet}
       >
         {current.content}
         {error ? <ErrorLine text={error.text} /> : null}
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   // Selected option: `textPrimary` fill, `bg` text (docs/DESIGN_SYSTEM.md).
   reasonSelected: { backgroundColor: EMBER.textPrimary },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   note: {
     ...TYPE.body,
     minHeight: CONTROL.lg + CONTROL.sm,

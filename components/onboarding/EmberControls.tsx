@@ -13,12 +13,14 @@ import {
   Dimensions,
   LayoutChangeEvent,
   Pressable,
+  StyleProp,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TextInputProps,
   View,
+  ViewStyle,
 } from 'react-native'
 
 import { isCatchAll, packChips } from '../../lib/chipPacking'
@@ -28,6 +30,8 @@ import {
   EMBER_RADIUS,
   GUTTER,
   ICON,
+  MAX_FONT_SCALE,
+  OPACITY,
   SPACE,
   SWITCH_COLORS,
   TYPE,
@@ -49,11 +53,30 @@ interface ButtonProps {
   onPress: () => void
   disabled?: boolean
   busy?: boolean
+  /**
+   * `primary` (the default) is the screen's one accent. `secondary` is the
+   * neutral beside or instead of it — a `surface` pill with `textPrimary`
+   * text — for a state whose action is not the screen's main one.
+   */
+  variant?: 'primary' | 'secondary'
+  accessibilityHint?: string
+  /** Placement only (margins, `alignSelf`), never the look. */
+  style?: StyleProp<ViewStyle>
 }
 
 /** The primary action. Flat accent fill, dark text, no glow. */
-export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
+export function EmberButton({
+  label,
+  onPress,
+  disabled,
+  busy,
+  variant = 'primary',
+  accessibilityHint,
+  style,
+}: ButtonProps) {
   const inactive = disabled || busy
+  const secondary = variant === 'secondary'
+  const ink = secondary ? EMBER.textPrimary : EMBER.onGradient
   return (
     <Pressable
       onPress={onPress}
@@ -61,16 +84,19 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!busy }}
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       style={({ pressed }) => [
         styles.buttonOuter,
         // Dimmed rather than greyed: the disabled state is nearly always
         // "you have not finished typing yet", and swapping the fill for a flat
-        // grey reads as broken rather than as not-yet.
-        inactive && styles.buttonInactive,
+        // grey reads as broken rather than as not-yet. Busy keeps its fill:
+        // a spinner on a dimmed pill reads as disabled, not as working.
+        disabled && !busy && styles.buttonInactive,
         pressed && !inactive && styles.pressed,
+        style,
       ]}
     >
-      <View style={styles.button}>
+      <View style={[styles.button, secondary && styles.buttonSecondary]}>
         {/*
           The label is capped because this button is a fixed
           `CONTROL.lg` box. React Native clips a glyph to its line
@@ -82,9 +108,9 @@ export function EmberButton({ label, onPress, disabled, busy }: ButtonProps) {
           everything would defeat the setting for the people who need it.
         */}
         {busy ? (
-          <ActivityIndicator color={EMBER.onGradient} />
+          <ActivityIndicator color={ink} />
         ) : (
-          <Text style={styles.buttonLabel} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+          <Text style={[styles.buttonLabel, { color: ink }]} maxFontSizeMultiplier={MAX_FONT_SCALE.button} numberOfLines={1}>
             {label}
           </Text>
         )}
@@ -315,13 +341,22 @@ interface ToggleProps {
  * screen is a switch people mis-set, and the cost of mis-setting this one is
  * not symmetrical.
  *
- * `Switch` from react-native, not a hand-rolled `Pressable`: the platform one
- * already announces its state to a screen reader, honours reduce-motion, and
- * has the right hit target.
+ * The drawn control is the platform `Switch` (it honours reduce-motion and
+ * looks like every other switch on the phone); the row around it is the
+ * target and carries the `switch` role and its `checked` state.
  */
 export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps) {
+  // The row is the target, as in Settings: a tap anywhere on it flips the
+  // switch, and it is announced once, as a switch.
   return (
-    <View style={styles.toggleRow}>
+    <Pressable
+      onPress={() => onValueChange(!value)}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityHint={helper}
+      accessibilityState={{ checked: value }}
+      style={({ pressed }) => [styles.toggleRow, pressed && styles.pressed]}
+    >
       <View style={styles.toggleText}>
         <Text style={styles.toggleLabel}>{label}</Text>
         <Text style={styles.helper}>{helper}</Text>
@@ -329,11 +364,11 @@ export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps
       <Switch
         value={value}
         onValueChange={onValueChange}
-        accessibilityLabel={label}
-        accessibilityHint={helper}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         {...SWITCH_COLORS}
       />
-    </View>
+    </Pressable>
   )
 }
 
@@ -404,18 +439,32 @@ export function EmberInlineToggle({
   onValueChange: (next: boolean) => void
   hint: string
 }) {
+  /*
+   * The whole pill is the target, not only the scaled-down switch inside it —
+   * that switch is ~40×24 on screen, under the 44pt floor. The pill is one
+   * accessible switch; the inner one is hidden from screen readers so the
+   * control is not announced twice.
+   */
   return (
-    <View style={styles.inlinePill}>
+    <Pressable
+      onPress={() => onValueChange(!value)}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      accessibilityState={{ checked: value }}
+      hitSlop={SPACE.sm}
+      style={({ pressed }) => [styles.inlinePill, pressed && styles.pressed]}
+    >
       <Text style={styles.inlineLabel}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        accessibilityLabel={label}
-        accessibilityHint={hint}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         {...SWITCH_COLORS}
         style={styles.inlineSwitch}
       />
-    </View>
+    </Pressable>
   )
 }
 
@@ -481,10 +530,11 @@ export function EmberFieldGroup({
 const CHIP_SPACING = SPACE.md
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: OPACITY.pressed },
 
   buttonOuter: { borderRadius: EMBER_RADIUS.pill },
-  buttonInactive: { opacity: 0.45 },
+  buttonInactive: { opacity: OPACITY.disabled },
+  buttonSecondary: { backgroundColor: EMBER.surface },
   button: {
     height: CONTROL.lg,
     borderRadius: EMBER_RADIUS.pill,
@@ -558,7 +608,7 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: EMBER.textPrimary },
   // Opacity only, so the chip keeps its measured width and the row does not
   // re-pack every time the cap is reached or released.
-  chipDisabled: { opacity: 0.35 },
+  chipDisabled: { opacity: OPACITY.disabled },
   chipLabel: TYPE.bodyStrong,
   chipLabelSelected: { color: EMBER.bg },
   chipLabelIdle: { color: EMBER.textPrimary },

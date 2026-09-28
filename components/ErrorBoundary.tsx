@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import React, { Component, ErrorInfo, ReactNode } from 'react'
-import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Logger } from '../lib/logger'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, GUTTER, MAX_FONT_SCALE, OPACITY, SPACE, TYPE } from '../lib/theme'
+import { EmberButton } from './onboarding/EmberControls'
 import { getCurrentUser } from '../lib/useAuth'
 
 interface Props {
@@ -19,6 +20,8 @@ interface State {
   error: Error | null
   errorInfo: ErrorInfo | null
   errorId: string | null
+  /** No mail app answered, so the address is shown to copy instead. */
+  showAddress: boolean
 }
 
 /**
@@ -39,6 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
       error: null,
       errorInfo: null,
       errorId: null,
+      showAddress: false,
     }
   }
 
@@ -96,18 +100,21 @@ export class ErrorBoundary extends Component<Props, State> {
       error: null,
       errorInfo: null,
       errorId: null,
+      showAddress: false,
     })
   }
 
   /*
    * An email to support with the error id in it. This sits above the toast
-   * layer, so a phone with no mail app is told the address in an alert.
+   * layer, so a phone with no mail app is shown the address on this screen,
+   * as text that can be selected and copied, rather than in an alert that
+   * disappears the moment you go to copy it.
    */
   contactSupport = async () => {
     const user = await getCurrentUser().catch(() => null)
     const url = supportMailto({ subject: "Blend'n crashed", userId: user?.id, errorId: this.state.errorId })
     Linking.openURL(url).catch(() => {
-      Alert.alert('Contact support', `Write to ${SUPPORT_EMAIL} and mention ${this.state.errorId ?? 'this error'}.`)
+      this.setState({ showAddress: true })
     })
   }
 
@@ -121,9 +128,12 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <View style={styles.container}>
           <Ionicons name="warning-outline" size={48} color={EMBER.destructive} />
-          <Text style={styles.title}>Oops! Something went wrong</Text>
+          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title}>
+            Something went wrong
+          </Text>
           <Text style={styles.subtitle}>
-            We encountered an unexpected error. Don&apos;t worry, your data is safe.
+            This screen stopped working. Nothing you saved is lost. Try again, and if it keeps
+            happening, tell us.
           </Text>
           {/*
             The raw message is for us, not for the person holding the phone: in
@@ -134,22 +144,27 @@ export class ErrorBoundary extends Component<Props, State> {
             <Text style={styles.devMessage} selectable>{this.state.error.message}</Text>
           ) : null}
 
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={this.resetErrorBoundary}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
+          {/* Full width, like every other screen's one primary action. */}
+          <View style={styles.actions}>
+            <EmberButton label="Try again" onPress={this.resetErrorBoundary} />
+          </View>
 
-          <TouchableOpacity
-            style={styles.detailsButton}
+          <Pressable
+            style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}
             onPress={() => void this.contactSupport()}
             accessibilityRole="button"
             accessibilityLabel="Contact support"
+            hitSlop={SPACE.sm}
           >
-            <Text style={styles.detailsButtonText}>CONTACT SUPPORT</Text>
-          </TouchableOpacity>
+            <Text style={styles.detailsButtonText} maxFontSizeMultiplier={MAX_FONT_SCALE.label}>
+              CONTACT SUPPORT
+            </Text>
+          </Pressable>
+          {this.state.showAddress ? (
+            <Text style={styles.address} selectable accessibilityLiveRegion="polite">
+              Write to {SUPPORT_EMAIL} and mention {this.state.errorId ?? 'this error'}.
+            </Text>
+          ) : null}
           {this.state.errorId ? (
             <Text style={styles.errorId} selectable>Error {this.state.errorId}</Text>
           ) : null}
@@ -202,23 +217,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACE.xxl
   },
-  retryButton: {
-    height: CONTROL.lg,
-    justifyContent: 'center',
-    backgroundColor: EMBER.accent,
-    paddingHorizontal: SPACE.xl,
-    borderRadius: EMBER_RADIUS.pill,
-    marginBottom: SPACE.lg
-  },
-  retryButtonText: {
-    ...TYPE.button,
-    color: EMBER.onGradient
-  },
+  actions: { alignSelf: 'stretch', marginBottom: SPACE.lg },
   detailsButton: {
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm
   },
-  detailsButtonText: TYPE.label,
+  // A text action (docs/DESIGN_SYSTEM.md): `label` in `textPrimary`.
+  detailsButtonText: { ...TYPE.label, color: EMBER.textPrimary },
+  pressed: { opacity: OPACITY.pressed },
+  address: {
+    ...TYPE.body,
+    color: EMBER.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACE.sm,
+  },
   errorId: {
     ...TYPE.meta,
     color: EMBER.textTertiary,

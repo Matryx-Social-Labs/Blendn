@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, AppState, Linking, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
@@ -14,7 +14,7 @@ import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
@@ -94,6 +94,13 @@ export default function SettingsScreen() {
   const [preferencesError, setPreferencesError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  /*
+   * Deleting is two steps in one tray: what it does, then "for good?". One
+   * tray whose content changes, not two, because iOS will not present a second
+   * modal while the first is still fading out.
+   */
+  const [deleteStep, setDeleteStep] = useState<'explain' | 'confirm' | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [signOutOpen, setSignOutOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [osPush, setOsPush] = useState<OsPush>('askable')
@@ -267,11 +274,12 @@ export default function SettingsScreen() {
       preferencesRef.current = rolled
       setPreferences(rolled)
       await savePreferencesLocal(rolled)
-      Alert.alert('Update failed', `Could not save “${PREFERENCE_TITLES[key]}”. Please try again.`)
+      // The switch has already flipped back; this says why.
+      showToast(`Couldn't save “${PREFERENCE_TITLES[key]}”. Try again.`, 'error')
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
     }
-  }, [user, savePreferencesLocal])
+  }, [user, savePreferencesLocal, showToast])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
     // Turning push on after the phone has said no: explain, and change nothing.
@@ -287,74 +295,50 @@ export default function SettingsScreen() {
     persistPreference(next, previous, key)
   }, [persistPreference, savePreferencesLocal, osPush])
 
-  const openExternal = useCallback(async (url: string) => {
-    try {
-      const supported = await Linking.canOpenURL(url)
-      if (!supported) {
-        Alert.alert('Link unavailable', 'Unable to open this link.')
-        return
-      }
-      await Linking.openURL(url)
-    } catch {
-      Alert.alert('Link unavailable', 'Unable to open this link.')
-    }
-  }, [])
+  /*
+   * `openURL` alone, no `canOpenURL` first: on iOS that answers false for any
+   * scheme not declared in `LSApplicationQueriesSchemes`. A failure is a
+   * toast, the same sentence About uses.
+   */
+  const openExternal = useCallback(
+    (url: string) => {
+      Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    },
+    [showToast]
+  )
 
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete Account',
-      // What the deletion route actually does (app/api/mobile/account in the
-      // API): the profile goes, messages stay under a deleted account, and
-      // registration details are held 180 days (IT Rules 2021, r.3(1)(h)).
-      'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: "What's kept",
-          onPress: () => {
-            Linking.openURL(BLENDN_LINKS.deleteAccount).catch(() => {})
-          },
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you absolutely sure?',
-              'Your account will be permanently deleted and cannot be recovered.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete My Account',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setDeletingAccount(true)
-                    try {
-                      const result = await deleteAccount()
-                      if (!result.success) {
-                        Alert.alert('Error', result.error || 'Failed to delete account')
-                      } else {
-                        /*
-                         * The session is already gone and the guard is on its
-                         * way to sign-in. The toast sits above the navigator,
-                         * so it lands there too: without it the account
-                         * vanished with no word that deleting it had worked.
-                         */
-                        showToast('Your account has been deleted.', 'success')
-                      }
-                    } catch {
-                      Alert.alert('Error', 'Failed to delete account')
-                    } finally {
-                      setDeletingAccount(false)
-                    }
-                  },
-                },
-              ]
-            )
-          },
-        },
-      ]
-    )
+    setDeleteError(null)
+    setDeleteStep('explain')
+  }, [])
+
+  const closeDelete = useCallback(() => {
+    setDeleteStep(null)
+    setDeleteError(null)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    setDeletingAccount(true)
+    setDeleteError(null)
+    try {
+      const result = await deleteAccount()
+      if (!result.success) {
+        // The tray stays, says why, and its button becomes Try again.
+        setDeleteError(result.error || "Your account wasn't deleted. Try again.")
+        return
+      }
+      setDeleteStep(null)
+      /*
+       * The session is already gone and the guard is on its way to sign-in.
+       * The toast sits above the navigator, so it lands there too: without it
+       * the account vanished with no word that deleting it had worked.
+       */
+      showToast('Your account has been deleted.', 'success')
+    } catch {
+      setDeleteError("Your account wasn't deleted. Check your connection and try again.")
+    } finally {
+      setDeletingAccount(false)
+    }
   }, [showToast])
 
   const confirmSignOut = useCallback(async () => {
@@ -362,20 +346,21 @@ export default function SettingsScreen() {
     try {
       const result = await signOut()
       // Local state is gone either way; this is the honest version of what
-      // the server did, which used to be reported as success regardless.
+      // the server did, which used to be reported as success regardless. A
+      // toast, because it lands on the sign-in screen the guard moves to.
       if (!result.success) {
-        Alert.alert(
-          'Signed out on this phone',
-          'We could not reach the server, so this session may stay active elsewhere until it lapses.'
+        showToast(
+          "Signed out on this phone. We couldn't reach the server, so you may stay signed in elsewhere for a while.",
+          'info'
         )
       }
     } catch {
-      Alert.alert('Error', 'Failed to sign out')
+      showToast("Couldn't sign out. Try again.", 'error')
     } finally {
       setSigningOut(false)
       setSignOutOpen(false)
     }
-  }, [])
+  }, [showToast])
 
   /*
    * Five sections, each named after what is actually in it.
@@ -419,17 +404,19 @@ export default function SettingsScreen() {
      */
     { header: 'Safety' },
     { icon: 'ban-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
-    { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => openExternal(BLENDN_LINKS.safety) },
-    { icon: 'flag-outline', title: 'Community guidelines', onPress: () => openExternal(BLENDN_LINKS.guidelines) },
+    { icon: 'shield-checkmark-outline', title: 'Safety tips', external: true, onPress: () => openExternal(BLENDN_LINKS.safety) },
+    { icon: 'flag-outline', title: 'Community guidelines', external: true, onPress: () => openExternal(BLENDN_LINKS.guidelines) },
 
     { header: 'Help' },
-    { icon: 'help-circle-outline', title: 'Help centre', onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'help-circle-outline', title: 'Help centre', external: true, onPress: () => openExternal(BLENDN_LINKS.help) },
     { icon: 'mail-outline', title: 'Contact support', onPress: () => router.push('/support') },
 
+    /*
+     * Terms and Privacy are on About, beside the version. They were listed
+     * here as well: two doors to each page, one screen apart.
+     */
     { header: 'About' },
     { icon: 'information-circle-outline', title: "About Blend'n", onPress: () => router.push('/about') },
-    { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
-    { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
 
     // Asks first: one stray tap used to end the session on the spot.
     { header: 'Account' },
@@ -445,7 +432,7 @@ export default function SettingsScreen() {
      * single irreversible row is what makes it mean anything.
      */
     { header: 'Danger zone', spaced: true },
-    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
+    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account…' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
   ]), [openExternal, deletingAccount, handleDeleteAccount])
 
   const renderItem = (item: any, idx: number) => {
@@ -464,8 +451,25 @@ export default function SettingsScreen() {
       // Push is on only when the account AND the phone say so.
       const pushBlocked = keyName === 'pushEnabled' && osPush === 'blocked'
       const hint = pushBlocked ? "Off in your phone's settings." : item.hint
+      const on = preferences[keyName] && !pushBlocked
+      const switchDisabled = saving[keyName] || loadingPreferences
+      /*
+       * The row is the target, not only the switch at its end: a tap on the
+       * title flips it, as in the phone's own Settings. One accessible
+       * `switch` with its state; the drawn Switch is hidden from screen
+       * readers so it is not announced twice.
+       */
       return (
-        <View key={idx} style={styles.row}>
+        <Pressable
+          key={idx}
+          onPress={() => onTogglePreference(keyName)}
+          disabled={switchDisabled}
+          accessibilityRole="switch"
+          accessibilityLabel={item.title}
+          accessibilityHint={hint}
+          accessibilityState={{ checked: on, disabled: switchDisabled, busy: saving[keyName] }}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
           <View style={styles.rowLeft}>
             <Ionicons name={item.icon} size={ICON.md} color={EMBER.textPrimary} />
             <View style={styles.rowText}>
@@ -478,14 +482,15 @@ export default function SettingsScreen() {
               <ActivityIndicator size="small" color={EMBER.textSecondary} style={styles.switchLoader} />
             )}
             <Switch
-              value={preferences[keyName] && !pushBlocked}
+              value={on}
               onValueChange={() => onTogglePreference(keyName)}
-              accessibilityLabel={item.title}
-              disabled={saving[keyName] || loadingPreferences}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              disabled={switchDisabled}
               {...SWITCH_COLORS}
             />
           </View>
-        </View>
+        </Pressable>
       )
     }
     // Shrinks rather than dims, like the Me tab's rows: 0.98 for a full-width
@@ -498,7 +503,7 @@ export default function SettingsScreen() {
         style={styles.row}
         onPress={item.onPress}
         disabled={item.disabled}
-        accessibilityRole="button"
+        accessibilityRole={item.external ? 'link' : 'button'}
         accessibilityLabel={item.title}
         accessibilityState={item.disabled ? { disabled: true, busy: true } : undefined}
       >
@@ -506,7 +511,12 @@ export default function SettingsScreen() {
           <Ionicons name={item.icon} size={ICON.md} color={item.danger ? EMBER.destructive : EMBER.textPrimary} />
           <Text style={[styles.rowTitle, item.danger && { color: EMBER.destructive }]}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+        {/* A page in the browser says so, as on About; a screen in the app gets a chevron. */}
+        <Ionicons
+          name={item.external ? 'open-outline' : 'chevron-forward'}
+          size={ICON.sm}
+          color={EMBER.textSecondary}
+        />
       </ScalePress>
     )
   }
@@ -568,6 +578,48 @@ export default function SettingsScreen() {
         ]}
       />
 
+      {/*
+        What deleting does, then "for good?". The first step's copy is what the
+        deletion route does (app/api/mobile/account in the API): the profile
+        goes, messages stay under a deleted account, and registration details
+        are held 180 days (IT Rules 2021, r.3(1)(h)).
+      */}
+      <ActionTray
+        visible={deleteStep !== null}
+        layout="stack"
+        dismissible={!deletingAccount}
+        onClose={closeDelete}
+        title={deleteStep === 'confirm' ? 'Delete your account for good?' : 'Delete your account?'}
+        message={
+          deleteStep === 'confirm'
+            ? "This can't be undone. You'd need a new account to use Blend'n again."
+            : 'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.'
+        }
+        buttons={
+          deleteStep === 'confirm'
+            ? [
+                {
+                  label: deleteError ? 'Try again' : 'Delete my account',
+                  variant: 'destructive',
+                  loading: deletingAccount,
+                  onPress: () => void confirmDelete(),
+                },
+                { label: 'Cancel', onPress: closeDelete, disabled: deletingAccount },
+              ]
+            : [
+                { label: 'Delete account', variant: 'destructive', onPress: () => setDeleteStep('confirm') },
+                { label: "What's kept", onPress: () => openExternal(BLENDN_LINKS.deleteAccount) },
+                { label: 'Cancel', onPress: closeDelete },
+              ]
+        }
+      >
+        {deleteError ? (
+          <Text style={styles.prefsError} accessibilityLiveRegion="polite">
+            {deleteError}
+          </Text>
+        ) : null}
+      </ActionTray>
+
       <ActionTray
         visible={pushBlockedOpen}
         title="Notifications are off"
@@ -592,8 +644,9 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   prefsErrorWrap: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm, alignItems: 'flex-start' },
   prefsError: { ...TYPE.meta, color: EMBER.destructive },
+  // 48pt: the one way out of a failed load is not a 32pt target.
   retry: {
-    height: CONTROL.sm,
+    height: CONTROL.md,
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
@@ -619,5 +672,6 @@ const styles = StyleSheet.create({
   rowTitle: { ...TYPE.bodyStrong },
   rowText: { flexShrink: 1, gap: SPACE.xxs },
   rowHint: { ...TYPE.meta },
+  pressed: { opacity: OPACITY.pressed },
   divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
 })

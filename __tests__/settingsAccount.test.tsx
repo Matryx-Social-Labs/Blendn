@@ -6,7 +6,7 @@
  * each is a branch a source grep would pass by name alone.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Alert, Linking } from 'react-native'
+import { Linking } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -18,7 +18,10 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
-  return { SafeAreaView: (p: object) => React.createElement(View, p) }
+  return {
+    SafeAreaView: (p: object) => React.createElement(View, p),
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  }
 })
 // Stable, like the real singleton: a new user object per render re-runs every effect keyed on it.
 const mockAuth = { user: { id: 'u_me' } }
@@ -84,8 +87,8 @@ describe('Push notifications', () => {
     await render(<SettingsScreen />)
 
     expect(await screen.findByText("Off in your phone's settings.")).toBeTruthy()
-    const toggle = screen.getByLabelText('Push notifications')
-    expect(toggle.props.value).toBe(false)
+    const toggle = screen.getByRole('switch', { name: 'Push notifications' })
+    expect(toggle.props.accessibilityState.checked).toBe(false)
   })
 
   it('explains, and offers Settings, instead of saving a switch nothing will deliver on', async () => {
@@ -94,7 +97,7 @@ describe('Push notifications', () => {
     await render(<SettingsScreen />)
     await screen.findByText("Off in your phone's settings.")
 
-    fireEvent(screen.getByLabelText('Push notifications'), 'valueChange', true)
+    fireEvent.press(screen.getByRole('switch', { name: 'Push notifications' }))
 
     expect(await screen.findByText('Notifications are off')).toBeTruthy()
     expect(api.updateProfile).not.toHaveBeenCalled()
@@ -104,10 +107,11 @@ describe('Push notifications', () => {
 
   it('saves as before when the phone allows them', async () => {
     await render(<SettingsScreen />)
-    const toggle = await screen.findByLabelText('Push notifications')
-    await waitFor(() => expect(toggle.props.value).toBe(true))
+    const toggle = () => screen.getByRole('switch', { name: 'Push notifications' })
+    await waitFor(() => expect(toggle().props.accessibilityState).toMatchObject({ checked: true, disabled: false }))
 
-    fireEvent(toggle, 'valueChange', false)
+    // The row is the target: a tap anywhere on it flips the switch.
+    fireEvent.press(toggle())
 
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', expect.objectContaining({ push_enabled: false })))
     expect(screen.queryByText('Notifications are off')).toBeNull()
@@ -125,19 +129,70 @@ it('offers Try again when the settings did not load, and it works', async () => 
   expect(api.getProfile).toHaveBeenCalledTimes(2)
 })
 
-it('says the account was deleted once it was', async () => {
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {})
-  ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+describe('Delete account', () => {
+  /** The row opens the tray; the tray's own button is the last one with the label. */
+  const openTray = async () => {
+    fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }))
+    await screen.findByText('Delete your account?')
+  }
+  const lastButton = (name: string) => {
+    const all = screen.getAllByRole('button', { name })
+    return all[all.length - 1]
+  }
+
+  it('asks twice, then says the account was deleted once it was', async () => {
+    ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+    await render(<SettingsScreen />)
+    await openTray()
+
+    fireEvent.press(lastButton('Delete account'))
+    expect(await screen.findByText('Delete your account for good?')).toBeTruthy()
+    expect(deleteAccount).not.toHaveBeenCalled()
+
+    fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+    expect(deleteAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the tray open with the reason when deleting fails, and offers Try again', async () => {
+    ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Server said no.' })
+    await render(<SettingsScreen />)
+    await openTray()
+    fireEvent.press(lastButton('Delete account'))
+    fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+
+    expect(await screen.findByText('Server said no.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('Cancel deletes nothing', async () => {
+    await render(<SettingsScreen />)
+    await openTray()
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+    expect(deleteAccount).not.toHaveBeenCalled()
+  })
+})
+
+it('reports a sign-out the server did not hear about', async () => {
+  ;(signOut as jest.Mock).mockResolvedValue({ success: false })
   await render(<SettingsScreen />)
+  fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
+  await screen.findByText('Sign out?')
+  const buttons = screen.getAllByText('Sign out')
+  fireEvent.press(buttons[buttons.length - 1])
 
-  fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }))
-  type Button = { text?: string; onPress?: () => void | Promise<void> }
-  const first = alert.mock.calls[0][2] as Button[]
-  first.find((b) => b.text === 'Delete')?.onPress?.()
-  const second = alert.mock.calls[1][2] as Button[]
-  await second.find((b) => b.text === 'Delete My Account')?.onPress?.()
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^Signed out on this phone/), 'info'))
+})
 
-  expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success')
+it('says which setting did not save, as a toast', async () => {
+  api.updateProfile.mockResolvedValue({ success: false, error: 'nope' } as never)
+  await render(<SettingsScreen />)
+  const toggle = () => screen.getByRole('switch', { name: 'Read receipts' })
+  await waitFor(() => expect(toggle().props.accessibilityState.disabled).toBe(false))
+  fireEvent.press(toggle())
+
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't save “Read receipts”. Try again.", 'error'))
 })
 
 it('opens About and Contact support', async () => {

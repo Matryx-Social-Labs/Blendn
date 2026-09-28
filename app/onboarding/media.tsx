@@ -12,6 +12,7 @@ import {
 } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
+import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useAuth } from '../../lib/useAuth'
 import { selectAndUploadPhoto } from '../../lib/photoUtils'
@@ -125,6 +126,7 @@ function MediaScreenInner() {
 
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
+  const { showToast } = useToast()
 
   // Prefilled once, in the render that first sees `loaded`.
   const [prefilled, setPrefilled] = useState(false)
@@ -138,9 +140,11 @@ function MediaScreenInner() {
     setUploadingSlot(slot)
     const result = await selectAndUploadPhoto(user.id)
     setUploadingSlot(null)
-    // A cancelled picker is not a failure and already said so in its own sheet;
-    // an upload error alerts from inside `selectAndUploadPhoto`.
+    // A cancelled picker is not a failure. Anything else says why, in the
+    // validator's or the server's words ("Photo must be less than 5MB"); it
+    // used to say nothing, and the empty slot looked like a tap that missed.
     if (result.success && result.url) setPhotos((current) => [...current, result.url!])
+    else if (!result.cancelled) showToast(result.error || "That photo wasn't added. Try again.", 'error')
   }
 
   const reduceMotion = useReducedMotion()
@@ -155,10 +159,10 @@ function MediaScreenInner() {
   return (
     <OnboardingScreen
       step="media"
-      title="Upload your "
-      titleAccent="identity"
-      subtitle="Authenticity is the soul of our gallery. Share moments that capture the real you."
-      ctaLabel="Finalize Identity"
+      title="Add your "
+      titleAccent="photos"
+      subtitle="Up to six. Recent photos where your face is clear work best."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit({ photos })}
       secondaryLabel="Skip for now"

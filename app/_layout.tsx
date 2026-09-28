@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
@@ -23,6 +24,7 @@ import { PresenceMonitor } from '../components/PresenceMonitor';
 import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
+import { handleAndroidBack } from '../lib/androidBack';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
@@ -419,27 +421,26 @@ function RootLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading, pathname, isNewAccount, unreachable]);
 
-  // Normalize Android hardware back behavior
+  /*
+   * Android hardware back, registered ONCE.
+   *
+   * It used to re-register on every pathname change. BackHandler runs the
+   * most recently added listener first, so each navigation put this one back
+   * on top — ahead of the Blend'n overlay's own handler (which closes the
+   * overlay) and ahead of React Navigation's. A ref carries the pathname
+   * instead. The rules are in `lib/androidBack.ts`, with tests.
+   */
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    const onBackPress = () => {
-      const isIndex = pathname === '/' || pathname === '/index';
-      const isTabsRoot = pathname?.startsWith('/(tabs)');
-
-      // Block back on login and the tabs root. Onboarding used to be here too,
-      // and was the only screen set that swallowed back with nowhere to go.
-      if (isIndex || isTabsRoot) {
-        return true; // prevent default
-      }
-      // Otherwise perform a normal back
-      try { router.back(); } catch {}
-      return true;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => {
-      try { sub.remove(); } catch {}
-    };
-  }, [pathname, loading]);
+    const sub = BackHandler.addEventListener('hardwareBackPress', () =>
+      handleAndroidBack(pathnameRef.current, router)
+    );
+    return () => sub.remove();
+  }, []);
 
   /*
    * Foreground no longer wipes the caches, and that IS the freshness strategy.
@@ -482,6 +483,11 @@ function RootLayout() {
       <GestureHandlerRootView style={styles.gestureRoot}>
       <ToastProvider>
         <View style={styles.root}>
+          {/*
+            One status bar for the app, light, because there is no light theme
+            (`Appearance.setColorScheme('dark')` above).
+          */}
+          <StatusBar style="light" />
           {/*
             * Rendered last in the tree but drawn on top, so it covers whatever
             * the router settles on. Deliberately not a gate — auth and routing
@@ -639,8 +645,15 @@ function RootLayout() {
         name="event-preferences/[eventId]"
         options={{
           headerShown: false,
-          presentation: 'card',
-          animation: routeTransition,
+          /*
+           * A modal, because the screen draws an ×: it is a choice you make
+           * and close, not a page in a stack. As a pushed card it slid in from
+           * the right with an × where every pushed screen has a back chevron,
+           * and the edge-swipe dismissed a screen that looked like it had to
+           * be closed.
+           */
+          presentation: 'modal',
+          animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
         }}
       />
       <Stack.Screen 

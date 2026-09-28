@@ -293,7 +293,7 @@ describe('the amenity tiles match 1141:4917', () => {
     // `grid-rows-[126px]`. Content-sized, the two agreed only while their text
     // wrapped identically. A floor, not a fixed height: the row stretches both
     // tiles to the taller one, and large text grows the tile instead of clipping.
-    expect(SECTIONS()).toContain('minHeight: 126')
+    expect(SECTIONS()).toMatch(/AMENITY_TILE_MIN_HEIGHT = 126[\s\S]*minHeight: AMENITY_TILE_MIN_HEIGHT/)
     expect(SECTIONS()).not.toMatch(/\n\s+height: 126/)
   })
 

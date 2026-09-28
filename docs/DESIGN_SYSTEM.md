@@ -11,6 +11,10 @@ run it directly with `npm run lint:design [files…]`). It checks:
 - shadows and `BlurView`
 - retired tokens (`EMBER_TYPE`, `EMBER_GRADIENT`, `EMBER_CONTROL_HEIGHT`) and the
   `APP_*` palette — the last one in `lib/` too
+- a number added to a safe-area inset (`insets.bottom + 16` → `+ SPACE.lg`),
+  a literal `min/maxWidth/Height`, and a literal `opacity: 0.x` (use
+  `OPACITY`). Files that predate these three are listed, with their owner, in
+  the script's `LATE_RULE_ALLOWLIST`
 
 It can't check the accent rule or "one row, one height" — those are review items.
 
@@ -46,6 +50,9 @@ It can't check the accent rule or "one row, one height" — those are review ite
 | `label` | Manrope Bold | 12/16 +1.2 tracking | uppercase: tags, field labels, eyebrows, text actions |
 | `caption` | Manrope SemiBold | 11/14 | tab labels, badges, counts |
 
+- `<Text variant>` caps the phone's text size per role (`MAX_FONT_SCALE`):
+  `display`/`title` 1.2, `button`/`label`/`caption` 1.3 (fixed-height boxes),
+  reading text 2.0.
 - New code: `<Text variant="meta">` from `components/ui/Text`, or `...TYPE.meta`
   inside a `StyleSheet`. Change colour with the `color` prop / a `color` key —
   never `fontSize`, `fontWeight` or `fontFamily`.
@@ -71,7 +78,10 @@ primary + secondary button pair is the one row where fills differ (accent +
 
 - Surfaces: `bg` page → `surfaceSunken` → `surface` (controls, cards).
 - Text: `textPrimary`, `textSecondary` (details), `textTertiary` (helper),
-  `textPlaceholder`.
+  `textPlaceholder`. All four are AA (4.5:1) on `bg`, `surfaceSunken` and
+  `surface` (`__tests__/themeContrast.test.ts`).
+- Pressed and disabled controls dim by `OPACITY.pressed` (0.85) and
+  `OPACITY.disabled` (0.45), nothing else.
 - `accent` (orange) is for **at most one thing per screen** plus the tab
   bar's own chrome (the active tab and the Blend'n disc, which is the brand
   mark): the screen's primary action. "One thing" can repeat — the Like on

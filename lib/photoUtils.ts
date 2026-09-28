@@ -3,11 +3,13 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { BLUR_WIDTH } from './conversationReveal'
 import * as ImagePicker from 'expo-image-picker'
-import { Alert, Linking, Platform } from 'react-native'
+import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
 import { queryCache } from './queryCache'
 import { refreshAuthUser } from './useAuth'
+import { sheetClosed, showSheet } from './sheet'
+import { toast } from './toast'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -128,67 +130,75 @@ const ensureCameraPermission = async (): Promise<PermissionOutcome> => {
 }
 
 /**
- * Alert buttons in the order each platform actually draws them.
+ * Ask with the app's own sheet and resolve to the choice, or `null` when it is
+ * cancelled or swiped away.
  *
- * iOS draws the array in order and styles `cancel` itself. Android maps
- * index 0 → neutral (far left), 1 → negative, 2 → positive (bold, far right)
- * and ignores `style`, so an iOS-ordered `[action, action, Cancel]` renders
- * on Android with the actions swapped and CANCEL as the bold primary. Found
- * by the react pass, verified against react-native/Libraries/Alert/Alert.js.
- * Cancel goes first on Android so it lands in the neutral slot.
+ * These were `Alert.alert`s: a light system box on a dark app, buttons in a
+ * different order on each platform (Android puts index 2 in the bold
+ * positive slot and ignores `style: 'cancel'`), and no way to say which option
+ * was the one most people want. The `ActionTray` draws every option in the
+ * order given, on both platforms.
+ *
+ * Waits for the sheet to be off screen before resolving: every choice here
+ * opens the camera or the photo picker next, and iOS drops a presentation
+ * made while the sheet's Modal is still fading (`sheetClosed`).
  */
-type AlertBtn = { text: string; onPress?: () => void; style?: 'cancel' | 'default' | 'destructive' }
-const alertButtons = (actions: AlertBtn[], cancel: AlertBtn): AlertBtn[] =>
-  Platform.OS === 'android' ? [cancel, ...actions] : [...actions, cancel]
+function choose<T>(
+  title: string,
+  message: string | undefined,
+  options: { label: string; value: T; variant?: 'primary' | 'secondary' }[]
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (value: T | null) => {
+      if (settled) return
+      settled = true
+      if (value === null) resolve(null)
+      else void sheetClosed().then(() => resolve(value))
+    }
+    showSheet({
+      kind: 'actions',
+      title,
+      message,
+      onDismiss: () => settle(null),
+      actions: [
+        ...options.map((o) => ({ label: o.label, variant: o.variant, then: () => settle(o.value) })),
+        { label: 'Cancel', cancel: true as const },
+      ],
+    })
+  })
+}
 
 /**
  * The camera is not available — refused, blocked, or absent — so say what
  * still works. Resolves to the person's choice; the caller acts on it.
  *
- * "Choose from photos" is offered on every branch, because the thing they
- * actually want is a photo on their profile and the gallery gets them there
- * with no permission at all. Settings is offered only when it is the only way
- * back — a button that opens Settings for a prompt the OS would have shown
- * anyway teaches people to ignore it.
+ * "Choose from photos" is offered on every branch, and first, as the sheet's
+ * one primary: the thing they actually want is a photo on their profile, and
+ * the library gets them there with no permission at all. Settings is offered
+ * only when it is the only way back — a button that opens Settings for a
+ * prompt the OS would have shown anyway teaches people to ignore it.
  */
 const offerLibraryInstead = (
   reason: PermissionOutcome | 'unavailable'
 ): Promise<'library' | 'settings' | null> =>
-  new Promise((resolve) => {
-    const title = reason === 'unavailable' ? 'No camera here' : 'Camera access is off'
-    const body =
-      reason === 'unavailable'
-        ? 'This device has no camera to use. You can still add a photo from your library.'
-        : 'You can still add a photo from your library — that never needs the camera.'
-    const actions: AlertBtn[] = [
-      ...(reason === 'blocked'
-        ? [{ text: 'Open Settings', onPress: () => resolve('settings') }]
-        : []),
-      // Last, so it is the positive (bold) button on Android and the trailing
-      // one on iOS: the thing they actually want is a photo on the profile.
-      { text: 'Choose from photos', onPress: () => resolve('library') },
+  choose<'library' | 'settings'>(
+    reason === 'unavailable' ? 'No camera here' : 'Camera access is off',
+    reason === 'unavailable'
+      ? 'This device has no camera to use. You can still add a photo from your library.'
+      : 'You can still add a photo from your library — that never needs the camera.',
+    [
+      { label: 'Choose from photos', value: 'library', variant: 'primary' },
+      ...(reason === 'blocked' ? [{ label: 'Open Settings', value: 'settings' as const }] : []),
     ]
-    Alert.alert(title, body, alertButtons(actions, { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }))
-  })
+  )
 
-/**
- * Show action sheet to choose photo source (camera or library)
- */
-export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | null> => {
-  return new Promise((resolve) => {
-    Alert.alert(
-      'Select Photo',
-      'Choose how you want to add a photo',
-      alertButtons(
-        [
-          { text: 'Camera', onPress: () => resolve('camera') },
-          { text: 'Photo Library', onPress: () => resolve('library') },
-        ],
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }
-      )
-    )
-  })
-}
+/** Where the photo comes from: the camera or the library. */
+export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | null> =>
+  choose<'camera' | 'library'>('Add a photo', undefined, [
+    { label: 'Take a photo', value: 'camera' },
+    { label: 'Choose from library', value: 'library' },
+  ])
 
 const pickerOptions = (o: PhotoOptions) => ({
   // The string form; `MediaTypeOptions.Images` is deprecated in v16.
@@ -220,7 +230,7 @@ export const pickImage = async (
       return result.canceled ? null : result
     } catch (error) {
       Logger.error('profile', 'Error picking image from library', { error })
-      Alert.alert('Error', 'Failed to open your photos. Please try again.')
+      toast("Your photos didn't open. Try again.", 'error')
       return null
     }
   }
@@ -713,7 +723,8 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     // Validate image
     const validation = validatePhoto(asset)
     if (!validation.valid) {
-      Alert.alert('Invalid Photo', validation.error)
+      // Returned, not shown: both callers say why a photo was not added,
+      // and an alert here as well made it two messages for one refusal.
       return { success: false, error: validation.error }
     }
 

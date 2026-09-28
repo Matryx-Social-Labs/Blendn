@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import React, { createContext, useCallback, useContext, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -13,8 +13,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
+import { setToastHandler, type ToastVariant } from '../lib/toast'
 
-type ToastVariant = 'success' | 'error' | 'info'
 
 interface ToastAction {
   label: string
@@ -126,6 +126,8 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
       exiting={reduceMotion ? toastFadeOut : toastExiting}
       layout={reduceMotion ? undefined : toastReflow}
       style={[styles.toast, { borderColor: config.border }]}
+      // Android reads a live region when it appears; iOS is told in showToast.
+      accessibilityLiveRegion={toast.variant === 'error' ? 'assertive' : 'polite'}
     >
       {/* The status tint over an opaque surface: a 15% fill alone lets the screen show through the text. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: config.bg }]} pointerEvents="none" />
@@ -161,10 +163,24 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback(
     (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction }) => {
       const id = ++nextId
+      /*
+       * Said aloud, not only drawn. A toast appears at the top while focus is
+       * wherever the finger was, so a screen reader user heard nothing when a
+       * save failed or a report went through. iOS has no live regions; it is
+       * told here. Android reads the toast's live region instead, so it is
+       * not announced twice.
+       */
+      if (Platform.OS === 'ios') {
+        const spoken = options?.action ? `${message} ${options.action.label} is available.` : message
+        AccessibilityInfo.announceForAccessibility(spoken)
+      }
       setToasts(prev => [...prev.slice(-2), { id, message, variant, action: options?.action }])
     },
     []
   )
+
+  // Lets `lib/` helpers with no hook (the photo picker) raise a toast too.
+  React.useEffect(() => setToastHandler(showToast), [showToast])
 
   const hideToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id))

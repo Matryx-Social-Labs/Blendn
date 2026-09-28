@@ -129,10 +129,10 @@ export default function ReadyScreen() {
         </View>
       ) : null}
       {draft.location ? (
-        <Summary icon="location" label="Primary Hub" value={draft.location} />
+        <Summary icon="location" label="Where you live" value={draft.location} />
       ) : null}
       {draft.looking_for?.length ? (
-        <Summary icon="people" label="Looking For" value={draft.looking_for.join(' · ')} />
+        <Summary icon="people" label="Looking for" value={draft.looking_for.join(' · ')} />
       ) : null}
 
       {failed ? (
