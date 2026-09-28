@@ -19,6 +19,7 @@ import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding
 import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { PresenceMonitor } from '../components/PresenceMonitor';
+import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
 import { initSentry, Sentry } from '../lib/sentry';
@@ -681,6 +682,13 @@ function RootLayout() {
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
           {user ? <PresenceMonitor /> : null}
+          {/*
+            The one sheet the safety flows and message menus open from
+            anywhere (`lib/sheet.ts`). Inside the toast provider, so a
+            finished step can say what it did.
+          */}
+          <SheetHost />
+
         </View>
       </ToastProvider>
       </GestureHandlerRootView>

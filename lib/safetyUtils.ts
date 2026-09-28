@@ -1,7 +1,7 @@
-import { Alert } from 'react-native'
 import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { showSheet, type Sheet, type SheetOutcome } from './sheet'
 
 export interface SafetyActionResult {
   success: boolean
@@ -141,11 +141,55 @@ export const isUserBlocked = async (userId: string): Promise<boolean> => {
   }
 }
 
-/**
- * Show user safety action sheet
+
+/*
+ * Every sheet below goes through `lib/sheet.ts`, not `Alert.alert`.
+ *
+ * These were alerts with four to seven buttons, and Android draws three: the
+ * leave sheet lost "Block and report", the user report lost everything after
+ * "Harassment", and the message report lost "Hate speech" and "Other" — on
+ * half the phones, the reasons most likely to be needed were the ones cut.
+ * A sheet draws every option on both platforms, and each report now takes a
+ * reason *and* an optional note, which every report endpoint accepts.
+ *
+ * The call shapes did not change: these are still plain functions a screen
+ * calls, with the same arguments, and `components/SheetHost.tsx` draws them.
  */
+
+/** Why somebody reports a person. The server stores the value as given. */
+const USER_REPORT_REASONS: { value: ReportType; label: string }[] = [
+  { value: 'harassment', label: 'Harassment or threats' },
+  { value: 'inappropriate_messages', label: 'Inappropriate messages' },
+  { value: 'inappropriate_photos', label: 'Inappropriate photos' },
+  { value: 'fake_profile', label: 'Fake profile' },
+  { value: 'spam', label: 'Spam or scam' },
+  { value: 'other', label: 'Something else' },
+]
+
+/** Why somebody reports one message. */
+const MESSAGE_REPORT_REASONS: { value: MessageReportType; label: string }[] = [
+  { value: 'harassment', label: 'Harassment or threats' },
+  { value: 'hate_speech', label: 'Hate speech' },
+  { value: 'inappropriate_content', label: 'Inappropriate content' },
+  { value: 'spam', label: 'Spam or scam' },
+  { value: 'other', label: 'Something else' },
+]
+
+/*
+ * No promise about what happens next. A report is read by a human who may
+ * decide it is fine, and copy implying removal would make every unchanged
+ * profile or message look like the report was ignored.
+ */
+const REPORTED = 'Report sent. Our team will review it.'
+
+/** A step that failed, in the server's sentence when it wrote one. */
+const failed = (serverSays: string | undefined, fallback: string): SheetOutcome => {
+  const said = serverSays || fallback
+  return { ok: false, error: `${said}${/[.!?]$/.test(said) ? '' : '.'} Try again.` }
+}
+
 /**
- * Leaving a conversation: unmatch, block, or either one with a report.
+ * Leaving a conversation: unmatch, or unmatch/block with a report.
  *
  * Distinct from `showUserSafetyActions`, which is the general "this person is a
  * problem" sheet available from a profile. This one is about *this
@@ -153,14 +197,20 @@ export const isUserBlocked = async (userId: string): Promise<boolean> => {
  *
  * ## Report is bundled, not offered afterwards
  *
- * "Unmatch and report" is one tap and one request. Composing them -- close,
- * then report -- can half-fail into exactly the state the whole design exists
- * to prevent: a closed thread whose evidence is out of reach, or a report with
- * no safety action. The server does both in one transaction.
+ * "Unmatch and report" is one request. Composing them -- close, then report --
+ * can half-fail into exactly the state the whole design exists to prevent: a
+ * closed thread whose evidence is out of reach, or a report with no safety
+ * action. The server does both in one transaction.
  *
  * It also matters psychologically. The safest-feeling act is "make it go
  * away", and if that is the button that loses the case, the people most in
  * need of the report are the least likely to file one.
+ *
+ * ## The reason is asked, not assumed
+ *
+ * This used to send `{ reason: 'other' }` for every report, so a moderator
+ * opened each one knowing nothing. The report step now asks why, with the same
+ * reasons a profile report offers, and an optional note.
  *
  * ## The copy changes once they have seen your face
  *
@@ -177,177 +227,154 @@ export const showLeaveConversationActions = (
 ): void => {
   const copy = leaveConfirmation(displayName, theyKnowYou, fromMatch)
   const verb = fromMatch ? 'Unmatch' : 'End conversation'
+  const done = fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
 
-  const leave = async (action: 'unmatch' | 'block', withReport: boolean) => {
+  const leave = async (
+    action: 'unmatch' | 'block',
+    report?: { reason: string; description?: string }
+  ): Promise<SheetOutcome> => {
     const result = await apiClient.leaveConversation(conversationId, {
       action,
-      ...(withReport ? { report: { reason: 'other' } } : {}),
+      ...(report ? { report } : {}),
     })
-    if (result.success) {
-      onLeft?.()
-    } else {
-      Alert.alert('Could not do that', result.error || 'Try again in a moment.')
-    }
+    if (!result.success) return failed(result.error, "Couldn't do that.")
+    onLeft?.()
+    return { ok: true, toast: report ? `${done}. ${REPORTED}` : done }
   }
 
-  Alert.alert(copy.title, copy.body, [
-    { text: verb, style: 'destructive', onPress: () => void leave('unmatch', false) },
-    { text: `${verb} and report`, style: 'destructive', onPress: () => void leave('unmatch', true) },
-    {
-      // Block is the stronger option, surfaced here rather than buried,
-      // because somebody who wants to be *unseen* rather than merely
-      // disconnected needs the other button and may not know it exists.
-      text: 'Block and report',
-      style: 'destructive',
-      onPress: () => void leave('block', true),
-    },
-    { text: 'Cancel', style: 'cancel' },
-  ])
+  const reportStep = (action: 'unmatch' | 'block', title: string): Sheet => ({
+    kind: 'reasons',
+    title,
+    message: `Why are you reporting ${displayName}?`,
+    reasons: USER_REPORT_REASONS,
+    submitLabel: action === 'block' ? 'Block and report' : `${verb} and report`,
+    run: (reason, description) => leave(action, { reason, ...(description ? { description } : {}) }),
+  })
+
+  showSheet({
+    kind: 'actions',
+    title: copy.title,
+    message: copy.body,
+    actions: [
+      { label: verb, variant: 'destructive', run: () => leave('unmatch') },
+      { label: `${verb} and report`, next: () => reportStep('unmatch', `${verb} and report`) },
+      {
+        // Block is the stronger option, surfaced here rather than buried,
+        // because somebody who wants to be *unseen* rather than merely
+        // disconnected needs the other button and may not know it exists.
+        label: 'Block and report',
+        next: () => reportStep('block', `Block and report ${displayName}`),
+      },
+      { label: 'Cancel', cancel: true },
+    ],
+  })
 }
 
+/**
+ * The general "this person is a problem" sheet, from a profile, a friend, a
+ * person card in the Room. Block or report, each one step further in.
+ */
 export const showUserSafetyActions = (
   userName: string,
   userId: string,
   onBlock?: () => void,
   onReport?: () => void
 ): void => {
-  Alert.alert(
-    `Safety Actions`,
-    `What would you like to do regarding ${userName}?`,
-    [
-      {
-        text: 'Block User',
-        style: 'destructive',
-        onPress: () => {
-          showBlockConfirmation(userName, userId, onBlock)
-        }
-      },
-      {
-        text: 'Report User',
-        onPress: () => {
-          showReportOptions(userName, userId, onReport)
-        }
-      },
-      {
-        text: 'Cancel',
-        style: 'cancel'
-      }
-    ]
-  )
+  showSheet({
+    kind: 'actions',
+    title: userName,
+    message: 'Blocking hides you from each other. A report goes to our team, and they are not told who sent it.',
+    actions: [
+      { label: 'Block', variant: 'destructive', next: () => blockStep(userName, userId, onBlock) },
+      { label: 'Report', next: () => userReportStep(userName, userId, onReport) },
+      { label: 'Cancel', cancel: true },
+    ],
+  })
 }
 
-/**
- * Show block confirmation dialog
- */
+const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
+  kind: 'actions',
+  title: `Block ${userName}?`,
+  message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
+  actions: [
+    {
+      label: 'Block',
+      variant: 'destructive',
+      run: async () => {
+        const result = await blockUser(userId)
+        if (!result.success) return failed(result.message, "Couldn't block them.")
+        onComplete?.()
+        return { ok: true, toast: `${userName} is blocked` }
+      },
+    },
+    { label: 'Cancel', cancel: true },
+  ],
+})
+
+/** A person's report step, for a sheet that is already open (a message request's "More"). */
+export const userReportStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
+  kind: 'reasons',
+  title: `Report ${userName}`,
+  message: `Why are you reporting ${userName}?`,
+  reasons: USER_REPORT_REASONS,
+  submitLabel: 'Send report',
+  run: async (reason, description) => {
+    const result = await reportUser(userId, reason as ReportType, description)
+    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    onComplete?.()
+    return { ok: true, toast: REPORTED }
+  },
+})
+
+/** The block confirmation on its own, for a screen that already asked. */
 export const showBlockConfirmation = (
   userName: string,
   userId: string,
   onComplete?: () => void
 ): void => {
-  Alert.alert(
-    'Block User',
-    `Are you sure you want to block ${userName}? They won't be able to see your profile or message you.`,
-    [
-      {
-        text: 'Cancel',
-        style: 'cancel'
-      },
-      {
-        text: 'Block',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await blockUser(userId, 'Blocked by user')
-          Alert.alert(
-            result.success ? 'Success' : 'Error',
-            result.message
-          )
-          if (result.success && onComplete) {
-            onComplete()
-          }
-        }
-      }
-    ]
-  )
+  showSheet(blockStep(userName, userId, onComplete))
 }
 
-/**
- * Show report options dialog
- */
+/** The user report reasons on their own. */
 export const showReportOptions = (
   userName: string,
   userId: string,
   onComplete?: () => void
 ): void => {
-  const reportOptions = [
-    { text: 'Inappropriate Messages', value: 'inappropriate_messages' as ReportType },
-    { text: 'Fake Profile', value: 'fake_profile' as ReportType },
-    { text: 'Harassment', value: 'harassment' as ReportType },
-    { text: 'Spam', value: 'spam' as ReportType },
-    { text: 'Inappropriate Photos', value: 'inappropriate_photos' as ReportType },
-    { text: 'Other', value: 'other' as ReportType },
-    { text: 'Cancel', style: 'cancel' as const }
-  ]
-
-  Alert.alert(
-    'Report User',
-    `Why are you reporting ${userName}?`,
-    reportOptions.map(option => ({
-      text: option.text,
-      style: option.style,
-      onPress: option.value ? async () => {
-        const result = await reportUser(userId, option.value!)
-        Alert.alert(
-          result.success ? 'Thank You' : 'Error',
-          result.success 
-            ? 'Your report has been submitted. Our team will review it.' 
-            : result.message
-        )
-        if (result.success && onComplete) {
-          onComplete()
-        }
-      } : undefined
-    }))
-  )
+  showSheet(userReportStep(userName, userId, onComplete))
 }
 
-/**
- * Show message report options
- */
+/** Report one message, from a chat's long-press menu. */
 export const showMessageReportOptions = (
   messageId: string,
   messageType: 'group' | 'private',
   onComplete?: () => void
 ): void => {
-  const reportOptions = [
-    { text: 'Harassment', value: 'harassment' as MessageReportType },
-    { text: 'Spam', value: 'spam' as MessageReportType },
-    { text: 'Inappropriate Content', value: 'inappropriate_content' as MessageReportType },
-    { text: 'Hate Speech', value: 'hate_speech' as MessageReportType },
-    { text: 'Other', value: 'other' as MessageReportType },
-    { text: 'Cancel', style: 'cancel' as const }
-  ]
-
-  Alert.alert(
-    'Report Message',
-    'Why are you reporting this message?',
-    reportOptions.map(option => ({
-      text: option.text,
-      style: option.style,
-      onPress: option.value ? async () => {
-        const result = await reportMessage(messageId, messageType, option.value!)
-        Alert.alert(
-          result.success ? 'Thank You' : 'Error',
-          result.success 
-            ? 'Your report has been submitted. Our team will review it.' 
-            : result.message
-        )
-        if (result.success && onComplete) {
-          onComplete()
-        }
-      } : undefined
-    }))
-  )
+  showSheet(messageReportStep(messageId, messageType, onComplete))
 }
+
+/**
+ * The same step, for a menu that is already a sheet: it replaces the menu in
+ * place rather than closing one and opening another.
+ */
+export const messageReportStep = (
+  messageId: string,
+  messageType: 'group' | 'private',
+  onComplete?: () => void
+): Sheet => ({
+  kind: 'reasons',
+  title: 'Report message',
+  message: 'Why are you reporting this message?',
+  reasons: MESSAGE_REPORT_REASONS,
+  submitLabel: 'Send report',
+  run: async (reason, description) => {
+    const result = await reportMessage(messageId, messageType, reason as MessageReportType, description)
+    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    onComplete?.()
+    return { ok: true, toast: REPORTED }
+  },
+})
+
 
 /**
  * Get human-readable report type
@@ -419,39 +446,30 @@ export const showEventReportOptions = (
   eventId: string,
   onComplete?: () => void
 ): void => {
-  const options: { text: string; value?: EventReportType; style?: 'cancel' }[] = [
-    { text: 'Misleading or inaccurate listing', value: 'misleading_listing' },
-    { text: "The venue doesn't feel safe", value: 'unsafe_venue' },
-    { text: 'Concerns about the organiser', value: 'organiser_conduct' },
-    { text: "This doesn't look like a real event", value: 'not_real' },
-    { text: 'Something else', value: 'other' },
-    { text: 'Cancel', style: 'cancel' },
+  const reasons: { value: EventReportType; label: string }[] = [
+    { value: 'misleading_listing', label: 'Misleading or inaccurate listing' },
+    { value: 'unsafe_venue', label: "The venue doesn't feel safe" },
+    { value: 'organiser_conduct', label: 'Concerns about the organiser' },
+    { value: 'not_real', label: "This doesn't look like a real event" },
+    { value: 'other', label: 'Something else' },
   ]
 
-  Alert.alert(
-    'Report this event',
-    `Why are you reporting ${eventTitle}?`,
-    options.map((option) => ({
-      text: option.text,
-      style: option.style,
-      onPress: option.value
-        ? async () => {
-            const result = await reportEvent(eventId, option.value!)
-            Alert.alert(
-              result.success ? 'Thank you' : 'Error',
-              result.success
-                ? /*
-                   * No promise about what happens to the event. A report is
-                   * read by a human who may decide it is fine, and copy
-                   * implying removal would make every unchanged listing look
-                   * like the report was ignored.
-                   */
-                  'Your report has been submitted. Our team will review it.'
-                : result.message
-            )
-            if (result.success) onComplete?.()
-          }
-        : undefined,
-    }))
-  )
+  showSheet({
+    kind: 'reasons',
+    title: 'Report this event',
+    message: `Why are you reporting ${eventTitle}?`,
+    reasons,
+    submitLabel: 'Send report',
+    run: async (reason, description) => {
+      const result = await reportEvent(eventId, reason as EventReportType, description)
+      if (!result.success) return failed(result.message, "Couldn't send your report.")
+      onComplete?.()
+      /*
+       * No promise about what happens to the event. A report is read by a
+       * human who may decide it is fine, and copy implying removal would make
+       * every unchanged listing look like the report was ignored.
+       */
+      return { ok: true, toast: 'Report sent. Our team will review it.' }
+    },
+  })
 }
