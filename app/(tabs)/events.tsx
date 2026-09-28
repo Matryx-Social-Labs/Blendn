@@ -75,7 +75,6 @@ import {
 import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
 import { openInMaps } from '../../lib/openInMaps'
 import { apiClient } from '../../lib/apiClient'
-import { scheduleEventReminder, cancelEventReminder } from '../../lib/notifications'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
@@ -875,17 +874,6 @@ function EventsInner() {
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
       feedback.tap()
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
-      // Schedule / cancel event reminder based on interest state
-      if (result.data!.interested) {
-        scheduleEventReminder({
-          id: event.id,
-          title: event.title,
-          start_time: event.start_time,
-          venue_name: event.venue_name,
-        }).catch(() => {})
-      } else {
-        cancelEventReminder(event.id).catch(() => {})
-      }
     } catch {
       setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))

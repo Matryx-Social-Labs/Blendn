@@ -43,6 +43,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
+import { useActiveThread } from '../../lib/notifications'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import Animated from 'react-native-reanimated'
 import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
@@ -234,6 +235,8 @@ const revealStyles = StyleSheet.create({
 
 function PrivateChatInner() {
   const { conversationId, otherUserName, otherUserId, otherUserAvatar } = useLocalSearchParams()
+  // A push for this conversation is not shown over it (`lib/notifications.ts`).
+  useActiveThread(`dm:${String(conversationId)}`)
   const { user: authUser } = useAuth()
   const [messages, setMessages] = useState<PrivateMessage[]>([])
   /*

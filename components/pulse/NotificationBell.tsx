@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Pressable,
@@ -15,6 +15,7 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
+import { subscribeToBell } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
@@ -81,6 +82,13 @@ export function NotificationBell() {
       void load()
     }, [load])
   )
+
+  /*
+   * And the moment a row lands while the app is open — a friend request on
+   * the Pulse no longer waits for you to leave and come back. The server says
+   * so on your own socket room; the next focus or open reconciles the count.
+   */
+  useEffect(() => subscribeToBell(() => setUnread((n) => n + 1)), [])
 
   const openSheet = useCallback(() => {
     setOpen(true)
@@ -198,7 +206,7 @@ export function NotificationBell() {
               <Ionicons name="notifications-off-outline" size={28} color={EMBER.textTertiary} />
               <Text style={styles.emptyText}>Nothing yet</Text>
               <Text style={styles.emptyHint}>
-                Check-ins, messages and organiser updates land here.
+                Friend requests, matches and event updates land here.
               </Text>
             </View>
           ) : (
