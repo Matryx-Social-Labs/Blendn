@@ -31,6 +31,9 @@ import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
+/** An amenity tile's floor: glyph, name and a one-line note at default text size. */
+const AMENITY_TILE_MIN_HEIGHT = 126
+
 /*
  * A value that changed rises 6pt into place and fades in; the old one simply
  * goes. Used by the CTA's label and icon and by the attendee count — anything
@@ -1030,7 +1033,7 @@ const styles = StyleSheet.create({
    */
   amenity: {
     flex: 1,
-    minHeight: 126,
+    minHeight: AMENITY_TILE_MIN_HEIGHT,
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: EMBER.separator,

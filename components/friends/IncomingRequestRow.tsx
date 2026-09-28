@@ -4,7 +4,7 @@ import { OptimizedImage } from '../OptimizedImage'
 import { REQUEST_HIT_SLOP } from '../banter/BanterSections'
 import { Text } from '../ui/Text'
 import type { FriendRequest } from '../../lib/friends'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../../lib/theme'
 
 /** The avatar's box and decode hint — `PersonRow`'s, so the two lists line up. */
 const AVATAR = 48
@@ -90,5 +90,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accept: { backgroundColor: EMBER.textPrimary },
-  dim: { opacity: 0.6 },
+  dim: { opacity: OPACITY.disabled },
 })

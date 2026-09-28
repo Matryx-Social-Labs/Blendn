@@ -11,7 +11,7 @@ import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { getReportTypeLabel, unblockUser, type BlockedUser, type ReportType } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../lib/theme'
 
 /** The reasons `getReportTypeLabel` can name; anything else is not shown. */
 const KNOWN_REASONS = new Set<string>([
@@ -192,5 +192,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 })
