@@ -13,8 +13,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
+import { setToastHandler, type ToastVariant } from '../lib/toast'
 
-type ToastVariant = 'success' | 'error' | 'info'
 
 interface ToastAction {
   label: string
@@ -178,6 +178,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     },
     []
   )
+
+  // Lets `lib/` helpers with no hook (the photo picker) raise a toast too.
+  React.useEffect(() => setToastHandler(showToast), [showToast])
 
   const hideToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id))

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
+import { Platform } from 'react-native'
 
 /**
  * One bottom sheet for the whole app, opened from anywhere.
@@ -56,6 +57,12 @@ export type ActionSheet = {
   /** Drawn above the actions — the message menu's emoji row. */
   content?: ReactNode
   actions: SheetAction[]
+  /**
+   * Called when the sheet goes away without an action being chosen: Cancel,
+   * the backdrop, the drag, Android back. A caller awaiting a choice needs
+   * this, or a sheet swiped away leaves its promise pending for ever.
+   */
+  onDismiss?: () => void
 }
 
 export type ReasonSheet = {
@@ -88,6 +95,29 @@ export function closeSheet(): void {
   state = { sheet: null, key: state.key }
   emit()
 }
+
+/** Close without a choice: tells the sheet's `onDismiss`, then closes. */
+export function dismissSheet(): void {
+  const sheet = state.sheet
+  closeSheet()
+  if (sheet?.kind === 'actions') sheet.onDismiss?.()
+}
+
+/**
+ * Resolves once a closing sheet is off screen on iOS.
+ *
+ * iOS will not present a native view controller — the photo picker, the
+ * camera — while a `Modal` is still fading out; the presentation is dropped
+ * without an error. A flow that closes the sheet and then opens the picker
+ * waits for this first. Android starts an activity over a closing dialog
+ * without complaint, so there it is immediate.
+ */
+export function sheetClosed(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? SHEET_FADE_MS : 0))
+}
+
+/** The Modal's fade (`animationType="fade"`), with a frame to spare. */
+const SHEET_FADE_MS = 350
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener)
