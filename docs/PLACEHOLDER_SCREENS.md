@@ -12,7 +12,9 @@ account), whose banner was removed on 2026-09-21 at the product owner's
 request; the screen is still provisional in layout, the label just no longer
 says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
 was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
-(Open mail app, Resend with a 30-second cooldown).
+(Open mail app, Resend with a 30-second cooldown). `app/rate/[eventId].tsx` and
+`app/event-preferences/[eventId].tsx` are no longer placeholders either (both
+2026-09-28); their sections below say what was decided.
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
@@ -209,8 +211,9 @@ empty**. They are only sent on save if touched — otherwise opening this screen
 to flip the reveal switch would silently wipe the intent for the event.
 
 
-**Route:** `/event-preferences/{eventId}` · **Reached from:** nothing yet.
-Should be reachable from the match screen and offered at first check-in.
+**Route:** `/event-preferences/{eventId}` · **Reached from:** the check-in
+trays when the server says `intentNeeded` (intent leads, `askIntent=1`), and
+the Blend'n room's settings.
 
 **What it does.** Sets your intent (why you are here) and whether your real name
 and photo are visible **in this room**, via
@@ -231,8 +234,28 @@ screen"**, because it is the counterpart to the entire pseudonymity model.
 
 ### Design notes
 
-"Just here for the event" is exclusive of the other three in the logic — picking
-it clears the rest. That should be visible in the interaction, not a surprise.
+No longer a placeholder (2026-09-28); the red banner is gone. Built to sit
+beside the rate and forgot-password screens:
+
+- **A close button, two questions, one accent.** Each question is a `title`
+  over a `body` explanation, split by a hairline. Save is the one accent, pinned
+  under the scroll so it is always in reach and clear of the home indicator.
+- **Intent options are rows**, `surface` with a label and a hint, that fill
+  `textPrimary` with a check when chosen (the system's selected treatment).
+- **"Just here for the event" stands apart behind an "OR".** It is exclusive of
+  the other three — picking it clears the rest — so the layout shows that before
+  it happens instead of surprising anyone.
+- **Reveal is a plain `surface` card with a switch.** "Do this at future events
+  too" fades in under it, in the same card, only once reveal is on. Off carries
+  no warning, badge or nudge: it is not an unfinished state.
+- **Accessibility.** Save is a `button` labelled "Save", with its disabled and
+  busy state. Each intent row is a `button` whose `selected` state is announced.
+  Simulator QA had found Save reading as a GenericElement (a `TouchableOpacity`
+  with no role). `__tests__/eventPreferencesScreen.test.tsx` pins both.
+
+Still open for the designer: whether intent should look like chips (as on
+`about-you`) rather than rows. Rows were chosen because each option carries a
+hint, and a hint does not fit in a chip.
 
 ---
 
