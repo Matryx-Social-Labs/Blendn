@@ -16,6 +16,7 @@ import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { subscribeToBell } from '../../lib/socketClient'
+import ActionTray from '../ActionTray'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
@@ -49,6 +50,13 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
+  /*
+   * The last load failed. Only drawn when there is nothing to show: a list
+   * that loaded once stays on screen through a failed refresh, and "Nothing
+   * yet" over a failed request would be the app telling you something false.
+   */
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
   const insets = useSafeAreaInsets()
 
   const load = useCallback(async () => {
@@ -58,9 +66,13 @@ export function NotificationBell() {
       if (result.success && result.data) {
         setItems(result.data.notifications)
         setUnread(result.data.unreadCount)
+        setLoadFailed(false)
+      } else {
+        setLoadFailed(true)
       }
     } catch (error) {
       Logger.warn('notifications', 'load:failed', { error: error as never })
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -180,17 +192,16 @@ export function NotificationBell() {
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>Notifications</Text>
             {items.length > 0 ? (
+              /*
+                Asks first. Clearing deletes every row on the server and there
+                is no way back, and the text action sits a thumb's width from
+                the first row.
+              */
               <Pressable
-                onPress={() => {
-                  setItems([])
-                  setUnread(0)
-                  apiClient.clearNotifications().catch((error) => {
-                    Logger.warn('notifications', 'clear:failed', { error: error as never })
-                  })
-                }}
+                onPress={() => setConfirmClear(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Clear all notifications"
-                hitSlop={8}
+                hitSlop={SPACE.md}
               >
                 <Text style={styles.clear}>CLEAR</Text>
               </Pressable>
@@ -199,6 +210,20 @@ export function NotificationBell() {
 
           {loading && items.length === 0 ? (
             <ActivityIndicator style={styles.loading} color={EMBER.textSecondary} />
+          ) : loadFailed && items.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+              <Text style={styles.emptyText}>Couldn&apos;t load notifications</Text>
+              <Text style={styles.emptyHint}>Check your connection and try again.</Text>
+              <ScalePress
+                onPress={() => void load()}
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                style={styles.retry}
+              >
+                <Text style={styles.retryText}>Try again</Text>
+              </ScalePress>
+            </View>
           ) : items.length === 0 ? (
             /*
               An empty bell is a normal state, not a failure. It says what it
@@ -250,6 +275,30 @@ export function NotificationBell() {
             />
           )}
         </RisingSheet>
+
+        {/* Inside the sheet's modal, so it presents over the sheet rather than behind it. */}
+        <ActionTray
+          visible={confirmClear}
+          title="Clear all notifications?"
+          message="This removes them for good."
+          size="compact"
+          onClose={() => setConfirmClear(false)}
+          buttons={[
+            { label: 'Keep', onPress: () => setConfirmClear(false) },
+            {
+              label: 'Clear all',
+              variant: 'destructive',
+              onPress: () => {
+                setConfirmClear(false)
+                setItems([])
+                setUnread(0)
+                apiClient.clearNotifications().catch((error) => {
+                  Logger.warn('notifications', 'clear:failed', { error: error as never })
+                })
+              },
+            },
+          ]}
+        />
       </SheetModal>
     </>
   )
@@ -308,10 +357,20 @@ const styles = StyleSheet.create({
   sheetTitle: TYPE.heading,
   clear: { ...TYPE.label, color: EMBER.textPrimary },
 
-  loading: { paddingVertical: 48 },
-  empty: { alignItems: 'center', gap: 8, paddingVertical: 48, paddingHorizontal: 32 },
+  loading: { paddingVertical: SPACE.xxxl },
+  empty: { alignItems: 'center', gap: SPACE.sm, paddingVertical: SPACE.xxxl, paddingHorizontal: SPACE.xxl },
   emptyText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
   emptyHint: { ...TYPE.meta, textAlign: 'center', color: EMBER.textTertiary },
+  // The error state's one action is its primary one (docs/DESIGN_SYSTEM.md).
+  retry: {
+    marginTop: SPACE.md,
+    height: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
+  },
+  retryText: { ...TYPE.button, color: EMBER.onGradient },
 
   list: { flexGrow: 0 },
   listContent: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
@@ -330,7 +389,7 @@ const styles = StyleSheet.create({
     marginTop: SPACE.sm,
   },
   dotRead: { backgroundColor: 'transparent' },
-  rowBody: { flex: 1, gap: 2 },
+  rowBody: { flex: 1, gap: SPACE.xxs },
   rowTitle: TYPE.bodyStrong,
   rowText: TYPE.meta,
   age: { ...TYPE.caption, color: EMBER.textTertiary },
