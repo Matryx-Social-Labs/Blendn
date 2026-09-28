@@ -15,7 +15,6 @@ import {
   Clipboard,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -59,7 +58,7 @@ import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
 import { initialsOf } from '../../lib/initials'
-import { useFollowEnd } from '../../lib/useFollowEnd'
+import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { newClientId } from '../../lib/clientId'
 import { receiptFor } from '../../lib/receipts'
 import { withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
@@ -491,7 +490,7 @@ function PrivateChatInner() {
 
 
   const scrollToBottom = (animated = true) => {
-    flatListRef.current?.scrollToEnd({ animated })
+    scrollListToEnd(flatListRef.current, animated)
   }
   // Follows the end as the first page lays out (lib/useFollowEnd.ts).
   const follow = useFollowEnd(() => scrollToBottom(false))
@@ -999,12 +998,8 @@ function PrivateChatInner() {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          /*
-           * Drag the conversation down to put the keyboard away — on iOS the
-           * keyboard follows the finger, the Messages behaviour people expect.
-           * Android has no interactive mode, so a drag dismisses it.
-           */
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          // Touching the conversation to scroll it puts the keyboard away.
+          keyboardDismissMode="on-drag"
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}
