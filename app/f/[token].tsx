@@ -22,7 +22,9 @@ const PHOTO = 160
  * `blendn://f/<token>` from the web page's "Open in Blend'n".
  *
  * Signed out, the root guard holds this route and opens it after sign-in (or
- * after onboarding, for a new account) — see `app/_layout.tsx`.
+ * after onboarding, for a new account) — see `app/_layout.tsx`. Meanwhile the
+ * welcome and sign-in screens say whose invite is waiting, from the public
+ * preview (`components/friends/PendingInvite.tsx`).
  *
  * Shows the person who sent the link, because sending it was their choice. A
  * link that does not work says only that: never whether it was reset, whether

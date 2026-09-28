@@ -16,6 +16,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
 import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
+import { PendingInvite } from '../components/friends/PendingInvite'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
 /*
@@ -291,6 +292,8 @@ function IndexInner() {
         <View style={styles.brandBlock}>
           <Image source={lockup} style={styles.lockup} resizeMode="contain" />
           <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
+          {/* Whose invite is waiting, when an invite link brought them here. */}
+          <PendingInvite />
         </View>
 
         <View style={styles.actions}>
