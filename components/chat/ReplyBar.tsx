@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
 
 interface ReplyBarProps {
@@ -46,5 +46,5 @@ const styles = StyleSheet.create({
   message: { ...TYPE.meta, color: EMBER.textSecondary },
   // A `CONTROL.md` target: the glyph alone was a 24pt tap beside the composer.
   close: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 })

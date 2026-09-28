@@ -32,7 +32,7 @@ afterEach(() => jest.useRealTimers())
 describe('RealtimeStatusBanner', () => {
   it('says nothing for a reconnect that finishes within the grace period', async () => {
     await render(<RealtimeStatusBanner status={status('reconnecting')} />)
-    expect(screen.queryByText(/Reconnecting|Realtime disconnected/)).toBeNull()
+    expect(screen.queryByText(/Reconnecting|Live updates paused/)).toBeNull()
     await act(async () => {
       jest.advanceTimersByTime(2500)
     })
@@ -40,7 +40,7 @@ describe('RealtimeStatusBanner', () => {
     await act(async () => {
       jest.advanceTimersByTime(5000)
     })
-    expect(screen.queryByText(/Reconnecting|Realtime disconnected/)).toBeNull()
+    expect(screen.queryByText(/Reconnecting|Live updates paused/)).toBeNull()
   })
 
   it('speaks once the socket has been down past the grace period', async () => {
@@ -48,12 +48,12 @@ describe('RealtimeStatusBanner', () => {
     await act(async () => {
       jest.advanceTimersByTime(3100)
     })
-    expect(screen.getByText('Realtime disconnected.')).toBeTruthy()
+    expect(screen.getByText('Live updates paused.')).toBeTruthy()
   })
 
   it('says offline at once — actions will fail, and that is worth saying now', async () => {
     markOffline()
     await render(<RealtimeStatusBanner status={status('disconnected')} />)
-    expect(screen.getByText('You are offline. Some actions may not work.')).toBeTruthy()
+    expect(screen.getByText("You're offline. Some actions won't work until you're back.")).toBeTruthy()
   })
 })
