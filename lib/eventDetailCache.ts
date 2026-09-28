@@ -19,3 +19,8 @@ export function getEventDetailCache<T>(eventId: string): T | null {
 export function setEventDetailCache<T>(eventId: string, data: T): void {
   cache.set(eventId, { data, expiresAt: Date.now() + CACHE_TTL_MS })
 }
+
+/** After a check-in or check-out: the cached `userStatus` is no longer true. */
+export function forgetEventDetailCache(eventId: string): void {
+  cache.delete(eventId)
+}

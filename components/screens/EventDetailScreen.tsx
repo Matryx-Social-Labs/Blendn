@@ -33,6 +33,7 @@ import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
+import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openBlendn } from '../../lib/blendnOverlay'
@@ -735,6 +736,21 @@ export default function EventDetail() {
       showTray('Error', 'Failed to update RSVP.')
     }
   }, [id, user, event, rsvpStatus, showTray, closeTray, feedback, confirmWithdrawRsvp, showToast])
+
+  /*
+   * Checked in or out anywhere — this screen's CTA, the Pulse's tray, the
+   * Blend'n room — and the detail is re-read from the server, whose
+   * `userStatus` is the one answer to "am I in". `checkInChanged` has already
+   * dropped the cached detail, so this read is fresh; before it did, the
+   * re-read after a check-in was served the stale `isCheckedIn: false` and
+   * the CTA went back to "Blend in" under an "Open the room" centre button.
+   */
+  useEffect(
+    () => subscribeCheckInChanged(() => void fetchEventDetails()),
+    // fetchEventDetails is redefined every render; one subscription per id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id]
+  )
 
   // Refresh event data (including check-in status) on focus
   useFocusEffect(
