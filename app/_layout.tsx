@@ -449,9 +449,10 @@ function RootLayout() {
 
   return (
     <ErrorBoundary
-      onError={(error, errorInfo) => {
+      onError={(error, errorInfo, errorId) => {
         Sentry.captureException(error, {
-          tags: { context: 'root-error-boundary' },
+          // The id the crash screen shows and puts in the support email.
+          tags: { context: 'root-error-boundary', error_id: errorId },
           extra: { componentStack: errorInfo.componentStack },
         })
       }}
@@ -663,9 +664,13 @@ function RootLayout() {
           animation: routeTransition,
         }}
       />
+      {/* Settings' About and Contact support. */}
+      <Stack.Screen name="about" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="support" options={{ headerShown: false, animation: routeTransition }} />
       {/* Friends. Declared so none of them inherits the native header. */}
       <Stack.Screen name="friends/index" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="friends/requests" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
