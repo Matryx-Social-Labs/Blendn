@@ -339,6 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceMedia,
     justifyContent: 'flex-end',
   },
+  // design-exception: decorative art dimmed under its caption, not a control state
   curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
   curationText: { padding: SPACE.xl, gap: SPACE.xs },
   curationEyebrow: { ...TYPE.label, color: EMBER.textSecondary },

@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   cardOn: { borderColor: EMBER.textPrimary },
+  // design-exception: decorative art dimmed under its label, not a control state
   art: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.4 },
   label: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg, gap: SPACE.sm },
   labelText: TYPE.button,

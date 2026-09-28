@@ -183,6 +183,7 @@ const styles = StyleSheet.create({
   bubbleWhen: { ...TYPE.caption, color: EMBER.textTertiary },
   bubbleBody: { ...TYPE.meta, color: EMBER.textTertiary },
 
+  // design-exception: part of the drawing, not a control state
   mapDim: { opacity: 0.4 },
   // 32pt in from every edge — the frame measures its pin positions against
   // this box, not against the card.
@@ -241,6 +242,7 @@ const styles = StyleSheet.create({
     height: 288,
     // design-exception: half the ring's 288pt size, to centre it — geometry, not spacing
     marginTop: -144,
+    // design-exception: part of the drawing, not a control state
     opacity: 0.5,
   },
 

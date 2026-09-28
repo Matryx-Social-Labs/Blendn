@@ -299,6 +299,7 @@ const styles = StyleSheet.create({
   headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
   title: TYPE.display,
   titleAccent: { color: EMBER.textPrimary },
+  // design-exception: a reading measure for the subtitle, from the frame
   subtitle: { ...TYPE.body, color: EMBER.textSecondary, maxWidth: 300 },
   body: { gap: SPACE.xxl },
 
