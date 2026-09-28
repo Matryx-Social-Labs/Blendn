@@ -34,7 +34,7 @@ drives the layout.
 | Top bar | always | `PulseTopBar` "The Banter" + the notification bell. No menu button, no compose. |
 | Search | always | `BanterSearch`, a `surface` pill. Filters titles, previews and a room's last sender in place. |
 | **Live now** | you are checked into a room | One full-width row per room: `surfaceSunken`, radius `md`, padding 16. 56pt square event cover (radius `sm`; a glyph on `surface` when there is none), title, and a still 8pt `success` dot + "You're here · N in the room" (count left off when 0). Rows 12 apart. Tapping opens the room. |
-| **Requests** | a request is pending | Heading + count in `meta`. Each request is a conversation row — sender's photo (or a glyph disc on `surface`), name, time, two lines of message — with **Decline** (`surface`) and **Accept** (`accent`, `onGradient`) 32pt pills under it. |
+| **Requests** | a request is pending | Heading + count in `meta`. Each request is a conversation row — sender's photo (or a glyph disc on `surface`), name, time, two lines of message — with **Decline** (`surface`) and **Accept** (`accent`, `onGradient`) 32pt pills under it, then a 32pt `surface` **More** disc (Block, or Report — which also declines). The photo and name open the sender's profile. |
 | **Conversations** | always (headings hidden when empty) | Bucketed **Today / This week / Earlier** by last activity with `DayHeading`. "MARK ALL READ" on the right of the first heading. |
 
 Checked-in rooms are **lifted out** of the conversations rather than repeated.

@@ -451,6 +451,10 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
  * *accept* or *decline*, not *read* — so the two answers sit under the
  * message instead of the row being a button.
  *
+ * The face and the name open the sender's profile, so "who is this" can be
+ * answered before answering them. "More" holds Block and Report: declining
+ * is not the answer to somebody who should not be able to ask again.
+ *
  * Accept is the screen's one accent (docs/DESIGN_SYSTEM.md). It repeats per
  * request, which the rule allows: it is one action, the Banter's primary one.
  */
@@ -462,6 +466,8 @@ export function BanterRequest({
   pending,
   onAccept,
   onDecline,
+  onOpenProfile,
+  onMore,
 }: {
   name: string
   avatarUrl?: string | null
@@ -470,9 +476,18 @@ export function BanterRequest({
   pending?: boolean
   onAccept: () => void
   onDecline: () => void
+  onOpenProfile?: () => void
+  onMore?: () => void
 }) {
   return (
     <View style={requestStyles.request}>
+      <Pressable
+        onPress={onOpenProfile}
+        disabled={!onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}'s profile`}
+        style={({ pressed }) => [pressed && styles.pressed]}
+      >
       {avatarUrl ? (
         <OptimizedImage
           source={avatarUrl}
@@ -487,10 +502,19 @@ export function BanterRequest({
           <MaterialIcons name="person" size={ICON.lg} color={EMBER.textSecondary} />
         </View>
       )}
+      </Pressable>
 
       <View style={requestStyles.requestBody}>
         <View style={styles.rowLine}>
-          <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+          <Text
+            style={styles.rowTitle}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.4}
+            onPress={onOpenProfile}
+            // The avatar above is the labelled button; this is the same target.
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          >
             {name}
           </Text>
           {timeLabel ? (
@@ -542,6 +566,22 @@ export function BanterRequest({
               Accept
             </Text>
           </Pressable>
+          {onMore ? (
+            // Last, and out of the way of the two answers.
+            <Pressable
+              onPress={onMore}
+              disabled={pending}
+              accessibilityRole="button"
+              accessibilityLabel={`More options for the request from ${name}`}
+              hitSlop={REQUEST_HIT_SLOP}
+              style={({ pressed }) => [
+                requestStyles.requestMore,
+                (pressed || pending) && styles.pressed,
+              ]}
+            >
+              <Ionicons name="ellipsis-horizontal" size={ICON.sm} color={EMBER.textSecondary} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -580,6 +620,15 @@ const requestStyles = StyleSheet.create({
   },
   // Secondary + primary: the one row where two fills may differ.
   requestDecline: { backgroundColor: EMBER.surface },
+  // One row, one height: a 32pt disc beside the two 32pt pills.
+  requestMore: {
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   requestAccept: { backgroundColor: EMBER.accent },
   requestDeclineLabel: { ...TYPE.button, color: EMBER.textSecondary },
   // `onGradient`, not white — white fails contrast on the accent fill.

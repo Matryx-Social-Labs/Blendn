@@ -36,6 +36,8 @@ import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { apiClient } from '../../lib/apiClient'
+import { userReportStep } from '../../lib/safetyUtils'
+import { showSheet } from '../../lib/sheet'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
@@ -144,6 +146,8 @@ interface PersonalChat {
 
 interface MessageRequest {
   request_id: string
+  /** Who asked. Opens their profile, and is who a report names. */
+  sender_id?: string | null
   sender_name?: string | null
   sender_avatar?: string | null
   initial_message?: string | null
@@ -397,6 +401,7 @@ function ChatInner() {
       if (result.success && result.data?.requests) {
         const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
           request_id: r.id,
+          sender_id: r.senderId || r.sender?.id || null,
           sender_name: r.sender?.name || null,
           sender_avatar: r.sender?.avatar || null,
           initial_message: r.message || null,
@@ -832,6 +837,46 @@ function ChatInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestPending, showToast])
 
+  /*
+   * "More" on a request: Block, or Report.
+   *
+   * Block goes through the request itself (`respond` with `block`), which is
+   * what writes the block and closes the request in one step. Report names
+   * the sender, and then declines the request, so a report does not leave the
+   * thing reported sitting in the inbox waiting for an answer.
+   */
+  const openRequestMore = (request: MessageRequest) => {
+    const name = request.sender_name || 'Someone'
+    const senderId = request.sender_id
+    showSheet({
+      kind: 'actions',
+      title: name,
+      message: 'Blocking stops them asking again and hides you from each other. A report goes to our team, and they are not told who sent it.',
+      actions: [
+        {
+          label: 'Block',
+          variant: 'destructive',
+          run: async () => {
+            const result = await apiClient.respondToMessageRequest(request.request_id, 'block')
+            if (!result.success) {
+              return { ok: false, error: `${result.error || "Couldn't block them."} Try again.` }
+            }
+            setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
+            void loadChats(true, true)
+            return { ok: true, toast: `${name} is blocked` }
+          },
+        },
+        ...(senderId
+          ? [{
+              label: 'Report',
+              next: () => userReportStep(name, senderId, () => void respondToRequest(request, 'decline')),
+            }]
+          : []),
+        { label: 'Cancel', cancel: true as const },
+      ],
+    })
+  }
+
   useEffect(() => {
     // loadChats paints the cached lists before its first await, which is the
     // synchronous setState flagged here. Moving that into render means splitting
@@ -908,6 +953,12 @@ function ChatInner() {
                   pending={requestPending[r.request_id]}
                   onAccept={() => respondToRequest(r, 'accept')}
                   onDecline={() => respondToRequest(r, 'decline')}
+                  onOpenProfile={
+                    r.sender_id
+                      ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never)
+                      : undefined
+                  }
+                  onMore={() => openRequestMore(r)}
                 />
               </Reanimated.View>
             ))}
