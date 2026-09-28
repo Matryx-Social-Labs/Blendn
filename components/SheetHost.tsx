@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native'
 
 import { closeSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../lib/theme'
 import ActionTray, { type ActionTrayButton } from './ActionTray'
 import { useToast } from './Toast'
 import { Text } from './ui/Text'
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   // Selected option: `textPrimary` fill, `bg` text (docs/DESIGN_SYSTEM.md).
   reasonSelected: { backgroundColor: EMBER.textPrimary },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   note: {
     ...TYPE.body,
     minHeight: CONTROL.lg + CONTROL.sm,
