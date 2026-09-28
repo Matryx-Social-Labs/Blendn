@@ -94,7 +94,11 @@ export function ChatComposer({
            * let somebody type a message they will never be allowed to send.
            */
           editable={!lock}
-          placeholder={lock ? LOCK_COPY[lock] : 'Share your thoughts...'}
+          /*
+           * The reason is the note above; the field says only that it is shut.
+           * Both used to carry the same sentence, one over the other.
+           */
+          placeholder={lock ? "Can't send right now" : 'Share your thoughts…'}
           placeholderTextColor={EMBER.textPlaceholder}
           multiline
           /*
@@ -112,6 +116,8 @@ export function ChatComposer({
           accessibilityRole="button"
           accessibilityLabel="Send"
           accessibilityState={{ disabled: !canSend }}
+          // A 32pt disc: 8 around it reaches the 44pt minimum without a bigger pill.
+          hitSlop={SPACE.sm}
           style={({ pressed }) => [styles.send, pressed && styles.pressed]}
         >
           <View style={[styles.sendFill, !canSend && styles.sendIdle]}>
