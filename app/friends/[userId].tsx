@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { LoadError } from '../../components/LoadError'
+import { LoadError, LoadState } from '../../components/LoadError'
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import {
@@ -21,6 +21,7 @@ import { apiClient } from '../../lib/apiClient'
 import { friendsSinceLabel, type FriendProfile } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
+import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 
 /**
@@ -101,33 +102,41 @@ export default function FriendProfileScreen() {
     })
   }
 
+  /*
+   * The app's one sheet (`lib/sheet.ts`), not a system alert: the same place
+   * every other "are you sure" on a person lives (block, report, leave). A
+   * refusal stays in the sheet and turns the button into Try again.
+   */
   const confirmUnfriend = () => {
     if (!friend) return
-    Alert.alert(
-      `Remove ${friend.name}?`,
-      "They won't be told. Your messages stay, and you can add each other again later.",
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showSheet({
+      kind: 'actions',
+      title: `Remove ${friend.name}?`,
+      message: "They won't be told. Your messages stay, and you can add each other again later.",
+      actions: [
         {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
+          label: 'Remove friend',
+          variant: 'destructive',
+          run: async () => {
             const result = await apiClient.removeFriend(friend.userId)
-            if (result.success) router.back()
-            else showToast("That didn't go through. Try again.", 'error')
+            if (!result.success) return { ok: false, error: "That didn't go through. Try again." }
+            router.back()
+            return { ok: true, toast: `${friend.name} is no longer a friend` }
           },
         },
-      ]
-    )
+        { label: 'Cancel', cancel: true },
+      ],
+    })
   }
 
   if (gone) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <Text variant="body" color={EMBER.textSecondary} style={styles.centerText}>
-          You&apos;re not friends with this person any more.
-        </Text>
-        <EmberButton label="Back" onPress={() => router.back()} />
+        <LoadState
+          icon="person-outline"
+          title="You're not friends with this person any more."
+          action={{ label: 'Go back', onPress: () => router.back() }}
+        />
       </View>
     )
   }
@@ -144,7 +153,7 @@ export default function FriendProfileScreen() {
           <Pressable
             onPress={() => router.back()}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel="Go back"
             hitSlop={SPACE.md}
             style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
           >
@@ -193,10 +202,15 @@ export default function FriendProfileScreen() {
           {friend.photos.length > 1 ? (
             <View style={styles.section}>
               <ProfileHeading title="Gallery" trailing={`${friend.photos.length} photos`} />
+              {/*
+                The photos beyond the hero's: the hero already cycles the first,
+                so it is not repeated here. `+ 1` keeps the lightbox on the
+                photo that was tapped.
+              */}
               <ProfileGallery
-                photos={friend.photos}
+                photos={friend.photos.slice(1)}
                 columnWidth={(width - GUTTER * 2 - SPACE.lg) / 2}
-                onPressPhoto={setLightbox}
+                onPressPhoto={(i) => setLightbox(i + 1)}
               />
             </View>
           ) : null}
@@ -223,7 +237,7 @@ export default function FriendProfileScreen() {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel="Go back"
           hitSlop={SPACE.md}
           style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
         >
@@ -253,7 +267,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     backgroundColor: EMBER.bg,
   },
-  centerText: { textAlign: 'center' },
   canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
   section: { gap: SPACE.lg },
   details: { gap: SPACE.xl },

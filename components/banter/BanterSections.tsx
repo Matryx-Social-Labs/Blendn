@@ -614,7 +614,7 @@ export function BanterRequest({
 }
 
 // 32pt pills + 6 above and below reach the 44pt minimum without a taller row.
-const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
+export const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
 
 const requestStyles = StyleSheet.create({
   // The conversation row's geometry, top-aligned because the body runs longer.

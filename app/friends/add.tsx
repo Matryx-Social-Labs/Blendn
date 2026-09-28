@@ -1,6 +1,6 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
@@ -10,8 +10,8 @@ import { PersonRow } from '../../components/friends/PersonRow'
 import ScalePress from '../../components/motion/ScalePress'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { ProfileHeading } from '../../components/profile/ProfileSections'
-import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
+import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 import { useFriendRequests } from '../../lib/useFriendRequests'
@@ -28,7 +28,6 @@ import { useFriendRequests } from '../../lib/useFriendRequests'
  */
 export default function AddFriendsScreen() {
   const { invite, failed, reload, share, reset } = useFriendInvite()
-  const { showToast } = useToast()
   const requests = useFriendRequests()
   const { incoming, outgoing, busy, respond, withdraw } = requests
   const [refreshing, setRefreshing] = useState(false)
@@ -47,22 +46,22 @@ export default function AddFriendsScreen() {
     setReloadingLink(false)
   }
 
+  // The app's one sheet, not a system alert; a refusal stays in it with Try again.
   const confirmReset = () =>
-    Alert.alert(
-      'Reset your link?',
-      'Your old link will stop working. People who are already your friends stay your friends.',
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showSheet({
+      kind: 'actions',
+      title: 'Reset your link?',
+      message: 'Your old link will stop working. People who are already your friends stay your friends.',
+      actions: [
         {
-          text: 'Reset link',
-          style: 'destructive',
-          onPress: async () => {
-            if (await reset()) showToast('New link ready', 'success')
-            else showToast("Your link wasn't reset. Try again.", 'error')
-          },
+          label: 'Reset link',
+          variant: 'destructive',
+          run: async () =>
+            (await reset()) ? { ok: true, toast: 'New link ready' } : { ok: false, error: "Your link wasn't reset. Try again." },
         },
-      ]
-    )
+        { label: 'Cancel', cancel: true },
+      ],
+    })
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
