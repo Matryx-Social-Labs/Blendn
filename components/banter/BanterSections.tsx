@@ -151,11 +151,14 @@ export function BanterLiveRoom({
   title,
   coverUrl,
   memberCount,
+  muted = false,
   onPress,
 }: {
   title: string
   coverUrl?: string | null
   memberCount?: number | null
+  /** You muted its notifications. */
+  muted?: boolean
   onPress?: () => void
 }) {
   const meta = liveRoomMeta(memberCount)
@@ -163,15 +166,18 @@ export function BanterLiveRoom({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, live room. ${meta}`}
+      accessibilityLabel={`${title}, live room. ${meta}${muted ? '. Muted' : ''}`}
       style={({ pressed }) => [styles.liveRow, pressed && styles.pressed]}
     >
       {/* `surface` under the cover: one step up from the panel it sits on. */}
       <RoomCover url={coverUrl} />
       <View style={styles.liveBody}>
-        <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
-          {title}
-        </Text>
+        <View style={styles.rowLine}>
+          <Text style={[styles.rowTitle, muted && styles.rowTitleMuted]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+            {title}
+          </Text>
+          {muted ? <MutedMark /> : null}
+        </View>
         <View style={styles.liveMetaLine}>
           <View style={styles.liveDot} />
           <Text style={styles.liveMeta} numberOfLines={1} maxFontSizeMultiplier={1.4}>
@@ -195,6 +201,8 @@ export interface ConversationItem {
   /** A room rather than a person: a square cover instead of a round face. */
   kind?: 'direct' | 'event' | 'group'
   unread?: boolean
+  /** You muted this room's notifications: a bell with a slash after the title. */
+  muted?: boolean
   /**
    * The preview is news in itself — "Asked to reveal names" — and is drawn in
    * `textPrimary` even when the row is read.
@@ -239,7 +247,7 @@ export function BanterConversation({
       accessibilityRole="button"
       accessibilityLabel={`${item.title}. ${item.preview}. ${item.timeLabel}${
         item.unread ? '. Unread' : ''
-      }`}
+      }${item.muted ? '. Muted' : ''}`}
       style={({ pressed }) => [styles.row, pressed && styles.pressed, style]}
     >
       {isRoom ? (
@@ -273,9 +281,10 @@ export function BanterConversation({
 
       <View style={styles.rowBody}>
         <View style={styles.rowLine}>
-          <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+          <Text style={[styles.rowTitle, item.muted && styles.rowTitleMuted]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
             {item.title}
           </Text>
+          {item.muted ? <MutedMark /> : null}
           <Text
             style={[styles.rowTime, item.unread && styles.rowTimeUnread]}
             maxFontSizeMultiplier={1.3}
@@ -302,6 +311,15 @@ export function BanterConversation({
       </View>
     </Pressable>
   )
+}
+
+/**
+ * Muted, as a still mark: the bell with a slash, in `textTertiary` — the same
+ * glyph the room's own header shows. Not a word, because "Muted" in this list
+ * already means the organiser stopped you posting (`roomStateLine`).
+ */
+function MutedMark() {
+  return <Ionicons name="notifications-off-outline" size={ICON.sm} color={EMBER.textTertiary} />
 }
 
 /** A room's avatar: its event's cover in a small square, or a glyph on `surface`. */
@@ -411,6 +429,8 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, gap: SPACE.xxs },
   rowLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowTitle: { ...TYPE.bodyStrong, flex: 1 },
+  // Shrinks to fit the mark after it rather than pushing it off the row.
+  rowTitleMuted: { flex: 0, flexShrink: 1, marginRight: 'auto' },
   rowTime: TYPE.meta,
   rowTimeUnread: { color: EMBER.textPrimary },
   rowPreview: { ...TYPE.body, flex: 1, color: EMBER.textSecondary },

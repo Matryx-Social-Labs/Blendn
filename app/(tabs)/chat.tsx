@@ -34,6 +34,7 @@ import { bucketRows, inboxTimeLabel, previewWithSender } from '../../components/
 import { matchRowPreview } from '../../lib/matchOpener'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
+import { isMuted, rememberRoomMute, useRoomMembership } from '../../lib/roomMembership'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { apiClient } from '../../lib/apiClient'
 import { userReportStep } from '../../lib/safetyUtils'
@@ -271,7 +272,21 @@ function ChatInner() {
   }, [])
 
   /* Lifted into Live now above, so not repeated in the list below. */
-  const liveRooms = useMemo(() => groupChats.filter((c) => c.is_checked_in), [groupChats])
+  /*
+   * Your mutes and the rooms you left, as `lib/roomMembership.ts` last heard
+   * them. A room left from Room info goes from this list at once rather than
+   * at the next read, and a mute set there shows on its row on the way back.
+   */
+  const membership = useRoomMembership()
+  const rooms = useMemo(
+    () => groupChats.filter((c) => !membership.left.has(c.chat_room_id)),
+    [groupChats, membership.left]
+  )
+  const roomMuted = useCallback(
+    (id: string) => isMuted(membership.mutes.get(id)),
+    [membership.mutes]
+  )
+  const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
 
   /*
    * The merged list.
@@ -312,7 +327,7 @@ function ChatInner() {
           open: () => handlePersonalChatPress(c),
         }
       }),
-      ...groupChats.filter((c) => !c.is_checked_in).map((c) => {
+      ...rooms.filter((c) => !c.is_checked_in).map((c) => {
         const preview =
           roomStateLine(c.room_state) ??
           (c.last_message?.trim()
@@ -326,6 +341,7 @@ function ChatInner() {
           avatarUrl: c.event_image,
           kind: 'event' as const,
           unread: c.unread_count > 0,
+          muted: roomMuted(c.chat_room_id),
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
           // The sender is searchable even when a room-state line replaces the preview.
           searchText: `${c.event_title} ${preview} ${c.last_sender_name ?? ''}`.toLowerCase(),
@@ -334,7 +350,7 @@ function ChatInner() {
       }),
     ]
     return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, groupChats, revealSeen, handlePersonalChatPress, handleGroupChatPress])
+  }, [personalChats, rooms, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
 
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim().toLowerCase()
@@ -471,6 +487,8 @@ function ChatInner() {
           }
         })
         .filter((chat) => chat.chat_room_id)
+      // Each row carries your mute of it; the store is what the rows read.
+      for (const room of rooms) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
 
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
       if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
@@ -923,6 +941,7 @@ function ChatInner() {
                 title={c.event_title}
                 coverUrl={c.event_image}
                 memberCount={c.participant_count}
+                muted={roomMuted(c.chat_room_id)}
                 onPress={() => handleGroupChatPress(c)}
               />
             ))}

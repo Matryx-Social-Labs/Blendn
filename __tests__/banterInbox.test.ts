@@ -206,8 +206,8 @@ describe('the room you are standing in', () => {
      * in Recent as well.
      */
     const src = SCREEN()
-    expect(src).toContain('groupChats.filter((c) => c.is_checked_in)')
-    expect(src).toContain('...groupChats.filter((c) => !c.is_checked_in).map')
+    expect(src).toContain('rooms.filter((c) => c.is_checked_in)')
+    expect(src).toContain('...rooms.filter((c) => !c.is_checked_in).map')
   })
 
   it('draws each live room as a full-width row, not a horizontal rail', () => {
