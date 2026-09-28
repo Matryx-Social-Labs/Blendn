@@ -9,11 +9,11 @@ import { AppHeader } from '../../components/AppHeader'
 import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
-import { DayHeading } from '../../components/ui/DayHeading'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
 import { Logger } from '../../lib/logger'
-import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import { markSeed, pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import { ProfileHeading } from '../../components/profile/ProfileSections'
 import { queryCache } from '../../lib/queryCache'
 import {
   isMuted,
@@ -151,10 +151,22 @@ function ChatInfoInner() {
   const subtitle = params.eventTitle && params.eventTitle !== title ? params.eventTitle : null
   const cover = params.eventImage || event?.image || null
 
+  /*
+   * The profile is told who this person is *here*: their pseudonym, and the
+   * room as the mark's fallback seed. `GET /users/:id` has no event context
+   * and answers "Attendee" for anyone you may not identify, so without these
+   * the profile titled them "Attendee" and drew a different creature from the
+   * one beside their name in this list.
+   */
   const openMember = (member: Member) => {
     router.push({
       pathname: '/user/[id]',
-      params: { id: member.userId, ...(event ? { eventId: event.id } : {}) },
+      params: {
+        id: member.userId,
+        ...(event ? { eventId: event.id } : {}),
+        ...(member.name ? { pseudonym: member.name } : {}),
+        roomSeed: `${chatGroupId}:${member.userId}`,
+      },
     } as never)
   }
 
@@ -263,7 +275,8 @@ function ChatInfoInner() {
         <ActionRow icon="exit-outline" label="Leave room" destructive onPress={confirmLeave} />
       </View>
 
-      <DayHeading title="In the room" detail={loading || failed ? undefined : String(total)} />
+      {/* The social screens' section heading (`ProfileHeading`), count beside it. */}
+      <ProfileHeading title="In the room" trailing={loading || failed ? undefined : String(total)} />
     </View>
   )
 
@@ -280,7 +293,8 @@ function ChatInfoInner() {
         contentContainerStyle={styles.list}
         renderItem={({ item }) => {
           const you = item.userId === user?.id
-          const mark = pseudonymAvatar(`${chatGroupId}:${item.userId}`)
+          // The one seed rule (`markSeed`): the pseudonym, as the bubble and the grid seed it.
+          const mark = pseudonymAvatar(markSeed(item.name, `${chatGroupId}:${item.userId}`))
           const role = roleLabel(item.role)
           const name = you ? 'You' : item.name || 'Attendee'
           return (

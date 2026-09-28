@@ -63,7 +63,7 @@ export function FilterSheet({
   return (
     <SheetModal visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close filters" />
-      <RisingSheet style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+      <RisingSheet style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SPACE.xl) + SPACE.sm }]}>
         <Grabber />
 
         <View style={styles.sheetHead}>
@@ -75,7 +75,7 @@ export function FilterSheet({
               onPress={() => onChange(NO_FILTERS)}
               accessibilityRole="button"
               accessibilityLabel="Clear all filters"
-              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              hitSlop={SPACE.md}
             >
               <Text style={styles.clear}>Clear all</Text>
             </Pressable>
@@ -83,6 +83,12 @@ export function FilterSheet({
         </View>
 
         <SheetScrollView showsVerticalScrollIndicator={false} style={styles.sheetBody}>
+          {/*
+            No categories (the list failed to load, or the server has none):
+            no "What" group. "Anything" alone would be a group with one chip
+            and nothing to choose between.
+          */}
+          {categories.length > 0 ? (
           <Group label="What">
             <Chip
               label="Anything"
@@ -105,6 +111,7 @@ export function FilterSheet({
               />
             ))}
           </Group>
+          ) : null}
 
           <Group label="When">
             {WHEN_OPTIONS.map((w: When) => (

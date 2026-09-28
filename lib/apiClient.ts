@@ -757,6 +757,12 @@ export interface UserProfileData {
     eventsOrganized: number
   }
   isOwnProfile?: boolean
+  /**
+   * `GET /users/:id` only: whether you may see who this is (`maySeeIdentity`).
+   * The server's one answer to "revealed?"; photos, bio and occupation are
+   * sent only when it is true. Absent from an older server — read as false.
+   */
+  identityVisible?: boolean
   onboarded?: boolean
   /**
    * `GET /users/:id` only: where you stand with them, decided by the server

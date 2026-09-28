@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import React, { useEffect, useMemo, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   FadeInDown,
@@ -20,6 +20,7 @@ import { MOTION_SPRING } from '../../lib/motion'
 import { subscribeToChatMessage } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
+import { Grabber } from '../ui/Grabber'
 import { Text } from '../ui/Text'
 
 /** A line in the dock: somebody's message, or something the room did. */
@@ -88,6 +89,9 @@ export function ChatDock({
   const reduceMotion = useReducedMotion()
   const [messages, setMessages] = useState<DockLine[]>([])
   const [count, setCount] = useState(0)
+  // The history request failed: not the same as a quiet room, so it says so.
+  const [historyFailed, setHistoryFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   // Left: the server refuses the history and the socket, so neither is asked.
   const left = useRoomMembership().left.has(chatGroupId ?? '')
 
@@ -97,13 +101,21 @@ export function ChatDock({
     apiClient
       .getChatMessages(chatGroupId, { limit: 8 })
       .then((r) => {
-        if (cancelled || !r.success) return
+        if (cancelled) return
+        if (!r.success) {
+          setHistoryFailed(true)
+          return
+        }
+        setHistoryFailed(false)
         const lines = fromHistory(r.data, myId)
         setMessages(lines.sort((a, b) => a.at - b.at).slice(-SHOWN))
         const total = (r.data as { pagination?: { total?: number } } | null)?.pagination?.total
         setCount(typeof total === 'number' ? total : lines.length)
       })
-      .catch((e) => Logger.debug('chat', 'dock history failed', { error: e }))
+      .catch((e) => {
+        Logger.debug('chat', 'dock history failed', { error: e })
+        if (!cancelled) setHistoryFailed(true)
+      })
     const unsubscribe = subscribeToChatMessage(chatGroupId, (data) => {
       if (data.chatGroupId !== chatGroupId) return
       const m = data.message
@@ -125,7 +137,7 @@ export function ChatDock({
       cancelled = true
       unsubscribe()
     }
-  }, [chatGroupId, myId, left])
+  }, [chatGroupId, myId, left, attempt])
 
   const lines = useMemo(
     () => [...messages, ...system].sort((a, b) => a.at - b.at).slice(-SHOWN),
@@ -151,12 +163,28 @@ export function ChatDock({
   return (
     <GestureDetector gesture={pull}>
       <Animated.View style={[styles.dock, { paddingBottom: bottomInset + SPACE.md }, liftStyle]}>
-        <View style={styles.handle} />
+        <Grabber style={styles.handle} />
         <View style={styles.lines} accessibilityLiveRegion="polite">
           {left ? (
             <Text variant="meta" color={EMBER.textTertiary}>
               You left this room&apos;s chat. Open it to rejoin.
             </Text>
+          ) : lines.length === 0 && historyFailed ? (
+            <View style={styles.failed}>
+              <Text variant="meta" color={EMBER.textTertiary} style={styles.placeholder} numberOfLines={1}>
+                Couldn&apos;t load messages.
+              </Text>
+              <Pressable
+                onPress={() => setAttempt((n) => n + 1)}
+                hitSlop={SPACE.md}
+                accessibilityRole="button"
+                accessibilityLabel="Try loading the room chat again"
+              >
+                <Text variant="label" color={EMBER.textPrimary}>
+                  TRY AGAIN
+                </Text>
+              </Pressable>
+            </View>
           ) : lines.length === 0 ? (
             <Text variant="meta" color={EMBER.textTertiary}>
               Nobody has said anything yet. Be the first.
@@ -213,14 +241,8 @@ const styles = StyleSheet.create({
     paddingTop: SPACE.sm,
     gap: SPACE.sm,
   },
-  handle: {
-    alignSelf: 'center',
-    width: SPACE.xxl,
-    height: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.separator,
-    marginBottom: SPACE.xs,
-  },
+  handle: { marginBottom: SPACE.xs },
+  failed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   // Two lines' worth, always: the dock never resizes, so the page above never moves.
   lines: { height: 2 * TYPE.meta.lineHeight + SPACE.xs, justifyContent: 'flex-end', gap: SPACE.xs },
   line: { flexDirection: 'row' },

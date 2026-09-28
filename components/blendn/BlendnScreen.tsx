@@ -23,6 +23,7 @@ import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
+import ScalePress from '../motion/ScalePress'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { RoomVisibilityBanner } from '../RoomVisibilityBanner'
 import { useToast } from '../Toast'
@@ -46,6 +47,7 @@ import { RoomStage, useStageScroll } from './RoomStage'
 import { TonightView } from './TonightView'
 
 const TOP_BAR = CONTROL.md
+const CHECK_OUT_SLOP = { top: (CONTROL.md - CONTROL.sm) / 2, bottom: (CONTROL.md - CONTROL.sm) / 2, left: SPACE.xs, right: SPACE.xs }
 
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
@@ -208,8 +210,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const like = useCallback((p: RoomPerson) => void likeId(p.id), [likeId])
   const wave = useCallback(
     async (p: RoomPerson) => {
+      // The haptic is `sendWave`'s, on a send; a refusal is toasted there too.
       const r = await sendWave(p.id)
-      if (r === 'sent') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
       if (r !== 'refused') setWaves((w) => ({ ...w, [p.id]: r }))
     },
     [sendWave]
@@ -218,9 +220,15 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     (p: RoomPerson) => {
       setOpen(null)
       // The event travels with the id: the profile's Like needs to know the room.
+      // The pseudonym travels too, so the profile is titled as the room shows
+      // them until the server says who they are (docs/PROFILE.md).
       router.push({
         pathname: '/user/[id]',
-        params: { id: p.id, ...(eventId ? { eventId } : {}) } as never,
+        params: {
+          id: p.id,
+          ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}),
+          ...(p.name ? { pseudonym: p.name } : {}),
+        } as never,
       })
     },
     [eventId]
@@ -434,11 +442,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         </Animated.View>
       ) : mode === 'error' ? (
         <View style={[styles.centred, { paddingTop: topInset }]}>
-          <Text variant="bodyStrong">Could not load the room</Text>
-          <Text variant="meta">{room.error ?? 'Check your connection and try again.'}</Text>
-          <Pressable onPress={room.retry} style={styles.retry} accessibilityRole="button">
-            <Text variant="button">Try again</Text>
-          </Pressable>
+          {/*
+            Fixed copy: `room.error` is whatever the request said ("Network
+            request failed", a server sentence) and is for the log. The one
+            action is this state's primary, so it takes the accent.
+          */}
+          <Text variant="bodyStrong">Couldn&apos;t load the room</Text>
+          <Text variant="meta">Check your connection and try again.</Text>
+          <ScalePress onPress={room.retry} style={styles.retry} accessibilityRole="button">
+            <Text variant="button" color={EMBER.onGradient}>
+              Try again
+            </Text>
+          </ScalePress>
         </View>
       ) : (
         <View style={[styles.centred, { paddingTop: topInset }]}>
@@ -462,6 +477,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             <Pressable
               onPress={confirmLeave}
               disabled={controls.checkOutBusy}
+              // The pill is drawn at 32; the target reaches the bar's 48.
+              hitSlop={CHECK_OUT_SLOP}
               accessibilityRole="button"
               accessibilityLabel="Check out of this event"
               accessibilityHint="Asks first. Removes you from the room; checking back in needs your location again."
@@ -495,7 +512,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         person={openLive}
         onClose={() => setOpen(null)}
         onLike={like}
-        onWave={(p) => void wave(p)}
+        onWave={wave}
         onMessage={(p) => {
           setOpen(null)
           setConnectTo(p)
@@ -515,9 +532,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onSend={async (message) => {
           if (!connectTo) return
           setConnecting(true)
-          await room.connect(connectTo.id, message)
-          setConnecting(false)
-          setConnectTo(null)
+          try {
+            // Closed only once the request stands; a failure keeps the sheet
+            // and the note, and says so, instead of "Request sent".
+            if (await room.connect(connectTo.id, message)) setConnectTo(null)
+            else showToast("Couldn't send the request. Try again.", 'error')
+          } finally {
+            setConnecting(false)
+          }
         }}
       />
 
@@ -595,10 +617,10 @@ const styles = StyleSheet.create({
   centred: { flex: 1, alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER },
   retry: {
     marginTop: SPACE.md,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.accent,
     justifyContent: 'center',
   },
 })

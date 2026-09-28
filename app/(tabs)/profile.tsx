@@ -2,9 +2,10 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RequestsRow } from '../../components/friends/RequestsRow'
+import { LoadError } from '../../components/LoadError'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { MemoryTile } from '../../components/profile/MemoryTile'
@@ -31,6 +32,7 @@ import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { TAB_BAR_CLEARANCE } from './_layout'
 
 /** The photo pile beside your name, for the skeleton's stand-in. */
 const STACK = { width: 120, height: 120 }
@@ -338,7 +340,12 @@ function ProfileInner() {
     </View>
   )
 
-  const mark = pseudonymAvatar(profile?.id || user?.id || 'you')
+  /*
+   * The mark behind your photo pile when you have none. Seeded on 'you', not
+   * your account id: lib/pseudonymAvatar.ts forbids a user id as a seed, and
+   * nobody else ever sees this one, so it has nothing to be stable against.
+   */
+  const mark = pseudonymAvatar('you')
   const stats = profile?.stats
   const meta = identityMeta(profile?.location, profile?.memberSince)
   const gaps = profile
@@ -597,7 +604,7 @@ function ProfileInner() {
   if ((authLoading || loading) && !profile) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
           {renderSkeleton()}
         </ScrollView>
       </SafeAreaView>
@@ -608,15 +615,8 @@ function ProfileInner() {
   if (error && !profile) {
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => getUserAndProfile(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Retry loading your profile"
-        >
-          <Text variant="button" color={EMBER.onGradient}>Retry</Text>
-        </TouchableOpacity>
+        {/* The app's one failed state, not a red sentence over a pill. */}
+        <LoadError title="Your profile didn't load" onRetry={() => void getUserAndProfile(true)} />
       </SafeAreaView>
     )
   }
@@ -625,6 +625,8 @@ function ProfileInner() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        // The tab bar floats over the page's foot: Settings sat under it.
+        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
         }
@@ -647,7 +649,8 @@ const styles = StyleSheet.create({
 
   /* The screen gutter, and 32 between sections. */
   panel: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },
-  section: { gap: SPACE.md },
+  // Heading → its content is 16 (docs/DESIGN_SYSTEM.md), as on every profile screen.
+  section: { gap: SPACE.lg },
   details: { gap: SPACE.xl },
 
   headerBlock: { gap: SPACE.lg },
@@ -702,8 +705,6 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.bg,
     padding: GUTTER,
   },
-  errorText: { color: EMBER.destructive, textAlign: 'center', marginBottom: SPACE.xl },
-  retryButton: { backgroundColor: EMBER.accent, paddingHorizontal: SPACE.xl, height: CONTROL.lg, justifyContent: 'center', borderRadius: EMBER_RADIUS.pill },
 })
 
 /*

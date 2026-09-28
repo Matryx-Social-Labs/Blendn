@@ -144,7 +144,7 @@ export function MatchMoment({
           ) : null}
           {opener ? (
             <View style={styles.opener}>
-              <Text variant="caption" color={EMBER.textTertiary}>
+              <Text variant="label" color={EMBER.textSecondary}>
                 TRY
               </Text>
               <Text variant="body" style={styles.centreText}>
@@ -185,7 +185,8 @@ function Heart({ progress, lift, size }: { progress: SharedValue<number>; lift: 
   })
   return (
     <Animated.View style={[styles.heart, style]} pointerEvents="none">
-      <Ionicons name="heart" size={size} color={EMBER.accent} />
+      {/* `textPrimary`, not the accent: Say hi is the one accent here. */}
+      <Ionicons name="heart" size={size} color={EMBER.textPrimary} />
     </Animated.View>
   )
 }

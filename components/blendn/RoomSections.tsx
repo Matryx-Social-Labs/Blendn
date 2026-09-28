@@ -232,16 +232,21 @@ export const GridFace = memo(function GridFace({
   onLike: (p: RoomPerson) => void
 }) {
   const [pop, setPop] = useState(0)
+  // Pressed under the finger, like Meet next's cards; the tap gesture has no press style of its own.
+  const [pressed, setPressed] = useState(false)
   const reduceMotion = useReducedMotion()
+  const likeable = !person.liked && !person.matched && !person.pending
 
   const single = Gesture.Tap()
     .runOnJS(true)
+    .onBegin(() => setPressed(true))
+    .onFinalize(() => setPressed(false))
     .onEnd((_e, ok) => ok && onOpen(person))
   const double = Gesture.Tap()
     .numberOfTaps(2)
     .runOnJS(true)
     .onEnd((_e, ok) => {
-      if (!ok || person.liked || person.matched) return
+      if (!ok || !likeable) return
       setPop((n) => n + 1)
       onLike(person)
     })
@@ -256,15 +261,25 @@ export const GridFace = memo(function GridFace({
       style={[styles.gridCell, { width: size }]}
     >
       <GestureDetector gesture={Gesture.Exclusive(double, single)}>
-        <View
+        <Animated.View
           accessible
           accessibilityRole="button"
           accessibilityLabel={`${person.name}. ${person.matched ? 'Matched' : reasonLine(person)}`}
-          accessibilityHint="Opens their card. Like is in the actions menu."
-          accessibilityActions={[{ name: 'activate' }, { name: 'longpress', label: 'Like' }]}
+          accessibilityHint={likeable ? 'Opens their card. Like is in the actions menu.' : 'Opens their card.'}
+          // Like is offered only while it can do something: not once liked,
+          // matched, or while a like is still in flight.
+          accessibilityActions={likeable ? [{ name: 'activate' }, { name: 'longpress', label: 'Like' }] : [{ name: 'activate' }]}
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onOpen(person)
-            else if (!person.liked) onLike(person)
+            else if (e.nativeEvent.actionName === 'longpress' && likeable) {
+              setPop((n) => n + 1)
+              onLike(person)
+            }
+          }}
+          style={{
+            transform: [{ scale: pressed && !reduceMotion ? PRESSED_SCALE : 1 }],
+            transitionProperty: 'transform',
+            transitionDuration: 120,
           }}
         >
           <Face name={person.name} photo={person.photo} size={size - SPACE.lg} />
@@ -280,7 +295,7 @@ export const GridFace = memo(function GridFace({
           ) : person.insideNow ? (
             <View style={styles.hereDot} />
           ) : null}
-        </View>
+        </Animated.View>
       </GestureDetector>
       <Text variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.centre}>
         {person.name}
@@ -340,6 +355,9 @@ export function useGridCell() {
   const { width } = useWindowDimensions()
   return (width - GUTTER * 2 - SPACE.md * 2) / 3
 }
+
+/** The press scale Meet next's cards use (`styles.pressed`). */
+const PRESSED_SCALE = 0.97
 
 export const GRID_GAP = SPACE.md
 export const GRID_ROW_GAP = SPACE.lg
@@ -414,5 +432,5 @@ const styles = StyleSheet.create({
     borderColor: EMBER.bg,
   },
   more: { alignSelf: 'center', paddingVertical: SPACE.sm },
-  pressed: { transform: [{ scale: 0.97 }] },
+  pressed: { transform: [{ scale: PRESSED_SCALE }] },
 })

@@ -6,7 +6,7 @@ import { HeartIcon } from '../motion/HeartIcon'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +32,7 @@ import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
+import { featuredDateLabel, timeLabel as pulseTimeLabel } from '../../lib/pulse'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
@@ -51,7 +52,7 @@ import {
 } from '../../lib/socketClient';
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme';
 import { PulseTopBar } from '../pulse/PulseTopBar';
-import { SceneHero } from '../scene/SceneHero';
+import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
 import {
   SCENE_CTA_HEIGHT,
@@ -603,16 +604,24 @@ export default function EventDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user])
 
+  /*
+   * One save request at a time. A second tap while the first is in flight
+   * flipped the optimistic state back and raced the two responses, so the
+   * heart could end on the opposite of what the server holds.
+   */
+  const interestInFlight = useRef(false)
   const handleToggleInterest = useCallback(async () => {
+    if (interestInFlight.current) return
     try {
       if (!id) return
       if (!user) {
-        showTray('Sign in required', 'Please sign in to show interest.', [
+        showTray('Sign in to save events', 'Saved events come with you to every device.', [
           { label: 'Not now', onPress: closeTray },
           { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
         ])
         return
       }
+      interestInFlight.current = true
       feedback.tap()
       const prevInterested = userInterested
       setUserInterested(!prevInterested)
@@ -623,14 +632,16 @@ export default function EventDetail() {
         setUserInterested(prevInterested)
         setInterestCount((prev) => Math.max(0, prev + (prevInterested ? 1 : -1)))
         feedback.error()
-        showTray('Error', 'Failed to update interest.')
+        showTray("Couldn't save the event", 'Try again.')
         return
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
     } catch {
       feedback.error()
-      showTray('Error', 'Failed to update interest.')
+      showTray("Couldn't save the event", 'Try again.')
+    } finally {
+      interestInFlight.current = false
     }
   }, [id, user, userInterested, showTray, closeTray, feedback])
 
@@ -653,12 +664,12 @@ export default function EventDetail() {
       if (!result.success) {
         setRsvpStatus(prevStatus)
         feedback.error()
-        showTray('Error', 'Failed to cancel RSVP.')
+        showTray("Couldn't cancel your RSVP", 'Try again.')
       }
     } catch {
       setRsvpStatus(prevStatus)
       feedback.error()
-      showTray('Error', 'Failed to update RSVP.')
+      showTray("Couldn't update your RSVP", 'Try again.')
     }
   }, [id, rsvpStatus, showTray, feedback])
 
@@ -688,7 +699,7 @@ export default function EventDetail() {
     try {
       if (!id) return
       if (!user) {
-        showTray('Sign in required', 'Please sign in to RSVP to events.', [
+        showTray('Sign in to RSVP', 'Your RSVP is kept on your account.', [
           { label: 'Not now', onPress: closeTray },
           { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
         ])
@@ -707,7 +718,7 @@ export default function EventDetail() {
       if (!result.success || !result.data) {
         setRsvpStatus(prevStatus)
         feedback.error()
-        showTray('Error', 'Failed to RSVP to event.')
+        showTray("Couldn't RSVP", 'Try again.')
       } else {
         setRsvpStatus(result.data.rsvpStatus)
         if (result.data.rsvpStatus === 'waitlisted') {
@@ -733,7 +744,7 @@ export default function EventDetail() {
     } catch {
       setRsvpStatus(prevStatus)
       feedback.error()
-      showTray('Error', 'Failed to update RSVP.')
+      showTray("Couldn't update your RSVP", 'Try again.')
     }
   }, [id, user, event, rsvpStatus, showTray, closeTray, feedback, confirmWithdrawRsvp, showToast])
 
@@ -813,12 +824,12 @@ export default function EventDetail() {
         showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
       } else {
         feedback.error()
-        showTray('Failed', result.error || 'Could not send announcement.')
+        showTray("Couldn't send the announcement", 'Try again.')
         setShowAnnouncementModal(false)
       }
     } catch {
       feedback.error()
-      showTray('Error', 'Failed to send announcement.')
+      showTray("Couldn't send the announcement", 'Try again.')
       setShowAnnouncementModal(false)
     } finally {
       setSendingAnnouncement(false)
@@ -858,12 +869,12 @@ export default function EventDetail() {
         showTray('Event updated', 'Your changes have been saved.')
       } else {
         feedback.error()
-        showTray('Failed', result.error || 'Could not update event.')
+        showTray("Couldn't save your changes", 'Try again.')
         setShowEditModal(false)
       }
     } catch {
       feedback.error()
-      showTray('Error', 'Failed to update event.')
+      showTray("Couldn't save your changes", 'Try again.')
       setShowEditModal(false)
     } finally {
       setSavingEdit(false)
@@ -872,8 +883,8 @@ export default function EventDetail() {
 
   const handleDeleteEvent = () => {
     Alert.alert(
-      'Delete Event',
-      'Are you sure you want to delete this event? This action cannot be undone.',
+      'Delete this event?',
+      "Everyone going loses it, and it can't be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -887,11 +898,11 @@ export default function EventDetail() {
                 router.back()
               } else {
                 feedback.error()
-                showTray('Failed', result.error || 'Could not delete event.')
+                showTray("Couldn't delete the event", 'Try again.')
               }
             } catch {
               feedback.error()
-              showTray('Error', 'Failed to delete event.')
+              showTray("Couldn't delete the event", 'Try again.')
             }
           },
         },
@@ -1110,14 +1121,14 @@ export default function EventDetail() {
                 <Text style={styles.retryButtonText}>Try again</Text>
               </ScalePress>
               <ScalePress haptic={false} style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={styles.backButtonText}>Go Back</Text>
+                <Text style={styles.backButtonText}>Go back</Text>
               </ScalePress>
             </>
           ) : (
             <>
               <Text style={styles.errorText}>Event not found</Text>
               <ScalePress style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={styles.backButtonText}>Go Back</Text>
+                <Text style={styles.backButtonText}>Go back</Text>
               </ScalePress>
             </>
           )}
@@ -1193,13 +1204,15 @@ export default function EventDetail() {
       ? 'arrow-forward'
       : ctaState === 'rsvpd' ? 'checkmark' : actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'
 
-  const when = event ? new Date(event.start_time) : null
-  const dateLabel = when
-    ? when.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
-    : ''
-  const timeLabel = when
-    ? when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : ''
+  /*
+   * The Pulse's words for a date — "Today", "Tomorrow", "Oct 24" — so a card
+   * and the page it opens never disagree. Read off the live window, not the
+   * run: on day 2 of a festival the hero says today's doors, not day 1's.
+   * Phone-local, like every date on the Pulse (the helpers take no zone).
+   */
+  const heroStart = live?.start_time ?? null
+  const dateLabel = heroStart ? featuredDateLabel(heroStart) : ''
+  const heroTimeLabel = heroStart ? pulseTimeLabel(heroStart) : ''
 
   return (
     <View style={styles.container}>
@@ -1239,7 +1252,7 @@ export default function EventDetail() {
               glyph={
                 <HeartIcon on={userInterested} size={ICON.md} onColor={EMBER.textPrimary} offColor={EMBER.textPrimary} />
               }
-              label={userInterested ? 'Remove from interested events' : 'Save this event'}
+              label={userInterested ? 'Saved' : 'Save'}
               active={userInterested}
               onPress={handleToggleInterest}
             />
@@ -1288,7 +1301,7 @@ export default function EventDetail() {
         */}
         <LayoutAnimationConfig skipEntering>
         {isLoading && !event ? (
-          <SkeletonBlock width="100%" height={420} borderRadius={0} />
+          <SkeletonBlock width="100%" height={sceneHeroHeight()} borderRadius={0} />
         ) : (
           <Animated.View entering={HERO_FADE_IN}>
           <SceneHero
@@ -1308,7 +1321,7 @@ export default function EventDetail() {
             source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
             title={event?.title || ''}
             dateLabel={dateLabel}
-            timeLabel={timeLabel}
+            timeLabel={heroTimeLabel}
             scarcity={heroPillLabel({
               maxCapacity: event?.max_capacity,
               currentCapacity: event?.current_capacity,
@@ -1464,6 +1477,7 @@ export default function EventDetail() {
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state={ctaState}
+            alone={checkInCount <= 1}
             onPress={primaryActionDisabled ? undefined : primaryActionPress}
             iconKey={checkingIn ? 'busy' : ctaIcon}
             icon={(color) =>

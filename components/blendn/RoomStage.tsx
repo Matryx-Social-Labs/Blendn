@@ -101,7 +101,8 @@ export function useStageScroll() {
  * - The route is a transparent modal with the stack's own animation off; this
  *   is the only transition, so there is never a slide *and* a morph.
  *
- * Reduce Motion: a 200ms fade both ways, and the drag still works.
+ * Reduce Motion: a 200ms fade both ways from the page colour (never the
+ * button's accent), and the drag still works.
  */
 export const RoomStage = React.forwardRef<{ close(): void }, {
   onClosed: () => void
@@ -169,7 +170,9 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     const p = open.get()
     return {
       opacity: reduceMotion ? p : 1,
-      backgroundColor: interpolateColor(p, [0, 0.55], [EMBER.accent, EMBER.bg]),
+      // Reduce Motion fades the page in, so it starts as the page: an orange
+      // screen flashing by is the morph's colour without the morph.
+      backgroundColor: reduceMotion ? EMBER.bg : interpolateColor(p, [0, 0.55], [EMBER.accent, EMBER.bg]),
       transform: [{ scale: reduceMotion ? 1 : interpolate(p, [0, 1], [startScale, 1]) }],
     }
   })

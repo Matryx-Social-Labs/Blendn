@@ -73,6 +73,7 @@ import {
   timeLabel,
 } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
+import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
 import { openInMaps } from '../../lib/openInMaps'
 import { apiClient } from '../../lib/apiClient'
@@ -171,6 +172,20 @@ function RevealRow({
     <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER * (4 + index)} distance={8}>
       {children}
     </FadeInUp>
+  )
+}
+
+/** One `UpcomingCard`-shaped placeholder: words left, square photo right. */
+function UpcomingSkeletonRow() {
+  return (
+    <View style={styles.upcomingSkeletonCard}>
+      <View style={{ flex: 1, gap: SPACE.sm }}>
+        <SkeletonLine width={'40%'} />
+        <SkeletonLine width={'85%'} />
+        <SkeletonLine width={'55%'} />
+      </View>
+      <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
+    </View>
   )
 }
 
@@ -441,7 +456,6 @@ function EventsInner() {
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
-  const locationRequestedRef = useRef(false)
   const interestInFlightRef = useRef<Set<string>>(new Set())
   const checkInFlightRef = useRef<Set<string>>(new Set())
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
@@ -618,11 +632,11 @@ function EventsInner() {
       if (!userLocation) {
         showTray({
           title: 'Location required',
-          message: 'Enable location to verify proximity and check in.',
+          message: 'Turn on location so we can check you in.',
           buttons: [
             { label: 'Cancel', onPress: closeTray },
             {
-              label: 'Open Settings',
+              label: 'Open settings',
               variant: 'primary',
               onPress: () => {
                 closeTray()
@@ -673,7 +687,7 @@ function EventsInner() {
           Logger.warn('events', 'Check-in timed out', { eventId: event.id })
           showTray({
             title: 'Still checking you in',
-            message: 'This is taking longer than expected. Please try again.',
+            message: 'This is taking longer than expected. Try again.',
             buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
           })
           return
@@ -693,7 +707,7 @@ function EventsInner() {
             ? [
                 { label: 'Done', onPress: closeTray },
                 {
-                  label: 'Open Maps',
+                  label: 'Open maps',
                   variant: 'primary',
                   onPress: () => {
                     closeTray()
@@ -772,13 +786,13 @@ function EventsInner() {
         // TypeScript drops that narrowing inside `onPress`, which runs later and
         // could in principle see a reassigned value.
         const chatId = chatResult.data.id
-        const chatName = chatResult.data.name || 'Event Chat'
+        const chatName = chatResult.data.name || 'Event chat'
         showTray({
           title: 'Checked in',
           message: 'You have been checked in and added to the event chat.',
           buttons: [
             {
-              label: 'Go to Chat',
+              label: 'Go to chat',
               variant: 'primary',
               onPress: () => {
                 closeTray()
@@ -820,9 +834,10 @@ function EventsInner() {
       }
       Logger.error('events', 'Unexpected error', { error: error as any })
       feedback.error()
+      // Fixed copy: an exception's message is for the log, not for the person.
       showTray({
         title: 'Check-in failed',
-        message: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
+        message: "Couldn't check you in. Try again.",
         buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
       })
     } finally {
@@ -864,8 +879,10 @@ function EventsInner() {
         setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
         feedback.error()
         showTray({
-          title: 'Update failed',
-          message: 'Failed to update interest.',
+          title: prevInterested ? "Couldn't remove it" : "Couldn't save",
+          message: prevInterested
+            ? "Couldn't remove this event from Saved. Try again."
+            : "Couldn't save this event. Try again.",
           buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
           size: 'compact',
         })
@@ -873,15 +890,17 @@ function EventsInner() {
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
-      feedback.tap()
+      // No second haptic here: the tap above already answered the finger.
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch {
       setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
       feedback.error()
       showTray({
-        title: 'Update failed',
-        message: 'Failed to update interest.',
+        title: prevInterested ? "Couldn't remove it" : "Couldn't save",
+        message: prevInterested
+          ? "Couldn't remove this event from Saved. Try again."
+          : "Couldn't save this event. Try again.",
         buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
         size: 'compact',
       })
@@ -926,8 +945,8 @@ function EventsInner() {
         setCheckedInEvents(previousCheckedInEvents)
         feedback.error()
         showTray({
-          title: 'Checkout failed',
-          message: result.error || 'Please try again.',
+          title: 'Check-out failed',
+          message: "Couldn't check you out. Try again.",
           buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
           size: 'compact',
         })
@@ -942,8 +961,8 @@ function EventsInner() {
       setCheckedInEvents(previousCheckedInEvents)
       feedback.error()
       showTray({
-        title: 'Checkout failed',
-        message: 'Please try again.',
+        title: 'Check-out failed',
+        message: "Couldn't check you out. Try again.",
         buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
         size: 'compact',
       })
@@ -963,19 +982,18 @@ function EventsInner() {
       formatCarouselCardDate(event.start_time),
       event.venue_name || event.display_city || 'Location TBA',
       (event.short_description || event.description || '').trim(),
-      'Tip: long-press cards for quick actions.',
     ].filter(Boolean).join('\n')
 
     const buttons: ActionTrayButton[] = [
       {
-        label: interested ? 'Remove Interest' : 'Mark Interested',
+        label: interested ? 'Remove from saved' : 'Save',
         onPress: () => {
           closeTray()
           toggleInterest(event)
         },
       },
       {
-        label: 'View Details',
+        label: 'View details',
         // One primary per tray: Check In takes it when it is on offer.
         variant: canCheckIn ? 'secondary' : 'primary',
         onPress: () => {
@@ -987,7 +1005,8 @@ function EventsInner() {
 
     if (canCheckIn) {
       buttons.unshift({
-        label: 'Check In',
+        // The check-in's name everywhere else in the app (the Scene's CTA).
+        label: 'Blend in',
         variant: 'primary',
         onPress: () => {
           closeTray()
@@ -1007,10 +1026,28 @@ function EventsInner() {
      */
     if (isCheckedIn) {
       buttons.unshift({
-        label: 'Check Out',
+        label: 'Check out',
+        /*
+         * Asks first, with the Room's words. Checking out closes the room and
+         * coming back needs a fresh location fix, so a stray tap in a tray
+         * of four buttons should not be able to do it on its own.
+         */
         onPress: () => {
-          closeTray()
-          void handleCheckOut(event)
+          showTray({
+            title: `Check out of ${event.title}?`,
+            message: 'You’ll leave the room and its people. To come back in you’ll need to check in again, with your location.',
+            buttons: [
+              { label: 'Stay', onPress: closeTray },
+              {
+                label: 'Check out',
+                variant: 'primary',
+                onPress: () => {
+                  closeTray()
+                  void handleCheckOut(event)
+                },
+              },
+            ],
+          })
         },
       })
     }
@@ -1033,11 +1070,11 @@ function EventsInner() {
         Logger.warn('events', 'permission:notGranted', {})
         showTray({
           title: 'Turn on location',
-          message: 'We need your location to show nearby events and enable check-in.',
+          message: 'We need your location to show nearby events and to check you in.',
           buttons: [
             { label: 'Cancel', onPress: closeTray },
             {
-              label: 'Open Settings',
+              label: 'Open settings',
               variant: 'primary',
               onPress: () => {
                 closeTray()
@@ -1064,19 +1101,18 @@ function EventsInner() {
     if (locationRequestInFlight.current) return
     if (locationStatus === 'denied' && !force) return
     locationRequestInFlight.current = true
-    locationRequestedRef.current = true
     getCurrentLocationQuietly()
       .finally(() => {
         locationRequestInFlight.current = false
       })
   }, [userLocation, locationStatus, getCurrentLocationQuietly])
 
-  const onScroll = useCallback((e: any) => {
-    const y = e.nativeEvent.contentOffset.y
-    if (!locationRequestedRef.current && y > 180) {
-      requestLocationIfNeeded(false)
-    }
-  }, [requestLocationIfNeeded])
+  /*
+   * No location prompt on scroll. Scrolling past 180pt used to raise the OS
+   * permission dialog (and, once refused, a "Turn on location" tray) in the
+   * middle of reading the feed, for a request nobody had made. The ask is the
+   * Nearby section's own button, where the reason is on screen beside it.
+   */
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -1160,6 +1196,18 @@ function EventsInner() {
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 20
   /*
+   * Whether another page could exist. A short page is the last one
+   * (`pageHasMore`), so the end of a twelve-event city stops asking.
+   */
+  const [hasMore, setHasMore] = useState(true)
+  const fetchMoreInFlightRef = useRef(false)
+  /*
+   * Bumped by every page-one load. A page two that was in flight when the
+   * city, search or filters changed belongs to the old list, and appending it
+   * to the new one would put another city's events under this one's header.
+   */
+  const feedGenerationRef = useRef(0)
+  /*
    * When `events` was last written. "Upcoming" means not started as of the
    * load, so this is set beside every `setEvents` and not read from the clock
    * during render.
@@ -1174,6 +1222,7 @@ function EventsInner() {
         setLoading(true)
       }
       setNetError(null)
+      feedGenerationRef.current += 1
       Logger.journey('events', 'fetch:start')
 
       /*
@@ -1201,7 +1250,7 @@ function EventsInner() {
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
-        setNetError('Failed to load events')
+        setNetError("Couldn't load events.")
         return
       }
 
@@ -1219,6 +1268,7 @@ function EventsInner() {
        */
       publishRoomSignal(normalized)
       setPage(0)
+      setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
       initialLoadedRef.current = true
       if (eventsData) {
@@ -1262,7 +1312,7 @@ function EventsInner() {
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
-      setNetError('Failed to load events')
+      setNetError("Couldn't load events.")
     } finally {
       if (!options?.silent || !initialLoadedRef.current) {
         setLoading(false)
@@ -1458,7 +1508,7 @@ function EventsInner() {
       } catch (error) {
         // Not being able to name where you are costs a "switch?" prompt and a
         // distance label. It must not interrupt browsing.
-        Logger.warn('events', 'Could not resolve the device city', { error: error as any })
+        Logger.warn('events', "Couldn't resolve the device city", { error: error as any })
       }
     })()
     return () => {
@@ -1634,17 +1684,20 @@ function EventsInner() {
 
   // Basic pagination: fetch next page after current items
   const fetchMore = useCallback(async () => {
+    // `onEndReached` fires more than once per arrival at the end; one request
+    // at a time, and none once a short page has said there is nothing more.
+    if (loading || !hasMore || fetchMoreInFlightRef.current) return
+    fetchMoreInFlightRef.current = true
+    const generation = feedGenerationRef.current
     try {
-      if (loading) return
       Logger.journey('events', 'fetchMore:start', { page: page + 1 })
       /*
-       * The same scope as page one, which it did not used to have.
+       * The same scope as page one — city, search **and filters**.
        *
-       * `city` was missing here while `fetchEvents` sends it, so scrolling to
-       * the bottom of a city-scoped list appended events from everywhere — the
-       * list silently stopped meaning what its own header said, and only past
-       * the fold where nobody looks twice. `search` would have inherited the
-       * identical bug the moment it was added, which is how this was found.
+       * `city` was missing here once, and scrolling to the bottom of a
+       * city-scoped list appended events from everywhere. The filters were
+       * missing until this: page one honoured "this weekend, within 2 km" and
+       * page two appended everything, below the fold where nobody looks twice.
        */
       const { data, error } = await fetchEventsApi({
         page: page + 1,
@@ -1654,11 +1707,16 @@ function EventsInner() {
         lon: userLocation?.longitude,
         include: 'checkins',
         search: searchTerm || undefined,
+        ...filtersToQuery(filters),
       })
+      // The list was replaced while this was in flight; this page is not its.
+      if (generation !== feedGenerationRef.current) return
       if (error) return
-      if (!data || data.length === 0) return
+      const received = data ?? []
+      setHasMore(pageHasMore(received.length, PAGE_SIZE))
+      if (received.length === 0) return
       setEvents(prev => {
-        const merged = [...prev, ...data.map(normalizeEvent)]
+        const merged = mergeEventPage(prev, received.map(normalizeEvent))
         publishRoomSignal(merged)
         return merged
       })
@@ -1667,7 +1725,7 @@ function EventsInner() {
       const interestMap: { [eventId: string]: boolean } = {}
       const countMap: Record<string, number> = {}
       const checkinMap: { [eventId: string]: any } = {}
-      data.forEach((event) => {
+      received.forEach((event) => {
         interestMap[event.id] = !!event.is_favorited
         countMap[event.id] = event.favorite_count || 0
         if (event.user_checkin) {
@@ -1681,8 +1739,12 @@ function EventsInner() {
       setInterestStatuses((prev) => ({ ...prev, ...interestMap }))
       setInterestCounts((prev) => ({ ...prev, ...countMap }))
       setCheckinStatuses((prev) => ({ ...prev, ...checkinMap }))
-    } catch {}
-  }, [loading, page, userLocation, selectedCity, searchTerm])
+    } catch (error) {
+      Logger.warn('events', 'fetchMore:failed', { error: error as any })
+    } finally {
+      fetchMoreInFlightRef.current = false
+    }
+  }, [loading, hasMore, page, userLocation, selectedCity, searchTerm, filters])
 
   // Cleared once the first content has committed; see `RevealRow`.
   const mainRowsRevealPending = useRef(true)
@@ -1719,6 +1781,7 @@ function EventsInner() {
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
             note={note}
             onPress={() => handleEventPress(event)}
+            onLongPress={() => handleEventPreview(event)}
             isFavorited={!!interestStatuses[event.id]}
             favoriteBusy={!!interestPending[event.id]}
             onToggleFavorite={() => toggleInterest(event)}
@@ -1726,7 +1789,7 @@ function EventsInner() {
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, toggleInterest])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -1822,8 +1885,9 @@ function EventsInner() {
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
         onPress: () => handleEventPress(item),
+        onLongPress: () => handleEventPreview(item),
       })),
-    [featuredItems, handleEventPress]
+    [featuredItems, handleEventPress, handleEventPreview]
   )
 
   const upcomingStackItems = useMemo(() => {
@@ -1912,6 +1976,7 @@ function EventsInner() {
               placeLabel={placeLabel(featuredItems[0])}
               width={featured.width}
               onPress={() => handleEventPress(featuredItems[0])}
+              onLongPress={() => handleEventPreview(featuredItems[0])}
             />
           </View>
         ) : (
@@ -1951,6 +2016,7 @@ function EventsInner() {
                 placeLabel={item.placeLabel}
                 width={featured.width}
                 onPress={item.onPress}
+                onLongPress={item.onLongPress}
               />
             )}
             // Hoisted: an inline component is a new type every render, which
@@ -1994,6 +2060,7 @@ function EventsInner() {
                   // browsing elsewhere it read "6412km away". Same rule as Nearby.
                   distanceLabel={browsingHere ? formatDistance(item.distance) : null}
                   onPress={() => handleEventPress(item)}
+                  onLongPress={() => handleEventPreview(item)}
                   isFavorited={!!interestStatuses[item.id]}
                   favoriteBusy={!!interestPending[item.id]}
                   onToggleFavorite={() => toggleInterest(item)}
@@ -2096,7 +2163,7 @@ function EventsInner() {
     <View style={styles.pulseSection}>
       <SectionHeader title="Nearby" />
       <Text style={styles.sectionSubTitle}>
-        Enable location to see events near you.
+        Turn on location to see events near you.
       </Text>
       <TouchableOpacity
         style={styles.nearbyCta}
@@ -2115,7 +2182,7 @@ function EventsInner() {
         }
       >
         <Text style={styles.nearbyCtaText}>
-          {locationStatus === 'denied' ? 'Open Settings' : 'Enable Location'}
+          {locationStatus === 'denied' ? 'Open settings' : 'Turn on location'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -2158,7 +2225,7 @@ function EventsInner() {
                   accessibilityRole="button"
                   accessibilityLabel="Dismiss quick actions tip"
                   onPress={markPreviewHintSeen}
-                  style={styles.bannerCta}
+                  style={[styles.bannerCta, styles.bannerCtaOnInfo]}
                 >
                   <Text style={styles.bannerCtaText}>Got it</Text>
                 </TouchableOpacity>
@@ -2193,7 +2260,7 @@ function EventsInner() {
                   accessibilityRole="button"
                   accessibilityLabel={`Switch to ${switchSuggestion}`}
                   onPress={() => chooseCity(switchSuggestion)}
-                  style={styles.bannerCta}
+                  style={[styles.bannerCta, styles.bannerCtaOnInfo]}
                 >
                   <Text style={styles.bannerCtaText}>Switch</Text>
                 </TouchableOpacity>
@@ -2233,28 +2300,33 @@ function EventsInner() {
             {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
               <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerWarn}>
                 <Text style={styles.bannerText}>
-                  Enable Location to show nearby events and check-in.
+                  Turn on location to see nearby events and check in.
                 </Text>
                 <TouchableOpacity
                   accessibilityRole="button"
-                  accessibilityLabel="Open settings to enable location"
+                  accessibilityLabel="Open settings to turn on location"
                   onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
                   style={styles.bannerCta}
                 >
-                  <Text style={styles.bannerCtaText}>Enable</Text>
+                  <Text style={styles.bannerCtaText}>Settings</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}
-            {!!netError && (
+            {/*
+              Only over a list that is still on screen. With nothing loaded the
+              whole page is the error (`firstLoadFailed` below), and saying it
+              twice, once small and once large, is noise.
+            */}
+            {!!netError && events.length > 0 && (
               <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerError}>
-                <Text style={styles.bannerText}>{netError}</Text>
+                <Text style={styles.bannerText}>Couldn&apos;t refresh events.</Text>
                 <TouchableOpacity
                   accessibilityRole="button"
-                  accessibilityLabel="Retry loading events"
+                  accessibilityLabel="Try again"
                   onPress={() => fetchEvents({ force: true })}
                   style={styles.bannerCta}
                 >
-                  <Text style={styles.bannerCtaText}>Retry</Text>
+                  <Text style={styles.bannerCtaText}>Try again</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}
@@ -2287,6 +2359,14 @@ function EventsInner() {
    * independent.
    */
   const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
+
+  const emptyKind = pulseEmptyKind({
+    searching: isSearching,
+    filtered: hasActiveFilters(filters),
+    city: selectedCity,
+    notLiveHere,
+  })
+  const emptyCopy = pulseEmptyCopy(emptyKind, { city: selectedCity, term: searchTerm })
 
   return (
     /*
@@ -2345,12 +2425,10 @@ function EventsInner() {
               // still does if the nav grows — the bar's height has changed
               // twice, and a feed that ends underneath it is not a visible
               // failure, just a last card nobody can reach.
-              paddingBottom: insets.bottom + Math.max(MAIN_PADDING_BOTTOM, TAB_BAR_CLEARANCE + 24),
+              paddingBottom: insets.bottom + Math.max(MAIN_PADDING_BOTTOM, TAB_BAR_CLEARANCE + SPACE.xl),
             },
           ]}
           showsVerticalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
           enableVirtualization={!isLoading && mainListData.length > 20}
           /*
            * 4, not 10.
@@ -2403,15 +2481,17 @@ function EventsInner() {
                   does not skeleton three sections it is about to hide.
                 */}
                 {isNarrowed ? (
-                  [...Array(4)].map((_, i) => (
-                    <View key={`s-flat-${i}`} style={{ marginTop: i === 0 ? SPACE.xl : STACK_GAP }}>
-                      <SkeletonBlock width={'100%'} height={200} borderRadius={EMBER_RADIUS.lg} />
-                      <View style={{ marginTop: SPACE.md, gap: SPACE.sm }}>
-                        <SkeletonLine width={'60%'} />
-                        <SkeletonLine width={'40%'} />
-                      </View>
-                    </View>
-                  ))
+                  /*
+                    The rows a search or filter returns are `UpcomingCard`s
+                    (`renderEventItem`), so the placeholder is that row — not
+                    the 200pt photo card it used to be, which the results then
+                    replaced with something a third of its height.
+                  */
+                  <View style={styles.narrowedSkeleton}>
+                    {[...Array(4)].map((_, i) => (
+                      <UpcomingSkeletonRow key={`s-flat-${i}`} />
+                    ))}
+                  </View>
                 ) : (
                   <>
                     {/* Featured — the real card's photo and words, with the next photo peeking. */}
@@ -2440,14 +2520,7 @@ function EventsInner() {
                       <View style={styles.dayGroup}>
                         <SkeletonLine width={80} />
                         {[...Array(3)].map((_, i) => (
-                          <View key={`s-up-${i}`} style={styles.upcomingSkeletonCard}>
-                            <View style={{ flex: 1, gap: SPACE.sm }}>
-                              <SkeletonLine width={'40%'} />
-                              <SkeletonLine width={'85%'} />
-                              <SkeletonLine width={'55%'} />
-                            </View>
-                            <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
-                          </View>
+                          <UpcomingSkeletonRow key={`s-up-${i}`} />
                         ))}
                       </View>
                     </View>
@@ -2491,69 +2564,70 @@ function EventsInner() {
                   picker is the primary action, and it is reachable even when
                   every other section is empty.
                 */}
+                {/*
+                  The first load failed: nothing on screen, and the page says
+                  why with one way forward. It used to be a thin red banner
+                  above a blank page, which read as a screen that had loaded
+                  and was empty.
+                */}
+                {events.length === 0 && !!netError && (
+                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
+                    <View style={styles.emptyState} accessibilityLiveRegion="polite">
+                      <View style={styles.emptyGlyph}>
+                        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
+                      </View>
+                      <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+                      <Text style={styles.emptySub}>Check your connection and try again.</Text>
+                      <ScalePress
+                        style={styles.ctaPrimary}
+                        onPress={() => fetchEvents({ force: true })}
+                        accessibilityRole="button"
+                        accessibilityLabel="Try again"
+                      >
+                        <Text style={styles.ctaPrimaryText}>Try again</Text>
+                      </ScalePress>
+                    </View>
+                  </FadeInUp>
+                )}
                 {events.length === 0 && !netError && (
                   <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
                     <View style={styles.emptyState}>
                       {/*
                         The city itself, when we have drawn it. An empty week in
                         Bengaluru is still Bengaluru, and the skyline says which
-                        city this is before the copy does. A search miss keeps
-                        the glyph: that empty is about the query, not the place.
+                        city this is before the copy does. A search or filter
+                        miss keeps the glyph: that empty is about the query,
+                        not the place.
                       */}
-                      {!isSearching && drawableCityArt(selectedCity) ? (
+                      {emptyKind !== 'search' && emptyKind !== 'filters' && drawableCityArt(selectedCity) ? (
                         <CityArtBanner art={drawableCityArt(selectedCity)!} height={140} />
                       ) : (
                         <View style={styles.emptyGlyph}>
                           <Ionicons
-                            name={notLiveHere ? 'rocket-outline' : 'calendar-outline'}
+                            name={
+                              emptyKind === 'notLive'
+                                ? 'rocket-outline'
+                                : emptyKind === 'search' || emptyKind === 'filters'
+                                  ? 'search-outline'
+                                  : 'calendar-outline'
+                            }
                             size={36}
                             color={EMBER.textTertiary}
                           />
                         </View>
                       )}
                       {/*
-                        Two different empties, and conflating them is a lie.
-
-                        A city on the list with nothing this week is a quiet
-                        week. A city *not* on the list is somewhere we have not
-                        launched — the user did nothing wrong and refreshing
-                        will never help, so saying "nobody has published
-                        anything yet" would read as the app being broken.
-
-                        Someone reaching this by choosing their own city is
-                        telling us where to go next, which is worth saying back
-                        to them rather than treating as a dead end.
+                        Four different empties, and conflating them is a lie
+                        (`lib/pulseFeed.ts`). A city with nothing this week is
+                        a quiet week; a city not on the list is one we have not
+                        launched in; and a search or a filter that found nothing
+                        is about the query, not the city. "Nothing on in
+                        Bengaluru" over a "this weekend, 2 km" filter told
+                        somebody the city was empty when it was not.
                       */}
-                      {/*
-                        A search that found nothing is not a city that has
-                        nothing.
-
-                        Without this, typing a misspelt venue name answers
-                        "Coming soon to Bengaluru" — which tells somebody we
-                        have not launched in the city they are standing in,
-                        because of a typo. The city copy below is about the
-                        city; this one is about the query, and the way out is
-                        to clear it rather than to move.
-                      */}
-                      <Text style={styles.emptyTitle}>
-                        {isSearching
-                          ? 'No matches'
-                          : !selectedCity
-                          ? 'No events yet'
-                          : notLiveHere
-                            ? `Coming soon to ${selectedCity}`
-                            : `Nothing on in ${selectedCity}`}
-                      </Text>
-                      <Text style={styles.emptySub}>
-                        {isSearching
-                          ? `Nothing here matches “${searchTerm}”${selectedCity ? ` in ${selectedCity}` : ''}.`
-                          : !selectedCity
-                          ? 'There are no published events to show right now.'
-                          : notLiveHere
-                            ? "We're not live here yet — you're early. Browse another city in the meantime, and we'll be here soon."
-                            : 'Nothing is on here at the moment. Try another city, or check back.'}
-                      </Text>
-                      {isSearching && (
+                      <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
+                      <Text style={styles.emptySub}>{emptyCopy.message}</Text>
+                      {emptyKind === 'search' ? (
                         <ScalePress
                           style={styles.ctaGhost}
                           onPress={() => changeSearchInput('')}
@@ -2562,26 +2636,40 @@ function EventsInner() {
                         >
                           <Text style={styles.ctaGhostText}>Clear search</Text>
                         </ScalePress>
-                      )}
-                      {!isSearching && cityOptions.length > 0 && (
+                      ) : emptyKind === 'filters' ? (
+                        // One way out: the filters are the reason, so they are the fix.
                         <ScalePress
                           style={styles.ctaGhost}
-                          onPress={() => setCityPickerOpen(true)}
+                          onPress={() => {
+                            setFilters(NO_FILTERS)
+                            setFilterDraft(NO_FILTERS)
+                          }}
                           accessibilityRole="button"
-                          accessibilityLabel="Choose a different city"
+                          accessibilityLabel="Clear filters"
                         >
-                          <Text style={styles.ctaGhostText}>Change city</Text>
+                          <Text style={styles.ctaGhostText}>Clear filters</Text>
                         </ScalePress>
-                      )}
-                      {!isSearching && (
-                        <ScalePress
-                          style={styles.ctaGhost}
-                          onPress={() => fetchEvents({ force: true })}
-                          accessibilityRole="button"
-                          accessibilityLabel="Refresh events"
-                        >
-                          <Text style={styles.ctaGhostText}>Refresh</Text>
-                        </ScalePress>
+                      ) : (
+                        <>
+                          {cityOptions.length > 0 && (
+                            <ScalePress
+                              style={styles.ctaGhost}
+                              onPress={() => setCityPickerOpen(true)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Choose a different city"
+                            >
+                              <Text style={styles.ctaGhostText}>Change city</Text>
+                            </ScalePress>
+                          )}
+                          <ScalePress
+                            style={styles.ctaGhost}
+                            onPress={() => fetchEvents({ force: true })}
+                            accessibilityRole="button"
+                            accessibilityLabel="Refresh events"
+                          >
+                            <Text style={styles.ctaGhostText}>Refresh</Text>
+                          </ScalePress>
+                        </>
                       )}
                     </View>
                   </FadeInUp>
@@ -2753,13 +2841,13 @@ function EventsInner() {
                         `${item.eventCount} event${item.eventCount === 1 ? '' : 's'}`
                       }
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={styles.cityPickerCity}>{item.city}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
+                        <Text style={[styles.cityPickerCity, active && styles.cityPickerTextActive]}>{item.city}</Text>
                         {here ? (
-                          <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
+                          <Ionicons name="navigate" size={ICON.sm} color={active ? EMBER.bg : EMBER.textSecondary} />
                         ) : null}
                       </View>
-                      <Text style={styles.cityPickerCount}>{item.eventCount}</Text>
+                      <Text style={[styles.cityPickerCount, active && styles.cityPickerTextActive]}>{item.eventCount}</Text>
                     </TouchableOpacity>
                   )
                 }}
@@ -2905,6 +2993,8 @@ const styles = StyleSheet.create({
     padding: SPACE.lg,
     gap: SPACE.lg,
   },
+  /** The search/filter skeleton: rows spaced like `mainRow`. */
+  narrowedSkeleton: { marginTop: SPACE.xl, gap: SPACE.md },
   /** "{City} / Tuesday", under a section heading. */
   sectionSubTitle: {
     ...TYPE.meta,
@@ -3018,6 +3108,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.pill,
   },
+  /*
+   * On an info banner, which is itself `surface`: a `surface` button there was
+   * the banner's own colour and read as plain text. One step down instead —
+   * warnings and errors keep `surface`, which stands clear of their tints.
+   */
+  bannerCtaOnInfo: {
+    backgroundColor: EMBER.surfaceSunken,
+  },
   bannerCtaText: {
     ...TYPE.button,
     color: EMBER.textPrimary,
@@ -3068,6 +3166,19 @@ const styles = StyleSheet.create({
   ctaGhostText: {
     ...TYPE.button,
   },
+  // The error state's single action is its primary one (docs/DESIGN_SYSTEM.md).
+  ctaPrimary: {
+    marginTop: SPACE.lg,
+    minHeight: CONTROL.md,
+    justifyContent: 'center',
+    backgroundColor: EMBER.accent,
+    borderRadius: EMBER_RADIUS.pill,
+    paddingHorizontal: SPACE.xl,
+  },
+  ctaPrimaryText: {
+    ...TYPE.button,
+    color: EMBER.onGradient,
+  },
 
   /* ---- The city picker -------------------------------------------------- */
   /*
@@ -3081,8 +3192,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  // The app's sheet: `surfaceSunken`, with `surface` rows on it (the filter
+  // and notification sheets are the same).
   cityPickerSheet: {
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.surfaceSunken,
     borderTopLeftRadius: EMBER_RADIUS.lg,
     borderTopRightRadius: EMBER_RADIUS.lg,
     paddingHorizontal: GUTTER,
@@ -3109,7 +3222,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     borderRadius: EMBER_RADIUS.md,
     marginBottom: SPACE.sm,
-    backgroundColor: EMBER.surfaceSunken,
+    backgroundColor: EMBER.surface,
   },
   /*
    * Dashed, and above the list rather than in it.
@@ -3126,11 +3239,11 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     marginBottom: SPACE.lg,
   },
+  // A selected option: `textPrimary` fill, `bg` text (docs/DESIGN_SYSTEM.md).
   cityPickerRowActive: {
-    backgroundColor: tint(EMBER.textPrimary, 0.14),
-    borderWidth: 1,
-    borderColor: tint(EMBER.textPrimary, 0.35),
+    backgroundColor: EMBER.textPrimary,
   },
+  cityPickerTextActive: { color: EMBER.bg },
   cityPickerCity: {
     ...TYPE.bodyStrong,
   },
