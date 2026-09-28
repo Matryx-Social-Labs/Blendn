@@ -1,8 +1,9 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+    FlatList,
     Share,
     StyleSheet,
     Text,
@@ -76,6 +77,9 @@ function GoingScreenInner() {
   const hadRowsRef = useRef(false)
   // The toast's Try again: the loader, reached through a ref because it is the loader that shows it.
   const reloadRef = useRef<() => void>(() => {})
+  // Tapping Going while already on it goes back to the top (the bar emits `tabPress`).
+  const listRef = useRef<FlatList<GoingItem>>(null)
+  useScrollToTop(listRef)
 
   const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
@@ -512,6 +516,7 @@ function GoingScreenInner() {
          */
         <FadeInUp style={styles.list}>
           <Animated.FlatList
+            ref={listRef}
             data={items}
             itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
             renderItem={renderItem}

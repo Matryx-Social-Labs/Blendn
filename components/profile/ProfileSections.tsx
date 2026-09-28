@@ -5,7 +5,7 @@ import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE, tint } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE, tint } from '../../lib/theme'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
@@ -433,7 +433,7 @@ export function ProfileActions({
 const styles = StyleSheet.create({
 
 
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: OPACITY.pressed },
 
   markFill: { alignItems: 'center', justifyContent: 'center' },
   /*

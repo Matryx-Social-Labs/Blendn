@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, TextInput, View } from 'react-native'
 
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { Text } from '../ui/Text'
 
 /**
@@ -129,6 +129,9 @@ export function ChatComposer({
   )
 }
 
+/** About five lines of body text before the input scrolls instead of growing. */
+const INPUT_MAX_HEIGHT = 132
+
 const styles = StyleSheet.create({
   shell: { paddingHorizontal: GUTTER },
   lockNote: { paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
@@ -152,7 +155,7 @@ const styles = StyleSheet.create({
      * Roughly five lines. Unbounded, a pasted paragraph grows the pill until it
      * covers the conversation it is a reply to.
      */
-    maxHeight: 132,
+    maxHeight: INPUT_MAX_HEIGHT,
   },
   /*
    * A `CONTROL.sm` circle: it sits inside the 40pt one-line input row, so the
@@ -172,6 +175,6 @@ const styles = StyleSheet.create({
    * for a flat disabled colour made the composer look broken rather than
    * waiting.
    */
-  sendIdle: { opacity: 0.4 },
-  pressed: { opacity: 0.8 },
+  sendIdle: { opacity: OPACITY.disabled },
+  pressed: { opacity: OPACITY.pressed },
 })

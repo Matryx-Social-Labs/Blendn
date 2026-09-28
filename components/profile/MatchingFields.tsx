@@ -12,7 +12,7 @@ import {
   type Gender,
   type Orientation,
 } from '../../lib/dating'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: EMBER.textPrimary, borderColor: EMBER.textPrimary },
   // Opacity only, so a chip that becomes unreachable keeps its width and the
   // row does not reflow under your thumb.
-  chipDisabled: { opacity: 0.35 },
+  chipDisabled: { opacity: OPACITY.disabled },
   chipText: { ...TYPE.bodyStrong },
   chipTextOn: { color: EMBER.bg },
   hint: {

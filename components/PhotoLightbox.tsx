@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useRef, useState } from 'react'
 import {
   Dimensions,
@@ -74,7 +73,6 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <StatusBar style="light" />
       <SwipeToDismiss onDismiss={onClose} enabled={!zoomed}>
         <FlatList
           ref={listRef}

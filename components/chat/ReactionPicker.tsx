@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { CHAT_REACTIONS, type ChatReaction } from '../../lib/apiClient'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../../lib/theme'
 
 /**
  * The six reactions the server accepts, as one row at the top of the room's
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
   },
   // Selected option: `textPrimary` fill (docs/DESIGN_SYSTEM.md).
   selected: { backgroundColor: EMBER.textPrimary },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   // design-exception: an emoji glyph sized to fill its 48pt disc, not text
   emoji: { fontSize: 24, lineHeight: 30 },
 })

@@ -28,9 +28,8 @@
  *   CONTROL, SPACE or a named constant
  * - a literal `opacity: 0.x` — use OPACITY (pressed / disabled) or name it
  *
- * The last three arrived after most screens were written. Files that still
- * have hits are listed in `LATE_RULE_ALLOWLIST` with who owns the fix, so the
- * rules hold everywhere else from today and the list only shrinks.
+ * The last three arrived after most screens were written. Every shipped file
+ * now follows them; `LATE_RULE_ALLOWLIST` holds only the dev-only previews.
  *
  * A value that genuinely cannot come from the scale (an emoji hero, a glyph
  * drawn to match an image) is allowed with `// design-exception: <reason>` on
@@ -108,11 +107,10 @@ const RULES = [
 ]
 
 /*
- * The three late rules, and the files allowed to break them until their
- * owners convert them. Each entry says why it is here. Remove an entry when
- * its file is clean; `npm run lint:design` names any entry that no longer
- * needs to be here. (A notice, not a failure: the owning passes run in
- * parallel, and cleaning a file should not break someone else's build.)
+ * The three late rules, and the files allowed to break them. Every shipped
+ * screen was converted (2026-09-29); only the dev-only design previews remain,
+ * and nothing new should join them. `npm run lint:design` names any entry that
+ * no longer needs to be here.
  */
 const LATE_RULES = [
   {
@@ -132,45 +130,9 @@ const LATE_RULES = [
   },
 ]
 
-const CHAT_PASS = 'chat/banter/DM screens: converted in the chat polish pass that owns them'
-const PROFILE_PASS = 'profile/friends screens: converted in the profile polish pass that owns them'
-const EVENTS_PASS = 'events/pulse/room screens: converted in the events polish pass that owns them'
 const LATE_RULE_ALLOWLIST = {
   'app/preview/tonight.tsx': 'dev-only design preview, not shipped',
   'app/preview/profile.tsx': 'dev-only design preview, not shipped',
-  'app/chat/[id].tsx': CHAT_PASS,
-  'app/(tabs)/chat.tsx': CHAT_PASS,
-  'app/private-chat/[conversationId].tsx': CHAT_PASS,
-  'app/chat-info/[id].tsx': CHAT_PASS,
-  'components/chat/ChatComposer.tsx': CHAT_PASS,
-  'components/chat/ChatBubble.tsx': CHAT_PASS,
-  'components/chat/ReactionPicker.tsx': CHAT_PASS,
-  'components/chat/TypingIndicator.tsx': CHAT_PASS,
-  'components/chat/RoomGuidelinesBanner.tsx': CHAT_PASS,
-  'components/chat/BroadcastNotice.tsx': CHAT_PASS,
-  'components/banter/BanterSections.tsx': CHAT_PASS,
-  'app/user/[id].tsx': PROFILE_PASS,
-  'app/edit-profile.tsx': PROFILE_PASS,
-  'app/friends/[userId].tsx': PROFILE_PASS,
-  'app/f/[token].tsx': PROFILE_PASS,
-  'components/profile/MatchingFields.tsx': PROFILE_PASS,
-  'components/profile/ProfileSections.tsx': PROFILE_PASS,
-  'components/grid/ConnectSheet.tsx': EVENTS_PASS,
-  'app/rate/[eventId].tsx': EVENTS_PASS,
-  'components/RoomVisibilityBanner.tsx': EVENTS_PASS,
-  'components/cityArt/CityArtCard.tsx': EVENTS_PASS,
-  'components/pulse/FilterControl.tsx': EVENTS_PASS,
-  'components/pulse/NotificationBell.tsx': EVENTS_PASS,
-  'components/pulse/UpcomingCard.tsx': EVENTS_PASS,
-  'components/pulse/SectionHeader.tsx': EVENTS_PASS,
-  'components/EventCover.tsx': EVENTS_PASS,
-  'components/screens/EventDetailScreen.tsx': EVENTS_PASS,
-  'components/blendn/HoldToConfirm.tsx': EVENTS_PASS,
-  'components/blendn/BlendnScreen.tsx': EVENTS_PASS,
-  'components/blendn/TonightView.tsx': EVENTS_PASS,
-  // The Blend'n button's press state shares this style with the tabs; the
-  // overlay pass is changing that file's button in parallel.
-  'app/(tabs)/_layout.tsx': EVENTS_PASS,
 }
 
 const SPACING_RE = /\b(padding|margin)(Top|Bottom|Left|Right|Horizontal|Vertical|Start|End)?:\s*(-?\d+(\.\d+)?)\b/g

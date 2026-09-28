@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { matchOpener, matchRowPreview } from '../lib/matchOpener'
+import { draftParam, matchOpener, matchRowPreview } from '../lib/matchOpener'
 
 /**
  * A match becomes a conversation — the opener, and the sheet that announces it.
@@ -157,5 +157,31 @@ describe('the moment paints without a second request', () => {
     // Pre-reveal `attendee.name` IS the pseudonym — `rankMatches` enforces it —
     // so the fallback cannot leak a real name.
     expect(ROOM()).toContain('result.data?.pseudonyms?.them || displayName(attendee.name)')
+  })
+})
+
+describe("the match moment's opener becomes a draft, never a message", () => {
+  it('reads the draft param: a string, not blank, not repeated', () => {
+    expect(draftParam('What brought you here tonight?')).toBe('What brought you here tonight?')
+    expect(draftParam(undefined)).toBe('')
+    expect(draftParam('   ')).toBe('')
+    expect(draftParam(['a', 'b'])).toBe('')
+  })
+
+  it('Say hi on the match moment carries the suggested opener to the DM', () => {
+    const screen = SCREEN()
+    const sayHi = screen.slice(screen.indexOf('const sayHi'), screen.indexOf('const safety'))
+    expect(sayHi).toMatch(/\.\.\.\(draft \? \{ draft \} : \{\}\)/)
+    // The moment shows `openerFor(matchPerson)`, and Say hi sends that same line.
+    expect(screen).toContain('opener={matchPerson ? openerFor(matchPerson) : null}')
+    expect(screen).toMatch(/sayHi\(m\.conversationId, [^)]*\}, matchPerson \? openerFor\(matchPerson\) : null\)/)
+  })
+
+  it('the DM fills its composer once, on mount, and does not send it', () => {
+    const dm = DM()
+    expect(dm).toContain('useState(() => draftParam(draft))')
+    // Read once, as the initial state: no effect re-applies it, and it never
+    // reaches the send path on its own.
+    expect(dm.match(/\bdraft\b/g)).toHaveLength(2)
   })
 })

@@ -17,7 +17,7 @@ import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/no
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { subscribeToBell } from '../../lib/socketClient'
 import ActionTray from '../ActionTray'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { RisingSheet, SheetFlatList, SheetModal } from '../motion/RisingSheet'
@@ -186,7 +186,7 @@ export function NotificationBell() {
           the most common way a modal traps somebody.
         */}
         <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
-        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.lg }]}>
           <Grabber style={styles.grabber} />
 
           <View style={styles.sheetHeader}>
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingVertical: SPACE.md,
   },
-  rowPressed: { opacity: 0.6 },
+  rowPressed: { opacity: OPACITY.pressed },
   dot: {
     width: 8,
     height: 8,

@@ -9,7 +9,7 @@
  */
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { followEnd } from '../lib/useFollowEnd'
+import { followEnd, scrollListToEnd } from '../lib/useFollowEnd'
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
@@ -48,6 +48,19 @@ describe('followEnd', () => {
   })
 })
 
+describe('scrollListToEnd', () => {
+  it("asks the ScrollView, not FlatList's estimate", () => {
+    const native = { scrollToEnd: jest.fn() }
+    const list = { getScrollResponder: () => native, scrollToEnd: jest.fn() }
+    scrollListToEnd(list as never, true)
+    expect(native.scrollToEnd).toHaveBeenCalledWith({ animated: true })
+    expect(list.scrollToEnd).not.toHaveBeenCalled()
+  })
+  it('does nothing before the list mounts', () => {
+    expect(() => scrollListToEnd(null, false)).not.toThrow()
+  })
+})
+
 describe('both chat screens use it', () => {
   it.each([
     ['app', 'private-chat', '[conversationId].tsx'],
@@ -58,5 +71,39 @@ describe('both chat screens use it', () => {
     expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
     // The timer that measured half a list.
     expect(src).not.toMatch(/setTimeout\(\(\) => scrollToBottom\(false\), 50\)/)
+  })
+
+  // FlatList.scrollToEnd aims at the last row by an estimate until that row is
+  // measured, and a message just sent never is: on build 121 a reply sent from
+  // a little way up stayed below the composer (driven 2026-09-28).
+  it.each([
+    ['app', 'private-chat', '[conversationId].tsx'],
+    ['app', 'chat', '[id].tsx'],
+  ])('%s/%s/%s scrolls the native view to its real end', (...p) => {
+    const src = read(...p)
+    expect(src).toMatch(/scrollListToEnd\(flatListRef\.current, animated\)/)
+    expect(src).not.toMatch(/flatListRef\.current\?\.scrollToEnd\(/)
+  })
+
+  // Touching the conversation to scroll it puts the keyboard away (owner, 2026-09-28).
+  it.each([
+    ['app', 'private-chat', '[conversationId].tsx'],
+    ['app', 'chat', '[id].tsx'],
+  ])('%s/%s/%s closes the keyboard on a drag', (...p) => {
+    expect(read(...p)).toMatch(/keyboardDismissMode="on-drag"/)
+  })
+})
+
+describe('the reply quote', () => {
+  it('widens a short reply to fit, rather than wrapping in the width "Ok" leaves', () => {
+    // flex: 1 is a zero basis: the quote never asked for width, and a reply
+    // saying "Repro" drew its quote as "Vikra… / unrea / d se…" (simulator, 2026-09-28).
+    expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/quoteBody: \{ flexShrink: 1,/)
+  })
+})
+
+describe('the read tick', () => {
+  it('is white, not the grey delivered wears — two greys a step apart read as one on the phone', () => {
+    expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/receiptRead: \{ color: EMBER\.textPrimary \}/)
   })
 })

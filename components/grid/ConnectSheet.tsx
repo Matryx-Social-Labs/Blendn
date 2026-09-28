@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { RisingSheet, SheetModal } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
@@ -174,6 +174,10 @@ export function ConnectSheet({
   )
 }
 
+/** The note grows from about three lines to about seven, then scrolls. */
+const NOTE_MIN_HEIGHT = 108
+const NOTE_MAX_HEIGHT = 200
+
 const styles = StyleSheet.create({
   // Transparent: `SheetModal` draws the dim and fades it on its own.
   scrim: { flex: 1 },
@@ -190,8 +194,8 @@ const styles = StyleSheet.create({
   disclosure: { ...TYPE.body, color: EMBER.textSecondary },
   input: {
     ...TYPE.body,
-    minHeight: 108,
-    maxHeight: 200,
+    minHeight: NOTE_MIN_HEIGHT,
+    maxHeight: NOTE_MAX_HEIGHT,
     borderRadius: EMBER_RADIUS.lg,
     backgroundColor: EMBER.surfaceSunken,
     padding: SPACE.lg,
@@ -211,7 +215,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.accent,
   },
   sendOff: { backgroundColor: EMBER.surface },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: OPACITY.pressed },
   sendLabel: { ...TYPE.button, color: EMBER.onGradient },
   sendLabelOff: { color: EMBER.textTertiary },
   footnote: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center' },

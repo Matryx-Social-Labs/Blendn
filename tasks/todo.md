@@ -398,11 +398,13 @@ Three read-only audits (~120 items) → three fix batches, all merged to dev gre
 Verified on the simulator vs staging (rebuilt binary incl. #309 UIScene): launch OK; Slow Kite profile shows pseudonym + owl only; tabs hidden from a11y while the room is open; "Happening now" after midnight; avatars match across grid/chat (🦊 Amber Fox, 🐼 Cosmic Panda, 🦦 Quiet Otter); Banter Accept white; Me Settings clears tab bar; room chat header shows the cover; sign-out + delete-account trays clear the home indicator; drag grabber dismisses.
 
 Follow-ups (not done):
-- [ ] useScrollToTop on the four tab lists (needs list refs)
-- [ ] Remove per-screen `<StatusBar style="light" />` (root sets it) — chat, chat-info, Banter, user, PhotoLightbox
-- [ ] Drain `LATE_RULE_ALLOWLIST` in scripts/check-design-tokens.js
-- [ ] PhotoManager upload results still `Alert.alert`
+- [x] useScrollToTop on the four tab lists — router-level test renders the real bar (polish/follow-ups)
+- [x] Remove per-screen `<StatusBar style="light" />` — all 8 removed incl. DM and SceneLightbox; a test keeps it to app/_layout.tsx
+- [x] Drain `LATE_RULE_ALLOWLIST` — only app/preview/* left
+- [x] PhotoManager toasts/sheet (already via #321, now tested); EventDetailScreen delete → showSheet; no Alert.alert left in app/ or components/
 - [ ] expo-clipboard (RN Clipboard deprecated) — native dep
-- [ ] Pass the MatchMoment opener into the DM as a draft (chat screens need a draft param)
+- [x] MatchMoment opener → DM `draft` param (fills the composer once, never sends)
 - [ ] Owner decision: roster ignores `friends_see_me_in_rooms` while profile honours it (pre-existing mismatch, see #498)
 - [ ] Untested: signed-out screens, onboarding keyboard on device, Android, VoiceOver end-to-end
+
+- [x] #326 follow-ups merged (after merging #319 into it; import-only conflict). Simulator: tapping the focused Pulse tab scrolls to top (search y -1948 → 218).
