@@ -901,6 +901,22 @@ export function subscribeToChatMessage(
 }
 
 /**
+ * Ask the server to put this socket back in a chat room it refused earlier.
+ *
+ * `join:chat` is sent when a screen subscribes and again on every reconnect.
+ * A member who had left was refused that join, and rejoining over HTTP does
+ * not reconnect, so without this the room stayed silent until the next
+ * reconnect: no new messages, typing or reactions.
+ */
+export function rejoinChatSocket(chatGroupId: string): void {
+  if (!socket?.connected) {
+    connect()
+    return
+  }
+  socket.emit("join:chat", chatGroupId)
+}
+
+/**
  * Subscribe to typing indicators for a specific chat group.
  */
 export function subscribeToChatTyping(
