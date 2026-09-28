@@ -3,6 +3,11 @@
 Push to `stage` → TestFlight and Play internal, against the staging API.
 Push to `prod` → both stores, against production, waiting for a human.
 
+> **Since 2026-09-28 `stage` does not ship itself.** The Expo free plan's builds
+> for the month are spent, so the `ship` job is off and a `stage` push runs
+> `verify` and stops. The commit then ships from a Mac with
+> `npm run ship:local`. See [Shipping `stage` from a Mac](#shipping-stage-from-a-mac).
+
 **A push means a promotion PR merged with a merge commit.** Since 2026-09-27 a
 ruleset makes `stage` and `prod` take changes only through a pull request from
 `dev` (or `stage` → `prod`), checked by `promotion source`
@@ -198,6 +203,7 @@ With neither, `sentry-cli` is handed nothing, the upload task fails, and the
 | `npx expo run:android` / `run:ios` (debug) | no — Metro serves it | **no**, unaffected |
 | A local **release** build, or any APK/AAB | yes | **yes — fails without a token** |
 | EAS | yes | fine; the token is an EAS environment variable |
+| `eas build --local` (`npm run ship:local`) | yes | **yes — fails without a token**: it is a `secret` EAS variable, which local builds do not get. The script disables the upload unless the shell has one |
 
 So the documented testing path is genuinely unaffected, which is why this went
 unnoticed. `bundleInDebug` is not set in `android/app/build.gradle`, so React
@@ -244,7 +250,10 @@ typecheck against the baseline, the full test suite and lint. Only if that
 passes does its `ship` job run
 `eas workflow:run .eas/workflows/stage-testflight.yml --ref <that sha>`.
 The EAS workflow has no trigger of its own and no test job. It is the two
-build → submit chains and nothing else.
+build → submit chains and nothing else. **The `ship` job is off for now**: it
+runs only when the repository variable `EAS_CLOUD_SHIP` is `true`, and it is
+unset. [Shipping `stage` from a Mac](#shipping-stage-from-a-mac) is the route
+meanwhile, and it holds to the same gate.
 
 **`prod`.** Unchanged. `.eas/workflows/prod-appstore.yml` triggers itself on
 the push and starts with its own `verify` job, which both builds `need`.
@@ -282,6 +291,92 @@ passed.
 **The two platform chains stay independent of each other.** Neither waits on
 the other, so an iOS signing problem still cannot stop Android testers getting
 a build.
+
+## Shipping `stage` from a Mac
+
+The route while the EAS quota is spent. It is the same release made on local
+hardware: the same `staging` profile, the same signing credentials and version
+counter held by EAS, the same `eas submit`. `eas build --local` spends no build
+credit.
+
+```bash
+git fetch origin && git switch --detach origin/stage
+npm ci                              # eas-cli reads the app config, whose plugins live in node_modules
+npm run ship:local                  # both platforms; or `-- ios`, `-- android`
+npm run ship:local -- --dry-run     # the checks and the commands, nothing built
+```
+
+`scripts/ship-local.sh` **refuses** unless, after a fetch, HEAD is
+`origin/stage`, the working tree is clean, and GitHub's `typecheck + test +
+lint` check passed on that SHA. So "ship exactly what CI tested" still holds,
+and the build is made from a git archive of the commit, so nothing uncommitted
+could reach it anyway. Then, one platform after the other (16 GB will not hold
+two release builds):
+
+```bash
+npx --yes eas-cli@24.8.0 build --local --platform <p> --profile staging --non-interactive …
+npx --yes eas-cli@24.8.0 submit --platform <p> --profile staging --path <file> --non-interactive
+```
+
+A failure on one platform does not stop the other, as in the cloud workflow. It
+ends with a table (platform, build, submit, artifact) and exits non-zero if
+anything failed.
+
+**What lands in `dist/`**, which is gitignored:
+
+| File | |
+|---|---|
+| `blendn-<sha>-staging-ios.ipa` | What went to TestFlight |
+| `blendn-<sha>-staging-android.aab` | What went to Play internal |
+| `blendn-<sha>-staging-android-mapping.txt` | R8's mapping, to retrace a native Java crash. EAS kept this as a build artifact; now it is here |
+| `ship-<sha>.log` | Everything the run printed, appended per run |
+
+Android is built with an artifacts directory, not `--output`: eas-cli 24.8.0
+copies the profile's `buildArtifactPaths` to the `--output` path too, after the
+`.aab`, so the mapping would replace the bundle.
+
+**What the Mac needs.** The script checks the tools before it starts, so a
+missing one fails before the version counter moves.
+
+| | |
+|---|---|
+| Xcode | 26 or newer, and not a beta: App Store Connect refuses both. A local build ignores `image` in `eas.json`, so this Mac's Xcode is the one that builds |
+| CocoaPods | `pod` on `PATH` |
+| fastlane | `brew install fastlane`. The iOS build runs it |
+| Android SDK + NDK | `ANDROID_HOME`, default `~/Library/Android/sdk`, with `ndk/` and `android-36` |
+| JDK | 17 or 21 on `JAVA_HOME` (see the JDK section above; 25 and up fail) |
+| eas-cli | Logged in as a member of the org (`npx eas-cli login`). The script pins 24.8.0, as CI does |
+| gh | Logged in, to read the check |
+
+**Three things differ from a cloud build.**
+
+1. **Sentry.** `SENTRY_AUTH_TOKEN` is a `secret` EAS variable, and a local build
+   is not given secret variables. Without it both release builds fail: the
+   Android `SentryUpload` task, and on iOS the bundle phase, which
+   `sentry-xcode.sh` exits 1. So unless `SENTRY_AUTH_TOKEN` is set in the shell,
+   the script sets `SENTRY_DISABLE_AUTO_UPLOAD=true` and says so. That build's
+   JS stack traces stay minified in Sentry and its iOS native crashes stay
+   unsymbolicated. Crash reporting still works. To upload, export an
+   organisation token as `SENTRY_AUTH_TOKEN`; `SENTRY_ORG` and `SENTRY_PROJECT`
+   still come from the `preview` environment.
+2. **`EXPO_PUBLIC_*`.** eas-cli lets the shell override the EAS environment, so
+   a `.env` sourced into the shell would ship a staging build pointed at
+   localhost. The script unsets every `EXPO_PUBLIC_*` first; `preview` decides.
+3. **Xcode**, above.
+
+**Version numbers stay in step.** `autoIncrement` with `appVersionSource:
+remote` works for a local build. eas-cli bumps the counter on EAS before it
+hands the job to the local builder, on the same code path as a cloud build, and
+the build uses that number. So submitting a local build does not desynchronise
+the counter the way a hand upload does (below). A local build that fails after
+the bump leaves a gap in the numbers, which both stores accept.
+
+**Turning the cloud route back on:** set the repository variable
+`EAS_CLOUD_SHIP` to `true` (Settings → Secrets and variables → Actions →
+Variables, or `gh variable set EAS_CLOUD_SHIP --body true`). The next `stage`
+push runs `ship` again, and nothing else changes. `npm run ship:local` keeps
+working as a fallback. Do not ship one commit both ways: that is two builds of
+one commit on each platform.
 
 ## What the app's tests actually cover
 
@@ -366,7 +461,9 @@ check your own work.
 
 > **Do not go back to hand-built Xcode uploads.** It is how the Android upload
 > key was lost (below), and a build made on a laptop carries whatever that laptop
-> had uncommitted.
+> had uncommitted. `npm run ship:local` is the exception, because it has neither
+> problem: EAS holds the keys and lends them to the build, which runs in a
+> temporary directory, and it refuses anything but a clean `origin/stage`.
 
 ## What decides which API a build talks to
 
@@ -1017,6 +1114,10 @@ nothing.
 
 This is the same failure that got `.github/workflows/deploy-ios.yml` deleted.
 Two systems on one app record is worse than either alone.
+
+`npm run ship:local` is not a hand upload in this sense. It builds with
+`eas build --local`, which takes its number from the EAS counter and bumps it,
+and uploads with `eas submit`. See [Shipping `stage` from a Mac](#shipping-stage-from-a-mac).
 
 | | |
 |---|---|
