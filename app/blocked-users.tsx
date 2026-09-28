@@ -13,22 +13,40 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
+import { LoadError } from '../components/LoadError'
+import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { getBlockedUsers, unblockUser, type BlockedUser } from '../lib/safetyUtils'
+import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../lib/theme'
 
 export default function BlockedUsers() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-  // State is set only in the callbacks, once the request has settled.
+  /*
+   * The API client directly, not `getBlockedUsers` from safetyUtils: that one
+   * answers a failure with `[]`, which drew "No Blocked Users" for somebody
+   * who had blocked people and was simply offline — the one list where
+   * "nobody" is the wrong thing to be told by mistake.
+   *
+   * State is set only in the callbacks, once the request has settled.
+   */
   const loadBlockedUsers = () =>
-    getBlockedUsers()
-      .then(setBlockedUsers)
+    apiClient.getBlockedUsers()
+      .then((result) => {
+        if (result.success && result.data) {
+          setBlockedUsers(result.data.users)
+          setFailed(false)
+        } else {
+          Logger.warn('profile', 'Could not load blocked users', { error: result.error })
+          setFailed(true)
+        }
+      })
       .catch((error) => {
         Logger.error('profile', 'Error loading blocked users', { error })
-        Alert.alert('Error', 'Failed to load blocked users')
+        setFailed(true)
       })
       .finally(() => setLoading(false))
 
@@ -107,7 +125,15 @@ export default function BlockedUsers() {
     </View>
   )
 
-  const renderEmptyState = () => (
+  const renderEmptyState = () => failed ? (
+    <View style={styles.emptyContainer}>
+      <LoadError
+        title="Blocked users didn't load"
+        onRetry={() => void onRefresh()}
+        retrying={refreshing}
+      />
+    </View>
+  ) : (
     <View style={styles.emptyContainer}>
       <Ionicons name="shield-checkmark-outline" size={64} color={EMBER.textTertiary} />
       <Text style={styles.emptyTitle}>No Blocked Users</Text>
