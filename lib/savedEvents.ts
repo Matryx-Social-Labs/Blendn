@@ -8,6 +8,7 @@
  * is read, and the test feeds it the real payload.
  */
 
+import { sessionFromApi, type EventSession } from './eventSession'
 import { feedPoster, type EventMediaItem } from './feedMedia'
 import { groupByDay } from './pulse'
 
@@ -20,6 +21,8 @@ export interface SavedEventRow {
   address: string
   start_time: string
   end_time: string
+  /** The day "Happening now" is judged by — `lib/eventSession.ts`. */
+  session?: EventSession | null
   /**
    * What the card draws: the cover, else the event's first media item as the
    * Pulse would poster it (SCRUM-286). Null means the placeholder.
@@ -41,6 +44,8 @@ export interface SavedEventsPayload {
     address?: string | null
     startTime: string
     endTime: string
+    /** `/me/rsvps` sends it; the favourites route and older servers do not. */
+    session?: { startTime: string; endTime: string } | null
     coverImageUrl?: string | null
     /** The event's first `event_media` row, or null. */
     coverImage?: EventMediaItem | null
@@ -61,6 +66,7 @@ export function savedEventRows(data: SavedEventsPayload | undefined | null): Sav
     address: e.address ?? '',
     start_time: e.startTime,
     end_time: e.endTime,
+    session: sessionFromApi(e.session),
     cover_image_url: feedPoster(e.coverImage ? [e.coverImage] : null, e.coverImageUrl),
     latitude: e.latitude ?? NaN,
     longitude: e.longitude ?? NaN,

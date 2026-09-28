@@ -1,3 +1,5 @@
+import { liveWindow, type EventSession } from './eventSession'
+
 /**
  * What the Blend'n button in the middle of the bar is currently offering.
  *
@@ -163,6 +165,8 @@ export interface RoomButtonEvent {
   id: string
   start_time: string
   end_time?: string | null
+  /** The day "running" means on a multi-day event — `lib/eventSession.ts`. */
+  session?: EventSession | null
   /** Kilometres, from the server, present only when a fix was sent. */
   distance?: number | null
   check_in_radius?: number | null
@@ -197,9 +201,10 @@ export function pickInsideEvent(
     const distanceM = e.distance * 1000
     if (distanceM > radiusM) continue
 
-    const start = new Date(e.start_time).getTime()
+    const live = liveWindow(e)
+    const start = new Date(live.start_time).getTime()
     if (!Number.isFinite(start) || start > now) continue
-    const end = e.end_time ? new Date(e.end_time).getTime() : NaN
+    const end = live.end_time ? new Date(live.end_time).getTime() : NaN
     if (Number.isFinite(end) && end < now) continue
 
     // Two fences can overlap on one street. The nearer centre is the better
@@ -228,7 +233,10 @@ export function pickTodayEvents(
   return events
     .filter((e) => {
       if (!e.is_favorited) return false
-      const start = new Date(e.start_time)
+      // Today's day of a multi-day run, so a run that is between days or whose
+      // day is cancelled is not "tonight".
+      const live = liveWindow(e)
+      const start = new Date(live.start_time)
       if (Number.isNaN(start.getTime())) return false
       if (
         start.getFullYear() !== today.getFullYear() ||
@@ -237,9 +245,12 @@ export function pickTodayEvents(
       ) {
         return false
       }
-      const end = e.end_time ? new Date(e.end_time).getTime() : NaN
+      const end = live.end_time ? new Date(live.end_time).getTime() : NaN
       return Number.isFinite(end) ? end >= now : true
     })
-    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    .sort(
+      (a, b) =>
+        new Date(liveWindow(a).start_time).getTime() - new Date(liveWindow(b).start_time).getTime()
+    )
     .map((e) => e.id)
 }

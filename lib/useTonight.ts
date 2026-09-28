@@ -5,6 +5,7 @@ import { getEvents, type BlendnEvent } from './api'
 import { apiClient, type RoomPreview } from './apiClient'
 import { subscribeCheckInChanged } from './checkIn'
 import { readStoredCity } from './cityStorage'
+import { liveWindow } from './eventSession'
 import { getDistanceKm } from './geo'
 import { Logger } from './logger'
 import { pickTonight } from './roomMoments'
@@ -80,13 +81,15 @@ function toTonight(
       : coords && Number.isFinite(e.latitude) && Number.isFinite(e.longitude)
         ? getDistanceKm(coords.latitude, coords.longitude, e.latitude as number, e.longitude as number)
         : null
+  // Today's day of a multi-day run, not the run: LIVE is what the door says.
+  const live = liveWindow(e)
   return {
     id: e.id,
     title: e.title,
     venue: e.venue_name,
     photo: e.cover_image_url,
-    startsAt: e.start_time,
-    endsAt: e.end_time,
+    startsAt: live.start_time,
+    endsAt: live.end_time ?? e.end_time,
     distanceKm,
     hereCount: e.current_capacity || 0,
     // `eventFromApi` writes 0 for "no cap"; 0 is not a capacity anyone set.

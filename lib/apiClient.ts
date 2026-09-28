@@ -548,6 +548,11 @@ export interface EventApiItem {
   start_time?: string
   endTime: string
   end_time?: string
+  /**
+   * The day "live" is judged by — see `lib/eventSession.ts`. Absent from an
+   * older server; null when every day is cancelled.
+   */
+  session?: { startTime: string; endTime: string } | null
   timezone: string
   status: string
   visibility: string
