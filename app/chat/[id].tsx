@@ -39,6 +39,7 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { showMessageReportOptions } from '../../lib/safetyUtils'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { useActiveThread } from '../../lib/notifications'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
@@ -171,6 +172,8 @@ function GroupChatInner(props?: {
 }) {
   const params = useLocalSearchParams()
   const chatRoomId = props?.chatRoomId ?? params.id
+  // A reply push for this room is not shown over it (`lib/notifications.ts`).
+  useActiveThread(`room:${String(chatRoomId)}`)
   const roomName = props?.roomName ?? params.roomName
   const eventTitle = props?.eventTitle ?? params.eventTitle
   const eventImage = props?.eventImage ?? params.eventImage

@@ -38,7 +38,6 @@ import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetai
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient';
 import { Logger } from '../../lib/logger';
-import { syncEventReminder } from '../../lib/notifications';
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
@@ -594,22 +593,6 @@ export default function EventDetail() {
       showTray('Error', 'Failed to update interest.')
     }
   }, [id, user, userInterested, showTray, closeTray, feedback])
-
-  /*
-   * The reminder follows what this screen shows: interested, going or
-   * waitlisted means remind me. Driven from state rather than from the two
-   * handlers so an optimistic flip, its rollback and a waitlist answer all
-   * land in the same place — and so opening an event you RSVP'd to before
-   * reminders followed RSVPs schedules the one you are owed.
-   */
-  const reminderWanted = userInterested || rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-  useEffect(() => {
-    if (!event?.id || !event.start_time) return
-    syncEventReminder(
-      { id: event.id, title: event.title, start_time: event.start_time, venue_name: event.venue_name },
-      reminderWanted
-    )
-  }, [event?.id, event?.title, event?.start_time, event?.venue_name, reminderWanted])
 
   const handleToggleRsvp = useCallback(async () => {
     // Hoisted out of the `try` so the `catch` can put it back: a thrown
