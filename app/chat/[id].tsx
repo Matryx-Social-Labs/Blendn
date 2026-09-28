@@ -8,7 +8,6 @@ import {
   Clipboard,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -45,7 +44,8 @@ import { messageReportStep } from '../../lib/safetyUtils'
 import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
-import { useFollowEnd } from '../../lib/useFollowEnd'
+import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { newClientId } from '../../lib/clientId'
 import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
@@ -224,6 +224,8 @@ function GroupChatInner() {
   const eventImage = (params.eventImage as string) || roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
+  // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
+  const messagesRef = useLatest(messages)
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   /*
@@ -282,7 +284,7 @@ function GroupChatInner() {
   }
 
   const scrollToBottom = (animated = true) => {
-    flatListRef.current?.scrollToEnd({ animated })
+    scrollListToEnd(flatListRef.current, animated)
   }
   /*
    * Follows the end as content lays out, until a real drag (lib/useFollowEnd).
@@ -378,19 +380,21 @@ function GroupChatInner() {
           : (result.data as any)?.messages || (result.data as any)?.data || []
 
         const pagination = (result.data as any)?.pagination
-        setHasMore(pagination?.hasMore || false)
-        setOldestCursor(pagination?.nextCursor || null)
-
         const msgs = transformRawMessages(Array.isArray(raw) ? raw : [], user.id)
         /*
-         * What only this phone holds rides on top of the refresh: a send still
-         * in flight, and one that failed. A refresh used to replace the list
-         * whole, so a failed message vanished at the next sync.
+         * A refresh keeps the older pages already loaded, and what only this
+         * phone holds: a send still in flight, and one that failed
+         * (lib/mergeNewestPage). Replacing the list whole lost a failed
+         * message at the next sync, and yanked anyone reading back.
          */
-        setMessages(prev => [
-          ...msgs,
-          ...prev.filter(m => m.message_id.startsWith('temp-') && !msgs.some(n => n.message_id === m.message_id)),
-        ])
+        const isTemp = (m: Message) => m.message_id.startsWith('temp-')
+        const { keptOlder } = mergeNewestPage(messagesRef.current, msgs, m => m.message_id, isTemp)
+        setMessages(prev => mergeNewestPage(prev, msgs, m => m.message_id, isTemp).items)
+        // Older pages kept means the cursor already points below them.
+        if (!keptOlder) {
+          setHasMore(pagination?.hasMore || false)
+          setOldestCursor(pagination?.nextCursor || null)
+        }
         if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
       })
       .catch((err) => {
@@ -997,12 +1001,8 @@ function GroupChatInner() {
           contentContainerStyle={[styles.listContent, messages.length === 0 && !loading && styles.emptyContent]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          /*
-           * Drag the conversation down to put the keyboard away — on iOS the
-           * keyboard follows the finger, the Messages behaviour people expect.
-           * Android has no interactive mode, so a drag dismisses it.
-           */
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          // Touching the conversation to scroll it puts the keyboard away.
+          keyboardDismissMode="on-drag"
           maxToRenderPerBatch={12}
           windowSize={10}
           initialNumToRender={25}

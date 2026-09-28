@@ -1,0 +1,75 @@
+# TQ-C09 (SCRUM-409). Reply from older messages in a long DM: the sent reply
+# must come into view and stay there. The keyboard's drag is c10.
+# Build 121 (driven 2026-09-28) left the reply below the composer: the send's
+# own echo re-read the newest page and put it in place of the list, dropping
+# the older page loaded above it, and the view jumped.
+# Env: EMAIL, PASSWORD, PEER (a regex for the other person's name in the
+# Banter), QUOTE (a regex for any message in the older page), MESSAGE.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c09
+---
+- launchApp:
+    clearState: true
+# clearState keeps the iOS Keychain session: signed in already, or not.
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+# iOS offers to save the password over the first screen.
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: ${PEER}
+    timeout: 30000
+- tapOn: ${PEER}
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# An older page above the newest, so a refresh that replaced the list whole
+# would shrink it.
+- repeat:
+    while:
+      notVisible: "Load older messages"
+    times: 15
+    commands:
+      - swipe:
+          start: 50%, 25%
+          end: 50%, 85%
+          duration: 300
+- tapOn: "Load older messages"
+- extendedWaitUntil:
+    visible: ${QUOTE}
+    timeout: 15000
+- longPressOn: ${QUOTE}
+- tapOn: "Reply"
+- extendedWaitUntil:
+    visible: ".*Replying to.*"
+    timeout: 5000
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- waitForAnimationToEnd:
+    timeout: 1000
+- tapOn: "Send"
+# Sent means the composer emptied: the text alone also matches the input box,
+# and a tap that lands before the typed text reaches state sends nothing.
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: ".*${MESSAGE}.*"
+    timeout: 10000
+# The echo's sync lands within a second or two; the reply must still be there.
+- waitForAnimationToEnd:
+    timeout: 4000
+- assertVisible: ".*${MESSAGE}.*"
+- takeScreenshot: c09-sent-in-view

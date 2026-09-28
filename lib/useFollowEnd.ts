@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import type { FlatList, ScrollView } from 'react-native'
 
 /**
  * Keep a chat list on its newest message while the reader is there.
@@ -36,6 +37,20 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
     },
   }
+}
+
+/**
+ * Scroll a list to the native view's own end.
+ *
+ * `FlatList.scrollToEnd` aims by an estimated height for a row not yet
+ * measured — a message just sent — and a reply sent from a little way up
+ * stayed below the composer (driven on build 121, 2026-09-28). The scroll
+ * responder is the ScrollView itself, which ends where its content does.
+ * RN's typings call it a JSX element; at runtime it is the ScrollView.
+ */
+export function scrollListToEnd(list: Pick<FlatList, 'getScrollResponder'> | null, animated: boolean): void {
+  const scroller = list?.getScrollResponder() as unknown as Pick<ScrollView, 'scrollToEnd'> | null | undefined
+  scroller?.scrollToEnd({ animated })
 }
 
 /** `followEnd` for the life of a screen. `scrollToEnd` is read at call time. */

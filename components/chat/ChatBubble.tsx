@@ -373,15 +373,19 @@ const styles = StyleSheet.create({
 
   text: TYPE.body,
   receipt: { ...TYPE.caption, color: EMBER.textTertiary },
-  /* Read is one step brighter, so "they saw it" is a colour change and not a glyph count. */
-  receiptRead: { color: EMBER.textSecondary },
+  /*
+   * Read is white against delivered's grey: `textSecondary` was one step up
+   * from `textTertiary`, and on the phone the two read as the same tick.
+   */
+  receiptRead: { color: EMBER.textPrimary },
   edited: { ...TYPE.caption, color: EMBER.textTertiary, marginTop: SPACE.xs },
   // Error text is `destructive` (docs/DESIGN_SYSTEM.md), under the bubble it is about.
   failed: { ...TYPE.caption, color: EMBER.destructive },
 
   quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
   quoteBar: { width: 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },
-  quoteBody: { flex: 1, gap: SPACE.xxs },
+  // Its own width, capped by the bubble's: `flex: 1` wrapped a quote to the width of a two-letter reply.
+  quoteBody: { flexShrink: 1, gap: SPACE.xxs },
   quoteName: { ...TYPE.caption, color: EMBER.textSecondary },
   quoteText: TYPE.caption,
 

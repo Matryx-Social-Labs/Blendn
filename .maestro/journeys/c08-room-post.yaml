@@ -16,7 +16,7 @@ tags:
     visible: "The Pulse"
     timeout: 60000
 - runFlow: ../subflows/dismiss-tip.yaml
-- tapOn: "Banter tab"
+- tapOn: "Banter"
 - extendedWaitUntil:
     visible: ${ROOM}
     timeout: 30000
