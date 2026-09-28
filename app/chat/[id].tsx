@@ -10,7 +10,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -22,22 +21,28 @@ import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
+import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
+import { useToast } from '../../components/Toast'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { apiClient } from '../../lib/apiClient'
+import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
+import { useLatest } from '../../lib/useLatest'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
-import { showMessageReportOptions } from '../../lib/safetyUtils'
+import { messageReportStep } from '../../lib/safetyUtils'
+import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
+import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { useActiveThread } from '../../lib/notifications'
 import Animated from 'react-native-reanimated'
@@ -56,6 +61,8 @@ interface Message {
   removed?: boolean
   replyTo?: Message
   reactions?: { emoji: string; count: number; mine?: boolean }[]
+  /** Yours, and it did not reach the server. Kept, marked, and retryable. */
+  failed?: boolean
 }
 
 type ChatListItem =
@@ -90,12 +97,13 @@ const formatTime = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
+function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo }: {
   name: string
   imageUrl: string | null
   subtitle?: string
   typingCount: number
   onBack: () => void
+  onInfo: () => void
 }) {
   return (
     <View style={headerStyles.container}>
@@ -121,6 +129,19 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
           <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
         ) : null}
       </View>
+
+      {/*
+        The room's info: who is in it, the guidelines, and a report. The same
+        glyph and place as the DM header's options, so one gesture finds both.
+      */}
+      <Pressable
+        onPress={onInfo}
+        accessibilityRole="button"
+        accessibilityLabel="Room info"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
+        <Ionicons name="ellipsis-vertical" size={ICON.lg} color={EMBER.textPrimary} />
+      </Pressable>
     </View>
   )
 }
@@ -129,7 +150,7 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    // 12 + (48 − 24) / 2 puts the back chevron's glyph on GUTTER.
+    // 12 + (48 − 24) / 2 puts the back and options glyphs on GUTTER.
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -182,7 +203,15 @@ function GroupChatInner(props?: {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
+  /*
+   * `sending` no longer reaches the composer -- see ComposerLock. It is kept
+   * only as the in-flight guard against a double tap landing in the same frame
+   * as the first, before `setNewMessage('')` has flushed. A ref, not state,
+   * because nothing renders from it.
+   */
+  const sendInFlightRef = useRef(false)
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
@@ -190,8 +219,12 @@ function GroupChatInner(props?: {
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
-  const [showMessageMenu, setShowMessageMenu] = useState(false)
+  /*
+   * History did not load. Drawn only while there is nothing on screen: a
+   * failed background refresh over messages already shown changes nothing.
+   */
+  const [loadError, setLoadError] = useState(false)
+  const { showToast } = useToast()
   const [trayVisible, setTrayVisible] = useState(false)
   const [trayTitle, setTrayTitle] = useState('')
   const [trayMessage, setTrayMessage] = useState('')
@@ -260,7 +293,11 @@ function GroupChatInner(props?: {
               created_at: msg.parent_message.created_at ?? '',
             }
           : undefined) as Message | undefined,
-        reactions: undefined as { emoji: string; count: number; mine?: boolean }[] | undefined,
+        // Counts and yours, from the server's tally; this was dropped, so every
+        // reaction vanished on reload.
+        reactions: (Array.isArray(msg.reactions) ? msg.reactions : undefined) as
+          | { emoji: string; count: number; mine?: boolean }[]
+          | undefined,
       }
     })
     return list.map(msg => ({
@@ -292,7 +329,8 @@ function GroupChatInner(props?: {
         }
 
         const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
-        if (!result.success || !result.data) { setLoading(false); return }
+        if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
+        setLoadError(false)
 
         const raw = Array.isArray(result.data)
           ? result.data
@@ -303,13 +341,22 @@ function GroupChatInner(props?: {
         setOldestCursor(pagination?.nextCursor || null)
 
         const msgs = transformRawMessages(Array.isArray(raw) ? raw : [], user.id)
-        setMessages(msgs)
+        /*
+         * What only this phone holds rides on top of the refresh: a send still
+         * in flight, and one that failed. A refresh used to replace the list
+         * whole, so a failed message vanished at the next sync.
+         */
+        setMessages(prev => [
+          ...msgs,
+          ...prev.filter(m => m.message_id.startsWith('temp-') && !msgs.some(n => n.message_id === m.message_id)),
+        ])
         if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
         // Scroll to bottom instantly on initial load
         setTimeout(() => scrollToBottom(false), 50)
       })
       .catch((err) => {
         Logger.error('chat', 'Error loading messages', { error: err })
+        setLoadError(true)
       })
       .finally(() => setLoading(false))
 
@@ -443,7 +490,7 @@ function GroupChatInner(props?: {
      */
     const handleReaction: ChatReactionCallback = (data) => {
       setMessages(prev => prev.map(msg =>
-        msg.message_id === data.messageId ? { ...msg, reactions: data.tally } : msg
+        msg.message_id === data.messageId ? { ...msg, reactions: withMine(data.tally, msg.reactions) } : msg
       ))
     }
 
@@ -467,36 +514,58 @@ function GroupChatInner(props?: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, currentUser])
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser) return
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-    if (chatRoomId) stopTyping(String(chatRoomId))
-
-    setSending(true)
-    const messageText = newMessage.trim()
-    let optimistic: Message | null = null
-
-    try {
-      optimistic = {
-        message_id: 'temp-' + (++_tempIdCounter),
-        sender_id: currentUser.id,
-        sender_name: 'You',
-        message_text: messageText,
-        message_type: 'text',
-        reply_to_message_id: replyingTo ? replyingTo.message_id : null,
-        is_edited: false,
-        created_at: new Date().toISOString(),
-        replyTo: replyingTo || undefined,
+  /**
+   * Turn the server's refusal into a locked composer.
+   *
+   * `lib/api-response.ts` has emitted USER_MUTED / CHAT_LOCKED / CHAT_CLOSED /
+   * RATE_LIMITED all along. The failed bubble and the toast say this message
+   * did not go; the lock says the next one will not either, and why -- so a
+   * muted user is not left typing messages they will never be allowed to
+   * send. A rate limit lifts on its own, so that one is timed from the
+   * server's own `retryAfter` rather than guessed; the rest persist until a
+   * send gets through.
+   */
+  const applyComposerLock = (errorCode?: string, retryAfter?: number) => {
+    if (lockTimerRef.current) { clearTimeout(lockTimerRef.current); lockTimerRef.current = null }
+    switch (errorCode) {
+      case 'USER_MUTED':
+        setComposerLock('muted'); return
+      case 'CHAT_LOCKED':
+        setComposerLock('locked'); return
+      case 'CHAT_CLOSED':
+        setComposerLock('closed'); return
+      case 'RATE_LIMITED': {
+        setComposerLock('rate_limited')
+        const ms = Math.min(Math.max((retryAfter ?? 5), 1), 120) * 1000
+        lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        return
       }
-      setMessages(prev => [...prev, optimistic!])
-      setNewMessage('')
-      setReplyingTo(null)
-      setTimeout(() => scrollToBottom(true), 80)
+      default:
+        // A send that landed, or a one-off failure (network, spam heuristic):
+        // not a lock. The failed bubble's "Tap to retry" is the way back.
+        setComposerLock(null)
+    }
+  }
 
-      if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
-      emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
+  useEffect(() => () => {
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+  }, [])
 
-      const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
+  /*
+   * One send of one message, first time or retry. The bubble is already on
+   * screen; this decides whether it stays as sent, goes (moderation), or is
+   * marked failed with the reason in a toast.
+   */
+  const deliver = async (optimistic: Message) => {
+    try {
+      const result = await apiClient.sendChatMessage(chatRoomId as string, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
+      /*
+       * Every answer re-decides the lock: a refusal sets it, and a send that
+       * got through lifts it. A mute ends on the server only when a send is
+       * tried (auto-unmute), and with the field read-only a retry of a failed
+       * bubble is the one send left -- so its success has to unlock the field.
+       */
+      applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
       if (!result.success) throw new Error(result.error || 'Failed to send')
 
       /*
@@ -511,9 +580,7 @@ function GroupChatInner(props?: {
        */
       const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
       if (hidden) {
-        if (optimistic) {
-          setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
-        }
+        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
       }
@@ -528,13 +595,17 @@ function GroupChatInner(props?: {
        */
       if (newId) setMessages(prev =>
         prev.some(m => m.message_id === newId)
-          ? prev.filter(m => m.message_id !== optimistic!.message_id)
-          : prev.map(m => m.message_id === optimistic!.message_id ? { ...m, message_id: newId } : m)
+          ? prev.filter(m => m.message_id !== optimistic.message_id)
+          : prev.map(m => m.message_id === optimistic.message_id ? { ...m, message_id: newId, failed: false } : m)
       )
       markDomainsDirty(['chat'])
     } catch (error) {
-      if (optimistic) setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
-      setNewMessage(messageText)
+      /*
+       * The bubble stays, marked "Not sent · Tap to retry". It used to be
+       * dropped with its text put back in the composer, which took it out of
+       * the conversation and read as though it had been deleted.
+       */
+      setMessages(prev => prev.map(m => m.message_id === optimistic.message_id ? { ...m, failed: true } : m))
       /*
        * `catch {` discarded the binding, so every refusal the server took care
        * to explain — muted, banned, room locked, chat window closed, spam —
@@ -542,9 +613,63 @@ function GroupChatInner(props?: {
        * forever. The server writes a good sentence; one missing character
        * threw it away.
        */
-      showTray('Error', error instanceof Error ? error.message : 'Failed to send message.')
-    } finally {
-      setSending(false)
+      showToast(error instanceof Error ? error.message : 'Failed to send message.', 'error')
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !currentUser) return
+    if (sendInFlightRef.current) return
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    if (chatRoomId) stopTyping(String(chatRoomId))
+
+    sendInFlightRef.current = true
+    const messageText = newMessage.trim()
+    const optimistic: Message = {
+      message_id: 'temp-' + (++_tempIdCounter),
+      sender_id: currentUser.id,
+      sender_name: 'You',
+      message_text: messageText,
+      message_type: 'text',
+      reply_to_message_id: replyingTo ? replyingTo.message_id : null,
+      is_edited: false,
+      created_at: new Date().toISOString(),
+      replyTo: replyingTo || undefined,
+    }
+    setMessages(prev => [...prev, optimistic])
+    setNewMessage('')
+    setReplyingTo(null)
+    setTimeout(() => scrollToBottom(true), 80)
+
+    if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
+    emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
+
+    // `deliver` catches its own failures, so this always runs.
+    await deliver(optimistic)
+    sendInFlightRef.current = false
+  }
+
+  const retrySend = (message: Message) => {
+    setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, failed: false } : m))
+    void deliver({ ...message, failed: false })
+  }
+
+  /*
+   * A reaction lands on the bubble the moment it is tapped, and the server's
+   * tally replaces it when it answers. Refused, it goes back to what it was
+   * and says so — an optimistic change that silently stays wrong is worse
+   * than a slow one.
+   */
+  const react = async (message: Message, emoji: ChatReaction) => {
+    const before = message.reactions
+    setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: toggleReaction(m.reactions, emoji) } : m))
+    const result = await apiClient.reactToChatMessage(String(chatRoomId), message.message_id, emoji)
+    if (result.success && result.data) {
+      const tally = result.data.reactions
+      setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: tally } : m))
+    } else {
+      setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: before } : m))
+      showToast(result.error || "Couldn't add your reaction. Try again.", 'error')
     }
   }
 
@@ -568,15 +693,91 @@ function GroupChatInner(props?: {
   })
 
   /*
+   * The long-press menu, as the app's one sheet (`lib/sheet.ts`).
+   *
+   * It was a centred Modal of its own, and Report closed it to open the
+   * report alert — a second modal presented while the first was leaving. As a
+   * sheet step, Report replaces the menu in place.
+   *
+   * What it offers depends on the message:
+   * - **theirs**: react, reply, copy, report
+   * - **yours**: react, reply, copy — reporting your own message is not a
+   *   thing, and offering it read as a broken menu
+   * - **still sending**: copy only; it has no id yet to reply or react to
+   * - **not sent**: try again, copy, delete
+   */
+  const showMessageMenu = (message: Message) => {
+    const mine = message.sender_id === currentUser?.id
+    const copy: SheetAction = {
+      label: 'Copy',
+      then: () => {
+        Clipboard.setString(message.message_text)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+      },
+    }
+
+    if (message.failed) {
+      showSheet({
+        kind: 'actions',
+        title: 'Not sent',
+        message: "This message didn't reach the room.",
+        actions: [
+          { label: 'Try again', variant: 'primary', then: () => retrySend(message) },
+          copy,
+          {
+            label: 'Delete',
+            variant: 'destructive',
+            then: () => setMessages(prev => prev.filter(m => m.message_id !== message.message_id)),
+          },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+      return
+    }
+
+    const delivered = !message.message_id.startsWith('temp-')
+    const actions: SheetAction[] = []
+    if (delivered) actions.push({ label: 'Reply', then: () => setReplyingTo(message) })
+    actions.push(copy)
+    if (delivered && !mine) {
+      /*
+       * The message id is captured here, when the menu opens. The old menu
+       * cleared its selection before the handler ran, so wiring the report
+       * without this would have reported `undefined`.
+       */
+      const messageId = message.message_id
+      actions.push({ label: 'Report', variant: 'destructive', next: () => messageReportStep(messageId, 'group') })
+    }
+    actions.push({ label: 'Cancel', cancel: true })
+
+    showSheet({
+      kind: 'actions',
+      title: mine ? 'Your message' : message.sender_name,
+      message: message.message_text.length > 120 ? `${message.message_text.slice(0, 120)}…` : message.message_text,
+      content: delivered ? (
+        <ReactionPicker
+          mine={(message.reactions ?? []).filter(r => r.mine).map(r => r.emoji)}
+          onPick={(emoji) => {
+            closeSheet()
+            void react(message, emoji)
+          }}
+        />
+      ) : undefined,
+      actions,
+    })
+  }
+  // Read at the moment of the long press, so the handler below can stay stable.
+  const messageMenuRef = useLatest(showMessageMenu)
+
+  /*
    * Long-press opens the message menu, and it is stable so `ChatBubble`'s memo
    * can bite: a room being typed in re-renders on every keystroke, and an
    * inline arrow here would re-render every mounted bubble each time.
    */
   const openMessageMenu = useCallback((message: Message) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-    setSelectedMessage(message)
-    setShowMessageMenu(true)
-  }, [])
+    messageMenuRef.current(message)
+  }, [messageMenuRef])
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.sender_id === currentUser?.id
@@ -619,6 +820,8 @@ function GroupChatInner(props?: {
             ? { senderName: item.replyTo.sender_name, text: item.replyTo.message_text }
             : null
         }
+        failed={item.failed}
+        onRetry={item.failed ? () => retrySend(item) : undefined}
         onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
     )
@@ -656,6 +859,15 @@ function GroupChatInner(props?: {
             subtitle={(eventTitle as string) || undefined}
             typingCount={typingUsers.size}
             onBack={() => router.back()}
+            onInfo={() => router.push({
+              pathname: '/chat-info/[id]',
+              params: {
+                id: String(chatRoomId),
+                roomName: (roomName as string) || '',
+                eventTitle: (eventTitle as string) || '',
+                eventImage: (eventImage as string) || '',
+              },
+            } as never)}
           />
         )}
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
@@ -698,7 +910,18 @@ function GroupChatInner(props?: {
               />
             ) : null
           }
-          ListEmptyComponent={!loading ? (
+          ListEmptyComponent={loading ? null : loadError ? (
+            // Not the empty state: an empty room and one that failed to load
+            // are different facts, and only one of them is an invitation.
+            <ChatLoadFailed
+              what="this chat"
+              onRetry={() => {
+                setLoadError(false)
+                setLoading(true)
+                void loadMessages(true)
+              }}
+            />
+          ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>Start the room conversation</Text>
               <Text style={styles.emptyText}>Be the first to post so everyone can join.</Text>
@@ -706,7 +929,7 @@ function GroupChatInner(props?: {
                 <Text style={styles.emptyCtaText}>Send a starter message</Text>
               </ScalePress>
             </View>
-          ) : null}
+          )}
           /*
            * Follow the end while the reader is at it. A `scrollToEnd` fired
            * 50ms after `setMessages` measured a list that had laid out
@@ -759,7 +982,7 @@ function GroupChatInner(props?: {
 
         <ChatComposer
           value={newMessage}
-          sending={sending}
+          lock={composerLock}
           onSend={sendMessage}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {
@@ -776,60 +999,6 @@ function GroupChatInner(props?: {
           }}
         />
       </KeyboardAvoidingView>
-
-      {/* Message menu */}
-      <Modal visible={showMessageMenu} transparent animationType="fade" onRequestClose={() => setShowMessageMenu(false)}>
-        {/*
-          accessible={false} on the scrim: a TouchableOpacity is accessible by
-          default and on iOS that collapses everything inside it into one node,
-          so VoiceOver (and Maestro) read the whole menu as "↩️ Reply 📋 Copy 🚩
-          Report" and could not pick Report on its own.
-        */}
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} accessible={false} onPress={() => setShowMessageMenu(false)}>
-          <View style={styles.messageMenu}>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Reply" onPress={() => {
-              if (selectedMessage) { setReplyingTo(selectedMessage); setShowMessageMenu(false); setSelectedMessage(null) }
-            }}>
-              <Text style={styles.menuIcon}>↩️</Text>
-              <Text style={styles.menuText}>Reply</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Copy" onPress={async () => {
-              if (selectedMessage) {
-                await Clipboard.setString(selectedMessage.message_text)
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-                setShowMessageMenu(false); setSelectedMessage(null)
-              }
-            }}>
-              <Text style={styles.menuIcon}>📋</Text>
-              <Text style={styles.menuText}>Copy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Report" onPress={() => {
-              /*
-               * Reuses the same flow the DM screen uses, rather than a second
-               * confirmation tray.
-               *
-               * This used to show a tray whose Report button fired a SUCCESS
-               * haptic and called nothing. So the room where abuse is most
-               * likely had a report button that silently did nothing, and the
-               * person who pressed it was actively told it had worked. Worse
-               * than no button.
-               *
-               * The message id is captured before the menu closes: the old code
-               * called setSelectedMessage(null) first, so by the time any
-               * handler ran the id was already gone. Wiring the API call
-               * without this would have reported `undefined`.
-               */
-              const messageId = selectedMessage?.message_id
-              setShowMessageMenu(false); setSelectedMessage(null)
-              if (!messageId) return
-              showMessageReportOptions(messageId, 'group')
-            }}>
-              <Text style={styles.menuIcon}>🚩</Text>
-              <Text style={[styles.menuText, styles.menuTextDestructive]}>Report</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       <ActionTray visible={trayVisible} title={trayTitle} message={trayMessage} buttons={trayButtons} onClose={closeTray} />
     </SafeAreaView>
@@ -893,18 +1062,6 @@ const styles = StyleSheet.create({
   },
   // A secondary button: the composer's send is this screen's one accent.
   emptyCtaText: { ...TYPE.button, color: EMBER.textPrimary },
-
-  // Message menu modal
-  modalOverlay: { flex: 1, backgroundColor: EMBER.backdrop, justifyContent: 'center', alignItems: 'center' },
-  messageMenu: {
-    backgroundColor: EMBER.surface, borderRadius: EMBER_RADIUS.md, padding: SPACE.sm, minWidth: 200,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: EMBER.separator,
-  },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.md, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.sm },
-  // An emoji standing in for a row icon, so it takes the icon size.
-  menuIcon: { fontSize: ICON.md, marginRight: SPACE.md },
-  menuText: TYPE.body,
-  menuTextDestructive: { color: EMBER.destructive },
 })
 
 

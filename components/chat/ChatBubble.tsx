@@ -104,6 +104,16 @@ export interface ChatBubbleProps {
    * with this `false`, so scrolling back never replays it.
    */
   animateIn?: boolean
+  /**
+   * Your message did not reach the server.
+   *
+   * It stays where you wrote it, marked "Not sent · Tap to retry", rather than
+   * vanishing with its text put back in the composer — which lost its place in
+   * the conversation and read as though it had been deleted. A tap sends it
+   * again; the long-press menu can delete it.
+   */
+  failed?: boolean
+  onRetry?: () => void
   onLongPress?: () => void
 }
 
@@ -141,6 +151,8 @@ function ChatBubbleBase({
   reactions,
   variant = 'room',
   receipt = null,
+  failed = false,
+  onRetry,
   onLongPress,
   removed = false,
   animateIn = false,
@@ -222,14 +234,18 @@ function ChatBubbleBase({
         </View>
 
         <Pressable
+          onPress={failed ? onRetry : undefined}
           onLongPress={removed ? undefined : onLongPress}
           delayLongPress={250}
-          accessibilityRole="text"
+          accessibilityRole={failed ? 'button' : 'text'}
           accessibilityLabel={
             removed
               ? `${mine ? 'Your' : `${senderName}'s`} message at ${time} was removed by moderation`
-              : `${mine ? 'You' : senderName} at ${time}: ${text}`
+              : failed
+                ? `Not sent: ${text}`
+                : `${mine ? 'You' : senderName} at ${time}: ${text}`
           }
+          accessibilityHint={failed ? 'Sends it again' : undefined}
           style={({ pressed }) => [
             styles.bubble,
             mine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -269,6 +285,12 @@ function ChatBubbleBase({
           */}
           {edited ? <Text style={styles.edited}>edited</Text> : null}
         </Pressable>
+
+        {failed ? (
+          <Text style={styles.failed} accessibilityElementsHidden importantForAccessibility="no">
+            Not sent · Tap to retry
+          </Text>
+        ) : null}
 
         {reactionEntries.length > 0 ? (
           <View style={[styles.reactions, mine && styles.reactionsMine]}>
@@ -355,6 +377,8 @@ const styles = StyleSheet.create({
   /* Read is one step brighter, so "they saw it" is a colour change and not a glyph count. */
   receiptRead: { color: EMBER.textSecondary },
   edited: { ...TYPE.caption, color: EMBER.textTertiary, marginTop: SPACE.xs },
+  // Error text is `destructive` (docs/DESIGN_SYSTEM.md), under the bubble it is about.
+  failed: { ...TYPE.caption, color: EMBER.destructive },
 
   quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
   quoteBar: { width: 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },

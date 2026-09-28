@@ -19,7 +19,7 @@ than swapping a pane — the chat is one place you are standing in, not a tab.
 ## Composition
 
 ```
-GroupChatHeader     back · room name · subtitle
+GroupChatHeader     back · room name · subtitle · options (→ Room info)
 RealtimeStatusBanner
 RoomGuidelinesBanner  once per room until "Got it" — in the column, never over a message
 FlatList
@@ -29,9 +29,28 @@ FlatList
   TypingIndicator   ListFooterComponent, at the end of the feed
 reply bar           when replying
 ChatComposer        floating pill
-message menu        long-press
+message menu        long-press — a step of the app's one sheet (lib/sheet.ts)
 ActionTray
 ```
+
+**Room info** (`app/chat-info/[id].tsx`): the room, its members as the room
+shows them (pseudonym + the bubble's own mark; tap opens the same gated profile
+the Grid opens), community guidelines, and *Report this event*. No Leave or
+Mute: neither has an endpoint.
+
+**The message menu** offers a reaction row (the six `CHAT_REACTIONS` the
+server accepts — optimistic, rolled back with a toast if refused), Reply, Copy,
+and Report on other people's messages only. A message still sending offers Copy
+only; it has no id to reply or react to yet.
+
+**A send that fails stays.** The bubble is marked *Not sent · Tap to retry*
+under it, in `destructive`; tap resends, long-press offers Try again, Copy and
+Delete. The server's reason is a toast. Both screens do this, and a refresh
+keeps these local messages rather than replacing the list whole.
+
+**History that fails to load** says *Couldn't load this chat* with Try again —
+never the "start the conversation" empty state, which is an invitation to talk
+into a thread that may hold a month of messages.
 
 ---
 
@@ -187,9 +206,18 @@ A DM is pseudonymous until both people reveal, except a message request, where
 real names apply throughout. The bubble does not decide any of that — it draws
 `reveal.displayName`, and the server decides what that is.
 
-### Long-press reports theirs, not yours
+### Long-press copies anything, reports only theirs
 
-Reporting your own message is not a thing, so `onLongPress` is `undefined` on
-your own rows. The old screen attached the handler to every row and checked
-`isMe` inside it, which meant a long press on your own message opened nothing
-and looked broken.
+Every row opens the menu, and every message can be copied. Report is on their
+messages alone: reporting your own message is not a thing. The long press used
+to be report-only and `undefined` on your own rows, so nothing in a DM could be
+copied and a long press on your own message opened nothing.
+
+### The header opens their profile — once they are a name to you
+
+The avatar and name are one target. It is live for an accepted message request
+and for a match who has revealed; before that, a profile would be the server's
+flat "Attendee" or more than the conversation says, so the header is not a
+button. The options menu needs the conversation record (its copy turns on
+whether they know who you are), so if that did not load it says so and offers
+Try again rather than acting on a guess.

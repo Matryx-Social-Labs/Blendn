@@ -10,7 +10,9 @@ Each carries a red `PLACEHOLDER DESIGN` banner on screen so nobody mistakes one
 for finished work in a demo — except `app/sign-in.tsx` (sign in / create
 account), whose banner was removed on 2026-09-21 at the product owner's
 request; the screen is still provisional in layout, the label just no longer
-says so to testers.
+says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
+was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
+(Open mail app, Resend with a 30-second cooldown).
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
@@ -72,7 +74,7 @@ index.tsx                     sign-in.tsx                    forgot-password.tsx
 |---|---|---|
 | `index.tsx` | `useAuth().user`, `.loading` | `signInWithGoogle`, `signInWithApple` |
 | `sign-in.tsx` | nothing | `signUp` / `signInWithEmail` → `/auth/signup`, `/auth/signin` |
-| `forgot-password.tsx` | nothing | `apiClient.forgotPassword` → `/api/auth/forgot-password` |
+| `forgot-password.tsx` | `email` param from sign-in | `apiClient.forgotPassword` → `/api/auth/forgot-password` |
 
 **No screen navigates on success.** The root layout's routing effect watches
 auth state and moves the user. Navigating from a screen as well races it — this
@@ -82,7 +84,6 @@ is why the Google and Apple handlers have no `router` call either.
 
 | | |
 |---|---|
-| **Terms and Privacy are not links** | The text is there; there are no URLs behind it. App Review will check this |
 | **Email verification** | Cut from this scope by decision. Nothing sends a verification mail, and `signin` does not gate on `emailVerified` |
 | **Reset happens in a browser** | The emailed link opens the web page. Deep-linking it into the app needs associated domains, DNS and a native rebuild |
 | **The Google mark is a monochrome glyph** | `AntDesign`, chosen to avoid a new dependency. Google's guidelines ask for their supplied multicolour asset — swap before store submission |
@@ -140,12 +141,17 @@ React Native.
 
 ## 1. `app/rate/[eventId].tsx` — peer rating
 
-**Route:** `/rate/{eventId}` · **Reached from:** nothing yet. Needs an entry
-point after an event ends.
+**Route:** `/rate/{eventId}` · **Reached from:** the Scene's CTA after an event
+you attended, Going's Past rows, the Room's end-of-night recap, and a rating push
+(no push kind exists server-side yet; the app routes the likely names).
 
-**What it does.** Loads the people you may rate (`GET /events/:id/peer-ratings`),
-walks them one at a time, and submits a 1–5, an optional issue, and an optional
-note.
+**What it does.** Asks about the night first — one tap on a 1–5, sent with
+`POST /events/:id/rating`, skipped if `userStatus.userRating` says you already
+did. Then loads the people you may rate (`GET /events/:id/peer-ratings`), shows
+each with the face and name you know them by (from the conversation list, never
+the public profile — `lib/ratePeople.ts`), and submits a 1–5, an optional issue,
+and an optional note. A failed load says so and offers Try again; "Nothing to
+rate" is only the server's real answer.
 
 ### Rules the design must not break
 
@@ -160,10 +166,10 @@ note.
 
 ### Design notes
 
-The current 1–5 number row is a placeholder and probably wrong: a five-star row
-reads as a public review, which is the one tone this must not have. The brief is
-"a private note to us". Worth exploring something that does not resemble a
-rating widget at all.
+No longer a placeholder (2026-09-28). The scale is five plain steps with a word
+at each end ("Not for me" / "Would meet again"), not stars: a five-star row reads
+as a public review, which is the one tone this must not have. Still open for the
+designer: whether it should resemble a rating widget at all.
 
 ---
 

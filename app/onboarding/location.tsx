@@ -1,8 +1,8 @@
 import * as Location from 'expo-location'
 import { useState } from 'react'
-import { Alert, Linking } from 'react-native'
 
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -29,11 +29,15 @@ const SETTINGS_HINT = "Blend'n uses location to see who is around you, and check
 export default function LocationScreen() {
   const { saving, commit, goBack } = useOnboarding('location')
   const [asking, setAsking] = useState(false)
+  const [settingsPrompt, setSettingsPrompt] = useState(false)
 
   const ask = async () => {
     setAsking(true)
     let granted = false
     let canAskAgain = true
+    // A permissions call that throws is a broken build, not a refusal: no
+    // Settings prompt, since Settings is not known to be the problem.
+    let broken = false
     try {
       const existing = await Location.getForegroundPermissionsAsync()
       canAskAgain = existing.canAskAgain
@@ -44,6 +48,7 @@ export default function LocationScreen() {
     } catch {
       granted = false
       canAskAgain = false
+      broken = true
     }
     setAsking(false)
 
@@ -56,15 +61,10 @@ export default function LocationScreen() {
      * `canAskAgain` is false in exactly that case, and Settings is the only
      * way back.
      */
-    if (!granted && !canAskAgain) {
-      Alert.alert(
-        'Turn this on in Settings',
-        `${SETTINGS_HINT}\n\nYour phone only asks once, and it was answered before. You can change it in Settings at any time.`,
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
-        ]
-      )
+    if (!granted && !canAskAgain && !broken) {
+      // The answer comes from the tray; the step waits for it.
+      setSettingsPrompt(true)
+      return
     }
 
     await commit({ share_location: granted })
@@ -86,6 +86,15 @@ export default function LocationScreen() {
       onBack={goBack}
     >
       <LocationIllustration />
+      <SettingsTray
+        visible={settingsPrompt}
+        hint={SETTINGS_HINT}
+        onClose={() => setSettingsPrompt(false)}
+        onNotNow={() => {
+          setSettingsPrompt(false)
+          void commit({ share_location: false })
+        }}
+      />
     </OnboardingScreen>
   )
 }

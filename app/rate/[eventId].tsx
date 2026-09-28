@@ -1,45 +1,34 @@
+import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 // The library one: react-native's own left the Submit button under the home
 // indicator, where taps are the system's (SCRUM-201).
 import { SafeAreaView } from 'react-native-safe-area-context'
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  useReducedMotion,
-  withTiming,
-} from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, useReducedMotion, withTiming } from 'react-native-reanimated'
 
-import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
-import { Logger } from '../../lib/logger'
-import { useToast } from '../../components/Toast'
+import { Face } from '../../components/blendn/Face'
 import ScalePress from '../../components/motion/ScalePress'
 import { fadeInFast } from '../../components/motion/presence'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { useToast } from '../../components/Toast'
+import { Text } from '../../components/ui/Text'
+import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
+import { ratePeople, type RatePerson } from '../../lib/ratePeople'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
- * Rate the people you met.
+ * After the night: how it was, and how the people you met were.
  *
- * ## DESIGN IS A PLACEHOLDER — LOGIC IS NOT
- *
- * Everything about how this looks is provisional and meant to be replaced.
- * Everything about what it does, who it lets you rate, and what it says is
- * deliberate, and the rules below must survive whatever the redesign does.
+ * Two kinds of step, in order. **The night** first — one tap on a 1–5 and it
+ * is sent (`rateEvent`, which had no caller until this screen) — then **each
+ * person you matched with**, one at a time, their face and the name you know
+ * them by. Either can be skipped, and the screen never asks twice.
  *
  * `DESIGN_HANDOFF.md` asks for something that "feels like a private note to us,
- * not a public review". This screen does not achieve that — it is a functional
- * stand-in so the flow can be audited end to end and handed over.
+ * not a public review", so the scale is five plain steps with words at the
+ * ends, not stars, and nothing is celebrated.
  *
  * ## Rules the design must not break
  *
@@ -53,7 +42,9 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/the
  * **Only people you connected with.** A mutual like, so both opted in. Rating
  * anyone who merely shared a room is a review-bombing surface and a way to
  * punish someone for declining. Enforced server-side; the list comes from
- * `getRatablePeers` and is never assembled on the client.
+ * `getRatablePeers` and is never assembled on the client. Their faces come from
+ * the conversation list, never the public profile (`lib/ratePeople.ts` says
+ * why).
  *
  * **Only after the event.** During the night a rating is leverage; afterwards
  * it is reflection. Also server-enforced.
@@ -61,6 +52,9 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/the
  * **Harassment is not a low rating with a label.** It routes to moderation and
  * is never averaged into anything. Four glowing ratings and one harassment
  * report is not a 4.2. The UI must never present it as the bottom of a scale.
+ *
+ * **A failed load is not "nothing to rate".** It says what failed and offers
+ * to try again; "Nothing to rate" is only ever the server's real answer.
  *
  * ## Deliberately absent
  *
@@ -75,7 +69,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/the
  * This is a private note, not an achievement: no celebration, no confetti, no
  * sound. What motion there is exists to stop the screen jumping.
  *
- * - **Between people, and into the done state**, the form fades out (120ms)
+ * - **Between steps, and into the done state**, the form fades out (120ms)
  *   while the next one fades in rising 8pt (220ms, strong ease-out). Without
  *   it Submit swapped one person's answers for a blank form in a single frame,
  *   which reads as "did that save, or did it reset?". Both layers are absolute
@@ -118,15 +112,88 @@ const ISSUES: { value: PeerRatingIssue; label: string }[] = [
   { value: 'harassment', label: 'They harassed me' },
 ]
 
+const FACE = CONTROL.lg * 2
+
+type Load =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | {
+      kind: 'ready'
+      people: RatePerson[]
+      title: string | null
+      /** Whether to ask about the night: not if it was already rated. */
+      askEvent: boolean
+    }
+
+/**
+ * Five plain steps with a word at each end.
+ *
+ * Not stars: a five-star row reads as a public review, and that is the one
+ * tone this must not have. The words say what the ends mean, so the numbers
+ * never have to.
+ */
+function Scale({
+  value,
+  onChoose,
+  low,
+  high,
+  disabled,
+  subject,
+}: {
+  value: number | null
+  onChoose: (n: number) => void
+  low: string
+  high: string
+  disabled?: boolean
+  subject: string
+}) {
+  return (
+    <View style={styles.scale}>
+      <View style={styles.scaleRow}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <ScalePress
+            key={n}
+            haptic={false}
+            disabled={disabled}
+            onPress={() => onChoose(n)}
+            style={styles.scaleCell}
+            accessibilityRole="button"
+            accessibilityState={{ selected: value === n, disabled }}
+            accessibilityLabel={`${subject}: ${n} out of 5${n === 1 ? `, ${low}` : n === 5 ? `, ${high}` : ''}`}
+          >
+            <Animated.View style={[styles.chip, value === n && styles.chipSelected, FILL_TRANSITION]}>
+              <Animated.Text style={[styles.chipText, value === n && styles.chipTextSelected, LABEL_TRANSITION]}>
+                {n}
+              </Animated.Text>
+            </Animated.View>
+          </ScalePress>
+        ))}
+      </View>
+      <View style={styles.scaleEnds} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        <Text variant="meta" color={EMBER.textTertiary}>
+          {low}
+        </Text>
+        <Text variant="meta" color={EMBER.textTertiary}>
+          {high}
+        </Text>
+      </View>
+    </View>
+  )
+}
+
 export default function RatePeers() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
 
-  const [peerIds, setPeerIds] = useState<string[]>([])
-  const [index, setIndex] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [load, setLoad] = useState<Load>({ kind: 'loading' })
+  const [attempt, setAttempt] = useState(0)
+  /** -1 is the night itself; 0… are people. */
+  const [index, setIndex] = useState(-1)
   const [submitting, setSubmitting] = useState(false)
+  /** How many things were actually sent, for the done state's words. */
+  const [sent, setSent] = useState(0)
 
+  const [eventRating, setEventRating] = useState<number | null>(null)
   const [rating, setRating] = useState<number | null>(null)
   const [issue, setIssue] = useState<PeerRatingIssue>('none')
   const [note, setNote] = useState('')
@@ -147,28 +214,48 @@ export default function RatePeers() {
     })
   }, [])
 
+  /*
+   * Three reads, one of which decides the screen. The ratable list is the
+   * gate: if it fails, nothing here is true and the screen says so. The
+   * conversation list (faces) and the event (its title, and whether you rated
+   * it already) only make it nicer — their failure costs a name or a title,
+   * never the screen.
+   */
   useEffect(() => {
-    let cancelled = false
     if (!eventId) return
-    apiClient
-      .getRatablePeers(String(eventId))
-      .then((res) => {
+    let cancelled = false
+    const id = String(eventId)
+    Promise.all([
+      apiClient.getRatablePeers(id),
+      apiClient.getConversations().catch(() => null),
+      apiClient.getEvent(id).catch(() => null),
+    ])
+      .then(([peers, conversations, event]) => {
         if (cancelled) return
-        // An empty list is the ordinary case, not an error: you may have
-        // connected with nobody, or already rated everyone.
-        setPeerIds(res.success && res.data ? res.data.userIds : [])
+        if (!peers.success || !peers.data) {
+          Logger.warn('match', 'Ratable peers refused', { error: peers.error })
+          setLoad({ kind: 'error' })
+          return
+        }
+        const rated = event?.data?.userStatus?.userRating
+        const people = ratePeople(peers.data.userIds, conversations?.success ? conversations.data ?? [] : [])
+        const askEvent = typeof rated !== 'number'
+        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, askEvent })
+        setIndex(askEvent ? -1 : 0)
       })
       .catch((e) => {
         Logger.error('match', 'Failed to load ratable peers', { error: e })
-        if (!cancelled) setPeerIds([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoad({ kind: 'error' })
       })
     return () => {
       cancelled = true
     }
-  }, [eventId])
+  }, [eventId, attempt])
+
+  const retry = useCallback(() => {
+    setLoad({ kind: 'loading' })
+    setAttempt((a) => a + 1)
+  }, [])
 
   const advance = useCallback(() => {
     setRating(null)
@@ -177,13 +264,42 @@ export default function RatePeers() {
     setIndex((i) => i + 1)
   }, [])
 
+  /** One tap and it is sent: the night is a single question. */
+  const rateNight = useCallback(
+    async (n: number) => {
+      if (submitting) return
+      Haptics.selectionAsync().catch(() => {})
+      setEventRating(n)
+      setSubmitting(true)
+      try {
+        const res = await apiClient.rateEvent(String(eventId), n)
+        if (!res.success) {
+          setEventRating(null)
+          showToast(res.error || 'Could not save that. Try again.', 'error')
+          return
+        }
+        setSent((s) => s + 1)
+        advance()
+      } catch (e) {
+        Logger.error('events', 'Failed to rate the event', { error: e })
+        setEventRating(null)
+        showToast('Could not save that. Try again.', 'error')
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [advance, eventId, showToast, submitting]
+  )
+
+  const people = load.kind === 'ready' ? load.people : []
+  const person = index >= 0 ? people[index] : undefined
+
   const submit = useCallback(async () => {
-    const userId = peerIds[index]
-    if (!userId || rating === null || submitting) return
+    if (!person || rating === null || submitting) return
     setSubmitting(true)
     try {
       const res = await apiClient.ratePeer(String(eventId), {
-        userId,
+        userId: person.id,
         rating,
         issue,
         note: note.trim() || undefined,
@@ -192,6 +308,7 @@ export default function RatePeers() {
         showToast('Could not save that. Try again.', 'error')
         return
       }
+      setSent((s) => s + 1)
       advance()
     } catch (e) {
       Logger.error('match', 'Failed to submit peer rating', { error: e })
@@ -199,81 +316,145 @@ export default function RatePeers() {
     } finally {
       setSubmitting(false)
     }
-  }, [advance, eventId, index, issue, note, peerIds, rating, showToast, submitting])
+  }, [advance, eventId, issue, note, person, rating, showToast, submitting])
 
-  if (loading) {
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/going'))
+
+  const topBar = (
+    <View style={styles.topBar}>
+      <Pressable
+        onPress={close}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+      >
+        <Ionicons name="close" size={ICON.lg} color={EMBER.textPrimary} />
+      </Pressable>
+      {load.kind === 'ready' && person ? (
+        <Text variant="caption" color={EMBER.textSecondary}>
+          {index + 1} of {people.length}
+        </Text>
+      ) : null}
+    </View>
+  )
+
+  if (load.kind === 'loading') {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={EMBER.textPrimary} style={styles.loader} />
+        {topBar}
+        <ActivityIndicator color={EMBER.textSecondary} style={styles.loader} />
       </SafeAreaView>
     )
   }
 
-  const done = index >= peerIds.length
+  if (load.kind === 'error') {
+    return (
+      <SafeAreaView style={styles.container}>
+        {topBar}
+        <Animated.View style={styles.centred} entering={entering}>
+          <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+          <Text variant="title" style={styles.centreText}>
+            Couldn&apos;t load who you met
+          </Text>
+          <Text variant="body" color={EMBER.textSecondary} style={styles.centreText}>
+            Check your connection and try again.
+          </Text>
+          <ScalePress onPress={retry} style={styles.primaryButton} accessibilityRole="button">
+            <Text variant="button" color={EMBER.onGradient}>
+              Try again
+            </Text>
+          </ScalePress>
+        </Animated.View>
+      </SafeAreaView>
+    )
+  }
+
+  const onNight = index === -1
+  const done = !onNight && index >= people.length
 
   return (
     <SafeAreaView style={styles.container}>
+      {topBar}
       <View style={styles.stage}>
         {done ? (
           <Animated.View key="done" style={styles.layer} entering={entering}>
             <View style={styles.centred}>
-              <Text style={styles.h1}>{peerIds.length === 0 ? 'Nothing to rate' : 'Thanks'}</Text>
-              <Text style={styles.body}>
-                {peerIds.length === 0
-                  ? 'You can rate people you connected with, once the event has finished.'
-                  : 'This is only ever seen by us. Nobody you rated will know.'}
+              <Text variant="display" style={styles.centreText}>
+                {sent > 0 ? 'Thanks' : people.length === 0 && !load.askEvent ? 'Nothing to rate' : 'All done'}
               </Text>
-              <TouchableOpacity style={styles.primaryButton} onPress={() => router.back()}>
-                <Text style={styles.primaryButtonText}>Done</Text>
-              </TouchableOpacity>
+              <Text variant="body" color={EMBER.textSecondary} style={styles.centreText}>
+                {sent > 0
+                  ? 'This is only ever seen by us. Nobody you rated will know.'
+                  : people.length === 0
+                    ? 'You can rate people you matched with, once the event has finished.'
+                    : 'Nothing was sent. You can come back to this from Going.'}
+              </Text>
+              <ScalePress onPress={close} style={styles.primaryButton} accessibilityRole="button">
+                <Text variant="button" color={EMBER.onGradient}>
+                  Done
+                </Text>
+              </ScalePress>
             </View>
           </Animated.View>
-        ) : (
+        ) : onNight ? (
+          <Animated.View key="night" style={styles.layer} entering={entering} exiting={fadeOutStage}>
+            <ScrollView contentContainerStyle={styles.scroll}>
+              <Text variant="label" color={EMBER.textSecondary}>
+                THE NIGHT
+              </Text>
+              <Text variant="display">How was {load.title || 'it'}?</Text>
+              <Text variant="body" color={EMBER.textSecondary}>
+                One tap. It helps whoever puts on the next one.
+              </Text>
+              <Scale
+                value={eventRating}
+                onChoose={(n) => void rateNight(n)}
+                low="Not great"
+                high="Loved it"
+                disabled={submitting}
+                subject="The night"
+              />
+              {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
+              <Pressable style={styles.skipButton} onPress={advance} disabled={submitting} accessibilityRole="button">
+                <Text variant="button" color={EMBER.textSecondary}>
+                  {people.length > 0 ? 'Skip to the people' : 'Skip'}
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </Animated.View>
+        ) : person ? (
           /*
             Keyed by person, so Submit and Skip both swap the whole form: the
             old one fades out and the next rises in, and the new ScrollView
             starts at the top rather than wherever the last one was left.
           */
           <Animated.View key={`peer-${index}`} style={styles.layer} entering={entering} exiting={fadeOutStage}>
-            <ScrollView contentContainerStyle={styles.scroll}>
-              {__DEV__ ? (
-                <Text style={styles.placeholderBanner}>
-                  PLACEHOLDER DESIGN — logic is final, layout is not
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+              <View style={styles.who}>
+                <Face name={person.name} photo={person.photo} size={FACE} />
+                <Text variant="title" numberOfLines={2} style={styles.centreText}>
+                  {person.name}
                 </Text>
-              ) : null}
-
-              <Text style={styles.h1}>How was meeting them?</Text>
-              <Text style={styles.body}>
-                {index + 1} of {peerIds.length}. Only we see this. They will never know you rated
-                them, or what you said.
-              </Text>
-
-              {/*
-                * Deliberately not stars. A five-star row reads as a public review and
-                * that is the tone this must not have. Numbers are a placeholder for
-                * whatever the designer chooses -- the constraint is that it must not
-                * look like something the other person will read.
-                */}
-              <View style={styles.row}>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <ScalePress
-                    key={n}
-                    haptic={false}
-                    onPress={() => chooseRating(n)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: rating === n }}
-                    accessibilityLabel={`Rate ${n} out of 5`}
-                  >
-                    <Animated.View style={[styles.chip, rating === n && styles.chipSelected, FILL_TRANSITION]}>
-                      <Animated.Text style={[styles.chipText, rating === n && styles.chipTextSelected, LABEL_TRANSITION]}>
-                        {n}
-                      </Animated.Text>
-                    </Animated.View>
-                  </ScalePress>
-                ))}
+                <Text variant="meta" style={styles.centreText}>
+                  Only we see this. They will never know you rated them, or what you said.
+                </Text>
               </View>
 
-              <Text style={styles.h2}>Did anything go wrong?</Text>
+              <Text variant="heading" style={styles.h2}>
+                How was meeting them?
+              </Text>
+              <Scale
+                value={rating}
+                onChoose={chooseRating}
+                low="Not for me"
+                high="Would meet again"
+                subject={`Meeting ${person.name}`}
+              />
+
+              <Text variant="heading" style={styles.h2}>
+                Did anything go wrong?
+              </Text>
               {ISSUES.map((opt) => (
                 <ScalePress
                   key={opt.value}
@@ -295,58 +476,74 @@ export default function RatePeers() {
               {/* Faded, not popped: it lands mid-form, under the finger's eye line. */}
               {issue === 'harassment' && (
                 <Animated.Text style={styles.warning} entering={fadeInFast}>
-                  This goes straight to our moderation team, not into any score. Someone will read
-                  it.
+                  This goes straight to our moderation team, not into any score. Someone will read it.
                 </Animated.Text>
               )}
 
-              <Text style={styles.h2}>Anything you want to tell us? (optional)</Text>
+              <Text variant="heading" style={styles.h2}>
+                Anything you want to tell us?
+              </Text>
               <TextInput
                 style={styles.input}
                 value={note}
                 onChangeText={setNote}
                 multiline
-                placeholder="Only we read this"
+                placeholder="Optional. Only we read this"
                 placeholderTextColor={EMBER.textPlaceholder}
                 maxLength={500}
               />
 
-              <TouchableOpacity
+              <ScalePress
                 style={[styles.primaryButton, (rating === null || submitting) && styles.buttonDisabled]}
                 onPress={submit}
                 disabled={rating === null || submitting}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: rating === null || submitting }}
               >
-                <Text style={styles.primaryButtonText}>{submitting ? 'Saving…' : 'Submit'}</Text>
-              </TouchableOpacity>
+                <Text variant="button" color={EMBER.onGradient}>
+                  {submitting ? 'Saving…' : 'Submit'}
+                </Text>
+              </ScalePress>
 
               {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
-              <TouchableOpacity style={styles.skipButton} onPress={advance} disabled={submitting}>
-                <Text style={styles.skipButtonText}>Skip this person</Text>
-              </TouchableOpacity>
+              <Pressable style={styles.skipButton} onPress={advance} disabled={submitting} accessibilityRole="button">
+                <Text variant="button" color={EMBER.textSecondary}>
+                  Skip this person
+                </Text>
+              </Pressable>
             </ScrollView>
           </Animated.View>
-        )}
+        ) : null}
       </View>
     </SafeAreaView>
   )
 }
 
-/** Placeholder styling. Replace wholesale; nothing here is a decision. */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
+  topBar: {
+    height: CONTROL.md,
+    paddingHorizontal: GUTTER - SPACE.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconButton: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.7 },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
   stage: { flex: 1 },
   layer: { ...StyleSheet.absoluteFill },
-  scroll: { padding: GUTTER, gap: SPACE.md },
+  scroll: { paddingHorizontal: GUTTER, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl, gap: SPACE.md },
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: GUTTER, gap: SPACE.md },
+  centreText: { textAlign: 'center' },
   loader: { marginTop: SPACE.xxxl },
-  placeholderBanner: { ...TYPE.label, color: EMBER.destructive, marginBottom: SPACE.sm },
-  h1: { ...TYPE.display },
-  h2: { ...TYPE.heading, marginTop: SPACE.lg },
-  body: { ...TYPE.body, color: EMBER.textSecondary },
-  row: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md },
+  who: { alignItems: 'center', gap: SPACE.sm, paddingBottom: SPACE.lg },
+  h2: { marginTop: SPACE.lg },
+  scale: { gap: SPACE.sm, marginTop: SPACE.sm },
+  scaleRow: { flexDirection: 'row', gap: SPACE.sm },
+  scaleCell: { flex: 1 },
+  scaleEnds: { flexDirection: 'row', justifyContent: 'space-between' },
   chip: {
-    width: CONTROL.md,
     height: CONTROL.md,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surface,
@@ -354,7 +551,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipSelected: { backgroundColor: EMBER.textPrimary },
-  chipText: { ...TYPE.bodyStrong },
+  chipText: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
   chipTextSelected: { color: EMBER.bg },
   option: {
     padding: SPACE.lg,
@@ -363,11 +560,12 @@ const styles = StyleSheet.create({
     marginTop: SPACE.xs,
   },
   optionSelected: { backgroundColor: EMBER.textPrimary },
-  optionText: { ...TYPE.body },
+  optionText: { ...TYPE.body, color: EMBER.textPrimary },
   optionTextSelected: { color: EMBER.bg },
   warning: { ...TYPE.meta, color: EMBER.destructive, marginTop: SPACE.sm },
   input: {
     ...TYPE.body,
+    color: EMBER.textPrimary,
     backgroundColor: EMBER.surface,
     borderRadius: EMBER_RADIUS.md,
     padding: SPACE.lg,
@@ -385,8 +583,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.xl,
     marginTop: SPACE.xl,
   },
-  primaryButtonText: { ...TYPE.button, color: EMBER.onGradient },
   buttonDisabled: { opacity: 0.4 },
   skipButton: { alignItems: 'center', justifyContent: 'center', height: CONTROL.md },
-  skipButtonText: { ...TYPE.button, color: EMBER.textSecondary },
 })

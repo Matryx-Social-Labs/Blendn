@@ -494,6 +494,13 @@ export interface ApiResponse<T = unknown> {
    * with no idea they were muted.
    */
   errorCode?: string
+  /**
+   * Seconds until a `RATE_LIMITED` refusal lifts. `lib/rate-limit.ts` on the
+   * server computes it and sends it both in the body and as `Retry-After`;
+   * without it a screen that wants to disable a control has to guess how long
+   * for, and a guess that is too short just earns another refusal.
+   */
+  retryAfter?: number
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -648,6 +655,8 @@ export interface EventApiItem {
   stats?: {
     checkInCount?: number
     favoriteCount?: number
+    /** Seats taken; the Scene's "Going" count before the doors. */
+    rsvpCount?: number
     ratingCount?: number
     averageRating?: number | null
   }
@@ -842,7 +851,7 @@ let refreshPromise: Promise<RefreshOutcome> | null = null
  * tokens alone; the next 401 tries again, and the server re-issues on a
  * replay inside its grace window.
  */
-type RefreshOutcome = 'ok' | 'rejected' | 'failed'
+export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 
 /**
  * After a refresh that never completed: try again at 2 s, 5 s and 10 s, in
@@ -1020,6 +1029,11 @@ class ApiClientClass {
         // Carried through so a screen can branch on the reason rather than
         // guess from the sentence. See ApiResponse.errorCode.
         errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+        // Body first, then the header, because only the body survives a proxy
+        // that strips Retry-After.
+        retryAfter: typeof parsed.retryAfter === 'number'
+          ? parsed.retryAfter
+          : Number(response.headers.get('Retry-After')) || undefined,
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -1494,6 +1508,17 @@ class ApiClientClass {
 
   async refreshSession(): Promise<boolean> {
     return (await this.refreshTokens()) === 'ok'
+  }
+
+  /**
+   * The same refresh, with the three answers kept apart.
+   *
+   * `refreshSession` folds 'failed' into `false`, and a caller deciding
+   * whether to sign somebody out cannot use that: a launch on a train read
+   * "no answer" as "refused" and cleared a perfectly good session.
+   */
+  async refreshSessionOutcome(): Promise<RefreshOutcome> {
+    return this.refreshTokens()
   }
 
   // === EVENT ENDPOINTS ===

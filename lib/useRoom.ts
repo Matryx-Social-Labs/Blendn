@@ -660,6 +660,10 @@ export function useRoom(): RoomState & RoomActions {
       } catch (e) {
         Logger.error('match', 'like failed', { error: e })
         forget()
+        // A throw (timeout, no network) un-fills the heart like a refusal
+        // does, so it is said like one — see lib/likeRefusal.ts.
+        const refusal = likeRefusal(undefined, undefined)
+        showToast(refusal.message, refusal.variant)
         return 'refused'
       }
     },

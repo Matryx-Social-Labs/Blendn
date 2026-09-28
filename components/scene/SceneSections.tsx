@@ -116,6 +116,42 @@ export function SceneHeading({ children }: { children: string }) {
 }
 
 /**
+ * Who is putting it on, and — while it runs — how many are there right now.
+ *
+ * The organiser has been on the payload since the Scene was built and drawn
+ * nowhere; "who's hosting" is one of the first things somebody deciding
+ * whether to go looks for. The live count is the room's own "here now"
+ * (`room-preview`), a still green dot beside it: the same mark the Room and
+ * Tonight use for live, never a pulse.
+ *
+ * Renders nothing when it has neither, so an unhosted, unstarted event does
+ * not get an empty row.
+ */
+export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
+  const live = typeof hereNow === 'number' && hereNow > 0
+  if (!host && !live) return null
+  return (
+    <View style={styles.byline}>
+      {host ? (
+        <Text style={styles.bylineHost} numberOfLines={1}>
+          By <Text style={styles.bylineName}>{host}</Text>
+        </Text>
+      ) : null}
+      {live ? (
+        <View
+          style={styles.bylineLive}
+          accessible
+          accessibilityLabel={`${hereNow} ${hereNow === 1 ? 'person' : 'people'} here now`}
+        >
+          <View style={styles.liveDot} />
+          <Text style={styles.bylineHost}>{hereNow} here now</Text>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+/**
  * The prose under a heading. `TYPE.body` on `textSecondary`.
  *
  * A caller with a phrase to lift (the event's own name, matched exactly)
@@ -597,15 +633,17 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rat
  * already reports it as information. A CTA that disabled itself on a full event
  * would block an interaction the product explicitly allows.
  *
- * `ended` disables, because for somebody who was not there tapping cannot do
- * anything at all.
+ * **No state disables.** `ended` used to — "This event has ended", greyed
+ * out — on the reasoning that for somebody who was not there tapping could do
+ * nothing. But somebody opening a finished event is somebody looking for a
+ * night out, and a dead pill in the most prominent slot told them nothing
+ * about where to find one. So it offers tonight instead: the Blend'n screen,
+ * which lists what is on now, nearest first.
  *
- * **`rate` is the exception, and it is why that sentence needed qualifying.**
- * If you attended, the night leaves one thing to do afterwards — rate the
- * people you met — so `ended` was a dead control for exactly the people with a
- * reason to come back to this screen. `PLACEHOLDER_SCREENS.md` asks for "an
- * entry point after an event ends" and this is it: the same slot, the same
- * rule that its subject changes with the clock.
+ * `rate` is the same slot for the people who *were* there: the night leaves
+ * one thing to do afterwards — rate the people you met. `PLACEHOLDER_SCREENS.md`
+ * asks for "an entry point after an event ends" and this is it: the same slot,
+ * the same rule that its subject changes with the clock.
  *
  * ## "Blend in", not "Join the Experience"
  *
@@ -622,7 +660,7 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   rsvpd: "You're going",
   join: 'Blend in',
   going: "You're in",
-  ended: 'This event has ended',
+  ended: "See what's on tonight",
   rate: 'Rate the people you met',
 }
 
@@ -672,7 +710,8 @@ export function SceneCTA({
   iconKey?: string
   onPress?: () => void
 }) {
-  const disabled = state === 'ended'
+  // Only while a handler is busy (checking in); no state is a dead end.
+  const disabled = !onPress
   /*
    * Quiet once you have already said yes. The accent is for the thing that
    * still needs doing; a fully lit pill that only un-does something reads as
@@ -695,12 +734,11 @@ export function SceneCTA({
      */
     <ScalePress
       haptic={false}
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled || !onPress}
+      onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected: state === 'going' }}
       accessibilityLabel={CTA_LABEL[state]}
-      style={disabled ? styles.ctaDisabled : undefined}
     >
       {/*
         A solid pill, and nothing around it.
@@ -831,6 +869,12 @@ const styles = StyleSheet.create({
   heading: { ...TYPE.heading },
   body: { ...TYPE.body, color: EMBER.textSecondary },
   bodyAccent: { color: EMBER.textPrimary },
+
+  byline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: SPACE.lg, rowGap: SPACE.xs },
+  bylineHost: { ...TYPE.meta, color: EMBER.textSecondary },
+  bylineName: { ...TYPE.meta, color: EMBER.textPrimary },
+  bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
 
   detailGroup: { gap: SPACE.xxl },
   detailBlock: { gap: SPACE.lg },
@@ -1009,7 +1053,6 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     borderColor: EMBER.separator,
   },
-  ctaDisabled: { opacity: 0.45 },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
   ctaLabelLoud: { color: EMBER.onGradient },

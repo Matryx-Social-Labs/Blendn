@@ -6,22 +6,27 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
 import { PersonRow } from '../../components/friends/PersonRow'
+import { RequestsRow } from '../../components/friends/RequestsRow'
+import { LoadError } from '../../components/LoadError'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { friendsSinceLabel, type Friend } from '../../lib/friends'
 import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { useFriendRequests } from '../../lib/useFriendRequests'
 
 /**
  * Your friends — the list the count on the Me tab opens.
  *
  * Real names and photos: both people said yes. Tapping one opens their
  * profile; the top-right opens Add friends, which is where your link is.
+ * Requests waiting on you sit above the list, when there are any.
  */
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<Friend[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const requests = useFriendRequests()
 
   const load = useCallback(async () => {
     const result = await apiClient.getFriends()
@@ -42,18 +47,14 @@ export default function FriendsScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true)
-    await load()
+    await Promise.all([load(), requests.load()])
     setRefreshing(false)
   }
 
   const openAdd = () => router.push('/friends/add')
 
   const empty = failed ? (
-    <View style={styles.empty}>
-      <Text variant="body" color={EMBER.textSecondary} style={styles.center}>
-        Your friends didn&apos;t load. Pull down to try again.
-      </Text>
-    </View>
+    <LoadError title="Your friends didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
   ) : (
     <View style={styles.empty}>
       <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textTertiary} />
@@ -72,6 +73,11 @@ export default function FriendsScreen() {
         onBack={() => router.back()}
         rightIconButton={{ name: 'person-add-outline', onPress: openAdd, accessibilityLabel: 'Add friends' }}
       />
+      {requests.incoming.length > 0 ? (
+        <View style={styles.requests}>
+          <RequestsRow count={requests.incoming.length} />
+        </View>
+      ) : null}
       {friends === null && !failed ? (
         <View style={styles.loading}>
           <ActivityIndicator color={EMBER.textSecondary} />
@@ -104,6 +110,7 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
+  requests: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
   empty: { alignItems: 'center', gap: SPACE.lg },
   center: { textAlign: 'center' },
 })

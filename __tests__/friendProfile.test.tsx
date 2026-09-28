@@ -96,7 +96,21 @@ it('stays on the profile and says so when removing fails', async () => {
 })
 
 it('says plainly when they are no longer a friend', async () => {
-  api.getFriend.mockResolvedValue({ success: false, error: 'Not found' })
+  api.getFriend.mockResolvedValue({ success: false, error: 'Not found', errorCode: 'NOT_FOUND' })
   await render(<FriendProfileScreen />)
   expect(await screen.findByText("You're not friends with this person any more.")).toBeTruthy()
+})
+
+it('does not call a failed load an unfriending, and tries again', async () => {
+  // Offline, a timeout, a 5xx: no NOT_FOUND. This used to read as "not friends any more".
+  api.getFriend.mockResolvedValueOnce({ success: false, error: 'No internet connection. Check your network and try again.' })
+  await render(<FriendProfileScreen />)
+  expect(await screen.findByText("This profile didn't load")).toBeTruthy()
+  expect(screen.queryByText("You're not friends with this person any more.")).toBeNull()
+  // And the way out is there, since the hero's top bar never drew.
+  expect(screen.getByLabelText('Back')).toBeTruthy()
+
+  api.getFriend.mockResolvedValueOnce({ success: true, data: BEN })
+  fireEvent.press(screen.getByText('Try again'))
+  expect(await screen.findByText('Ben, 31')).toBeTruthy()
 })

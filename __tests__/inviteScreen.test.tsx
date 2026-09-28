@@ -38,12 +38,28 @@ const ANA = { userId: 'u_ana', name: 'Ana', photo: 'https://cdn/ana.jpg' }
 beforeEach(() => jest.clearAllMocks())
 
 it('says a dead link does not work, and nothing about why', async () => {
-  api.openFriendInvite.mockResolvedValue({ success: false, error: "This invite link doesn't work any more" })
+  api.openFriendInvite.mockResolvedValue({
+    success: false,
+    error: "This invite link doesn't work any more",
+    errorCode: 'NOT_FOUND',
+  })
   await render(<InviteScreen />)
   await screen.findByText("This link doesn't work")
   expect(screen.getByText('Ask the person who sent it for a new one.')).toBeTruthy()
   // No action to take on a link that does not work.
   expect(screen.queryByText('Send friend request')).toBeNull()
+})
+
+it('calls a link that failed to load a failed load, not a dead link, and tries again', async () => {
+  api.openFriendInvite.mockResolvedValueOnce({ success: false, error: 'This is taking too long. Check your connection and try again.' })
+  await render(<InviteScreen />)
+  await screen.findByText("This link didn't open")
+  expect(screen.queryByText("This link doesn't work")).toBeNull()
+
+  api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
+  fireEvent.press(screen.getByText('Try again'))
+  await screen.findByText('Ana')
+  expect(screen.getByText('Send friend request')).toBeTruthy()
 })
 
 it('shows who sent it and asks with the token, then says Requested', async () => {

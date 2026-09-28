@@ -13,6 +13,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -25,14 +26,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
+import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
+import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { showLeaveConversationActions, showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
+import { messageReportStep, showLeaveConversationActions } from '../../lib/safetyUtils'
+import { showSheet, type SheetAction } from '../../lib/sheet'
+import { useLatest } from '../../lib/useLatest'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -56,6 +61,8 @@ interface PrivateMessage {
   text: string | null
   isRead: boolean
   createdAt: string
+  /** Yours, and it did not reach the server. Kept, marked, and retryable. */
+  failed?: boolean
 }
 
 type ChatListItem =
@@ -93,18 +100,26 @@ const formatDayLabel = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
+let _localIdCounter = 0
+
 const getInitials = (name: string) => {
   const parts = String(name || '?').trim().split(/\s+/)
   return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : '')).toUpperCase() || '?'
 }
 
-function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: {
+function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions, onProfile }: {
   name: string
   subtitle?: string | null
   avatarUrl: string | null
   isTyping: boolean
   onBack: () => void
   onOptions: () => void
+  /**
+   * Opens their profile. Absent while they are a pseudonym to you: until they
+   * reveal, a profile would be either the flat "Attendee" the server returns
+   * for an unidentified person or, worse, more than the conversation says.
+   */
+  onProfile?: () => void
 }) {
   return (
     <View style={headerStyles.container}>
@@ -112,6 +127,14 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
         <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
+      <Pressable
+        onPress={onProfile}
+        disabled={!onProfile}
+        accessibilityRole={onProfile ? 'button' : 'header'}
+        accessibilityLabel={name}
+        accessibilityHint={onProfile ? 'Opens their profile' : undefined}
+        style={({ pressed }) => [headerStyles.identity, pressed && onProfile && headerStyles.pressed]}
+      >
       <View style={headerStyles.avatarWrap}>
         {avatarUrl ? (
           <OptimizedImage source={avatarUrl} recyclingKey={avatarUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
@@ -138,8 +161,9 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
         )}
         {isTyping && <Text style={headerStyles.typing}>typing…</Text>}
       </View>
+      </Pressable>
 
-      <Pressable onPress={onOptions} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable onPress={onOptions} accessibilityRole="button" accessibilityLabel="Conversation options" style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
         <Ionicons name="ellipsis-vertical" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
     </View>
@@ -159,6 +183,8 @@ const headerStyles = StyleSheet.create({
   },
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
+  // The avatar and the name are one target: either one opens the profile.
+  identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   avatarWrap: { position: 'relative' },
   avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
   avatarFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
@@ -250,6 +276,13 @@ function PrivateChatInner() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  /*
+   * Not a send-in-flight state: `sending` above still guards the double tap.
+   * This is the composer lock, and it is set only when the server says the
+   * user may not post right now -- see ComposerLock.
+   */
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
@@ -270,13 +303,31 @@ function PrivateChatInner() {
    */
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
+  /*
+   * The conversation's own record did not load. The options sheet needs it —
+   * the leave copy turns on whether they know who you are, and guessing that
+   * wrong tells somebody unmatching "ends it" when it cannot — so options
+   * says it failed and offers to try again rather than acting on a guess.
+   */
+  const [revealFailed, setRevealFailed] = useState(false)
+  const [revealAttempt, setRevealAttempt] = useState(0)
+  /** Their account id, from the server, for the header's tap-through. */
+  const [otherId, setOtherId] = useState<string | null>(null)
+  /** History did not load, and there is nothing on screen to fall back on. */
+  const [loadError, setLoadError] = useState(false)
+  const { showToast } = useToast()
 
   // Declared inside the effect: it sets state only after the request returns.
   useEffect(() => {
     const loadReveal = async () => {
       if (!conversationId) return
       const r = await apiClient.getConversation(conversationId as string)
-      if (!r.success || !r.data) return
+      if (!r.success || !r.data) {
+        setRevealFailed(true)
+        return
+      }
+      setRevealFailed(false)
+      setOtherId(r.data.otherUser?.id || null)
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -297,7 +348,7 @@ function PrivateChatInner() {
       })
     }
     void loadReveal()
-  }, [conversationId])
+  }, [conversationId, revealAttempt])
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
@@ -402,7 +453,12 @@ function PrivateChatInner() {
           setEnded(true)
           return
         }
+        if (!result.success && !cursor) {
+          setLoadError(true)
+          return
+        }
         if (result.success && result.data) {
+          if (!cursor) setLoadError(false)
           const msgs = result.data.messages.map(mapMessage).reverse()
           if (cursor) {
             setMessages(prev => {
@@ -410,7 +466,9 @@ function PrivateChatInner() {
               return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
             })
           } else {
-            setMessages(msgs)
+            // A message that failed to send exists only on this phone; a
+            // refresh keeps it rather than replacing the list whole.
+            setMessages(prev => [...msgs, ...prev.filter(m => m.failed)])
             // Scroll to bottom instantly on initial load — no animation so there's no visible jump
             setTimeout(() => scrollToBottom(false), 50)
             initialLoadDoneRef.current = true
@@ -424,6 +482,7 @@ function PrivateChatInner() {
       })
       .catch((err) => {
         Logger.error('private-chat', 'Failed to load messages', { error: err })
+        if (!cursor) setLoadError(true)
       })
       .finally(() => setLoading(false))
 
@@ -504,17 +563,37 @@ function PrivateChatInner() {
     return subscribeToMessages()
   }, [conversationId, subscribeToMessages])
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !authUser || !conversationId) return
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-    stopPrivateTyping(String(conversationId))
-
-    const messageText = newMessage.trim()
-    setNewMessage('')
-    setSending(true)
-
-    if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
-    emitChatListUpdate({ type: 'personal', conversationId: String(conversationId), lastMessage: messageText, lastMessageTime: new Date().toISOString() })
+  /*
+   * One send of one message's text, first time or retry. `localId` is the
+   * failed bubble being retried, if any: it goes when the send lands, and is
+   * marked failed again if it does not.
+   */
+  const deliver = async (messageText: string, localId?: string) => {
+    const markFailed = (reason: string) => {
+      /*
+       * The bubble stays, marked "Not sent · Tap to retry". The text used to
+       * go back into the composer with a tray over it, which took the
+       * message out of the conversation and read as though it was deleted.
+       */
+      if (localId) {
+        setMessages(prev => prev.map(m => m.id === localId ? { ...m, failed: true } : m))
+      } else {
+        const id = `local-${++_localIdCounter}`
+        markArriving(id)
+        setMessages(prev => [...prev, {
+          id,
+          conversationId: String(conversationId),
+          senderId: authUser!.id,
+          sender: { id: authUser!.id, name: null, image: null },
+          text: messageText,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          failed: true,
+        }])
+        setTimeout(() => scrollToBottom(true), 80)
+      }
+      showToast(reason, 'error')
+    }
 
     try {
       const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
@@ -530,8 +609,13 @@ function PrivateChatInner() {
          * the room: the server writes a good sentence and one discarded binding
          * threw it away, so the user retried forever.
          */
-        showTray('Not sent', result.error || 'Failed to send message. Please try again.')
-        setNewMessage(messageText)
+        if (result.errorCode === 'RATE_LIMITED' || result.errorCode === 'SPAM_BLOCKED') {
+          setComposerLock('rate_limited')
+          if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+          const ms = Math.min(Math.max(result.retryAfter ?? 5, 1), 120) * 1000
+          lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        }
+        markFailed(result.error || 'Failed to send message. Please try again.')
         return
       }
 
@@ -550,25 +634,45 @@ function PrivateChatInner() {
 
       const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
       if (hidden) {
+        if (localId) setMessages(prev => prev.filter(m => m.id !== localId))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
       }
 
       if (result.data) {
         markArriving(result.data.id)
-        setMessages(prev => prev.some(m => m.id === result.data!.id) ? prev : [...prev, mapMessage(result.data)])
+        setMessages(prev => {
+          const rest = localId ? prev.filter(m => m.id !== localId) : prev
+          return rest.some(m => m.id === result.data!.id) ? rest : [...rest, mapMessage(result.data)]
+        })
         markDomainsDirty(['chat'])
         setTimeout(() => scrollToBottom(true), 80)
       }
     } catch (error) {
-      showTray(
-        'Not sent',
-        error instanceof Error ? error.message : 'Failed to send message. Please try again.'
-      )
-      setNewMessage(messageText)
-    } finally {
-      setSending(false)
+      markFailed(error instanceof Error ? error.message : 'Failed to send message. Please try again.')
     }
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || sending || !authUser || !conversationId) return
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    stopPrivateTyping(String(conversationId))
+
+    const messageText = newMessage.trim()
+    setNewMessage('')
+    setSending(true)
+
+    if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
+    emitChatListUpdate({ type: 'personal', conversationId: String(conversationId), lastMessage: messageText, lastMessageTime: new Date().toISOString() })
+
+    await deliver(messageText)
+    setSending(false)
+  }
+
+  const retrySend = (message: PrivateMessage) => {
+    if (!message.text) return
+    setMessages(prev => prev.map(m => m.id === message.id ? { ...m, failed: false } : m))
+    void deliver(message.text, message.id)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -583,27 +687,58 @@ function PrivateChatInner() {
   }, [messages])
 
   /*
+   * The long-press menu, as the app's one sheet (`lib/sheet.ts`).
+   *
+   * Every message can be copied. Theirs can also be reported; yours cannot —
+   * reporting your own message is not a thing. It used to be report-only, so
+   * a long press on your own message opened nothing and there was no way to
+   * copy anything. A message that did not send offers Try again and Delete.
+   */
+  const showMessageMenu = (message: PrivateMessage) => {
+    const isMe = message.senderId === authUser?.id
+    const actions: SheetAction[] = []
+    if (message.failed) actions.push({ label: 'Try again', variant: 'primary', then: () => retrySend(message) })
+    actions.push({
+      label: 'Copy',
+      then: () => {
+        Clipboard.setString(message.text || '')
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+      },
+    })
+    if (message.failed) {
+      actions.push({
+        label: 'Delete',
+        variant: 'destructive',
+        then: () => setMessages(prev => prev.filter(m => m.id !== message.id)),
+      })
+    } else if (!isMe) {
+      const messageId = message.id
+      actions.push({ label: 'Report', variant: 'destructive', next: () => messageReportStep(messageId, 'private') })
+    }
+    actions.push({ label: 'Cancel', cancel: true })
+
+    const text = message.text || ''
+    showSheet({
+      kind: 'actions',
+      title: message.failed ? 'Not sent' : isMe ? 'Your message' : reveal?.displayName || 'Message',
+      message: text.length > 120 ? `${text.slice(0, 120)}…` : text,
+      actions,
+    })
+  }
+  // Read at the moment of the long press, so the handler below can stay stable.
+  const messageMenuRef = useLatest(showMessageMenu)
+
+  /*
    * Stable, so `ChatBubble`'s memo can bite: a conversation being typed in
    * re-renders on every keystroke, and an inline arrow would re-render every
    * mounted bubble each time.
    */
-  const reportMessage = useCallback((messageId: string) => {
+  const openMessageMenu = useCallback((message: PrivateMessage) => {
     // The same press-and-hold answer the room's message menu gives, on the
-    // frame the tray opens — the hold has "caught".
+    // frame the sheet opens — the hold has "caught".
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-    showTray('Message options', 'What would you like to do?', [
-      { label: 'Cancel', onPress: closeTray },
-      {
-        label: 'Report',
-        variant: 'destructive',
-        onPress: () => {
-          closeTray()
-          showMessageReportOptions(messageId, 'private')
-        },
-      },
-    ])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    messageMenuRef.current(message)
+  }, [messageMenuRef])
 
   const renderMessage = ({ item }: { item: PrivateMessage }) => {
     const isMe = item.senderId === authUser?.id
@@ -620,13 +755,13 @@ function PrivateChatInner() {
         /*
          * Only on your own, and only here. A room has twenty readers and twenty
          * different answers, so a tick there would either lie or need twenty.
+         * A message that never arrived has nothing to tick.
          */
-        receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}
-        /*
-         * Reporting your own message is not a thing, so their messages get the
-         * long press and yours do not.
-         */
-        onLongPress={isMe ? undefined : () => reportMessage(item.id)}
+        receipt={isMe && !item.failed ? (item.isRead ? 'read' : 'sent') : null}
+        failed={item.failed}
+        onRetry={item.failed ? () => retrySend(item) : undefined}
+        // Every message can be copied; the menu decides whether Report is on it.
+        onLongPress={() => openMessageMenu(item)}
       />
     )
   }
@@ -694,6 +829,13 @@ function PrivateChatInner() {
           isTyping={isOtherTyping}
           subtitle={reveal ? revealSubtitle(reveal) : null}
           onBack={() => router.back()}
+          onProfile={
+            // Only once they are a name to you: an accepted request, or a
+            // match who revealed. The server decides both.
+            reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && (otherId || otherUserId)
+              ? () => router.push({ pathname: '/user/[id]', params: { id: String(otherId || otherUserId) } } as never)
+              : undefined
+          }
           onOptions={() => {
             /*
              * The conversation sheet, not the profile one.
@@ -703,20 +845,39 @@ function PrivateChatInner() {
              * in both inboxes. `showLeaveConversationActions` is about *this*
              * conversation and bundles the report into the same request.
              */
-            if (conversationId) {
+            if (reveal) {
               showLeaveConversationActions(
                 conversationId as string,
-                reveal?.displayName || (otherUserName as string) || 'them',
+                reveal.displayName || (otherUserName as string) || 'them',
                 // They know you if you revealed, or if this never was
                 // pseudonymous — an accepted request showed them your name.
-                (reveal?.youRevealed ?? false) || reveal?.pseudonymous === false,
+                reveal.youRevealed || reveal.pseudonymous === false,
                 () => router.back(),
-                reveal?.fromMatch ?? true
+                reveal.fromMatch ?? true
               )
-            } else if (otherUserId) {
-              showUserSafetyActions((otherUserName as string) || 'User', otherUserId as string, () => router.back())
             } else {
-              showTray('Coming soon', 'Safety options will be available soon.')
+              /*
+               * Not "Coming soon". The sheet's copy depends on what the
+               * conversation record says, so without it the honest answer is
+               * that it did not load — or has not yet — and a way to retry.
+               */
+              showTray(
+                revealFailed ? "Couldn't load this conversation" : 'Still loading',
+                revealFailed
+                  ? 'Its options need the conversation details, which did not load.'
+                  : 'The conversation details are on their way. Try again in a moment.',
+                [
+                  { label: 'Cancel', onPress: closeTray },
+                  {
+                    label: 'Try again',
+                    variant: 'primary',
+                    onPress: () => {
+                      closeTray()
+                      setRevealAttempt(n => n + 1)
+                    },
+                  },
+                ]
+              )
             }
           }}
         />
@@ -761,6 +922,17 @@ function PrivateChatInner() {
               <Text style={styles.emptyTitle}>This conversation has ended</Text>
               <Text style={styles.emptyText}>It is no longer available to either of you.</Text>
             </View>
+          ) : !loading && loadError ? (
+            // Not the empty state: a thread that failed to load is not an
+            // invitation to "Start the conversation".
+            <ChatLoadFailed
+              what="this conversation"
+              onRetry={() => {
+                setLoadError(false)
+                setLoading(true)
+                void loadMessages()
+              }}
+            />
           ) : !loading ? (
             /*
               Fades out as the first message lands rather than vanishing in the
@@ -809,7 +981,7 @@ function PrivateChatInner() {
 
         <ChatComposer
           value={newMessage}
-          sending={sending}
+          lock={composerLock}
           onSend={sendMessage}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {
