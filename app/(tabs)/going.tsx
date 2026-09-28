@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     Share,
     StyleSheet,
@@ -20,8 +20,8 @@ import { DayHeading } from '../../components/ui/DayHeading'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
+import { failedSections, goingSections, newFailure, type GoingSection } from '../../lib/goingSections'
 import {
-  goingItems,
   rsvpEventRows,
   savedEventRows,
   type AttendancePayload,
@@ -30,6 +30,7 @@ import {
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
+import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
@@ -69,8 +70,14 @@ function GoingScreenInner() {
   const [restoredId, setRestoredId] = useState<string | null>(null)
   // Pull-to-refresh also retries a cover that failed to load (EventCover).
   const [refreshCount, setRefreshCount] = useState(0)
+  // Which requests failed last time, so a lasting failure is said once, not on every focus.
+  const failedRef = useRef<GoingSection[]>([])
+  // Whether a load has ever brought rows: with everything failing, those rows are still on screen.
+  const hadRowsRef = useRef(false)
+  // The toast's Try again: the loader, reached through a ref because it is the loader that shows it.
+  const reloadRef = useRef<() => void>(() => {})
 
-  const loadInterestedEvents = useCallback(async () => {
+  const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
     // later focus refreshes update the list in place instead of blanking it.
     try {
@@ -96,6 +103,9 @@ function GoingScreenInner() {
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
+      const rowCount =
+        (saved.data?.events?.length ?? 0) + (rsvps.data?.events?.length ?? 0) + (past.data?.events?.length ?? 0)
+      if (rowCount > 0) hadRowsRef.current = true
       if (saved.success && saved.data) setEvents(savedEventRows(saved.data))
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
       if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
@@ -103,14 +113,33 @@ function GoingScreenInner() {
       if (past.success && past.data) setAttended(past.data.events ?? [])
       else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
 
-      setLoadFailed(!saved.success && !rsvps.success && !past.success)
+      const allFailed = !saved.success && !rsvps.success && !past.success
+      setLoadFailed(allFailed)
+
+      /*
+       * A section whose request failed keeps its last good rows, which also
+       * makes the failure invisible: the list just stops being true. So a
+       * failure that is new says so, with the retry in the toast — unless the
+       * screen is about to show the full error state, which already does.
+       */
+      const failed = failedSections({ saved, going: rsvps, past })
+      const shown = hadRowsRef.current || !allFailed
+      if (shown && newFailure(failedRef.current, failed)) {
+        showToast("Couldn't load all of your events.", 'error', {
+          action: { label: 'Try again', onPress: () => reloadRef.current() },
+        })
+      }
+      failedRef.current = failed
     } catch {
       // Keep whatever is already on screen; a failed refresh is not an empty list.
       setLoadFailed(true)
     } finally {
       setLoading(false)
     }
-  }, [authUser])
+  }, [authUser, showToast])
+  useEffect(() => {
+    reloadRef.current = () => void loadInterestedEvents()
+  }, [loadInterestedEvents])
 
   /*
    * Reload every time the tab is focused, not once per mount.
@@ -215,7 +244,13 @@ function GoingScreenInner() {
    * actions inside it could not be reached.
    */
   const renderNext = useCallback((row: RsvpEventRow) => {
-    const when = nextUpLabel(row.start_time, row.end_time)
+    /*
+     * Today's day of a multi-day run, not the run (`lib/eventSession.ts`). A
+     * run whose last day that goes ahead is over — the rest cancelled — is
+     * listed until the run's end, and says so rather than naming a start.
+     */
+    const today = liveWindow(row)
+    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time)
     const live = when === HAPPENING_NOW
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
@@ -346,7 +381,8 @@ function GoingScreenInner() {
           <UpcomingCard
             title={row.title}
             imageUrl={row.cover_image_url}
-            timeLabel={timeLabel(row.start_time)}
+            // Today's day of a multi-day run, as the heading above it is.
+            timeLabel={timeLabel(liveWindow(row).start_time)}
             placeLabel={placeLabel(row)}
             note={cancelled ? 'Cancelled' : row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null}
             noteTone={cancelled ? 'destructive' : 'default'}
@@ -367,8 +403,8 @@ function GoingScreenInner() {
             placeLabel={placeLabel(row)}
             onPress={() => openEvent(row.id)}
             action={{
-              label: 'RATE PEOPLE YOU MET',
-              accessibilityLabel: `Rate people you met at ${row.title}`,
+              label: 'RATE WHO YOU MET',
+              accessibilityLabel: `Rate who you met at ${row.title}`,
               onPress: () => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any }),
             }}
           />
@@ -402,7 +438,8 @@ function GoingScreenInner() {
     )
   }, [openEvent, removeSave, reduceMotion, renderNext, restoredId])
 
-  const items = useMemo(() => goingItems(going, events, attended), [going, events, attended])
+  // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
+  const items = useMemo(() => goingSections(going, events, attended), [going, events, attended])
 
   const keyExtractor = useCallback((item: GoingItem) => item.key, [])
 
@@ -451,7 +488,7 @@ function GoingScreenInner() {
             }}
             accessibilityRole="button"
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>Try again</Text>
           </ScalePress>
         </FadeInUp>
       ) : items.length === 0 ? (

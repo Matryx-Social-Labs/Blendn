@@ -20,12 +20,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
+import { RoomLeftState } from '../../components/chat/RoomLeftState'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
 import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
-import { TypingIndicator } from '../../components/chat/TypingIndicator'
+import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
 import { useToast } from '../../components/Toast'
@@ -34,10 +35,11 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useLatest } from '../../lib/useLatest'
+import { userMessage } from '../../lib/userMessage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { messageReportStep } from '../../lib/safetyUtils'
@@ -45,6 +47,7 @@ import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { useActiveThread } from '../../lib/notifications'
+import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
@@ -97,23 +100,29 @@ const formatTime = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo }: {
+function GroupChatHeader({ name, imageUrl, subtitle, muted, onBack, onInfo }: {
   name: string
   imageUrl: string | null
   subtitle?: string
-  typingCount: number
+  /** You muted this room's notifications: a still bell-slash beside the name. */
+  muted: boolean
   onBack: () => void
   onInfo: () => void
 }) {
   return (
     <View style={headerStyles.container}>
-      <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
         <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
         {imageUrl ? (
-          <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+          <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={HEADER_AVATAR} height={HEADER_AVATAR} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
             <Ionicons name="people" size={ICON.md} color={EMBER.textPrimary} />
@@ -122,10 +131,22 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo
       </View>
 
       <View style={headerStyles.titleArea}>
-        <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
-        {typingCount > 0 ? (
-          <Text style={headerStyles.typing}>{typingCount === 1 ? 'someone is typing…' : `${typingCount} people typing…`}</Text>
-        ) : subtitle ? (
+        <View style={headerStyles.nameRow}>
+          <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+          {muted ? (
+            <Ionicons
+              name="notifications-off-outline"
+              size={ICON.sm}
+              color={EMBER.textSecondary}
+              accessibilityLabel="Notifications muted"
+            />
+          ) : null}
+        </View>
+        {/*
+          Typing is said once, at the end of the feed (`TypingIndicator`). The
+          header repeated it here in a different sentence.
+        */}
+        {subtitle ? (
           <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
         ) : null}
       </View>
@@ -146,6 +167,12 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack, onInfo
   )
 }
 
+/**
+ * A room is its event's cover in a square, as on the Banter row — 40pt here,
+ * the bubble avatar's size, radius `sm`. A person is round; a room is not.
+ */
+const HEADER_AVATAR = 40
+
 const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
@@ -160,45 +187,36 @@ const headerStyles = StyleSheet.create({
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: {},
-  avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
+  avatar: { width: HEADER_AVATAR, height: HEADER_AVATAR, borderRadius: EMBER_RADIUS.sm, overflow: 'hidden' },
   avatarGroupFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: TYPE.bodyStrong,
-  // Primary, so a live "typing…" never reads as the secondary subtitle.
-  typing: { ...TYPE.meta, color: EMBER.textPrimary },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  name: { ...TYPE.bodyStrong, flexShrink: 1 },
   subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
 })
 
 /**
- * The event room chat.
+ * The event room chat, as a route: the chat room id, and what the opener knew
+ * about its event, come from the URL.
  *
- * Reached two ways, which is why it takes props at all. As a route it reads the
- * chat room id from the URL, the way it always has. As a **segment of The Room**
- * it is handed one, because there the id comes from whichever event you are
- * checked into rather than from navigation.
- *
- * `embedded` drops the header and the back button: The Room already draws both
- * above the `Grid | Chat` toggle, and a second header inside the segment would
- * stack two titles and two ways back out of one screen.
- *
- * Props are optional so the route keeps working untouched — expo-router passes
- * none, so every default is the old behaviour.
+ * The Room used to embed this as a segment through optional props (`embedded`
+ * dropped the header). Nothing has passed them since the Room navigates here
+ * instead, so the path is gone.
  */
-function GroupChatInner(props?: {
-  chatRoomId?: string
-  roomName?: string
-  eventTitle?: string
-  eventImage?: string
-  embedded?: boolean
-}) {
+function GroupChatInner() {
   const params = useLocalSearchParams()
-  const chatRoomId = props?.chatRoomId ?? params.id
+  const chatRoomId = params.id
   // A reply push for this room is not shown over it (`lib/notifications.ts`).
   useActiveThread(`room:${String(chatRoomId)}`)
-  const roomName = props?.roomName ?? params.roomName
-  const eventTitle = props?.eventTitle ?? params.eventTitle
-  const eventImage = props?.eventImage ?? params.eventImage
-  const embedded = props?.embedded === true
+  /*
+   * The opener's knowledge of the room, filled in from the room list when it
+   * is missing — the Room's chat dock opens this with no cover, and the header
+   * drew a generic people glyph there while the Banter's path showed the event.
+   */
+  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string }>({})
+  const roomName = (params.roomName as string) || roomInfo.title
+  const eventTitle = (params.eventTitle as string) || roomInfo.title
+  const eventImage = (params.eventImage as string) || roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -224,6 +242,19 @@ function GroupChatInner(props?: {
    * failed background refresh over messages already shown changes nothing.
    */
   const [loadError, setLoadError] = useState(false)
+  /*
+   * Not in the room. `left` is a leave the app knows about — made here, or
+   * the server's LEFT_ROOM — and lives in `lib/roomMembership.ts` so Room info
+   * and the Banter agree. `outOfRoom` is history refused as a non-member,
+   * which is also what the server says to a leave made on another phone.
+   */
+  const [outOfRoom, setOutOfRoom] = useState(false)
+  const [rejoining, setRejoining] = useState(false)
+  const left = useRoomMembership().left.has(String(chatRoomId))
+  const outside = left || outOfRoom
+  const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
+  /** From the room list (`memberCount`), for the header when the title says nothing new. */
+  const [memberCount, setMemberCount] = useState<number | null>(null)
   const { showToast } = useToast()
   const [trayVisible, setTrayVisible] = useState(false)
   const [trayTitle, setTrayTitle] = useState('')
@@ -329,8 +360,17 @@ function GroupChatInner(props?: {
         }
 
         const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
+        /*
+         * Refused as somebody not in the room: the left state, not "Couldn't
+         * load" — Try again would be refused the same way for ever.
+         */
+        if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
+        if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
+        // Served as a member, so whatever this phone thought, you are in.
+        setOutOfRoom(false)
+        markRoomJoined(String(chatRoomId))
 
         const raw = Array.isArray(result.data)
           ? result.data
@@ -406,6 +446,30 @@ function GroupChatInner(props?: {
     // trigger a reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, authUser, authLoading])
+
+  /*
+   * The room's row in the Banter's list — usually already cached, so free —
+   * is where its mute and its member count arrive.
+   */
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    apiClient.getChatGroups().then((result) => {
+      if (!live || !result.success || !result.data) return
+      const data = result.data as unknown as Record<string, any>
+      const rooms: Record<string, any>[] = Array.isArray(data) ? data : data.groups || data.rooms || data.data || []
+      const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
+      if (!room) return
+      rememberRoomMute(String(chatRoomId), room.mute)
+      const count = Number(room.memberCount ?? room.participant_count)
+      if (count > 0) setMemberCount(count)
+      // The same fields the Banter reads for its row, so the header matches it.
+      const image = room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url
+      const title = room.event?.title || room.event_title || room.eventTitle
+      setRoomInfo({ title: title ? String(title) : undefined, image: image ? String(image) : undefined })
+    }).catch(() => {})
+    return () => { live = false }
+  }, [chatRoomId])
 
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
@@ -499,20 +563,29 @@ function GroupChatInner(props?: {
     const u3 = subscribeToChatReaction(String(chatRoomId), handleReaction)
     const u4 = subscribeToChatMessageDeleted(String(chatRoomId), handleDeleted)
     const u5 = subscribeToChatMemberBanned(String(chatRoomId), handleBanned)
+    // Somebody left: one fewer in the header's count.
+    const u6 = subscribeToChatMemberLeft(String(chatRoomId), () => {
+      setMemberCount((n) => (n && n > 0 ? n - 1 : n))
+    })
     return () => {
-      u1(); u2(); u3(); u4(); u5()
+      u1(); u2(); u3(); u4(); u5(); u6()
       typingCleanupRefs.current.forEach(t => clearTimeout(t))
       typingCleanupRefs.current.clear()
     }
   }
 
+  /*
+   * Not while outside the room: the server refuses the join. `outside` is a
+   * dependency so a rejoin subscribes again, which is what re-joins the
+   * socket room (`join:chat`).
+   */
   useEffect(() => {
-    if (!chatRoomId || !currentUser) return
+    if (!chatRoomId || !currentUser || outside) return
     return subscribeToMessages()
     // subscribeToMessages is redefined every render; only the listed values
     // should re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRoomId, currentUser])
+  }, [chatRoomId, currentUser, outside])
 
   /**
    * Turn the server's refusal into a locked composer.
@@ -566,7 +639,9 @@ function GroupChatInner(props?: {
        * bubble is the one send left -- so its success has to unlock the field.
        */
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
-      if (!result.success) throw new Error(result.error || 'Failed to send')
+      // Left on another phone, or here a moment ago: the room becomes the left state.
+      if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      if (!result.success) throw new Error(userMessage(result, "Couldn't send. Try again."))
 
       /*
        * The server can accept a message and still withhold it.
@@ -613,7 +688,7 @@ function GroupChatInner(props?: {
        * forever. The server writes a good sentence; one missing character
        * threw it away.
        */
-      showToast(error instanceof Error ? error.message : 'Failed to send message.', 'error')
+      showToast(error instanceof Error ? error.message : "Couldn't send. Try again.", 'error')
     }
   }
 
@@ -669,8 +744,38 @@ function GroupChatInner(props?: {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: tally } : m))
     } else {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: before } : m))
-      showToast(result.error || "Couldn't add your reaction. Try again.", 'error')
+      if (result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      else if (result.errorCode === 'CHAT_CLOSED' || result.errorCode === 'CHAT_LOCKED') applyComposerLock(result.errorCode)
+      showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error')
     }
+  }
+
+  /*
+   * Back in. The server answers the refusals in its own words — banned, the
+   * room has closed, the organiser locked it — and a room you were never in
+   * is its 404, which means checking in is the way.
+   */
+  const rejoin = async () => {
+    if (rejoining || !chatRoomId) return
+    setRejoining(true)
+    const result = await apiClient.rejoinChatGroup(String(chatRoomId))
+    setRejoining(false)
+    if (!result.success) {
+      showToast(
+        result.errorCode === 'NOT_FOUND'
+          ? 'Check in at the event to join its room.'
+          : userMessage(result, "Couldn't rejoin this room. Try again."),
+        'error'
+      )
+      return
+    }
+    markRoomJoined(String(chatRoomId))
+    // The socket was refused this room while you were out of it.
+    rejoinChatSocket(String(chatRoomId))
+    setOutOfRoom(false)
+    setLoading(true)
+    showToast("You're back in the room", 'success')
+    void loadMessages(true)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -685,7 +790,7 @@ function GroupChatInner(props?: {
   }, [messages])
 
   const socketStatus = useLiveSync({
-    enabled: !!chatRoomId && !!currentUser,
+    enabled: !!chatRoomId && !!currentUser && !outside,
     onSync: () => loadMessages(false, true),
     domains: ['chat'],
     syncOnReconnect: true,
@@ -808,7 +913,7 @@ function GroupChatInner(props?: {
          */
         animateIn={item.message_id.startsWith('temp-')}
         senderId={item.sender_id}
-        roomId={String(params.id)}
+        roomId={String(chatRoomId)}
         senderName={item.sender_name}
         text={item.message_text}
         removed={item.removed}
@@ -835,41 +940,44 @@ function GroupChatInner(props?: {
   const ListHeader = loading ? (
     <ActivityIndicator style={styles.loadingIndicator} color={EMBER.textSecondary} />
   ) : hasMore ? (
-    <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
-      <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
-    </TouchableOpacity>
+    <Pressable
+      onPress={loadOlderMessages}
+      disabled={loadingOlder}
+      accessibilityRole="button"
+      accessibilityLabel="Load older messages"
+      accessibilityState={{ busy: loadingOlder }}
+      hitSlop={SPACE.sm}
+      style={({ pressed }) => [styles.loadMoreBtn, pressed && styles.pressed]}
+    >
+      <Text style={styles.loadMoreText}>{loadingOlder ? 'LOADING…' : 'LOAD OLDER MESSAGES'}</Text>
+    </Pressable>
   ) : null
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      // Embedded, The Room owns the top inset — it draws the title and the
-      // segments above this. Claiming 'top' here too would inset twice and
-      // leave a bar of page colour under the toggle.
-      edges={embedded ? ['bottom'] : ['top', 'bottom']}
-    >
-      {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        {embedded ? null : (
-          <GroupChatHeader
-            name={(roomName as string) || 'Event Chat'}
-            imageUrl={(eventImage as string) || null}
-            subtitle={(eventTitle as string) || undefined}
-            typingCount={typingUsers.size}
+        <GroupChatHeader
+            name={roomName || 'Event chat'}
+            imageUrl={eventImage || null}
+            subtitle={roomSubtitle(roomName || 'Event chat', eventTitle || undefined, memberCount)}
+            muted={muted}
             onBack={() => router.back()}
             onInfo={() => router.push({
               pathname: '/chat-info/[id]',
               params: {
                 id: String(chatRoomId),
-                roomName: (roomName as string) || '',
-                eventTitle: (eventTitle as string) || '',
-                eventImage: (eventImage as string) || '',
+                roomName: roomName || '',
+                eventTitle: eventTitle || '',
+                eventImage: eventImage || '',
               },
             } as never)}
           />
-        )}
+        {outside ? (
+          <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
+        ) : (<>
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
         <RoomGuidelinesBanner userId={authUser?.id} chatRoomId={chatRoomId ? String(chatRoomId) : undefined} />
 
@@ -901,13 +1009,7 @@ function GroupChatInner(props?: {
            */
           ListFooterComponent={
             typingUsers.size > 0 ? (
-              <TypingIndicator
-                label={
-                  typingUsers.size === 1
-                    ? `${Array.from(typingUsers.values())[0]} is typing...`
-                    : `${typingUsers.size} people are typing...`
-                }
-              />
+              <TypingIndicator label={typingLabel(Array.from(typingUsers.values()))} />
             ) : null
           }
           ListEmptyComponent={loading ? null : loadError ? (
@@ -925,8 +1027,19 @@ function GroupChatInner(props?: {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>Start the room conversation</Text>
               <Text style={styles.emptyText}>Be the first to post so everyone can join.</Text>
-              <ScalePress style={styles.emptyCta} onPress={() => { setNewMessage('Hey everyone 👋') }} pressedScale={0.97}>
-                <Text style={styles.emptyCtaText}>Send a starter message</Text>
+              {/*
+                Writes a starter into the composer for you to send or change —
+                so it says "Write", not "Send": the tap sends nothing.
+              */}
+              <ScalePress
+                style={styles.emptyCta}
+                onPress={() => { setNewMessage('Hey everyone 👋') }}
+                pressedScale={0.97}
+                accessibilityRole="button"
+                accessibilityLabel="Write a starter"
+                accessibilityHint="Puts a hello in the message box"
+              >
+                <Text style={styles.emptyCtaText}>Write a starter</Text>
               </ScalePress>
             </View>
           )}
@@ -971,12 +1084,17 @@ function GroupChatInner(props?: {
           <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.replyBar}>
             <View style={styles.replyBarLine} />
             <View style={styles.replyBarContent}>
-              <Text style={styles.replyBarLabel}>Replying to {replyingTo.sender_name}</Text>
+              <Text style={styles.replyBarLabel} numberOfLines={1}>Replying to {replyingTo.sender_name}</Text>
               <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
             </View>
-            <TouchableOpacity style={styles.replyBarClose} onPress={() => setReplyingTo(null)}>
-              <Ionicons name="close" size={ICON.sm} color={EMBER.textSecondary} />
-            </TouchableOpacity>
+            <Pressable
+              style={({ pressed }) => [styles.replyBarClose, pressed && styles.pressed]}
+              onPress={() => setReplyingTo(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel reply"
+            >
+              <Ionicons name="close" size={ICON.md} color={EMBER.textSecondary} />
+            </Pressable>
           </Animated.View>
         )}
 
@@ -998,6 +1116,7 @@ function GroupChatInner(props?: {
             }
           }}
         />
+        </>)}
       </KeyboardAvoidingView>
 
       <ActionTray visible={trayVisible} title={trayTitle} message={trayMessage} buttons={trayButtons} onClose={closeTray} />
@@ -1015,7 +1134,9 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
-  loadMoreText: { ...TYPE.meta, color: EMBER.textTertiary },
+  // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
+  loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
+  pressed: { opacity: 0.6 },
 
   // System / announcement messages
 
@@ -1040,7 +1161,8 @@ const styles = StyleSheet.create({
   replyBarContent: { flex: 1 },
   replyBarLabel: { ...TYPE.caption, color: EMBER.textPrimary },
   replyBarMessage: { ...TYPE.meta, color: EMBER.textSecondary },
-  replyBarClose: { padding: SPACE.xs },
+  // A `CONTROL.md` target: the glyph alone was a 24pt tap beside the composer.
+  replyBarClose: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
 
   // Input bar
 

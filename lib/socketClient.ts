@@ -134,6 +134,8 @@ export interface ServerToClientEvents {
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
   "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
+  /** Somebody left the room themselves. `userId` is the room's handle for them. */
+  "chat:memberLeft": (data: { chatGroupId: string; userId: string }) => void
   /**
    * A like turned mutual — sent to both people's `user:{id}` rooms.
    *
@@ -195,6 +197,7 @@ type ChatTypingCallback = (data: ServerToClientEvents["chat:typing"] extends (da
 type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends (data: infer D) => void ? D : never) => void
 type ChatMessageDeletedCallback = (data: ServerToClientEvents["chat:messageDeleted"] extends (data: infer D) => void ? D : never) => void
 type ChatMemberBannedCallback = (data: ServerToClientEvents["chat:memberBanned"] extends (data: infer D) => void ? D : never) => void
+type ChatMemberLeftCallback = (data: ServerToClientEvents["chat:memberLeft"] extends (data: infer D) => void ? D : never) => void
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
@@ -282,6 +285,7 @@ const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
  */
 const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCallback>>()
 const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
+const chatMemberLeftSubscriptions = new Map<string, Set<ChatMemberLeftCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 /*
@@ -505,6 +509,7 @@ export function disconnect(): void {
   chatReactionSubscriptions.clear()
   chatMessageDeletedSubscriptions.clear()
   chatMemberBannedSubscriptions.clear()
+  chatMemberLeftSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
@@ -650,6 +655,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("chat:messageDeleted", (data) => {
     chatMessageDeletedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
+  })
+
+  sock.on("chat:memberLeft", (data) => {
+    chatMemberLeftSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   sock.on("chat:memberBanned", (data) => {
@@ -892,6 +901,22 @@ export function subscribeToChatMessage(
 }
 
 /**
+ * Ask the server to put this socket back in a chat room it refused earlier.
+ *
+ * `join:chat` is sent when a screen subscribes and again on every reconnect.
+ * A member who had left was refused that join, and rejoining over HTTP does
+ * not reconnect, so without this the room stayed silent until the next
+ * reconnect: no new messages, typing or reactions.
+ */
+export function rejoinChatSocket(chatGroupId: string): void {
+  if (!socket?.connected) {
+    connect()
+    return
+  }
+  socket.emit("join:chat", chatGroupId)
+}
+
+/**
  * Subscribe to typing indicators for a specific chat group.
  */
 export function subscribeToChatTyping(
@@ -947,6 +972,14 @@ export function subscribeToChatMessageDeleted(
   callback: ChatMessageDeletedCallback
 ): () => void {
   return subscribeIn(chatMessageDeletedSubscriptions, chatGroupId, callback)
+}
+
+/** Somebody left this room themselves — a roster drops them. */
+export function subscribeToChatMemberLeft(
+  chatGroupId: string,
+  callback: ChatMemberLeftCallback
+): () => void {
+  return subscribeIn(chatMemberLeftSubscriptions, chatGroupId, callback)
 }
 
 /** A member was banned from, or unbanned in, this room. */
@@ -1150,6 +1183,7 @@ export type {
   ChatReactionCallback,
   ChatMessageDeletedCallback,
   ChatMemberBannedCallback,
+  ChatMemberLeftCallback,
   PrivateMessageCallback,
   PrivateTypingCallback,
   PrivateReadCallback,

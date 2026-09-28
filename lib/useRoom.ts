@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
+import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal } from './likeRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
@@ -115,7 +116,10 @@ export interface RoomState {
    */
   match: { person: RoomPerson | null; name: string; you: string | null; conversationId: string; at: number } | null
   wave: { fromUserId: string; fromName: string; at: number } | null
-  /** Why the room failed to load, when `status` is `error`. */
+  /**
+   * Why the room failed to load, when `status` is `error`. For diagnosis: the
+   * screen says a fixed sentence and never prints this raw.
+   */
   error: string | null
   /** For `RealtimeStatusBanner`. */
   connection: SocketConnectionStatus
@@ -176,9 +180,10 @@ export function useRoom(): RoomState & RoomActions {
   const [likeState, setLikeState] = useState<Record<string, LikeStatus>>({})
   const [conversations, setConversations] = useState<Record<string, string>>({})
   /**
-   * Never reset on failure: `@@unique([sender_id, recipient_id])` means a
-   * request can fail *because one exists*, and re-offering it invites a send
-   * that can never succeed.
+   * Set on a sent request, or on the `CONFLICT` that says one exists:
+   * `@@unique([sender_id, recipient_id])` means a request can fail *because
+   * one exists*, and re-offering it invites a send that can never succeed.
+   * Never on any other failure, which the caller reports (see `connect`).
    */
   const [requested, setRequested] = useState<Record<string, boolean>>({})
   /** Blocked or reported this session. Survives refetches until the next load's block list catches up. */
@@ -290,7 +295,7 @@ export function useRoom(): RoomState & RoomActions {
 
         if (!active.success || !active.data?.checkIns) {
           Logger.error('match', 'Error fetching active check-ins', { error: active.error })
-          if (!eventRef.current) setLoadError(active.error || 'Could not reach the server.')
+          if (!eventRef.current) setLoadError(active.error || "Couldn't reach the server.")
           return
         }
 
@@ -390,7 +395,7 @@ export function useRoom(): RoomState & RoomActions {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
         if (!eventRef.current) {
-          setLoadError(e instanceof Error ? e.message : 'Something went wrong loading the room.')
+          setLoadError(e instanceof Error ? e.message : "Couldn't load the room.")
         }
       }
     },
@@ -526,6 +531,17 @@ export function useRoom(): RoomState & RoomActions {
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
           setChatGroupId(String(id))
+          // Served as a member: back in, and the room's mute as the server has it.
+          markRoomJoined(String(id))
+          rememberRoomMute(String(id), result.data?.mute)
+        } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
+          /*
+           * You left this room, and the server no longer rejoins you by
+           * reading it. The id still comes back so the chat can open on
+           * "You left" with its Rejoin, rather than on "not open yet".
+           */
+          markRoomLeft(result.chatGroupId)
+          setChatGroupId(result.chatGroupId)
         } else {
           chatResolvedForRef.current = null
           setChatGroupId(null)
@@ -692,6 +708,7 @@ export function useRoom(): RoomState & RoomActions {
         return 'refused'
       } catch (e) {
         Logger.error('match', 'wave failed', { error: e })
+        showToast("Couldn't send the wave. Try again.", 'error')
         return 'refused'
       }
     },
@@ -701,9 +718,11 @@ export function useRoom(): RoomState & RoomActions {
   /**
    * A message request — the action that reveals you.
    *
-   * Marked requested whatever the answer, for the `@@unique` reason on
-   * `requested` above. The haptic is success-only: a request that already
-   * existed is not a new send.
+   * Marked requested only when the ask stands: a new request, or a `CONFLICT`
+   * saying one already exists between you (`@@unique` above — re-offering it
+   * invites a send that can never succeed). Anything else — offline, refused,
+   * a 500 — leaves the button offered, and `false` lets the caller say so;
+   * it used to mark every failure "Request sent". The haptic is success-only.
    */
   const connect = useCallback(async (id: string, note?: string): Promise<boolean> => {
     try {
@@ -711,14 +730,14 @@ export function useRoom(): RoomState & RoomActions {
       if (result.success) {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
       } else {
-        Logger.warn('match', 'connect request failed', { error: result.error })
+        Logger.warn('match', 'connect request failed', { error: result.error, code: result.errorCode })
       }
-      return !!result.success
+      const stands = !!result.success || result.errorCode === 'CONFLICT'
+      if (stands) setRequested((prev) => ({ ...prev, [id]: true }))
+      return stands
     } catch (e) {
       Logger.error('match', 'connect request error', { error: e })
       return false
-    } finally {
-      setRequested((prev) => ({ ...prev, [id]: true }))
     }
   }, [])
 

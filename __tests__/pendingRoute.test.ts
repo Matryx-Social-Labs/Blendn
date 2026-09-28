@@ -12,7 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
-import { openWhenReady, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
+import { openWhenReady, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
   resetPendingRoute()
@@ -39,6 +39,29 @@ describe('openWhenReady', () => {
     openWhenReady('/(tabs)/chat')
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/chat')
     expect(takePendingRoute()).toBeNull()
+  })
+})
+
+describe('pendingInviteToken', () => {
+  it('reads the token of an invite link waiting for sign-in, without taking it', () => {
+    openWhenReady('/f/abc123' as never)
+    expect(pendingInviteToken()).toBe('abc123')
+    // Still there for the guard to open after sign-in.
+    expect(takePendingRoute()).toBe('/f/abc123')
+    expect(pendingInviteToken()).toBeNull()
+  })
+
+  it('reads the object form too', () => {
+    openWhenReady({ pathname: '/f/[token]', params: { token: 'tok9' } } as never)
+    expect(pendingInviteToken()).toBe('tok9')
+  })
+
+  it('is null for anything that is not an invite', () => {
+    expect(pendingInviteToken()).toBeNull()
+    openWhenReady('/(tabs)/chat')
+    expect(pendingInviteToken()).toBeNull()
+    openWhenReady('/friends/add' as never)
+    expect(pendingInviteToken()).toBeNull()
   })
 })
 

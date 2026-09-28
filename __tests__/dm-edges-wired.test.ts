@@ -24,7 +24,7 @@ describe('a thread that has ended', () => {
   it('does not offer a wave into it', () => {
     // The wave lives in the other branch only.
     const ended = src.indexOf('This conversation has ended')
-    const wave = src.indexOf('emptyCtaText}>Send a wave')
+    const wave = src.indexOf('emptyCtaText}>Say hi')
     expect(ended).toBeGreaterThan(-1)
     expect(wave).toBeGreaterThan(ended)
   })

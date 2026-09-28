@@ -10,7 +10,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
-let mockParams: { id: string; eventId?: string } = { id: 'rh_ben', eventId: 'e1' }
+let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'rh_ben', eventId: 'e1' }
 const mockUser = { id: 'u_me' }
 
 jest.mock('expo-router', () => ({
@@ -87,7 +87,7 @@ import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile from '../app/user/[id]'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
-const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi' }
+const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -124,7 +124,7 @@ describe('with the server’s `connection`', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Requested')).toBeTruthy()
-    expect(screen.getByText('Request pending. You can chat after acceptance.')).toBeTruthy()
+    expect(screen.getByText('Request sent — you can chat once they accept.')).toBeTruthy()
     expect(api.getMessageRequests).not.toHaveBeenCalled()
   })
 
@@ -280,7 +280,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByLabelText('Back'))
+    fireEvent.press(await screen.findByLabelText('Go back'))
     expect(router.back).toHaveBeenCalled()
   })
 
@@ -291,6 +291,61 @@ describe('when the profile does not load', () => {
 
     expect(await screen.findByText("This profile isn't available.")).toBeTruthy()
     expect(screen.queryByText('Try again')).toBeNull()
+  })
+})
+
+describe('identity fails closed (the server’s `identityVisible`, nothing else)', () => {
+  it('shows no photo, bio or name when the flag is absent, even if the fields arrived', async () => {
+    // An older route, or a server bug: the fields are present, the flag is not.
+    mockParams = { id: 'rh_ben', eventId: 'e1', pseudonym: 'Cosmic Panda', roomSeed: 'g1:rh_ben' }
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', occupation: 'Chef' },
+    })
+    await render(<UserProfile />)
+
+    // Titled by the room's pseudonym, never by the name that leaked through.
+    expect(await screen.findByText('Cosmic Panda')).toBeTruthy()
+    expect(screen.queryByText('Ben')).toBeNull()
+    // One bio block only: the "Still anonymous" note, not theirs.
+    expect(screen.queryAllByText('bio')).toHaveLength(1)
+    expect(screen.queryByText('detail')).toBeNull()
+    expect(screen.queryByText('gallery')).toBeNull()
+    expect(screen.getByText('Still anonymous')).toBeTruthy()
+  })
+
+  it('treats identityVisible: false the same, and never titles anybody "Attendee"', async () => {
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', name: 'Attendee', identityVisible: false, connection: undefined },
+    })
+    await render(<UserProfile />)
+
+    expect(await screen.findByText('Someone')).toBeTruthy()
+    expect(screen.queryByText('Attendee')).toBeNull()
+  })
+
+  it('does not hand "Attendee" to the thread as their name', async () => {
+    mockParams = { id: 'u_ben' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'u_ben', name: 'Attendee', identityVisible: false } })
+    api.getConversations.mockResolvedValue({
+      success: true,
+      data: [{ id: 'conv-1', otherUser: { id: 'u_ben', name: 'Attendee' } }],
+    })
+    await render(<UserProfile />)
+
+    fireEvent.press(await screen.findByText('Message'))
+    const params = (router.push as jest.Mock).mock.calls[0][0].params
+    expect(params.conversationId).toBe('conv-1')
+    expect(params.otherUserName).toBeUndefined()
+  })
+
+  it('shows identity when the server says so', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, age: 29, connection: { conversationId: null, request: null } } })
+    await render(<UserProfile />)
+
+    expect(await screen.findByText('Ben, 29')).toBeTruthy()
+    expect(screen.getByText('bio')).toBeTruthy()
   })
 })
 

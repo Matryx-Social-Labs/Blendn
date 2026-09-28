@@ -143,7 +143,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
      */
     const src = SCREEN()
     expect(src).toContain("mode === 'error' ? (")
-    expect(src).toContain('Could not load the room')
+    expect(src).toContain('Couldn&apos;t load the room')
     expect(src).toContain('onPress={room.retry}')
     // Both branches, because the whole point is that they say different things.
     expect(SECTIONS()).toContain('Nobody else is here yet')

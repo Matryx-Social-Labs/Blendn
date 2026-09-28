@@ -51,6 +51,12 @@ interface Props {
   distanceLabel?: string | null
   onPress: () => void
   /**
+   * The quick-actions tray (save, check in or out, details). Also offered to
+   * VoiceOver as a "Quick actions" custom action, since a long-press is not
+   * discoverable with a screen reader.
+   */
+  onLongPress?: () => void
+  /**
    * A status after the time — "On the waitlist", "Cancelled". `noteTone`
    * `destructive` for the one that is bad news.
    */
@@ -74,6 +80,9 @@ interface Props {
   onToggleFavorite?: () => void
 }
 
+/** Hoisted so the prop keeps one identity across renders. */
+const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
+
 function UpcomingCardImpl({
   title,
   category,
@@ -83,6 +92,7 @@ function UpcomingCardImpl({
   joinedCount,
   distanceLabel,
   onPress,
+  onLongPress,
   note,
   noteTone = 'default',
   action,
@@ -110,8 +120,17 @@ function UpcomingCardImpl({
       haptic={false}
       pressedScale={0.98}
       onPress={onPress}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
+      accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
+      onAccessibilityAction={
+        onLongPress
+          ? (e) => {
+              if (e.nativeEvent.actionName === 'quickActions') onLongPress()
+            }
+          : undefined
+      }
       style={styles.card}
     >
       <View style={styles.body}>
@@ -182,9 +201,7 @@ function UpcomingCardImpl({
             disabled={favoriteBusy}
             accessibilityRole="button"
             accessibilityState={{ selected: Boolean(isFavorited), disabled: Boolean(favoriteBusy) }}
-            accessibilityLabel={
-              isFavorited ? `Remove ${title} from interested` : `Mark ${title} as interested`
-            }
+            accessibilityLabel={isFavorited ? `Saved, ${title}` : `Save ${title}`}
             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
             style={({ pressed }) => [
               styles.favorite,

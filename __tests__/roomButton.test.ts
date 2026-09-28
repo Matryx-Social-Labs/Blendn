@@ -180,7 +180,9 @@ describe('the Pulse no longer carries the checked-in strip', () => {
      * `useRoomControls`, which calls `checkOutOf`). The room's asks first
      * now — one stray tap closed the room — but it is still one tray away.
      */
-    expect(pulse).toContain("label: 'Check Out'")
+    expect(pulse).toContain("label: 'Check out'")
+    // And asks first, like the room's, before `handleCheckOut` runs.
+    expect(pulse).toContain('title: `Check out of ${event.title}?`')
     expect(pulse).toContain('void handleCheckOut(event)')
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
     expect(blendn).toContain('onPress={confirmLeave}')

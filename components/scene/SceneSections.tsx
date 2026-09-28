@@ -211,7 +211,8 @@ export function SceneAttendees({
   const reduceMotion = useReducedMotion()
   return (
     <View style={styles.attendeesSection}>
-      <View style={styles.attendees}>
+      {/* One stop, read as the heading says it: "Going, 12". */}
+      <View style={styles.attendees} accessible accessibilityLabel={`${label}, ${count}`}>
         <SceneHeading>{label}</SceneHeading>
         {/*
           Keyed by the number, so a save or a check-in arriving over the socket
@@ -223,13 +224,13 @@ export function SceneAttendees({
             entering={reduceMotion ? changeFade : riseIn}
             style={styles.attendeeCount}
           >
-            {count > 0 ? `${count}+` : '—'}
+            {count > 0 ? String(count) : '—'}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
       {shown > 0 ? (
         /*
-          One image node, not three creatures.
+          Hidden from the screen reader, not three creatures.
           A screen reader walking this row unlabelled announces the emoji —
           "butterfly", "turtle", "fox" — which is worse than silence: it is
           confidently wrong about what is on the screen. The discs carry no
@@ -238,9 +239,8 @@ export function SceneAttendees({
         */
         <View
           style={styles.stack}
-          accessible
-          accessibilityRole="image"
-          accessibilityLabel={`${count} people interested`}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
         >
           {Array.from({ length: shown }, (_, i) => {
             /*
@@ -586,9 +586,8 @@ export function SceneAmenity({
     /*
       Grouped, and its type is capped.
 
-      Two Texts in a fixed 126pt box: at a large accessibility size the title
-      and subtitle together overflow the tile and RN clips them, so the tile
-      shows half a word. 1.5 is the largest step both lines still fit at.
+      Two Texts in a 126pt-minimum box: at a large accessibility size the title
+      and subtitle together would grow the tile past its neighbour's rhythm. 1.5 is the largest step both lines still fit at.
 
       `accessible` collapses the pair into one announcement — "Open Bar,
       Premium Spirits" — rather than two stops that each say half of it.
@@ -661,7 +660,16 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   join: 'Blend in',
   going: "You're in",
   ended: "See what's on tonight",
-  rate: 'Rate the people you met',
+  rate: 'Rate who you met',
+}
+
+/**
+ * The label, with the one state that depends on more than the clock: after a
+ * night where nobody else checked in there is nobody to rate, so the prompt is
+ * the night itself — the same words the room's recap uses.
+ */
+export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
+  return state === 'rate' && alone ? 'Rate the night' : CTA_LABEL[state]
 }
 
 /**
@@ -702,8 +710,11 @@ export function SceneCTA({
   icon,
   iconKey,
   onPress,
+  alone = false,
 }: {
   state?: SceneCTAState
+  /** Nobody but you checked in: `rate` then asks about the night, not people. */
+  alone?: boolean
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
   /** Names which glyph `icon` is drawing; a new key is what pops the new one in. */
@@ -738,7 +749,7 @@ export function SceneCTA({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected: state === 'going' }}
-      accessibilityLabel={CTA_LABEL[state]}
+      accessibilityLabel={sceneCtaLabel(state, alone)}
     >
       {/*
         A solid pill, and nothing around it.
@@ -765,7 +776,7 @@ export function SceneCTA({
             style={[styles.ctaLabel, quiet ? styles.ctaLabelQuiet : styles.ctaLabelLoud]}
             numberOfLines={1}
           >
-            {CTA_LABEL[state]}
+            {sceneCtaLabel(state, alone)}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
@@ -827,15 +838,19 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                     answer fades in, and the row's height snaps (tasks/lessons.md —
                     no layout transitions). No exit fade: the height has already
                     snapped shut, so a fading answer would sit on the row below.
+
+                    The answer is a sibling of the button, not inside it: a
+                    labelled button is one VoiceOver stop that reads only its
+                    label, so an answer inside it could be opened and never heard.
                   */
+                  <View key={id} style={styles.detailQuestion}>
                   <ScalePress
-                    key={id}
                     pressedScale={0.98}
                     onPress={() => setOpen(isOpen ? null : id)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: isOpen }}
                     accessibilityLabel={item.question}
-                    style={styles.detailQuestion}
+                    style={styles.detailQuestionButton}
                   >
                     <View style={styles.detailQuestionRow}>
                       <Text style={styles.detailQuestionText}>{item.question}</Text>
@@ -850,12 +865,13 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                         <MaterialIcons name="expand-more" size={ICON.md} color={EMBER.textSecondary} />
                       </Animated.View>
                     </View>
+                  </ScalePress>
                     {isOpen ? (
                       <Animated.Text entering={fadeInFast} style={styles.detailAnswer}>
                         {item.answer}
                       </Animated.Text>
                     ) : null}
-                  </ScalePress>
+                  </View>
                 )
               })
             : null}
@@ -886,7 +902,8 @@ const styles = StyleSheet.create({
    * `CONTROL.md` minimum: this is the one control in the section, and a question
    * people are trying to tap is the wrong place to be stingy with the target.
    */
-  detailQuestion: { minHeight: CONTROL.md, justifyContent: 'center', gap: SPACE.sm },
+  detailQuestion: { gap: SPACE.sm },
+  detailQuestionButton: { minHeight: CONTROL.md, justifyContent: 'center' },
   detailQuestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1007,12 +1024,13 @@ const styles = StyleSheet.create({
    * subtitle wrapped and one tile grew taller than its neighbour, which is a
    * ragged row rather than a pair.
    *
-   * A grid row is a floor and a ceiling in CSS; here it is `height`, so the
-   * pair is always level whatever the vocabulary eventually contains.
+   * A grid row is a floor and a ceiling in CSS; here it is `minHeight`, with
+   * the row stretching both tiles to the taller one, so the pair stays level
+   * and a large text size grows the tile instead of clipping its words.
    */
   amenity: {
     flex: 1,
-    height: 126,
+    minHeight: 126,
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: EMBER.separator,

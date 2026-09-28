@@ -23,6 +23,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
+import { PendingInvite } from '../components/friends/PendingInvite'
 
 const lockup = require('../assets/logo/lockup-white.png')
 /*
@@ -220,6 +221,8 @@ export default function SignIn() {
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           />
+
+          <PendingInvite />
 
           {notice && !error ? (
             <Text style={styles.notice} accessibilityRole="alert">

@@ -41,6 +41,27 @@ export function takePendingRoute(): Href | null {
   return target
 }
 
+/**
+ * The token of an invite link waiting for sign-in, or null.
+ *
+ * Signed out, `/f/<token>` is held here while the guard shows the welcome
+ * screen (`app/_layout.tsx`). The welcome and sign-in screens read it — without
+ * taking it — to say whose invite is waiting (`components/friends/PendingInvite`).
+ */
+export function pendingInviteToken(): string | null {
+  const target = pending as unknown
+  let path: string | null = null
+  if (typeof target === 'string') {
+    path = target
+  } else if (target && typeof target === 'object') {
+    const t = target as { pathname?: unknown; params?: { token?: unknown } }
+    if (t.pathname === '/f/[token]' && typeof t.params?.token === 'string') return t.params.token || null
+    if (typeof t.pathname === 'string') path = t.pathname
+  }
+  const match = path?.match(/^\/f\/([^/?#]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 /** Tests only. */
 export function resetPendingRoute(): void {
   ready = false

@@ -298,3 +298,90 @@ Audit found ~225 departures from docs/DESIGN_SYSTEM.md that `lint:design` didn't
 - [x] Simulator: every tab screenshotted (Banter populated via preview); lint:design, tsc, jest 89/1113, eslint clean
 
 Server follow-ups: room last-read never advances from the room screen (Banter unread returns on refresh); no mark-room-read endpoint; host/attendee faces/live check-in count for cards.
+
+# User-journey gap audit (2026-09-28)
+
+Four read-only audit tracks (first run, events → room, chat/friends, account/settings). Mobile only; admin needs are noted, not done.
+Verified in code before writing: offline sign-out, Android >3-button alerts, settings "pull to retry", placeholder banners.
+
+## P0 — broken for real users
+- [ ] Offline or 5xx cold start signs you out: `refreshSession()` returns `=== 'ok'`, so `'failed'` (network/5xx) hits `clearAuthState()` (lib/useAuth.ts:139–166). Keep the session on `'failed'`, clear it only on `'rejected'`
+- [ ] Android drops safety buttons: `Alert.alert` with 4–7 buttons (lib/safetyUtils.ts:193 leave, :291 report user, :330 report message). Android shows 3. Move to a sheet
+
+## P1 — dead ends, silent failures, missing confirmations
+First run
+- [ ] Push permission prompt fires 2s after auth (app/_layout.tsx:257), before the onboarding notifications explainer, which uses up iOS's one-time prompt
+- [ ] Onboarding has no way out: no back on basics, no sign-out anywhere in onboarding (wrong Google account, under 18)
+- [ ] Onboarding saves fail silently (lib/useOnboarding.ts commit → Logger.warn only)
+- [ ] Terms/Privacy are plain text on app/index.tsx:338 and sign-in.tsx:360. The blendn.app links all redirect to the homepage (admin/web need)
+- [ ] forgot-password and rate/[eventId] show a "PLACEHOLDER DESIGN" banner to users
+Events → room
+- [ ] Check-out in BlendnScreen is one tap with no confirmation (TonightView uses HoldToConfirm)
+- [ ] The room never ends: `endsAt` is ignored, with no recap and no "rate who you met"
+- [ ] The rate screen doesn't show who you're rating, only "1 of N"
+- [ ] Event detail network error shows "Event not found" with no retry
+- [ ] Cancelling an RSVP or leaving the waitlist takes one tap with no confirmation
+- [ ] Tonight fetch error shows as "Nothing on near you" (useTonight has `status:'error'`; TonightView ignores it)
+- [ ] No RealtimeStatusBanner in the room
+Chat / friends
+- [ ] Reactions display, but there's no UI to add them (`reactToChatMessage` has no callers)
+- [ ] Group chat header has no options: members, mute, leave (leave/mute API missing, admin need)
+- [ ] Blocking from app/user/[id] leaves you on their profile (no `onBlock` → back)
+- [ ] Connect flips to "Requested" even when the request fails (app/user/[id].tsx:316–340)
+- [ ] Likes from a profile fail silently, and a mutual like there has no match moment
+- [ ] Pending friend requests only show inside "Add friends": no badge on the Me tab or /friends
+- [ ] Message requests: only Accept/Decline, with no block/report and no tap-through to the profile
+- [ ] Chat load failure shows the "start the conversation" empty state (group + DM)
+Account
+- [ ] Edit profile: back or swipe drops your edits with no warning
+- [ ] Settings error says "Pull to retry", but there's no RefreshControl (app/settings.tsx:152)
+- [ ] Session expiry sends you to sign-in without saying why
+- [ ] Push toggle stays ON when the OS permission is denied, with no Open Settings
+- [ ] ErrorBoundary says "contact support", but there's no contact method
+
+## P2 — polish
+- [ ] No notification/activity inbox screen (a new screen, so a design decision)
+- [ ] No rating prompt/push after an event, and the rate screen's load error shows as "Nothing to rate"
+- [ ] `rateEvent` (rate the event itself) has no callers
+- [ ] Event shares carry no link. Deep links cover `/f/*` only
+- [ ] Ended event CTA is a dead end for non-attendees
+- [ ] Organizer is fetched but never shown. No live "N here now" on detail
+- [ ] Friend invite: offline looks the same as expired. A signed-out invitee gets no context
+- [ ] Interest/work-field pickers have no loading/error states. City has no autocomplete
+- [ ] Failed send has no failed bubble or retry. DM long-press has no Copy. You can't delete your own messages. Group menu offers Report on your own messages
+- [ ] Report reason is hardcoded to 'other'. DM "Coming soon: Safety options" fallback (private-chat:716)
+- [ ] DM header doesn't open the other person's profile. Profile error state has no back button
+- [ ] Network errors read as permanent on friend profile, invite and friends/add
+- [ ] Sign-out takes one tap. No version footer. Blocked-users load error looks the same as an empty list
+- [ ] Pulse has its own check-in path (events.tsx:660–830) alongside useCheckInFlow, so the two will drift
+- [ ] Docs: AGENTS.md:94 + CODEBASE_OVERVIEW.md mention the deleted `/onboarding/welcome`. PULSE/ROADMAP still say "friend graph pending"
+
+## Deferred by design (not gaps)
+Map view, media in chat, broadcasts frame, message search, per-type notification prefs, data export, forced-update/min-version (needs admin).
+
+## Build plan (2026-09-28) — missing screens & popups
+Four parallel tracks, each in its own worktree/branch → PR to dev. Popups use `components/ActionTray` (cross-platform, no Android 3-button limit) and `components/Toast`.
+- [x] A `fix/journey-first-run`: offline launch keeps the session + "can't reach Blend'n" screen; session-expired notice on sign-in; onboarding back + sign-out; forgot-password redesign + check-inbox/resend/open-mail; Terms/Privacy linked; onboarding save/picker error states
+- [x] B `fix/journey-chat-safety`: safety sheets off Alert (leave/report/block + reason picker); reaction picker; group chat info screen (members); message-request options; DM long-press Copy + own-message rules; DM header → profile; chat load error + retry; failed-send bubble + retry
+- [x] C `fix/journey-events-room`: check-out confirm; cancel RSVP/leave waitlist confirm; room-ended recap → rate; rate screen redesign (who you're rating) + error; add-to-calendar on detail; detail/Tonight error+retry; organizer + live count; ended CTA next step
+- [x] D `fix/journey-account-friends`: edit-profile discard confirm; sign-out confirm; push toggle ↔ OS permission + Open Settings; settings pull-to-retry; About (version) + Contact support screens; ErrorBoundary contact; blocked-users error; friend requests list + badge; profile error back/block→back/connect+like failure toasts; invite & friend-profile offline vs gone
+Admin needs (not done): group leave/mute endpoints, real blendn.app policy pages, min-version.
+
+### Review
+Merged to dev 2026-09-28: #310 (A), #311 (C), #312 (B), #313 (D). #313 needed dev merged in twice: `BLENDN_LINKS` deduped into lib/links.ts; Settings push switch clears "Maybe later" then reads the OS permission back. Final branch: tsc clean, lint 0 errors, lint:design clean, jest 1367/1367, CI green.
+Not yet verified on a simulator/device.
+Admin needs: group chat leave + mute endpoints, room report type, "event ended / rate" push, GET own event rating, public invite preview.
+
+## Simulator QA vs staging (2026-09-28)
+Passed: sign-out confirm, About, Contact support, edit-profile discard, DM header → profile, DM long-press (own: Copy; theirs: Copy/Report), report reason sheet, Room info + members, reaction picker (🔥 persisted), rate night → rate people (pseudonym), "By {organizer}".
+Found:
+- [x] Design Festival (multi-day, blr seed) shows LIVE/"Happening now" but check-in refuses "Event has not started yet" — client live state vs server occurrence disagree (pre-existing)
+- [x] Group chat header back button has no accessibilityLabel
+- [x] Group chat header subtitle repeats the event title
+Untested: room check-out confirm + recap (no live seeded event left on staging), signed-out screens, offline/error states.
+Admin: #494 merged, migration applied to staging (yamanote) and verified, promoted dev→staging via #495. NOTE: blendn-admin/.env DATABASE_URL points at PRODUCTION (gondola).
+
+### Round 2 (2026-09-28 ~23:50)
+Merged: mobile #315 (leave/mute/report room, own rating, invite preview, header fixes), #316 (multi-day by today's day), #317 (Rejoin re-joins the socket), #318 (check-in prefs designed, CTA reflects check-in); admin #494, #496 → promoted to staging via #495, #497. Staging reseeded (scenarios, crowd, my-banter). blendn-admin/.env → staging (backup .env.bak-prod-*); Railway CLI linked to staging.
+Verified on simulator vs staging: mute (DB muted_until), leave → room gone from Banter → "You left this room" → Rejoin (DB active), header a11y + "38 in the room", room check-out confirm, live recap "That's a wrap" (11 min, Rate the night), festival check-in succeeds in today's window, CTA "You're in" after check-in, redesigned prefs screen, "N here now".
+Still untested: signed-out screens (forgot password, invite preview on sign-in, onboarding exit), offline/error states, Android.

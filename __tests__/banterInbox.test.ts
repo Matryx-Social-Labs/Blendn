@@ -206,8 +206,8 @@ describe('the room you are standing in', () => {
      * in Recent as well.
      */
     const src = SCREEN()
-    expect(src).toContain('groupChats.filter((c) => c.is_checked_in)')
-    expect(src).toContain('...groupChats.filter((c) => !c.is_checked_in).map')
+    expect(src).toContain('rooms.filter((c) => c.is_checked_in)')
+    expect(src).toContain('...rooms.filter((c) => !c.is_checked_in).map')
   })
 
   it('draws each live room as a full-width row, not a horizontal rail', () => {
@@ -253,7 +253,7 @@ describe('a row is one height, read or unread', () => {
     const dot = sections.slice(sections.indexOf('unreadDot: {'))
     const dotBody = dot.slice(0, dot.indexOf('},'))
     expect(dotBody).toContain('width: UNREAD_DOT')
-    // Unread is neutral: the screen's one accent is Accept.
+    // Unread is neutral, like everything on a populated inbox.
     expect(dotBody).toContain('backgroundColor: EMBER.textPrimary')
   })
 
@@ -344,14 +344,14 @@ describe('requests look like the conversations they become', () => {
     expect(src).toContain('timeLabel={inboxTimeLabel(r.created_at)}')
   })
 
-  it('gives Accept the accent — the only one on the screen with rows', () => {
+  it('gives Accept the strong-neutral, not the accent — a list of requests was a column of orange', () => {
     const sections = SECTIONS()
-    expect(sections).toContain('requestAccept: { backgroundColor: EMBER.accent }')
-    expect(sections).toContain('requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient }')
+    expect(sections).toContain('requestAccept: { backgroundColor: EMBER.textPrimary }')
+    expect(sections).toContain('requestAcceptLabel: { ...TYPE.button, color: EMBER.bg }')
     expect(sections).toContain('requestDecline: { backgroundColor: EMBER.surface }')
     expect(sections).toContain('height: CONTROL.sm')
-    // Nothing else in the sections reaches for it.
-    expect(sections.match(/EMBER\.accent/g)).toHaveLength(1)
+    // Nothing in the sections reaches for the accent any more.
+    expect(sections.match(/EMBER\.accent/g)).toBeNull()
   })
 
   it('shows the count beside the heading', () => {

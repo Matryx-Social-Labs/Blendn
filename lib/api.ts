@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from './apiClient'
+import { sessionFromApi } from './eventSession'
 import { Logger } from './logger'
 
 Logger.info('api', 'Using admin backend for API calls')
@@ -61,6 +62,8 @@ export function eventFromApi(e: EventPayload) {
       address: e.address || '',
       start_time: e.startTime,
       end_time: e.endTime,
+      /** Judge LIVE by this, not the run above — `lib/eventSession.ts`. */
+      session: sessionFromApi(e.session),
       timezone: e.timezone || 'UTC',
       price_cents: e.priceCents || 0,
       max_capacity: e.maxCapacity || 0,

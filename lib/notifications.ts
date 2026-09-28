@@ -443,10 +443,10 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       break
     }
     /*
-     * "The night's over — rate who you met." The server sends no such push
-     * yet (`NotificationData["type"]` in blendn-admin has no rating kind), so
-     * these are the names it is likeliest to use, routed ahead of time: the
-     * alternative is a tap that opens nothing the day it ships. Without an
+     * "The night's over — rate who you met." The server sends
+     * `rating_request` with `eventId`, once per event, after an event you
+     * checked in to ends (blendn-admin `event-notifications.service.ts`). The
+     * other names were routed ahead of it and cost nothing to keep. Without an
      * event id there is nothing to rate, and Going's Past rows carry the way
      * in for every event you attended.
      */

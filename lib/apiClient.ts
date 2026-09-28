@@ -501,7 +501,37 @@ export interface ApiResponse<T = unknown> {
    * for, and a guess that is too short just earns another refusal.
    */
   retryAfter?: number
+  /**
+   * The room a refusal is about. `GET /events/:eventId/chat` answers
+   * `LEFT_ROOM` with it, so a screen that only knew the event can still offer
+   * the rejoin (`rejoinChatGroup`) without a second lookup.
+   */
+  chatGroupId?: string
   errors?: Array<{ path: string; message: string }>
+}
+
+/**
+ * Your own mute of a room's pushes — not the organiser's mute, which stops you
+ * posting (`room_state` in the Banter). `until: null` while muted is "until I
+ * turn it back on". Sent as `mute` on `GET /events/:eventId/chat` and on each
+ * `GET /chat/groups` item.
+ */
+export interface RoomMute {
+  muted: boolean
+  until: string | null
+}
+
+/** Your rating of an event, or all nulls when you have not rated it. */
+export interface MyEventRating {
+  rating: number | null
+  review: string | null
+  ratedAt: string | null
+}
+
+/** Who sent an invite link, for somebody not signed in yet: a first name and a photo. */
+export interface FriendInvitePreview {
+  name: string
+  photoUrl: string | null
 }
 
 
@@ -548,6 +578,11 @@ export interface EventApiItem {
   start_time?: string
   endTime: string
   end_time?: string
+  /**
+   * The day "live" is judged by — see `lib/eventSession.ts`. Absent from an
+   * older server; null when every day is cancelled.
+   */
+  session?: { startTime: string; endTime: string } | null
   timezone: string
   status: string
   visibility: string
@@ -722,6 +757,12 @@ export interface UserProfileData {
     eventsOrganized: number
   }
   isOwnProfile?: boolean
+  /**
+   * `GET /users/:id` only: whether you may see who this is (`maySeeIdentity`).
+   * The server's one answer to "revealed?"; photos, bio and occupation are
+   * sent only when it is true. Absent from an older server — read as false.
+   */
+  identityVisible?: boolean
   onboarded?: boolean
   /**
    * `GET /users/:id` only: where you stand with them, decided by the server
@@ -818,6 +859,8 @@ export interface CheckInResult {
 
 export interface EventChatData {
   chatGroupId?: string
+  /** Your mute of this room's pushes. Absent from a server older than it. */
+  mute?: RoomMute
   chatGroupName?: string
   id?: string
   name?: string
@@ -918,6 +961,23 @@ class ApiClientClass {
   forgetActiveCheckins(): void {
     for (const key of this.responseCache.keys()) {
       if (key.includes(':/api/mobile/checkins/active:')) this.responseCache.delete(key)
+    }
+  }
+
+  /**
+   * Drop the cached detail of one event, so the next `getEvent` asks the server.
+   *
+   * Called after a check-in or check-out (`lib/checkIn.ts`). The detail carries
+   * `userStatus.isCheckedIn` and is SWR-cached, and SWR serves an expired entry
+   * as-is while it refreshes in the background — so the event screen's re-read
+   * right after a check-in got the pre-check-in answer and put "Blend in" back
+   * over the optimistic "You're in". Only the detail itself, with any query:
+   * `/events/:id?include=…`, not `/events/:id/checkins`.
+   */
+  forgetEvent(eventId: string): void {
+    const detail = `:/api/mobile/events/${eventId}`
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
     }
   }
 
@@ -1034,6 +1094,7 @@ class ApiClientClass {
         retryAfter: typeof parsed.retryAfter === 'number'
           ? parsed.retryAfter
           : Number(response.headers.get('Retry-After')) || undefined,
+        ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -1758,6 +1819,15 @@ class ApiClientClass {
     )
   }
 
+  /**
+   * Your own rating of this event — `rating: null` when you have not rated it.
+   * Yours only: no route returns anybody else's. 404 `NOT_FOUND` for an event
+   * that does not exist.
+   */
+  async getMyEventRating(eventId: string): Promise<ApiResponse<MyEventRating>> {
+    return this.queuedRequest<MyEventRating>(`/api/mobile/events/${encodeURIComponent(eventId)}/rating`)
+  }
+
   // === ORGANIZER ENDPOINTS ===
 
   async updateEvent(
@@ -2193,6 +2263,98 @@ class ApiClientClass {
     return this.queuedRequest(
       `/api/mobile/chat/groups/${chatGroupId}/messages/${messageId}/reactions`,
       { method: 'POST', body: JSON.stringify({ emoji }) },
+      true,
+      2
+    )
+  }
+
+  // === ROOM MEMBERSHIP: leave, mute, report ===
+
+  /**
+   * Drop the cached room list, so the Banter's next read asks the server.
+   * Leaving takes a room out of it and a mute changes a row in it; the list is
+   * SWR-cached, and answering from the old copy would put a left room back.
+   */
+  forgetChatGroups(): void {
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(':/api/mobile/chat/groups:')) this.responseCache.delete(key)
+    }
+  }
+
+  /**
+   * Leave a room. Idempotent. From then on its history, posts, reactions and
+   * socket are refused (`LEFT_ROOM`), and its pushes stop. The way back is
+   * `rejoinChatGroup`, or checking in at the event again.
+   */
+  async leaveChatGroup(chatGroupId: string): Promise<ApiResponse<{ chatGroupId: string; left: true }>> {
+    const result = await this.queuedRequest<{ chatGroupId: string; left: true }>(
+      `/api/mobile/chat/groups/${encodeURIComponent(chatGroupId)}/leave`,
+      { method: 'POST' },
+      true,
+      2
+    )
+    if (result.success) this.forgetChatGroups()
+    return result
+  }
+
+  /**
+   * Undo a leave you made yourself. 403 `USER_BANNED`, `CHAT_CLOSED` or
+   * `CHAT_LOCKED` when the room will not take you back — the error is the
+   * server's sentence for which.
+   */
+  async rejoinChatGroup(chatGroupId: string): Promise<ApiResponse<{ chatGroupId: string; left: false }>> {
+    const result = await this.queuedRequest<{ chatGroupId: string; left: false }>(
+      `/api/mobile/chat/groups/${encodeURIComponent(chatGroupId)}/leave`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+    if (result.success) this.forgetChatGroups()
+    return result
+  }
+
+  /**
+   * Silence a room's pushes to you, until `until` (ISO) or, with null, until
+   * you unmute. Nothing else changes: you still read and post, and nobody is
+   * told. 400 `VALIDATION_FAILED` for a time in the past or over a year away.
+   */
+  async muteChatGroup(
+    chatGroupId: string,
+    until: string | null
+  ): Promise<ApiResponse<{ chatGroupId: string; mute: RoomMute }>> {
+    const result = await this.queuedRequest<{ chatGroupId: string; mute: RoomMute }>(
+      `/api/mobile/chat/groups/${encodeURIComponent(chatGroupId)}/mute`,
+      { method: 'POST', body: JSON.stringify({ until }) },
+      true,
+      3
+    )
+    if (result.success) this.forgetChatGroups()
+    return result
+  }
+
+  async unmuteChatGroup(chatGroupId: string): Promise<ApiResponse<{ chatGroupId: string; mute: RoomMute }>> {
+    const result = await this.queuedRequest<{ chatGroupId: string; mute: RoomMute }>(
+      `/api/mobile/chat/groups/${encodeURIComponent(chatGroupId)}/mute`,
+      { method: 'DELETE' },
+      true,
+      3
+    )
+    if (result.success) this.forgetChatGroups()
+    return result
+  }
+
+  /**
+   * Report a whole room — a pile-on, a room gone hostile — which no single
+   * message shows. Any member may, including one who left or was banned.
+   */
+  async reportChatGroup(
+    chatGroupId: string,
+    reason: string,
+    description?: string
+  ): Promise<ApiResponse<{ reported: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/chat/groups/${encodeURIComponent(chatGroupId)}/report`,
+      { method: 'POST', body: JSON.stringify(description ? { reason, description } : { reason }) },
       true,
       2
     )
@@ -2838,6 +3000,15 @@ class ApiClientClass {
 
   async openFriendInvite(token: string): Promise<ApiResponse<{ person: FriendPerson; state: FriendState }>> {
     return this.queuedRequest(`/api/mobile/friends/invite/${encodeURIComponent(token)}`)
+  }
+
+  /**
+   * Who sent this link, for somebody who is **not signed in** — so it goes
+   * without a token. A first name and a photo, nothing else. 404 `NOT_FOUND`
+   * when the link does not work; 429 `RATE_LIMITED` per IP.
+   */
+  async getFriendInvitePreview(token: string): Promise<ApiResponse<FriendInvitePreview>> {
+    return this.queuedRequest(`/api/mobile/friends/invite/${encodeURIComponent(token)}/preview`, {}, false)
   }
 
   async getFriendRequests(): Promise<ApiResponse<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>> {

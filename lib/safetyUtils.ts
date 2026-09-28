@@ -381,13 +381,13 @@ export const messageReportStep = (
  */
 export const getReportTypeLabel = (reportType: ReportType | MessageReportType): string => {
   switch (reportType) {
-    case 'inappropriate_messages': return 'Inappropriate Messages'
-    case 'fake_profile': return 'Fake Profile'
+    case 'inappropriate_messages': return 'Inappropriate messages'
+    case 'fake_profile': return 'Fake profile'
     case 'harassment': return 'Harassment'
-    case 'spam': return 'Spam'
-    case 'inappropriate_photos': return 'Inappropriate Photos'
-    case 'inappropriate_content': return 'Inappropriate Content'
-    case 'hate_speech': return 'Hate Speech'
+    case 'spam': return 'Spam or scam'
+    case 'inappropriate_photos': return 'Inappropriate photos'
+    case 'inappropriate_content': return 'Inappropriate content'
+    case 'hate_speech': return 'Hate speech'
     case 'other': return 'Other'
     default: return 'Unknown'
   }
@@ -470,6 +470,48 @@ export const showEventReportOptions = (
        * every unchanged listing look like the report was ignored.
        */
       return { ok: true, toast: 'Report sent. Our team will review it.' }
+    },
+  })
+}
+
+/**
+ * Why somebody would report a **room** — what no single message shows.
+ *
+ * A message can be reported and so can a person; a room gone bad is neither.
+ * It is a pile-on across twenty messages, or a host letting it happen, and
+ * reporting one message of it hands a moderator a fragment. The server stores
+ * these beside event reports (`event_reports.chat_group_id`) and shows them as
+ * "Room", so the reason is free text and this list is the vocabulary.
+ */
+export type RoomReportType = 'pile_on' | 'hate_speech' | 'unsafe' | 'host_conduct' | 'spam' | 'other'
+
+export const ROOM_REPORT_REASONS: { value: RoomReportType; label: string }[] = [
+  { value: 'pile_on', label: 'People are ganging up on someone' },
+  { value: 'hate_speech', label: 'Hate speech or slurs' },
+  { value: 'unsafe', label: 'Someone could get hurt' },
+  { value: 'host_conduct', label: 'The host is letting it happen' },
+  { value: 'spam', label: 'Spam or scam' },
+  { value: 'other', label: 'Something else' },
+]
+
+/** Report a whole room, from Room info. Straight to the reasons, like an event. */
+export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => void): void => {
+  showSheet({
+    kind: 'reasons',
+    title: 'Report this room',
+    message: "What's going on in here? Our team reads the room, not just one message, and nobody is told who reported it.",
+    reasons: ROOM_REPORT_REASONS,
+    submitLabel: 'Send report',
+    run: async (reason, description) => {
+      try {
+        const result = await apiClient.reportChatGroup(chatGroupId, reason, description)
+        if (!result.success) return failed(result.error, "Couldn't send your report.")
+      } catch (error) {
+        Logger.error('general', 'Error reporting room', { error })
+        return failed(undefined, "Couldn't send your report.")
+      }
+      onComplete?.()
+      return { ok: true, toast: REPORTED }
     },
   })
 }
