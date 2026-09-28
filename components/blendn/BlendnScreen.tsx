@@ -233,11 +233,15 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     },
     [eventId]
   )
-  const sayHi = useCallback((conversationId: string, p: { id: string; name: string }) => {
+  /**
+   * Into the DM. `draft` is the opener the match moment suggested: it waits in
+   * the composer for you to edit or send, and is never sent for you.
+   */
+  const sayHi = useCallback((conversationId: string, p: { id: string; name: string }, draft?: string | null) => {
     setOpen(null)
     router.push({
       pathname: '/private-chat/[conversationId]',
-      params: { conversationId, otherUserName: p.name, otherUserId: p.id } as never,
+      params: { conversationId, otherUserName: p.name, otherUserId: p.id, ...(draft ? { draft } : {}) } as never,
     })
   }, [])
   const safety = useCallback(
@@ -560,7 +564,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onSayHi={() => {
           const m = room.match
           room.clearMatch()
-          if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name })
+          if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name }, matchPerson ? openerFor(matchPerson) : null)
         }}
       />
 

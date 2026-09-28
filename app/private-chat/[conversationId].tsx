@@ -51,7 +51,7 @@ import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
-import { matchOpener } from '../../lib/matchOpener'
+import { draftParam, matchOpener } from '../../lib/matchOpener'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
@@ -279,7 +279,7 @@ const revealStyles = StyleSheet.create({
 })
 
 function PrivateChatInner() {
-  const { conversationId, otherUserName, otherUserId, otherUserAvatar } = useLocalSearchParams()
+  const { conversationId, otherUserName, otherUserId, otherUserAvatar, draft } = useLocalSearchParams()
   // A push for this conversation is not shown over it (`lib/notifications.ts`).
   useActiveThread(`dm:${String(conversationId)}`)
   const { user: authUser } = useAuth()
@@ -292,7 +292,9 @@ function PrivateChatInner() {
    * (SCRUM-165). Nothing to wave at.
    */
   const [ended, setEnded] = useState(false)
-  const [newMessage, setNewMessage] = useState('')
+  // A suggested opener (the match moment's "Try …") fills the composer once, on
+  // mount. It is only ever a draft: nothing sends until you press send.
+  const [newMessage, setNewMessage] = useState(() => draftParam(draft))
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   /*

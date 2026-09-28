@@ -86,3 +86,15 @@ export function matchRowPreview(input: MatchOpenerInput): string | null {
   if (!input.fromMatch) return null
   return 'You matched — start the conversation'
 }
+
+/**
+ * The composer's starting text from the DM route's optional `draft` param.
+ *
+ * The match moment suggests a first line; "Say hi" carries it here so it is
+ * already typed. Only a draft — the screen never sends it on its own. A
+ * missing, repeated or blank param starts the composer empty.
+ */
+export function draftParam(param: string | string[] | undefined): string {
+  if (typeof param !== 'string') return ''
+  return param.trim() ? param : ''
+}
