@@ -73,7 +73,7 @@ const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function RootLayout() {
-  const { user, loading, isNewAccount } = useAuth();
+  const { user, loading, isNewAccount, unreachable } = useAuth();
   const pathname = usePathname();
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
@@ -247,20 +247,13 @@ function RootLayout() {
           if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
-        // Also remove push token best-effort
-        removePushTokenFromProfile().catch(() => {});
+        // Also remove push token best-effort. Not while the server is merely
+        // unreachable: that session is still live, and the DELETE landing
+        // when the connection returns would silence its notifications.
+        if (!unreachable) removePushTokenFromProfile().catch(() => {});
         // Reset push init flag for next sign-in
         pushInitRef.current = false;
         return;
-      }
-
-      // Authenticated → defer push notification init to avoid blocking startup
-      if (!pushInitRef.current) {
-        pushInitRef.current = true;
-        // Delay push init by 2 seconds to let UI render first
-        setTimeout(() => {
-          initializePushNotifications().catch(() => {});
-        }, 2000);
       }
 
       /*
@@ -385,6 +378,23 @@ function RootLayout() {
          */
         const inOnboarding = pathname.startsWith('/onboarding');
         setRouteReady(!inOnboarding);
+        /*
+         * Push starts here, in the app proper, and not the moment auth resolves.
+         *
+         * `initializePushNotifications` asks the OS for permission. Run on
+         * sign-in, it put the system dialog over onboarding's first screen,
+         * two seconds in, before the notifications step that exists to explain
+         * it had been reached, and iOS asks only once. Onboarding's step asks;
+         * this registers the token once somebody is through. For an account
+         * already onboarded it is the same moment as before: the first screen
+         * after sign-in, deferred so the UI renders first.
+         */
+        if (!inOnboarding && !pushInitRef.current) {
+          pushInitRef.current = true;
+          setTimeout(() => {
+            initializePushNotifications().catch(() => {});
+          }, 2000);
+        }
         if (!inOnboarding) {
           const waiting = takePendingRoute();
           if (waiting) router.push(waiting);
@@ -399,7 +409,7 @@ function RootLayout() {
     // replaceIfNeeded is redefined every render; adding it here would rerun
     // this effect (and its routing decisions) on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, pathname, isNewAccount]);
+  }, [user, loading, pathname, isNewAccount, unreachable]);
 
   // Normalize Android hardware back behavior
   useEffect(() => {
