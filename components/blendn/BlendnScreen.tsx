@@ -220,9 +220,15 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     (p: RoomPerson) => {
       setOpen(null)
       // The event travels with the id: the profile's Like needs to know the room.
+      // The pseudonym travels too, so the profile is titled as the room shows
+      // them until the server says who they are (docs/PROFILE.md).
       router.push({
         pathname: '/user/[id]',
-        params: { id: p.id, ...(eventId ? { eventId } : {}) } as never,
+        params: {
+          id: p.id,
+          ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}),
+          ...(p.name ? { pseudonym: p.name } : {}),
+        } as never,
       })
     },
     [eventId]
