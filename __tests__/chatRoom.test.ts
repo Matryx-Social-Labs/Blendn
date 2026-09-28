@@ -424,7 +424,8 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   })
 
   it('shows a receipt only on your own messages', () => {
-    expect(DM()).toContain("receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}")
+    // …and not on one that never arrived.
+    expect(DM()).toContain("receipt={isMe && !item.failed ? (item.isRead ? 'read' : 'sent') : null}")
   })
 
   it('keeps receipts out of the room', () => {
@@ -435,8 +436,16 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
     expect(codeOnly(read('app/chat/[id].tsx'))).not.toContain('receipt=')
   })
 
-  it('does not offer to report your own message', () => {
-    expect(DM()).toContain('onLongPress={isMe ? undefined :')
+  it('does not offer to report your own message, but lets you copy it', () => {
+    /*
+     * The long press used to be report-only and absent on your own rows, so
+     * nothing in a DM could be copied. Every row opens the menu now; Report is
+     * on theirs alone.
+     */
+    const src = DM()
+    expect(src).toContain('onLongPress={() => openMessageMenu(item)}')
+    expect(src).toMatch(/\} else if \(!isMe\) \{[\s\S]{0,200}label: 'Report'/)
+    expect(src).toContain("label: 'Copy'")
   })
 })
 
