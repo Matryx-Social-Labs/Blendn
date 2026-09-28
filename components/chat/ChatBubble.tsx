@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useReducedMotion, withTiming } from 'react-native-reanimated'
 
-import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import { markSeed, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { fadeInFast } from '../motion/presence'
 
@@ -46,7 +46,7 @@ export interface ChatBubbleProps {
   mine: boolean
   /** Pseudonym, or a real name once they have revealed. */
   senderName: string
-  /** Stable per person. Salted with `roomId` to seed the avatar. */
+  /** Stable per person. With `roomId`, the avatar's seed when the name is a placeholder. */
   senderId: string
   /** The room or conversation this bubble is in. Salts the avatar seed. */
   roomId: string
@@ -160,25 +160,15 @@ function ChatBubbleBase({
   const direct = variant === 'direct'
   const reduceMotion = useReducedMotion()
   /*
-   * Seeded on the room *and* the sender, which is neither of the two things
-   * this was argued between.
-   *
-   * It used to be `senderId` alone, and `lib/pseudonymAvatar.ts` says why that
-   * is wrong in as many words: "Never feed it a user id: that is stable forever
-   * and would rebuild exactly the cross-event identity the pseudonyms exist to
-   * prevent." The same person carried the same colour and creature in every
-   * room, at every event, forever — a correlator handed to everyone they had
-   * ever shared a room with.
-   *
-   * `senderName` alone is wrong too, and a test already said so: two people
-   * both falling back to "Attendee" would share a mark, and somebody's disc
-   * would change the instant they revealed.
-   *
-   * Salting the id with the room satisfies both. Stable for the length of the
-   * room, unique per person inside it, different in the next room, and
-   * unaffected by a reveal.
+   * Seeded on the pseudonym, the one rule every surface follows
+   * (`markSeed` in lib/pseudonymAvatar.ts): the Room grid, Room info and the
+   * Banter all seed on the name, so one person is one creature on all of them
+   * — and "Cosmic Panda" draws a panda. A placeholder name ("Attendee") falls
+   * back to the room *and* the sender, so two unresolved people never share a
+   * mark. Never the sender id alone: that is stable forever and would rebuild
+   * the cross-event identity the pseudonyms exist to prevent.
    */
-  const mark = pseudonymAvatar(`${roomId}:${senderId}`)
+  const mark = pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))
   const reactionEntries = reactions ?? []
 
   return (
@@ -221,7 +211,7 @@ function ChatBubbleBase({
           ) : mine ? (
             <>
               <Text style={styles.time}>{time}</Text>
-              <Text style={styles.nameMine}>Me</Text>
+              <Text style={styles.nameMine}>You</Text>
             </>
           ) : (
             <>
@@ -294,8 +284,17 @@ function ChatBubbleBase({
 
         {reactionEntries.length > 0 ? (
           <View style={[styles.reactions, mine && styles.reactionsMine]}>
-            {reactionEntries.map(({ emoji, count }) => (
-              <View key={emoji} style={styles.reaction}>
+            {reactionEntries.map(({ emoji, count, mine: yours }) => (
+              /*
+                Yours is marked with a 1pt `textPrimary` edge — the same
+                reaction the menu shows as selected — so you can see what you
+                already said before long-pressing to take it back.
+              */
+              <View
+                key={emoji}
+                style={[styles.reaction, yours && styles.reactionMine]}
+                accessibilityLabel={`${emoji} ${count}${yours ? ', yours' : ''}`}
+              >
                 <Text style={styles.reactionEmoji} maxFontSizeMultiplier={1.2}>
                   {emoji}
                 </Text>
@@ -396,7 +395,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
+    // The same 1pt the mine state draws, transparent, so marking one never shifts the row.
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
+  reactionMine: { borderColor: EMBER.textPrimary },
   reactionEmoji: TYPE.meta,
   reactionCount: TYPE.caption,
 })

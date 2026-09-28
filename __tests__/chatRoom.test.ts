@@ -48,30 +48,25 @@ describe('the bubble points at its sender', () => {
      * `pseudonymAvatar` is the only avatar source allowed on this surface.
      */
     const src = codeOnly(BUBBLE())
-    expect(src).toMatch(/pseudonymAvatar\(`\$\{roomId\}:\$\{senderId\}`\)/)
+    expect(src).toContain('pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))')
     expect(src).not.toMatch(/OptimizedImage|<Image|profile_photos/)
   })
 
-  it('seeds the avatar from the room and the id, never from either alone', () => {
+  it('seeds the avatar on the pseudonym, the rule every surface shares — never on the id alone', () => {
     /*
-     * Both single-seed options are wrong, in opposite directions.
+     * One person was a dolphin on the Room grid (seeded on the name) and a
+     * hedgehog in this bubble (seeded on room + id). `markSeed` is the one
+     * rule: the pseudonym, unique inside a room and different at the next
+     * event. A placeholder name ("Attendee") falls back to room + sender, so
+     * two unresolved people never share a creature.
      *
-     * The display name would give two people falling back to "Attendee" the
-     * same creature, and would change somebody's mark the moment they revealed.
-     *
-     * The id alone is worse: `lib/pseudonymAvatar.ts` says "Never feed it a
-     * user id: that is stable forever and would rebuild exactly the cross-event
-     * identity the pseudonyms exist to prevent." It shipped that way, so every
-     * message anybody sent carried the same colour and creature in every room
-     * they had ever been in.
-     *
-     * Salting the id with the room is stable inside a room, unique per person
-     * in it, different in the next one, and unaffected by a reveal.
+     * The id alone stays forbidden: `lib/pseudonymAvatar.ts` — "Never feed it
+     * a user id: that is stable forever and would rebuild exactly the
+     * cross-event identity the pseudonyms exist to prevent."
      */
     const src = codeOnly(BUBBLE())
-    expect(src).not.toContain('pseudonymAvatar(senderName)')
     expect(src).not.toContain('pseudonymAvatar(senderId)')
-    expect(src).toMatch(/pseudonymAvatar\(`\$\{roomId\}:\$\{senderId\}`\)/)
+    expect(src).toContain('pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))')
   })
 
   it('counts reactions without naming who left them', () => {
@@ -425,7 +420,8 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
 
   it('shows a receipt only on your own messages', () => {
     // …and not on one that never arrived.
-    expect(DM()).toContain("receipt={isMe && !item.failed ? (item.isRead ? 'read' : 'sent') : null}")
+    // …and not on one still on this phone (sending, or failed).
+    expect(DM()).toContain("receipt={isMe && !isLocalMessage(item) ? (item.isRead ? 'read' : 'sent') : null}")
   })
 
   it('keeps receipts out of the room', () => {

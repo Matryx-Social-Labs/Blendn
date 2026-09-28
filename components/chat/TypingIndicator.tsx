@@ -7,6 +7,9 @@ import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 /**
  * Three dots and a name. Frame `1141:5574`.
  *
+ * The one place typing shows: the room's header no longer repeats it.
+ * `typingLabel` below writes the line, so the room and the DM say it alike.
+ *
  * ## It sits in the list, not above the composer
  *
  * The old screen drew typing as a strip pinned between the list and the input.
@@ -70,7 +73,7 @@ export function TypingIndicator({ label }: { label: string }) {
         ))}
       </View>
       <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-        {label.toUpperCase()}
+        {label}
       </Text>
     </View>
   )
@@ -87,5 +90,23 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: 0.6 },
   dots: { flexDirection: 'row', gap: SPACE.xs },
   dot: { width: 4, height: 4, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textSecondary },
-  label: { ...TYPE.label, flexShrink: 1 },
+  /*
+   * `meta`, not the uppercase `label` role: the line carries a person's name,
+   * and "COSMIC PANDA IS TYPING…" shouted a pseudonym the rest of the room
+   * writes in its own case.
+   */
+  label: { ...TYPE.meta, color: EMBER.textSecondary, flexShrink: 1 },
 })
+
+/**
+ * "Cosmic Panda is typing…", "3 people are typing…".
+ *
+ * One sentence for both screens. The DM said "{name} are typing..." off the
+ * route param — plural verb, three dots, and blank when the param was missing.
+ * Names are drawn as the server sends them, never uppercased.
+ */
+export function typingLabel(names: string[]): string {
+  const named = names.map((n) => n.trim()).filter(Boolean)
+  if (names.length > 1) return `${names.length} people are typing…`
+  return `${named[0] || 'Someone'} is typing…`
+}

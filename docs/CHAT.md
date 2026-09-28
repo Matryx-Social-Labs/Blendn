@@ -115,10 +115,12 @@ The frame draws photographs — "Julian Ember", "Sarah Chen". This room is
 pseudonymous until you reveal yourself (`app/room.tsx`, `setMatchPreferences`),
 so a photo would undo the thing that screen exists to protect.
 
-`pseudonymAvatar(senderId)` gives a colour and a creature, stable for as long as
-somebody is that pseudonym — the same treatment the Grid's discs get. When
-somebody *has* revealed, the name is simply their real one; **the server decides
-that, not the component.**
+`pseudonymAvatar(markSeed(senderName, room:sender))` gives a colour and a
+creature — seeded on **the pseudonym**, the one rule every surface follows
+(`lib/pseudonymAvatar.ts`): the Grid's `Face`, Room info, the Banter and the
+profile hero all seed on the name, so one person is one creature everywhere in
+the room. A placeholder name ("Attendee") falls back to room + sender. When the
+pseudonym's noun is an animal the disc draws it — Cosmic Panda is a panda.
 
 Flat fill, where the Grid's disc is a `LinearGradient`: a gradient is a native
 view, and the Grid pays for three on screen where a chat would pay for thirty.

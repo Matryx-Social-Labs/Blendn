@@ -4,7 +4,6 @@ import { usePreventRemove, type NavigationAction } from 'expo-router/react-navig
 import React, { useEffect, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -25,6 +24,7 @@ import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
+import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
@@ -82,6 +82,7 @@ function formSnapshot(f: {
 
 export default function EditProfile() {
   const { user: authUser } = useAuth()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -183,6 +184,17 @@ export default function EditProfile() {
     if (leaving) navigation.dispatch(leaving)
   }, [leaving, navigation])
 
+  /*
+   * Saved: leave once the render that moved the baseline has landed. Calling
+   * `router.back()` in the save handler itself ran before `savedSnapshot`
+   * updated, so the guard above still saw a dirty form and asked "Discard
+   * changes?" about changes that had just been saved.
+   */
+  const [leaveAfterSave, setLeaveAfterSave] = useState(false)
+  useEffect(() => {
+    if (leaveAfterSave && !dirty) router.back()
+  }, [leaveAfterSave, dirty])
+
   const discardChanges = () => {
     setDiscardOpen(false)
     setLeaving(pendingLeave.current)
@@ -193,7 +205,7 @@ export default function EditProfile() {
     const loadProfile = async () => {
       try {
         if (!authUser) {
-          Alert.alert('Error', 'Please sign in to edit your profile')
+          showToast('Sign in to edit your profile.', 'error')
           router.back()
           return
         }
@@ -300,7 +312,7 @@ export default function EditProfile() {
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        Alert.alert('Error', 'Failed to load profile data')
+        showToast("Couldn't load your profile. Try again.", 'error')
       } finally {
         setLoading(false)
       }
@@ -309,7 +321,7 @@ export default function EditProfile() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser])
+  }, [authUser, showToast])
 
   const handlePhotosChange = (newPhotos: string[]) => {
     setPhotos(newPhotos)
@@ -317,10 +329,10 @@ export default function EditProfile() {
 
   const openTagInput = (mode: TagInputMode) => {
     if (mode === 'goal') {
-      setTagInputTitle('Add Goal')
+      setTagInputTitle('Add goal')
       setTagInputPlaceholder('What are you looking for?')
     } else if (mode === 'lookingFor') {
-      setTagInputTitle('Add Preference')
+      setTagInputTitle('Add preference')
       setTagInputPlaceholder('What type of person are you looking for?')
     }
     setTagInputMode(mode)
@@ -476,20 +488,20 @@ export default function EditProfile() {
       void refreshAuthUser()
 
       Logger.info('profile', 'EditProfile: Profile updated successfully', { userId: authUser.id })
-      Alert.alert(
-        'Profile Updated',
-        'Your profile has been successfully updated!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
-      )
+      /*
+       * A toast and straight back, not an alert with an OK to dismiss first:
+       * saving is the whole reason the screen was open, and the Me tab it
+       * returns to already shows the change. The baseline moved above, so
+       * the leave guard lets this through without asking.
+       */
+      showToast('Profile saved', 'success')
+      setLeaveAfterSave(true)
 
     } catch (error) {
       Logger.error('profile', 'EditProfile: Save profile error', { error })
-      Alert.alert('Error', 'Failed to save profile. Please try again.')
+      // Never the thrown message: it is the server's or the client's wording
+      // for a developer ("Failed to update profile"), not for the person.
+      showToast("Couldn't save your profile. Try again.", 'error')
     } finally {
       setSaving(false)
     }
@@ -535,7 +547,7 @@ export default function EditProfile() {
         behavior={KEYBOARD_BEHAVIOR}
       >
         <AppHeader
-          title="Edit Profile"
+          title="Edit profile"
           onBack={() => router.back()}
           rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
         />

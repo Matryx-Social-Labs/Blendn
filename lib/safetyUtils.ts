@@ -381,13 +381,13 @@ export const messageReportStep = (
  */
 export const getReportTypeLabel = (reportType: ReportType | MessageReportType): string => {
   switch (reportType) {
-    case 'inappropriate_messages': return 'Inappropriate Messages'
-    case 'fake_profile': return 'Fake Profile'
+    case 'inappropriate_messages': return 'Inappropriate messages'
+    case 'fake_profile': return 'Fake profile'
     case 'harassment': return 'Harassment'
-    case 'spam': return 'Spam'
-    case 'inappropriate_photos': return 'Inappropriate Photos'
-    case 'inappropriate_content': return 'Inappropriate Content'
-    case 'hate_speech': return 'Hate Speech'
+    case 'spam': return 'Spam or scam'
+    case 'inappropriate_photos': return 'Inappropriate photos'
+    case 'inappropriate_content': return 'Inappropriate content'
+    case 'hate_speech': return 'Hate speech'
     case 'other': return 'Other'
     default: return 'Unknown'
   }
@@ -490,7 +490,7 @@ export const ROOM_REPORT_REASONS: { value: RoomReportType; label: string }[] = [
   { value: 'hate_speech', label: 'Hate speech or slurs' },
   { value: 'unsafe', label: 'Someone could get hurt' },
   { value: 'host_conduct', label: 'The host is letting it happen' },
-  { value: 'spam', label: 'Spam or scams' },
+  { value: 'spam', label: 'Spam or scam' },
   { value: 'other', label: 'Something else' },
 ]
 

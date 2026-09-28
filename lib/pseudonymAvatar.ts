@@ -89,6 +89,63 @@ const CHARACTERS = [
   '🦜', '🐺', '🐬', '🦩', '🐨', '🦄', '🐡', '🦔',
 ] as const
 
+/**
+ * The creature a pseudonym already names.
+ *
+ * Pseudonyms are adjective-plus-noun from a fixed list (`lib/anonymous-names.ts`
+ * in blendn-admin). A hashed creature beside "Cosmic Panda" drew a bee, and
+ * the same bee beside "Quiet Otter" — the label and the picture disagreeing
+ * about who somebody is. When the noun is an animal, the disc draws that
+ * animal; birds without an emoji of their own (heron, wren, kite…) share the
+ * bird. Nouns that are not creatures ("Comet", "Nebula") keep the hashed cast.
+ *
+ * Only glyphs with a colour rendering on both platforms for years — no
+ * ZWJ sequences (black bird, phoenix) that fall back to two glyphs.
+ */
+const NOUN_CHARACTERS: Record<string, string> = {
+  panda: '🐼', dragon: '🐉', hydra: '🐉', falcon: '🦅', eagle: '🦅', hawk: '🦅', griffin: '🦅',
+  tiger: '🐯', wolf: '🐺', coyote: '🐺', dolphin: '🐬', panther: '🐆', jaguar: '🐆', cheetah: '🐆',
+  lynx: '🐈', owl: '🦉', fox: '🦊', bear: '🐻', lion: '🦁', stag: '🦌', moose: '🦌', gazelle: '🦌',
+  cobra: '🐍', viper: '🐍', swan: '🦢', otter: '🦦', badger: '🦡', bison: '🦬', gecko: '🦎',
+  dove: '🕊️', parrot: '🦜', toucan: '🦜', penguin: '🐧', koala: '🐨', lemur: '🐒',
+  mustang: '🐎', stallion: '🐎', pegasus: '🐎', unicorn: '🦄', kraken: '🐙', moth: '🦋',
+  raven: '🐦', crane: '🐦', heron: '🐦', robin: '🐦', finch: '🐦', wren: '🐦', lark: '🐦',
+  pelican: '🐦', puffin: '🐦', kite: '🐦', koel: '🐦',
+}
+
+/** "Cosmic Panda" → "panda"; "Cosmic Panda 2" (a collision suffix) → "panda". */
+function nounOf(pseudonym: string): string | null {
+  const words = pseudonym.split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w))
+  return words.length > 1 ? words[words.length - 1].toLowerCase() : null
+}
+
+/**
+ * Names that are not a pseudonym: what a surface shows before one resolves,
+ * or when the server withheld it. Seeding on these would give everybody so
+ * labelled the same mark.
+ */
+const PLACEHOLDER_NAMES = new Set(['', 'attendee', 'someone', 'them', 'you', 'anonymous', 'unknown'])
+
+/**
+ * The one seed rule for a person's mark, on every surface.
+ *
+ * **The pseudonym itself.** It is what the Room grid (`components/blendn/Face`),
+ * the Banter row, the room's bubbles, Room info and the profile hero all have
+ * in hand, it is unique inside a room (`@@unique([chat_group_id,
+ * anonymous_name])`), and it changes between events — so one person is one
+ * colour and one creature everywhere they appear under that name, and nobody
+ * can be followed across events by their disc. It used to be `roomId:senderId`
+ * in the chat and the name on the grid, so the same person was a dolphin on
+ * one screen and a hedgehog on the next.
+ *
+ * `fallback` is for a placeholder name ("Attendee" before the pseudonym
+ * resolves): something per-person and per-room — never a bare user id.
+ */
+export function markSeed(name: string | null | undefined, fallback: string): string {
+  const trimmed = (name ?? '').trim()
+  return PLACEHOLDER_NAMES.has(trimmed.toLowerCase()) ? fallback : trimmed
+}
+
 export interface PseudonymAvatar {
   /** Two stops, drawn as a gradient disc. */
   colors: readonly [string, string]
@@ -123,7 +180,10 @@ export function pseudonymAvatar(pseudonym: string): PseudonymAvatar {
    * cheap mix for the creature gives 128 usable combinations.
    */
   const colors = HUES[h % HUES.length]
-  const character = CHARACTERS[Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % CHARACTERS.length]
+  const noun = nounOf(seed)
+  const character =
+    (noun && NOUN_CHARACTERS[noun]) ||
+    CHARACTERS[Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % CHARACTERS.length]
   return { colors, initial: seed[0].toUpperCase(), character }
 }
 
