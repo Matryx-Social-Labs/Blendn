@@ -351,12 +351,12 @@ On 2026-09-28 `npm run ship:local` built iOS **build 118** (`4611f1d`) on a Mac
 whose only Xcode was 27.0, and submitted it. On an iPhone running iOS 27.0 it
 **crashes at launch**: `EXC_BREAKPOINT` in UIKitCore,
 `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`. An app linked
-against the iOS 27 SDK must adopt the UIScene lifecycle, and ours still uses the
-classic AppDelegate window: `ios/blendn/AppDelegate.swift` (`ExpoAppDelegate`,
+against the iOS 27 SDK must adopt the UIScene lifecycle, and ours then still used
+the classic AppDelegate window: `ios/blendn/AppDelegate.swift` (`ExpoAppDelegate`,
 `var window`), and no `UIApplicationSceneManifest` in `Info.plist`.
 
-Cloud builds never met this. `eas.json` pins the image
-`macos-tahoe-26.5-xcode-26.6`, so they use Xcode 26.6 and the iOS 26.5 SDK, which
+Cloud builds never met this. `eas.json` then pinned the image
+`macos-tahoe-26.5-xcode-26.6`, so they used Xcode 26.6 and the iOS 26.5 SDK, which
 does not demand scenes. **`eas build --local` ignores `image`** and uses
 whatever Xcode the Mac has, so the local route had silently changed toolchain.
 The `.ipa` said so, for anyone who looked: `DTXcode` 2700, `DTSDKName`
@@ -366,7 +366,7 @@ submitted, and that is the bigger failure.
 
 **The rule: a local iOS build uses the Xcode in `eas.json`'s image.** The
 script reads the version from the `staging` profile's `ios.image`
-(`…-xcode-26.6` → 26.6), looks for an Xcode of that major.minor (`DEVELOPER_DIR`
+(`…-xcode-27.0` → 27.0), looks for an Xcode of that major.minor (`DEVELOPER_DIR`
 if set, then every `/Applications/Xcode*.app`), and exports `DEVELOPER_DIR` to
 it for the build. `xcode-select` is not touched. The Xcode it used is the
 `Xcode:` line at the top of the log, and the smoke test checks that the `.ipa`'s
@@ -374,11 +374,11 @@ it for the build. `xcode-select` is not touched. The Xcode it used is the
 it; Android still ships:
 
 ```bash
-brew install xcodesorg/made/xcodes && xcodes install 26.6   # asks for an Apple ID
+brew install xcodesorg/made/xcodes && xcodes install 27.0   # asks for an Apple ID
 ```
 
-or `Xcode_26.6.xip` from <https://developer.apple.com/download/all/>, moved to
-`/Applications/Xcode-26.6.app`. Several Xcodes live side by side; nothing else
+or the Xcode 27.0 `.xip` from <https://developer.apple.com/download/all/>, moved to
+`/Applications/Xcode-27.0.app`. Several Xcodes live side by side; nothing else
 needs to change. When `eas.json` moves to a new image, the Mac needs that Xcode
 too.
 
@@ -390,12 +390,16 @@ smoke test on the iOS 27.0 simulator with build 118's exact exception, and an
 Xcode 26.6 build of the same commit passed there. On an iOS 26 runtime both
 would have passed.
 
-**The long-term fix is to adopt the UIScene lifecycle** (a scene manifest in
-`Info.plist` and a scene delegate that owns the window, which Expo's
-`ExpoAppDelegate` has to support too), before Apple starts requiring the iOS 27
-SDK for App Store Connect uploads, as it required iOS 26's on 28 April 2026 (see
-*Xcode 26 is required for TestFlight too*, below). Not done yet; it is a
-follow-up. Until then Xcode 27 cannot build this app for release.
+**The fix was to adopt the UIScene lifecycle, and that is done** (#309,
+2026-09-28). `ios/blendn/SceneDelegate.swift` subclasses Expo SDK 57's
+`ExpoAppSceneDelegate`, which owns the window and passes cold-start links on to
+`Linking`. `Info.plist` and `app.json` declare the scene manifest, and
+`__tests__/sceneLifecycle.test.ts` pins all of it. Xcode 27 Release builds were
+then driven on the iOS 27.0 simulator: links, push taps, the sign-in sheets, and
+sign-out, with no crash. After that, `eas.json` moved to Xcode 27.0 (see *Xcode
+26 is required for TestFlight too*, below), ahead of Apple requiring the iOS 27
+SDK for App Store Connect uploads, as it required iOS 26's on 28 April 2026.
+Removing the scene delegate now brings build 118's crash back.
 
 ### Nothing is submitted until it launches
 
@@ -462,7 +466,7 @@ missing one fails before the version counter moves.
 
 | | |
 |---|---|
-| Xcode | **The version in `eas.json`'s `staging` image**, 26.6 today, not a beta. Others may be installed beside it. See *Build 118, and the Xcode rule* |
+| Xcode | **The version in `eas.json`'s `staging` image**, 27.0 today, not a beta. Others may be installed beside it. See *Build 118, and the Xcode rule* |
 | iOS simulator runtime | The newest iOS, for the smoke test: `xcodebuild -downloadPlatform iOS` with the newest Xcode. The newest installed is used |
 | CocoaPods | `pod` on `PATH` |
 | fastlane | `brew install fastlane`. The iOS build runs it |
@@ -1135,13 +1139,25 @@ Connect or submitted for distribution.
 Nothing in the CLI output tells you. Build 102 went through the whole pipeline —
 built, submitted, "scheduled" — and died in App Store Connect afterwards.
 
-**On SDK 57 the pin is `macos-tahoe-26.5-xcode-26.6`, on both profiles in
-`eas.json`.** SDK 57 needs Xcode 26.4 or newer (`expo-doctor` checks
-`>=26.4.0`), so the Xcode 26.0 image that carried SDK 53 through Apple's deadline
-can no longer build it. This is the image Expo pairs with SDK 57.
+**On SDK 57 the pin is `macos-tahoe-26.6-xcode-27.0`, on both profiles in
+`eas.json`** (since 2026-09-28; before that it was `macos-tahoe-26.5-xcode-26.6`).
+SDK 57 needs Xcode 26.4 or newer (`expo-doctor` checks `>=26.4.0`).
+
+* **Xcode 27 needs the UIScene lifecycle.** Without it the app does not launch
+  (build 118). #309 added it.
+* **It is 27.0, not 27.1.** 27.1 is a beta (27A9269, 18 September 2026), and
+  App Store Connect does not take uploads built with a beta Xcode. EAS also
+  offers `macos-tahoe-26.6-xcode-27.1`; don't use it until 27.1 is released.
+* **Expo's image table may not list it.** On 2026-09-28 the table at
+  <https://docs.expo.dev/build-reference/infrastructure/> still stopped at 26.6,
+  but EAS builds with this image. Other projects' EAS builds on it succeed, and
+  `latest` stays on 26.6. The image name is only checked when a cloud build
+  starts; `eas.json` validation accepts any string.
+* **This Mac's Xcode 27.0 is 27A266a.** `ship:local` requires the image's
+  major.minor, so moving the pin means installing that Xcode first.
 
 ```json
-"ios": { "image": "macos-tahoe-26.5-xcode-26.6" }
+"ios": { "image": "macos-tahoe-26.6-xcode-27.0" }
 ```
 
 **A build on a Mac does not read that pin.** `eas build --local` uses the Mac's
