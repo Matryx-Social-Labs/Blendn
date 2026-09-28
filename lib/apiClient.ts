@@ -842,7 +842,7 @@ let refreshPromise: Promise<RefreshOutcome> | null = null
  * tokens alone; the next 401 tries again, and the server re-issues on a
  * replay inside its grace window.
  */
-type RefreshOutcome = 'ok' | 'rejected' | 'failed'
+export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 
 /**
  * After a refresh that never completed: try again at 2 s, 5 s and 10 s, in
@@ -1494,6 +1494,17 @@ class ApiClientClass {
 
   async refreshSession(): Promise<boolean> {
     return (await this.refreshTokens()) === 'ok'
+  }
+
+  /**
+   * The same refresh, with the three answers kept apart.
+   *
+   * `refreshSession` folds 'failed' into `false`, and a caller deciding
+   * whether to sign somebody out cannot use that: a launch on a train read
+   * "no answer" as "refused" and cleared a perfectly good session.
+   */
+  async refreshSessionOutcome(): Promise<RefreshOutcome> {
+    return this.refreshTokens()
   }
 
   // === EVENT ENDPOINTS ===

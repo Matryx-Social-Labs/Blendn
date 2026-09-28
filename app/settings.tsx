@@ -7,8 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { apiClient } from '../lib/apiClient'
-import { COMMUNITY_GUIDELINES_URL } from '../lib/communityGuidelines'
+import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
+import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
@@ -44,15 +45,6 @@ const DEFAULT_PREFERENCES: PreferencesState = {
 
 const toBoolean = (value: unknown, fallback: boolean) =>
   typeof value === 'boolean' ? value : fallback
-
-const BLENDN_LINKS = {
-  safety: 'https://blendn.app/safety',
-  guidelines: COMMUNITY_GUIDELINES_URL,
-  help: 'https://blendn.app/help',
-  terms: 'https://blendn.app/terms',
-  privacy: 'https://blendn.app/privacy',
-  deleteAccount: 'https://www.blendn.app/delete-account',
-} as const
 
 export default function SettingsScreen() {
   const { user } = useAuth()
@@ -202,7 +194,8 @@ export default function SettingsScreen() {
 
       if (key === 'pushEnabled') {
         if (next.pushEnabled) {
-          initializePushNotifications().catch(() => {})
+          // Turning it on is the answer onboarding's "Maybe later" deferred.
+          void clearPushDeclined(user.id).then(() => initializePushNotifications()).catch(() => {})
         } else {
           removePushTokenFromProfile().catch(() => {})
         }

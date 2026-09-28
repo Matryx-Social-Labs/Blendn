@@ -10,7 +10,9 @@ Each carries a red `PLACEHOLDER DESIGN` banner on screen so nobody mistakes one
 for finished work in a demo — except `app/sign-in.tsx` (sign in / create
 account), whose banner was removed on 2026-09-21 at the product owner's
 request; the screen is still provisional in layout, the label just no longer
-says so to testers.
+says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
+was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
+(Open mail app, Resend with a 30-second cooldown).
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
@@ -72,7 +74,7 @@ index.tsx                     sign-in.tsx                    forgot-password.tsx
 |---|---|---|
 | `index.tsx` | `useAuth().user`, `.loading` | `signInWithGoogle`, `signInWithApple` |
 | `sign-in.tsx` | nothing | `signUp` / `signInWithEmail` → `/auth/signup`, `/auth/signin` |
-| `forgot-password.tsx` | nothing | `apiClient.forgotPassword` → `/api/auth/forgot-password` |
+| `forgot-password.tsx` | `email` param from sign-in | `apiClient.forgotPassword` → `/api/auth/forgot-password` |
 
 **No screen navigates on success.** The root layout's routing effect watches
 auth state and moves the user. Navigating from a screen as well races it — this
@@ -82,7 +84,6 @@ is why the Google and Apple handlers have no `router` call either.
 
 | | |
 |---|---|
-| **Terms and Privacy are not links** | The text is there; there are no URLs behind it. App Review will check this |
 | **Email verification** | Cut from this scope by decision. Nothing sends a verification mail, and `signin` does not gate on `emailVerified` |
 | **Reset happens in a browser** | The emailed link opens the web page. Deep-linking it into the app needs associated domains, DNS and a native rebuild |
 | **The Google mark is a monochrome glyph** | `AntDesign`, chosen to avoid a new dependency. Google's guidelines ask for their supplied multicolour asset — swap before store submission |

@@ -86,4 +86,4 @@ export async function consumeSessionEndedNotice(): Promise<string | boolean> {
 }
 
 /** What the entry screen says. Plain: what happened, and what to do. */
-export const SESSION_ENDED_NOTICE = 'You were signed out. Sign in again to pick up where you left off.'
+export const SESSION_ENDED_NOTICE = 'You were signed out. Sign in again to carry on.'

@@ -203,7 +203,13 @@ describe('"Maybe later" is an answer, and gets recorded', () => {
      * behaviour the code did not have.
      */
     const src = read(file)
-    expect(src).toMatch(new RegExp(`onSecondary=\\{\\(\\) => void commit\\(\\{ ${field}: false \\}\\)\\}`))
+    // Directly, or through the notifications step's `answer`, which also
+    // remembers the decline so push start-up does not ask the OS.
+    const direct = new RegExp(`onSecondary=\\{\\(\\) => void commit\\(\\{ ${field}: false \\}\\)\\}`)
+    const viaAnswer =
+      /onSecondary=\{\(\) => void answer\(false\)\}/.test(src) &&
+      new RegExp(`await commit\\(\\{ ${field}: enabled \\}\\)`).test(src)
+    expect(direct.test(src) || viaAnswer).toBe(true)
     // And the decline path no longer reaches `skip`, which is what wrote nothing.
     expect(src).not.toMatch(/onSecondary=\{\(\) => void skip\(\)\}/)
   })
