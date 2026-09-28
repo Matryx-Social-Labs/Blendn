@@ -37,6 +37,10 @@
         "backgroundColor": "#F05524"
       },
       "package": "com.matryxsociallabs.blendn",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
