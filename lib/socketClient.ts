@@ -130,6 +130,8 @@ export interface ServerToClientEvents {
     messageIds: string[]
     readBy: string
   }) => void
+  /** These messages reached the other person's app: ✓✓ delivered (SCRUM-408). */
+  "private:delivered": (data: { conversationId: string; messageIds: string[] }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
@@ -172,6 +174,7 @@ interface ClientToServerEvents {
   "private:startTyping": (conversationId: string) => void
   "private:stopTyping": (conversationId: string) => void
   "private:markRead": (conversationId: string, messageIds: string[]) => void
+  "private:delivered": (conversationId: string, messageIds: string[]) => void
   ping: () => void
 }
 
@@ -295,6 +298,10 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 const bellSubscriptions = new Set<BellCallback>()
+type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
+const deliveredSubscriptions = new Set<DeliveredCallback>()
+/** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
+let myUserId: string | null = null
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -569,6 +576,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("connected", (data) => {
     Logger.info("socket", "Authenticated", { userId: data.userId })
+    myUserId = data.userId
   })
 
   sock.on("error", (data) => {
@@ -672,6 +680,15 @@ function setupSocketHandlers(sock: TypedSocket): void {
   // Private messaging updates
   sock.on("private:message", (data) => {
     markDomainsDirty(["chat", "match"])
+    /*
+     * The app has it: tell the sender ✓✓ (SCRUM-408). Here rather than in a
+     * screen, because a message delivered to the Banter or to a screen that
+     * never opened the thread is still delivered.
+     */
+    const incoming = data.message as { id?: string; senderId?: string } | undefined
+    if (incoming?.id && myUserId && incoming.senderId !== myUserId) {
+      sock.emit("private:delivered", data.conversationId, [incoming.id])
+    }
     // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
@@ -704,6 +721,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("private:read", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateReadCallback)(data))
+  })
+
+  sock.on("private:delivered", (data) => {
+    deliveredSubscriptions.forEach((cb) => cb(data))
   })
 }
 
@@ -1116,6 +1137,14 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   roomWaveSubscriptions.add(callback)
   return () => {
     roomWaveSubscriptions.delete(callback)
+  }
+}
+
+/** Your messages reached their app: ✓✓ delivered (SCRUM-408). */
+export function subscribeToDelivered(callback: DeliveredCallback): () => void {
+  deliveredSubscriptions.add(callback)
+  return () => {
+    deliveredSubscriptions.delete(callback)
   }
 }
 

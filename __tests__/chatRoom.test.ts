@@ -423,7 +423,7 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   it('shows a receipt only on your own messages', () => {
     // …and not on one that never arrived.
     // …and not on one still on this phone (sending, or failed).
-    expect(DM()).toContain("receipt={isMe && !isLocalMessage(item) ? (item.isRead ? 'read' : 'sent') : null}")
+    expect(DM()).toContain("receipt={isLocalMessage(item) ? null : receiptFor(item, authUser?.id)}")
   })
 
   it('keeps receipts out of the room', () => {

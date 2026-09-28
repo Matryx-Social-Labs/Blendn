@@ -134,3 +134,18 @@ describe('coming back from the background', () => {
     now.mockRestore()
   })
 })
+
+describe('delivery acks (SCRUM-408)', () => {
+  it("acks a DM from somebody else the moment it arrives, and never your own", async () => {
+    const s = await connected()
+    const emitted: unknown[][] = []
+    s.emit = ((...args: unknown[]) => {
+      emitted.push(args)
+      return s
+    }) as never
+    s.fire('connected', { userId: 'me' })
+    s.fire('private:message', { conversationId: 'c1', message: { id: 'm1', senderId: 'them' } })
+    s.fire('private:message', { conversationId: 'c1', message: { id: 'm2', senderId: 'me' } })
+    expect(emitted).toEqual([['private:delivered', 'c1', ['m1']]])
+  })
+})

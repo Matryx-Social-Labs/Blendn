@@ -91,7 +91,7 @@ export interface ChatBubbleProps {
    * times, so a tick would either lie or need twenty answers. A DM has one
    * reader and one answer.
    */
-  receipt?: 'sent' | 'read' | null
+  receipt?: 'sent' | 'delivered' | 'read' | null
   /**
    * Arrives with a short rise instead of appearing in one frame.
    *
@@ -202,9 +202,9 @@ function ChatBubbleBase({
               {mine && receipt ? (
                 <Text
                   style={[styles.receipt, receipt === 'read' && styles.receiptRead]}
-                  accessibilityLabel={receipt === 'read' ? 'Read' : 'Sent'}
+                  accessibilityLabel={receipt === 'read' ? 'Read' : receipt === 'delivered' ? 'Delivered' : 'Sent'}
                 >
-                  {receipt === 'read' ? '✓✓' : '✓'}
+                  {receipt === 'sent' ? '✓' : '✓✓'}
                 </Text>
               ) : null}
             </>

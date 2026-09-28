@@ -47,10 +47,13 @@ import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { useFollowEnd } from '../../lib/useFollowEnd'
+import { newClientId } from '../../lib/clientId'
+import { ReplyBar } from '../../components/chat/ReplyBar'
+import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
-import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface Message {
   message_id: string
@@ -59,6 +62,8 @@ interface Message {
   message_text: string
   message_type: string
   reply_to_message_id: string | null
+  /** This send's own id, kept on the optimistic row so a retry is the same send (SCRUM-410). */
+  client_id?: string
   is_edited: boolean
   created_at: string
   /** Hidden by moderation. Only ever true on the sender's own messages. */
@@ -626,7 +631,14 @@ function GroupChatInner() {
    */
   const deliver = async (optimistic: Message) => {
     try {
-      const result = await apiClient.sendChatMessage(chatRoomId as string, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
+      const result = await apiClient.sendChatMessage(
+        chatRoomId as string,
+        optimistic.message_text,
+        'text',
+        undefined,
+        optimistic.reply_to_message_id ?? undefined,
+        optimistic.client_id
+      )
       /*
        * Every answer re-decides the lock: a refusal sets it, and a send that
        * got through lifts it. A mute ends on the server only when a send is
@@ -702,6 +714,7 @@ function GroupChatInner() {
       message_text: messageText,
       message_type: 'text',
       reply_to_message_id: replyingTo ? replyingTo.message_id : null,
+      client_id: newClientId(),
       is_edited: false,
       created_at: new Date().toISOString(),
       replyTo: replyingTo || undefined,
@@ -899,6 +912,7 @@ function GroupChatInner() {
     }
 
     return (
+      <SwipeToReply enabled={!item.removed && !item.failed} onReply={() => setReplyingTo(item)}>
       <ChatBubble
         mine={isMe}
         /*
@@ -924,6 +938,7 @@ function GroupChatInner() {
         onRetry={item.failed ? () => retrySend(item) : undefined}
         onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
+      </SwipeToReply>
     )
   }
 
@@ -1075,23 +1090,13 @@ function GroupChatInner() {
           </Animated.View>
         )}
 
-        {replyingTo && (
-          <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.replyBar}>
-            <View style={styles.replyBarLine} />
-            <View style={styles.replyBarContent}>
-              <Text style={styles.replyBarLabel} numberOfLines={1}>Replying to {replyingTo.sender_name}</Text>
-              <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.replyBarClose, pressed && styles.pressed]}
-              onPress={() => setReplyingTo(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel reply"
-            >
-              <Ionicons name="close" size={ICON.md} color={EMBER.textSecondary} />
-            </Pressable>
-          </Animated.View>
-        )}
+        {replyingTo ? (
+          <ReplyBar
+            name={replyingTo.sender_name}
+            text={replyingTo.message_text}
+            onCancel={() => setReplyingTo(null)}
+          />
+        ) : null}
 
         <ChatComposer
           value={newMessage}
@@ -1144,20 +1149,7 @@ const styles = StyleSheet.create({
 
   // Typing
 
-  // Reply bar above input
-  replyBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: GUTTER, paddingVertical: SPACE.sm,
-    backgroundColor: EMBER.surfaceSunken,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: EMBER.separator,
-    gap: SPACE.md,
-  },
-  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.textSecondary, borderRadius: EMBER_RADIUS.pill },
-  replyBarContent: { flex: 1 },
-  replyBarLabel: { ...TYPE.caption, color: EMBER.textPrimary },
-  replyBarMessage: { ...TYPE.meta, color: EMBER.textSecondary },
-  // A `CONTROL.md` target: the glyph alone was a 24pt tap beside the composer.
-  replyBarClose: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
+
 
   // Input bar
 
