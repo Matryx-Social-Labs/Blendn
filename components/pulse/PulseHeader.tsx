@@ -84,7 +84,7 @@ export function PulseHeader({
   query,
   onChangeQuery,
   onSubmitQuery,
-  placeholder = 'Search experiences...',
+  placeholder = 'Search events…',
   searching = false,
   onPressFilter,
   activeFilterCount = 0,
@@ -188,7 +188,7 @@ export function PulseHeader({
           placeholderTextColor={EMBER.textPlaceholder}
           returnKeyType="search"
           autoCorrect={false}
-          accessibilityLabel="Search experiences"
+          accessibilityLabel="Search events"
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={styles.searchInput}
@@ -233,10 +233,9 @@ export function PulseHeader({
             pressedScale={0.9}
             onPress={onPressFilter}
             accessibilityRole="button"
-            accessibilityLabel={
-              activeFilterCount > 0
-                ? `Filters, ${activeFilterCount} active. Change filters`
-                : 'Filter events'
+            accessibilityLabel="Filters"
+            accessibilityValue={
+              activeFilterCount > 0 ? { text: `${activeFilterCount} active` } : undefined
             }
             style={styles.filterAction}
           >

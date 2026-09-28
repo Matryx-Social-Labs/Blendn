@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useMemo } from 'react'
-import { Image } from 'expo-image'
 import { StyleSheet, Text, View } from 'react-native'
 import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE, tint } from '../lib/theme'
 import ScalePress from './motion/ScalePress'
+import { OptimizedImage } from './OptimizedImage'
 
 type NearbyEvent = {
   id: string
@@ -26,6 +26,8 @@ interface NearbyEventCardProps {
 }
 
 const ASPECT_RATIO = 363 / 249
+/** Hoisted so the prop keeps one identity across renders. */
+const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
 /** For placeholders that have to be this card's shape (nearby-events loading). */
 export const NEARBY_CARD_ASPECT = ASPECT_RATIO
 
@@ -33,19 +35,34 @@ export const NEARBY_CARD_ASPECT = ASPECT_RATIO
 export default function NearbyEventCard({ event, width, onPress, onLongPress, timeLabel, locationLabel }: NearbyEventCardProps) {
   const height = useMemo(() => width / ASPECT_RATIO, [width])
 
-  const radiusImage = EMBER_RADIUS.lg
+  // A large card: `card`, the same radius as the Featured photo.
+  const radiusImage = EMBER_RADIUS.card
 
-  // Shrinks under the finger, no haptic: a card in a scrolling list is touched
-  // on the way into every scroll.
+  /*
+   * Shrinks under the finger, no haptic: a card in a scrolling list is touched
+   * on the way into every scroll.
+   *
+   * No margin of its own: the list it sits in owns the gap between cards (the
+   * Pulse's stack gap, the Nearby screen's row wrapper). A card that also
+   * carried a margin made the two gaps add up differently on each screen.
+   */
   return (
     <ScalePress
       haptic={false}
       onPress={() => onPress?.(event)}
-      onLongPress={() => onLongPress?.(event)}
+      onLongPress={onLongPress ? () => onLongPress(event) : undefined}
       delayLongPress={320}
-      style={{ width, marginBottom: SPACE.lg, alignSelf: 'center' }}
+      style={{ width, alignSelf: 'center' }}
       accessibilityRole="button"
-      accessibilityLabel={`Open event ${event.title}`}
+      accessibilityLabel={[event.title, timeLabel, locationLabel].filter(Boolean).join(', ')}
+      accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
+      onAccessibilityAction={
+        onLongPress
+          ? (e) => {
+              if (e.nativeEvent.actionName === 'quickActions') onLongPress(event)
+            }
+          : undefined
+      }
     >
       {/*
         The frame is chosen by whether there is an image. The CONTENT is not.
@@ -71,10 +88,11 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
           <View
             pointerEvents="none"
             style={{
+              // `xl`, the card padding: at the `card` radius a 16 inset sat in the curve.
               position: 'absolute',
-              left: SPACE.lg,
-              right: SPACE.lg,
-              bottom: SPACE.lg,
+              left: SPACE.xl,
+              right: SPACE.xl,
+              bottom: SPACE.xl,
             }}
           >
             <Text
@@ -84,22 +102,21 @@ export default function NearbyEventCard({ event, width, onPress, onLongPress, ti
               {event.title}
             </Text>
 
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: '55%' }}>
-                <Ionicons name="time-outline" size={ICON.sm} color={EMBER.textPrimary} />
-                <Text numberOfLines={1} style={{ ...TYPE.meta, color: EMBER.textPrimary }}>{timeLabel}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, maxWidth: '40%' }}>
-                <Ionicons name="map-outline" size={ICON.sm} color={EMBER.textPrimary} />
-                <Text numberOfLines={1} style={{ ...TYPE.meta, color: EMBER.textPrimary }}>{locationLabel}</Text>
-              </View>
+            {/*
+              One line each. The time used to share a row with the venue and
+              was capped at 55% of it, which cut "Tomorrow · 9:00 PM" to
+              "Tomorrow · 9…" on a phone; the date is the part that matters.
+            */}
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={ICON.sm} color={EMBER.textPrimary} />
+              <Text numberOfLines={1} style={styles.metaText}>{timeLabel}</Text>
             </View>
+            {locationLabel ? (
+              <View style={[styles.metaItem, styles.metaGap]}>
+                <Ionicons name="map-outline" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text numberOfLines={1} style={styles.metaText}>{locationLabel}</Text>
+              </View>
+            ) : null}
           </View>
       </Frame>
     </ScalePress>
@@ -142,12 +159,15 @@ function Frame({
       // expo-image so the photo fades in (150ms) over the placeholder colour
       // instead of snapping in a beat after the text; ImageBackground cannot.
       <View style={[styles.placeholder, { width: '100%', height, borderRadius: radius, overflow: 'hidden' }]}>
-        <Image
-          source={{ uri: source }}
-          style={StyleSheet.absoluteFill}
+        {/* Sized, so the CDN serves this card's pixels rather than the original upload. */}
+        <OptimizedImage
+          source={source}
+          recyclingKey={source}
+          style={StyleSheet.absoluteFill as never}
+          width={width}
+          height={height}
           contentFit="cover"
           transition={150}
-          cachePolicy="memory-disk"
         />
         {gradient}
         {children}
@@ -164,6 +184,9 @@ function Frame({
 }
 
 const styles = StyleSheet.create({
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  metaGap: { marginTop: SPACE.xs },
+  metaText: { ...TYPE.meta, color: EMBER.textPrimary, flexShrink: 1 },
   placeholder: {
     backgroundColor: EMBER.surface,
   },

@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, typ
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { EMBER, EMBER_RADIUS, GUTTER, SPACE, tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
+import { useReducedMotion } from 'react-native-reanimated'
 
 /**
  * The hero's media: a swipeable pager that also advances on its own.
@@ -73,6 +74,7 @@ export function SceneHeroMedia({
    */
   const [settled, setSettled] = useState(0)
   const [manual, setManual] = useState(false)
+  const reduceMotion = useReducedMotion()
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -81,7 +83,7 @@ export function SceneHeroMedia({
 
   const goTo = (next: number) => {
     const wrapped = ((next % playlist.length) + playlist.length) % playlist.length
-    scrollRef.current?.scrollTo({ x: wrapped * width, animated: true })
+    scrollRef.current?.scrollTo({ x: wrapped * width, animated: !reduceMotion })
     setIndex(wrapped)
     /*
      * `onMomentumScrollEnd` does not fire reliably for a programmatic
@@ -102,8 +104,11 @@ export function SceneHeroMedia({
    * exact complements and were written as two expressions in two places. The
    * day they disagreed a clip would either freeze on its last frame or loop
    * forever while the timer tried to move past it.
+   *
+   * Never under Reduce Motion: a page sliding away on its own is exactly the
+   * motion that setting asks us not to start. The viewer swipes, clips loop.
    */
-  const autoAdvances = !manual && playlist.length > 1
+  const autoAdvances = !manual && !reduceMotion && playlist.length > 1
   const autoAdvancesRef = useRef(autoAdvances)
 
   // The three refs above, refreshed on every commit rather than during render.
@@ -121,14 +126,14 @@ export function SceneHeroMedia({
   }, [])
 
   useEffect(() => {
-    if (manual || playlist.length < 2) return
+    if (!autoAdvances) return
     // Guarded on `image` rather than cancelled inside the video branch: a timer
     // that exists and is cancelled elsewhere is one somebody eventually forgets
     // to cancel. While a clip plays there is simply no interval.
     if (current?.kind !== 'image') return
     const id = setTimeout(() => goToRef.current(indexRef.current + 1), IMAGE_DWELL_MS)
     return () => clearTimeout(id)
-  }, [manual, index, current?.kind, playlist.length])
+  }, [autoAdvances, index, current?.kind])
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)

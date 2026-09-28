@@ -462,6 +462,16 @@ export default function TabLayout() {
   const blendnOpen = useBlendnOpen()
   return (
     <View style={styles.host}>
+    {/*
+      While Blend'n is open the tabs and the bar under it are hidden from
+      VoiceOver and TalkBack: an overlay that only looks modal let a swipe
+      walk straight past the room into "Pulse tab".
+    */}
+    <View
+      style={styles.tabs}
+      accessibilityElementsHidden={blendnOpen}
+      importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}
+    >
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -498,12 +508,17 @@ export default function TabLayout() {
       <Tabs.Screen name="chat" options={{ title: 'Banter' }} />
       <Tabs.Screen name="profile" options={{ title: 'Me' }} />
     </Tabs>
+    </View>
       {/*
         The Blend'n screen, over the tabs *and* the bar, under the root stack.
         An overlay rather than a route so a profile, a DM or the room chat
         pushed from it lands on top of it — see `lib/blendnOverlay.ts`.
       */}
-      {blendnOpen ? <BlendnScreen /> : null}
+      {blendnOpen ? (
+        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal pointerEvents="box-none">
+          <BlendnScreen />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -570,6 +585,7 @@ export function tabBarTop(screenHeight: number, bottomInset: number) {
 
 const styles = StyleSheet.create({
   host: { flex: 1, backgroundColor: EMBER.bg },
+  tabs: { flex: 1 },
   /*
    * Frame `1141:4827`, measured rather than guessed.
    *

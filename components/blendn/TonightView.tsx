@@ -250,7 +250,7 @@ export function VenuePass({
       </View>
       {tasteMatchCount && tasteMatchCount > 0 ? <Teaser count={tasteMatchCount} /> : null}
       <HoldToConfirm
-        label="Hold to check in"
+        label="Hold to blend in"
         icon="finger-print"
         busy={busy}
         busyLabel="Checking you in…"
@@ -340,7 +340,7 @@ export function TonightView({
               {list.length > 0 ? (
                 <Pressable
                   onPress={onSeeAll}
-                  hitSlop={12}
+                  hitSlop={SPACE.md}
                   style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
                   accessibilityRole="button"
                   accessibilityLabel="See everything nearby"
@@ -376,7 +376,9 @@ export function TonightView({
                 Check your connection and try again.
               </Text>
               <ScalePress onPress={onRetry} style={styles.browse} accessibilityRole="button">
-                <Text variant="button">Try again</Text>
+                <Text variant="button" color={EMBER.onGradient}>
+                  Try again
+                </Text>
               </ScalePress>
             </View>
           ) : list.length === 0 && !insideEvent ? (
@@ -387,7 +389,9 @@ export function TonightView({
                 Save something on the Pulse and it shows up here on the night.
               </Text>
               <ScalePress onPress={onBrowse} style={styles.browse} accessibilityRole="button">
-                <Text variant="button">Browse the Pulse</Text>
+                <Text variant="button" color={EMBER.onGradient}>
+                  Browse the Pulse
+                </Text>
               </ScalePress>
             </View>
           ) : list.length > 0 ? (
@@ -468,12 +472,13 @@ const styles = StyleSheet.create({
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xxs },
   empty: { alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER, paddingTop: SPACE.xxl },
   centre: { textAlign: 'center' },
+  // An empty or error state's one action is that state's primary: the accent.
   browse: {
     marginTop: SPACE.md,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.accent,
     justifyContent: 'center',
   },
   passDock: { paddingHorizontal: SPACE.md, paddingTop: SPACE.xs },

@@ -3,6 +3,7 @@ import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
+    AppState,
     Dimensions,
     FlatList,
     Linking,
@@ -22,7 +23,7 @@ import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
 import { MOTION_STAGGER } from '../lib/motion'
-import { formatTimeRange } from '../lib/time'
+import { featuredDateLabel, timeLabel } from '../lib/pulse'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
 
@@ -45,6 +46,9 @@ type Event = BlendnEvent
  */
 
 const screenW = Dimensions.get('window').width
+
+/** An empty state's illustration, not an inline icon (DESIGN_SYSTEM: 28+). */
+const EMPTY_ICON = ICON.lg * 2
 
 /*
  * The rows that fade up when the list first appears — about a screenful. Rows
@@ -71,11 +75,13 @@ export default function NearbyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
+  // Permission granted, but no fix: GPS off, indoors, timed out. Not "no events".
+  const [locationFailed, setLocationFailed] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const mountedRef = useRef(true)
   // The same floor as the home screen, so a fast load doesn't flash the placeholders.
   const showSkeleton = useMinimumVisible(loading, 720)
-  const showList = !showSkeleton && !locationDenied && events.length > 0
+  const showList = !showSkeleton && !locationDenied && !locationFailed && events.length > 0
   // False until the list has committed once: the rows in its first render stagger in.
   const listRevealedRef = useRef(false)
 
@@ -96,13 +102,22 @@ export default function NearbyEventsScreen() {
           setLocationDenied(true)
           return null
         }
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-        const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
-        setUserLocation(coords)
         setLocationDenied(false)
-        return coords
+        try {
+          const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+          const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+          setUserLocation(coords)
+          setLocationFailed(false)
+          return coords
+        } catch {
+          setLocationFailed(true)
+          return null
+        }
       })
-      .catch(() => null), [])
+      .catch(() => {
+        setLocationFailed(true)
+        return null
+      }), [])
 
   const loadEvents = useCallback((force = false) =>
     Promise.resolve(userLocation || getLocation())
@@ -165,6 +180,35 @@ export default function NearbyEventsScreen() {
     loadEvents(true)
   }, [loadEvents])
 
+  /*
+   * Back from Settings with location turned on: try again without making
+   * somebody find a button. Only while denied — a foreground is otherwise not
+   * a reason to refetch a list they are reading — and only once the setting
+   * really changed: checked without asking, because on Android a request can
+   * put the permission dialog back up, and closing it is another 'active'.
+   */
+  useEffect(() => {
+    if (!locationDenied) return
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return
+      Location.getForegroundPermissionsAsync()
+        .then(({ status }) => {
+          if (status === 'granted' && mountedRef.current) {
+            setLoading(true)
+            void loadEvents(true)
+          }
+        })
+        .catch(() => {})
+    })
+    return () => sub.remove()
+  }, [locationDenied, loadEvents])
+
+  const retryLocation = useCallback(() => {
+    setLoading(true)
+    setLocationFailed(false)
+    void loadEvents(true)
+  }, [loadEvents])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await loadEvents(true)
@@ -219,7 +263,8 @@ export default function NearbyEventsScreen() {
           event={item as any}
           width={cardWidth}
           onPress={handleEventPress as any}
-          timeLabel={formatTimeRange(item.start_time, item.end_time)}
+          // The day as well as the hour: "9:00 PM" alone could be any night.
+          timeLabel={`${featuredDateLabel(item.start_time)} · ${timeLabel(item.start_time)}`}
           locationLabel={distLabel || item.venue_name || item.address || ''}
         />
       </RevealRow>
@@ -241,7 +286,7 @@ export default function NearbyEventsScreen() {
         >
           <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
         </ScalePress>
-        <Text style={styles.headerTitle} accessibilityRole="header">Nearby Events</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Nearby events</Text>
         {/* The back button's width less its negative margin, so the title stays centred. */}
         <View style={{ width: CONTROL.md - SPACE.md }} />
       </View>
@@ -257,9 +302,9 @@ export default function NearbyEventsScreen() {
         </View>
       ) : locationDenied ? (
         <FadeInUp style={styles.empty}>
-          <Ionicons name="location-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
+          <Ionicons name="location-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>Location access needed</Text>
-          <Text style={styles.emptySub}>Enable location to see events near you.</Text>
+          <Text style={styles.emptySub}>Turn on location to see events near you.</Text>
           <ScalePress
             style={styles.settingsBtn}
             onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
@@ -268,9 +313,18 @@ export default function NearbyEventsScreen() {
             <Text style={styles.settingsBtnText}>Open Settings</Text>
           </ScalePress>
         </FadeInUp>
+      ) : locationFailed ? (
+        <FadeInUp style={styles.empty}>
+          <Ionicons name="navigate-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>Location unavailable</Text>
+          <Text style={styles.emptySub}>Couldn&apos;t find where you are. Try again in a moment.</Text>
+          <ScalePress style={styles.settingsBtn} onPress={retryLocation} accessibilityRole="button">
+            <Text style={styles.settingsBtnText}>Try again</Text>
+          </ScalePress>
+        </FadeInUp>
       ) : events.length === 0 && loadFailed ? (
         <FadeInUp style={styles.empty}>
-          <Ionicons name="cloud-offline-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
+          <Ionicons name="cloud-offline-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
           <Text style={styles.emptySub}>Check your connection and try again.</Text>
           <ScalePress
@@ -281,14 +335,22 @@ export default function NearbyEventsScreen() {
             }}
             accessibilityRole="button"
           >
-            <Text style={styles.settingsBtnText}>Retry</Text>
+            <Text style={styles.settingsBtnText}>Try again</Text>
           </ScalePress>
         </FadeInUp>
       ) : events.length === 0 ? (
         <FadeInUp style={styles.empty}>
-          <Ionicons name="calendar-outline" size={48} color={EMBER.textSecondary} style={{ marginBottom: SPACE.md }} />
+          <Ionicons name="calendar-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>No nearby events</Text>
           <Text style={styles.emptySub}>There are no events near your current location.</Text>
+          {/* A way on from a dead end: everything in the city, not just nearby. */}
+          <ScalePress
+            style={styles.settingsBtn}
+            onPress={() => router.navigate('/(tabs)/events' as any)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Browse events</Text>
+          </ScalePress>
         </FadeInUp>
       ) : (
         <FlatList
@@ -318,6 +380,7 @@ const styles = StyleSheet.create({
   backBtn: { width: CONTROL.md, height: CONTROL.md, marginLeft: -SPACE.md, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...TYPE.heading },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
+  emptyIcon: { marginBottom: SPACE.md },
   emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
   emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
   settingsBtn: {
@@ -333,10 +396,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     paddingBottom: SPACE.xl,
   },
-  // The card carries SPACE.lg below it; this makes the gap between cards GUTTER.
+  // The whole gap between cards: GUTTER. The card carries no margin of its own.
   cardWrapper: {
-    marginBottom: SPACE.sm,
+    marginBottom: SPACE.xl,
   },
-  // The card's own bottom margin, which `NearbyEventCard` sets on itself.
-  skeletonCard: { paddingBottom: SPACE.lg, alignSelf: 'center' },
+  // Stands in for the next row's gap, so the placeholders sit where the cards will.
+  skeletonCard: { paddingBottom: SPACE.xl, alignSelf: 'center' },
 })
