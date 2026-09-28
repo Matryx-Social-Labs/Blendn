@@ -20,6 +20,7 @@ import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRo
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
+import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
 import { initSentry, Sentry } from '../lib/sentry';
@@ -689,7 +690,9 @@ function RootLayout() {
       <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/requests" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      {/* A room's info, from the options button in its header. */}
+      <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,
@@ -703,6 +706,13 @@ function RootLayout() {
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
           {user ? <PresenceMonitor /> : null}
+          {/*
+            The one sheet the safety flows and message menus open from
+            anywhere (`lib/sheet.ts`). Inside the toast provider, so a
+            finished step can say what it did.
+          */}
+          <SheetHost />
+
         </View>
       </ToastProvider>
       </GestureHandlerRootView>

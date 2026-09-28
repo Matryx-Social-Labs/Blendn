@@ -185,12 +185,22 @@ describe('the screen renders through the rebuilt components', () => {
      * "↩️ Reply 📋 Copy 🚩 Report", because the scrim TouchableOpacity is
      * accessible by default and iOS collapses everything inside it. The
      * safety action was unreachable to a screen reader.
+     *
+     * The menu is now a sheet step (`lib/sheet.ts`), and every tray button
+     * is its own labelled button.
      */
     const src = SCREEN()
-    expect(src).toMatch(/style=\{styles\.modalOverlay\}[^>]*accessible=\{false\}/)
     for (const label of ['Reply', 'Copy', 'Report']) {
-      expect(src).toContain(`accessibilityRole="button" accessibilityLabel="${label}"`)
+      expect(src).toContain(`label: '${label}'`)
     }
+    const tray = read('components/ActionTray.tsx')
+    expect(tray).toContain('accessibilityRole="button"')
+    expect(tray).toContain('accessibilityLabel={button.label}')
+  })
+
+  it('offers Report on their messages only', () => {
+    // Reporting your own message is not a thing; offering it read as broken.
+    expect(codeOnly(SCREEN())).toMatch(/if \(delivered && !mine\) \{[\s\S]{0,200}label: 'Report'/)
   })
 
   it('keeps day separators and system messages in one shape', () => {
@@ -249,7 +259,7 @@ describe('the screen renders through the rebuilt components', () => {
      * optimistic row was renamed to an id already in the list.
      */
     const src = codeOnly(SCREEN())
-    expect(src).toMatch(/prev\.some\(m => m\.message_id === newId\)\s*\? prev\.filter\(m => m\.message_id !== optimistic!\.message_id\)/)
+    expect(src).toMatch(/prev\.some\(m => m\.message_id === newId\)\s*\? prev\.filter\(m => m\.message_id !== optimistic!?\.message_id\)/)
   })
 })
 
@@ -414,7 +424,8 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   })
 
   it('shows a receipt only on your own messages', () => {
-    expect(DM()).toContain("receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}")
+    // …and not on one that never arrived.
+    expect(DM()).toContain("receipt={isMe && !item.failed ? (item.isRead ? 'read' : 'sent') : null}")
   })
 
   it('keeps receipts out of the room', () => {
@@ -425,8 +436,16 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
     expect(codeOnly(read('app/chat/[id].tsx'))).not.toContain('receipt=')
   })
 
-  it('does not offer to report your own message', () => {
-    expect(DM()).toContain('onLongPress={isMe ? undefined :')
+  it('does not offer to report your own message, but lets you copy it', () => {
+    /*
+     * The long press used to be report-only and absent on your own rows, so
+     * nothing in a DM could be copied. Every row opens the menu now; Report is
+     * on theirs alone.
+     */
+    const src = DM()
+    expect(src).toContain('onLongPress={() => openMessageMenu(item)}')
+    expect(src).toMatch(/\} else if \(!isMe\) \{[\s\S]{0,200}label: 'Report'/)
+    expect(src).toContain("label: 'Copy'")
   })
 })
 

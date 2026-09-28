@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ActivityIndicator,
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
 import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
 import { TRAY_SPECS, type TraySize } from '../lib/uxStandards'
@@ -31,6 +33,15 @@ type ActionTrayProps = {
   onClose: () => void
   size?: TraySize
   dismissible?: boolean
+  /**
+   * `row` (the default) sets the first two buttons side by side and the rest
+   * in a second row — right for a confirm/cancel pair. `stack` gives every
+   * button its own full-width row, for a list of actions: four buttons in the
+   * default layout put three in one row, too narrow to read "Block and report".
+   */
+  layout?: 'row' | 'stack'
+  /** Drawn between the message and the buttons: a reason list, an emoji row. */
+  children?: ReactNode
 }
 
 const getButtonStyle = (variant: ActionTrayButton['variant']) => {
@@ -52,6 +63,8 @@ export default function ActionTray({
   onClose,
   size = 'default',
   dismissible = true,
+  layout = 'row',
+  children,
 }: ActionTrayProps) {
   const config = TRAY_SPECS[size]
   const [opacity] = useState(() => new Animated.Value(0))
@@ -78,9 +91,10 @@ export default function ActionTray({
   const canDismiss = dismissible && !buttons.some((button) => button.loading)
 
   const buttonRows = useMemo(() => {
+    if (layout === 'stack') return buttons.map((button) => [button])
     if (buttons.length <= 2) return [buttons]
     return [buttons.slice(0, 2), buttons.slice(2)]
-  }, [buttons])
+  }, [buttons, layout])
 
   return (
     <Modal
@@ -92,7 +106,12 @@ export default function ActionTray({
         if (canDismiss) onClose()
       }}
     >
-      <View style={styles.fullscreen}>
+      {/*
+        A reason sheet has a note field, and without this the keyboard rises
+        over the very field being typed into. `padding` on both platforms, for
+        the reason `lib/keyboard.ts` gives.
+      */}
+      <KeyboardAvoidingView style={styles.fullscreen} behavior={KEYBOARD_BEHAVIOR}>
         <Pressable
           style={styles.backdrop}
           onPress={() => {
@@ -116,6 +135,7 @@ export default function ActionTray({
           <View style={styles.grabber} />
           <Text style={styles.title}>{title}</Text>
           {!!message && <Text style={styles.message}>{message}</Text>}
+          {children}
           <View style={styles.buttonsWrap}>
             {buttonRows.map((row, rowIndex) => (
               <View style={styles.buttonRow} key={`row-${rowIndex}`}>
@@ -127,6 +147,9 @@ export default function ActionTray({
                       key={`${button.label}-${buttonIndex}`}
                       onPress={button.onPress}
                       disabled={isDisabled}
+                      accessibilityRole="button"
+                      accessibilityLabel={button.label}
+                      accessibilityState={{ disabled: isDisabled, busy: !!button.loading }}
                       activeOpacity={0.86}
                       style={[
                         styles.button,
@@ -146,7 +169,7 @@ export default function ActionTray({
             ))}
           </View>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
