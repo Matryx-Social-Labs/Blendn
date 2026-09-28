@@ -901,6 +901,9 @@ export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
  * the sign-in screen overnight. The caller that hit the failure is told the
  * transport failed, as before; the recovery just no longer waits for them.
  */
+/** What a request that failed for no reason we can name says to a person. */
+const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try again.'
+
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -1204,14 +1207,18 @@ class ApiClientClass {
         if (isTimeoutError(error)) {
           return { success: false, error: TIMEOUT_MESSAGE }
         }
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : `Network error (${endpoint})`,
-        }
+        /*
+         * A sentence for a person, not the exception or the route. This
+         * string reaches toasts and error lines as-is, and it used to read
+         * "Network error (/api/mobile/events/…)" or a raw JS message. The
+         * endpoint and the error are in the log line above.
+         */
+        return { success: false, error: GENERIC_FAILURE_MESSAGE }
       }
     }
 
-    return { success: false, error: `Request failed after retries (${endpoint})` }
+    Logger.error('api', 'Request failed after retries', { endpoint })
+    return { success: false, error: GENERIC_FAILURE_MESSAGE }
   }
 
   private async refreshTokens(): Promise<RefreshOutcome> {
