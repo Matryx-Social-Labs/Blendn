@@ -668,7 +668,9 @@ function RootLayout() {
       <Stack.Screen name="friends/index" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      {/* A room's info, from the options button in its header. */}
+      <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,
