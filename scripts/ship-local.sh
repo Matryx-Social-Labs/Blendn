@@ -115,6 +115,19 @@ build() {
     echo "warning: no R8 mapping.txt came out of this build, so Java crashes in it cannot be retraced."
 }
 
+# Up to three tries. The upload is ~90 MB from a home connection, and a dropped
+# socket (`write EPIPE` at 20%, the first Android run) fails a build that is
+# fine. Repeating is safe: a store refuses a build number it already has, so a
+# retry after an upload that did land cannot ship twice.
+submit() {
+  local p=$1 artifact=$2 attempt
+  for attempt in 1 2 3; do
+    run "${eas[@]}" submit --platform "$p" --profile "$profile" --path "$artifact" --non-interactive && return 0
+    [ "$attempt" -lt 3 ] && echo "submit failed (attempt $attempt of 3); trying again in 30s" && sleep 30
+  done
+  return 1
+}
+
 main() {
   echo "== $(date '+%Y-%m-%d %H:%M:%S') ship-local $short ${platforms[*]}$($dry_run && echo ' (dry run)')"
   guards
@@ -145,7 +158,7 @@ main() {
     if build "$p" "$artifact"; then
       built=ok
       echo "== $(date '+%H:%M:%S') $p: submit"
-      if run "${eas[@]}" submit --platform "$p" --profile "$profile" --path "$artifact" --non-interactive; then
+      if submit "$p" "$artifact"; then
         submitted=ok
       else
         submitted=fail
