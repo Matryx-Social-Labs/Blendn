@@ -183,3 +183,29 @@ be built. None was invented to fill the space.
    real it belongs in onboarding, not just on this screen.
 3. **Is `PRO` a plan?** If so it is a much larger decision than a badge.
 4. **The gradient chip needs a meaning or should be dropped** — see 4 above.
+
+---
+
+## Identity is the server's `identityVisible`, and fails closed
+
+`app/user/[id].tsx` used to infer "revealed" from a photo, a bio or an
+occupation having arrived. It now reads `identityVisible` from `GET /users/:id`
+and nothing else (`lib/profileIdentity.ts`): anything but `true` drops photos,
+bio, occupation and education at the boundary, even if the payload carried
+them, and the title is the room's pseudonym — never the server's flat
+"Attendee", which it no longer shows anywhere.
+
+### Opening a profile from a room: pass `pseudonym` and `roomSeed`
+
+The route takes two optional params besides `id` and `eventId`:
+
+| param | what | example |
+|---|---|---|
+| `pseudonym` | the person's name **in this room**, as the room shows it | `Cosmic Panda` |
+| `roomSeed` | the mark's fallback seed, used only if the pseudonym is a placeholder | `${chatGroupId}:${handle}` |
+
+Room info's member list passes both. **The Room grid (`components/blendn/`)
+should too** — in `BlendnScreen.tsx`'s `openProfile`, add
+`pseudonym: p.name` and `` roomSeed: `${eventId}:${p.id}` `` to the params — so the
+profile it opens is titled and drawn the way the card was. Without them the
+page says "Someone" and draws a neutral mark.
