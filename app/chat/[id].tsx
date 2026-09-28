@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
+import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { SystemNotice } from '../../components/chat/SystemNotice'
@@ -655,6 +656,7 @@ function GroupChatInner(props?: {
           />
         )}
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
+        <RoomGuidelinesBanner userId={authUser?.id} chatRoomId={chatRoomId ? String(chatRoomId) : undefined} />
 
         <FlatList
           ref={flatListRef}

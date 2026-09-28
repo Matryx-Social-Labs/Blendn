@@ -21,6 +21,7 @@ than swapping a pane — the chat is one place you are standing in, not a tab.
 ```
 GroupChatHeader     back · room name · subtitle
 RealtimeStatusBanner
+RoomGuidelinesBanner  once per room until "Got it" — in the column, never over a message
 FlatList
   SystemNotice      day separators AND system messages — same shape on purpose
   ChatBubble        inbound (tail bottom-left) / outbound (tail bottom-right)
