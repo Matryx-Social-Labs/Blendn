@@ -90,11 +90,11 @@ app/
 ```
 
 **Auth guard logic** lives entirely in `app/_layout.tsx`:
-- unauthenticated → `/`
-- authenticated + not onboarded → `/onboarding/welcome`
+- unauthenticated → `/` (which also shows "Can't reach Blend'n" when a session is stored but the server could not confirm it)
+- authenticated + onboarding unfinished → the step it stopped on (`resumeStep` → `ONBOARDING_ROUTES` in `lib/onboarding.ts`; the first step is `/onboarding/basics`)
 - authenticated + onboarded → `/(tabs)/events`
 
-Onboarding status is cached in `AsyncStorage` under `user_onboarded_status_<userId>` so the guard doesn't block the UI on every cold start. A background fetch keeps the cache fresh.
+Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboardingStorage.ts`) and `profiles.onboarded` from the session's user, so the guard makes no network call on launch. Push registration (which asks for permission) starts only once the user is past onboarding.
 
 ### API Layer (`lib/`)
 
