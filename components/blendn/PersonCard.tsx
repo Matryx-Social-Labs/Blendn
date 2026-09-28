@@ -50,7 +50,8 @@ export function PersonCard({
   person: RoomPerson | null
   onClose: () => void
   onLike: (p: RoomPerson) => void
-  onWave: (p: RoomPerson) => void
+  /** Resolves when the wave has settled; the button ignores taps until then. */
+  onWave: (p: RoomPerson) => Promise<unknown> | void
   onMessage: (p: RoomPerson) => void
   onSayHi: (p: RoomPerson) => void
   onSafety: (p: RoomPerson) => void
@@ -60,6 +61,8 @@ export function PersonCard({
 }) {
   const insets = useSafeAreaInsets()
   const [pop, setPop] = useState(0)
+  // One wave at a time: a second tap while the first is in flight would send two.
+  const [waving, setWaving] = useState(false)
 
   // Keep the last person while the sheet sinks, so it does not empty mid-exit.
   const [shown, setShown] = useState<RoomPerson | null>(person)
@@ -70,6 +73,16 @@ export function PersonCard({
     if (!p || p.liked || p.matched) return
     setPop((n) => n + 1)
     onLike(p)
+  }
+
+  const wave = async () => {
+    if (!p || waving || waveState) return
+    setWaving(true)
+    try {
+      await onWave(p)
+    } finally {
+      setWaving(false)
+    }
   }
 
   const doubleTap = Gesture.Tap()
@@ -99,7 +112,8 @@ export function PersonCard({
 
         <View style={styles.head}>
           <GestureDetector gesture={doubleTap}>
-            <View accessible accessibilityLabel={`${p.name}. Double tap the photo to like.`}>
+            {/* The name only: the Like button below is how VoiceOver likes. */}
+            <View accessible accessibilityLabel={p.name}>
               <Face name={p.name} photo={p.photo} size={FACE} />
               <HeartPop trigger={pop} size={ICON.lg * 2} />
               {p.insideNow ? <View style={styles.hereDot} /> : null}
@@ -171,11 +185,12 @@ export function PersonCard({
             </ScalePress>
           )}
           <ScalePress
-            onPress={() => onWave(p)}
-            disabled={waveState === 'sent' || waveState === 'too-soon'}
+            onPress={() => void wave()}
+            disabled={waving || waveState === 'sent' || waveState === 'too-soon'}
             style={[styles.action, styles.neutral, styles.square]}
             accessibilityRole="button"
             accessibilityLabel={waveState ? `You waved at ${p.name}` : `Wave at ${p.name}`}
+            accessibilityState={{ disabled: waving || !!waveState, busy: waving }}
           >
             <Text variant="button" maxFontSizeMultiplier={1}>
               👋
@@ -287,5 +302,6 @@ const styles = StyleSheet.create({
   primary: { flex: 1, backgroundColor: EMBER.accent },
   neutral: { flex: 1, backgroundColor: EMBER.surface },
   square: { flex: 0, width: CONTROL.lg },
-  link: { alignSelf: 'center', paddingVertical: SPACE.xs },
+  // A text action at a control's height, so the target is a full 48.
+  link: { alignSelf: 'center', height: CONTROL.md, paddingHorizontal: SPACE.lg, justifyContent: 'center' },
 })
