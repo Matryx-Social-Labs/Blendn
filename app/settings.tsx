@@ -1,17 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, AppState, Linking, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
+import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
@@ -46,8 +49,30 @@ const DEFAULT_PREFERENCES: PreferencesState = {
 const toBoolean = (value: unknown, fallback: boolean) =>
   typeof value === 'boolean' ? value : fallback
 
+/**
+ * What the phone itself says about notifications, apart from what the account says.
+ *
+ * `blocked` is a no the app can no longer ask past: iOS after the first
+ * refusal, Android once "Don't ask again" is set. Only the phone's Settings can
+ * undo it, so the switch shows off whatever the account says, and turning it on
+ * explains that instead of saving a preference nothing will ever deliver on.
+ */
+type OsPush = 'granted' | 'askable' | 'blocked'
+
+async function readOsPush(): Promise<OsPush> {
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync()
+    if (status === 'granted') return 'granted'
+    return canAskAgain ? 'askable' : 'blocked'
+  } catch {
+    // Unknown reads as askable: the switch then behaves as it always did.
+    return 'askable'
+  }
+}
+
 export default function SettingsScreen() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [, setDisplayName] = useState<string>('')
   const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
@@ -67,7 +92,24 @@ export default function SettingsScreen() {
   })
   const [loadingPreferences, setLoadingPreferences] = useState(true)
   const [preferencesError, setPreferencesError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [signOutOpen, setSignOutOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [osPush, setOsPush] = useState<OsPush>('askable')
+  const [pushBlockedOpen, setPushBlockedOpen] = useState(false)
+
+  /*
+   * Read now and on every return to the app: the fix for `blocked` is a trip
+   * to the phone's Settings, and coming back should show that it worked.
+   */
+  useEffect(() => {
+    void readOsPush().then(setOsPush)
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void readOsPush().then(setOsPush)
+    })
+    return () => sub.remove()
+  }, [])
 
   const settingsStorageKey = useMemo(() => (
     user?.id ? `settings_preferences_${user.id}` : null
@@ -114,62 +156,73 @@ export default function SettingsScreen() {
     return { profile, nextPrefs }
   }, [])
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (!user) return
-        if (settingsStorageKey) {
-          try {
-            const cached = await AsyncStorage.getItem(settingsStorageKey)
-            if (cached) {
-              const parsed = JSON.parse(cached) as Partial<PreferencesState>
-              setPreferences({
-                pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
-                showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
-                shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
-                locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
-                friendsSeeMe: toBoolean(parsed.friendsSeeMe, DEFAULT_PREFERENCES.friendsSeeMe),
-              })
-            }
-          } catch {}
-        }
-
-        const result = await apiClient.getProfile(user.id)
-        if (!result.success || !result.data) {
-          /*
-           * Say so, rather than leave four switches reading ON. With nothing
-           * cached the defaults are all `true` and looked exactly like a
-           * server-confirmed answer — the same lie the naming bug below used
-           * to tell, arriving through a network failure instead.
-           */
-          Logger.warn('profile', 'Could not load preferences', { error: result.error })
-          setPreferencesError('Could not load your settings. Pull to retry or check your connection.')
-        }
-        if (result.success && result.data) {
-          setPreferencesError(null)
-          const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
-          const name = profile.name || user.name || 'You'
-          setDisplayName(name)
-          // Get avatar from profile photos if available
-          const photos = profile.photos || profile.profile_photos || []
-          const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
-          if (primary) {
-            setAvatarUrl(primary)
-          } else if (user.image) {
-            setAvatarUrl(user.image)
+  const loadPreferences = useCallback(async () => {
+    if (!user) return
+    try {
+      if (settingsStorageKey) {
+        try {
+          const cached = await AsyncStorage.getItem(settingsStorageKey)
+          if (cached) {
+            const parsed = JSON.parse(cached) as Partial<PreferencesState>
+            setPreferences({
+              pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
+              showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
+              shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
+              locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
+              friendsSeeMe: toBoolean(parsed.friendsSeeMe, DEFAULT_PREFERENCES.friendsSeeMe),
+            })
           }
-          setPreferences(nextPrefs)
-          savePreferencesLocal(nextPrefs)
-        }
-      } catch (error) {
-        Logger.warn('profile', 'Could not load preferences', { error })
-        setPreferencesError('Could not load your settings. Check your connection and try again.')
-      } finally {
-        setLoadingPreferences(false)
+        } catch {}
       }
+
+      const result = await apiClient.getProfile(user.id)
+      if (!result.success || !result.data) {
+        /*
+         * Say so, rather than leave four switches reading ON. With nothing
+         * cached the defaults are all `true` and looked exactly like a
+         * server-confirmed answer — the same lie the naming bug below used
+         * to tell, arriving through a network failure instead.
+         */
+        Logger.warn('profile', 'Could not load preferences', { error: result.error })
+        setPreferencesError("Your settings didn't load. Pull down or try again.")
+      }
+      if (result.success && result.data) {
+        setPreferencesError(null)
+        const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
+        const name = profile.name || user.name || 'You'
+        setDisplayName(name)
+        // Get avatar from profile photos if available
+        const photos = profile.photos || profile.profile_photos || []
+        const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
+        if (primary) {
+          setAvatarUrl(primary)
+        } else if (user.image) {
+          setAvatarUrl(user.image)
+        }
+        setPreferences(nextPrefs)
+        savePreferencesLocal(nextPrefs)
+      }
+    } catch (error) {
+      Logger.warn('profile', 'Could not load preferences', { error })
+      setPreferencesError("Your settings didn't load. Pull down or try again.")
+    } finally {
+      setLoadingPreferences(false)
     }
-    load()
   }, [user, settingsStorageKey, savePreferencesLocal, hydratePreferencesFromProfile])
+
+  useEffect(() => {
+    // Every setState in loadPreferences comes after its first await; the rule
+    // can't see through the async function. It is shared with pull-to-refresh
+    // and Try again, which is why it isn't declared inside this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPreferences()
+  }, [loadPreferences])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([loadPreferences(), readOsPush().then(setOsPush)])
+    setRefreshing(false)
+  }, [loadPreferences])
 
   const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
     if (!user) return
@@ -194,8 +247,12 @@ export default function SettingsScreen() {
 
       if (key === 'pushEnabled') {
         if (next.pushEnabled) {
-          // Turning it on is the answer onboarding's "Maybe later" deferred.
-          void clearPushDeclined(user.id).then(() => initializePushNotifications()).catch(() => {})
+          // Turning it on is the answer onboarding's "Maybe later" deferred. It may
+          // ask the phone for the first time; read its answer back either way.
+          void clearPushDeclined(user.id)
+            .then(() => initializePushNotifications())
+            .catch(() => {})
+            .finally(() => void readOsPush().then(setOsPush))
         } else {
           removePushTokenFromProfile().catch(() => {})
         }
@@ -217,13 +274,18 @@ export default function SettingsScreen() {
   }, [user, savePreferencesLocal])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
+    // Turning push on after the phone has said no: explain, and change nothing.
+    if (key === 'pushEnabled' && osPush === 'blocked') {
+      setPushBlockedOpen(true)
+      return
+    }
     const previous = preferencesRef.current
     const next = { ...previous, [key]: !previous[key] }
     preferencesRef.current = next
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [persistPreference, savePreferencesLocal])
+  }, [persistPreference, savePreferencesLocal, osPush])
 
   const openExternal = useCallback(async (url: string) => {
     try {
@@ -271,6 +333,14 @@ export default function SettingsScreen() {
                       const result = await deleteAccount()
                       if (!result.success) {
                         Alert.alert('Error', result.error || 'Failed to delete account')
+                      } else {
+                        /*
+                         * The session is already gone and the guard is on its
+                         * way to sign-in. The toast sits above the navigator,
+                         * so it lands there too: without it the account
+                         * vanished with no word that deleting it had worked.
+                         */
+                        showToast('Your account has been deleted.', 'success')
                       }
                     } catch {
                       Alert.alert('Error', 'Failed to delete account')
@@ -285,6 +355,26 @@ export default function SettingsScreen() {
         },
       ]
     )
+  }, [showToast])
+
+  const confirmSignOut = useCallback(async () => {
+    setSigningOut(true)
+    try {
+      const result = await signOut()
+      // Local state is gone either way; this is the honest version of what
+      // the server did, which used to be reported as success regardless.
+      if (!result.success) {
+        Alert.alert(
+          'Signed out on this phone',
+          'We could not reach the server, so this session may stay active elsewhere until it lapses.'
+        )
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to sign out')
+    } finally {
+      setSigningOut(false)
+      setSignOutOpen(false)
+    }
   }, [])
 
   /*
@@ -332,27 +422,18 @@ export default function SettingsScreen() {
     { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => openExternal(BLENDN_LINKS.safety) },
     { icon: 'flag-outline', title: 'Community guidelines', onPress: () => openExternal(BLENDN_LINKS.guidelines) },
 
+    { header: 'Help' },
+    { icon: 'help-circle-outline', title: 'Help centre', onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'mail-outline', title: 'Contact support', onPress: () => router.push('/support') },
+
     { header: 'About' },
-    { icon: 'help-circle-outline', title: 'Help & support', onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'information-circle-outline', title: "About Blend'n", onPress: () => router.push('/about') },
     { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
     { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
 
+    // Asks first: one stray tap used to end the session on the spot.
     { header: 'Account' },
-    { icon: 'log-out-outline', title: 'Sign out', onPress: async () => {
-      try {
-        const result = await signOut()
-        // Local state is gone either way; this is the honest version of what
-        // the server did, which used to be reported as success regardless.
-        if (!result.success) {
-          Alert.alert(
-            'Signed out on this phone',
-            'We could not reach the server, so this session may stay active elsewhere until it lapses.'
-          )
-        }
-      } catch {
-        Alert.alert('Error', 'Failed to sign out')
-      }
-    } },
+    { icon: 'log-out-outline', title: 'Sign out', onPress: () => setSignOutOpen(true) },
 
     /*
      * Alone, at the bottom, under its own header and a gap.
@@ -380,13 +461,16 @@ export default function SettingsScreen() {
     }
     if (item.keyName) {
       const keyName = item.keyName as PreferenceKey
+      // Push is on only when the account AND the phone say so.
+      const pushBlocked = keyName === 'pushEnabled' && osPush === 'blocked'
+      const hint = pushBlocked ? "Off in your phone's settings." : item.hint
       return (
         <View key={idx} style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name={item.icon} size={ICON.md} color={EMBER.textPrimary} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.title}</Text>
-              {item.hint ? <Text style={styles.rowHint}>{item.hint}</Text> : null}
+              {hint ? <Text style={styles.rowHint}>{hint}</Text> : null}
             </View>
           </View>
           <View style={styles.switchWrap}>
@@ -394,7 +478,7 @@ export default function SettingsScreen() {
               <ActivityIndicator size="small" color={EMBER.textSecondary} style={styles.switchLoader} />
             )}
             <Switch
-              value={preferences[keyName]}
+              value={preferences[keyName] && !pushBlocked}
               onValueChange={() => onTogglePreference(keyName)}
               accessibilityLabel={item.title}
               disabled={saving[keyName] || loadingPreferences}
@@ -431,7 +515,11 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <AppHeader title="Settings" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+      >
         {/*
           There was a profile card here, and it was the third door to editing.
           Worse than a duplicate: a `TouchableOpacity` whose outer press went to
@@ -444,9 +532,21 @@ export default function SettingsScreen() {
         */}
         <View style={styles.card}>
           {preferencesError ? (
-            <Text style={styles.prefsError} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {preferencesError}
-            </Text>
+            <View style={styles.prefsErrorWrap}>
+              <Text style={styles.prefsError} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                {preferencesError}
+              </Text>
+              <ScalePress
+                onPress={() => void onRefresh()}
+                disabled={refreshing}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                style={styles.retry}
+              >
+                <Text style={styles.retryLabel}>Try again</Text>
+              </ScalePress>
+            </View>
           ) : null}
           {items.map((it, i) => (
             <React.Fragment key={`it-${i}`}>
@@ -456,12 +556,50 @@ export default function SettingsScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <ActionTray
+        visible={signOutOpen}
+        title="Sign out?"
+        message="You'll need to sign in again to see your events, friends and messages."
+        onClose={() => setSignOutOpen(false)}
+        buttons={[
+          { label: 'Cancel', onPress: () => setSignOutOpen(false), disabled: signingOut },
+          { label: 'Sign out', variant: 'primary', onPress: () => void confirmSignOut(), loading: signingOut },
+        ]}
+      />
+
+      <ActionTray
+        visible={pushBlockedOpen}
+        title="Notifications are off"
+        message="Your phone is blocking notifications from Blend'n. Turn them on in Settings, then come back."
+        onClose={() => setPushBlockedOpen(false)}
+        buttons={[
+          { label: 'Not now', onPress: () => setPushBlockedOpen(false) },
+          {
+            label: 'Open Settings',
+            variant: 'primary',
+            onPress: () => {
+              setPushBlockedOpen(false)
+              Linking.openSettings().catch(() => {})
+            },
+          },
+        ]}
+      />
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  prefsError: { ...TYPE.meta, color: EMBER.destructive, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  prefsErrorWrap: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm, alignItems: 'flex-start' },
+  prefsError: { ...TYPE.meta, color: EMBER.destructive },
+  retry: {
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    justifyContent: 'center',
+  },
+  retryLabel: { ...TYPE.bodyStrong },
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg },

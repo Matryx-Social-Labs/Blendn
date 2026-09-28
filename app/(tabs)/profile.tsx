@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { RequestsRow } from '../../components/friends/RequestsRow'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { MemoryTile } from '../../components/profile/MemoryTile'
@@ -163,6 +164,8 @@ function ProfileInner() {
   const [refreshing, setRefreshing] = useState(false)
   // Null until it loads, and on failure: the stat is left out rather than showing a wrong 0.
   const [friendsCount, setFriendsCount] = useState<number | null>(null)
+  // Requests waiting on you. Zero until it loads, and on failure: the row is simply not drawn.
+  const [requestCount, setRequestCount] = useState(0)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const { width: windowWidth } = useWindowDimensions()
@@ -280,9 +283,14 @@ function ProfileInner() {
    * awaited by the profile; on focus, so accepting someone on Add friends
    * shows here when you come back.
    */
-  const loadFriendsCount = useCallback(async () => {
-    const result = await apiClient.getFriends()
-    if (result.success && result.data) setFriendsCount(result.data.count)
+  const loadFriendsCount = useCallback(() => {
+    void apiClient.getFriends().then((result) => {
+      if (result.success && result.data) setFriendsCount(result.data.count)
+    })
+    // Its own request, so a slow one never holds up the friend count.
+    void apiClient.getFriendRequests().then((result) => {
+      if (result.success && result.data) setRequestCount(result.data.incoming.length)
+    })
   }, [])
 
   /*
@@ -427,6 +435,16 @@ function ProfileInner() {
         </View>
 
       </FadeInUp>
+
+      {/*
+        Somebody is waiting on an answer. Above "Finish your profile": it is
+        about another person, and the only thing on this page with a clock on it.
+      */}
+      {requestCount > 0 ? (
+        <FadeInUp {...ENTER} delay={enter(1)}>
+          <RequestsRow count={requestCount} />
+        </FadeInUp>
+      ) : null}
 
       {/*
         What is missing, as rows -- never a meter: staying without a photo is

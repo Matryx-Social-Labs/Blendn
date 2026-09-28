@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useNavigation } from 'expo-router'
+import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
@@ -15,6 +16,7 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
@@ -50,6 +52,33 @@ interface UserProfile {
 }
 
 type TagInputMode = 'goal' | 'lookingFor'
+
+/**
+ * Everything the form edits, as one comparable string.
+ *
+ * Photos are not in it: `PhotoManager` saves each change as it is made, so
+ * there is nothing of theirs to lose by leaving. Interests are sorted because
+ * the picker's order is not a change.
+ */
+function formSnapshot(f: {
+  name: string
+  age: string
+  location: string
+  phone: string
+  occupation: string
+  education: string
+  bio: string
+  interestIds: string[]
+  goals: string[]
+  lookingFor: string[]
+  intents: string[]
+  workField: string | null
+  gender: string | null
+  orientations: string[]
+  interestedIn: string[]
+}): string {
+  return JSON.stringify({ ...f, interestIds: [...f.interestIds].sort() })
+}
 
 export default function EditProfile() {
   const { user: authUser } = useAuth()
@@ -123,6 +152,41 @@ export default function EditProfile() {
   const basicInfoY = useRef(0)
   const nameInputRef = useRef<TextInput>(null)
   const ageInputRef = useRef<TextInput>(null)
+
+  /*
+   * Unsaved edits, and leaving with them.
+   *
+   * Back and swipe-back used to drop a half-written bio without a word. The
+   * form is compared with what it held when it loaded (or last saved); while
+   * they differ, leaving by any route — the header's back, the swipe, Android's
+   * back — stops and asks. Null until the profile has loaded, so a slow load is
+   * never "dirty".
+   */
+  const navigation = useNavigation()
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [leaving, setLeaving] = useState<NavigationAction | null>(null)
+  const pendingLeave = useRef<NavigationAction | null>(null)
+  const currentSnapshot = formSnapshot({
+    name, age, location, phone, occupation, education, bio, interestIds, goals, lookingFor,
+    intents, workField, gender, orientations, interestedIn,
+  })
+  const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
+
+  usePreventRemove(dirty && !leaving, ({ data }) => {
+    pendingLeave.current = data.action
+    setDiscardOpen(true)
+  })
+
+  // Discard lifts the guard first, then replays the exit that was stopped.
+  useEffect(() => {
+    if (leaving) navigation.dispatch(leaving)
+  }, [leaving, navigation])
+
+  const discardChanges = () => {
+    setDiscardOpen(false)
+    setLeaving(pendingLeave.current)
+  }
 
   // Declared inside the effect: it sets state only after its requests return.
   useEffect(() => {
@@ -212,6 +276,24 @@ export default function EditProfile() {
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
         })
+        // The form as loaded: what "unsaved changes" is measured against.
+        setSavedSnapshot(formSnapshot({
+          name: combinedProfile.name || '',
+          age: combinedProfile.age?.toString() || '',
+          location: combinedProfile.location || '',
+          phone: combinedProfile.phone || '',
+          occupation: combinedProfile.occupation || '',
+          education: combinedProfile.education || '',
+          bio: combinedProfile.bio || '',
+          interestIds: structured,
+          goals: combinedProfile.goals || [],
+          lookingFor: combinedProfile.looking_for || [],
+          intents: loadedIntents,
+          workField: loadedWorkField,
+          gender: loadedGender,
+          orientations: loadedOrientations,
+          interestedIn: loadedInterestedIn,
+        }))
 
         const fields = await apiClient.getWorkFields()
         if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
@@ -385,6 +467,8 @@ export default function EditProfile() {
         if (!r.success) throw new Error(r.error || 'Could not save your interests')
       }
       setInterestsAtLoad(interestIds)
+      // Saved: nothing is unsaved any more, so the OK below leaves without asking.
+      setSavedSnapshot(currentSnapshot)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
@@ -720,6 +804,17 @@ export default function EditProfile() {
           </Pressable>
         </Modal>
       </KeyboardAvoidingView>
+
+      <ActionTray
+        visible={discardOpen}
+        title="Discard changes?"
+        message="You have edits that aren't saved. Leave now and they're gone."
+        onClose={() => setDiscardOpen(false)}
+        buttons={[
+          { label: 'Keep editing', onPress: () => setDiscardOpen(false) },
+          { label: 'Discard', variant: 'destructive', onPress: discardChanges },
+        ]}
+      />
     </SafeAreaView>
   )
 }
