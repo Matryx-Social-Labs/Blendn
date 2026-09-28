@@ -408,6 +408,17 @@ smoke_ios() (
   echo "smoke ios: pass. The flow reached the sign-in screen, and ${smoke_seconds}s later $bundle_id is still running (pid $pid), no crash report. Screenshot: $shot"
 )
 
+# iOS uploads straight to App Store Connect with Apple's altool when the App
+# Store Connect API key is on this Mac: the free plan's EAS Submit queue held
+# build 120 for 40 minutes, altool took 2.5. It is the key EAS holds for
+# submissions (same ID and issuer; the issuer is not a secret). The .p8 lives
+# only in ~/.appstoreconnect/private_keys (altool's own lookup path), never
+# in the repo. Without it, iOS falls back to `eas submit`. Android always uses
+# `eas submit`: its Play service-account key exists only on EAS.
+asc_key_id=${ASC_KEY_ID:-F234C2B22X}
+asc_issuer=${ASC_ISSUER_ID:-45a73825-a8a9-4741-9b94-6ad6aa2bc726}
+asc_key_dir=$HOME/.appstoreconnect/private_keys
+
 # Up to three tries. The upload is ~90 MB from a home connection, and a dropped
 # socket (`write EPIPE` at 20%, the first Android run) fails a build that is
 # fine. Repeating is safe: a store refuses a build number it already has, so a
@@ -415,7 +426,12 @@ smoke_ios() (
 submit() {
   local p=$1 artifact=$2 attempt
   for attempt in 1 2 3; do
-    run "${eas[@]}" submit --platform "$p" --profile "$profile" --path "$artifact" --non-interactive && return 0
+    if [ "$p" = ios ] && [ -f "$asc_key_dir/AuthKey_$asc_key_id.p8" ]; then
+      run xcrun altool --upload-app -f "$artifact" -t ios \
+        --apiKey "$asc_key_id" --apiIssuer "$asc_issuer" && return 0
+    else
+      run "${eas[@]}" submit --platform "$p" --profile "$profile" --path "$artifact" --non-interactive && return 0
+    fi
     [ "$attempt" -lt 3 ] && echo "submit failed (attempt $attempt of 3); trying again in 30s" && sleep 30
   done
   return 1
