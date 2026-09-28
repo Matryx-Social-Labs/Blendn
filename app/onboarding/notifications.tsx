@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
+import { clearPushDeclined, markPushDeclined } from '../../lib/pushDecline'
+import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -23,6 +25,17 @@ const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wa
 
 export default function NotificationsScreen() {
   const { saving, commit, goBack } = useOnboarding('notifications')
+  const { user } = useAuth()
+
+  /*
+   * The answer is also kept on the phone, so the push start-up on reaching
+   * the tabs does not ask the OS straight after "Maybe later" (see
+   * lib/pushDecline.ts). A yes clears it, for somebody who came back here.
+   */
+  const answer = async (enabled: boolean) => {
+    if (user?.id) await (enabled ? clearPushDeclined(user.id) : markPushDeclined(user.id))
+    await commit({ push_enabled: enabled })
+  }
   const [asking, setAsking] = useState(false)
   const [settingsPrompt, setSettingsPrompt] = useState(false)
 
@@ -66,7 +79,7 @@ export default function NotificationsScreen() {
       return
     }
 
-    await commit({ push_enabled: granted })
+    await answer(granted)
   }
 
   return (
@@ -93,7 +106,7 @@ export default function NotificationsScreen() {
        * is small. The STORED preference is what a settings screen, a digest or
        * any re-prompt reads, and it currently says yes.
        */
-      onSecondary={() => void commit({ push_enabled: false })}
+      onSecondary={() => void answer(false)}
       onBack={goBack}
     >
       <NotificationIllustration />
@@ -103,7 +116,7 @@ export default function NotificationsScreen() {
         onClose={() => setSettingsPrompt(false)}
         onNotNow={() => {
           setSettingsPrompt(false)
-          void commit({ push_enabled: false })
+          void answer(false)
         }}
       />
     </OnboardingScreen>

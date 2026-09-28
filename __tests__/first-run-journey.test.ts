@@ -15,13 +15,13 @@ describe('push permission waits for the onboarding step that explains it', () =>
   const layout = read('app/_layout.tsx')
 
   it('starts push only outside onboarding', () => {
-    const call = layout.indexOf('initializePushNotifications().catch')
+    const call = layout.indexOf('initializePushNotifications({ prompt: !declined })')
     const gate = layout.lastIndexOf('if (!inOnboarding && !pushInitRef.current) {', call)
     expect(call).toBeGreaterThan(-1)
     expect(gate).toBeGreaterThan(-1)
     expect(layout.indexOf("const inOnboarding = pathname.startsWith('/onboarding')")).toBeLessThan(gate)
     // One call site: the old one ran the moment auth resolved.
-    expect(layout.split('initializePushNotifications()').length).toBe(2)
+    expect(layout.split('initializePushNotifications(').length).toBe(2)
   })
 })
 

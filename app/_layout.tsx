@@ -18,6 +18,7 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
+import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
@@ -388,11 +389,17 @@ function RootLayout() {
          * this registers the token once somebody is through. For an account
          * already onboarded it is the same moment as before: the first screen
          * after sign-in, deferred so the UI renders first.
+         *
+         * "Maybe later" on that step is respected: a declined account never
+         * sees the OS dialog from here (lib/pushDecline.ts). Settings asks.
          */
         if (!inOnboarding && !pushInitRef.current) {
           pushInitRef.current = true;
+          const userId = user.id;
           setTimeout(() => {
-            initializePushNotifications().catch(() => {});
+            hasDeclinedPush(userId)
+              .then((declined) => initializePushNotifications({ prompt: !declined }))
+              .catch(() => {});
           }, 2000);
         }
         if (!inOnboarding) {

@@ -94,7 +94,7 @@ app/
 - authenticated + onboarding unfinished → the step it stopped on (`resumeStep` → `ONBOARDING_ROUTES` in `lib/onboarding.ts`; the first step is `/onboarding/basics`)
 - authenticated + onboarded → `/(tabs)/events`
 
-Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboardingStorage.ts`) and `profiles.onboarded` from the session's user, so the guard makes no network call on launch. Push registration (which asks for permission) starts only once the user is past onboarding.
+Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboardingStorage.ts`) and `profiles.onboarded` from the session's user, so the guard makes no network call on launch. Push registration (which asks for permission) starts only once the user is past onboarding, and never asks an account that chose "Maybe later" there (`lib/pushDecline.ts`); the Settings toggle asks.
 
 ### API Layer (`lib/`)
 

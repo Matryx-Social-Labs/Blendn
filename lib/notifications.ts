@@ -109,8 +109,12 @@ export interface NotificationData {
   data?: Record<string, any>
 }
 
-// Register for push notifications and get the Expo push token
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+// Register for push notifications and get the Expo push token.
+// `prompt: false` never shows the OS dialog: it registers only when the
+// permission is already granted (see lib/pushDecline.ts).
+export async function registerForPushNotificationsAsync(
+  { prompt = true }: { prompt?: boolean } = {}
+): Promise<string | null> {
   let token: string | null = null
 
   if (Platform.OS === 'android') {
@@ -130,6 +134,10 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     let finalStatus = existingStatus
 
     if (existingStatus !== 'granted') {
+      if (!prompt) {
+        Logger.info('notifications', 'Push declined during onboarding; not asking')
+        return null
+      }
       const { status } = await Notifications.requestPermissionsAsync()
       finalStatus = status
     }
@@ -526,10 +534,12 @@ export async function cancelLegacyEventReminders(): Promise<void> {
 }
 
 // Initialize push notifications (call this on app startup)
-export async function initializePushNotifications(): Promise<string | null> {
+export async function initializePushNotifications(
+  options: { prompt?: boolean } = {}
+): Promise<string | null> {
   cancelLegacyEventReminders().catch(() => {})
   try {
-    const token = await registerForPushNotificationsAsync()
+    const token = await registerForPushNotificationsAsync(options)
 
     if (token) {
       // Store token for removal on logout
