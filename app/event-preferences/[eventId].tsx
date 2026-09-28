@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 // The library one, like every other screen: react-native's own SafeAreaView
 // left the Save button under the home indicator on an iPhone 17 Pro, where
 // taps on its centre are the system's, not ours (SCRUM-201).
@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Animated from 'react-native-reanimated'
 
 import ScalePress from '../../components/motion/ScalePress'
+import { EmberButton } from '../../components/onboarding/EmberControls'
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
@@ -16,7 +17,7 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 /**
@@ -201,7 +202,6 @@ export default function EventPreferences() {
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
   const justHere = intents.find((i) => i.value === 'just_here')
-  const saveDisabled = saving || (askIntent && intent.length === 0)
 
   const intentOption = (opt: (typeof INTENTS)[number]) => {
     const selected = intent.includes(opt.value)
@@ -356,25 +356,17 @@ export default function EventPreferences() {
 
       {/* Pinned under the scroll, not at its end: with four intent rows it fell below the fold. */}
       <View style={styles.footer}>
-        <ScalePress
-          style={[styles.primaryButton, saveDisabled && styles.buttonDisabled]}
-          onPress={save}
-          // The first-door answer cannot be nothing: an empty save would write
-          // an empty default and the board would still refuse them.
-          disabled={saving || (askIntent && intent.length === 0)}
-          accessibilityRole="button"
-          accessibilityLabel="Save"
+        {/*
+          The first-door answer cannot be nothing: an empty save would write
+          an empty default and the board would still refuse them.
+        */}
+        <EmberButton
+          label="Save"
+          onPress={() => void save()}
+          disabled={askIntent && intent.length === 0}
+          busy={saving}
           accessibilityHint={askIntent && intent.length === 0 ? 'Choose an answer first' : undefined}
-          accessibilityState={{ disabled: saveDisabled, busy: saving }}
-        >
-          {saving ? (
-            <ActivityIndicator color={EMBER.onGradient} />
-          ) : (
-            <Text variant="button" color={EMBER.onGradient}>
-              Save
-            </Text>
-          )}
-        </ScalePress>
+        />
       </View>
     </SafeAreaView>
   )
@@ -389,7 +381,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconButton: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   scroll: { paddingHorizontal: GUTTER, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl },
 
   section: { gap: SPACE.lg },
@@ -434,12 +426,4 @@ const styles = StyleSheet.create({
   switchText: { flex: 1, gap: SPACE.xxs },
 
   footer: { paddingHorizontal: GUTTER, paddingTop: SPACE.md, paddingBottom: SPACE.lg },
-  primaryButton: {
-    backgroundColor: EMBER.accent,
-    borderRadius: EMBER_RADIUS.pill,
-    height: CONTROL.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonDisabled: { opacity: 0.4 },
 })

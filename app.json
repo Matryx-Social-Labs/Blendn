@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/logo/icon-ios.png",
     "scheme": "blendn",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
@@ -106,7 +106,7 @@
         "expo-notifications",
         {
           "icon": "./assets/logo/monogram-white.png",
-          "color": "#F15524"
+          "color": "#F05524"
         }
       ],
       [
