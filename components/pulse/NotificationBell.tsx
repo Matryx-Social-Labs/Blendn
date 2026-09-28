@@ -86,9 +86,11 @@ export function NotificationBell() {
   /*
    * And the moment a row lands while the app is open — a friend request on
    * the Pulse no longer waits for you to leave and come back. The server says
-   * so on your own socket room; the next focus or open reconciles the count.
+   * so on your own socket room, and the bell asks the server for the count
+   * rather than adding one: it read 3 for one row on the owner's iPhone when
+   * the app held three sockets, and a re-read cannot drift that way.
    */
-  useEffect(() => subscribeToBell(() => setUnread((n) => n + 1)), [])
+  useEffect(() => subscribeToBell(() => void load()), [load])
 
   const openSheet = useCallback(() => {
     setOpen(true)
