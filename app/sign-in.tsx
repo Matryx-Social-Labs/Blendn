@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
-import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import { router, useLocalSearchParams } from 'expo-router'
+import React, { useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -17,13 +16,18 @@ import {
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { EmberButton } from '../components/onboarding/EmberControls'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, MAX_FONT_SCALE, OPACITY, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
+import { PendingInvite } from '../components/friends/PendingInvite'
 
-const lockup = require('../assets/logo/lockup-white.png')
+// The same lockup as the entry screen, so the brand does not change colour
+// between the two taps of signing in (this was the all-white `lockup-white`).
+const lockup = require('../assets/logo/lockup-hero.png')
 /*
  * Fixed height, width derived from the file. Not `width: '<pct>%'` plus
  * `aspectRatio` — that combination rendered the lockup several times too large
@@ -33,7 +37,7 @@ const lockup = require('../assets/logo/lockup-white.png')
  */
 const LOCKUP_ASPECT = (() => {
   const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 816 / 242
+  return s?.width && s?.height ? s.width / s.height : 674 / 202
 })()
 const LOCKUP_HEIGHT = 40
 
@@ -89,6 +93,23 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const emailRef = useRef<TextInput>(null)
+  const passwordRef = useRef<TextInput>(null)
+  const ageRef = useRef<TextInput>(null)
+  /*
+   * A ref as well as `busy`: the keyboard's "go" and the button can land in
+   * the same frame, and both read the `busy` of the render before either set
+   * it — two sign-ups, and the second one's "already registered" shown over
+   * an account that had just been created.
+   */
+  const inFlight = useRef(false)
+  /*
+   * Why they are here, when the server signed them out: the entry screen hands
+   * its notice on. Without it, somebody signed out mid-use who chose email
+   * met a blank form and had to guess whether they had done something wrong.
+   */
+  const params = useLocalSearchParams<{ notice?: string }>()
+  const notice = typeof params.notice === 'string' && params.notice ? params.notice : null
 
   const isSignup = mode === 'signup'
   /*
@@ -130,12 +151,14 @@ export default function SignIn() {
   }
 
   const submit = async () => {
+    if (inFlight.current) return
     const problem = validate()
     if (problem) {
       setError(problem)
       return
     }
 
+    inFlight.current = true
     setBusy(true)
     setError(null)
     try {
@@ -174,6 +197,7 @@ export default function SignIn() {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -213,8 +237,23 @@ export default function SignIn() {
             importantForAccessibility="no-hide-descendants"
           />
 
+          <PendingInvite />
+
+          {notice && !error ? (
+            <Text style={styles.notice} accessibilityRole="alert">
+              {notice}
+            </Text>
+          ) : null}
+
+          {/*
+            Two tabs over one form. The selected one is the system's selected
+            treatment — a `textPrimary` fill with `bg` text — not `surface` on
+            `surfaceSunken`, which was one step of grey apart and read as two
+            unselected halves (tasks/lessons.md).
+          */}
           <View
             style={styles.segmented}
+            accessibilityRole="tablist"
             onLayout={(e) => setSegmentWidth((e.nativeEvent.layout.width - SEGMENTED_PADDING * 2) / 2)}
           >
             {segmentWidth > 0 ? (
@@ -224,17 +263,28 @@ export default function SignIn() {
               <Pressable
                 key={m}
                 onPress={() => switchMode(m)}
+                disabled={busy}
                 style={styles.segment}
-                accessibilityRole="button"
-                accessibilityState={{ selected: mode === m }}
+                accessibilityRole="tab"
+                accessibilityLabel={m === 'signin' ? 'Sign in' : 'Create account'}
+                accessibilityState={{ selected: mode === m, disabled: busy }}
               >
-                <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>
+                <Text
+                  style={[styles.segmentText, mode === m && styles.segmentTextActive]}
+                  maxFontSizeMultiplier={MAX_FONT_SCALE.button}
+                >
                   {m === 'signin' ? 'Sign in' : 'Create account'}
                 </Text>
               </Pressable>
             ))}
           </View>
 
+          {/*
+            One order for the keyboard to walk: name, email, password, then
+            age last, whose "go" submits. Age sat second, between two text
+            fields, so Next on the name opened a number pad and Next on the
+            number pad (which has none on iOS) was a dead end.
+          */}
           {isSignup && (
             <View style={styles.field}>
               <Text style={styles.label}>NAME</Text>
@@ -244,28 +294,17 @@ export default function SignIn() {
                 onChangeText={setName}
                 placeholder="What should we call you?"
                 placeholderTextColor={EMBER.textPlaceholder}
+                accessibilityLabel="Name"
+                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
                 autoCapitalize="words"
+                // A name is not a word to correct.
+                autoCorrect={false}
                 autoComplete="name"
                 textContentType="name"
                 returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => emailRef.current?.focus()}
                 maxLength={100}
-              />
-            </View>
-          )}
-
-          {isSignup && (
-            <View style={styles.field}>
-              {/* Required: Blend'n is 18+ (SCRUM-330). */}
-              <Text style={styles.label}>AGE</Text>
-              <TextInput
-                style={styles.input}
-                value={age}
-                onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
-                placeholder="You must be 18 or over"
-                placeholderTextColor={EMBER.textPlaceholder}
-                keyboardType="number-pad"
-                returnKeyType="next"
-                maxLength={3}
               />
             </View>
           )}
@@ -273,17 +312,22 @@ export default function SignIn() {
           <View style={styles.field}>
             <Text style={styles.label}>EMAIL</Text>
             <TextInput
+              ref={emailRef}
               style={styles.input}
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
               placeholderTextColor={EMBER.textPlaceholder}
+              accessibilityLabel="Email"
+              maxFontSizeMultiplier={MAX_FONT_SCALE.button}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
               autoComplete="email"
               textContentType="emailAddress"
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
             />
           </View>
 
@@ -291,11 +335,14 @@ export default function SignIn() {
             <Text style={styles.label}>PASSWORD</Text>
             <View style={styles.passwordRow}>
               <TextInput
+                ref={passwordRef}
                 style={[styles.input, styles.passwordInput]}
                 value={password}
                 onChangeText={setPassword}
                 placeholder={isSignup ? `At least ${MIN_PASSWORD_LENGTH} characters` : 'Your password'}
                 placeholderTextColor={EMBER.textPlaceholder}
+                accessibilityLabel="Password"
+                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -307,8 +354,10 @@ export default function SignIn() {
                  */
                 autoComplete={isSignup ? 'new-password' : 'current-password'}
                 textContentType={isSignup ? 'newPassword' : 'password'}
-                returnKeyType="go"
-                onSubmitEditing={submit}
+                // Sign-in ends here; sign-up goes on to the age.
+                returnKeyType={isSignup ? 'next' : 'go'}
+                submitBehavior={isSignup ? 'submit' : 'blurAndSubmit'}
+                onSubmitEditing={isSignup ? () => ageRef.current?.focus() : () => void submit()}
               />
               <Pressable
                 onPress={() => setShowPassword((v) => !v)}
@@ -326,28 +375,50 @@ export default function SignIn() {
             </View>
           </View>
 
+          {isSignup && (
+            <View style={styles.field}>
+              {/* Required: Blend'n is 18+ (SCRUM-330). */}
+              <Text style={styles.label}>AGE</Text>
+              <TextInput
+                ref={ageRef}
+                style={styles.input}
+                value={age}
+                onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
+                placeholder="You must be 18 or over"
+                placeholderTextColor={EMBER.textPlaceholder}
+                accessibilityLabel="Age"
+                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
+                keyboardType="number-pad"
+                returnKeyType="go"
+                onSubmitEditing={() => void submit()}
+                maxLength={3}
+              />
+            </View>
+          )}
+
           {error && (
             <Text style={styles.error} accessibilityRole="alert">
               {error}
             </Text>
           )}
 
-          <Pressable
-            onPress={submit}
-            disabled={busy}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.primary, (pressed || busy) && styles.pressed]}
-          >
-            {busy ? (
-              <ActivityIndicator color={EMBER.onGradient} />
-            ) : (
-              <Text style={styles.primaryLabel}>{isSignup ? 'Create account' : 'Sign in'}</Text>
-            )}
-          </Pressable>
+          <EmberButton
+            label={isSignup ? 'Create account' : 'Sign in'}
+            onPress={() => void submit()}
+            busy={busy}
+            style={styles.primary}
+          />
 
           {!isSignup && (
             <Pressable
-              onPress={() => router.push('/forgot-password')}
+              // The address typed here goes with them, so it is not typed twice.
+              onPress={() =>
+                router.push(
+                  trimmedEmail
+                    ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
+                    : '/forgot-password'
+                )
+              }
               style={styles.linkButton}
               accessibilityRole="button"
             >
@@ -356,9 +427,7 @@ export default function SignIn() {
           )}
 
           {isSignup && (
-            <Text style={styles.legal}>
-              By creating an account you agree to our Terms and Privacy Policy.
-            </Text>
+            <LegalLine lead="By creating an account you" style={styles.legal} />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -398,10 +467,10 @@ const styles = StyleSheet.create({
     bottom: SEGMENTED_PADDING,
     left: SEGMENTED_PADDING,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.textPrimary,
   },
   segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
-  segmentTextActive: { color: EMBER.textPrimary },
+  segmentTextActive: { color: EMBER.bg },
 
   field: { gap: SPACE.sm },
   label: TYPE.label,
@@ -418,25 +487,12 @@ const styles = StyleSheet.create({
 
   error: { ...TYPE.meta, color: EMBER.destructive },
 
-  primary: {
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.accent,
-    marginTop: SPACE.sm,
-  },
-  // Dark on the accent, never white — white on the orange fails AA.
-  primaryLabel: { ...TYPE.button, color: EMBER.onGradient },
-  pressed: { opacity: 0.85 },
+  primary: { marginTop: SPACE.sm },
+  pressed: { opacity: OPACITY.pressed },
 
   linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
   // A text action, so it reads as one: primary, not the grey of a caption.
   link: { ...TYPE.label, color: EMBER.textPrimary },
-  legal: {
-    ...TYPE.meta,
-    color: EMBER.textTertiary,
-    textAlign: 'center',
-    marginTop: SPACE.xs,
-  },
+  legal: { marginTop: SPACE.xs },
+  notice: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center' },
 })

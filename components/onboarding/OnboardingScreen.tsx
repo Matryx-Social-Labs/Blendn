@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { ReactNode, useEffect } from 'react'
 import {
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,10 +20,13 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
+  CONTROL,
   EMBER,
   EMBER_RADIUS,
   GUTTER,
   ICON,
+  MAX_FONT_SCALE,
+  OPACITY,
   SPACE,
   TYPE,
 } from '../../lib/theme'
@@ -128,22 +132,30 @@ export function OnboardingScreen({
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + SPACE.md }]}>
         {/*
          * The back chevron keeps its footprint when there is nowhere to go
          * back to, rather than being removed — otherwise the progress bar
-         * shifts left on the first screen and jumps right on the second.
+         * shifts left on the first screen and jumps right on the second. The
+         * empty footprint is a plain view: it used to be a disabled "Go back"
+         * button that a screen reader still stopped on.
+         *
+         * `chevron-back` at `ICON.lg`, the same back mark as every other
+         * screen's top bar (it was the only `arrow-back` in the app).
          */}
-        <Pressable
-          onPress={onBack}
-          disabled={!onBack}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={styles.backButton}
-        >
-          {onBack ? <Ionicons name="arrow-back" size={ICON.md} color={EMBER.textPrimary} /> : null}
-        </Pressable>
+        {onBack ? (
+          <Pressable
+            onPress={onBack}
+            hitSlop={SPACE.md}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
+          </Pressable>
+        ) : (
+          <View style={styles.backButton} />
+        )}
 
         {step ? (
           <>
@@ -160,15 +172,22 @@ export function OnboardingScreen({
         ) : null}
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={KEYBOARD_BEHAVIOR}
-        keyboardVerticalOffset={insets.top}
-      >
+      {/*
+       * The avoiding view holds the scroll AND the footer, with no offset.
+       *
+       * It used to hold only the scroll, offset by the top inset: the footer
+       * sat outside it, so the keyboard covered Continue, and the offset (a
+       * header's worth of the wrong number — this view starts below the
+       * header, not at the top of the window) left a gap over the keyboard.
+       * The view's own frame is what `padding` measures against, so 0 is right.
+       */}
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
         <ScrollView
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          // Drag the form down to put the keyboard away, as in Messages.
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
           /*
            * A screen with nothing to scroll must not scroll.
@@ -188,7 +207,7 @@ export function OnboardingScreen({
           scrollEnabled={!!children}
         >
           <View style={styles.headlineBlock}>
-            <Text style={styles.title}>
+            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display}>
               {title}
               {titleAccent ? <Text style={styles.titleAccent}>{titleAccent}</Text> : null}
             </Text>
@@ -197,33 +216,47 @@ export function OnboardingScreen({
 
           {children ? <View style={styles.body}>{children}</View> : null}
         </ScrollView>
-      </KeyboardAvoidingView>
 
-      {/*
-       * Pinned rather than at the end of the scroll, and opaque over the
-       * page: the design puts the action within one-handed reach, and on a
-       * screen with six fields a button that scrolls away is a button people
-       * think is missing.
-       */}
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}>
-        <EmberButton
-          label={ctaLabel}
-          onPress={onContinue}
-          disabled={ctaDisabled}
-          busy={ctaBusy}
-        />
-        {secondaryLabel && onSecondary ? (
-          <Pressable onPress={onSecondary} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.secondary}>{secondaryLabel}</Text>
-          </Pressable>
-        ) : null}
-        {footerNote ? (
-          <View style={styles.footerNoteRow}>
-            <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
-            <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>
-          </View>
-        ) : null}
-      </View>
+        {/*
+         * Pinned rather than at the end of the scroll, and opaque over the
+         * page: the design puts the action within one-handed reach, and on a
+         * screen with six fields a button that scrolls away is a button people
+         * think is missing.
+         */}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}>
+          <EmberButton label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} busy={ctaBusy} />
+          {secondaryLabel && onSecondary ? (
+            /*
+             * Off while the primary is saving: "Skip" tapped during a save
+             * used to navigate twice — once for the skip, once when the save
+             * landed. `useOnboarding` also refuses a second move in flight.
+             */
+            <Pressable
+              onPress={onSecondary}
+              disabled={ctaBusy}
+              hitSlop={SPACE.sm}
+              accessibilityRole="button"
+              accessibilityLabel={secondaryLabel}
+              accessibilityState={{ disabled: !!ctaBusy }}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                ctaBusy && styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.secondary} maxFontSizeMultiplier={MAX_FONT_SCALE.button}>
+                {secondaryLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+          {footerNote ? (
+            <View style={styles.footerNoteRow}>
+              <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
+              <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>
+            </View>
+          ) : null}
+        </View>
+      </KeyboardAvoidingView>
     </View>
   )
 }
@@ -240,7 +273,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     paddingBottom: SPACE.xl,
   },
-  backButton: { width: ICON.md, height: ICON.md, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: ICON.lg, height: ICON.lg, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: OPACITY.pressed },
+  disabled: { opacity: OPACITY.disabled },
   progressTrack: {
     flex: 1,
     height: 6,
@@ -264,6 +299,7 @@ const styles = StyleSheet.create({
   headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
   title: TYPE.display,
   titleAccent: { color: EMBER.textPrimary },
+  // design-exception: a reading measure for the subtitle, from the frame
   subtitle: { ...TYPE.body, color: EMBER.textSecondary, maxWidth: 300 },
   body: { gap: SPACE.xxl },
 
@@ -274,11 +310,12 @@ const styles = StyleSheet.create({
     // Opaque page colour, so scrolled text never shows through the button.
     backgroundColor: EMBER.bg,
   },
+  // 48pt tall, so the link under the button is a real target, not a line of text.
+  secondaryButton: { minHeight: CONTROL.md, justifyContent: 'center' },
   secondary: {
     ...TYPE.body,
     textAlign: 'center',
-    color: EMBER.textTertiary,
-    paddingVertical: SPACE.xs,
+    color: EMBER.textSecondary,
   },
   footerNoteRow: {
     flexDirection: 'row',

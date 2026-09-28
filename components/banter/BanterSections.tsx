@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type View
 
 import { OptimizedImage } from '../OptimizedImage'
 import { DayHeading } from '../ui/DayHeading'
+import { initialsOf } from '../../lib/initials'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { liveRoomMeta } from './inbox'
@@ -151,11 +152,14 @@ export function BanterLiveRoom({
   title,
   coverUrl,
   memberCount,
+  muted = false,
   onPress,
 }: {
   title: string
   coverUrl?: string | null
   memberCount?: number | null
+  /** You muted its notifications. */
+  muted?: boolean
   onPress?: () => void
 }) {
   const meta = liveRoomMeta(memberCount)
@@ -163,15 +167,18 @@ export function BanterLiveRoom({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, live room. ${meta}`}
+      accessibilityLabel={`${title}, live room. ${meta}${muted ? '. Muted' : ''}`}
       style={({ pressed }) => [styles.liveRow, pressed && styles.pressed]}
     >
       {/* `surface` under the cover: one step up from the panel it sits on. */}
       <RoomCover url={coverUrl} />
       <View style={styles.liveBody}>
-        <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
-          {title}
-        </Text>
+        <View style={styles.rowLine}>
+          <Text style={[styles.rowTitle, muted && styles.rowTitleMuted]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+            {title}
+          </Text>
+          {muted ? <MutedMark /> : null}
+        </View>
         <View style={styles.liveMetaLine}>
           <View style={styles.liveDot} />
           <Text style={styles.liveMeta} numberOfLines={1} maxFontSizeMultiplier={1.4}>
@@ -195,6 +202,8 @@ export interface ConversationItem {
   /** A room rather than a person: a square cover instead of a round face. */
   kind?: 'direct' | 'event' | 'group'
   unread?: boolean
+  /** You muted this room's notifications: a bell with a slash after the title. */
+  muted?: boolean
   /**
    * The preview is news in itself — "Asked to reveal names" — and is drawn in
    * `textPrimary` even when the row is read.
@@ -239,7 +248,7 @@ export function BanterConversation({
       accessibilityRole="button"
       accessibilityLabel={`${item.title}. ${item.preview}. ${item.timeLabel}${
         item.unread ? '. Unread' : ''
-      }`}
+      }${item.muted ? '. Muted' : ''}`}
       style={({ pressed }) => [styles.row, pressed && styles.pressed, style]}
     >
       {isRoom ? (
@@ -260,22 +269,31 @@ export function BanterConversation({
          * to prevent.
          */
         <PseudonymDisc pseudonym={item.title} />
-      ) : (
+      ) : item.avatarUrl ? (
         <OptimizedImage
-          source={item.avatarUrl ?? ''}
-          recyclingKey={item.avatarUrl ?? undefined}
+          source={item.avatarUrl}
+          recyclingKey={item.avatarUrl}
           style={styles.rowAvatar as never}
           width={ROW_AVATAR}
           height={ROW_AVATAR}
           contentFit="cover"
         />
+      ) : (
+        // No photo set: their initials, the same the conversation header
+        // draws. This was an empty source, which spun for ever (SCRUM-404).
+        <View style={styles.rowAvatar}>
+          <Text style={styles.rowInitials} maxFontSizeMultiplier={1.2}>
+            {initialsOf(item.title)}
+          </Text>
+        </View>
       )}
 
       <View style={styles.rowBody}>
         <View style={styles.rowLine}>
-          <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+          <Text style={[styles.rowTitle, item.muted && styles.rowTitleMuted]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
             {item.title}
           </Text>
+          {item.muted ? <MutedMark /> : null}
           <Text
             style={[styles.rowTime, item.unread && styles.rowTimeUnread]}
             maxFontSizeMultiplier={1.3}
@@ -302,6 +320,15 @@ export function BanterConversation({
       </View>
     </Pressable>
   )
+}
+
+/**
+ * Muted, as a still mark: the bell with a slash, in `textTertiary` — the same
+ * glyph the room's own header shows. Not a word, because "Muted" in this list
+ * already means the organiser stopped you posting (`roomStateLine`).
+ */
+function MutedMark() {
+  return <Ionicons name="notifications-off-outline" size={ICON.sm} color={EMBER.textTertiary} />
 }
 
 /** A room's avatar: its event's cover in a small square, or a glyph on `surface`. */
@@ -388,6 +415,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowInitials: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
   /*
    * Fixed against Dynamic Type — `maxFontSizeMultiplier={1}`.
    *
@@ -411,6 +439,8 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, gap: SPACE.xxs },
   rowLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowTitle: { ...TYPE.bodyStrong, flex: 1 },
+  // Shrinks to fit the mark after it rather than pushing it off the row.
+  rowTitleMuted: { flex: 0, flexShrink: 1, marginRight: 'auto' },
   rowTime: TYPE.meta,
   rowTimeUnread: { color: EMBER.textPrimary },
   rowPreview: { ...TYPE.body, flex: 1, color: EMBER.textSecondary },
@@ -421,7 +451,7 @@ const styles = StyleSheet.create({
     width: UNREAD_DOT,
     height: UNREAD_DOT,
   },
-  // Unread is neutral: the one accent on this screen is Accept.
+  // Unread is neutral, like everything on a populated inbox.
   unreadDot: {
     width: UNREAD_DOT,
     height: UNREAD_DOT,
@@ -451,8 +481,16 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
  * *accept* or *decline*, not *read* — so the two answers sit under the
  * message instead of the row being a button.
  *
- * Accept is the screen's one accent (docs/DESIGN_SYSTEM.md). It repeats per
- * request, which the rule allows: it is one action, the Banter's primary one.
+ * The face and the name open the sender's profile, so "who is this" can be
+ * answered before answering them. "More" holds Block and Report: declining
+ * is not the answer to somebody who should not be able to ask again.
+ *
+ * Accept is a `textPrimary` fill with `bg` text — the design system's
+ * strong-neutral, not the accent. A list of three requests drew three orange
+ * pills, and with the empty state's "Explore events" and the tab bar that was
+ * too much orange for one screen (docs/DESIGN_SYSTEM.md: at most one thing).
+ * White on the dark page still reads as the affirmative answer beside
+ * Decline's `surface`.
  */
 export function BanterRequest({
   name,
@@ -462,6 +500,8 @@ export function BanterRequest({
   pending,
   onAccept,
   onDecline,
+  onOpenProfile,
+  onMore,
 }: {
   name: string
   avatarUrl?: string | null
@@ -470,9 +510,18 @@ export function BanterRequest({
   pending?: boolean
   onAccept: () => void
   onDecline: () => void
+  onOpenProfile?: () => void
+  onMore?: () => void
 }) {
   return (
     <View style={requestStyles.request}>
+      <Pressable
+        onPress={onOpenProfile}
+        disabled={!onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}'s profile`}
+        style={({ pressed }) => [pressed && styles.pressed]}
+      >
       {avatarUrl ? (
         <OptimizedImage
           source={avatarUrl}
@@ -487,10 +536,19 @@ export function BanterRequest({
           <MaterialIcons name="person" size={ICON.lg} color={EMBER.textSecondary} />
         </View>
       )}
+      </Pressable>
 
       <View style={requestStyles.requestBody}>
         <View style={styles.rowLine}>
-          <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+          <Text
+            style={styles.rowTitle}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.4}
+            onPress={onOpenProfile}
+            // The avatar above is the labelled button; this is the same target.
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          >
             {name}
           </Text>
           {timeLabel ? (
@@ -542,6 +600,23 @@ export function BanterRequest({
               Accept
             </Text>
           </Pressable>
+          {onMore ? (
+            // Last, and out of the way of the two answers.
+            <Pressable
+              onPress={onMore}
+              disabled={pending}
+              accessibilityRole="button"
+              accessibilityLabel={`More options for the request from ${name}`}
+              // A 32pt disc, so 8 all round: the pills' slop left it 40 wide.
+              hitSlop={SPACE.sm}
+              style={({ pressed }) => [
+                requestStyles.requestMore,
+                (pressed || pending) && styles.pressed,
+              ]}
+            >
+              <Ionicons name="ellipsis-horizontal" size={ICON.sm} color={EMBER.textSecondary} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -549,7 +624,7 @@ export function BanterRequest({
 }
 
 // 32pt pills + 6 above and below reach the 44pt minimum without a taller row.
-const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
+export const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
 
 const requestStyles = StyleSheet.create({
   // The conversation row's geometry, top-aligned because the body runs longer.
@@ -580,8 +655,17 @@ const requestStyles = StyleSheet.create({
   },
   // Secondary + primary: the one row where two fills may differ.
   requestDecline: { backgroundColor: EMBER.surface },
-  requestAccept: { backgroundColor: EMBER.accent },
+  // One row, one height: a 32pt disc beside the two 32pt pills.
+  requestMore: {
+    width: CONTROL.sm,
+    height: CONTROL.sm,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Strong-neutral, not the accent: see the component's note.
+  requestAccept: { backgroundColor: EMBER.textPrimary },
   requestDeclineLabel: { ...TYPE.button, color: EMBER.textSecondary },
-  // `onGradient`, not white — white fails contrast on the accent fill.
-  requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient },
+  requestAcceptLabel: { ...TYPE.button, color: EMBER.bg },
 })

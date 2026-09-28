@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/logo/icon-ios.png",
     "scheme": "blendn",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
@@ -27,7 +27,18 @@
               "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
             ]
           }
-        ]
+        ],
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
       }
     },
     "android": {
@@ -106,7 +117,7 @@
         "expo-notifications",
         {
           "icon": "./assets/logo/monogram-white.png",
-          "color": "#F15524"
+          "color": "#F05524"
         }
       ],
       [

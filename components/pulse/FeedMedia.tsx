@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
-import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, ReduceMotion, useReducedMotion } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
@@ -57,7 +57,7 @@ const frameIn = FadeIn.duration(FRAME_FADE_MS)
  */
 export function FeedMedia({
   playlist,
-  isActive,
+  isActive: activeCard,
   width,
   height,
 }: {
@@ -67,6 +67,14 @@ export function FeedMedia({
   width: number
   height: number
 }) {
+  /*
+   * Reduce Motion: the first still, and nothing else — no clip playing on its
+   * own and no slideshow advancing under the reader. The card behaves exactly
+   * like an inactive one, which is already the cheap, still path. The event's
+   * own screen is where the media can be opened deliberately.
+   */
+  const reduceMotion = useReducedMotion()
+  const isActive = activeCard && !reduceMotion
   const [index, setIndex] = useState(0)
   /**
    * The item being dissolved away from, held underneath the new one until its

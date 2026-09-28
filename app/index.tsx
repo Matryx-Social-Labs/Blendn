@@ -1,5 +1,5 @@
 import { ScreenProfiler } from '../lib/perf'
-import { AntDesign } from '@expo/vector-icons'
+import { AntDesign, Ionicons } from '@expo/vector-icons'
 import {
   GoogleSignin,
   statusCodes
@@ -9,12 +9,15 @@ import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { EmberButton } from '../components/onboarding/EmberControls'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
-import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
+import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
+import { PendingInvite } from '../components/friends/PendingInvite'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
 /*
@@ -68,8 +71,13 @@ const GOOGLE_FILL = '#FFFFFF'
 const GOOGLE_INK = '#1F1F1F'
 
 function IndexInner() {
-  const { user, loading } = useAuth()
-  const [signingIn, setSigningIn] = useState(false)
+  const { user, loading, unreachable } = useAuth()
+  /*
+   * Which provider is in flight, not just whether one is. With one boolean,
+   * tapping Apple put Google's button into its spinner — the wrong button
+   * said it was working. Every way in is still off while either runs.
+   */
+  const [signingIn, setSigningIn] = useState<'google' | 'apple' | null>(null)
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false)
   /*
    * Every failure here used to be `Logger.error` and nothing else: the spinner
@@ -102,17 +110,18 @@ function IndexInner() {
    */
   const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => {
-    if (user || loading) return
+    if (user || loading || unreachable) return
     consumeSessionEndedNotice().then((ended) => {
       if (ended) setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)
     })
-  }, [user, loading])
+  }, [user, loading, unreachable])
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
   const handleGoogleSignIn = async () => {
+    if (signingIn) return
     try {
-      setSigningIn(true)
+      setSigningIn('google')
       setError(null)
       Logger.info('auth', 'Starting Google Sign In...')
 
@@ -161,16 +170,17 @@ function IndexInner() {
         // rather than the generic message.
         setError('Google Play services needs updating before you can sign in with Google.')
       } else {
-        setError("Couldn't sign in with Google. Please try again.")
+        setError("Couldn't sign in with Google. Try again.")
       }
     } finally {
-      setSigningIn(false)
+      setSigningIn(null)
     }
   }
 
   const handleAppleSignIn = async () => {
+    if (signingIn) return
     try {
-      setSigningIn(true)
+      setSigningIn('apple')
       setError(null)
       Logger.info('auth', 'Starting Apple Sign In...')
 
@@ -214,11 +224,33 @@ function IndexInner() {
         Logger.info('auth', 'User cancelled Apple sign in')
       } else {
         Logger.error('auth', 'Apple Sign In failed', { error: err })
-        setError("Couldn't sign in with Apple. Please try again.")
+        setError("Couldn't sign in with Apple. Try again.")
       }
     } finally {
-      setSigningIn(false)
+      setSigningIn(null)
     }
+  }
+
+  /*
+   * A session is stored, and the server could not be reached to confirm it.
+   *
+   * Nothing refused it, so this is not the sign-in screen: offering Google and
+   * Apple to somebody who is already signed in sends them to redo something
+   * that was never undone. Checked before `loading` so Try again keeps this
+   * screen, with its button busy, instead of dropping to the splash.
+   */
+  if (unreachable) {
+    return (
+      <SafeAreaView style={styles.unreachable} edges={['top', 'bottom']}>
+        <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textSecondary} />
+        <Text style={styles.unreachableTitle} accessibilityRole="header">Can&apos;t reach Blend&apos;n</Text>
+        <Text style={styles.unreachableBody}>
+          You&apos;re still signed in. Check your connection and try again.
+        </Text>
+        {/* The state's one action, so it takes the accent. */}
+        <EmberButton label="Try again" onPress={() => void retryAuth()} busy={loading} style={styles.retryButton} />
+      </SafeAreaView>
+    )
   }
 
   /*
@@ -257,6 +289,8 @@ function IndexInner() {
         <View style={styles.brandBlock}>
           <Image source={lockup} style={styles.lockup} resizeMode="contain" />
           <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
+          {/* Whose invite is waiting, when an invite link brought them here. */}
+          <PendingInvite />
         </View>
 
         <View style={styles.actions}>
@@ -288,15 +322,17 @@ function IndexInner() {
             */}
           <Pressable
             onPress={handleGoogleSignIn}
-            disabled={signingIn}
+            disabled={!!signingIn}
             accessibilityRole="button"
             accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: !!signingIn, busy: signingIn === 'google' }}
             style={({ pressed }) => [
               styles.googleButton,
-              (pressed || signingIn) && styles.pressed,
+              pressed && styles.pressed,
+              signingIn === 'apple' && styles.disabled,
             ]}
           >
-            {signingIn ? (
+            {signingIn === 'google' ? (
               <ActivityIndicator color={GOOGLE_INK} />
             ) : (
               <>
@@ -312,13 +348,24 @@ function IndexInner() {
              * moment the background stopped being a pastel gradient — a real bug
              * the old design was hiding rather than avoiding.
              */
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-              cornerRadius={CONTROL.lg / 2}
-              style={styles.appleButton}
-              onPress={handleAppleSignIn}
-            />
+            <View
+              pointerEvents={signingIn ? 'none' : 'auto'}
+              style={signingIn === 'google' && styles.disabled}
+            >
+              {/* The system draws this button and has no busy state; its spinner sits over it. */}
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                cornerRadius={CONTROL.lg / 2}
+                style={styles.appleButton}
+                onPress={handleAppleSignIn}
+              />
+              {signingIn === 'apple' ? (
+                <View style={styles.appleBusy} pointerEvents="none">
+                  <ActivityIndicator color={GOOGLE_INK} />
+                </View>
+              ) : null}
+            </View>
           )}
 
           <View style={styles.dividerRow}>
@@ -328,17 +375,23 @@ function IndexInner() {
           </View>
 
           <Pressable
-            onPress={() => router.push('/sign-in')}
-            disabled={signingIn}
+            /*
+             * The notice goes with them. Somebody the server signed out who
+             * picks email lands on a form that otherwise says nothing about
+             * why they are there.
+             */
+            onPress={() =>
+              router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
+            }
+            disabled={!!signingIn}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}
+            accessibilityState={{ disabled: !!signingIn }}
+            style={({ pressed }) => [styles.emailButton, pressed && styles.pressed, !!signingIn && styles.disabled]}
           >
             <Text style={styles.emailLabel}>Continue with email</Text>
           </Pressable>
 
-          <Text style={styles.legal}>
-            By continuing you agree to our Terms and Privacy Policy.
-          </Text>
+          <LegalLine lead="By continuing you" style={styles.legal} />
         </View>
       </SafeAreaView>
     )
@@ -455,9 +508,35 @@ const styles = StyleSheet.create({
   // design-exception: level with `googleLabel` and the system-drawn Apple button — see the note there
   emailLabel: { color: EMBER.textPrimary, fontSize: 21, fontWeight: '500' },
   pressed: {
-    opacity: 0.85,
+    opacity: OPACITY.pressed,
   },
-  legal: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center', marginTop: SPACE.sm },
+  disabled: {
+    opacity: OPACITY.disabled,
+  },
+  // Over the system-drawn Apple button, which has no busy state of its own.
+  appleBusy: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: GOOGLE_FILL,
+  },
+  legal: { marginTop: SPACE.sm },
+
+  unreachable: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACE.md,
+    paddingHorizontal: GUTTER,
+    backgroundColor: 'transparent',
+  },
+  unreachableTitle: { ...TYPE.title, textAlign: 'center' },
+  unreachableBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
+  retryButton: {
+    alignSelf: 'stretch',
+    marginTop: SPACE.lg,
+  },
 })
 
 

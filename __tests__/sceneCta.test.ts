@@ -116,7 +116,7 @@ describe('the pill is solid, and nothing glows around it', () => {
 })
 
 describe('what the button says', () => {
-  it('says Blend in, and only ended disables', () => {
+  it('says Blend in, and no state is a dead end', () => {
     const src = SRC()
     expect(src).toContain("join: 'Blend in'")
     expect(src).toContain('"You\'re in"')
@@ -124,9 +124,11 @@ describe('what the button says', () => {
      * `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
      * event still takes people; `max_capacity` is a number the organiser
      * watches, not a door the app keeps. A capacity-disabled CTA would block an
-     * interaction the product explicitly allows.
+     * interaction the product explicitly allows. And `ended` offers tonight
+     * rather than greying out: a finished event is somebody looking for one.
      */
-    expect(src).toContain("const disabled = state === 'ended'")
+    expect(src).toContain('const disabled = !onPress')
+    expect(src).toContain(`ended: "See what's on tonight"`)
   })
 })
 
@@ -287,10 +289,12 @@ describe('the Location card matches 1141:4900', () => {
 })
 
 describe('the amenity tiles match 1141:4917', () => {
-  it('are a fixed 126 tall, so the pair cannot go ragged', () => {
+  it('are at least 126 tall, so the pair cannot go ragged or clip', () => {
     // `grid-rows-[126px]`. Content-sized, the two agreed only while their text
-    // wrapped identically — which today's two fixtures happen to do.
-    expect(SECTIONS()).toContain('height: 126')
+    // wrapped identically. A floor, not a fixed height: the row stretches both
+    // tiles to the taller one, and large text grows the tile instead of clipping.
+    expect(SECTIONS()).toMatch(/AMENITY_TILE_MIN_HEIGHT = 126[\s\S]*minHeight: AMENITY_TILE_MIN_HEIGHT/)
+    expect(SECTIONS()).not.toMatch(/\n\s+height: 126/)
   })
 
   it('lets each icon take its own size', () => {
@@ -331,9 +335,10 @@ describe('the accessibility gaps docs/SCENE.md recorded', () => {
     /*
      * Unlabelled, a screen reader says "butterfly, turtle, fox" — worse than
      * silence, because it is confidently wrong about what is on screen. The
-     * count is the whole message.
+     * count is the whole message, read with its heading ("Going, 12").
      */
-    expect(SECTIONS()).toContain('accessibilityLabel={`${count} people interested`}')
+    expect(SECTIONS()).toContain('accessibilityLabel={`${label}, ${count}`}')
+    expect(SECTIONS()).toMatch(/style=\{styles\.stack\}\s*\n\s*accessibilityElementsHidden/)
   })
 })
 

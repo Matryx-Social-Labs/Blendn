@@ -113,11 +113,23 @@ const TabButton = memo(({
   avatarUrl?: string | null
 }) => (
   <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={`${label} tab`}
-    accessibilityState={isFocused ? { selected: true } : {}}
+    /*
+     * A tab, named by its name: VoiceOver adds "tab, 2 of 5" itself, so the
+     * old "Pulse tab" label was read as "Pulse tab, tab". `selected` is always
+     * stated, so an unselected tab says so too.
+     */
+    accessibilityRole="tab"
+    accessibilityLabel={label}
+    accessibilityState={{ selected: isFocused }}
     onPress={onPress}
     onLongPress={onLongPress}
+    /*
+     * The items are content-sized (see `bar`), so "Me" alone was a 23pt-wide
+     * target. The slop reaches into the gaps either side and up to the bar's
+     * edge without moving anything: equal-width `flex: 1` cells would reach
+     * the same area but re-space the measured row.
+     */
+    hitSlop={TAB_HIT_SLOP}
     style={({ pressed }) => [styles.item, pressed && styles.pressed]}
   >
     <View style={styles.iconBox}>
@@ -444,6 +456,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     <View
       style={[styles.bar, { paddingBottom: tabBarBottomPadding(insets.bottom) }]}
       pointerEvents="box-none"
+      accessibilityRole="tablist"
     >
       {/* Opaque and flat: no glass (tasks/lessons.md). */}
       <View style={styles.barSurface} pointerEvents="none" />
@@ -462,6 +475,16 @@ export default function TabLayout() {
   const blendnOpen = useBlendnOpen()
   return (
     <View style={styles.host}>
+    {/*
+      While Blend'n is open the tabs and the bar under it are hidden from
+      VoiceOver and TalkBack: an overlay that only looks modal let a swipe
+      walk straight past the room into "Pulse tab".
+    */}
+    <View
+      style={styles.tabs}
+      accessibilityElementsHidden={blendnOpen}
+      importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}
+    >
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -498,12 +521,17 @@ export default function TabLayout() {
       <Tabs.Screen name="chat" options={{ title: 'Banter' }} />
       <Tabs.Screen name="profile" options={{ title: 'Me' }} />
     </Tabs>
+    </View>
       {/*
         The Blend'n screen, over the tabs *and* the bar, under the root stack.
         An overlay rather than a route so a profile, a DM or the room chat
         pushed from it lands on top of it — see `lib/blendnOverlay.ts`.
       */}
-      {blendnOpen ? <BlendnScreen /> : null}
+      {blendnOpen ? (
+        <View style={StyleSheet.absoluteFill} accessibilityViewIsModal pointerEvents="box-none">
+          <BlendnScreen />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -545,6 +573,13 @@ export const TAB_BAR_PADDING_TOP = 8
 export const TAB_BAR_LINE = CENTRE_SIZE
 
 /**
+ * Each tab's touch area past its drawn box: up to the bar's top edge, and 12
+ * into the ~27pt gap either side, so neighbours do not overlap. Takes "Me"
+ * from 23pt wide to 47.
+ */
+const TAB_HIT_SLOP = { top: TAB_BAR_PADDING_TOP, bottom: SPACE.md, left: SPACE.md, right: SPACE.md }
+
+/**
  * The bar's bottom padding.
  *
  * `insets.bottom` is 34 on a home-indicator phone, and the indicator itself is
@@ -570,6 +605,7 @@ export function tabBarTop(screenHeight: number, bottomInset: number) {
 
 const styles = StyleSheet.create({
   host: { flex: 1, backgroundColor: EMBER.bg },
+  tabs: { flex: 1 },
   /*
    * Frame `1141:4827`, measured rather than guessed.
    *

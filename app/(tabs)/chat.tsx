@@ -1,5 +1,4 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,7 +16,6 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
-import ScalePress from '../../components/motion/ScalePress'
 import {
   BANTER_PADDING_HORIZONTAL,
   BANTER_SECTION_GAP,
@@ -34,11 +32,16 @@ import { bucketRows, inboxTimeLabel, previewWithSender } from '../../components/
 import { matchRowPreview } from '../../lib/matchOpener'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
+import { isMuted, rememberRoomMute, useRoomMembership } from '../../lib/roomMembership'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
 import { apiClient } from '../../lib/apiClient'
+import { userReportStep } from '../../lib/safetyUtils'
+import { showSheet } from '../../lib/sheet'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
+import { userMessage } from '../../lib/userMessage'
+import { LoadError, LoadState } from '../../components/LoadError'
 import { queryCache } from '../../lib/queryCache'
 import {
   ChatMessageCallback,
@@ -47,7 +50,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -76,7 +79,8 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  *    which the client cannot derive, because "the event is on now" is not the
  *    same as "I am there".
  * 2. **Requests** — the one row that cannot be opened, because tapping it has
- *    to mean accept or decline. Accept is the screen's one accent.
+ *    to mean accept or decline. Accept is a strong-neutral pill, not the
+ *    accent — a list of requests was a column of orange.
  * 3. **Conversations**, bucketed Today / This week / Earlier by last activity
  *    (`components/banter/inbox.ts`), "Mark all read" on the first heading.
  *
@@ -144,6 +148,8 @@ interface PersonalChat {
 
 interface MessageRequest {
   request_id: string
+  /** Who asked. Opens their profile, and is who a report names. */
+  sender_id?: string | null
   sender_name?: string | null
   sender_avatar?: string | null
   initial_message?: string | null
@@ -172,10 +178,11 @@ const previewFromMessage = (message: any): string | undefined => {
   }
 
   const mediaType = String(message.mediaType ?? message.media_type ?? message.type ?? '').toLowerCase()
-  if (mediaType.includes('image') || mediaType.includes('photo')) return '[Photo]'
-  if (mediaType.includes('voice') || mediaType.includes('audio')) return '[Voice note]'
-  if (mediaType.includes('video')) return '[Video]'
-  if (message.mediaUrl || message.media_url || message.attachmentUrl || message.attachment_url) return '[Attachment]'
+  // Said as a person would, not as a bracketed type tag.
+  if (mediaType.includes('image') || mediaType.includes('photo')) return 'Sent a photo'
+  if (mediaType.includes('voice') || mediaType.includes('audio')) return 'Sent a voice note'
+  if (mediaType.includes('video')) return 'Sent a video'
+  if (message.mediaUrl || message.media_url || message.attachmentUrl || message.attachment_url) return 'Sent an attachment'
   return undefined
 }
 
@@ -267,7 +274,21 @@ function ChatInner() {
   }, [])
 
   /* Lifted into Live now above, so not repeated in the list below. */
-  const liveRooms = useMemo(() => groupChats.filter((c) => c.is_checked_in), [groupChats])
+  /*
+   * Your mutes and the rooms you left, as `lib/roomMembership.ts` last heard
+   * them. A room left from Room info goes from this list at once rather than
+   * at the next read, and a mute set there shows on its row on the way back.
+   */
+  const membership = useRoomMembership()
+  const rooms = useMemo(
+    () => groupChats.filter((c) => !membership.left.has(c.chat_room_id)),
+    [groupChats, membership.left]
+  )
+  const roomMuted = useCallback(
+    (id: string) => isMuted(membership.mutes.get(id)),
+    [membership.mutes]
+  )
+  const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
 
   /*
    * The merged list.
@@ -308,7 +329,7 @@ function ChatInner() {
           open: () => handlePersonalChatPress(c),
         }
       }),
-      ...groupChats.filter((c) => !c.is_checked_in).map((c) => {
+      ...rooms.filter((c) => !c.is_checked_in).map((c) => {
         const preview =
           roomStateLine(c.room_state) ??
           (c.last_message?.trim()
@@ -322,6 +343,7 @@ function ChatInner() {
           avatarUrl: c.event_image,
           kind: 'event' as const,
           unread: c.unread_count > 0,
+          muted: roomMuted(c.chat_room_id),
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
           // The sender is searchable even when a room-state line replaces the preview.
           searchText: `${c.event_title} ${preview} ${c.last_sender_name ?? ''}`.toLowerCase(),
@@ -330,7 +352,7 @@ function ChatInner() {
       }),
     ]
     return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, groupChats, revealSeen, handlePersonalChatPress, handleGroupChatPress])
+  }, [personalChats, rooms, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
 
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim().toLowerCase()
@@ -397,6 +419,7 @@ function ChatInner() {
       if (result.success && result.data?.requests) {
         const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
           request_id: r.id,
+          sender_id: r.senderId || r.sender?.id || null,
           sender_name: r.sender?.name || null,
           sender_avatar: r.sender?.avatar || null,
           initial_message: r.message || null,
@@ -451,7 +474,7 @@ function ChatInner() {
           return {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
             event_id: room.event_id || room.eventId || '',
-            event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Unknown Event',
+            event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
             // `memberCount` is what `GET /chat/groups` sends; the rest never arrived.
             participant_count: Number(room.memberCount ?? room.participant_count) || 0,
             event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
@@ -466,6 +489,8 @@ function ChatInner() {
           }
         })
         .filter((chat) => chat.chat_room_id)
+      // Each row carries your mute of it; the store is what the rows read.
+      for (const room of rooms) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
 
       if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
       if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
@@ -663,7 +688,7 @@ function ChatInner() {
 
         const updated = [...prev]
         const isFromMe = data.message.senderId === user.id
-        const nextPreview = previewFromMessage(data.message) || '[Message]'
+        const nextPreview = previewFromMessage(data.message) || 'New message'
         updated[idx] = {
           ...updated[idx],
           last_message: nextPreview,
@@ -801,7 +826,7 @@ function ChatInner() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
-        showToast(result.error || `Couldn't ${action} that request. Try again.`, 'error')
+        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error')
         await loadChats(true, true)
         return
       }
@@ -831,6 +856,46 @@ function ChatInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestPending, showToast])
+
+  /*
+   * "More" on a request: Block, or Report.
+   *
+   * Block goes through the request itself (`respond` with `block`), which is
+   * what writes the block and closes the request in one step. Report names
+   * the sender, and then declines the request, so a report does not leave the
+   * thing reported sitting in the inbox waiting for an answer.
+   */
+  const openRequestMore = (request: MessageRequest) => {
+    const name = request.sender_name || 'Someone'
+    const senderId = request.sender_id
+    showSheet({
+      kind: 'actions',
+      title: name,
+      message: 'Blocking stops them asking again and hides you from each other. A report goes to our team, and they are not told who sent it.',
+      actions: [
+        {
+          label: 'Block',
+          variant: 'destructive',
+          run: async () => {
+            const result = await apiClient.respondToMessageRequest(request.request_id, 'block')
+            if (!result.success) {
+              return { ok: false, error: userMessage(result, "Couldn't block them. Try again.") }
+            }
+            setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
+            void loadChats(true, true)
+            return { ok: true, toast: `${name} is blocked` }
+          },
+        },
+        ...(senderId
+          ? [{
+              label: 'Report',
+              next: () => userReportStep(name, senderId, () => void respondToRequest(request, 'decline')),
+            }]
+          : []),
+        { label: 'Cancel', cancel: true as const },
+      ],
+    })
+  }
 
   useEffect(() => {
     // loadChats paints the cached lists before its first await, which is the
@@ -878,6 +943,7 @@ function ChatInner() {
                 title={c.event_title}
                 coverUrl={c.event_image}
                 memberCount={c.participant_count}
+                muted={roomMuted(c.chat_room_id)}
                 onPress={() => handleGroupChatPress(c)}
               />
             ))}
@@ -908,6 +974,12 @@ function ChatInner() {
                   pending={requestPending[r.request_id]}
                   onAccept={() => respondToRequest(r, 'accept')}
                   onDecline={() => respondToRequest(r, 'decline')}
+                  onOpenProfile={
+                    r.sender_id
+                      ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never)
+                      : undefined
+                  }
+                  onMore={() => openRequestMore(r)}
                 />
               </Reanimated.View>
             ))}
@@ -1008,46 +1080,21 @@ function InboxSkeleton() {
 }
 
 function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View style={styles.empty}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-        Couldn&apos;t load your chats
-      </Text>
-      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-        Check your connection and try again.
-      </Text>
-      <ScalePress
-        style={styles.emptyCta}
-        onPress={onRetry}
-        pressedScale={0.97}
-        accessibilityRole="button"
-      >
-        <Text style={styles.emptyCtaText}>Retry</Text>
-      </ScalePress>
-    </View>
-  )
+  return <LoadError title="Couldn't load your chats" onRetry={onRetry} />
 }
 
 function EmptyInbox() {
   return (
-    <View style={styles.empty}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="chatbubbles-outline" size={36} color={EMBER.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-        No conversations yet
-      </Text>
-      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-        Blend in to an event and its room appears here — or message someone you
-        met there.
-      </Text>
-      <ScalePress style={styles.emptyCta} onPress={() => router.push('/(tabs)/events' as any)} pressedScale={0.97}>
-        <Text style={styles.emptyCtaText}>Explore events</Text>
-      </ScalePress>
-    </View>
+    <LoadState
+      icon="chatbubbles-outline"
+      title="No conversations yet"
+      message="Blend in to an event and its room appears here — or message someone you met there."
+      action={{
+        label: 'Explore events',
+        onPress: () => router.push('/(tabs)/events' as any),
+        accessibilityHint: 'Opens the Pulse',
+      }}
+    />
   )
 }
 
@@ -1086,31 +1133,6 @@ const styles = StyleSheet.create({
   skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.md, alignItems: 'center' },
   skeletonBody: { flex: 1, gap: SPACE.sm },
 
-  empty: { alignItems: 'center', paddingVertical: SPACE.xxxl, paddingHorizontal: SPACE.lg, gap: SPACE.sm },
-  // Same glyph tile as the Pulse's empty state (events.tsx `emptyGlyph`).
-  emptyGlyph: {
-    width: 80,
-    height: 80,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACE.sm,
-  },
-  emptyTitle: { ...TYPE.title, textAlign: 'center' },
-  emptyBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
-  emptyCta: {
-    marginTop: SPACE.sm,
-    backgroundColor: EMBER.accent,
-    borderRadius: EMBER_RADIUS.pill,
-    height: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.xl,
-  },
-  // `onGradient`, not white — white fails contrast on the accent fill.
-  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
 })
 
 

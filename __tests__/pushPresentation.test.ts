@@ -140,12 +140,13 @@ describe('the bell, while the app is open', () => {
    * that arrived while you were on it waited for you to leave and come back.
    * The server says `notification:new` on your own socket room when a row lands.
    */
-  it('listens for a new row and bumps its badge', () => {
+  it('listens for a new row and re-reads its count', () => {
     const socket = read('lib', 'socketClient.ts')
     expect(socket).toMatch(/sock\.on\("notification:new"/)
     expect(socket).toMatch(/export function subscribeToBell\(/)
     const bell = read('components', 'pulse', 'NotificationBell.tsx')
     expect(bell).toMatch(/subscribeToBell\(/)
-    expect(bell).toMatch(/setUnread\(\(n\) => n \+ 1\)/)
+    // The server's count, not a local +1 that duplicates would inflate.
+    expect(bell).toMatch(/subscribeToBell\(\(\) => void load\(\)\)/)
   })
 })

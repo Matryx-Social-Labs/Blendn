@@ -12,7 +12,10 @@ import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-
  *
  * The fades ignore Reduce Motion on purpose — a fade *is* the reduced form,
  * and it still says "this just changed". The pop is skipped under it: the
- * control simply appears.
+ * control simply appears. That is `ReduceMotion.System` on the pop's timings,
+ * which ends them at once when the setting is on. The comment claimed this
+ * before the code did — a custom entering worklet is not covered by
+ * Reanimated's own reduce-motion handling, so the scale ran regardless.
  */
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
 
@@ -22,7 +25,7 @@ export const fadeOutFast = FadeOut.duration(120).easing(EASE_OUT).reduceMotion(R
 /** Opacity plus a 0.9 → 1 scale, for a floating control. Never from scale(0). */
 export const popIn = () => {
   'worklet'
-  const t = { duration: 150, easing: EASE_OUT }
+  const t = { duration: 150, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 0, transform: [{ scale: 0.9 }] },
     animations: {
@@ -34,7 +37,7 @@ export const popIn = () => {
 
 export const popOut = () => {
   'worklet'
-  const t = { duration: 120, easing: EASE_OUT }
+  const t = { duration: 120, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 1, transform: [{ scale: 1 }] },
     animations: {

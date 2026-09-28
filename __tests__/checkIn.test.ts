@@ -6,7 +6,7 @@
  * decides, so both doors — and the Blend'n button — agree.
  */
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn() },
+  apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn(), forgetEvent: jest.fn() },
 }))
 jest.mock('../lib/rosterMemory', () => ({ forgetRoster: jest.fn() }))
 jest.mock('../lib/roomVisibilityStorage', () => ({
@@ -21,7 +21,7 @@ import { checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged
 /* eslint-enable import/first */
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
-  'checkIn' | 'checkOut' | 'forgetActiveCheckins',
+  'checkIn' | 'checkOut' | 'forgetActiveCheckins' | 'forgetEvent',
   jest.Mock
 >
 const mockForgetRoster = jest.requireMock('../lib/rosterMemory').forgetRoster as jest.Mock
@@ -110,6 +110,64 @@ describe('check-in state changes reach the tab bar', () => {
     await submitCheckIn('e1', at)
     expect(heard).not.toHaveBeenCalled()
     off()
+  })
+})
+
+/*
+ * Simulator QA, 2026-09-28: Blend in → I Agree → "Checked in" → Stay here, and
+ * the event screen's CTA went back to "Blend in" while the centre button said
+ * "Open the room". Only the active list was dropped; the event detail, SWR-
+ * cached with `userStatus.isCheckedIn: false`, answered the screen's re-read
+ * (on the socket's check-in, or on focus coming back from "Why do you go out?")
+ * and overwrote the optimistic "You're in".
+ */
+describe('a check-in change drops the cached event detail too', () => {
+  const { getEventDetailCache, setEventDetailCache } = jest.requireActual('../lib/eventDetailCache')
+
+  it.each([
+    ['a fresh check-in', () => mockApi.checkIn.mockResolvedValue({ success: true, data: {} }), () => submitCheckIn('e1', at)],
+    [
+      'already checked in',
+      () => mockApi.checkIn.mockResolvedValue({ success: false, errorCode: 'ALREADY_CHECKED_IN', error: 'x' }),
+      () => submitCheckIn('e1', at),
+    ],
+    ['a check-out', () => mockApi.checkOut.mockResolvedValue({ success: true, data: {} }), () => checkOutOf('e1')],
+  ])('%s', async (_name, arrange, act) => {
+    arrange()
+    setEventDetailCache('e1', { userStatus: { isCheckedIn: false } })
+    setEventDetailCache('e2', { userStatus: { isCheckedIn: false } })
+    await act()
+    expect(mockApi.forgetEvent).toHaveBeenCalledWith('e1')
+    expect(getEventDetailCache('e1')).toBeNull()
+    // Only the event that changed.
+    expect(getEventDetailCache('e2')).not.toBeNull()
+  })
+
+  it('and not on a refusal that changed nothing', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: false, errorCode: 'EVENT_ENDED', error: 'over' })
+    await submitCheckIn('e1', at)
+    expect(mockApi.forgetEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('the event screen hears check-in changes', () => {
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const screen = strip(readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8'))
+
+  it('re-reads the detail — the one source of userStatus — whenever check-in state changes', () => {
+    expect(screen).toContain("import { subscribeCheckInChanged } from '../../lib/checkIn'")
+    expect(screen).toMatch(/subscribeCheckInChanged\(\(\) => void fetchEventDetails\(\)\)/)
+  })
+
+  it('still turns the CTA at once from the check-in result', () => {
+    expect(screen).toMatch(/onCheckedIn: \(outcome\) =>\s*setCheckInStatus\(/)
+  })
+
+  it('apiClient drops only the detail, not the attendee list', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib', 'apiClient.ts'), 'utf8')
+    const body = src.slice(src.indexOf('forgetEvent(eventId: string): void {'), src.indexOf('private setCache<T>'))
+    expect(body).toContain('const detail = `:/api/mobile/events/${eventId}`')
+    expect(body).toContain('key.includes(`${detail}:`) || key.includes(`${detail}?`)')
   })
 })
 

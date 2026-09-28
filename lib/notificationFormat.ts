@@ -26,6 +26,8 @@ export type NotificationKind =
   | 'reveal'
   | 'friend_request'
   | 'friend_accepted'
+  /** An event you checked in to has ended: rate it. Carries `eventId`. */
+  | 'rating_request'
 
 export interface NotificationItem {
   id: string

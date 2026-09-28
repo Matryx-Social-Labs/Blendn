@@ -43,7 +43,7 @@ render.
 | **Me tab** | identity card → Preview, three counts, **Edit profile**, **Settings** |
 | **Preview** (`/user/<own id>`) | how others see you — literally the attendee screen, in its `'self'` mode |
 | **Edit profile** | photos, name, age, occupation, education, bio, interests, **and the five matching fields** |
-| **Settings** | Privacy · Notifications · Safety · About · Account, then Danger zone |
+| **Settings** | Privacy · Notifications · Safety · Help · About · Account, then Danger zone |
 
 ### There used to be two editors and three doors
 
@@ -77,12 +77,19 @@ continuing to write them would keep it current for somebody who just opted out.
 
 ## Settings, reorganised
 
-Five sections, each named after what is under it:
+Six sections, each named after what is under it:
 
 **Privacy** (online status, read receipts, location) · **Notifications** (push) ·
-**Safety** (blocked users, safety tips, guidelines) · **About** (help, terms,
-privacy policy) · **Account** (sign out) — then **Danger zone**, alone at the
-bottom behind a 40pt gap, holding Delete account.
+**Safety** (blocked users, safety tips, guidelines) · **Help** (help centre,
+Contact support) · **About** (About Blend'n, terms, privacy policy) ·
+**Account** (sign out) — then **Danger zone**, alone at the bottom behind a 40pt
+gap, holding Delete account.
+
+Sign out asks first, in an `ActionTray`. The push switch also reads the phone's
+permission: when the OS has blocked notifications it shows off, with a hint, and
+turning it on explains and offers Open Settings rather than saving a preference
+nothing can deliver on. Contact support drafts an email to the address in
+`lib/support.ts` with the app version, the phone and the account id.
 
 What that replaced: an "Account" section containing **no account settings** —
 Blocked users, Sign out, Delete account — with the two destructive rows adjacent
@@ -176,3 +183,29 @@ be built. None was invented to fill the space.
    real it belongs in onboarding, not just on this screen.
 3. **Is `PRO` a plan?** If so it is a much larger decision than a badge.
 4. **The gradient chip needs a meaning or should be dropped** — see 4 above.
+
+---
+
+## Identity is the server's `identityVisible`, and fails closed
+
+`app/user/[id].tsx` used to infer "revealed" from a photo, a bio or an
+occupation having arrived. It now reads `identityVisible` from `GET /users/:id`
+and nothing else (`lib/profileIdentity.ts`): anything but `true` drops photos,
+bio, occupation and education at the boundary, even if the payload carried
+them, and the title is the room's pseudonym — never the server's flat
+"Attendee", which it no longer shows anywhere.
+
+### Opening a profile from a room: pass `pseudonym` and `roomSeed`
+
+The route takes two optional params besides `id` and `eventId`:
+
+| param | what | example |
+|---|---|---|
+| `pseudonym` | the person's name **in this room**, as the room shows it | `Cosmic Panda` |
+| `roomSeed` | the mark's fallback seed, used only if the pseudonym is a placeholder | `${chatGroupId}:${handle}` |
+
+Room info's member list passes both. **The Room grid (`components/blendn/`)
+should too** — in `BlendnScreen.tsx`'s `openProfile`, add
+`pseudonym: p.name` and `` roomSeed: `${eventId}:${p.id}` `` to the params — so the
+profile it opens is titled and drawn the way the card was. Without them the
+page says "Someone" and draws a neutral mark.

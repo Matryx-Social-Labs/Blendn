@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { LoadError } from '../../components/LoadError'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
+import { isGone } from '../../lib/loadFailure'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 
 /** The photo's box and decode hint. */
@@ -20,11 +22,18 @@ const PHOTO = 160
  * `blendn://f/<token>` from the web page's "Open in Blend'n".
  *
  * Signed out, the root guard holds this route and opens it after sign-in (or
- * after onboarding, for a new account) — see `app/_layout.tsx`.
+ * after onboarding, for a new account) — see `app/_layout.tsx`. Meanwhile the
+ * welcome and sign-in screens say whose invite is waiting, from the public
+ * preview (`components/friends/PendingInvite.tsx`).
  *
  * Shows the person who sent the link, because sending it was their choice. A
  * link that does not work says only that: never whether it was reset, whether
  * they blocked you, or whether the account still exists.
+ *
+ * "Doesn't work" is the server's 404 and nothing else. A link opened on a bad
+ * connection is a link that didn't load, and gets Try again — telling
+ * somebody their friend's link is dead because the train went into a tunnel
+ * sends them off to ask for a new one they don't need.
  */
 export default function InviteScreen() {
   const { token } = useLocalSearchParams<{ token: string }>()
@@ -32,23 +41,37 @@ export default function InviteScreen() {
   const [person, setPerson] = useState<FriendPerson | null>(null)
   const [state, setState] = useState<FriendState | null>(null)
   const [dead, setDead] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [asking, setAsking] = useState(false)
+
+  const settle = useCallback((result: Awaited<ReturnType<typeof apiClient.openFriendInvite>>) => {
+    if (result.success && result.data) {
+      setPerson(result.data.person)
+      setState(result.data.state)
+      setFailed(false)
+    } else if (isGone(result)) {
+      setDead(true)
+    } else {
+      setFailed(true)
+    }
+  }, [])
 
   useEffect(() => {
     let live = true
     apiClient.openFriendInvite(String(token)).then((result) => {
-      if (!live) return
-      if (result.success && result.data) {
-        setPerson(result.data.person)
-        setState(result.data.state)
-      } else {
-        setDead(true)
-      }
+      if (live) settle(result)
     })
     return () => {
       live = false
     }
-  }, [token])
+  }, [token, settle])
+
+  const retry = async () => {
+    setRetrying(true)
+    settle(await apiClient.openFriendInvite(String(token)))
+    setRetrying(false)
+  }
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events'))
 
@@ -100,6 +123,8 @@ export default function InviteScreen() {
               Ask the person who sent it for a new one.
             </Text>
           </>
+        ) : failed && !person ? (
+          <LoadError title="This link didn't open" onRetry={() => void retry()} retrying={retrying} />
         ) : !person || !cta ? (
           <ActivityIndicator color={EMBER.textSecondary} />
         ) : (

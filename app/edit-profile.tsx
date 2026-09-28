@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useNavigation } from 'expo-router'
+import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   AccessibilityInfo,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
@@ -23,6 +24,7 @@ import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
+import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
@@ -51,8 +53,36 @@ interface UserProfile {
 
 type TagInputMode = 'goal' | 'lookingFor'
 
+/**
+ * Everything the form edits, as one comparable string.
+ *
+ * Photos are not in it: `PhotoManager` saves each change as it is made, so
+ * there is nothing of theirs to lose by leaving. Interests are sorted because
+ * the picker's order is not a change.
+ */
+function formSnapshot(f: {
+  name: string
+  age: string
+  location: string
+  phone: string
+  occupation: string
+  education: string
+  bio: string
+  interestIds: string[]
+  goals: string[]
+  lookingFor: string[]
+  intents: string[]
+  workField: string | null
+  gender: string | null
+  orientations: string[]
+  interestedIn: string[]
+}): string {
+  return JSON.stringify({ ...f, interestIds: [...f.interestIds].sort() })
+}
+
 export default function EditProfile() {
   const { user: authUser } = useAuth()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -124,12 +154,58 @@ export default function EditProfile() {
   const nameInputRef = useRef<TextInput>(null)
   const ageInputRef = useRef<TextInput>(null)
 
+  /*
+   * Unsaved edits, and leaving with them.
+   *
+   * Back and swipe-back used to drop a half-written bio without a word. The
+   * form is compared with what it held when it loaded (or last saved); while
+   * they differ, leaving by any route — the header's back, the swipe, Android's
+   * back — stops and asks. Null until the profile has loaded, so a slow load is
+   * never "dirty".
+   */
+  const navigation = useNavigation()
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [leaving, setLeaving] = useState<NavigationAction | null>(null)
+  const pendingLeave = useRef<NavigationAction | null>(null)
+  const currentSnapshot = formSnapshot({
+    name, age, location, phone, occupation, education, bio, interestIds, goals, lookingFor,
+    intents, workField, gender, orientations, interestedIn,
+  })
+  const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
+
+  usePreventRemove(dirty && !leaving, ({ data }) => {
+    pendingLeave.current = data.action
+    setDiscardOpen(true)
+  })
+
+  // Discard lifts the guard first, then replays the exit that was stopped.
+  useEffect(() => {
+    if (leaving) navigation.dispatch(leaving)
+  }, [leaving, navigation])
+
+  /*
+   * Saved: leave once the render that moved the baseline has landed. Calling
+   * `router.back()` in the save handler itself ran before `savedSnapshot`
+   * updated, so the guard above still saw a dirty form and asked "Discard
+   * changes?" about changes that had just been saved.
+   */
+  const [leaveAfterSave, setLeaveAfterSave] = useState(false)
+  useEffect(() => {
+    if (leaveAfterSave && !dirty) router.back()
+  }, [leaveAfterSave, dirty])
+
+  const discardChanges = () => {
+    setDiscardOpen(false)
+    setLeaving(pendingLeave.current)
+  }
+
   // Declared inside the effect: it sets state only after its requests return.
   useEffect(() => {
     const loadProfile = async () => {
       try {
         if (!authUser) {
-          Alert.alert('Error', 'Please sign in to edit your profile')
+          showToast('Sign in to edit your profile.', 'error')
           router.back()
           return
         }
@@ -212,13 +288,31 @@ export default function EditProfile() {
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
         })
+        // The form as loaded: what "unsaved changes" is measured against.
+        setSavedSnapshot(formSnapshot({
+          name: combinedProfile.name || '',
+          age: combinedProfile.age?.toString() || '',
+          location: combinedProfile.location || '',
+          phone: combinedProfile.phone || '',
+          occupation: combinedProfile.occupation || '',
+          education: combinedProfile.education || '',
+          bio: combinedProfile.bio || '',
+          interestIds: structured,
+          goals: combinedProfile.goals || [],
+          lookingFor: combinedProfile.looking_for || [],
+          intents: loadedIntents,
+          workField: loadedWorkField,
+          gender: loadedGender,
+          orientations: loadedOrientations,
+          interestedIn: loadedInterestedIn,
+        }))
 
         const fields = await apiClient.getWorkFields()
         if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        Alert.alert('Error', 'Failed to load profile data')
+        showToast("Couldn't load your profile. Try again.", 'error')
       } finally {
         setLoading(false)
       }
@@ -227,7 +321,7 @@ export default function EditProfile() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser])
+  }, [authUser, showToast])
 
   const handlePhotosChange = (newPhotos: string[]) => {
     setPhotos(newPhotos)
@@ -235,10 +329,10 @@ export default function EditProfile() {
 
   const openTagInput = (mode: TagInputMode) => {
     if (mode === 'goal') {
-      setTagInputTitle('Add Goal')
+      setTagInputTitle('Add goal')
       setTagInputPlaceholder('What are you looking for?')
     } else if (mode === 'lookingFor') {
-      setTagInputTitle('Add Preference')
+      setTagInputTitle('Add preference')
       setTagInputPlaceholder('What type of person are you looking for?')
     }
     setTagInputMode(mode)
@@ -385,6 +479,8 @@ export default function EditProfile() {
         if (!r.success) throw new Error(r.error || 'Could not save your interests')
       }
       setInterestsAtLoad(interestIds)
+      // Saved: nothing is unsaved any more, so the OK below leaves without asking.
+      setSavedSnapshot(currentSnapshot)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
@@ -392,20 +488,20 @@ export default function EditProfile() {
       void refreshAuthUser()
 
       Logger.info('profile', 'EditProfile: Profile updated successfully', { userId: authUser.id })
-      Alert.alert(
-        'Profile Updated',
-        'Your profile has been successfully updated!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
-      )
+      /*
+       * A toast and straight back, not an alert with an OK to dismiss first:
+       * saving is the whole reason the screen was open, and the Me tab it
+       * returns to already shows the change. The baseline moved above, so
+       * the leave guard lets this through without asking.
+       */
+      showToast('Profile saved', 'success')
+      setLeaveAfterSave(true)
 
     } catch (error) {
       Logger.error('profile', 'EditProfile: Save profile error', { error })
-      Alert.alert('Error', 'Failed to save profile. Please try again.')
+      // Never the thrown message: it is the server's or the client's wording
+      // for a developer ("Failed to update profile"), not for the person.
+      showToast("Couldn't save your profile. Try again.", 'error')
     } finally {
       setSaving(false)
     }
@@ -451,7 +547,7 @@ export default function EditProfile() {
         behavior={KEYBOARD_BEHAVIOR}
       >
         <AppHeader
-          title="Edit Profile"
+          title="Edit profile"
           onBack={() => router.back()}
           rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
         />
@@ -720,6 +816,17 @@ export default function EditProfile() {
           </Pressable>
         </Modal>
       </KeyboardAvoidingView>
+
+      <ActionTray
+        visible={discardOpen}
+        title="Discard changes?"
+        message="You have edits that aren't saved. Leave now and they're gone."
+        onClose={() => setDiscardOpen(false)}
+        buttons={[
+          { label: 'Keep editing', onPress: () => setDiscardOpen(false) },
+          { label: 'Discard', variant: 'destructive', onPress: discardChanges },
+        ]}
+      />
     </SafeAreaView>
   )
 }

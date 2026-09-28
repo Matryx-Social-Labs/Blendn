@@ -19,7 +19,10 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
-  return { SafeAreaView: (p: object) => React.createElement(View, p) }
+  return {
+    SafeAreaView: (p: object) => React.createElement(View, p),
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  }
 })
 // One object, as the real singleton hands out: a fresh one per render re-runs
 // Settings' load effect forever.
@@ -112,8 +115,9 @@ it('the link opens the guidelines', async () => {
   expect(screen.getByTestId(BANNER)).toBeTruthy()
 })
 
+// A link: it opens a web page, and says so with its role and its open-outline mark.
 it('the Settings row opens the same page', async () => {
   await render(<SettingsScreen />)
-  await fireEvent.press(await screen.findByRole('button', { name: 'Community guidelines' }))
+  await fireEvent.press(await screen.findByRole('link', { name: 'Community guidelines' }))
   await waitFor(() => expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL))
 })

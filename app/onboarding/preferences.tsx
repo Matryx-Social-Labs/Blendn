@@ -142,7 +142,7 @@ export default function PreferencesScreen() {
       step="preferences"
       title="Your "
       titleAccent="preferences"
-      subtitle="Be your authentic self. Help us curate the right connections for your journey."
+      subtitle="Who you'd like to meet and why you go out. It shapes who you're introduced to."
       ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() =>
@@ -248,7 +248,7 @@ export default function PreferencesScreen() {
         />
       </EmberSection>
 
-      <EmberSection title="Looking For" caption="What brings you to Blend'n today?">
+      <EmberSection title="Looking for" caption="What brings you to Blend'n today?">
         <LookingForCards selected={lookingFor} onToggle={toggle} withoutDating={under18} />
       </EmberSection>
     </OnboardingScreen>

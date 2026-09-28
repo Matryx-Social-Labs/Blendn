@@ -133,10 +133,18 @@ export const EMBER = {
   textPrimary: '#FFFFFF',
   /** Body copy, field labels, the progress percentage. */
   textSecondary: '#AEAAAA',
-  /** Helper text under a field. Deliberately dimmer than `textSecondary`. */
-  textTertiary: '#787574',
-  /** Placeholder inside an input. Cool grey, so an empty field cannot be mistaken for a filled one. */
-  textPlaceholder: '#6B7280',
+  /**
+   * Helper text under a field. Deliberately dimmer than `textSecondary`, and
+   * still AA (4.5:1) on `bg`, `surfaceSunken` and `surface` — it was `#787574`,
+   * 3.3:1 on `surface`, which is where most helper text sits.
+   * `__tests__/themeContrast.test.ts` holds it there.
+   */
+  textTertiary: '#928E8D',
+  /**
+   * Placeholder inside an input. Cool grey, so an empty field cannot be
+   * mistaken for a filled one; AA on `surface`, the input fill (was `#6B7280`, 3.2:1).
+   */
+  textPlaceholder: '#8A8F99',
 
   /**
    * The primary action, flat — one per screen (docs/DESIGN_SYSTEM.md). No
@@ -280,6 +288,18 @@ export const CONTROL = {
 } as const
 
 /**
+ * Opacity for a control's two dimmed states, the same on every control.
+ *
+ * `pressed` is the feedback while a finger is down; `disabled` is "not yet"
+ * (a form not finished), dimmed rather than greyed so it does not read as
+ * broken. Before this the app used 0.4, 0.45, 0.5, 0.6, 0.7 and 0.86.
+ */
+export const OPACITY = {
+  pressed: 0.85,
+  disabled: 0.45,
+} as const
+
+/**
  * The type scale. Nine roles; a screen picks a role, never a size.
  *
  * Plus Jakarta Sans for headings and actions, Manrope for reading. Weight comes
@@ -357,3 +377,30 @@ export const TYPE = {
 } as const
 
 export type TypeRole = keyof typeof TYPE
+
+/**
+ * How far each role may grow with the phone's text size (Dynamic Type / Font
+ * scale), for `<Text variant>`.
+ *
+ * - `display`, `title`: 1.2. Already large and one to a line; a 34pt title at
+ *   3x wraps a screen name into four lines of nothing else.
+ * - `button`, `label`, `caption`: 1.3. They live in fixed-height boxes — a
+ *   56pt button, a tab label, a badge — and React Native clips a glyph to its
+ *   box rather than growing the box. 1.3 is the largest step that still fits.
+ * - `heading`, `body`, `bodyStrong`, `meta`: 2. Reading text in containers
+ *   that grow, which is where larger type is for.
+ *
+ * A call site with a fixed box of its own passes a tighter
+ * `maxFontSizeMultiplier`; the prop wins.
+ */
+export const MAX_FONT_SCALE: Record<TypeRole, number> = {
+  display: 1.2,
+  title: 1.2,
+  heading: 2,
+  button: 1.3,
+  body: 2,
+  bodyStrong: 2,
+  meta: 2,
+  label: 1.3,
+  caption: 1.3,
+}

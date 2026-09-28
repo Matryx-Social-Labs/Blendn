@@ -58,10 +58,12 @@ this". A correction on step one would silently wipe an answer from step six.
 `stepPayload` in `lib/onboarding.ts` is what narrows it, and
 `__tests__/onboarding.test.ts` pins it.
 
-**A failed server save does not block anyone.** The local draft is intact,
-`onboarded` is not written until the last step, and step eight re-sends
-everything — so the recovery is automatic. The alternative is trapping someone
-on a screen because their train went into a tunnel.
+**A failed server save stops on the step and says so.** It used to move on
+silently, trusting step eight to re-send everything; in practice that walked
+somebody through six screens of answers the server had not taken, to a final
+save that failed on the same field. Now a toast says what failed and Continue
+is the retry. The local draft is kept either way, and the step is only marked
+done once the server has it, so resume lands back on it.
 
 ### Resume
 
@@ -197,17 +199,15 @@ influence who anyone is matched with.
 **Decision needed:** either add Travel and Open to `connection_intent`, or
 accept that this screen is profile decoration and collect intent elsewhere.
 
-### 3. "Other" is stored as "prefer not to say"
+### 3. The fourth gender chip says what it stores
 
 The API's gender enum is `woman | man | non_binary | prefer_not_to_say`. The
-frame's fourth chip is **Other**.
+frame's fourth chip is **Other**, and it used to be labelled that while it
+saved `prefer_not_to_say`: someone saying *none of these three fit* was
+recorded as *declined to answer*.
 
-Someone choosing "Other" is saying *none of these three fit*. We record *they
-declined to answer*. Those are different statements, and `deriveInterestedIn`
-treats them the same.
-
-**Decision needed:** add `other` to the enum, or change the chip's label to
-match what it stores.
+**Decided (2026-09-29):** the chip reads **Prefer not to say**, which is what
+it stores. Adding `other` to the enum is still open, for the API.
 
 ### 4. Employment type and class year are not collected
 

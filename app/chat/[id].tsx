@@ -10,7 +10,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -21,27 +20,40 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { BroadcastNotice } from '../../components/chat/BroadcastNotice'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
+import { RoomLeftState } from '../../components/chat/RoomLeftState'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
+import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
-import { TypingIndicator } from '../../components/chat/TypingIndicator'
+import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
+import { useToast } from '../../components/Toast'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { apiClient } from '../../lib/apiClient'
+import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
+import { useLatest } from '../../lib/useLatest'
+import { userMessage } from '../../lib/userMessage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
-import { showMessageReportOptions } from '../../lib/safetyUtils'
+import { messageReportStep } from '../../lib/safetyUtils'
+import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
+import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { useFollowEnd } from '../../lib/useFollowEnd'
+import { newClientId } from '../../lib/clientId'
+import { ReplyBar } from '../../components/chat/ReplyBar'
+import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
+import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
-import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface Message {
   message_id: string
@@ -50,12 +62,16 @@ interface Message {
   message_text: string
   message_type: string
   reply_to_message_id: string | null
+  /** This send's own id, kept on the optimistic row so a retry is the same send (SCRUM-410). */
+  client_id?: string
   is_edited: boolean
   created_at: string
   /** Hidden by moderation. Only ever true on the sender's own messages. */
   removed?: boolean
   replyTo?: Message
   reactions?: { emoji: string; count: number; mine?: boolean }[]
+  /** Yours, and it did not reach the server. Kept, marked, and retryable. */
+  failed?: boolean
 }
 
 type ChatListItem =
@@ -90,22 +106,29 @@ const formatTime = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
+function GroupChatHeader({ name, imageUrl, subtitle, muted, onBack, onInfo }: {
   name: string
   imageUrl: string | null
   subtitle?: string
-  typingCount: number
+  /** You muted this room's notifications: a still bell-slash beside the name. */
+  muted: boolean
   onBack: () => void
+  onInfo: () => void
 }) {
   return (
     <View style={headerStyles.container}>
-      <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
         <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
       <View style={headerStyles.avatarWrap}>
         {imageUrl ? (
-          <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+          <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={headerStyles.avatar as any} width={HEADER_AVATAR} height={HEADER_AVATAR} contentFit="cover" />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarGroupFallback]}>
             <Ionicons name="people" size={ICON.md} color={EMBER.textPrimary} />
@@ -114,22 +137,53 @@ function GroupChatHeader({ name, imageUrl, subtitle, typingCount, onBack }: {
       </View>
 
       <View style={headerStyles.titleArea}>
-        <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
-        {typingCount > 0 ? (
-          <Text style={headerStyles.typing}>{typingCount === 1 ? 'someone is typing…' : `${typingCount} people typing…`}</Text>
-        ) : subtitle ? (
+        <View style={headerStyles.nameRow}>
+          <Text style={headerStyles.name} numberOfLines={1}>{name}</Text>
+          {muted ? (
+            <Ionicons
+              name="notifications-off-outline"
+              size={ICON.sm}
+              color={EMBER.textSecondary}
+              accessibilityLabel="Notifications muted"
+            />
+          ) : null}
+        </View>
+        {/*
+          Typing is said once, at the end of the feed (`TypingIndicator`). The
+          header repeated it here in a different sentence.
+        */}
+        {subtitle ? (
           <Text style={headerStyles.subtitle} numberOfLines={1}>{subtitle}</Text>
         ) : null}
       </View>
+
+      {/*
+        The room's info: who is in it, the guidelines, and a report. The same
+        glyph and place as the DM header's options, so one gesture finds both.
+      */}
+      <Pressable
+        onPress={onInfo}
+        accessibilityRole="button"
+        accessibilityLabel="Room info"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
+        <Ionicons name="ellipsis-vertical" size={ICON.lg} color={EMBER.textPrimary} />
+      </Pressable>
     </View>
   )
 }
+
+/**
+ * A room is its event's cover in a square, as on the Banter row — 40pt here,
+ * the bubble avatar's size, radius `sm`. A person is round; a room is not.
+ */
+const HEADER_AVATAR = 40
 
 const headerStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    // 12 + (48 − 24) / 2 puts the back chevron's glyph on GUTTER.
+    // 12 + (48 − 24) / 2 puts the back and options glyphs on GUTTER.
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -139,50 +193,49 @@ const headerStyles = StyleSheet.create({
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
   avatarWrap: {},
-  avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
+  avatar: { width: HEADER_AVATAR, height: HEADER_AVATAR, borderRadius: EMBER_RADIUS.sm, overflow: 'hidden' },
   avatarGroupFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   titleArea: { flex: 1 },
-  name: TYPE.bodyStrong,
-  // Primary, so a live "typing…" never reads as the secondary subtitle.
-  typing: { ...TYPE.meta, color: EMBER.textPrimary },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  name: { ...TYPE.bodyStrong, flexShrink: 1 },
   subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
 })
 
 /**
- * The event room chat.
+ * The event room chat, as a route: the chat room id, and what the opener knew
+ * about its event, come from the URL.
  *
- * Reached two ways, which is why it takes props at all. As a route it reads the
- * chat room id from the URL, the way it always has. As a **segment of The Room**
- * it is handed one, because there the id comes from whichever event you are
- * checked into rather than from navigation.
- *
- * `embedded` drops the header and the back button: The Room already draws both
- * above the `Grid | Chat` toggle, and a second header inside the segment would
- * stack two titles and two ways back out of one screen.
- *
- * Props are optional so the route keeps working untouched — expo-router passes
- * none, so every default is the old behaviour.
+ * The Room used to embed this as a segment through optional props (`embedded`
+ * dropped the header). Nothing has passed them since the Room navigates here
+ * instead, so the path is gone.
  */
-function GroupChatInner(props?: {
-  chatRoomId?: string
-  roomName?: string
-  eventTitle?: string
-  eventImage?: string
-  embedded?: boolean
-}) {
+function GroupChatInner() {
   const params = useLocalSearchParams()
-  const chatRoomId = props?.chatRoomId ?? params.id
+  const chatRoomId = params.id
   // A reply push for this room is not shown over it (`lib/notifications.ts`).
   useActiveThread(`room:${String(chatRoomId)}`)
-  const roomName = props?.roomName ?? params.roomName
-  const eventTitle = props?.eventTitle ?? params.eventTitle
-  const eventImage = props?.eventImage ?? params.eventImage
-  const embedded = props?.embedded === true
+  /*
+   * The opener's knowledge of the room, filled in from the room list when it
+   * is missing — the Room's chat dock opens this with no cover, and the header
+   * drew a generic people glyph there while the Banter's path showed the event.
+   */
+  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string }>({})
+  const roomName = (params.roomName as string) || roomInfo.title
+  const eventTitle = (params.eventTitle as string) || roomInfo.title
+  const eventImage = (params.eventImage as string) || roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
+  /*
+   * `sending` no longer reaches the composer -- see ComposerLock. It is kept
+   * only as the in-flight guard against a double tap landing in the same frame
+   * as the first, before `setNewMessage('')` has flushed. A ref, not state,
+   * because nothing renders from it.
+   */
+  const sendInFlightRef = useRef(false)
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
@@ -190,8 +243,25 @@ function GroupChatInner(props?: {
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
-  const [showMessageMenu, setShowMessageMenu] = useState(false)
+  /*
+   * History did not load. Drawn only while there is nothing on screen: a
+   * failed background refresh over messages already shown changes nothing.
+   */
+  const [loadError, setLoadError] = useState(false)
+  /*
+   * Not in the room. `left` is a leave the app knows about — made here, or
+   * the server's LEFT_ROOM — and lives in `lib/roomMembership.ts` so Room info
+   * and the Banter agree. `outOfRoom` is history refused as a non-member,
+   * which is also what the server says to a leave made on another phone.
+   */
+  const [outOfRoom, setOutOfRoom] = useState(false)
+  const [rejoining, setRejoining] = useState(false)
+  const left = useRoomMembership().left.has(String(chatRoomId))
+  const outside = left || outOfRoom
+  const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
+  /** From the room list (`memberCount`), for the header when the title says nothing new. */
+  const [memberCount, setMemberCount] = useState<number | null>(null)
+  const { showToast } = useToast()
   const [trayVisible, setTrayVisible] = useState(false)
   const [trayTitle, setTrayTitle] = useState('')
   const [trayMessage, setTrayMessage] = useState('')
@@ -199,15 +269,6 @@ function GroupChatInner(props?: {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
-  /*
-   * Whether the list should keep following its end as content lays out.
-   * Distinct from `isAtBottomRef`: that one is derived from scroll geometry,
-   * and during the first layout a programmatic scrollToEnd is followed by the
-   * content growing again, so the geometry read "not at the bottom" and the
-   * next size change was ignored -- the room opened one message short, the
-   * newest bubble under the composer. This flips only on a real drag.
-   */
-  const followEndRef = useRef(true)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -224,6 +285,13 @@ function GroupChatInner(props?: {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  /*
+   * Follows the end as content lays out, until a real drag (lib/useFollowEnd).
+   * Distinct from `isAtBottomRef`, which is scroll geometry: during the first
+   * layout a programmatic scrollToEnd is followed by the content growing again,
+   * so geometry read "not at the bottom" and the room opened one message short.
+   */
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   const transformRawMessages = (raw: any[], userId?: string): Message[] => {
     const list = raw.map((msg: any) => {
@@ -260,7 +328,11 @@ function GroupChatInner(props?: {
               created_at: msg.parent_message.created_at ?? '',
             }
           : undefined) as Message | undefined,
-        reactions: undefined as { emoji: string; count: number; mine?: boolean }[] | undefined,
+        // Counts and yours, from the server's tally; this was dropped, so every
+        // reaction vanished on reload.
+        reactions: (Array.isArray(msg.reactions) ? msg.reactions : undefined) as
+          | { emoji: string; count: number; mine?: boolean }[]
+          | undefined,
       }
     })
     return list.map(msg => ({
@@ -285,14 +357,22 @@ function GroupChatInner(props?: {
           if (cached) {
             setMessages(cached)
             setLoading(false)
-            // Instant jump to bottom when restoring from cache
-            setTimeout(() => scrollToBottom(false), 50)
             if (!refreshEvenIfCached) return
           }
         }
 
         const result = await apiClient.getChatMessages(chatRoomId as string, { limit: 50 })
-        if (!result.success || !result.data) { setLoading(false); return }
+        /*
+         * Refused as somebody not in the room: the left state, not "Couldn't
+         * load" — Try again would be refused the same way for ever.
+         */
+        if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
+        if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
+        if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
+        setLoadError(false)
+        // Served as a member, so whatever this phone thought, you are in.
+        setOutOfRoom(false)
+        markRoomJoined(String(chatRoomId))
 
         const raw = Array.isArray(result.data)
           ? result.data
@@ -303,13 +383,20 @@ function GroupChatInner(props?: {
         setOldestCursor(pagination?.nextCursor || null)
 
         const msgs = transformRawMessages(Array.isArray(raw) ? raw : [], user.id)
-        setMessages(msgs)
+        /*
+         * What only this phone holds rides on top of the refresh: a send still
+         * in flight, and one that failed. A refresh used to replace the list
+         * whole, so a failed message vanished at the next sync.
+         */
+        setMessages(prev => [
+          ...msgs,
+          ...prev.filter(m => m.message_id.startsWith('temp-') && !msgs.some(n => n.message_id === m.message_id)),
+        ])
         if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
-        // Scroll to bottom instantly on initial load
-        setTimeout(() => scrollToBottom(false), 50)
       })
       .catch((err) => {
         Logger.error('chat', 'Error loading messages', { error: err })
+        setLoadError(true)
       })
       .finally(() => setLoading(false))
 
@@ -359,6 +446,30 @@ function GroupChatInner(props?: {
     // trigger a reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, authUser, authLoading])
+
+  /*
+   * The room's row in the Banter's list — usually already cached, so free —
+   * is where its mute and its member count arrive.
+   */
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    apiClient.getChatGroups().then((result) => {
+      if (!live || !result.success || !result.data) return
+      const data = result.data as unknown as Record<string, any>
+      const rooms: Record<string, any>[] = Array.isArray(data) ? data : data.groups || data.rooms || data.data || []
+      const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
+      if (!room) return
+      rememberRoomMute(String(chatRoomId), room.mute)
+      const count = Number(room.memberCount ?? room.participant_count)
+      if (count > 0) setMemberCount(count)
+      // The same fields the Banter reads for its row, so the header matches it.
+      const image = room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url
+      const title = room.event?.title || room.event_title || room.eventTitle
+      setRoomInfo({ title: title ? String(title) : undefined, image: image ? String(image) : undefined })
+    }).catch(() => {})
+    return () => { live = false }
+  }, [chatRoomId])
 
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
@@ -443,7 +554,7 @@ function GroupChatInner(props?: {
      */
     const handleReaction: ChatReactionCallback = (data) => {
       setMessages(prev => prev.map(msg =>
-        msg.message_id === data.messageId ? { ...msg, reactions: data.tally } : msg
+        msg.message_id === data.messageId ? { ...msg, reactions: withMine(data.tally, msg.reactions) } : msg
       ))
     }
 
@@ -452,52 +563,92 @@ function GroupChatInner(props?: {
     const u3 = subscribeToChatReaction(String(chatRoomId), handleReaction)
     const u4 = subscribeToChatMessageDeleted(String(chatRoomId), handleDeleted)
     const u5 = subscribeToChatMemberBanned(String(chatRoomId), handleBanned)
+    // Somebody left: one fewer in the header's count.
+    const u6 = subscribeToChatMemberLeft(String(chatRoomId), () => {
+      setMemberCount((n) => (n && n > 0 ? n - 1 : n))
+    })
     return () => {
-      u1(); u2(); u3(); u4(); u5()
+      u1(); u2(); u3(); u4(); u5(); u6()
       typingCleanupRefs.current.forEach(t => clearTimeout(t))
       typingCleanupRefs.current.clear()
     }
   }
 
+  /*
+   * Not while outside the room: the server refuses the join. `outside` is a
+   * dependency so a rejoin subscribes again, which is what re-joins the
+   * socket room (`join:chat`).
+   */
   useEffect(() => {
-    if (!chatRoomId || !currentUser) return
+    if (!chatRoomId || !currentUser || outside) return
     return subscribeToMessages()
     // subscribeToMessages is redefined every render; only the listed values
     // should re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRoomId, currentUser])
+  }, [chatRoomId, currentUser, outside])
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser) return
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-    if (chatRoomId) stopTyping(String(chatRoomId))
-
-    setSending(true)
-    const messageText = newMessage.trim()
-    let optimistic: Message | null = null
-
-    try {
-      optimistic = {
-        message_id: 'temp-' + (++_tempIdCounter),
-        sender_id: currentUser.id,
-        sender_name: 'You',
-        message_text: messageText,
-        message_type: 'text',
-        reply_to_message_id: replyingTo ? replyingTo.message_id : null,
-        is_edited: false,
-        created_at: new Date().toISOString(),
-        replyTo: replyingTo || undefined,
+  /**
+   * Turn the server's refusal into a locked composer.
+   *
+   * `lib/api-response.ts` has emitted USER_MUTED / CHAT_LOCKED / CHAT_CLOSED /
+   * RATE_LIMITED all along. The failed bubble and the toast say this message
+   * did not go; the lock says the next one will not either, and why -- so a
+   * muted user is not left typing messages they will never be allowed to
+   * send. A rate limit lifts on its own, so that one is timed from the
+   * server's own `retryAfter` rather than guessed; the rest persist until a
+   * send gets through.
+   */
+  const applyComposerLock = (errorCode?: string, retryAfter?: number) => {
+    if (lockTimerRef.current) { clearTimeout(lockTimerRef.current); lockTimerRef.current = null }
+    switch (errorCode) {
+      case 'USER_MUTED':
+        setComposerLock('muted'); return
+      case 'CHAT_LOCKED':
+        setComposerLock('locked'); return
+      case 'CHAT_CLOSED':
+        setComposerLock('closed'); return
+      case 'RATE_LIMITED': {
+        setComposerLock('rate_limited')
+        const ms = Math.min(Math.max((retryAfter ?? 5), 1), 120) * 1000
+        lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        return
       }
-      setMessages(prev => [...prev, optimistic!])
-      setNewMessage('')
-      setReplyingTo(null)
-      setTimeout(() => scrollToBottom(true), 80)
+      default:
+        // A send that landed, or a one-off failure (network, spam heuristic):
+        // not a lock. The failed bubble's "Tap to retry" is the way back.
+        setComposerLock(null)
+    }
+  }
 
-      if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
-      emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
+  useEffect(() => () => {
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+  }, [])
 
-      const result = await apiClient.sendChatMessage(chatRoomId as string, messageText, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
-      if (!result.success) throw new Error(result.error || 'Failed to send')
+  /*
+   * One send of one message, first time or retry. The bubble is already on
+   * screen; this decides whether it stays as sent, goes (moderation), or is
+   * marked failed with the reason in a toast.
+   */
+  const deliver = async (optimistic: Message) => {
+    try {
+      const result = await apiClient.sendChatMessage(
+        chatRoomId as string,
+        optimistic.message_text,
+        'text',
+        undefined,
+        optimistic.reply_to_message_id ?? undefined,
+        optimistic.client_id
+      )
+      /*
+       * Every answer re-decides the lock: a refusal sets it, and a send that
+       * got through lifts it. A mute ends on the server only when a send is
+       * tried (auto-unmute), and with the field read-only a retry of a failed
+       * bubble is the one send left -- so its success has to unlock the field.
+       */
+      applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
+      // Left on another phone, or here a moment ago: the room becomes the left state.
+      if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      if (!result.success) throw new Error(userMessage(result, "Couldn't send. Try again."))
 
       /*
        * The server can accept a message and still withhold it.
@@ -511,9 +662,7 @@ function GroupChatInner(props?: {
        */
       const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
       if (hidden) {
-        if (optimistic) {
-          setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
-        }
+        setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
       }
@@ -528,13 +677,17 @@ function GroupChatInner(props?: {
        */
       if (newId) setMessages(prev =>
         prev.some(m => m.message_id === newId)
-          ? prev.filter(m => m.message_id !== optimistic!.message_id)
-          : prev.map(m => m.message_id === optimistic!.message_id ? { ...m, message_id: newId } : m)
+          ? prev.filter(m => m.message_id !== optimistic.message_id)
+          : prev.map(m => m.message_id === optimistic.message_id ? { ...m, message_id: newId, failed: false } : m)
       )
       markDomainsDirty(['chat'])
     } catch (error) {
-      if (optimistic) setMessages(prev => prev.filter(m => m.message_id !== optimistic!.message_id))
-      setNewMessage(messageText)
+      /*
+       * The bubble stays, marked "Not sent · Tap to retry". It used to be
+       * dropped with its text put back in the composer, which took it out of
+       * the conversation and read as though it had been deleted.
+       */
+      setMessages(prev => prev.map(m => m.message_id === optimistic.message_id ? { ...m, failed: true } : m))
       /*
        * `catch {` discarded the binding, so every refusal the server took care
        * to explain — muted, banned, room locked, chat window closed, spam —
@@ -542,10 +695,95 @@ function GroupChatInner(props?: {
        * forever. The server writes a good sentence; one missing character
        * threw it away.
        */
-      showTray('Error', error instanceof Error ? error.message : 'Failed to send message.')
-    } finally {
-      setSending(false)
+      showToast(error instanceof Error ? error.message : "Couldn't send. Try again.", 'error')
     }
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !currentUser) return
+    if (sendInFlightRef.current) return
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    if (chatRoomId) stopTyping(String(chatRoomId))
+
+    sendInFlightRef.current = true
+    const messageText = newMessage.trim()
+    const optimistic: Message = {
+      message_id: 'temp-' + (++_tempIdCounter),
+      sender_id: currentUser.id,
+      sender_name: 'You',
+      message_text: messageText,
+      message_type: 'text',
+      reply_to_message_id: replyingTo ? replyingTo.message_id : null,
+      client_id: newClientId(),
+      is_edited: false,
+      created_at: new Date().toISOString(),
+      replyTo: replyingTo || undefined,
+    }
+    setMessages(prev => [...prev, optimistic])
+    setNewMessage('')
+    setReplyingTo(null)
+    setTimeout(() => scrollToBottom(true), 80)
+
+    if (authUser?.id) queryCache.invalidate(`group_chats_${authUser.id}`)
+    emitChatListUpdate({ type: 'group', chatGroupId: String(chatRoomId), lastMessage: messageText, lastMessageTime: optimistic.created_at, senderName: 'You' })
+
+    // `deliver` catches its own failures, so this always runs.
+    await deliver(optimistic)
+    sendInFlightRef.current = false
+  }
+
+  const retrySend = (message: Message) => {
+    setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, failed: false } : m))
+    void deliver({ ...message, failed: false })
+  }
+
+  /*
+   * A reaction lands on the bubble the moment it is tapped, and the server's
+   * tally replaces it when it answers. Refused, it goes back to what it was
+   * and says so — an optimistic change that silently stays wrong is worse
+   * than a slow one.
+   */
+  const react = async (message: Message, emoji: ChatReaction) => {
+    const before = message.reactions
+    setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: toggleReaction(m.reactions, emoji) } : m))
+    const result = await apiClient.reactToChatMessage(String(chatRoomId), message.message_id, emoji)
+    if (result.success && result.data) {
+      const tally = result.data.reactions
+      setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: tally } : m))
+    } else {
+      setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: before } : m))
+      if (result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      else if (result.errorCode === 'CHAT_CLOSED' || result.errorCode === 'CHAT_LOCKED') applyComposerLock(result.errorCode)
+      showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error')
+    }
+  }
+
+  /*
+   * Back in. The server answers the refusals in its own words — banned, the
+   * room has closed, the organiser locked it — and a room you were never in
+   * is its 404, which means checking in is the way.
+   */
+  const rejoin = async () => {
+    if (rejoining || !chatRoomId) return
+    setRejoining(true)
+    const result = await apiClient.rejoinChatGroup(String(chatRoomId))
+    setRejoining(false)
+    if (!result.success) {
+      showToast(
+        result.errorCode === 'NOT_FOUND'
+          ? 'Check in at the event to join its room.'
+          : userMessage(result, "Couldn't rejoin this room. Try again."),
+        'error'
+      )
+      return
+    }
+    markRoomJoined(String(chatRoomId))
+    // The socket was refused this room while you were out of it.
+    rejoinChatSocket(String(chatRoomId))
+    setOutOfRoom(false)
+    setLoading(true)
+    showToast("You're back in the room", 'success')
+    void loadMessages(true)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -560,12 +798,89 @@ function GroupChatInner(props?: {
   }, [messages])
 
   const socketStatus = useLiveSync({
-    enabled: !!chatRoomId && !!currentUser,
+    enabled: !!chatRoomId && !!currentUser && !outside,
     onSync: () => loadMessages(false, true),
     domains: ['chat'],
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })
+
+  /*
+   * The long-press menu, as the app's one sheet (`lib/sheet.ts`).
+   *
+   * It was a centred Modal of its own, and Report closed it to open the
+   * report alert — a second modal presented while the first was leaving. As a
+   * sheet step, Report replaces the menu in place.
+   *
+   * What it offers depends on the message:
+   * - **theirs**: react, reply, copy, report
+   * - **yours**: react, reply, copy — reporting your own message is not a
+   *   thing, and offering it read as a broken menu
+   * - **still sending**: copy only; it has no id yet to reply or react to
+   * - **not sent**: try again, copy, delete
+   */
+  const showMessageMenu = (message: Message) => {
+    const mine = message.sender_id === currentUser?.id
+    const copy: SheetAction = {
+      label: 'Copy',
+      then: () => {
+        Clipboard.setString(message.message_text)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+      },
+    }
+
+    if (message.failed) {
+      showSheet({
+        kind: 'actions',
+        title: 'Not sent',
+        message: "This message didn't reach the room.",
+        actions: [
+          { label: 'Try again', variant: 'primary', then: () => retrySend(message) },
+          copy,
+          {
+            label: 'Delete',
+            variant: 'destructive',
+            then: () => setMessages(prev => prev.filter(m => m.message_id !== message.message_id)),
+          },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+      return
+    }
+
+    const delivered = !message.message_id.startsWith('temp-')
+    const actions: SheetAction[] = []
+    if (delivered) actions.push({ label: 'Reply', then: () => setReplyingTo(message) })
+    actions.push(copy)
+    if (delivered && !mine) {
+      /*
+       * The message id is captured here, when the menu opens. The old menu
+       * cleared its selection before the handler ran, so wiring the report
+       * without this would have reported `undefined`.
+       */
+      const messageId = message.message_id
+      actions.push({ label: 'Report', variant: 'destructive', next: () => messageReportStep(messageId, 'group') })
+    }
+    actions.push({ label: 'Cancel', cancel: true })
+
+    showSheet({
+      kind: 'actions',
+      title: mine ? 'Your message' : message.sender_name,
+      message: message.message_text.length > 120 ? `${message.message_text.slice(0, 120)}…` : message.message_text,
+      content: delivered ? (
+        <ReactionPicker
+          mine={(message.reactions ?? []).filter(r => r.mine).map(r => r.emoji)}
+          onPick={(emoji) => {
+            closeSheet()
+            void react(message, emoji)
+          }}
+        />
+      ) : undefined,
+      actions,
+    })
+  }
+  // Read at the moment of the long press, so the handler below can stay stable.
+  const messageMenuRef = useLatest(showMessageMenu)
 
   /*
    * Long-press opens the message menu, and it is stable so `ChatBubble`'s memo
@@ -574,9 +889,8 @@ function GroupChatInner(props?: {
    */
   const openMessageMenu = useCallback((message: Message) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-    setSelectedMessage(message)
-    setShowMessageMenu(true)
-  }, [])
+    messageMenuRef.current(message)
+  }, [messageMenuRef])
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.sender_id === currentUser?.id
@@ -598,6 +912,7 @@ function GroupChatInner(props?: {
     }
 
     return (
+      <SwipeToReply enabled={!item.removed && !item.failed} onReply={() => setReplyingTo(item)}>
       <ChatBubble
         mine={isMe}
         /*
@@ -607,7 +922,7 @@ function GroupChatInner(props?: {
          */
         animateIn={item.message_id.startsWith('temp-')}
         senderId={item.sender_id}
-        roomId={String(params.id)}
+        roomId={String(chatRoomId)}
         senderName={item.sender_name}
         text={item.message_text}
         removed={item.removed}
@@ -619,8 +934,11 @@ function GroupChatInner(props?: {
             ? { senderName: item.replyTo.sender_name, text: item.replyTo.message_text }
             : null
         }
+        failed={item.failed}
+        onRetry={item.failed ? () => retrySend(item) : undefined}
         onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
+      </SwipeToReply>
     )
   }
 
@@ -632,32 +950,44 @@ function GroupChatInner(props?: {
   const ListHeader = loading ? (
     <ActivityIndicator style={styles.loadingIndicator} color={EMBER.textSecondary} />
   ) : hasMore ? (
-    <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
-      <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
-    </TouchableOpacity>
+    <Pressable
+      onPress={loadOlderMessages}
+      disabled={loadingOlder}
+      accessibilityRole="button"
+      accessibilityLabel="Load older messages"
+      accessibilityState={{ busy: loadingOlder }}
+      hitSlop={SPACE.sm}
+      style={({ pressed }) => [styles.loadMoreBtn, pressed && styles.pressed]}
+    >
+      <Text style={styles.loadMoreText}>{loadingOlder ? 'LOADING…' : 'LOAD OLDER MESSAGES'}</Text>
+    </Pressable>
   ) : null
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      // Embedded, The Room owns the top inset — it draws the title and the
-      // segments above this. Claiming 'top' here too would inset twice and
-      // leave a bar of page colour under the toggle.
-      edges={embedded ? ['bottom'] : ['top', 'bottom']}
-    >
-      {embedded ? null : <Stack.Screen options={{ headerShown: false }} />}
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar style="light" />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        {embedded ? null : (
-          <GroupChatHeader
-            name={(roomName as string) || 'Event Chat'}
-            imageUrl={(eventImage as string) || null}
-            subtitle={(eventTitle as string) || undefined}
-            typingCount={typingUsers.size}
+        <GroupChatHeader
+            name={roomName || 'Event chat'}
+            imageUrl={eventImage || null}
+            subtitle={roomSubtitle(roomName || 'Event chat', eventTitle || undefined, memberCount)}
+            muted={muted}
             onBack={() => router.back()}
+            onInfo={() => router.push({
+              pathname: '/chat-info/[id]',
+              params: {
+                id: String(chatRoomId),
+                roomName: roomName || '',
+                eventTitle: eventTitle || '',
+                eventImage: eventImage || '',
+              },
+            } as never)}
           />
-        )}
+        {outside ? (
+          <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
+        ) : (<>
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
         <RoomGuidelinesBanner userId={authUser?.id} chatRoomId={chatRoomId ? String(chatRoomId) : undefined} />
 
@@ -689,24 +1019,40 @@ function GroupChatInner(props?: {
            */
           ListFooterComponent={
             typingUsers.size > 0 ? (
-              <TypingIndicator
-                label={
-                  typingUsers.size === 1
-                    ? `${Array.from(typingUsers.values())[0]} is typing...`
-                    : `${typingUsers.size} people are typing...`
-                }
-              />
+              <TypingIndicator label={typingLabel(Array.from(typingUsers.values()))} />
             ) : null
           }
-          ListEmptyComponent={!loading ? (
+          ListEmptyComponent={loading ? null : loadError ? (
+            // Not the empty state: an empty room and one that failed to load
+            // are different facts, and only one of them is an invitation.
+            <ChatLoadFailed
+              what="this chat"
+              onRetry={() => {
+                setLoadError(false)
+                setLoading(true)
+                void loadMessages(true)
+              }}
+            />
+          ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>Start the room conversation</Text>
               <Text style={styles.emptyText}>Be the first to post so everyone can join.</Text>
-              <ScalePress style={styles.emptyCta} onPress={() => { setNewMessage('Hey everyone 👋') }} pressedScale={0.97}>
-                <Text style={styles.emptyCtaText}>Send a starter message</Text>
+              {/*
+                Writes a starter into the composer for you to send or change —
+                so it says "Write", not "Send": the tap sends nothing.
+              */}
+              <ScalePress
+                style={styles.emptyCta}
+                onPress={() => { setNewMessage('Hey everyone 👋') }}
+                pressedScale={0.97}
+                accessibilityRole="button"
+                accessibilityLabel="Write a starter"
+                accessibilityHint="Puts a hello in the message box"
+              >
+                <Text style={styles.emptyCtaText}>Write a starter</Text>
               </ScalePress>
             </View>
-          ) : null}
+          )}
           /*
            * Follow the end while the reader is at it. A `scrollToEnd` fired
            * 50ms after `setMessages` measured a list that had laid out
@@ -716,14 +1062,14 @@ function GroupChatInner(props?: {
            * Driven 2026-09-13, twice. Content growing while you are reading
            * older messages leaves you where you are.
            */
-          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
-          onScrollBeginDrag={() => { followEndRef.current = false }}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
             // Back at the end by hand: follow again.
-            if (atBottom) followEndRef.current = true
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}
@@ -744,22 +1090,17 @@ function GroupChatInner(props?: {
           </Animated.View>
         )}
 
-        {replyingTo && (
-          <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.replyBar}>
-            <View style={styles.replyBarLine} />
-            <View style={styles.replyBarContent}>
-              <Text style={styles.replyBarLabel}>Replying to {replyingTo.sender_name}</Text>
-              <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
-            </View>
-            <TouchableOpacity style={styles.replyBarClose} onPress={() => setReplyingTo(null)}>
-              <Ionicons name="close" size={ICON.sm} color={EMBER.textSecondary} />
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+        {replyingTo ? (
+          <ReplyBar
+            name={replyingTo.sender_name}
+            text={replyingTo.message_text}
+            onCancel={() => setReplyingTo(null)}
+          />
+        ) : null}
 
         <ChatComposer
           value={newMessage}
-          sending={sending}
+          lock={composerLock}
           onSend={sendMessage}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {
@@ -775,61 +1116,8 @@ function GroupChatInner(props?: {
             }
           }}
         />
+        </>)}
       </KeyboardAvoidingView>
-
-      {/* Message menu */}
-      <Modal visible={showMessageMenu} transparent animationType="fade" onRequestClose={() => setShowMessageMenu(false)}>
-        {/*
-          accessible={false} on the scrim: a TouchableOpacity is accessible by
-          default and on iOS that collapses everything inside it into one node,
-          so VoiceOver (and Maestro) read the whole menu as "↩️ Reply 📋 Copy 🚩
-          Report" and could not pick Report on its own.
-        */}
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} accessible={false} onPress={() => setShowMessageMenu(false)}>
-          <View style={styles.messageMenu}>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Reply" onPress={() => {
-              if (selectedMessage) { setReplyingTo(selectedMessage); setShowMessageMenu(false); setSelectedMessage(null) }
-            }}>
-              <Text style={styles.menuIcon}>↩️</Text>
-              <Text style={styles.menuText}>Reply</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Copy" onPress={async () => {
-              if (selectedMessage) {
-                await Clipboard.setString(selectedMessage.message_text)
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-                setShowMessageMenu(false); setSelectedMessage(null)
-              }
-            }}>
-              <Text style={styles.menuIcon}>📋</Text>
-              <Text style={styles.menuText}>Copy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} accessibilityRole="button" accessibilityLabel="Report" onPress={() => {
-              /*
-               * Reuses the same flow the DM screen uses, rather than a second
-               * confirmation tray.
-               *
-               * This used to show a tray whose Report button fired a SUCCESS
-               * haptic and called nothing. So the room where abuse is most
-               * likely had a report button that silently did nothing, and the
-               * person who pressed it was actively told it had worked. Worse
-               * than no button.
-               *
-               * The message id is captured before the menu closes: the old code
-               * called setSelectedMessage(null) first, so by the time any
-               * handler ran the id was already gone. Wiring the API call
-               * without this would have reported `undefined`.
-               */
-              const messageId = selectedMessage?.message_id
-              setShowMessageMenu(false); setSelectedMessage(null)
-              if (!messageId) return
-              showMessageReportOptions(messageId, 'group')
-            }}>
-              <Text style={styles.menuIcon}>🚩</Text>
-              <Text style={[styles.menuText, styles.menuTextDestructive]}>Report</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       <ActionTray visible={trayVisible} title={trayTitle} message={trayMessage} buttons={trayButtons} onClose={closeTray} />
     </SafeAreaView>
@@ -846,7 +1134,9 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
-  loadMoreText: { ...TYPE.meta, color: EMBER.textTertiary },
+  // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
+  loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
+  pressed: { opacity: 0.6 },
 
   // System / announcement messages
 
@@ -859,19 +1149,7 @@ const styles = StyleSheet.create({
 
   // Typing
 
-  // Reply bar above input
-  replyBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: GUTTER, paddingVertical: SPACE.sm,
-    backgroundColor: EMBER.surfaceSunken,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: EMBER.separator,
-    gap: SPACE.md,
-  },
-  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.textSecondary, borderRadius: EMBER_RADIUS.pill },
-  replyBarContent: { flex: 1 },
-  replyBarLabel: { ...TYPE.caption, color: EMBER.textPrimary },
-  replyBarMessage: { ...TYPE.meta, color: EMBER.textSecondary },
-  replyBarClose: { padding: SPACE.xs },
+
 
   // Input bar
 
@@ -893,18 +1171,6 @@ const styles = StyleSheet.create({
   },
   // A secondary button: the composer's send is this screen's one accent.
   emptyCtaText: { ...TYPE.button, color: EMBER.textPrimary },
-
-  // Message menu modal
-  modalOverlay: { flex: 1, backgroundColor: EMBER.backdrop, justifyContent: 'center', alignItems: 'center' },
-  messageMenu: {
-    backgroundColor: EMBER.surface, borderRadius: EMBER_RADIUS.md, padding: SPACE.sm, minWidth: 200,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: EMBER.separator,
-  },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.md, paddingVertical: SPACE.md, borderRadius: EMBER_RADIUS.sm },
-  // An emoji standing in for a row icon, so it takes the icon size.
-  menuIcon: { fontSize: ICON.md, marginRight: SPACE.md },
-  menuText: TYPE.body,
-  menuTextDestructive: { color: EMBER.destructive },
 })
 
 

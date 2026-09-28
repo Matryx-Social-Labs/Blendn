@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   EmberCardSection,
@@ -7,10 +7,12 @@ import {
   EmberField,
   EmberFieldGroup,
 } from '../../components/onboarding/EmberControls'
+import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Dimensions } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import { GUTTER, SPACE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -37,6 +39,7 @@ export default function JourneyScreen() {
   const [education, setEducation] = useState('')
   const [workField, setWorkField] = useState<string | undefined>()
   const [fields, setFields] = useState<{ slug: string; label: string }[]>([])
+  const [fieldsStatus, setFieldsStatus] = useState<ListStatus>('loading')
 
   // Prefilled once, in the render that first sees `loaded`.
   const [prefilled, setPrefilled] = useState(false)
@@ -56,11 +59,26 @@ export default function JourneyScreen() {
    * took two PRs. A hardcoded list here would diverge the first time someone
    * adds a field on the server.
    */
-  useEffect(() => {
-    apiClient.getWorkFields().then((result) => {
-      if (result.success && result.data) setFields(result.data.workFields)
-    })
+  const loadFields = useCallback(async () => {
+    setFieldsStatus('loading')
+    try {
+      const result = await apiClient.getWorkFields()
+      if (result.success && result.data) {
+        setFields(result.data.workFields)
+        setFieldsStatus('ready')
+        return
+      }
+      Logger.warn('profile', 'Work fields did not load', { error: result.error })
+    } catch (error) {
+      Logger.warn('profile', 'Work fields threw', { error })
+    }
+    setFieldsStatus('error')
   }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fetch's own loading flag
+    void loadFields()
+  }, [loadFields])
 
   const patch = {
     location: location.trim(),
@@ -74,8 +92,8 @@ export default function JourneyScreen() {
       step="journey"
       title="Your "
       titleAccent="journey"
-      subtitle="Almost there. Fill in your professional and educational milestones."
-      ctaLabel="Continue Exploration"
+      subtitle="Where you live, what you do and where you studied. All optional."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
       // "Skip", because that is what `skip()` does: it advances and persists the
@@ -96,8 +114,8 @@ export default function JourneyScreen() {
       */}
       <EmberCardSection
         icon="location-outline"
-        title="Current Base"
-        caption="Where you are making your impact"
+        title="Where you live"
+        caption="Used to show you events nearby"
       >
         <EmberField
           label="City"
@@ -112,20 +130,24 @@ export default function JourneyScreen() {
       <EmberCardSection
         icon="briefcase-outline"
         title="Occupation"
-        caption="Your professional identity and role"
+        caption="Your job title and where you work"
       >
         <EmberField
           label="Job title"
-          placeholder="e.g. Creative Director"
+          placeholder="e.g. Product designer"
           value={occupation}
           onChangeText={setOccupation}
           autoCapitalize="sentences"
           maxLength={100}
         />
 
-        {/* Only once the server has answered — an empty chip row under a label
-            reads as a section that failed to load. */}
-        {fields.length > 0 ? (
+        {/* The chips once the server has answered; until then, or if it did
+            not, the section says so rather than silently missing. */}
+        {fieldsStatus !== 'ready' ? (
+          <EmberFieldGroup label="Field of work">
+            <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
+          </EmberFieldGroup>
+        ) : fields.length > 0 ? (
           <EmberFieldGroup
             label="Field of work"
             helper="The only part of this shown in a room. Your job title and employer are not."
@@ -148,7 +170,7 @@ export default function JourneyScreen() {
       <EmberCardSection
         icon="school-outline"
         title="Education"
-        caption="The foundation of your knowledge"
+        caption="Where you studied, if you want to say"
       >
         <EmberField
           label="School / University"

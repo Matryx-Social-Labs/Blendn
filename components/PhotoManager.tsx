@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
     AccessibilityInfo,
     ActivityIndicator,
-    Alert,
     Dimensions,
     StyleSheet,
     Text,
@@ -22,7 +21,9 @@ import {
     selectAndUploadPhoto
 } from '../lib/photoUtils'
 import { Logger } from '../lib/logger'
+import { showSheet } from '../lib/sheet'
 import { fadeOutFast } from './motion/presence'
+import { useToast } from './Toast'
 import { OptimizedImage } from './OptimizedImage'
 
 const { width } = Dimensions.get('window')
@@ -59,6 +60,7 @@ export default function PhotoManager({
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const { showToast } = useToast()
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
   const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange'] | undefined>(undefined)
   // Measure available width to compute exact 3-col sizing
@@ -117,7 +119,7 @@ export default function PhotoManager({
 
   const handleAddPhoto = async () => {
     if (photos.length >= maxPhotos) {
-      Alert.alert('Photo Limit', `You can only have up to ${maxPhotos} photos`)
+      showToast(`You can have up to ${maxPhotos} photos.`, 'info')
       return
     }
 
@@ -155,17 +157,24 @@ export default function PhotoManager({
           setPhotos(prev => prev.filter(p => p.url !== result.url))
           // The server's sentence when it gave one -- "That looks like a
           // blank image" says what to do; a generic retry does not.
-          Alert.alert('Could not add that photo', saved.error)
+          // (`reorderPhotos` curates it: the server's refusal, or its own line.)
+          showToast(saved.error, 'error')
           return
         }
         AccessibilityInfo.announceForAccessibility('Photo added')
         Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
       } else if (result.error && !result.cancelled) {
-        Alert.alert('Upload Failed', result.error)
+        Logger.warn('profile', 'PhotoManager: upload refused', { error: result.error })
+        /*
+         * The picker's own checks ("Photo must be less than 5MB") are written
+         * for the person; everything else it returns ("Upload failed with
+         * status 502") is not, and gets the app's sentence.
+         */
+        showToast(/^Photo must be /.test(result.error) ? `${result.error}.` : "Couldn't upload that photo. Try again.", 'error')
       }
     } catch (error) {
       Logger.error('profile', 'PhotoManager: Add photo error', { error, userId })
-      Alert.alert('Error', 'Failed to upload photo')
+      showToast("Couldn't upload that photo. Try again.", 'error')
     } finally {
       setUploading(false)
     }
@@ -200,10 +209,10 @@ export default function PhotoManager({
       const saved = await reorderPhotos(userId, reordered.map((p) => p.url))
       if (!saved.ok) {
         setPhotos(photos)
-        Alert.alert('Could not update', saved.error)
+        showToast(saved.error, 'error')
       }
     },
-    [editable, photos, userId]
+    [editable, photos, userId, showToast]
   )
 
   const handleRemovePhoto = useCallback((photoIndex: number) => {
@@ -211,15 +220,16 @@ export default function PhotoManager({
 
     const photo = photos[photoIndex]
     
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
+    // The app's one sheet, like every other "are you sure" (lib/sheet.ts).
+    showSheet({
+      kind: 'actions',
+      title: 'Remove this photo?',
+      message: "It comes off your profile. You can add it again later.",
+      actions: [
         {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
+          label: 'Remove photo',
+          variant: 'destructive',
+          then: async () => {
             try {
               // Remove from state immediately for better UX
               const newPhotos = photos.filter((_, index) => index !== photoIndex)
@@ -232,7 +242,7 @@ export default function PhotoManager({
               const saved = await reorderPhotos(userId, newPhotos.map(p => p.url))
               if (!saved.ok) {
                 setPhotos(photos)
-                Alert.alert('Could not remove', saved.error)
+                showToast(saved.error, 'error')
                 return
               }
 
@@ -244,19 +254,20 @@ export default function PhotoManager({
               Logger.info('profile', 'PhotoManager: Photo removed', { userId, url: photo.url })
             } catch (error) {
               Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
-              Alert.alert('Error', 'Failed to remove photo')
+              showToast("Couldn't remove that photo. Try again.", 'error')
               // Reload photos to restore state
               setLoading(true)
               loadPhotos()
             }
-          }
-        }
-      ]
-    )
+          },
+        },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
     // loadPhotos is redefined every render; only the listed values should
     // recreate this callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editable, photos, userId])
+  }, [editable, photos, userId, showToast])
 
   const renderPhoto = useCallback(({ item, index }: { item: ProfilePhoto; index: number }) => {
     const cachedUrl = cachedUrls[item.url]
@@ -296,7 +307,7 @@ export default function PhotoManager({
           
           {item.isPrimary ? (
             <View style={styles.primaryBadge}>
-              <Text style={styles.primaryText}>PRIMARY</Text>
+              <Text style={styles.primaryText}>Main</Text>
             </View>
           ) : (
             editable && (
@@ -348,7 +359,7 @@ export default function PhotoManager({
         ) : (
           <>
             <Ionicons name="add" size={32} color={EMBER.textSecondary} />
-            <Text style={styles.addPhotoText}>Add Photo</Text>
+            <Text style={styles.addPhotoText}>Add photo</Text>
           </>
         )}
       </TouchableOpacity>

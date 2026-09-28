@@ -15,15 +15,19 @@ const SCREEN = () => stripComments(read('app/user/[id].tsx'))
 const SECTIONS = () => stripComments(read('components/profile/ProfileSections.tsx'))
 
 describe('the screen never re-decides the identity gate', () => {
-  it('reads no reveal flag, because the payload has none', () => {
+  it("takes the server's identityVisible, and fails closed without it", () => {
     /*
-     * `profiles/[userId]` withholds bio, occupation, education and photos behind
-     * `maySeeIdentity` and returns the literal name "Attendee" otherwise. There
-     * is no `revealed` boolean, and adding one would be a second source of truth
-     * for a rule that already has exactly one.
+     * It used to infer "revealed" from a photo, a bio or an occupation having
+     * arrived — so any identity field that turned up by mistake became a reveal
+     * nobody agreed to. `GET /users/:id` now says `identityVisible` (the
+     * server's `maySeeIdentity`, not re-derived here), and anything but `true`
+     * drops the identity fields at the boundary (`withheldUnlessVisible`).
      */
     const src = SCREEN()
-    expect(src).toContain('const revealed = photos.length > 0')
+    expect(src).toContain('identityVisible: data.identityVisible === true || data.isOwnProfile === true')
+    expect(src).toContain('withheldUnlessVisible(nextProfile)')
+    expect(src).toContain('const revealed = identity.revealed')
+    expect(src).not.toContain('const revealed = photos.length > 0')
     expect(src).not.toContain('maySeeIdentity')
     expect(src).not.toContain('theyRevealed')
   })
@@ -137,10 +141,10 @@ describe('the profile carries the Grid\'s two actions', () => {
      * broken rather than merely useless. Connect still works: the server gates
      * a request on `haveSharedAnEvent` and resolves it itself.
      */
-    expect(SCREEN()).toContain("useLocalSearchParams<{ id: string; eventId?: string }>")
+    expect(SCREEN()).toMatch(/useLocalSearchParams<\{\s*id: string\s*eventId\?: string/)
     // The room passes the event with the id when it opens a profile.
-    expect(stripComments(read('components/blendn/BlendnScreen.tsx'))).toContain(
-      '...(eventId ? { eventId } : {})'
+    expect(stripComments(read('components/blendn/BlendnScreen.tsx'))).toMatch(
+      /\.\.\.\(eventId \? \{ eventId[,\s}]/
     )
   })
 

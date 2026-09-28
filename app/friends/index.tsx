@@ -1,27 +1,33 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
 import { PersonRow } from '../../components/friends/PersonRow'
+import { RequestsRow } from '../../components/friends/RequestsRow'
+import { LoadError } from '../../components/LoadError'
+import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { friendsSinceLabel, type Friend } from '../../lib/friends'
 import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { useFriendRequests } from '../../lib/useFriendRequests'
 
 /**
  * Your friends — the list the count on the Me tab opens.
  *
  * Real names and photos: both people said yes. Tapping one opens their
  * profile; the top-right opens Add friends, which is where your link is.
+ * Requests waiting on you sit above the list, when there are any.
  */
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<Friend[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const requests = useFriendRequests()
 
   const load = useCallback(async () => {
     const result = await apiClient.getFriends()
@@ -42,18 +48,14 @@ export default function FriendsScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true)
-    await load()
+    await Promise.all([load(), requests.load()])
     setRefreshing(false)
   }
 
   const openAdd = () => router.push('/friends/add')
 
   const empty = failed ? (
-    <View style={styles.empty}>
-      <Text variant="body" color={EMBER.textSecondary} style={styles.center}>
-        Your friends didn&apos;t load. Pull down to try again.
-      </Text>
-    </View>
+    <LoadError title="Your friends didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
   ) : (
     <View style={styles.empty}>
       <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textTertiary} />
@@ -72,10 +74,13 @@ export default function FriendsScreen() {
         onBack={() => router.back()}
         rightIconButton={{ name: 'person-add-outline', onPress: openAdd, accessibilityLabel: 'Add friends' }}
       />
-      {friends === null && !failed ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={EMBER.textSecondary} />
+      {requests.incoming.length > 0 ? (
+        <View style={styles.requests}>
+          <RequestsRow count={requests.incoming.length} />
         </View>
+      ) : null}
+      {friends === null && !failed ? (
+        <PeopleSkeleton />
       ) : (
         <FlatList
           data={friends ?? []}
@@ -90,8 +95,8 @@ export default function FriendsScreen() {
           )}
           contentContainerStyle={friends?.length ? styles.list : styles.emptyList}
           ListEmptyComponent={empty}
-          onRefresh={onRefresh}
-          refreshing={refreshing}
+          // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -99,11 +104,35 @@ export default function FriendsScreen() {
   )
 }
 
+
+/** Rows at `PersonRow`'s geometry while the list loads, so it does not jump when it lands. */
+function PeopleSkeleton() {
+  return (
+    <View style={styles.skeleton} accessibilityLabel="Loading">
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={styles.skeletonRow}>
+          <SkeletonCircle width={SKELETON_AVATAR} />
+          <View style={styles.skeletonText}>
+            <SkeletonLine width="45%" />
+            <SkeletonLine width="30%" />
+          </View>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+/** `PersonRow`'s avatar. */
+const SKELETON_AVATAR = 48
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  skeleton: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
+  skeletonText: { flex: 1, gap: SPACE.sm },
   list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
+  requests: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
   empty: { alignItems: 'center', gap: SPACE.lg },
   center: { textAlign: 'center' },
 })

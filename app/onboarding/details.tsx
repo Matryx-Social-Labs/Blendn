@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import {
@@ -7,20 +7,24 @@ import {
   EmberField,
   EmberFieldGroup,
 } from '../../components/onboarding/EmberControls'
+import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
+import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
  * Writing prompts, not a feature — they exist to unstick a blank textarea,
- * so tapping one is not wired to anything. Copy is the frame's own.
+ * so tapping one is not wired to anything. The frame's were filler ("I thrive
+ * at the intersection of technology and human connection"); these are the
+ * kind of line a stranger at an event can actually open with.
  */
 const BIO_PROMPTS = [
-  'A perfect Sunday involves curated playlists and vintage bookstore hopping.',
-  'Currently mastering the art of the perfect pour-over coffee.',
-  'I thrive at the intersection of technology and human connection.',
+  'A perfect Sunday for me is…',
+  "Lately I've been learning…",
+  'Ask me about…',
 ]
 
 /**
@@ -51,6 +55,7 @@ export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
+  const [groupsStatus, setGroupsStatus] = useState<ListStatus>('loading')
   /*
    * Names and ids, together.
    *
@@ -73,13 +78,26 @@ export default function DetailsScreen() {
     setBio(draft.bio ?? '')
   }
 
-  useEffect(() => {
-    apiClient.getCategories().then((result) => {
+  const loadGroups = useCallback(async () => {
+    setGroupsStatus('loading')
+    try {
+      const result = await apiClient.getCategories()
       if (result.success && result.data) {
         setGroups(toPickerTree(result.data as unknown as CategoryNode[]))
+        setGroupsStatus('ready')
+        return
       }
-    })
+      Logger.warn('profile', 'Interest categories did not load', { error: result.error })
+    } catch (error) {
+      Logger.warn('profile', 'Interest categories threw', { error })
+    }
+    setGroupsStatus('error')
   }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fetch's own loading flag
+    void loadGroups()
+  }, [loadGroups])
 
   const toggle = (id: string, name: string) => {
     setInterests((current) =>
@@ -95,8 +113,8 @@ export default function DetailsScreen() {
       step="details"
       title="The finer "
       titleAccent="details"
-      subtitle="Tell the circle who you are beyond the profile picture. Light up your presence."
-      ctaLabel="Complete Profile"
+      subtitle="A few lines about you and what you're into. It's what people read before they say hello."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit({ interests, interestIds, bio: bio.trim() })}
       secondaryLabel="Skip"
@@ -113,7 +131,7 @@ export default function DetailsScreen() {
       */}
       <EmberField
         label="About me"
-        placeholder="Ask me about… surprise experiences, the best hidden coffee in the city, or the recent obsession with blockchain architecture."
+        placeholder="Ask me about… the best coffee in the city, a trip I'm planning, or what I'm reading."
         helper={`${bio.length}/${BIO_LIMIT}`}
         value={bio}
         onChangeText={(text) => setBio(text.slice(0, BIO_LIMIT))}
@@ -129,6 +147,10 @@ export default function DetailsScreen() {
           </View>
         ))}
       </View>
+
+      {groupsStatus !== 'ready' ? (
+        <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} />
+      ) : null}
 
       {groups.map((group) => (
         <EmberFieldGroup key={group.id} label={group.name}>

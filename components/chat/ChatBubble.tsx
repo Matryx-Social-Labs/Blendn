@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useReducedMotion, withTiming } from 'react-native-reanimated'
 
-import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import { markSeed, pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { fadeInFast } from '../motion/presence'
 
@@ -46,7 +46,7 @@ export interface ChatBubbleProps {
   mine: boolean
   /** Pseudonym, or a real name once they have revealed. */
   senderName: string
-  /** Stable per person. Salted with `roomId` to seed the avatar. */
+  /** Stable per person. With `roomId`, the avatar's seed when the name is a placeholder. */
   senderId: string
   /** The room or conversation this bubble is in. Salts the avatar seed. */
   roomId: string
@@ -91,7 +91,7 @@ export interface ChatBubbleProps {
    * times, so a tick would either lie or need twenty answers. A DM has one
    * reader and one answer.
    */
-  receipt?: 'sent' | 'read' | null
+  receipt?: 'sent' | 'delivered' | 'read' | null
   /**
    * Arrives with a short rise instead of appearing in one frame.
    *
@@ -104,6 +104,16 @@ export interface ChatBubbleProps {
    * with this `false`, so scrolling back never replays it.
    */
   animateIn?: boolean
+  /**
+   * Your message did not reach the server.
+   *
+   * It stays where you wrote it, marked "Not sent · Tap to retry", rather than
+   * vanishing with its text put back in the composer — which lost its place in
+   * the conversation and read as though it had been deleted. A tap sends it
+   * again; the long-press menu can delete it.
+   */
+  failed?: boolean
+  onRetry?: () => void
   onLongPress?: () => void
 }
 
@@ -141,6 +151,8 @@ function ChatBubbleBase({
   reactions,
   variant = 'room',
   receipt = null,
+  failed = false,
+  onRetry,
   onLongPress,
   removed = false,
   animateIn = false,
@@ -148,25 +160,15 @@ function ChatBubbleBase({
   const direct = variant === 'direct'
   const reduceMotion = useReducedMotion()
   /*
-   * Seeded on the room *and* the sender, which is neither of the two things
-   * this was argued between.
-   *
-   * It used to be `senderId` alone, and `lib/pseudonymAvatar.ts` says why that
-   * is wrong in as many words: "Never feed it a user id: that is stable forever
-   * and would rebuild exactly the cross-event identity the pseudonyms exist to
-   * prevent." The same person carried the same colour and creature in every
-   * room, at every event, forever — a correlator handed to everyone they had
-   * ever shared a room with.
-   *
-   * `senderName` alone is wrong too, and a test already said so: two people
-   * both falling back to "Attendee" would share a mark, and somebody's disc
-   * would change the instant they revealed.
-   *
-   * Salting the id with the room satisfies both. Stable for the length of the
-   * room, unique per person inside it, different in the next room, and
-   * unaffected by a reveal.
+   * Seeded on the pseudonym, the one rule every surface follows
+   * (`markSeed` in lib/pseudonymAvatar.ts): the Room grid, Room info and the
+   * Banter all seed on the name, so one person is one creature on all of them
+   * — and "Cosmic Panda" draws a panda. A placeholder name ("Attendee") falls
+   * back to the room *and* the sender, so two unresolved people never share a
+   * mark. Never the sender id alone: that is stable forever and would rebuild
+   * the cross-event identity the pseudonyms exist to prevent.
    */
-  const mark = pseudonymAvatar(`${roomId}:${senderId}`)
+  const mark = pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))
   const reactionEntries = reactions ?? []
 
   return (
@@ -200,16 +202,16 @@ function ChatBubbleBase({
               {mine && receipt ? (
                 <Text
                   style={[styles.receipt, receipt === 'read' && styles.receiptRead]}
-                  accessibilityLabel={receipt === 'read' ? 'Read' : 'Sent'}
+                  accessibilityLabel={receipt === 'read' ? 'Read' : receipt === 'delivered' ? 'Delivered' : 'Sent'}
                 >
-                  {receipt === 'read' ? '✓✓' : '✓'}
+                  {receipt === 'sent' ? '✓' : '✓✓'}
                 </Text>
               ) : null}
             </>
           ) : mine ? (
             <>
               <Text style={styles.time}>{time}</Text>
-              <Text style={styles.nameMine}>Me</Text>
+              <Text style={styles.nameMine}>You</Text>
             </>
           ) : (
             <>
@@ -222,14 +224,18 @@ function ChatBubbleBase({
         </View>
 
         <Pressable
+          onPress={failed ? onRetry : undefined}
           onLongPress={removed ? undefined : onLongPress}
           delayLongPress={250}
-          accessibilityRole="text"
+          accessibilityRole={failed ? 'button' : 'text'}
           accessibilityLabel={
             removed
               ? `${mine ? 'Your' : `${senderName}'s`} message at ${time} was removed by moderation`
-              : `${mine ? 'You' : senderName} at ${time}: ${text}`
+              : failed
+                ? `Not sent: ${text}`
+                : `${mine ? 'You' : senderName} at ${time}: ${text}`
           }
+          accessibilityHint={failed ? 'Sends it again' : undefined}
           style={({ pressed }) => [
             styles.bubble,
             mine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -270,10 +276,25 @@ function ChatBubbleBase({
           {edited ? <Text style={styles.edited}>edited</Text> : null}
         </Pressable>
 
+        {failed ? (
+          <Text style={styles.failed} accessibilityElementsHidden importantForAccessibility="no">
+            Not sent · Tap to retry
+          </Text>
+        ) : null}
+
         {reactionEntries.length > 0 ? (
           <View style={[styles.reactions, mine && styles.reactionsMine]}>
-            {reactionEntries.map(({ emoji, count }) => (
-              <View key={emoji} style={styles.reaction}>
+            {reactionEntries.map(({ emoji, count, mine: yours }) => (
+              /*
+                Yours is marked with a 1pt `textPrimary` edge — the same
+                reaction the menu shows as selected — so you can see what you
+                already said before long-pressing to take it back.
+              */
+              <View
+                key={emoji}
+                style={[styles.reaction, yours && styles.reactionMine]}
+                accessibilityLabel={`${emoji} ${count}${yours ? ', yours' : ''}`}
+              >
                 <Text style={styles.reactionEmoji} maxFontSizeMultiplier={1.2}>
                   {emoji}
                 </Text>
@@ -355,6 +376,8 @@ const styles = StyleSheet.create({
   /* Read is one step brighter, so "they saw it" is a colour change and not a glyph count. */
   receiptRead: { color: EMBER.textSecondary },
   edited: { ...TYPE.caption, color: EMBER.textTertiary, marginTop: SPACE.xs },
+  // Error text is `destructive` (docs/DESIGN_SYSTEM.md), under the bubble it is about.
+  failed: { ...TYPE.caption, color: EMBER.destructive },
 
   quote: { flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.sm },
   quoteBar: { width: 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },
@@ -372,7 +395,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xxs,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.surfaceSunken,
+    // The same 1pt the mine state draws, transparent, so marking one never shifts the row.
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
+  reactionMine: { borderColor: EMBER.textPrimary },
   reactionEmoji: TYPE.meta,
   reactionCount: TYPE.caption,
 })

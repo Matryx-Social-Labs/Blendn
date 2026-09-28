@@ -81,8 +81,9 @@ describe('the Scene keeps what the earlier pass gave it', () => {
   it('does not let the avatar row announce the creatures', () => {
     // Unlabelled it says "butterfly, turtle, fox" — worse than silence,
     // because it is confidently wrong about what is on screen.
-    expect(read('components', 'scene', 'SceneSections.tsx')).toContain(
-      'accessibilityLabel={`${count} people interested`}'
-    )
+    const sections = read('components', 'scene', 'SceneSections.tsx')
+    // The discs are hidden; the count is read with its heading instead.
+    expect(sections).toMatch(/style=\{styles\.stack\}\s*\n\s*accessibilityElementsHidden/)
+    expect(sections).toContain('accessibilityLabel={`${label}, ${count}`}')
   })
 })

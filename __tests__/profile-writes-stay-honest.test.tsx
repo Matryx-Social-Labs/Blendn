@@ -14,7 +14,6 @@
  * pin would certify by name alone.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Alert } from 'react-native'
 
 jest.mock('../lib/photoUtils', () => ({
   selectAndUploadPhoto: jest.fn(),
@@ -26,6 +25,9 @@ jest.mock('../lib/photoUtils', () => ({
 jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../components/OptimizedImage', () => {
   // A stand-in that keeps the accessibility name, which is what the tests read.
   const React = require('react')
@@ -37,10 +39,10 @@ jest.mock('../components/OptimizedImage', () => {
 })
 
 import * as photoUtils from '../lib/photoUtils'
+import { showSheet } from '../lib/sheet'
 import PhotoManager from '../components/PhotoManager'
 
 const pu = photoUtils as jest.Mocked<typeof photoUtils>
-const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {})
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -56,12 +58,12 @@ describe('adding a photo', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
 
     await render(<PhotoManager userId="u" editable />)
-    await screen.findByText('Add Photo')
-    fireEvent.press(screen.getByText('Add Photo'))
+    await screen.findByText('Add photo')
+    fireEvent.press(screen.getByText('Add photo'))
 
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']))
     // The server's own sentence, not a generic retry.
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not add that photo', 'That looks like a blank image. Pick a photo of yourself.'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error'))
     // Two tiles, not three: the one the server does not have is not shown.
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })
@@ -71,11 +73,11 @@ describe('adding a photo', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: true })
 
     await render(<PhotoManager userId="u" editable />)
-    await screen.findByText('Add Photo')
-    fireEvent.press(screen.getByText('Add Photo'))
+    await screen.findByText('Add photo')
+    fireEvent.press(screen.getByText('Add photo'))
 
     await waitFor(() => expect(screen.getAllByLabelText(/^Photo \d of 3/)).toHaveLength(3))
-    expect(alert).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 })
 
@@ -89,7 +91,7 @@ describe('making a photo the main one', () => {
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/b.jpg', 'https://cdn/a.jpg']))
     // b is now first and carries the main-photo label; nothing was alerted.
     await screen.findByLabelText('Photo 1 of 2, main photo')
-    expect(alert).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('puts the order back and says why when the write is refused', async () => {
@@ -98,7 +100,7 @@ describe('making a photo the main one', () => {
     await screen.findByLabelText('Photo 2 of 2')
     fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
 
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not update', 'Could not save your photos'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save your photos', 'error'))
     // The grid is back to what the server holds: a first, b second.
     const tiles = screen.getAllByLabelText(/^Photo \d of 2/)
     expect(tiles[0].props.accessibilityLabel).toBe('Photo 1 of 2, main photo')
@@ -107,9 +109,10 @@ describe('making a photo the main one', () => {
 })
 
 describe('removing a photo', () => {
+  // The confirmation is the app's sheet; this is a tap on its "Remove photo".
   function confirmRemove() {
-    const buttons = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[]
-    buttons.find((b) => b.text === 'Remove')!.onPress!()
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)?.[0] as { actions: { label: string; then?: () => void }[] }
+    sheet.actions.find((a) => a.label === 'Remove photo')!.then!()
   }
 
   it('does NOT delete the object when the profile write fails, and restores the grid', async () => {
@@ -119,7 +122,7 @@ describe('removing a photo', () => {
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
 
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Could not remove', 'That looks like a blank image. Pick a photo of yourself.'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error'))
     expect(pu.deletePhoto).not.toHaveBeenCalled()
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })

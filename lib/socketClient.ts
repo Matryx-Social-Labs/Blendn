@@ -130,10 +130,14 @@ export interface ServerToClientEvents {
     messageIds: string[]
     readBy: string
   }) => void
+  /** These messages reached the other person's app: ✓✓ delivered (SCRUM-408). */
+  "private:delivered": (data: { conversationId: string; messageIds: string[] }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
   "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
+  /** Somebody left the room themselves. `userId` is the room's handle for them. */
+  "chat:memberLeft": (data: { chatGroupId: string; userId: string }) => void
   /**
    * A like turned mutual — sent to both people's `user:{id}` rooms.
    *
@@ -170,6 +174,7 @@ interface ClientToServerEvents {
   "private:startTyping": (conversationId: string) => void
   "private:stopTyping": (conversationId: string) => void
   "private:markRead": (conversationId: string, messageIds: string[]) => void
+  "private:delivered": (conversationId: string, messageIds: string[]) => void
   ping: () => void
 }
 
@@ -195,6 +200,7 @@ type ChatTypingCallback = (data: ServerToClientEvents["chat:typing"] extends (da
 type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends (data: infer D) => void ? D : never) => void
 type ChatMessageDeletedCallback = (data: ServerToClientEvents["chat:messageDeleted"] extends (data: infer D) => void ? D : never) => void
 type ChatMemberBannedCallback = (data: ServerToClientEvents["chat:memberBanned"] extends (data: infer D) => void ? D : never) => void
+type ChatMemberLeftCallback = (data: ServerToClientEvents["chat:memberLeft"] extends (data: infer D) => void ? D : never) => void
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
@@ -282,6 +288,7 @@ const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
  */
 const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCallback>>()
 const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
+const chatMemberLeftSubscriptions = new Map<string, Set<ChatMemberLeftCallback>>()
 const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 /*
@@ -291,6 +298,10 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 const bellSubscriptions = new Set<BellCallback>()
+type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
+const deliveredSubscriptions = new Set<DeliveredCallback>()
+/** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
+let myUserId: string | null = null
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -298,8 +309,12 @@ let appStateSubscription: { remove: () => void } | null = null
 /**
  * Initialize the socket connection
  */
-export async function connect(): Promise<boolean> {
-  if (socket?.connected) {
+/**
+ * `force` builds a fresh socket even when the current one says it is
+ * connected — for a phone back from the background, where it may be lying.
+ */
+export async function connect(opts: { force?: boolean } = {}): Promise<boolean> {
+  if (socket?.connected && !opts.force) {
     Logger.debug("socket", "Already connected")
     emitConnectionStatus({
       state: "connected",
@@ -340,6 +355,23 @@ export async function connect(): Promise<boolean> {
     }
 
     Logger.info("socket", `Connecting to socket server at: ${SOCKET_URL}`)
+
+    /*
+     * Retire the socket this one replaces.
+     *
+     * This runs whenever the current socket is not connected — every return
+     * from the background, before it has finished reconnecting. socket.io opens
+     * a second connection for a namespace that is already open, and the old
+     * socket, with unlimited reconnection attempts, came back beside the new
+     * one. Each server event then arrived once per socket: one friend request
+     * read 3 on the bell, driven on the owner's iPhone 2026-09-28. Listeners
+     * first, so its own disconnect handler does not report a drop.
+     */
+    if (socket) {
+      socket.removeAllListeners()
+      socket.io.removeAllListeners()
+      socket.disconnect()
+    }
 
     socket = io(SOCKET_URL, {
       /*
@@ -488,6 +520,7 @@ export function disconnect(): void {
   chatReactionSubscriptions.clear()
   chatMessageDeletedSubscriptions.clear()
   chatMemberBannedSubscriptions.clear()
+  chatMemberLeftSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
@@ -543,6 +576,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("connected", (data) => {
     Logger.info("socket", "Authenticated", { userId: data.userId })
+    myUserId = data.userId
   })
 
   sock.on("error", (data) => {
@@ -635,6 +669,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
     chatMessageDeletedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
+  sock.on("chat:memberLeft", (data) => {
+    chatMemberLeftSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
+  })
+
   sock.on("chat:memberBanned", (data) => {
     chatMemberBannedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
@@ -642,6 +680,15 @@ function setupSocketHandlers(sock: TypedSocket): void {
   // Private messaging updates
   sock.on("private:message", (data) => {
     markDomainsDirty(["chat", "match"])
+    /*
+     * The app has it: tell the sender ✓✓ (SCRUM-408). Here rather than in a
+     * screen, because a message delivered to the Banter or to a screen that
+     * never opened the thread is still delivered.
+     */
+    const incoming = data.message as { id?: string; senderId?: string } | undefined
+    if (incoming?.id && myUserId && incoming.senderId !== myUserId) {
+      sock.emit("private:delivered", data.conversationId, [incoming.id])
+    }
     // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
@@ -674,6 +721,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("private:read", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateReadCallback)(data))
+  })
+
+  sock.on("private:delivered", (data) => {
+    deliveredSubscriptions.forEach((cb) => cb(data))
   })
 }
 
@@ -875,6 +926,22 @@ export function subscribeToChatMessage(
 }
 
 /**
+ * Ask the server to put this socket back in a chat room it refused earlier.
+ *
+ * `join:chat` is sent when a screen subscribes and again on every reconnect.
+ * A member who had left was refused that join, and rejoining over HTTP does
+ * not reconnect, so without this the room stayed silent until the next
+ * reconnect: no new messages, typing or reactions.
+ */
+export function rejoinChatSocket(chatGroupId: string): void {
+  if (!socket?.connected) {
+    connect()
+    return
+  }
+  socket.emit("join:chat", chatGroupId)
+}
+
+/**
  * Subscribe to typing indicators for a specific chat group.
  */
 export function subscribeToChatTyping(
@@ -930,6 +997,14 @@ export function subscribeToChatMessageDeleted(
   callback: ChatMessageDeletedCallback
 ): () => void {
   return subscribeIn(chatMessageDeletedSubscriptions, chatGroupId, callback)
+}
+
+/** Somebody left this room themselves — a roster drops them. */
+export function subscribeToChatMemberLeft(
+  chatGroupId: string,
+  callback: ChatMemberLeftCallback
+): () => void {
+  return subscribeIn(chatMemberLeftSubscriptions, chatGroupId, callback)
 }
 
 /** A member was banned from, or unbanned in, this room. */
@@ -1065,6 +1140,14 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   }
 }
 
+/** Your messages reached their app: ✓✓ delivered (SCRUM-408). */
+export function subscribeToDelivered(callback: DeliveredCallback): () => void {
+  deliveredSubscriptions.add(callback)
+  return () => {
+    deliveredSubscriptions.delete(callback)
+  }
+}
+
 /** A row landed in your bell. Same delivery as `subscribeToRoomMatch`. */
 export function subscribeToBell(callback: BellCallback): () => void {
   if (!socket?.connected) connect()
@@ -1093,19 +1176,35 @@ export function initSocketWithAppState(): void {
 /**
  * Handle app state changes
  */
-async function handleAppStateChange(state: AppStateStatus): Promise<void> {
+/**
+ * Longer than this in the background, and the socket is not trusted.
+ *
+ * iOS suspends a backgrounded app, and its socket still says "connected" when
+ * the app returns, on a connection the server may have dropped. Nothing
+ * notices until the ping times out (about 85 s), and until then no message
+ * arrives and no banner says why (SCRUM-407). A fresh socket goes connecting →
+ * connected, which is what makes every screen's `useLiveSync` catch up on what
+ * it missed. Under this, a glance at another app keeps the socket it has.
+ */
+const FRESH_SOCKET_AFTER_MS = 15_000
+let backgroundedAt: number | null = null
+
+export async function handleAppStateChange(state: AppStateStatus): Promise<void> {
   Logger.debug("socket", `App state changed to: ${state}`)
 
-  if (state === "active") {
-    // App came to foreground, reconnect if needed
-    // Room rejoining is handled automatically by the connect handler in setupSocketHandlers
-    if (!socket?.connected) {
-      await connect()
-    }
-  } else {
-    // App went to background, disconnect to save battery
-    // Note: In production, you might want to keep the connection
-    // for push-like functionality
+  if (state === "background") {
+    backgroundedAt ??= Date.now()
+    return
+  }
+  if (state !== "active") return
+
+  const away = backgroundedAt === null ? 0 : Date.now() - backgroundedAt
+  backgroundedAt = null
+  // Room rejoining is handled by the connect handler in setupSocketHandlers.
+  if (!socket?.connected) {
+    await connect()
+  } else if (away > FRESH_SOCKET_AFTER_MS) {
+    await connect({ force: true })
   }
 }
 
@@ -1133,6 +1232,7 @@ export type {
   ChatReactionCallback,
   ChatMessageDeletedCallback,
   ChatMemberBannedCallback,
+  ChatMemberLeftCallback,
   PrivateMessageCallback,
   PrivateTypingCallback,
   PrivateReadCallback,

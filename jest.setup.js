@@ -6,3 +6,7 @@
 // test that only reads a pure function out of that module. The package ships
 // this mock for exactly that.
 jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'))
+// Same for gesture handler: `GestureHandlerRootView` installs a native module on
+// mount. `ActionTray` carries one (a Modal is its own native root), so every
+// screen that draws a tray needs the package's own mock to render in a test.
+require('react-native-gesture-handler/jestSetup')

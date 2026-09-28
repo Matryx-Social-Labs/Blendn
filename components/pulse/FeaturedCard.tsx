@@ -119,7 +119,11 @@ interface Props {
   /** Full width when it is the only card — see `FEATURED_CARD_SOLO`. */
   width?: number
   onPress: () => void
+  /** The quick-actions tray; also a "Quick actions" VoiceOver action. */
+  onLongPress?: () => void
 }
+
+const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
 
 function FeaturedCardImpl({
   title,
@@ -130,6 +134,7 @@ function FeaturedCardImpl({
   placeLabel,
   width = FEATURED_CARD_WIDTH,
   onPress,
+  onLongPress,
 }: Props) {
   // From the width it is actually drawn at: the solo card is wider.
   const photoHeight = Math.round(width * FEATURED_PHOTO_ASPECT)
@@ -141,8 +146,17 @@ function FeaturedCardImpl({
       haptic={false}
       pressedScale={0.98}
       onPress={onPress}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
+      accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
+      onAccessibilityAction={
+        onLongPress
+          ? (e) => {
+              if (e.nativeEvent.actionName === 'quickActions') onLongPress()
+            }
+          : undefined
+      }
       style={{ width }}
     >
       <View style={[styles.photo, { height: photoHeight }]}>

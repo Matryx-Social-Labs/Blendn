@@ -2,86 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
 import { Text } from './ui/Text'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
-
-interface ChatHeaderProps {
-  groupName: string
-  participantCount?: number
-  onBack?: () => void
-  onSettings?: () => void
-}
-
-interface SegmentedControlProps {
-  options: string[]
-  selectedIndex: number
-  onSelectionChange: (index: number) => void
-}
-
-function SegmentedControl({ options, selectedIndex, onSelectionChange }: SegmentedControlProps) {
-  return (
-    <View style={styles.segmentedContainer}>
-      <View style={styles.segmentedPill}>
-        {options.map((option, index) => (
-          <Pressable
-            key={index}
-            onPress={() => onSelectionChange(index)}
-            style={[
-              styles.segmentedItem,
-              index === selectedIndex && styles.segmentedItemActive
-            ]}
-          >
-            <Text style={[
-              styles.segmentedText,
-              index === selectedIndex && styles.segmentedTextActive
-            ]}>
-              {option}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  )
-}
-
-function ChatHeader({ groupName, participantCount, onBack, onSettings }: ChatHeaderProps) {
-  return (
-    <View style={[styles.chatHeaderContainer, { paddingTop: 0 }]}>
-      <View style={styles.chatHeaderRow}>
-        {/* Back button */}
-        {onBack && (
-          <Pressable
-            onPress={onBack}
-            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-        )}
-
-        {/* Center content */}
-        <View style={styles.chatHeaderCenter}>
-          <Text variant="heading" style={styles.chatHeaderTitle} numberOfLines={1}>
-            {groupName}
-          </Text>
-          {participantCount && (
-            <Text variant="meta" style={styles.chatHeaderSubtitle}>
-              {participantCount} members
-            </Text>
-          )}
-        </View>
-
-        {/* Settings button */}
-        {onSettings && (
-          <Pressable
-            onPress={onSettings}
-            style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="settings-outline" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-        )}
-      </View>
-    </View>
-  )
-}
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE } from '../lib/theme'
 
 interface RightIconButton {
   name: keyof typeof Ionicons.glyphMap
@@ -111,7 +32,8 @@ interface AppHeaderProps {
  * light text. There used to be a `variant` prop with a light-mode
  * branch (`#FFFFFF` background, dark text); nothing in the app renders it and
  * there's no dark-mode toggle to reach it, so it was dead code pretending to
- * be a feature.
+ * be a feature. `ChatHeader` and `SegmentedControl` went the same way: both
+ * chat screens draw their own header, and nothing imported either.
  */
 export function AppHeader(props: AppHeaderProps) {
   const {
@@ -124,17 +46,10 @@ export function AppHeader(props: AppHeaderProps) {
     containerStyle,
   } = props
 
+  const textButtonInactive = !!rightTextButton?.disabled || !!rightTextButton?.loading
+
   return (
-    <View style={[
-      {
-        // 12 plus the icon button's own 12 inset puts the chevron on the 24 gutter.
-        paddingHorizontal: SPACE.md,
-        paddingTop: SPACE.sm,
-        paddingBottom: SPACE.md,
-        backgroundColor: 'transparent',
-      },
-      containerStyle,
-    ]}>
+    <View style={[styles.container, containerStyle]}>
       <View style={styles.row}>
         {/* Back button or left spacer */}
         {onBack ? (
@@ -150,7 +65,19 @@ export function AppHeader(props: AppHeaderProps) {
 
         {/* Title */}
         <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
-          <Text variant="display" numberOfLines={1}>
+          {/*
+            The screen's name, announced as a header so a screen reader can
+            jump to it. One line: a long name ("Contact support" at a large
+            text size) shrinks to fit rather than being cut off with "…", and
+            the display role's 1.2 cap keeps it from wrapping the bar.
+          */}
+          <Text
+            variant="display"
+            accessibilityRole="header"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {title}
           </Text>
           {!!subtitle && (
@@ -163,9 +90,16 @@ export function AppHeader(props: AppHeaderProps) {
         {/* Right */}
         {rightTextButton ? (
           <Pressable
-            disabled={!!rightTextButton.disabled || !!rightTextButton.loading}
+            disabled={textButtonInactive}
             onPress={rightTextButton.onPress}
-            style={({ pressed }) => [styles.ctaBtn, (rightTextButton.disabled || rightTextButton.loading) && styles.ctaDisabled, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={rightTextButton.label}
+            accessibilityState={{ disabled: textButtonInactive, busy: !!rightTextButton.loading }}
+            style={({ pressed }) => [
+              styles.ctaBtn,
+              rightTextButton.disabled && !rightTextButton.loading && styles.ctaDisabled,
+              pressed && styles.pressed,
+            ]}
           >
             {rightTextButton.loading ? (
               <ActivityIndicator size="small" color={EMBER.onGradient} />
@@ -189,72 +123,13 @@ export function AppHeader(props: AppHeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  // SegmentedControl styles
-  segmentedContainer: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
+  container: {
+    // 12 plus the icon button's own 12 inset puts the chevron on the 24 gutter.
+    paddingHorizontal: SPACE.md,
+    paddingTop: SPACE.sm,
+    paddingBottom: SPACE.md,
+    backgroundColor: 'transparent',
   },
-  segmentedPill: {
-    flexDirection: 'row',
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: EMBER.separator,
-    overflow: 'hidden',
-  },
-  segmentedItem: {
-    flex: 1,
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  segmentedItemActive: {
-    backgroundColor: EMBER.surface,
-  },
-  segmentedText: {
-    ...TYPE.bodyStrong,
-    color: EMBER.textSecondary,
-  },
-  segmentedTextActive: {
-    color: EMBER.textPrimary,
-  },
-
-  // ChatHeader styles
-  chatHeaderContainer: {
-    backgroundColor: EMBER.bg,
-    paddingBottom: 0,
-    paddingHorizontal: 0,
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatHeaderCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  chatHeaderTitle: {
-    textAlign: 'center',
-  },
-  chatHeaderSubtitle: {
-    textAlign: 'center',
-  },
-  settingsButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // AppHeader styles
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,17 +156,15 @@ const styles = StyleSheet.create({
     height: CONTROL.md,
     justifyContent: 'center',
     borderRadius: EMBER_RADIUS.pill,
-    minWidth: 60,
+    minWidth: CONTROL.md + SPACE.md,
     alignItems: 'center',
   },
   ctaDisabled: {
-    opacity: 0.6,
+    opacity: OPACITY.disabled,
   },
   pressed: {
-    opacity: 0.6,
+    opacity: OPACITY.pressed,
   },
 })
 
-export { ChatHeader, AppHeader as default, SegmentedControl }
-
-
+export { AppHeader as default }

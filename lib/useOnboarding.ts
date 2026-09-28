@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
 import {
@@ -26,8 +27,8 @@ import { clearNewAccountFlag, refreshAuthUser, useAuth } from './useAuth'
  * going back to the picker and deselecting something left it on the server for
  * ever, and nothing anywhere called DELETE.
  *
- * Returns false on any failure so the caller can warn; never throws, because
- * both callers sit under the "a failed server save does not block anyone" rule.
+ * Returns false on any failure so the caller can say so; never throws, so a
+ * refused write is an answer the caller handles rather than an exception.
  */
 export async function syncInterests(userId: string, wanted: string[]): Promise<boolean> {
   const held = await apiClient.getProfileInterests(userId)
@@ -63,19 +64,34 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
  *    re-sends an empty `bio`, and the API reads a present key as "set this" —
  *    so a correction on step one silently wipes an answer from step six.
  *
- * A failed server save does **not** block the person. The local draft is
- * intact, `onboarded` is not written until the last step, and every field is
- * re-sent on that final save — so the recovery is automatic and the alternative
- * is trapping someone on a screen because their train went into a tunnel.
+ * A failed server save **stops on the step and says so**. It used to move on
+ * regardless, logging a warning nobody saw, on the theory that the last step
+ * re-sends everything. In practice that sent somebody through six screens of
+ * answers the server had not taken, to a final save that then failed on the
+ * same field with no idea which one. Now the step stays, a toast says what
+ * failed, and Continue is the retry. The draft is already in storage, so a
+ * retry or a relaunch loses nothing, and the step is not marked done until the
+ * server has it, so resume lands back here rather than past it.
  */
 export function useOnboarding(step: OnboardingStep) {
   const { user } = useAuth()
   const userId = user?.id
+  const { showToast } = useToast()
 
   const [draft, setDraft] = useState<OnboardingDraft>({})
   const [progress, setProgress] = useState<OnboardingProgress>(EMPTY_PROGRESS)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+  /*
+   * One move at a time.
+   *
+   * A ref, not `saving`: two taps inside one frame both read the same stale
+   * `saving`, and a double-tapped Continue pushed the next step twice (Back
+   * then landed on a copy of the step you were already on). Skip during a
+   * save did the same with a different pair. `commit`, `skip` and `finish`
+   * all take this before doing anything and refuse while it is held.
+   */
+  const inFlight = useRef(false)
 
   // Rehydrate on mount. Every step does this rather than only the first,
   // because every step can be the one someone resumes onto.
@@ -177,33 +193,31 @@ export function useOnboarding(step: OnboardingStep) {
    * caller does not have to `update()` and then `commit()` and hope the state
    * has settled — React batches, and reading `draft` immediately after setting
    * it is the classic way to save the previous value.
+   *
+   * Resolves `true` when it moved on, `false` when the save failed and the
+   * step stays (the toast has said why).
    */
   const commit = useCallback(
-    async (patch: Partial<OnboardingDraft> = {}) => {
-      if (!userId) return
+    async (patch: Partial<OnboardingDraft> = {}): Promise<boolean> => {
+      if (!userId || inFlight.current) return false
+      inFlight.current = true
       const merged = { ...draft, ...patch }
       const nextProgress = advance(progress, step)
 
       setSaving(true)
       setDraft(merged)
-      setProgress(nextProgress)
-      await writeOnboarding(userId, { progress: nextProgress, draft: merged })
+      // The answers are kept whatever happens next; the step is not marked
+      // done until the server has them (below), so resume comes back here.
+      await writeOnboarding(userId, { progress, draft: merged })
 
       /*
-       * Everything from here is best-effort, and the `try` is load-bearing.
+       * The `try` is load-bearing.
        *
-       * The rule this file states is "a failed server save does not block
-       * anyone" — and the first version only honoured it for a *returned*
-       * error. `apiClient.updateProfile` throws on a non-2xx, so a rejected
-       * field or a dropped connection skipped `setSaving(false)` and skipped
-       * the navigation, leaving the Continue button spinning with no way past
-       * it. A validation error the person cannot see or fix became a wall.
-       *
-       * Catching is the whole fix. The draft is already in storage two lines
-       * above, and the last step re-sends every field, so the recovery is
-       * automatic and the cost of failing here is that the dashboard sees the
-       * profile a few minutes late.
+       * `apiClient.updateProfile` throws on a non-2xx, so the first version
+       * skipped `setSaving(false)` on a rejected field or a dropped connection
+       * and left the Continue button spinning with no way past it.
        */
+      let failure: string | null = null
       try {
         /*
          * The structured graph, before the profile write.
@@ -228,33 +242,50 @@ export function useOnboarding(step: OnboardingStep) {
           const synced = await syncInterests(userId, merged.interestIds)
           if (!synced) {
             Logger.warn('auth', 'Onboarding could not save the interest graph', { step })
+            failure = "Couldn't save your interests. Check your connection and try again."
           }
         }
 
         const body = stepPayload(step, merged)
-        if (Object.keys(body).length > 0) {
+        if (!failure && Object.keys(body).length > 0) {
           const result = await apiClient.updateProfile(userId, body)
           if (!result.success) {
             Logger.warn('auth', 'Onboarding step did not save to the server', {
               step,
               error: result.error,
             })
+            // The server's sentence when it gave one: a refused field says
+            // which, and that is what somebody needs to fix it.
+            failure = result.error || "Couldn't save that. Try again."
           }
         }
       } catch (error) {
         Logger.warn('auth', 'Onboarding step threw while saving', { step, error })
+        failure = "Couldn't save that. Check your connection and try again."
       } finally {
         // In `finally` rather than after the call: a throw here used to leave
         // this stuck true, which is what made the button spin forever.
         setSaving(false)
+        // A failed save stays on the step, so Continue has to work again.
+        if (failure) inFlight.current = false
       }
 
-      // Outside the try, deliberately. Moving on is not conditional on the
-      // network — that is the entire point of saving the draft first.
-      const after = nextStep(step)
-      if (after) advanceTo(after)
+      if (failure) {
+        showToast(failure, 'error')
+        return false
+      }
+
+      setProgress(nextProgress)
+      try {
+        await writeOnboarding(userId, { progress: nextProgress, draft: merged })
+        const after = nextStep(step)
+        if (after) advanceTo(after)
+      } finally {
+        inFlight.current = false
+      }
+      return true
     },
-    [advanceTo, draft, progress, step, userId]
+    [advanceTo, draft, progress, showToast, step, userId]
   )
 
   /**
@@ -265,15 +296,20 @@ export function useOnboarding(step: OnboardingStep) {
    * would be putting words in someone's mouth.
    */
   const skip = useCallback(async () => {
-    if (!userId) return
+    if (!userId || inFlight.current) return
+    inFlight.current = true
     const nextProgress = advance(progress, step)
     setProgress(nextProgress)
-    // `writeOnboarding` swallows its own errors, so this cannot throw — but the
-    // navigation stays after it for the same reason as in `commit`: skipping
-    // must never depend on anything that can fail.
-    await writeOnboarding(userId, { progress: nextProgress, draft })
-    const after = nextStep(step)
-    if (after) advanceTo(after)
+    try {
+      // `writeOnboarding` swallows its own errors, so this cannot throw — but the
+      // navigation stays after it for the same reason as in `commit`: skipping
+      // must never depend on anything that can fail.
+      await writeOnboarding(userId, { progress: nextProgress, draft })
+      const after = nextStep(step)
+      if (after) advanceTo(after)
+    } finally {
+      inFlight.current = false
+    }
   }, [advanceTo, draft, progress, step, userId])
 
   /**
@@ -288,45 +324,53 @@ export function useOnboarding(step: OnboardingStep) {
    * Local progress is cleared once the server has it, so a later launch reads
    * `profiles.onboarded` and does not try to resume a flow that is over.
    */
-  const finish = useCallback(async () => {
-    if (!userId) return
+  const finish = useCallback(async (): Promise<boolean> => {
+    if (!userId || inFlight.current) return false
+    inFlight.current = true
     setSaving(true)
-
-    /*
-     * The graph is NOT in the profile PUT — `updateProfileSchema` strips
-     * `interestIds` — so re-sending the draft below does not re-send it. This
-     * call is what makes the "everything is re-sent here" claim above true for
-     * the one field whose absence is silent. The first version of this file
-     * claimed the backstop and did not have it.
-     *
-     * `undefined` means the picker was never visited; syncing to `[]` would
-     * wipe a graph set elsewhere (edit-profile, `about-you`).
-     */
-    if (draft.interestIds) {
-      try {
-        const synced = await syncInterests(userId, draft.interestIds)
-        if (!synced) Logger.warn('auth', 'Finishing onboarding could not save the interest graph')
-      } catch (error) {
-        Logger.warn('auth', 'Finishing onboarding threw while saving the interest graph', { error })
+    try {
+      /*
+       * The graph is NOT in the profile PUT — `updateProfileSchema` strips
+       * `interestIds` — so re-sending the draft below does not re-send it. This
+       * call is what makes the "everything is re-sent here" claim above true for
+       * the one field whose absence is silent. The first version of this file
+       * claimed the backstop and did not have it.
+       *
+       * `undefined` means the picker was never visited; syncing to `[]` would
+       * wipe a graph set elsewhere (edit-profile, `about-you`).
+       */
+      if (draft.interestIds) {
+        try {
+          const synced = await syncInterests(userId, draft.interestIds)
+          if (!synced) Logger.warn('auth', 'Finishing onboarding could not save the interest graph')
+        } catch (error) {
+          Logger.warn('auth', 'Finishing onboarding threw while saving the interest graph', { error })
+        }
       }
-    }
 
-    const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
-    setSaving(false)
+      const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
 
-    if (!result.success) {
-      Logger.warn('auth', 'Could not complete onboarding', { error: result.error })
+      if (!result.success) {
+        Logger.warn('auth', 'Could not complete onboarding', { error: result.error })
+        return false
+      }
+
+      await clearOnboarding(userId)
+      // The flow is over for this session too, not only on this device.
+      clearNewAccountFlag()
+      // The in-memory user still says `onboarded: false` with no age, and the
+      // root guard's `mayParticipate` reads it; refreshed, it agrees with the
+      // server before anything asks it again.
+      void refreshAuthUser()
+      return true
+    } catch (error) {
+      // A throw here used to leave `saving` true and the button spinning.
+      Logger.warn('auth', 'Finishing onboarding threw', { error })
       return false
+    } finally {
+      inFlight.current = false
+      setSaving(false)
     }
-
-    await clearOnboarding(userId)
-    // The flow is over for this session too, not only on this device.
-    clearNewAccountFlag()
-    // The in-memory user still says `onboarded: false` with no age, and the
-    // root guard's `mayParticipate` reads it; refreshed, it agrees with the
-    // server before anything asks it again.
-    void refreshAuthUser()
-    return true
   }, [draft, userId])
 
   return { draft, progress, loaded, saving, update, commit, skip, finish, goBack, jumpTo }

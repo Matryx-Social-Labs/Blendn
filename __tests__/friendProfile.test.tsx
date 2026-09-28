@@ -6,7 +6,6 @@
  * structural pin would pass by name alone.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Alert } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
@@ -19,6 +18,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn() },
 }))
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../components/PhotoLightbox', () => () => null)
@@ -30,7 +30,7 @@ jest.mock('../components/profile/ProfileSections', () => {
     ProfileHero: (p: { title: string }) => React.createElement(Text, null, p.title),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
-    ProfileGallery: stub('gallery'),
+    ProfileGallery: (p: { photos: string[] }) => React.createElement(Text, null, `gallery: ${p.photos.join(',')}`),
     ProfileHeading: stub('heading'),
     ProfileInterests: stub('interests'),
   }
@@ -38,6 +38,7 @@ jest.mock('../components/profile/ProfileSections', () => {
 
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
+import { showSheet } from '../lib/sheet'
 import FriendProfileScreen from '../app/friends/[userId]'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -54,7 +55,6 @@ const BEN = {
   friendsSince: '2026-09-27T20:00:00Z',
   conversationId: null as string | null,
 }
-const alert = jest.spyOn(Alert, 'alert')
 
 beforeEach(() => jest.clearAllMocks())
 
@@ -81,22 +81,57 @@ it('opens a DM when there is none', async () => {
   )
 })
 
-it('stays on the profile and says so when removing fails', async () => {
+/** Runs the confirmation sheet's "Remove friend", as a tap on it would. */
+const runRemove = async () => {
+  const sheet = (showSheet as jest.Mock).mock.calls[0][0]
+  const remove = sheet.actions.find((a: { label: string }) => a.label === 'Remove friend')
+  return remove.run()
+}
+
+it('asks in the app’s sheet, and stays on the profile saying so when removing fails', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: false, error: 'nope' })
-  alert.mockImplementation((_t, _m, buttons) => {
-    const remove = buttons?.find((b) => b.text === 'Remove')
-    void remove?.onPress?.()
-  })
   await render(<FriendProfileScreen />)
   fireEvent.press(await screen.findByLabelText('Remove Ben from friends'))
-  await waitFor(() => expect(api.removeFriend).toHaveBeenCalledWith('u_ben'))
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error'))
+  expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Remove Ben?' }))
+  // The sheet keeps the refusal and turns the button into Try again.
+  await expect(runRemove()).resolves.toEqual({ ok: false, error: "That didn't go through. Try again." })
+  expect(api.removeFriend).toHaveBeenCalledWith('u_ben')
   expect(router.back).not.toHaveBeenCalled()
 })
 
+it('leaves once the server agreed', async () => {
+  api.getFriend.mockResolvedValue({ success: true, data: BEN })
+  api.removeFriend.mockResolvedValue({ success: true, data: {} } as never)
+  await render(<FriendProfileScreen />)
+  fireEvent.press(await screen.findByLabelText('Remove Ben from friends'))
+  await expect(runRemove()).resolves.toMatchObject({ ok: true })
+  expect(router.back).toHaveBeenCalled()
+})
+
+it('does not repeat the hero’s first photo in the gallery', async () => {
+  api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, photos: ['a', 'b', 'c'] } })
+  await render(<FriendProfileScreen />)
+  // The hero cycles 'a'; the gallery is the rest.
+  expect(await screen.findByText('gallery: b,c')).toBeTruthy()
+})
+
 it('says plainly when they are no longer a friend', async () => {
-  api.getFriend.mockResolvedValue({ success: false, error: 'Not found' })
+  api.getFriend.mockResolvedValue({ success: false, error: 'Not found', errorCode: 'NOT_FOUND' })
   await render(<FriendProfileScreen />)
   expect(await screen.findByText("You're not friends with this person any more.")).toBeTruthy()
+})
+
+it('does not call a failed load an unfriending, and tries again', async () => {
+  // Offline, a timeout, a 5xx: no NOT_FOUND. This used to read as "not friends any more".
+  api.getFriend.mockResolvedValueOnce({ success: false, error: 'No internet connection. Check your network and try again.' })
+  await render(<FriendProfileScreen />)
+  expect(await screen.findByText("This profile didn't load")).toBeTruthy()
+  expect(screen.queryByText("You're not friends with this person any more.")).toBeNull()
+  // And the way out is there, since the hero's top bar never drew.
+  expect(screen.getByLabelText('Go back')).toBeTruthy()
+
+  api.getFriend.mockResolvedValueOnce({ success: true, data: BEN })
+  fireEvent.press(screen.getByText('Try again'))
+  expect(await screen.findByText('Ben, 31')).toBeTruthy()
 })

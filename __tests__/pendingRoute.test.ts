@@ -12,7 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
-import { openWhenReady, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
+import { openWhenReady, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
   resetPendingRoute()
@@ -42,6 +42,29 @@ describe('openWhenReady', () => {
   })
 })
 
+describe('pendingInviteToken', () => {
+  it('reads the token of an invite link waiting for sign-in, without taking it', () => {
+    openWhenReady('/f/abc123' as never)
+    expect(pendingInviteToken()).toBe('abc123')
+    // Still there for the guard to open after sign-in.
+    expect(takePendingRoute()).toBe('/f/abc123')
+    expect(pendingInviteToken()).toBeNull()
+  })
+
+  it('reads the object form too', () => {
+    openWhenReady({ pathname: '/f/[token]', params: { token: 'tok9' } } as never)
+    expect(pendingInviteToken()).toBe('tok9')
+  })
+
+  it('is null for anything that is not an invite', () => {
+    expect(pendingInviteToken()).toBeNull()
+    openWhenReady('/(tabs)/chat')
+    expect(pendingInviteToken()).toBeNull()
+    openWhenReady('/friends/add' as never)
+    expect(pendingInviteToken()).toBeNull()
+  })
+})
+
 describe('a notification tapped while signed out', () => {
   it('waits for sign-in instead of navigating', () => {
     navigateFromNotificationData({ type: 'private_message', conversationId: 'c1' })
@@ -60,6 +83,17 @@ describe('notificationTarget', () => {
       pathname: '/event/[id]',
       params: { id: 'e1' },
     })
+  })
+
+  it('opens the rating screen for an event-ended or rating push, whatever the server names it', () => {
+    for (const type of ['event_ended', 'event_rating', 'rate_event', 'peer_rating', 'rate_peers', 'rating_request']) {
+      expect(notificationTarget({ type, eventId: 'e1' })).toEqual({
+        pathname: '/rate/[eventId]',
+        params: { eventId: 'e1' },
+      })
+    }
+    // No event, nothing to rate: Going's Past rows are the way in.
+    expect(notificationTarget({ type: 'event_ended' })).toBe('/(tabs)/going')
   })
 
   it('goes nowhere for an unknown or empty payload', () => {

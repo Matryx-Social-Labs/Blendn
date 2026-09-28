@@ -109,8 +109,12 @@ export interface NotificationData {
   data?: Record<string, any>
 }
 
-// Register for push notifications and get the Expo push token
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+// Register for push notifications and get the Expo push token.
+// `prompt: false` never shows the OS dialog: it registers only when the
+// permission is already granted (see lib/pushDecline.ts).
+export async function registerForPushNotificationsAsync(
+  { prompt = true }: { prompt?: boolean } = {}
+): Promise<string | null> {
   let token: string | null = null
 
   if (Platform.OS === 'android') {
@@ -130,6 +134,10 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     let finalStatus = existingStatus
 
     if (existingStatus !== 'granted') {
+      if (!prompt) {
+        Logger.info('notifications', 'Push declined during onboarding; not asking')
+        return null
+      }
       const { status } = await Notifications.requestPermissionsAsync()
       finalStatus = status
     }
@@ -434,6 +442,27 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       target = '/friends'
       break
     }
+    /*
+     * "The night's over — rate who you met." The server sends
+     * `rating_request` with `eventId`, once per event, after an event you
+     * checked in to ends (blendn-admin `event-notifications.service.ts`). The
+     * other names were routed ahead of it and cost nothing to keep. Without an
+     * event id there is nothing to rate, and Going's Past rows carry the way
+     * in for every event you attended.
+     */
+    case 'event_ended':
+    case 'event_rating':
+    case 'rate_event':
+    case 'peer_rating':
+    case 'rate_peers':
+    case 'rating_request': {
+      if (data.eventId) {
+        target = { pathname: '/rate/[eventId]', params: { eventId: String(data.eventId) } as any }
+      } else {
+        target = '/(tabs)/going'
+      }
+      break
+    }
     case 'waitlist_promoted': {
       // "A place opened up" is only actionable on the event itself.
       if (data.eventId) {
@@ -526,10 +555,12 @@ export async function cancelLegacyEventReminders(): Promise<void> {
 }
 
 // Initialize push notifications (call this on app startup)
-export async function initializePushNotifications(): Promise<string | null> {
+export async function initializePushNotifications(
+  options: { prompt?: boolean } = {}
+): Promise<string | null> {
   cancelLegacyEventReminders().catch(() => {})
   try {
-    const token = await registerForPushNotificationsAsync()
+    const token = await registerForPushNotificationsAsync(options)
 
     if (token) {
       // Store token for removal on logout

@@ -97,7 +97,8 @@ a border on `centreButton` would shrink the gradient and the mark on it.
 
 **Check out is in the Room's top bar.** The strip held the only one-tap check
 out, so it moved with the signal rather than being dropped — one tap from the
-button wearing the green dot. The Pulse's long-press tray also offers it now; it used to offer a
+button wearing the green dot, then a confirm (it closes the room, and checking
+back in needs your location again). The Pulse's long-press tray also offers it now; it used to offer a
 way in and no way out.
 
 **Every state goes somewhere real**, which is the whole reason this is a mode

@@ -1,16 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
+import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
-import { COMMUNITY_GUIDELINES_URL } from '../lib/communityGuidelines'
+import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
+import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
@@ -45,17 +49,30 @@ const DEFAULT_PREFERENCES: PreferencesState = {
 const toBoolean = (value: unknown, fallback: boolean) =>
   typeof value === 'boolean' ? value : fallback
 
-const BLENDN_LINKS = {
-  safety: 'https://blendn.app/safety',
-  guidelines: COMMUNITY_GUIDELINES_URL,
-  help: 'https://blendn.app/help',
-  terms: 'https://blendn.app/terms',
-  privacy: 'https://blendn.app/privacy',
-  deleteAccount: 'https://www.blendn.app/delete-account',
-} as const
+/**
+ * What the phone itself says about notifications, apart from what the account says.
+ *
+ * `blocked` is a no the app can no longer ask past: iOS after the first
+ * refusal, Android once "Don't ask again" is set. Only the phone's Settings can
+ * undo it, so the switch shows off whatever the account says, and turning it on
+ * explains that instead of saving a preference nothing will ever deliver on.
+ */
+type OsPush = 'granted' | 'askable' | 'blocked'
+
+async function readOsPush(): Promise<OsPush> {
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync()
+    if (status === 'granted') return 'granted'
+    return canAskAgain ? 'askable' : 'blocked'
+  } catch {
+    // Unknown reads as askable: the switch then behaves as it always did.
+    return 'askable'
+  }
+}
 
 export default function SettingsScreen() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const [, setDisplayName] = useState<string>('')
   const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
@@ -75,7 +92,31 @@ export default function SettingsScreen() {
   })
   const [loadingPreferences, setLoadingPreferences] = useState(true)
   const [preferencesError, setPreferencesError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  /*
+   * Deleting is two steps in one tray: what it does, then "for good?". One
+   * tray whose content changes, not two, because iOS will not present a second
+   * modal while the first is still fading out.
+   */
+  const [deleteStep, setDeleteStep] = useState<'explain' | 'confirm' | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [signOutOpen, setSignOutOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [osPush, setOsPush] = useState<OsPush>('askable')
+  const [pushBlockedOpen, setPushBlockedOpen] = useState(false)
+
+  /*
+   * Read now and on every return to the app: the fix for `blocked` is a trip
+   * to the phone's Settings, and coming back should show that it worked.
+   */
+  useEffect(() => {
+    void readOsPush().then(setOsPush)
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void readOsPush().then(setOsPush)
+    })
+    return () => sub.remove()
+  }, [])
 
   const settingsStorageKey = useMemo(() => (
     user?.id ? `settings_preferences_${user.id}` : null
@@ -122,62 +163,73 @@ export default function SettingsScreen() {
     return { profile, nextPrefs }
   }, [])
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (!user) return
-        if (settingsStorageKey) {
-          try {
-            const cached = await AsyncStorage.getItem(settingsStorageKey)
-            if (cached) {
-              const parsed = JSON.parse(cached) as Partial<PreferencesState>
-              setPreferences({
-                pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
-                showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
-                shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
-                locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
-                friendsSeeMe: toBoolean(parsed.friendsSeeMe, DEFAULT_PREFERENCES.friendsSeeMe),
-              })
-            }
-          } catch {}
-        }
-
-        const result = await apiClient.getProfile(user.id)
-        if (!result.success || !result.data) {
-          /*
-           * Say so, rather than leave four switches reading ON. With nothing
-           * cached the defaults are all `true` and looked exactly like a
-           * server-confirmed answer — the same lie the naming bug below used
-           * to tell, arriving through a network failure instead.
-           */
-          Logger.warn('profile', 'Could not load preferences', { error: result.error })
-          setPreferencesError('Could not load your settings. Pull to retry or check your connection.')
-        }
-        if (result.success && result.data) {
-          setPreferencesError(null)
-          const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
-          const name = profile.name || user.name || 'You'
-          setDisplayName(name)
-          // Get avatar from profile photos if available
-          const photos = profile.photos || profile.profile_photos || []
-          const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
-          if (primary) {
-            setAvatarUrl(primary)
-          } else if (user.image) {
-            setAvatarUrl(user.image)
+  const loadPreferences = useCallback(async () => {
+    if (!user) return
+    try {
+      if (settingsStorageKey) {
+        try {
+          const cached = await AsyncStorage.getItem(settingsStorageKey)
+          if (cached) {
+            const parsed = JSON.parse(cached) as Partial<PreferencesState>
+            setPreferences({
+              pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
+              showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
+              shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
+              locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
+              friendsSeeMe: toBoolean(parsed.friendsSeeMe, DEFAULT_PREFERENCES.friendsSeeMe),
+            })
           }
-          setPreferences(nextPrefs)
-          savePreferencesLocal(nextPrefs)
-        }
-      } catch (error) {
-        Logger.warn('profile', 'Could not load preferences', { error })
-        setPreferencesError('Could not load your settings. Check your connection and try again.')
-      } finally {
-        setLoadingPreferences(false)
+        } catch {}
       }
+
+      const result = await apiClient.getProfile(user.id)
+      if (!result.success || !result.data) {
+        /*
+         * Say so, rather than leave four switches reading ON. With nothing
+         * cached the defaults are all `true` and looked exactly like a
+         * server-confirmed answer — the same lie the naming bug below used
+         * to tell, arriving through a network failure instead.
+         */
+        Logger.warn('profile', 'Could not load preferences', { error: result.error })
+        setPreferencesError("Your settings didn't load. Pull down or try again.")
+      }
+      if (result.success && result.data) {
+        setPreferencesError(null)
+        const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
+        const name = profile.name || user.name || 'You'
+        setDisplayName(name)
+        // Get avatar from profile photos if available
+        const photos = profile.photos || profile.profile_photos || []
+        const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
+        if (primary) {
+          setAvatarUrl(primary)
+        } else if (user.image) {
+          setAvatarUrl(user.image)
+        }
+        setPreferences(nextPrefs)
+        savePreferencesLocal(nextPrefs)
+      }
+    } catch (error) {
+      Logger.warn('profile', 'Could not load preferences', { error })
+      setPreferencesError("Your settings didn't load. Pull down or try again.")
+    } finally {
+      setLoadingPreferences(false)
     }
-    load()
   }, [user, settingsStorageKey, savePreferencesLocal, hydratePreferencesFromProfile])
+
+  useEffect(() => {
+    // Every setState in loadPreferences comes after its first await; the rule
+    // can't see through the async function. It is shared with pull-to-refresh
+    // and Try again, which is why it isn't declared inside this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPreferences()
+  }, [loadPreferences])
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([loadPreferences(), readOsPush().then(setOsPush)])
+    setRefreshing(false)
+  }, [loadPreferences])
 
   const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
     if (!user) return
@@ -202,7 +254,12 @@ export default function SettingsScreen() {
 
       if (key === 'pushEnabled') {
         if (next.pushEnabled) {
-          initializePushNotifications().catch(() => {})
+          // Turning it on is the answer onboarding's "Maybe later" deferred. It may
+          // ask the phone for the first time; read its answer back either way.
+          void clearPushDeclined(user.id)
+            .then(() => initializePushNotifications())
+            .catch(() => {})
+            .finally(() => void readOsPush().then(setOsPush))
         } else {
           removePushTokenFromProfile().catch(() => {})
         }
@@ -217,82 +274,93 @@ export default function SettingsScreen() {
       preferencesRef.current = rolled
       setPreferences(rolled)
       await savePreferencesLocal(rolled)
-      Alert.alert('Update failed', `Could not save “${PREFERENCE_TITLES[key]}”. Please try again.`)
+      // The switch has already flipped back; this says why.
+      showToast(`Couldn't save “${PREFERENCE_TITLES[key]}”. Try again.`, 'error')
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
     }
-  }, [user, savePreferencesLocal])
+  }, [user, savePreferencesLocal, showToast])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
+    // Turning push on after the phone has said no: explain, and change nothing.
+    if (key === 'pushEnabled' && osPush === 'blocked') {
+      setPushBlockedOpen(true)
+      return
+    }
     const previous = preferencesRef.current
     const next = { ...previous, [key]: !previous[key] }
     preferencesRef.current = next
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [persistPreference, savePreferencesLocal])
+  }, [persistPreference, savePreferencesLocal, osPush])
 
-  const openExternal = useCallback(async (url: string) => {
-    try {
-      const supported = await Linking.canOpenURL(url)
-      if (!supported) {
-        Alert.alert('Link unavailable', 'Unable to open this link.')
-        return
-      }
-      await Linking.openURL(url)
-    } catch {
-      Alert.alert('Link unavailable', 'Unable to open this link.')
-    }
-  }, [])
+  /*
+   * `openURL` alone, no `canOpenURL` first: on iOS that answers false for any
+   * scheme not declared in `LSApplicationQueriesSchemes`. A failure is a
+   * toast, the same sentence About uses.
+   */
+  const openExternal = useCallback(
+    (url: string) => {
+      Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    },
+    [showToast]
+  )
 
   const handleDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete Account',
-      // What the deletion route actually does (app/api/mobile/account in the
-      // API): the profile goes, messages stay under a deleted account, and
-      // registration details are held 180 days (IT Rules 2021, r.3(1)(h)).
-      'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: "What's kept",
-          onPress: () => {
-            Linking.openURL(BLENDN_LINKS.deleteAccount).catch(() => {})
-          },
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you absolutely sure?',
-              'Your account will be permanently deleted and cannot be recovered.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete My Account',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setDeletingAccount(true)
-                    try {
-                      const result = await deleteAccount()
-                      if (!result.success) {
-                        Alert.alert('Error', result.error || 'Failed to delete account')
-                      }
-                    } catch {
-                      Alert.alert('Error', 'Failed to delete account')
-                    } finally {
-                      setDeletingAccount(false)
-                    }
-                  },
-                },
-              ]
-            )
-          },
-        },
-      ]
-    )
+    setDeleteError(null)
+    setDeleteStep('explain')
   }, [])
+
+  const closeDelete = useCallback(() => {
+    setDeleteStep(null)
+    setDeleteError(null)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    setDeletingAccount(true)
+    setDeleteError(null)
+    try {
+      const result = await deleteAccount()
+      if (!result.success) {
+        // The tray stays, says why, and its button becomes Try again.
+        setDeleteError(result.error || "Your account wasn't deleted. Try again.")
+        return
+      }
+      setDeleteStep(null)
+      /*
+       * The session is already gone and the guard is on its way to sign-in.
+       * The toast sits above the navigator, so it lands there too: without it
+       * the account vanished with no word that deleting it had worked.
+       */
+      showToast('Your account has been deleted.', 'success')
+    } catch {
+      setDeleteError("Your account wasn't deleted. Check your connection and try again.")
+    } finally {
+      setDeletingAccount(false)
+    }
+  }, [showToast])
+
+  const confirmSignOut = useCallback(async () => {
+    setSigningOut(true)
+    try {
+      const result = await signOut()
+      // Local state is gone either way; this is the honest version of what
+      // the server did, which used to be reported as success regardless. A
+      // toast, because it lands on the sign-in screen the guard moves to.
+      if (!result.success) {
+        showToast(
+          "Signed out on this phone. We couldn't reach the server, so you may stay signed in elsewhere for a while.",
+          'info'
+        )
+      }
+    } catch {
+      showToast("Couldn't sign out. Try again.", 'error')
+    } finally {
+      setSigningOut(false)
+      setSignOutOpen(false)
+    }
+  }, [showToast])
 
   /*
    * Five sections, each named after what is actually in it.
@@ -336,30 +404,23 @@ export default function SettingsScreen() {
      */
     { header: 'Safety' },
     { icon: 'ban-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
-    { icon: 'shield-checkmark-outline', title: 'Safety tips', onPress: () => openExternal(BLENDN_LINKS.safety) },
-    { icon: 'flag-outline', title: 'Community guidelines', onPress: () => openExternal(BLENDN_LINKS.guidelines) },
+    { icon: 'shield-checkmark-outline', title: 'Safety tips', external: true, onPress: () => openExternal(BLENDN_LINKS.safety) },
+    { icon: 'flag-outline', title: 'Community guidelines', external: true, onPress: () => openExternal(BLENDN_LINKS.guidelines) },
 
+    { header: 'Help' },
+    { icon: 'help-circle-outline', title: 'Help centre', external: true, onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'mail-outline', title: 'Contact support', onPress: () => router.push('/support') },
+
+    /*
+     * Terms and Privacy are on About, beside the version. They were listed
+     * here as well: two doors to each page, one screen apart.
+     */
     { header: 'About' },
-    { icon: 'help-circle-outline', title: 'Help & support', onPress: () => openExternal(BLENDN_LINKS.help) },
-    { icon: 'document-text-outline', title: 'Terms of Service', onPress: () => openExternal(BLENDN_LINKS.terms) },
-    { icon: 'lock-closed-outline', title: 'Privacy Policy', onPress: () => openExternal(BLENDN_LINKS.privacy) },
+    { icon: 'information-circle-outline', title: "About Blend'n", onPress: () => router.push('/about') },
 
+    // Asks first: one stray tap used to end the session on the spot.
     { header: 'Account' },
-    { icon: 'log-out-outline', title: 'Sign out', onPress: async () => {
-      try {
-        const result = await signOut()
-        // Local state is gone either way; this is the honest version of what
-        // the server did, which used to be reported as success regardless.
-        if (!result.success) {
-          Alert.alert(
-            'Signed out on this phone',
-            'We could not reach the server, so this session may stay active elsewhere until it lapses.'
-          )
-        }
-      } catch {
-        Alert.alert('Error', 'Failed to sign out')
-      }
-    } },
+    { icon: 'log-out-outline', title: 'Sign out', onPress: () => setSignOutOpen(true) },
 
     /*
      * Alone, at the bottom, under its own header and a gap.
@@ -371,7 +432,7 @@ export default function SettingsScreen() {
      * single irreversible row is what makes it mean anything.
      */
     { header: 'Danger zone', spaced: true },
-    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account...' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
+    { icon: 'trash-outline', title: deletingAccount ? 'Deleting account…' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
   ]), [openExternal, deletingAccount, handleDeleteAccount])
 
   const renderItem = (item: any, idx: number) => {
@@ -387,13 +448,33 @@ export default function SettingsScreen() {
     }
     if (item.keyName) {
       const keyName = item.keyName as PreferenceKey
+      // Push is on only when the account AND the phone say so.
+      const pushBlocked = keyName === 'pushEnabled' && osPush === 'blocked'
+      const hint = pushBlocked ? "Off in your phone's settings." : item.hint
+      const on = preferences[keyName] && !pushBlocked
+      const switchDisabled = saving[keyName] || loadingPreferences
+      /*
+       * The row is the target, not only the switch at its end: a tap on the
+       * title flips it, as in the phone's own Settings. One accessible
+       * `switch` with its state; the drawn Switch is hidden from screen
+       * readers so it is not announced twice.
+       */
       return (
-        <View key={idx} style={styles.row}>
+        <Pressable
+          key={idx}
+          onPress={() => onTogglePreference(keyName)}
+          disabled={switchDisabled}
+          accessibilityRole="switch"
+          accessibilityLabel={item.title}
+          accessibilityHint={hint}
+          accessibilityState={{ checked: on, disabled: switchDisabled, busy: saving[keyName] }}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
           <View style={styles.rowLeft}>
             <Ionicons name={item.icon} size={ICON.md} color={EMBER.textPrimary} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.title}</Text>
-              {item.hint ? <Text style={styles.rowHint}>{item.hint}</Text> : null}
+              {hint ? <Text style={styles.rowHint}>{hint}</Text> : null}
             </View>
           </View>
           <View style={styles.switchWrap}>
@@ -401,14 +482,15 @@ export default function SettingsScreen() {
               <ActivityIndicator size="small" color={EMBER.textSecondary} style={styles.switchLoader} />
             )}
             <Switch
-              value={preferences[keyName]}
+              value={on}
               onValueChange={() => onTogglePreference(keyName)}
-              accessibilityLabel={item.title}
-              disabled={saving[keyName] || loadingPreferences}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              disabled={switchDisabled}
               {...SWITCH_COLORS}
             />
           </View>
-        </View>
+        </Pressable>
       )
     }
     // Shrinks rather than dims, like the Me tab's rows: 0.98 for a full-width
@@ -421,7 +503,7 @@ export default function SettingsScreen() {
         style={styles.row}
         onPress={item.onPress}
         disabled={item.disabled}
-        accessibilityRole="button"
+        accessibilityRole={item.external ? 'link' : 'button'}
         accessibilityLabel={item.title}
         accessibilityState={item.disabled ? { disabled: true, busy: true } : undefined}
       >
@@ -429,7 +511,12 @@ export default function SettingsScreen() {
           <Ionicons name={item.icon} size={ICON.md} color={item.danger ? EMBER.destructive : EMBER.textPrimary} />
           <Text style={[styles.rowTitle, item.danger && { color: EMBER.destructive }]}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+        {/* A page in the browser says so, as on About; a screen in the app gets a chevron. */}
+        <Ionicons
+          name={item.external ? 'open-outline' : 'chevron-forward'}
+          size={ICON.sm}
+          color={EMBER.textSecondary}
+        />
       </ScalePress>
     )
   }
@@ -438,7 +525,11 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <AppHeader title="Settings" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+      >
         {/*
           There was a profile card here, and it was the third door to editing.
           Worse than a duplicate: a `TouchableOpacity` whose outer press went to
@@ -451,9 +542,21 @@ export default function SettingsScreen() {
         */}
         <View style={styles.card}>
           {preferencesError ? (
-            <Text style={styles.prefsError} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {preferencesError}
-            </Text>
+            <View style={styles.prefsErrorWrap}>
+              <Text style={styles.prefsError} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                {preferencesError}
+              </Text>
+              <ScalePress
+                onPress={() => void onRefresh()}
+                disabled={refreshing}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                style={styles.retry}
+              >
+                <Text style={styles.retryLabel}>Try again</Text>
+              </ScalePress>
+            </View>
           ) : null}
           {items.map((it, i) => (
             <React.Fragment key={`it-${i}`}>
@@ -463,12 +566,93 @@ export default function SettingsScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <ActionTray
+        visible={signOutOpen}
+        title="Sign out?"
+        message="You'll need to sign in again to see your events, friends and messages."
+        onClose={() => setSignOutOpen(false)}
+        buttons={[
+          { label: 'Cancel', onPress: () => setSignOutOpen(false), disabled: signingOut },
+          { label: 'Sign out', variant: 'primary', onPress: () => void confirmSignOut(), loading: signingOut },
+        ]}
+      />
+
+      {/*
+        What deleting does, then "for good?". The first step's copy is what the
+        deletion route does (app/api/mobile/account in the API): the profile
+        goes, messages stay under a deleted account, and registration details
+        are held 180 days (IT Rules 2021, r.3(1)(h)).
+      */}
+      <ActionTray
+        visible={deleteStep !== null}
+        layout="stack"
+        dismissible={!deletingAccount}
+        onClose={closeDelete}
+        title={deleteStep === 'confirm' ? 'Delete your account for good?' : 'Delete your account?'}
+        message={
+          deleteStep === 'confirm'
+            ? "This can't be undone. You'd need a new account to use Blend'n again."
+            : 'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.'
+        }
+        buttons={
+          deleteStep === 'confirm'
+            ? [
+                {
+                  label: deleteError ? 'Try again' : 'Delete my account',
+                  variant: 'destructive',
+                  loading: deletingAccount,
+                  onPress: () => void confirmDelete(),
+                },
+                { label: 'Cancel', onPress: closeDelete, disabled: deletingAccount },
+              ]
+            : [
+                { label: 'Delete account', variant: 'destructive', onPress: () => setDeleteStep('confirm') },
+                { label: "What's kept", onPress: () => openExternal(BLENDN_LINKS.deleteAccount) },
+                { label: 'Cancel', onPress: closeDelete },
+              ]
+        }
+      >
+        {deleteError ? (
+          <Text style={styles.prefsError} accessibilityLiveRegion="polite">
+            {deleteError}
+          </Text>
+        ) : null}
+      </ActionTray>
+
+      <ActionTray
+        visible={pushBlockedOpen}
+        title="Notifications are off"
+        message="Your phone is blocking notifications from Blend'n. Turn them on in Settings, then come back."
+        onClose={() => setPushBlockedOpen(false)}
+        buttons={[
+          { label: 'Not now', onPress: () => setPushBlockedOpen(false) },
+          {
+            label: 'Open Settings',
+            variant: 'primary',
+            onPress: () => {
+              setPushBlockedOpen(false)
+              Linking.openSettings().catch(() => {})
+            },
+          },
+        ]}
+      />
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  prefsError: { ...TYPE.meta, color: EMBER.destructive, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  prefsErrorWrap: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm, alignItems: 'flex-start' },
+  prefsError: { ...TYPE.meta, color: EMBER.destructive },
+  // 48pt: the one way out of a failed load is not a 32pt target.
+  retry: {
+    height: CONTROL.md,
+    paddingHorizontal: SPACE.md,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    justifyContent: 'center',
+  },
+  retryLabel: { ...TYPE.bodyStrong },
   container: { flex: 1, backgroundColor: 'transparent' },
   
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg },
@@ -488,5 +672,6 @@ const styles = StyleSheet.create({
   rowTitle: { ...TYPE.bodyStrong },
   rowText: { flexShrink: 1, gap: SPACE.xxs },
   rowHint: { ...TYPE.meta },
+  pressed: { opacity: OPACITY.pressed },
   divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
 })

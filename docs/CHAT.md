@@ -19,7 +19,8 @@ than swapping a pane — the chat is one place you are standing in, not a tab.
 ## Composition
 
 ```
-GroupChatHeader     back · room name · subtitle
+GroupChatHeader     back · room name (+ bell-slash if you muted it) · subtitle · options (→ Room info)
+RoomLeftState       instead of everything below, while you are not in the room
 RealtimeStatusBanner
 RoomGuidelinesBanner  once per room until "Got it" — in the column, never over a message
 FlatList
@@ -29,9 +30,64 @@ FlatList
   TypingIndicator   ListFooterComponent, at the end of the feed
 reply bar           when replying
 ChatComposer        floating pill
-message menu        long-press
+message menu        long-press — a step of the app's one sheet (lib/sheet.ts)
 ActionTray
 ```
+
+**Room info** (`app/chat-info/[id].tsx`): the room, its members as the room
+shows them (pseudonym + the bubble's own mark; tap opens the same gated profile
+the Grid opens), then four rows:
+
+- **Mute notifications** — 1 hour, 8 hours, until tomorrow (8am), or until you
+  turn it back on (`POST/DELETE /chat/groups/:id/mute`). Silences the room's
+  pushes to you and nothing else; nobody is told. The row says until when, and
+  the sheet offers Unmute. Not the organiser's mute (`room_state: 'muted'`,
+  which stops you posting), so the chat header and the Banter row show a
+  bell-slash glyph rather than the word.
+- **Community guidelines**.
+- **Report this room** (`POST /chat/groups/:id/report`) — for what no single
+  message shows: a pile-on, a host letting it happen. *Report this event* moved
+  out: the event page has its own, and two report rows here made a moderator
+  guess which one was meant.
+- **Leave room** — a confirmation that says you stop getting its messages and
+  can rejoin by checking in again; then back out to the Banter with a toast.
+
+Mute and left state live in `lib/roomMembership.ts`, a small store every
+screen reads: the Banter list and `GET /events/:id/chat` write the server's
+`mute`, Room info writes what it changes, and a room left on this phone drops
+out of the Banter at once.
+
+**Somebody not in the room.** Leaving is enforced by the server: history is
+refused (403), posts and reactions answer `LEFT_ROOM`, the socket join is
+refused, and `GET /events/:id/chat` answers `LEFT_ROOM` with the `chatGroupId`
+instead of rejoining you. The room draws `RoomLeftState` in place of the feed
+and composer — *You left this room* when the app knows you did, *You're not in
+this room* for a plain 403 (which is also what a leave made on another phone
+looks like) — with **Rejoin** (`DELETE /chat/groups/:id/leave`). The server's
+refusal (banned, closed, locked) is the toast when a rejoin is refused. A send
+or reaction refused with `LEFT_ROOM` turns the screen into the same state.
+The Room's chat dock says "You left this room's chat. Open it to rejoin."
+
+**The header's subtitle** is the event's title when the room is named
+something else. Most rooms are named after their event, and repeating the
+title said nothing, so then it is "38 in the room" (from the room list's
+`memberCount`, less anyone who leaves while you watch — `chat:memberLeft`), or
+nothing until that is known. Room info's member list drops people on the same
+event.
+
+**The message menu** offers a reaction row (the six `CHAT_REACTIONS` the
+server accepts — optimistic, rolled back with a toast if refused), Reply, Copy,
+and Report on other people's messages only. A message still sending offers Copy
+only; it has no id to reply or react to yet.
+
+**A send that fails stays.** The bubble is marked *Not sent · Tap to retry*
+under it, in `destructive`; tap resends, long-press offers Try again, Copy and
+Delete. The server's reason is a toast. Both screens do this, and a refresh
+keeps these local messages rather than replacing the list whole.
+
+**History that fails to load** says *Couldn't load this chat* with Try again —
+never the "start the conversation" empty state, which is an invitation to talk
+into a thread that may hold a month of messages.
 
 ---
 
@@ -59,10 +115,12 @@ The frame draws photographs — "Julian Ember", "Sarah Chen". This room is
 pseudonymous until you reveal yourself (`app/room.tsx`, `setMatchPreferences`),
 so a photo would undo the thing that screen exists to protect.
 
-`pseudonymAvatar(senderId)` gives a colour and a creature, stable for as long as
-somebody is that pseudonym — the same treatment the Grid's discs get. When
-somebody *has* revealed, the name is simply their real one; **the server decides
-that, not the component.**
+`pseudonymAvatar(markSeed(senderName, room:sender))` gives a colour and a
+creature — seeded on **the pseudonym**, the one rule every surface follows
+(`lib/pseudonymAvatar.ts`): the Grid's `Face`, Room info, the Banter and the
+profile hero all seed on the name, so one person is one creature everywhere in
+the room. A placeholder name ("Attendee") falls back to room + sender. When the
+pseudonym's noun is an animal the disc draws it — Cosmic Panda is a panda.
 
 Flat fill, where the Grid's disc is a `LinearGradient`: a gradient is a native
 view, and the Grid pays for three on screen where a chat would pay for thirty.
@@ -187,9 +245,18 @@ A DM is pseudonymous until both people reveal, except a message request, where
 real names apply throughout. The bubble does not decide any of that — it draws
 `reveal.displayName`, and the server decides what that is.
 
-### Long-press reports theirs, not yours
+### Long-press copies anything, reports only theirs
 
-Reporting your own message is not a thing, so `onLongPress` is `undefined` on
-your own rows. The old screen attached the handler to every row and checked
-`isMe` inside it, which meant a long press on your own message opened nothing
-and looked broken.
+Every row opens the menu, and every message can be copied. Report is on their
+messages alone: reporting your own message is not a thing. The long press used
+to be report-only and `undefined` on your own rows, so nothing in a DM could be
+copied and a long press on your own message opened nothing.
+
+### The header opens their profile — once they are a name to you
+
+The avatar and name are one target. It is live for an accepted message request
+and for a match who has revealed; before that, a profile would be the server's
+flat "Attendee" or more than the conversation says, so the header is not a
+button. The options menu needs the conversation record (its copy turns on
+whether they know who you are), so if that did not load it says so and offers
+Try again rather than acting on a guess.

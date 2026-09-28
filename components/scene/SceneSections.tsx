@@ -31,6 +31,9 @@ import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
+/** An amenity tile's floor: glyph, name and a one-line note at default text size. */
+const AMENITY_TILE_MIN_HEIGHT = 126
+
 /*
  * A value that changed rises 6pt into place and fades in; the old one simply
  * goes. Used by the CTA's label and icon and by the attendee count — anything
@@ -116,6 +119,42 @@ export function SceneHeading({ children }: { children: string }) {
 }
 
 /**
+ * Who is putting it on, and — while it runs — how many are there right now.
+ *
+ * The organiser has been on the payload since the Scene was built and drawn
+ * nowhere; "who's hosting" is one of the first things somebody deciding
+ * whether to go looks for. The live count is the room's own "here now"
+ * (`room-preview`), a still green dot beside it: the same mark the Room and
+ * Tonight use for live, never a pulse.
+ *
+ * Renders nothing when it has neither, so an unhosted, unstarted event does
+ * not get an empty row.
+ */
+export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
+  const live = typeof hereNow === 'number' && hereNow > 0
+  if (!host && !live) return null
+  return (
+    <View style={styles.byline}>
+      {host ? (
+        <Text style={styles.bylineHost} numberOfLines={1}>
+          By <Text style={styles.bylineName}>{host}</Text>
+        </Text>
+      ) : null}
+      {live ? (
+        <View
+          style={styles.bylineLive}
+          accessible
+          accessibilityLabel={`${hereNow} ${hereNow === 1 ? 'person' : 'people'} here now`}
+        >
+          <View style={styles.liveDot} />
+          <Text style={styles.bylineHost}>{hereNow} here now</Text>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+/**
  * The prose under a heading. `TYPE.body` on `textSecondary`.
  *
  * A caller with a phrase to lift (the event's own name, matched exactly)
@@ -175,7 +214,8 @@ export function SceneAttendees({
   const reduceMotion = useReducedMotion()
   return (
     <View style={styles.attendeesSection}>
-      <View style={styles.attendees}>
+      {/* One stop, read as the heading says it: "Going, 12". */}
+      <View style={styles.attendees} accessible accessibilityLabel={`${label}, ${count}`}>
         <SceneHeading>{label}</SceneHeading>
         {/*
           Keyed by the number, so a save or a check-in arriving over the socket
@@ -187,13 +227,13 @@ export function SceneAttendees({
             entering={reduceMotion ? changeFade : riseIn}
             style={styles.attendeeCount}
           >
-            {count > 0 ? `${count}+` : '—'}
+            {count > 0 ? String(count) : '—'}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
       {shown > 0 ? (
         /*
-          One image node, not three creatures.
+          Hidden from the screen reader, not three creatures.
           A screen reader walking this row unlabelled announces the emoji —
           "butterfly", "turtle", "fox" — which is worse than silence: it is
           confidently wrong about what is on the screen. The discs carry no
@@ -202,9 +242,8 @@ export function SceneAttendees({
         */
         <View
           style={styles.stack}
-          accessible
-          accessibilityRole="image"
-          accessibilityLabel={`${count} people interested`}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
         >
           {Array.from({ length: shown }, (_, i) => {
             /*
@@ -550,9 +589,8 @@ export function SceneAmenity({
     /*
       Grouped, and its type is capped.
 
-      Two Texts in a fixed 126pt box: at a large accessibility size the title
-      and subtitle together overflow the tile and RN clips them, so the tile
-      shows half a word. 1.5 is the largest step both lines still fit at.
+      Two Texts in a 126pt-minimum box: at a large accessibility size the title
+      and subtitle together would grow the tile past its neighbour's rhythm. 1.5 is the largest step both lines still fit at.
 
       `accessible` collapses the pair into one announcement — "Open Bar,
       Premium Spirits" — rather than two stops that each say half of it.
@@ -597,15 +635,17 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rat
  * already reports it as information. A CTA that disabled itself on a full event
  * would block an interaction the product explicitly allows.
  *
- * `ended` disables, because for somebody who was not there tapping cannot do
- * anything at all.
+ * **No state disables.** `ended` used to — "This event has ended", greyed
+ * out — on the reasoning that for somebody who was not there tapping could do
+ * nothing. But somebody opening a finished event is somebody looking for a
+ * night out, and a dead pill in the most prominent slot told them nothing
+ * about where to find one. So it offers tonight instead: the Blend'n screen,
+ * which lists what is on now, nearest first.
  *
- * **`rate` is the exception, and it is why that sentence needed qualifying.**
- * If you attended, the night leaves one thing to do afterwards — rate the
- * people you met — so `ended` was a dead control for exactly the people with a
- * reason to come back to this screen. `PLACEHOLDER_SCREENS.md` asks for "an
- * entry point after an event ends" and this is it: the same slot, the same
- * rule that its subject changes with the clock.
+ * `rate` is the same slot for the people who *were* there: the night leaves
+ * one thing to do afterwards — rate the people you met. `PLACEHOLDER_SCREENS.md`
+ * asks for "an entry point after an event ends" and this is it: the same slot,
+ * the same rule that its subject changes with the clock.
  *
  * ## "Blend in", not "Join the Experience"
  *
@@ -622,8 +662,17 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   rsvpd: "You're going",
   join: 'Blend in',
   going: "You're in",
-  ended: 'This event has ended',
-  rate: 'Rate the people you met',
+  ended: "See what's on tonight",
+  rate: 'Rate who you met',
+}
+
+/**
+ * The label, with the one state that depends on more than the clock: after a
+ * night where nobody else checked in there is nobody to rate, so the prompt is
+ * the night itself — the same words the room's recap uses.
+ */
+export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
+  return state === 'rate' && alone ? 'Rate the night' : CTA_LABEL[state]
 }
 
 /**
@@ -664,15 +713,19 @@ export function SceneCTA({
   icon,
   iconKey,
   onPress,
+  alone = false,
 }: {
   state?: SceneCTAState
+  /** Nobody but you checked in: `rate` then asks about the night, not people. */
+  alone?: boolean
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
   /** Names which glyph `icon` is drawing; a new key is what pops the new one in. */
   iconKey?: string
   onPress?: () => void
 }) {
-  const disabled = state === 'ended'
+  // Only while a handler is busy (checking in); no state is a dead end.
+  const disabled = !onPress
   /*
    * Quiet once you have already said yes. The accent is for the thing that
    * still needs doing; a fully lit pill that only un-does something reads as
@@ -695,12 +748,11 @@ export function SceneCTA({
      */
     <ScalePress
       haptic={false}
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled || !onPress}
+      onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled, selected: state === 'going' }}
-      accessibilityLabel={CTA_LABEL[state]}
-      style={disabled ? styles.ctaDisabled : undefined}
+      accessibilityLabel={sceneCtaLabel(state, alone)}
     >
       {/*
         A solid pill, and nothing around it.
@@ -727,7 +779,7 @@ export function SceneCTA({
             style={[styles.ctaLabel, quiet ? styles.ctaLabelQuiet : styles.ctaLabelLoud]}
             numberOfLines={1}
           >
-            {CTA_LABEL[state]}
+            {sceneCtaLabel(state, alone)}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
@@ -789,15 +841,19 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                     answer fades in, and the row's height snaps (tasks/lessons.md —
                     no layout transitions). No exit fade: the height has already
                     snapped shut, so a fading answer would sit on the row below.
+
+                    The answer is a sibling of the button, not inside it: a
+                    labelled button is one VoiceOver stop that reads only its
+                    label, so an answer inside it could be opened and never heard.
                   */
+                  <View key={id} style={styles.detailQuestion}>
                   <ScalePress
-                    key={id}
                     pressedScale={0.98}
                     onPress={() => setOpen(isOpen ? null : id)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: isOpen }}
                     accessibilityLabel={item.question}
-                    style={styles.detailQuestion}
+                    style={styles.detailQuestionButton}
                   >
                     <View style={styles.detailQuestionRow}>
                       <Text style={styles.detailQuestionText}>{item.question}</Text>
@@ -812,12 +868,13 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                         <MaterialIcons name="expand-more" size={ICON.md} color={EMBER.textSecondary} />
                       </Animated.View>
                     </View>
+                  </ScalePress>
                     {isOpen ? (
                       <Animated.Text entering={fadeInFast} style={styles.detailAnswer}>
                         {item.answer}
                       </Animated.Text>
                     ) : null}
-                  </ScalePress>
+                  </View>
                 )
               })
             : null}
@@ -832,6 +889,12 @@ const styles = StyleSheet.create({
   body: { ...TYPE.body, color: EMBER.textSecondary },
   bodyAccent: { color: EMBER.textPrimary },
 
+  byline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: SPACE.lg, rowGap: SPACE.xs },
+  bylineHost: { ...TYPE.meta, color: EMBER.textSecondary },
+  bylineName: { ...TYPE.meta, color: EMBER.textPrimary },
+  bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
+
   detailGroup: { gap: SPACE.xxl },
   detailBlock: { gap: SPACE.lg },
   detailPairs: { gap: SPACE.md },
@@ -842,7 +905,8 @@ const styles = StyleSheet.create({
    * `CONTROL.md` minimum: this is the one control in the section, and a question
    * people are trying to tap is the wrong place to be stingy with the target.
    */
-  detailQuestion: { minHeight: CONTROL.md, justifyContent: 'center', gap: SPACE.sm },
+  detailQuestion: { gap: SPACE.sm },
+  detailQuestionButton: { minHeight: CONTROL.md, justifyContent: 'center' },
   detailQuestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -963,12 +1027,13 @@ const styles = StyleSheet.create({
    * subtitle wrapped and one tile grew taller than its neighbour, which is a
    * ragged row rather than a pair.
    *
-   * A grid row is a floor and a ceiling in CSS; here it is `height`, so the
-   * pair is always level whatever the vocabulary eventually contains.
+   * A grid row is a floor and a ceiling in CSS; here it is `minHeight`, with
+   * the row stretching both tiles to the taller one, so the pair stays level
+   * and a large text size grows the tile instead of clipping its words.
    */
   amenity: {
     flex: 1,
-    height: 126,
+    minHeight: AMENITY_TILE_MIN_HEIGHT,
     backgroundColor: EMBER.surfaceMedia,
     borderWidth: 1,
     borderColor: EMBER.separator,
@@ -1009,7 +1074,6 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     borderColor: EMBER.separator,
   },
-  ctaDisabled: { opacity: 0.45 },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
   ctaLabelLoud: { color: EMBER.onGradient },

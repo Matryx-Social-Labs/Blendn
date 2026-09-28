@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
 import '../lib/globalText';
@@ -18,9 +19,12 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
+import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
+import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
+import { handleAndroidBack } from '../lib/androidBack';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
@@ -73,7 +77,7 @@ const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function RootLayout() {
-  const { user, loading, isNewAccount } = useAuth();
+  const { user, loading, isNewAccount, unreachable } = useAuth();
   const pathname = usePathname();
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
@@ -247,20 +251,13 @@ function RootLayout() {
           if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
-        // Also remove push token best-effort
-        removePushTokenFromProfile().catch(() => {});
+        // Also remove push token best-effort. Not while the server is merely
+        // unreachable: that session is still live, and the DELETE landing
+        // when the connection returns would silence its notifications.
+        if (!unreachable) removePushTokenFromProfile().catch(() => {});
         // Reset push init flag for next sign-in
         pushInitRef.current = false;
         return;
-      }
-
-      // Authenticated → defer push notification init to avoid blocking startup
-      if (!pushInitRef.current) {
-        pushInitRef.current = true;
-        // Delay push init by 2 seconds to let UI render first
-        setTimeout(() => {
-          initializePushNotifications().catch(() => {});
-        }, 2000);
       }
 
       /*
@@ -385,6 +382,29 @@ function RootLayout() {
          */
         const inOnboarding = pathname.startsWith('/onboarding');
         setRouteReady(!inOnboarding);
+        /*
+         * Push starts here, in the app proper, and not the moment auth resolves.
+         *
+         * `initializePushNotifications` asks the OS for permission. Run on
+         * sign-in, it put the system dialog over onboarding's first screen,
+         * two seconds in, before the notifications step that exists to explain
+         * it had been reached, and iOS asks only once. Onboarding's step asks;
+         * this registers the token once somebody is through. For an account
+         * already onboarded it is the same moment as before: the first screen
+         * after sign-in, deferred so the UI renders first.
+         *
+         * "Maybe later" on that step is respected: a declined account never
+         * sees the OS dialog from here (lib/pushDecline.ts). Settings asks.
+         */
+        if (!inOnboarding && !pushInitRef.current) {
+          pushInitRef.current = true;
+          const userId = user.id;
+          setTimeout(() => {
+            hasDeclinedPush(userId)
+              .then((declined) => initializePushNotifications({ prompt: !declined }))
+              .catch(() => {});
+          }, 2000);
+        }
         if (!inOnboarding) {
           const waiting = takePendingRoute();
           if (waiting) router.push(waiting);
@@ -399,29 +419,28 @@ function RootLayout() {
     // replaceIfNeeded is redefined every render; adding it here would rerun
     // this effect (and its routing decisions) on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, pathname, isNewAccount]);
+  }, [user, loading, pathname, isNewAccount, unreachable]);
 
-  // Normalize Android hardware back behavior
+  /*
+   * Android hardware back, registered ONCE.
+   *
+   * It used to re-register on every pathname change. BackHandler runs the
+   * most recently added listener first, so each navigation put this one back
+   * on top — ahead of the Blend'n overlay's own handler (which closes the
+   * overlay) and ahead of React Navigation's. A ref carries the pathname
+   * instead. The rules are in `lib/androidBack.ts`, with tests.
+   */
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    const onBackPress = () => {
-      const isIndex = pathname === '/' || pathname === '/index';
-      const isTabsRoot = pathname?.startsWith('/(tabs)');
-
-      // Block back on login and the tabs root. Onboarding used to be here too,
-      // and was the only screen set that swallowed back with nowhere to go.
-      if (isIndex || isTabsRoot) {
-        return true; // prevent default
-      }
-      // Otherwise perform a normal back
-      try { router.back(); } catch {}
-      return true;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => {
-      try { sub.remove(); } catch {}
-    };
-  }, [pathname, loading]);
+    const sub = BackHandler.addEventListener('hardwareBackPress', () =>
+      handleAndroidBack(pathnameRef.current, router)
+    );
+    return () => sub.remove();
+  }, []);
 
   /*
    * Foreground no longer wipes the caches, and that IS the freshness strategy.
@@ -449,9 +468,10 @@ function RootLayout() {
 
   return (
     <ErrorBoundary
-      onError={(error, errorInfo) => {
+      onError={(error, errorInfo, errorId) => {
         Sentry.captureException(error, {
-          tags: { context: 'root-error-boundary' },
+          // The id the crash screen shows and puts in the support email.
+          tags: { context: 'root-error-boundary', error_id: errorId },
           extra: { componentStack: errorInfo.componentStack },
         })
       }}
@@ -463,6 +483,11 @@ function RootLayout() {
       <GestureHandlerRootView style={styles.gestureRoot}>
       <ToastProvider>
         <View style={styles.root}>
+          {/*
+            One status bar for the app, light, because there is no light theme
+            (`Appearance.setColorScheme('dark')` above).
+          */}
+          <StatusBar style="light" />
           {/*
             * Rendered last in the tree but drawn on top, so it covers whatever
             * the router settles on. Deliberately not a gate — auth and routing
@@ -620,8 +645,15 @@ function RootLayout() {
         name="event-preferences/[eventId]"
         options={{
           headerShown: false,
-          presentation: 'card',
-          animation: routeTransition,
+          /*
+           * A modal, because the screen draws an ×: it is a choice you make
+           * and close, not a page in a stack. As a pushed card it slid in from
+           * the right with an × where every pushed screen has a back chevron,
+           * and the edge-swipe dismissed a screen that looked like it had to
+           * be closed.
+           */
+          presentation: 'modal',
+          animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
         }}
       />
       <Stack.Screen 
@@ -663,11 +695,17 @@ function RootLayout() {
           animation: routeTransition,
         }}
       />
+      {/* Settings' About and Contact support. */}
+      <Stack.Screen name="about" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="support" options={{ headerShown: false, animation: routeTransition }} />
       {/* Friends. Declared so none of them inherits the native header. */}
       <Stack.Screen name="friends/index" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="friends/requests" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      {/* A room's info, from the options button in its header. */}
+      <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,
@@ -681,6 +719,13 @@ function RootLayout() {
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
           {user ? <PresenceMonitor /> : null}
+          {/*
+            The one sheet the safety flows and message menus open from
+            anywhere (`lib/sheet.ts`). Inside the toast provider, so a
+            finished step can say what it did.
+          */}
+          <SheetHost />
+
         </View>
       </ToastProvider>
       </GestureHandlerRootView>

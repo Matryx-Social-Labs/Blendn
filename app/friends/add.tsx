@@ -1,20 +1,20 @@
-import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useRef, useState } from 'react'
-import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { router } from 'expo-router'
+import { useState } from 'react'
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
+import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { PersonRow } from '../../components/friends/PersonRow'
 import ScalePress from '../../components/motion/ScalePress'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { ProfileHeading } from '../../components/profile/ProfileSections'
-import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
-import { apiClient } from '../../lib/apiClient'
-import type { FriendRequest } from '../../lib/friends'
+import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
 import { useFriendInvite } from '../../lib/useFriendInvite'
+import { useFriendRequests } from '../../lib/useFriendRequests'
 
 /**
  * Add friends: your link, and the requests waiting either way.
@@ -28,84 +28,40 @@ import { useFriendInvite } from '../../lib/useFriendInvite'
  */
 export default function AddFriendsScreen() {
   const { invite, failed, reload, share, reset } = useFriendInvite()
-  const { showToast } = useToast()
-  const [incoming, setIncoming] = useState<FriendRequest[]>([])
-  const [outgoing, setOutgoing] = useState<FriendRequest[]>([])
-  /*
-   * Per row, and checked synchronously. One shared id let a tap on another row
-   * re-enable this one mid-request; and state alone is read from the render
-   * the tap happened in, so a quick second tap before the re-render sent a
-   * second answer. The ref decides; the state only greys the buttons.
-   */
-  const inFlight = useRef(new Set<string>())
-  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
-  const once = async (id: string, work: () => Promise<void>) => {
-    if (inFlight.current.has(id)) return
-    inFlight.current.add(id)
-    setBusy(new Set(inFlight.current))
-    try {
-      await work()
-    } finally {
-      inFlight.current.delete(id)
-      setBusy(new Set(inFlight.current))
-    }
-  }
+  const requests = useFriendRequests()
+  const { incoming, outgoing, busy, respond, withdraw } = requests
   const [refreshing, setRefreshing] = useState(false)
-
-  const loadRequests = useCallback(async () => {
-    const result = await apiClient.getFriendRequests()
-    if (result.success && result.data) {
-      setIncoming(result.data.incoming)
-      setOutgoing(result.data.outgoing)
-    }
-  }, [])
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadRequests()
-    }, [loadRequests])
-  )
+  const [reloadingLink, setReloadingLink] = useState(false)
 
   const onRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([loadRequests(), invite ? Promise.resolve() : reload()])
+    await Promise.all([requests.load(), invite ? Promise.resolve() : reload()])
     setRefreshing(false)
   }
 
-  const respond = (request: FriendRequest, action: 'accept' | 'dismiss') =>
-    once(request.id, async () => {
-      const result = await apiClient.respondToFriendRequest(request.id, action)
-      if (!result.success) {
-        showToast("That didn't go through. Try again.", 'error')
-        return
-      }
-      setIncoming((list) => list.filter((r) => r.id !== request.id))
-      if (action === 'accept') showToast(`You and ${request.person.name} are friends`, 'success')
-    })
+  // The link didn't load: the button that would share it asks again instead.
+  const retryLink = async () => {
+    setReloadingLink(true)
+    await reload()
+    setReloadingLink(false)
+  }
 
-  const withdraw = (request: FriendRequest) =>
-    once(request.id, async () => {
-      const result = await apiClient.withdrawFriendRequest(request.id)
-      if (result.success) setOutgoing((list) => list.filter((r) => r.id !== request.id))
-      else showToast("That didn't go through. Try again.", 'error')
-    })
-
+  // The app's one sheet, not a system alert; a refusal stays in it with Try again.
   const confirmReset = () =>
-    Alert.alert(
-      'Reset your link?',
-      'Your old link will stop working. People who are already your friends stay your friends.',
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showSheet({
+      kind: 'actions',
+      title: 'Reset your link?',
+      message: 'Your old link will stop working. People who are already your friends stay your friends.',
+      actions: [
         {
-          text: 'Reset link',
-          style: 'destructive',
-          onPress: async () => {
-            if (await reset()) showToast('New link ready', 'success')
-            else showToast("Your link wasn't reset. Try again.", 'error')
-          },
+          label: 'Reset link',
+          variant: 'destructive',
+          run: async () =>
+            (await reset()) ? { ok: true, toast: 'New link ready' } : { ok: false, error: "Your link wasn't reset. Try again." },
         },
-      ]
-    )
+        { label: 'Cancel', cancel: true },
+      ],
+    })
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -121,7 +77,11 @@ export default function AddFriendsScreen() {
             your friend.
           </Text>
           <InviteLinkCard url={invite?.url} failed={failed} />
-          <EmberButton label="Share my link" onPress={() => void share()} disabled={!invite} />
+          {failed && !invite ? (
+            <EmberButton label="Try again" onPress={() => void retryLink()} busy={reloadingLink} />
+          ) : (
+            <EmberButton label="Share my link" onPress={() => void share()} disabled={!invite} />
+          )}
           {invite ? (
             <ScalePress
               onPress={confirmReset}
@@ -135,36 +95,35 @@ export default function AddFriendsScreen() {
           ) : null}
         </View>
 
+        {/*
+          Requests that didn't load used to leave this half of the screen
+          blank — indistinguishable from having none. Said, with a way back.
+        */}
+        {requests.failed && !requests.loaded ? (
+          <View style={styles.section}>
+            <ProfileHeading title="Requests" />
+            <Text variant="body" color={EMBER.textSecondary}>Your requests didn&apos;t load.</Text>
+            <ScalePress
+              onPress={() => void requests.load()}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityLabel="Try loading requests again"
+              style={[styles.pill, styles.start]}
+            >
+              <Text variant="bodyStrong">Try again</Text>
+            </ScalePress>
+          </View>
+        ) : null}
+
         {incoming.length > 0 ? (
           <View style={styles.section}>
             <ProfileHeading title="Requests" />
             {incoming.map((request) => (
-              <PersonRow
+              <IncomingRequestRow
                 key={request.id}
-                person={request.person}
-                trailing={
-                  <View style={styles.actions}>
-                    <ScalePress
-                      onPress={() => void respond(request, 'dismiss')}
-                      disabled={busy.has(request.id)}
-                      haptic={false}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Not now, ${request.person.name}`}
-                      style={styles.pill}
-                    >
-                      <Text variant="bodyStrong">Not now</Text>
-                    </ScalePress>
-                    <ScalePress
-                      onPress={() => void respond(request, 'accept')}
-                      disabled={busy.has(request.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Accept ${request.person.name}`}
-                      style={[styles.pill, styles.accept]}
-                    >
-                      <Text variant="bodyStrong" color={EMBER.onGradient}>Accept</Text>
-                    </ScalePress>
-                  </View>
-                }
+                request={request}
+                busy={busy.has(request.id)}
+                onRespond={(action) => void respond(request, action)}
               />
             ))}
           </View>
@@ -204,7 +163,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },
   section: { gap: SPACE.md },
   quiet: { alignSelf: 'center', paddingVertical: SPACE.sm },
-  actions: { flexDirection: 'row', gap: SPACE.sm },
+  start: { alignSelf: 'flex-start' },
   pill: {
     height: CONTROL.sm,
     paddingHorizontal: SPACE.md,
@@ -212,5 +171,4 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     justifyContent: 'center',
   },
-  accept: { backgroundColor: EMBER.accent },
 })

@@ -123,7 +123,7 @@ export default function ChatPreview() {
       </ScrollView>
 
       <View style={styles.composer}>
-        <ChatComposer value="" sending={false} onChangeText={() => {}} onSend={() => {}} />
+        <ChatComposer value="" onChangeText={() => {}} onSend={() => {}} />
       </View>
     </SafeAreaView>
   )

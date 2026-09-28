@@ -2,7 +2,9 @@ import { ScreenProfiler } from '../../lib/perf'
 import { useRef, useState } from 'react'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+
+import ActionTray from '../../components/ActionTray'
 
 import {
   EmberChip,
@@ -22,7 +24,7 @@ import {
 } from '../../lib/onboarding'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
-import { useAuth } from '../../lib/useAuth'
+import { signOut, useAuth } from '../../lib/useAuth'
 
 const CURATION_ART = require('../../assets/onboarding/curation.png')
 
@@ -35,23 +37,21 @@ const CURATION_ART = require('../../assets/onboarding/curation.png')
  */
 
 /**
- * The four options in the design, mapped to what the API stores.
+ * The four options the API stores, each labelled as what it stores.
  *
- * **"Other" maps to `prefer_not_to_say`, and those are not the same thing.**
- * The API's enum is `woman | man | non_binary | prefer_not_to_say`; the frames
- * offer Woman, Man, Non-binary, Other. Someone choosing "Other" is telling us
- * something — that none of the three fit — and we are recording that they
- * declined to say, which is a different statement.
- *
- * Mapped rather than blocked because the alternative is shipping no gender
- * field at all, and `deriveInterestedIn` needs one. Recorded in
- * `docs/ONBOARDING.md` as a question for the API, not papered over here.
+ * The frames offer Woman, Man, Non-binary, **Other**, and the fourth chip was
+ * labelled "Other" while it saved `prefer_not_to_say`. Someone choosing
+ * "Other" is saying none of the three fit; we recorded that they declined to
+ * answer, a different statement. The API's enum is
+ * `woman | man | non_binary | prefer_not_to_say`, so the label now says what
+ * is stored. An `other` value is still a question for the API
+ * (`docs/ONBOARDING.md`).
  */
 const GENDERS: { label: string; value: OnboardingGender }[] = [
   { label: 'Woman', value: 'woman' },
   { label: 'Man', value: 'man' },
   { label: 'Non-binary', value: 'non_binary' },
-  { label: 'Other', value: 'prefer_not_to_say' },
+  { label: 'Prefer not to say', value: 'prefer_not_to_say' },
 ]
 
 function BasicsScreenInner() {
@@ -69,6 +69,7 @@ function BasicsScreenInner() {
    * Advancing on a full box is what every date field and every OTP field does,
    * so it is also what people already expect.
    */
+  const dayRef = useRef<TextInput>(null)
   const monthRef = useRef<TextInput>(null)
   const yearRef = useRef<TextInput>(null)
 
@@ -98,18 +99,45 @@ function BasicsScreenInner() {
     setDob(splitDateOfBirth(draft.dateOfBirth))
   }
 
+  /*
+   * The way out, on the one step with no back.
+   *
+   * Somebody who signed in with the wrong Google account, or who is under 18
+   * and cannot continue, had no exit: no back button here, swipe-back off at
+   * the root, and Settings is behind the flow. Confirmed first because it
+   * ends the session; what they have typed stays on this phone (the draft is
+   * keyed by account), so signing back in resumes here.
+   */
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const leave = async () => {
+    setSigningOut(true)
+    // The root layout routes to the entry screen when the user clears.
+    await signOut()
+    setSigningOut(false)
+    setConfirmSignOut(false)
+  }
+
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
   const patch = { name: name.trim(), gender, dateOfBirth }
+  const ready = canContinue('basics', patch)
+  // The keyboard's own "go" on the last box does what Continue does, and only
+  // when Continue could. `commit` refuses a second save while one is running.
+  const submit = () => {
+    if (ready && !saving) void commit(patch)
+  }
 
   return (
     <OnboardingScreen
       step="basics"
       title="The basics"
-      subtitle="Tell us a bit about yourself to curate your Blend'n experience."
-      ctaLabel="Continue Journey"
-      ctaDisabled={!canContinue('basics', patch)}
+      subtitle="Tell us a bit about yourself. You can change any of it later."
+      ctaLabel="Continue"
+      ctaDisabled={!ready}
       ctaBusy={saving}
-      onContinue={() => void commit(patch)}
+      onContinue={submit}
+      secondaryLabel="Not you? Sign out"
+      onSecondary={() => setConfirmSignOut(true)}
     >
       {/*
         Full name, first name displayed.
@@ -126,14 +154,19 @@ function BasicsScreenInner() {
       */}
       <EmberField
         label="Your name"
-        placeholder="e.g. Julian Ember"
+        placeholder="First and last name"
         helper="Only your first name shows in an event room. Your full name is for people you match or talk with."
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
+        // A name is not a word to correct.
+        autoCorrect={false}
         autoComplete="name"
         textContentType="name"
         returnKeyType="next"
+        // Next goes to the birth date, and the keyboard stays up on the way.
+        submitBehavior="submit"
+        onSubmitEditing={() => dayRef.current?.focus()}
         maxLength={100}
       />
 
@@ -162,6 +195,7 @@ function BasicsScreenInner() {
               compact
               label="Day of birth"
               placeholder="DD"
+              ref={dayRef}
               value={dob.day}
               onChangeText={(value) => {
                 const day = digits(value, 2)
@@ -199,6 +233,8 @@ function BasicsScreenInner() {
               value={dob.year}
               onChangeText={(year) => setDob({ ...dob, year: digits(year, 4) })}
               keyboardType="number-pad"
+              returnKeyType="go"
+              onSubmitEditing={submit}
               maxLength={4}
             />
           </View>
@@ -215,9 +251,21 @@ function BasicsScreenInner() {
          * which is never true once the boxes are full, so it never showed.
          */}
         {isUnderAccountAge(dateOfBirth) ? (
-          <Text style={styles.error}>{ADULTS_ONLY}</Text>
+          <Text style={styles.error} accessibilityLiveRegion="polite">{ADULTS_ONLY}</Text>
         ) : dateOfBirth && !isCompleteDateOfBirth(dateOfBirth) ? (
-          <Text style={styles.error}>That is not a date we recognise.</Text>
+          <Text style={styles.error} accessibilityLiveRegion="polite">That is not a date we recognise.</Text>
+        ) : null}
+        {/* Under 18 is a dead end on this account, so the exit sits beside it. */}
+        {isUnderAccountAge(dateOfBirth) ? (
+          <Pressable
+            onPress={() => setConfirmSignOut(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            hitSlop={SPACE.md}
+            style={styles.signOutInline}
+          >
+            <Text style={styles.textAction}>SIGN OUT</Text>
+          </Pressable>
         ) : null}
       </EmberFieldGroup>
 
@@ -244,10 +292,21 @@ function BasicsScreenInner() {
           pointerEvents="none"
         />
         <View style={styles.curationText}>
-          <Text style={styles.curationEyebrow}>CURATION PHASE</Text>
-          <Text style={styles.curationCaption}>Personalizing your bioluminescent feed...</Text>
+          <Text style={styles.curationEyebrow}>NEXT</Text>
+          <Text style={styles.curationCaption}>A few quick questions, then your Pulse is personalised around you.</Text>
         </View>
       </View>
+
+      <ActionTray
+        visible={confirmSignOut}
+        title="Sign out?"
+        message="What you've filled in stays on this phone, so you can pick up here when you sign back in."
+        onClose={() => setConfirmSignOut(false)}
+        buttons={[
+          { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
+          { label: 'Sign out', variant: 'primary', onPress: () => void leave(), loading: signingOut },
+        ]}
+      />
     </OnboardingScreen>
   )
 }
@@ -268,6 +327,9 @@ const styles = StyleSheet.create({
   dateSmall: { flex: 1 },
   dateLarge: { flex: 1.5 },
   error: { ...TYPE.meta, color: EMBER.destructive },
+  signOutInline: { alignSelf: 'flex-start' },
+  // A text action (DESIGN_SYSTEM.md): `label` in `textPrimary`.
+  textAction: { ...TYPE.label, color: EMBER.textPrimary },
 
   curationCard: {
     width: '100%',
@@ -277,6 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceMedia,
     justifyContent: 'flex-end',
   },
+  // design-exception: decorative art dimmed under its caption, not a control state
   curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
   curationText: { padding: SPACE.xl, gap: SPACE.xs },
   curationEyebrow: { ...TYPE.label, color: EMBER.textSecondary },

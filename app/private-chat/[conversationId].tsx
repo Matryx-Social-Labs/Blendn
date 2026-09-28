@@ -13,6 +13,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -25,18 +26,32 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { ChatBubble } from '../../components/chat/ChatBubble'
-import { ChatComposer } from '../../components/chat/ChatComposer'
+import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
+import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
 import { SystemNotice } from '../../components/chat/SystemNotice'
-import { TypingIndicator } from '../../components/chat/TypingIndicator'
+import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import ScalePress from '../../components/motion/ScalePress'
+import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { showLeaveConversationActions, showMessageReportOptions, showUserSafetyActions } from '../../lib/safetyUtils'
+import { messageReportStep, showLeaveConversationActions } from '../../lib/safetyUtils'
+import { showSheet, type SheetAction } from '../../lib/sheet'
+import { useLatest } from '../../lib/useLatest'
+import { userMessage } from '../../lib/userMessage'
+import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
+import {
+  directHeaderAvatar,
+  emptyThreadLine,
+  isLocalMessage,
+  optimisticDirectMessage,
+  settleDirectMessage,
+  type PrivateMessage,
+} from '../../lib/directThread'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
+import { subscribeToConversation, subscribeToDelivered, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { matchOpener } from '../../lib/matchOpener'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -44,23 +59,22 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
+import { initialsOf } from '../../lib/initials'
+import { useFollowEnd } from '../../lib/useFollowEnd'
+import { newClientId } from '../../lib/clientId'
+import { receiptFor } from '../../lib/receipts'
+import { withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
+import type { DmReplyQuote } from '../../lib/apiClient'
+import { ReplyBar } from '../../components/chat/ReplyBar'
+import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import Animated from 'react-native-reanimated'
 import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 
-interface PrivateMessage {
-  id: string
-  conversationId: string
-  senderId: string
-  sender: { id: string; name: string | null; image: string | null }
-  text: string | null
-  isRead: boolean
-  createdAt: string
-}
-
 type ChatListItem =
   | ({ kind: 'message' } & PrivateMessage)
   | { kind: 'separator'; id: string; label: string }
+  | UnreadDivider
 
 const mapMessage = (msg: any): PrivateMessage => ({
   id: msg.id,
@@ -69,7 +83,24 @@ const mapMessage = (msg: any): PrivateMessage => ({
   sender: msg.sender,
   text: msg.text,
   isRead: msg.isRead,
+  deliveredAt: msg.deliveredAt ?? null,
+  replyTo: msg.replyTo ?? null,
   createdAt: msg.createdAt,
+})
+
+/** A reply's quote as the bubble draws it. */
+const quoteLine = (q: DmReplyQuote) => ({
+  senderName: q.senderName,
+  text: q.unavailable ? 'Message unavailable' : q.text ?? (q.mediaType === 'image' ? '📷 Photo' : q.mediaType === 'video' ? '🎥 Video' : ''),
+})
+
+/** A local quote for a message being replied to, before the server's arrives. */
+const quoteFrom = (m: PrivateMessage): DmReplyQuote => ({
+  id: m.id,
+  senderName: m.sender?.name || '',
+  text: m.text,
+  mediaType: null,
+  unavailable: false,
 })
 
 const formatTime = (iso: string) => {
@@ -93,31 +124,52 @@ const formatDayLabel = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
-const getInitials = (name: string) => {
-  const parts = String(name || '?').trim().split(/\s+/)
-  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : '')).toUpperCase() || '?'
-}
 
-function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: {
+function ChatHeader({ name, avatar, subtitle, onBack, onOptions, onProfile }: {
   name: string
   subtitle?: string | null
-  avatarUrl: string | null
-  isTyping: boolean
+  /**
+   * Their photo, or — while they are a pseudonym to you — the generated mark
+   * the Banter row draws for them (seeded on the pseudonym, so it is the same
+   * creature there and here). Initials only for a named person with no photo.
+   */
+  avatar: { kind: 'photo'; url: string } | { kind: 'mark'; seed: string } | { kind: 'initials' }
   onBack: () => void
   onOptions: () => void
+  /**
+   * Opens their profile. Absent while they are a pseudonym to you: until they
+   * reveal, a profile would be either the flat "Attendee" the server returns
+   * for an unidentified person or, worse, more than the conversation says.
+   */
+  onProfile?: () => void
 }) {
   return (
     <View style={headerStyles.container}>
-      <Pressable onPress={onBack} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}
+      >
         <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
 
+      <Pressable
+        onPress={onProfile}
+        disabled={!onProfile}
+        accessibilityRole={onProfile ? 'button' : 'header'}
+        accessibilityLabel={name}
+        accessibilityHint={onProfile ? 'Opens their profile' : undefined}
+        style={({ pressed }) => [headerStyles.identity, pressed && onProfile && headerStyles.pressed]}
+      >
       <View style={headerStyles.avatarWrap}>
-        {avatarUrl ? (
-          <OptimizedImage source={avatarUrl} recyclingKey={avatarUrl} style={headerStyles.avatar as any} width={38} height={38} contentFit="cover" />
+        {avatar.kind === 'photo' ? (
+          <OptimizedImage source={avatar.url} recyclingKey={avatar.url} style={headerStyles.avatar as any} width={HEADER_AVATAR} height={HEADER_AVATAR} contentFit="cover" />
+        ) : avatar.kind === 'mark' ? (
+          <PseudonymMark seed={avatar.seed} />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarFallback]}>
-            <Text style={headerStyles.avatarText}>{getInitials(name)}</Text>
+            <Text style={headerStyles.avatarText}>{initialsOf(name)}</Text>
           </View>
         )}
       </View>
@@ -136,15 +188,28 @@ function ChatHeader({ name, avatarUrl, isTyping, subtitle, onBack, onOptions }: 
           // 402pt phone one line cut it at "You can't see the…".
           <Text style={headerStyles.subtitle} numberOfLines={2}>{subtitle}</Text>
         )}
-        {isTyping && <Text style={headerStyles.typing}>typing…</Text>}
       </View>
+      </Pressable>
 
-      <Pressable onPress={onOptions} style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
+      <Pressable onPress={onOptions} accessibilityRole="button" accessibilityLabel="Conversation options" style={({ pressed }) => [headerStyles.iconBtn, pressed && headerStyles.pressed]}>
         <Ionicons name="ellipsis-vertical" size={ICON.lg} color={EMBER.textPrimary} />
       </Pressable>
     </View>
   )
 }
+
+/** The generated mark at the header's size: flat, as the chat's bubbles draw it. */
+function PseudonymMark({ seed }: { seed: string }) {
+  const mark = pseudonymAvatar(seed)
+  return (
+    <View style={[headerStyles.avatar, headerStyles.avatarFallback, { backgroundColor: mark.colors[0] }]}>
+      <Text style={headerStyles.markGlyph} maxFontSizeMultiplier={1}>{mark.character}</Text>
+    </View>
+  )
+}
+
+/** The room header's avatar size, so a DM and a room open at one height. */
+const HEADER_AVATAR = 40
 
 const headerStyles = StyleSheet.create({
   container: {
@@ -159,15 +224,17 @@ const headerStyles = StyleSheet.create({
   },
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.5 },
+  // The avatar and the name are one target: either one opens the profile.
+  identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   avatarWrap: { position: 'relative' },
-  avatar: { width: 38, height: 38, borderRadius: EMBER_RADIUS.pill },
+  avatar: { width: HEADER_AVATAR, height: HEADER_AVATAR, borderRadius: EMBER_RADIUS.pill },
   avatarFallback: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   avatarText: TYPE.bodyStrong,
+  // design-exception: an emoji glyph sized to fill the 40pt disc, as in ChatBubble
+  markGlyph: { fontSize: 20, lineHeight: 26 },
   titleArea: { flex: 1 },
   name: TYPE.bodyStrong,
   subtitle: { ...TYPE.meta, color: EMBER.textSecondary },
-  // Primary, so a live "typing…" never reads as the secondary subtitle.
-  typing: { ...TYPE.meta, color: EMBER.textPrimary },
 })
 
 /**
@@ -250,6 +317,17 @@ function PrivateChatInner() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  // The message the next send replies to (SCRUM-409).
+  const [replyingTo, setReplyingTo] = useState<PrivateMessage | null>(null)
+  // Where the unread started when the thread opened (SCRUM-406).
+  const [unread, setUnread] = useState<{ firstId: string; count: number } | null>(null)
+  /*
+   * Not a send-in-flight state: `sending` above still guards the double tap.
+   * This is the composer lock, and it is set only when the server says the
+   * user may not post right now -- see ComposerLock.
+   */
+  const [composerLock, setComposerLock] = useState<ComposerLock | null>(null)
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
@@ -270,13 +348,34 @@ function PrivateChatInner() {
    */
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
+  /*
+   * The conversation's own record did not load. The options sheet needs it —
+   * the leave copy turns on whether they know who you are, and guessing that
+   * wrong tells somebody unmatching "ends it" when it cannot — so options
+   * says it failed and offers to try again rather than acting on a guess.
+   */
+  const [revealFailed, setRevealFailed] = useState(false)
+  const [revealAttempt, setRevealAttempt] = useState(0)
+  /** Their account id, from the server, for the header's tap-through. */
+  const [otherId, setOtherId] = useState<string | null>(null)
+  /** Their photo as the server resolves it: `null` until they reveal. */
+  const [otherImage, setOtherImage] = useState<string | null>(null)
+  /** History did not load, and there is nothing on screen to fall back on. */
+  const [loadError, setLoadError] = useState(false)
+  const { showToast } = useToast()
 
   // Declared inside the effect: it sets state only after the request returns.
   useEffect(() => {
     const loadReveal = async () => {
       if (!conversationId) return
       const r = await apiClient.getConversation(conversationId as string)
-      if (!r.success || !r.data) return
+      if (!r.success || !r.data) {
+        setRevealFailed(true)
+        return
+      }
+      setRevealFailed(false)
+      setOtherId(r.data.otherUser?.id || null)
+      setOtherImage(r.data.otherUser?.image || null)
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -297,7 +396,7 @@ function PrivateChatInner() {
       })
     }
     void loadReveal()
-  }, [conversationId])
+  }, [conversationId, revealAttempt])
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
@@ -348,7 +447,7 @@ function PrivateChatInner() {
               setReveal((prev) => (prev ? { ...prev, revealRequested: prev.revealRequested } : prev))
               showTray('Asked', `We let ${reveal.displayName} know. They'll decide in their own time.`)
             } else {
-              showTray('Could not ask', r.error || 'Try again in a moment.')
+              showTray("Couldn't ask", userMessage(r, "Couldn't ask them. Try again."))
             }
           })
           .finally(() => setRevealBusy(false))
@@ -376,7 +475,7 @@ function PrivateChatInner() {
                    * Surfaced verbatim rather than translated, so the one
                    * missing input is named at the moment it is reached for.
                    */
-                  showTray('Not yet', r.error || 'Could not reveal. Try again.')
+                  showTray('Not yet', userMessage(r, "Couldn't reveal. Try again."))
                 }
               })
               .finally(() => setRevealBusy(false))
@@ -393,6 +492,8 @@ function PrivateChatInner() {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  // Follows the end as the first page lays out (lib/useFollowEnd.ts).
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   // State is set only in the callbacks, once the request has settled.
   const loadMessages = (cursor?: string) =>
@@ -402,7 +503,12 @@ function PrivateChatInner() {
           setEnded(true)
           return
         }
+        if (!result.success && !cursor) {
+          setLoadError(true)
+          return
+        }
         if (result.success && result.data) {
+          if (!cursor) setLoadError(false)
           const msgs = result.data.messages.map(mapMessage).reverse()
           if (cursor) {
             setMessages(prev => {
@@ -410,9 +516,22 @@ function PrivateChatInner() {
               return [...msgs.filter(m => !existingIds.has(m.id)), ...prev]
             })
           } else {
-            setMessages(msgs)
-            // Scroll to bottom instantly on initial load — no animation so there's no visible jump
-            setTimeout(() => scrollToBottom(false), 50)
+            // A message still sending, or one that failed, exists only on
+            // this phone; a refresh keeps it rather than replacing the list whole.
+            setMessages(prev => [...msgs, ...prev.filter(isLocalMessage)])
+            /*
+             * Open where they left off (SCRUM-406): the server named the first
+             * unread before marking the thread read. Only on the first open —
+             * a background refresh must not yank someone who is reading.
+             */
+            const firstUnreadId = result.data.firstUnreadId
+            if (!initialLoadDoneRef.current && firstUnreadId && (result.data.unreadCount ?? 0) > 0) {
+              setUnread({ firstId: firstUnreadId, count: result.data.unreadCount ?? 0 })
+              follow.stop()
+              if (!msgs.some(m => m.id === firstUnreadId) && result.data.hasMore && result.data.nextCursor) {
+                void loadBackTo(firstUnreadId, result.data.nextCursor)
+              }
+            }
             initialLoadDoneRef.current = true
           }
           setHasMore(result.data.hasMore)
@@ -424,8 +543,27 @@ function PrivateChatInner() {
       })
       .catch((err) => {
         Logger.error('private-chat', 'Failed to load messages', { error: err })
+        if (!cursor) setLoadError(true)
       })
       .finally(() => setLoading(false))
+
+  /** Older pages until the first unread is on screen — at most three more. */
+  const loadBackTo = async (messageId: string, cursor: string) => {
+    let next: string | null = cursor
+    for (let page = 0; page < 3 && next; page++) {
+      const r = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: next })
+      if (!r.success || !r.data) return
+      const older = r.data.messages.map(mapMessage).reverse()
+      setMessages(prev => {
+        const ids = new Set(prev.map(m => m.id))
+        return [...older.filter(m => !ids.has(m.id)), ...prev]
+      })
+      setHasMore(r.data.hasMore)
+      setOldestCursor(r.data.nextCursor)
+      if (older.some(m => m.id === messageId)) return
+      next = r.data.hasMore ? r.data.nextCursor : null
+    }
+  }
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMore || !oldestCursor) return
@@ -496,7 +634,13 @@ function PrivateChatInner() {
     const u1 = subscribeToConversation(String(conversationId), handleNewMessage)
     const u2 = subscribeToConversation(String(conversationId), handleTyping)
     const u3 = subscribeToConversation(String(conversationId), handleRead)
-    return () => { u1(); u2(); u3(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
+    // ✓✓ delivered as their app gets them (SCRUM-408).
+    const u4 = subscribeToDelivered((d) => {
+      if (d.conversationId !== String(conversationId)) return
+      const at = new Date().toISOString()
+      setMessages(prev => prev.map(m => d.messageIds.includes(m.id) && !m.deliveredAt ? { ...m, deliveredAt: at } : m))
+    })
+    return () => { u1(); u2(); u3(); u4(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
   }, [conversationId, authUser?.id, markArriving])
 
   useEffect(() => {
@@ -504,34 +648,43 @@ function PrivateChatInner() {
     return subscribeToMessages()
   }, [conversationId, subscribeToMessages])
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !authUser || !conversationId) return
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-    stopPrivateTyping(String(conversationId))
-
-    const messageText = newMessage.trim()
-    setNewMessage('')
-    setSending(true)
-
-    if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
-    emitChatListUpdate({ type: 'personal', conversationId: String(conversationId), lastMessage: messageText, lastMessageTime: new Date().toISOString() })
+  /*
+   * One send of one message, first time or retry. The bubble is already on
+   * screen under a `local-` id, as the room does it: the text leaves the
+   * composer and lands in the thread in the same frame, rather than after the
+   * round trip. The answer swaps the local id for the server's, drops it
+   * (moderation), or marks it "Not sent · Tap to retry" with the reason in a
+   * toast.
+   */
+  const deliver = async (localId: string, messageText: string, opts: { clientId: string; replyToId?: string }) => {
+    const { clientId, replyToId } = opts
+    const markFailed = (reason: string) => {
+      setMessages(prev => prev.map(m => m.id === localId ? { ...m, failed: true } : m))
+      showToast(reason, 'error')
+    }
 
     try {
-      const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
+      const result = await apiClient.sendPrivateMessage(String(conversationId), {
+        text: messageText,
+        clientId,
+        ...(replyToId && { replyToId }),
+      })
 
       if (!result.success) {
         /*
-         * The server's sentence, not ours.
-         *
-         * Both this branch and the `catch` below flattened every refusal into
-         * "Failed to send message. Please try again." — including the one that
-         * needs explaining most, `SPAM_BLOCKED` (429), which arrives with a
-         * reason. `app/chat/[id].tsx` records the same bug and the same fix for
-         * the room: the server writes a good sentence and one discarded binding
-         * threw it away, so the user retried forever.
+         * The server's sentence for a refusal it wrote for the person — a
+         * `SPAM_BLOCKED` (429) arrives with its reason — and the app's own
+         * for anything else (`userMessage`). Both this branch and the `catch`
+         * once flattened every refusal into one generic line, so the user
+         * retried forever against a wall that had already explained itself.
          */
-        showTray('Not sent', result.error || 'Failed to send message. Please try again.')
-        setNewMessage(messageText)
+        if (result.errorCode === 'RATE_LIMITED' || result.errorCode === 'SPAM_BLOCKED') {
+          setComposerLock('rate_limited')
+          if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
+          const ms = Math.min(Math.max(result.retryAfter ?? 5, 1), 120) * 1000
+          lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
+        }
+        markFailed(userMessage(result, "Couldn't send. Try again."))
         return
       }
 
@@ -539,36 +692,67 @@ function PrivateChatInner() {
        * The server can accept a message and still withhold it.
        *
        * Moderation returns 200 with `text: null` and `moderation_hidden: true`.
-       * This branch checked only `success`, so a withheld message was appended
-       * and the sender saw their own words while the recipient got nothing —
-       * accidental shadowbanning, in the *private* channel. `mapMessage` would
-       * also have rendered `text: null` as an empty bubble.
-       *
-       * The room was fixed for exactly this; DMs were not, because deterministic
-       * screening was added to them afterwards. Same shape, same answer.
+       * Showing the bubble as sent would let the sender see their own words
+       * while the recipient got nothing — accidental shadowbanning, in the
+       * *private* channel. Same shape as the room, same answer.
        */
-
       const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
       if (hidden) {
+        setMessages(prev => prev.filter(m => m.id !== localId))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
       }
 
       if (result.data) {
-        markArriving(result.data.id)
-        setMessages(prev => prev.some(m => m.id === result.data!.id) ? prev : [...prev, mapMessage(result.data)])
+        const sent = mapMessage(result.data)
+        /*
+         * The socket can echo your own message before this response lands.
+         * If the echo is already in the list, the local copy is the one to go;
+         * otherwise the local bubble takes the server's id in place.
+         */
+        setMessages(prev => settleDirectMessage(prev, localId, sent))
         markDomainsDirty(['chat'])
-        setTimeout(() => scrollToBottom(true), 80)
       }
     } catch (error) {
-      showTray(
-        'Not sent',
-        error instanceof Error ? error.message : 'Failed to send message. Please try again.'
-      )
-      setNewMessage(messageText)
-    } finally {
-      setSending(false)
+      Logger.warn('private-chat', 'send failed', { error })
+      markFailed("Couldn't send. Try again.")
     }
+  }
+
+  const sendMessage = async (text?: string) => {
+    const messageText = (text ?? newMessage).trim()
+    if (!messageText || sending || !authUser || !conversationId) return
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    stopPrivateTyping(String(conversationId))
+
+    const replyTo = replyingTo
+    const local: PrivateMessage = {
+      ...optimisticDirectMessage(messageText, String(conversationId), authUser.id),
+      // The same id on every try of this send (SCRUM-410), and what it replies to.
+      clientId: newClientId(),
+      ...(replyTo && !replyTo.failed && { replyToId: replyTo.id, replyTo: quoteFrom(replyTo) }),
+    }
+    markArriving(local.id)
+    setMessages(prev => [...prev, local])
+    if (text === undefined) setNewMessage('')
+    setReplyingTo(null)
+    setSending(true)
+    // Your own send brings the end back into view and follows it again.
+    follow.noteAtEnd(true)
+    setTimeout(() => scrollToBottom(true), 80)
+
+    if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
+    emitChatListUpdate({ type: 'personal', conversationId: String(conversationId), lastMessage: messageText, lastMessageTime: local.createdAt })
+
+    // `deliver` catches its own failures, so this always runs.
+    await deliver(local.id, messageText, { clientId: local.clientId ?? newClientId(), replyToId: local.replyToId })
+    setSending(false)
+  }
+
+  const retrySend = (message: PrivateMessage) => {
+    if (!message.text) return
+    setMessages(prev => prev.map(m => m.id === message.id ? { ...m, failed: false } : m))
+    void deliver(message.id, message.text, { clientId: message.clientId ?? newClientId(), replyToId: message.replyToId })
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -579,35 +763,83 @@ function PrivateChatInner() {
       if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.createdAt) }); lastDay = day }
       items.push({ kind: 'message', ...m })
     }
-    return items
-  }, [messages])
+    return withUnreadDivider(items, unread?.firstId, unread?.count ?? 0)
+  }, [messages, unread])
+
+  /*
+   * Scroll to "N unread messages" once it is in the list (SCRUM-406). Once per
+   * open; rows further up may not be measured yet, which is what
+   * `onScrollToIndexFailed` below answers.
+   */
+  const anchoredRef = useRef(false)
+  const dividerIndex = chatItems.findIndex(i => i.kind === 'unread')
+  useEffect(() => {
+    if (anchoredRef.current || dividerIndex < 0) return
+    anchoredRef.current = true
+    requestAnimationFrame(() =>
+      flatListRef.current?.scrollToIndex({ index: dividerIndex, viewPosition: 0.1, animated: false })
+    )
+  }, [dividerIndex])
+
+  /*
+   * The long-press menu, as the app's one sheet (`lib/sheet.ts`).
+   *
+   * Every message can be copied. Theirs can also be reported; yours cannot —
+   * reporting your own message is not a thing. It used to be report-only, so
+   * a long press on your own message opened nothing and there was no way to
+   * copy anything. A message that did not send offers Try again and Delete.
+   */
+  const showMessageMenu = (message: PrivateMessage) => {
+    const isMe = message.senderId === authUser?.id
+    const actions: SheetAction[] = []
+    if (message.failed) actions.push({ label: 'Try again', variant: 'primary', then: () => retrySend(message) })
+    else actions.push({ label: 'Reply', then: () => setReplyingTo(message) })
+    actions.push({
+      label: 'Copy',
+      then: () => {
+        Clipboard.setString(message.text || '')
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+      },
+    })
+    if (message.failed) {
+      actions.push({
+        label: 'Delete',
+        variant: 'destructive',
+        then: () => setMessages(prev => prev.filter(m => m.id !== message.id)),
+      })
+    } else if (!isMe) {
+      const messageId = message.id
+      actions.push({ label: 'Report', variant: 'destructive', next: () => messageReportStep(messageId, 'private') })
+    }
+    actions.push({ label: 'Cancel', cancel: true })
+
+    const text = message.text || ''
+    showSheet({
+      kind: 'actions',
+      title: message.failed ? 'Not sent' : isMe ? 'Your message' : reveal?.displayName || 'Their message',
+      message: text.length > 120 ? `${text.slice(0, 120)}…` : text,
+      actions,
+    })
+  }
+  // Read at the moment of the long press, so the handler below can stay stable.
+  const messageMenuRef = useLatest(showMessageMenu)
 
   /*
    * Stable, so `ChatBubble`'s memo can bite: a conversation being typed in
    * re-renders on every keystroke, and an inline arrow would re-render every
    * mounted bubble each time.
    */
-  const reportMessage = useCallback((messageId: string) => {
+  const openMessageMenu = useCallback((message: PrivateMessage) => {
     // The same press-and-hold answer the room's message menu gives, on the
-    // frame the tray opens — the hold has "caught".
+    // frame the sheet opens — the hold has "caught".
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-    showTray('Message options', 'What would you like to do?', [
-      { label: 'Cancel', onPress: closeTray },
-      {
-        label: 'Report',
-        variant: 'destructive',
-        onPress: () => {
-          closeTray()
-          showMessageReportOptions(messageId, 'private')
-        },
-      },
-    ])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    messageMenuRef.current(message)
+  }, [messageMenuRef])
 
   const renderMessage = ({ item }: { item: PrivateMessage }) => {
     const isMe = item.senderId === authUser?.id
     return (
+      <SwipeToReply enabled={!item.failed} onReply={() => setReplyingTo(item)}>
       <ChatBubble
         variant="direct"
         mine={isMe}
@@ -620,21 +852,23 @@ function PrivateChatInner() {
         /*
          * Only on your own, and only here. A room has twenty readers and twenty
          * different answers, so a tick there would either lie or need twenty.
+         * A message that never arrived has nothing to tick.
          */
-        receipt={isMe ? (item.isRead ? 'read' : 'sent') : null}
-        /*
-         * Reporting your own message is not a thing, so their messages get the
-         * long press and yours do not.
-         */
-        onLongPress={isMe ? undefined : () => reportMessage(item.id)}
+        receipt={isLocalMessage(item) ? null : receiptFor(item, authUser?.id)}
+        replyTo={item.replyTo ? quoteLine(item.replyTo) : null}
+        failed={item.failed}
+        onRetry={item.failed ? () => retrySend(item) : undefined}
+        // Every message can be copied; the menu decides whether Report is on it.
+        onLongPress={() => openMessageMenu(item)}
       />
+      </SwipeToReply>
     )
   }
 
   const renderChatItem = ({ item }: { item: ChatListItem }) => {
     // Same centred pill the room uses -- a date is the conversation narrating
     // itself, not something either person said.
-    if (item.kind === 'separator') return <SystemNotice label={item.label} />
+    if (item.kind === 'separator' || item.kind === 'unread') return <SystemNotice label={item.label} />
     return renderMessage({ item })
   }
 
@@ -657,6 +891,7 @@ function PrivateChatInner() {
    * first, and scrolls away on its own as the conversation grows.
    */
   const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
+  const sayHi = emptyThreadLine(reveal?.displayName, (otherUserName as string) || null)
 
   const ListHeader = (
     <>
@@ -673,9 +908,17 @@ function PrivateChatInner() {
       {loading ? (
         <ActivityIndicator style={styles.loadingIndicator} color={EMBER.textSecondary} />
       ) : hasMore ? (
-        <TouchableOpacity style={styles.loadMoreBtn} onPress={loadOlderMessages} disabled={loadingOlder}>
-          <Text style={styles.loadMoreText}>{loadingOlder ? 'Loading…' : '↑ Load older messages'}</Text>
-        </TouchableOpacity>
+        <Pressable
+          onPress={loadOlderMessages}
+          disabled={loadingOlder}
+          accessibilityRole="button"
+          accessibilityLabel="Load older messages"
+          accessibilityState={{ busy: loadingOlder }}
+          hitSlop={SPACE.sm}
+          style={({ pressed }) => [styles.loadMoreBtn, pressed && styles.pressed]}
+        >
+          <Text style={styles.loadMoreText}>{loadingOlder ? 'LOADING…' : 'LOAD OLDER MESSAGES'}</Text>
+        </Pressable>
       ) : null}
     </>
   )
@@ -690,10 +933,16 @@ function PrivateChatInner() {
           // Server-resolved. A pseudonym until they reveal, and the route param
           // only as a first paint before the fetch lands.
           name={reveal?.displayName || (otherUserName as string) || 'Chat'}
-          avatarUrl={(otherUserAvatar as string) || null}
-          isTyping={isOtherTyping}
+          avatar={directHeaderAvatar(reveal, otherImage, (otherUserAvatar as string) || null)}
           subtitle={reveal ? revealSubtitle(reveal) : null}
           onBack={() => router.back()}
+          onProfile={
+            // Only once they are a name to you: an accepted request, or a
+            // match who revealed. The server decides both.
+            reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && (otherId || otherUserId)
+              ? () => router.push({ pathname: '/user/[id]', params: { id: String(otherId || otherUserId) } } as never)
+              : undefined
+          }
           onOptions={() => {
             /*
              * The conversation sheet, not the profile one.
@@ -703,20 +952,39 @@ function PrivateChatInner() {
              * in both inboxes. `showLeaveConversationActions` is about *this*
              * conversation and bundles the report into the same request.
              */
-            if (conversationId) {
+            if (reveal) {
               showLeaveConversationActions(
                 conversationId as string,
-                reveal?.displayName || (otherUserName as string) || 'them',
+                reveal.displayName || (otherUserName as string) || 'them',
                 // They know you if you revealed, or if this never was
                 // pseudonymous — an accepted request showed them your name.
-                (reveal?.youRevealed ?? false) || reveal?.pseudonymous === false,
+                reveal.youRevealed || reveal.pseudonymous === false,
                 () => router.back(),
-                reveal?.fromMatch ?? true
+                reveal.fromMatch ?? true
               )
-            } else if (otherUserId) {
-              showUserSafetyActions((otherUserName as string) || 'User', otherUserId as string, () => router.back())
             } else {
-              showTray('Coming soon', 'Safety options will be available soon.')
+              /*
+               * Not "Coming soon". The sheet's copy depends on what the
+               * conversation record says, so without it the honest answer is
+               * that it did not load — or has not yet — and a way to retry.
+               */
+              showTray(
+                revealFailed ? "Couldn't load this conversation" : 'Still loading',
+                revealFailed
+                  ? 'Its options need the conversation details, which did not load.'
+                  : 'The conversation details are on their way. Try again in a moment.',
+                [
+                  { label: 'Cancel', onPress: closeTray },
+                  {
+                    label: 'Try again',
+                    variant: 'primary',
+                    onPress: () => {
+                      closeTray()
+                      setRevealAttempt(n => n + 1)
+                    },
+                  },
+                ]
+              )
             }
           }}
         />
@@ -750,7 +1018,9 @@ function PrivateChatInner() {
            */
           ListFooterComponent={
             isOtherTyping ? (
-              <TypingIndicator label={`${otherUserName || 'They'} are typing...`} />
+              // The server's name for them, never the route param: a pseudonym
+              // until they reveal, like every other line on this screen.
+              <TypingIndicator label={typingLabel([reveal?.displayName ?? ''])} />
             ) : null
           }
           ListEmptyComponent={!loading && ended ? (
@@ -761,6 +1031,17 @@ function PrivateChatInner() {
               <Text style={styles.emptyTitle}>This conversation has ended</Text>
               <Text style={styles.emptyText}>It is no longer available to either of you.</Text>
             </View>
+          ) : !loading && loadError ? (
+            // Not the empty state: a thread that failed to load is not an
+            // invitation to "Start the conversation".
+            <ChatLoadFailed
+              what="this conversation"
+              onRetry={() => {
+                setLoadError(false)
+                setLoading(true)
+                void loadMessages()
+              }}
+            />
           ) : !loading ? (
             /*
               Fades out as the first message lands rather than vanishing in the
@@ -777,16 +1058,36 @@ function PrivateChatInner() {
                 an accepted message request, which was never a match. The header
                 above already says so when it is true, so this stays neutral.
               */}
-              <Text style={styles.emptyText}>Say hi to {otherUserName}.</Text>
-              <ScalePress style={styles.emptyCta} onPress={() => setNewMessage('Hey 👋')} pressedScale={0.97}>
-                <Text style={styles.emptyCtaText}>Send a wave 👋</Text>
+              {sayHi ? <Text style={styles.emptyText}>{sayHi}</Text> : null}
+              {/*
+                Sends for real. It used to be labelled "Send a wave" and only
+                put "Hey 👋" in the composer, so the tap that promised a wave
+                sent nothing.
+              */}
+              <ScalePress
+                style={styles.emptyCta}
+                onPress={() => void sendMessage('Hey 👋')}
+                pressedScale={0.97}
+                accessibilityRole="button"
+                accessibilityLabel="Say hi"
+                accessibilityHint="Sends “Hey 👋”"
+              >
+                <Text style={styles.emptyCtaText}>Say hi 👋</Text>
               </ScalePress>
             </Animated.View>
           ) : null}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollToIndexFailed={(info) => {
+            // Not measured yet: get close by the average row, then land on it.
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
+            setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.1, animated: false }), 120)
+          }}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}
@@ -807,10 +1108,18 @@ function PrivateChatInner() {
           </Animated.View>
         )}
 
+        {replyingTo ? (
+          <ReplyBar
+            name={replyingTo.senderId === authUser?.id ? 'yourself' : reveal?.displayName || String(otherUserName || 'them')}
+            text={replyingTo.text || ''}
+            onCancel={() => setReplyingTo(null)}
+          />
+        ) : null}
+
         <ChatComposer
           value={newMessage}
-          sending={sending}
-          onSend={sendMessage}
+          lock={composerLock}
+          onSend={() => void sendMessage()}
           onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
           onChangeText={(text) => {
             setNewMessage(text)
@@ -842,6 +1151,7 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
+  pressed: { opacity: 0.6 },
   /*
    * Frame-less by necessity -- the design has no thread header for this. Built
    * from the Banter's own card idiom (radius 32, p24) so it reads as part of
@@ -857,7 +1167,8 @@ const styles = StyleSheet.create({
   },
   matchOpenerTitle: TYPE.heading,
   matchOpenerBody: { ...TYPE.body, color: EMBER.textSecondary },
-  loadMoreText: { ...TYPE.meta, color: EMBER.textTertiary },
+  // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
+  loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
 
   // Messages
 

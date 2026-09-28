@@ -23,6 +23,14 @@
  *   `EMBER.accent`, `CONTROL.lg`, `EMBER_RADIUS.pill`
  * - the legacy `APP_*` palette and the old `Typography` component (also in
  *   `lib/`, where a screen's constants can hide it)
+ * - a number added to a safe-area inset (`insets.bottom + 16`) — use SPACE
+ * - a literal `minWidth` / `maxWidth` / `minHeight` / `maxHeight` — use
+ *   CONTROL, SPACE or a named constant
+ * - a literal `opacity: 0.x` — use OPACITY (pressed / disabled) or name it
+ *
+ * The last three arrived after most screens were written. Files that still
+ * have hits are listed in `LATE_RULE_ALLOWLIST` with who owns the fix, so the
+ * rules hold everywhere else from today and the list only shrinks.
  *
  * A value that genuinely cannot come from the scale (an emoji hero, a glyph
  * drawn to match an image) is allowed with `// design-exception: <reason>` on
@@ -99,6 +107,72 @@ const RULES = [
   },
 ]
 
+/*
+ * The three late rules, and the files allowed to break them until their
+ * owners convert them. Each entry says why it is here. Remove an entry when
+ * its file is clean; `npm run lint:design` names any entry that no longer
+ * needs to be here. (A notice, not a failure: the owning passes run in
+ * parallel, and cleaning a file should not break someone else's build.)
+ */
+const LATE_RULES = [
+  {
+    id: 'inset-literal',
+    test: /\binsets\.(top|bottom|left|right)\s*[-+]\s*[1-9]/,
+    message: 'number added to a safe-area inset — use SPACE (insets.bottom + SPACE.lg)',
+  },
+  {
+    id: 'size-literal',
+    test: /\b(min|max)(Width|Height):\s*[1-9]/,
+    message: 'literal min/max width or height — use CONTROL, SPACE or a named constant',
+  },
+  {
+    id: 'opacity-literal',
+    test: /\bopacity:\s*0?\.\d/,
+    message: 'literal opacity — use OPACITY.pressed / OPACITY.disabled, or name it',
+  },
+]
+
+const CHAT_PASS = 'chat/banter/DM screens: converted in the chat polish pass that owns them'
+const PROFILE_PASS = 'profile/friends screens: converted in the profile polish pass that owns them'
+const EVENTS_PASS = 'events/pulse/room screens: converted in the events polish pass that owns them'
+const LATE_RULE_ALLOWLIST = {
+  'app/preview/tonight.tsx': 'dev-only design preview, not shipped',
+  'app/preview/profile.tsx': 'dev-only design preview, not shipped',
+  'app/chat/[id].tsx': CHAT_PASS,
+  'app/(tabs)/chat.tsx': CHAT_PASS,
+  'app/private-chat/[conversationId].tsx': CHAT_PASS,
+  'app/chat-info/[id].tsx': CHAT_PASS,
+  'components/chat/ChatComposer.tsx': CHAT_PASS,
+  'components/chat/ChatBubble.tsx': CHAT_PASS,
+  'components/chat/ReactionPicker.tsx': CHAT_PASS,
+  'components/chat/TypingIndicator.tsx': CHAT_PASS,
+  'components/chat/RoomGuidelinesBanner.tsx': CHAT_PASS,
+  'components/chat/BroadcastNotice.tsx': CHAT_PASS,
+  'components/banter/BanterSections.tsx': CHAT_PASS,
+  'app/user/[id].tsx': PROFILE_PASS,
+  'app/edit-profile.tsx': PROFILE_PASS,
+  'app/friends/[userId].tsx': PROFILE_PASS,
+  'app/f/[token].tsx': PROFILE_PASS,
+  'components/profile/MatchingFields.tsx': PROFILE_PASS,
+  'components/profile/ProfileSections.tsx': PROFILE_PASS,
+  'components/grid/ConnectSheet.tsx': EVENTS_PASS,
+  'app/rate/[eventId].tsx': EVENTS_PASS,
+  'components/RoomVisibilityBanner.tsx': EVENTS_PASS,
+  'components/cityArt/CityArtCard.tsx': EVENTS_PASS,
+  'components/pulse/FilterControl.tsx': EVENTS_PASS,
+  'components/pulse/NotificationBell.tsx': EVENTS_PASS,
+  'components/pulse/UpcomingCard.tsx': EVENTS_PASS,
+  'components/pulse/SectionHeader.tsx': EVENTS_PASS,
+  'components/EventCover.tsx': EVENTS_PASS,
+  'components/screens/EventDetailScreen.tsx': EVENTS_PASS,
+  'components/blendn/HoldToConfirm.tsx': EVENTS_PASS,
+  'components/blendn/BlendnScreen.tsx': EVENTS_PASS,
+  'components/blendn/TonightView.tsx': EVENTS_PASS,
+  // The Blend'n button's press state shares this style with the tabs; the
+  // overlay pass is changing that file's button in parallel.
+  'app/(tabs)/_layout.tsx': EVENTS_PASS,
+}
+
 const SPACING_RE = /\b(padding|margin)(Top|Bottom|Left|Right|Horizontal|Vertical|Start|End)?:\s*(-?\d+(\.\d+)?)\b/g
 const GAP_RE = /\b(gap|rowGap|columnGap):\s*(\d+(\.\d+)?)\b/g
 const ICON_RE = /<(Ionicons|MaterialIcons|MaterialCommunityIcons|Feather|\w+Icon)\b[^>]*?\bsize=\{(\d+)\}/g
@@ -126,6 +200,7 @@ function excepted(lines, i) {
 }
 
 function checkSource(source, file, { libOnly = false } = {}) {
+  const lateAllowed = Object.prototype.hasOwnProperty.call(LATE_RULE_ALLOWLIST, file.split(path.sep).join('/'))
   const lines = source.split('\n')
   const found = []
   const add = (i, message) => found.push({ file, line: i + 1, message, text: lines[i].trim() })
@@ -159,6 +234,12 @@ function checkSource(source, file, { libOnly = false } = {}) {
     }
     if (libOnly) return
 
+    if (!lateAllowed) {
+      for (const rule of LATE_RULES) {
+        if (rule.test.test(code)) add(i, rule.message)
+      }
+    }
+
     for (const m of code.matchAll(SPACING_RE)) {
       if (!SPACE.has(Math.abs(Number(m[3])))) add(i, `${m[1]}${m[2] ?? ''}: ${m[3]} is off the SPACE scale`)
     }
@@ -182,7 +263,20 @@ function findViolations(files) {
   return [...allFiles().flatMap((f) => check(f)), ...libFiles().flatMap((f) => check(f, { libOnly: true }))]
 }
 
-module.exports = { findViolations, checkSource }
+/**
+ * Allowlisted files that no longer break a late rule. The entry should go:
+ * a stale allowance is a hole the next literal walks through unseen.
+ */
+function staleAllowances() {
+  return Object.keys(LATE_RULE_ALLOWLIST).filter((rel) => {
+    const abs = path.join(ROOT, rel)
+    if (!fs.existsSync(abs)) return true
+    const lines = fs.readFileSync(abs, 'utf8').split('\n')
+    return !lines.some((line, i) => !excepted(lines, i) && LATE_RULES.some((rule) => rule.test.test(line.replace(/(^|[^:])\/\/.*$/, '$1'))))
+  })
+}
+
+module.exports = { findViolations, checkSource, staleAllowances, LATE_RULE_ALLOWLIST }
 
 if (require.main === module) {
   const args = process.argv.slice(2)
@@ -190,5 +284,8 @@ if (require.main === module) {
   for (const v of violations) console.log(`${v.file}:${v.line}  ${v.message}\n    ${v.text}`)
   const files = new Set(violations.map((v) => v.file)).size
   console.log(violations.length ? `\n${violations.length} violations in ${files} files` : 'design tokens: clean')
+  if (!args.length) {
+    for (const rel of staleAllowances()) console.log(`note: ${rel} is clean — remove it from LATE_RULE_ALLOWLIST`)
+  }
   process.exit(violations.length ? 1 : 0)
 }

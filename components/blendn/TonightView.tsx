@@ -250,7 +250,7 @@ export function VenuePass({
       </View>
       {tasteMatchCount && tasteMatchCount > 0 ? <Teaser count={tasteMatchCount} /> : null}
       <HoldToConfirm
-        label="Hold to check in"
+        label="Hold to blend in"
         icon="finger-print"
         busy={busy}
         busyLabel="Checking you in…"
@@ -273,6 +273,8 @@ export function VenuePass({
 export function TonightView({
   events,
   loading,
+  error,
+  onRetry,
   insideEvent,
   tasteMatchCount,
   checkingIn,
@@ -285,6 +287,9 @@ export function TonightView({
 }: {
   events: TonightEvent[]
   loading: boolean
+  /** The feed failed and there is nothing on screen to keep. */
+  error: boolean
+  onRetry: () => void
   insideEvent: TonightEvent | null
   tasteMatchCount: number | null
   checkingIn: boolean
@@ -335,7 +340,7 @@ export function TonightView({
               {list.length > 0 ? (
                 <Pressable
                   onPress={onSeeAll}
-                  hitSlop={12}
+                  hitSlop={SPACE.md}
                   style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
                   accessibilityRole="button"
                   accessibilityLabel="See everything nearby"
@@ -358,6 +363,24 @@ export function TonightView({
             <View style={styles.skeletonWrap}>
               <View style={styles.skeleton} />
             </View>
+          ) : error && list.length === 0 && !insideEvent ? (
+            /*
+              A failed load is not "nothing on". The empty state below tells
+              somebody their city is quiet tonight, which is a claim about the
+              world the screen can't make when it never heard back.
+            */
+            <View style={styles.empty}>
+              <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+              <Text variant="bodyStrong">Couldn’t load tonight’s events</Text>
+              <Text variant="meta" style={styles.centre}>
+                Check your connection and try again.
+              </Text>
+              <ScalePress onPress={onRetry} style={styles.browse} accessibilityRole="button">
+                <Text variant="button" color={EMBER.onGradient}>
+                  Try again
+                </Text>
+              </ScalePress>
+            </View>
           ) : list.length === 0 && !insideEvent ? (
             <View style={styles.empty}>
               <Ionicons name="moon-outline" size={ICON.lg} color={EMBER.textTertiary} />
@@ -366,7 +389,9 @@ export function TonightView({
                 Save something on the Pulse and it shows up here on the night.
               </Text>
               <ScalePress onPress={onBrowse} style={styles.browse} accessibilityRole="button">
-                <Text variant="button">Browse the Pulse</Text>
+                <Text variant="button" color={EMBER.onGradient}>
+                  Browse the Pulse
+                </Text>
               </ScalePress>
             </View>
           ) : list.length > 0 ? (
@@ -447,12 +472,13 @@ const styles = StyleSheet.create({
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xxs },
   empty: { alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER, paddingTop: SPACE.xxl },
   centre: { textAlign: 'center' },
+  // An empty or error state's one action is that state's primary: the accent.
   browse: {
     marginTop: SPACE.md,
-    height: CONTROL.md,
+    height: CONTROL.lg,
     paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    backgroundColor: EMBER.accent,
     justifyContent: 'center',
   },
   passDock: { paddingHorizontal: SPACE.md, paddingTop: SPACE.xs },
