@@ -341,6 +341,23 @@ export async function connect(): Promise<boolean> {
 
     Logger.info("socket", `Connecting to socket server at: ${SOCKET_URL}`)
 
+    /*
+     * Retire the socket this one replaces.
+     *
+     * This runs whenever the current socket is not connected — every return
+     * from the background, before it has finished reconnecting. socket.io opens
+     * a second connection for a namespace that is already open, and the old
+     * socket, with unlimited reconnection attempts, came back beside the new
+     * one. Each server event then arrived once per socket: one friend request
+     * read 3 on the bell, driven on the owner's iPhone 2026-09-28. Listeners
+     * first, so its own disconnect handler does not report a drop.
+     */
+    if (socket) {
+      socket.removeAllListeners()
+      socket.io.removeAllListeners()
+      socket.disconnect()
+    }
+
     socket = io(SOCKET_URL, {
       /*
        * A callback, and one that refreshes.
