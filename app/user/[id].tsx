@@ -4,11 +4,11 @@ import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MatchMoment } from '../../components/blendn/MatchMoment'
-import { LoadError } from '../../components/LoadError'
+import { LoadError, LoadState } from '../../components/LoadError'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import {
@@ -23,10 +23,11 @@ import {
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -63,9 +64,18 @@ interface UserProfileView {
     eventsOrganized: number
   }
   memberSince?: string
+  /** The server's `identityVisible`, or your own profile. Nothing else sets it. */
+  identityVisible: boolean
 }
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
+
+/** The line under the action, said the way a person would. */
+const CTA_HINT = {
+  connect: 'Send a request to start chatting.',
+  requested: 'Request sent — you can chat once they accept.',
+  message: 'You can message each other.',
+} as const
 type ProfileConnection = NonNullable<UserProfileData['connection']>
 
 function UserProfileInner() {
@@ -78,7 +88,19 @@ function UserProfileInner() {
    * absent. Connect still works: a message request is gated on
    * `haveSharedAnEvent`, which the server resolves itself.
    */
-  const { id, eventId } = useLocalSearchParams<{ id: string; eventId?: string }>()
+  /*
+   * `pseudonym` and `roomSeed` arrive from a room — Room info's member list,
+   * and the Room grid once it passes them (see `docs/PROFILE.md`). The server
+   * has no event context and names anyone you may not identify "Attendee";
+   * the room already knows what this person is called *there*, and the page
+   * should call them the same, with the same creature.
+   */
+  const { id, eventId, pseudonym, roomSeed } = useLocalSearchParams<{
+    id: string
+    eventId?: string
+    pseudonym?: string
+    roomSeed?: string
+  }>()
   const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
@@ -102,6 +124,8 @@ function UserProfileInner() {
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [connectSending, setConnectSending] = useState(false)
+  // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
+  const identity = profileIdentity(profile, { pseudonym, roomSeed })
 
   const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection) => {
     if (!authUser) {
@@ -130,15 +154,15 @@ function UserProfileInner() {
       if (connection.conversationId) {
         setConversationId(connection.conversationId)
         setCtaMode('message')
-        setCtaMessage('You are connected. Open the chat.')
+        setCtaMessage(CTA_HINT.message)
       } else if (connection.request) {
         setConversationId(null)
         setCtaMode('requested')
-        setCtaMessage('Request pending. You can chat after acceptance.')
+        setCtaMessage(CTA_HINT.requested)
       } else {
         setConversationId(null)
         setCtaMode('connect')
-        setCtaMessage('Send a request to start chatting.')
+        setCtaMessage(CTA_HINT.connect)
       }
       return
     }
@@ -158,7 +182,7 @@ function UserProfileInner() {
         if (convId) {
           setConversationId(convId)
           setCtaMode('message')
-          setCtaMessage('You are connected. Open the chat.')
+          setCtaMessage(CTA_HINT.message)
           return
         }
       }
@@ -177,7 +201,7 @@ function UserProfileInner() {
         if (hasPending) {
           setConversationId(null)
           setCtaMode('requested')
-          setCtaMessage('Request pending. You can chat after acceptance.')
+          setCtaMessage(CTA_HINT.requested)
           return
         }
       }
@@ -185,7 +209,7 @@ function UserProfileInner() {
 
     setConversationId(null)
     setCtaMode('connect')
-    setCtaMessage('Send a request to start chatting.')
+    setCtaMessage(CTA_HINT.connect)
   }, [authUser])
 
   // State is set only in the callbacks, once the requests have settled; the
@@ -230,6 +254,7 @@ function UserProfileInner() {
               : [],
             stats: data.stats,
             memberSince: data.memberSince,
+            identityVisible: data.identityVisible === true || data.isOwnProfile === true,
           }
         } else {
           const fallbackResult = await apiClient.getProfile(id)
@@ -252,11 +277,14 @@ function UserProfileInner() {
               education: data.education,
               interests,
               photos,
+              // An older route with no `identityVisible`: fail closed.
+              identityVisible: false,
             }
           }
         }
 
-        setProfile(nextProfile)
+        // Fail closed: no identity field survives unless the server said you may see it.
+        setProfile(nextProfile ? withheldUnlessVisible(nextProfile) : null)
         setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
@@ -297,7 +325,11 @@ function UserProfileInner() {
       pathname: '/private-chat/[conversationId]',
       params: {
         conversationId,
-        otherUserName: profile.name || 'User',
+        /*
+         * A first paint only — the thread asks the server who they are. Never
+         * the server's flat "Attendee", which would flash as their name.
+         */
+        ...(identity.revealed || pseudonym ? { otherUserName: identity.title } : {}),
         // May be a room handle. The thread compares nothing with it, and
         // its only use — block or report — takes a handle as readily as an id.
         otherUserId: profile.user_id,
@@ -329,7 +361,7 @@ function UserProfileInner() {
       if (result.data?.mutual && result.data.conversationId) {
         setConversationId(result.data.conversationId)
         setCtaMode('message')
-        setCtaMessage('You are connected. Open the chat.')
+        setCtaMessage(CTA_HINT.message)
         // The moment the room gives a mutual like, rather than a button quietly changing.
         setMatch({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null })
       }
@@ -360,7 +392,7 @@ function UserProfileInner() {
       if (result.success || result.errorCode === 'CONFLICT') {
         if (result.success) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
         setCtaMode('requested')
-        setCtaMessage('Request pending. You can chat after acceptance.')
+        setCtaMessage(CTA_HINT.requested)
         setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
@@ -377,7 +409,7 @@ function UserProfileInner() {
   const openSafety = () => {
     if (!profile) return
     // Blocked: there is nothing left to look at here.
-    showUserSafetyActions(profile.name || 'User', profile.user_id, () => router.back())
+    showUserSafetyActions(identity.title, profile.user_id, () => router.back())
   }
 
   const isLoading = loading
@@ -394,7 +426,17 @@ function UserProfileInner() {
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         {loadError === 'gone' ? (
-          <Text style={styles.muted}>This profile isn&apos;t available.</Text>
+          /*
+           * One "gone" state, the same shape as every other: deleted, blocked
+           * either way, or never there — the server answers all of them alike
+           * and so does this.
+           */
+          <LoadState
+            icon="person-outline"
+            title="This profile isn't available."
+            message="It may have been removed."
+            action={{ label: 'Go back', onPress: () => router.back() }}
+          />
         ) : (
           <LoadError title="This profile didn't load" onRetry={retryLoad} />
         )}
@@ -402,7 +444,7 @@ function UserProfileInner() {
           <Pressable
             onPress={() => router.back()}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel="Go back"
             hitSlop={12}
             style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
           >
@@ -416,18 +458,11 @@ function UserProfileInner() {
   const photos = (profile?.photos ?? []).filter((u): u is string => !!u && u.trim() !== '')
 
   /*
-   * Revealed, inferred from what actually arrived rather than from a flag.
-   *
-   * `profiles/[userId]` withholds `bio`, `occupation`, `education` and `photos`
-   * behind `maySeeIdentity` and returns the literal name "Attendee" otherwise.
-   * There is no `revealed` boolean in the payload, and adding one would be a
-   * second source of truth for a rule that already has exactly one.
-   *
-   * A photo is the honest test: it is the field that cannot be absent for an
-   * innocent reason once someone has revealed, because `User.image` mirrors the
-   * primary and the gate is the only thing that empties it.
+   * Revealed is the server's `identityVisible`, never inferred from what
+   * arrived — see `lib/profileIdentity.ts`. By here an unrevealed profile has
+   * no photos, bio, occupation or education left to draw.
    */
-  const revealed = photos.length > 0 || !!profile?.bio || !!profile?.occupation
+  const revealed = identity.revealed
 
   /*
    * One still, blurred, when they have not revealed.
@@ -439,9 +474,7 @@ function UserProfileInner() {
    */
   const blurHero = !revealed && profile?.blurPhoto ? [profile.blurPhoto] : []
 
-  const heroTitle = revealed
-    ? [profile?.name, profile?.age].filter(Boolean).join(', ') || 'Someone'
-    : profile?.name || 'Attendee'
+  const heroTitle = identity.title
 
   /*
    * The frame's line under the name is "PRO MEMBER • @blendn_julia". Neither exists --
@@ -471,7 +504,8 @@ function UserProfileInner() {
               blurred={!revealed}
               title={heroTitle}
               subtitle={heroSubtitle}
-              pseudonym={profile?.name || 'Attendee'}
+              // The room's seed rule (`markSeed`), never a user id or "Attendee".
+              pseudonym={identity.seed}
             />
 
             <View style={styles.canvas}>
@@ -615,7 +649,7 @@ function UserProfileInner() {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel="Go back"
           hitSlop={12}
           style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
         >
@@ -660,7 +694,6 @@ function ProfileSkeleton({ width }: { width: number }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER, backgroundColor: EMBER.bg },
-  muted: { ...TYPE.body, color: EMBER.textSecondary },
   scroll: { backgroundColor: EMBER.bg },
   // The screen gutter, 32 clear of the hero and between sections.
   canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
