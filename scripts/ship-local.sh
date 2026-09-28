@@ -261,7 +261,11 @@ adb_serial() {
 smoke_android() (
   bundle=$1 shot=dist/smoke-$short-android.png
   tmp=$(mktemp -d) || exit 1
-  trap 'rm -rf "$tmp"' EXIT
+  # An emulator this step booted is shut down again, pass or fail: the Mac has
+  # 16 GB and a left-running AVD is gigabytes nobody asked for. One that was
+  # already running is left as it was.
+  started=""
+  trap 'rm -rf "$tmp"; [ -z "$started" ] || a emu kill >/dev/null 2>&1' EXIT
   a() { "$ANDROID_HOME/platform-tools/adb" -s "$serial" "$@"; }
 
   pkg=$(bundletool dump manifest --bundle="$bundle" --xpath=/manifest/@package) || return 1
@@ -276,6 +280,7 @@ smoke_android() (
     echo "+ emulator -avd $avd -gpu host -no-snapshot-save -no-boot-anim"
     nohup "$ANDROID_HOME/emulator/emulator" -avd "$avd" -gpu host -no-snapshot-save -no-boot-anim \
       </dev/null >"$tmp/emulator.log" 2>&1 &
+    started=1
   fi
   local booted=""
   for _ in $(seq 60); do
