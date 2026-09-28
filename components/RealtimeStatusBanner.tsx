@@ -1,9 +1,9 @@
 import React, { useState, useSyncExternalStore } from 'react'
-import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
 import Animated from 'react-native-reanimated'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE, tint } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, MAX_FONT_SCALE, OPACITY, SPACE, TYPE, tint } from '../lib/theme'
 import { fadeInFast, fadeOutFast } from './motion/presence'
 
 /**
@@ -45,26 +45,48 @@ export default function RealtimeStatusBanner({
 
   const isReconnecting = status.state === 'reconnecting' || retrying
 
+  /*
+   * What it means for the person, not which subsystem failed: "Realtime
+   * disconnected" named a socket. Offline is the error (actions will fail);
+   * a dropped socket is a warning (what is on screen just stops updating),
+   * so the two are tinted apart (docs/DESIGN_SYSTEM.md).
+   */
   const message = isOffline
-    ? 'You are offline. Some actions may not work.'
+    ? "You're offline. Some actions won't work until you're back."
     : isReconnecting
-    ? 'Reconnecting...'
-    : 'Realtime disconnected.'
+    ? 'Reconnecting…'
+    : 'Live updates paused.'
 
   const handleRetry = async () => {
     if (isOffline || isReconnecting) return
     setRetrying(true)
-    await connect()
-    setRetrying(false)
+    try {
+      await connect()
+    } finally {
+      setRetrying(false)
+    }
   }
 
   return (
-    <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={[styles.container, isOffline && styles.offlineContainer, style]}>
+    <Animated.View
+      entering={fadeInFast}
+      exiting={fadeOutFast}
+      style={[styles.container, isOffline && styles.offlineContainer, style]}
+      accessibilityLiveRegion="polite"
+    >
       <Text style={styles.text}>{message}</Text>
       {!isOffline && !isReconnecting && (
-        <TouchableOpacity onPress={handleRetry} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.retryText} accessibilityLabel="Retry">RETRY</Text>
-        </TouchableOpacity>
+        <Pressable
+          onPress={handleRetry}
+          accessibilityRole="button"
+          accessibilityLabel="Reconnect live updates"
+          hitSlop={SPACE.md}
+          style={({ pressed }) => [styles.retry, pressed && styles.pressed]}
+        >
+          <Text style={styles.retryText} maxFontSizeMultiplier={MAX_FONT_SCALE.label}>
+            TRY AGAIN
+          </Text>
+        </Pressable>
       )}
     </Animated.View>
   )
@@ -75,9 +97,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.md,
     borderRadius: EMBER_RADIUS.md,
-    backgroundColor: tint(EMBER.destructive, 0.16),
+    backgroundColor: tint(EMBER.warning, 0.16),
     borderWidth: 1,
-    borderColor: tint(EMBER.destructive, 0.35),
+    borderColor: tint(EMBER.warning, 0.35),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -91,9 +113,10 @@ const styles = StyleSheet.create({
     color: EMBER.textPrimary,
     flex: 1,
   },
+  retry: { minHeight: CONTROL.sm, justifyContent: 'center', marginLeft: SPACE.sm },
   retryText: {
     ...TYPE.label,
     color: EMBER.textPrimary,
-    marginLeft: SPACE.sm,
   },
+  pressed: { opacity: OPACITY.pressed },
 })
