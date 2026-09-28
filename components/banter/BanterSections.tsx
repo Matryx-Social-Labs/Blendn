@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     width: UNREAD_DOT,
     height: UNREAD_DOT,
   },
-  // Unread is neutral: the one accent on this screen is Accept.
+  // Unread is neutral, like everything on a populated inbox.
   unreadDot: {
     width: UNREAD_DOT,
     height: UNREAD_DOT,
@@ -475,8 +475,12 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
  * answered before answering them. "More" holds Block and Report: declining
  * is not the answer to somebody who should not be able to ask again.
  *
- * Accept is the screen's one accent (docs/DESIGN_SYSTEM.md). It repeats per
- * request, which the rule allows: it is one action, the Banter's primary one.
+ * Accept is a `textPrimary` fill with `bg` text — the design system's
+ * strong-neutral, not the accent. A list of three requests drew three orange
+ * pills, and with the empty state's "Explore events" and the tab bar that was
+ * too much orange for one screen (docs/DESIGN_SYSTEM.md: at most one thing).
+ * White on the dark page still reads as the affirmative answer beside
+ * Decline's `surface`.
  */
 export function BanterRequest({
   name,
@@ -593,7 +597,8 @@ export function BanterRequest({
               disabled={pending}
               accessibilityRole="button"
               accessibilityLabel={`More options for the request from ${name}`}
-              hitSlop={REQUEST_HIT_SLOP}
+              // A 32pt disc, so 8 all round: the pills' slop left it 40 wide.
+              hitSlop={SPACE.sm}
               style={({ pressed }) => [
                 requestStyles.requestMore,
                 (pressed || pending) && styles.pressed,
@@ -649,8 +654,8 @@ const requestStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  requestAccept: { backgroundColor: EMBER.accent },
+  // Strong-neutral, not the accent: see the component's note.
+  requestAccept: { backgroundColor: EMBER.textPrimary },
   requestDeclineLabel: { ...TYPE.button, color: EMBER.textSecondary },
-  // `onGradient`, not white — white fails contrast on the accent fill.
-  requestAcceptLabel: { ...TYPE.button, color: EMBER.onGradient },
+  requestAcceptLabel: { ...TYPE.button, color: EMBER.bg },
 })

@@ -1,5 +1,4 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,7 +16,6 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
-import ScalePress from '../../components/motion/ScalePress'
 import {
   BANTER_PADDING_HORIZONTAL,
   BANTER_SECTION_GAP,
@@ -42,6 +40,8 @@ import { showSheet } from '../../lib/sheet'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
+import { userMessage } from '../../lib/userMessage'
+import { LoadError, LoadState } from '../../components/LoadError'
 import { queryCache } from '../../lib/queryCache'
 import {
   ChatMessageCallback,
@@ -50,7 +50,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -79,7 +79,8 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  *    which the client cannot derive, because "the event is on now" is not the
  *    same as "I am there".
  * 2. **Requests** — the one row that cannot be opened, because tapping it has
- *    to mean accept or decline. Accept is the screen's one accent.
+ *    to mean accept or decline. Accept is a strong-neutral pill, not the
+ *    accent — a list of requests was a column of orange.
  * 3. **Conversations**, bucketed Today / This week / Earlier by last activity
  *    (`components/banter/inbox.ts`), "Mark all read" on the first heading.
  *
@@ -177,10 +178,11 @@ const previewFromMessage = (message: any): string | undefined => {
   }
 
   const mediaType = String(message.mediaType ?? message.media_type ?? message.type ?? '').toLowerCase()
-  if (mediaType.includes('image') || mediaType.includes('photo')) return '[Photo]'
-  if (mediaType.includes('voice') || mediaType.includes('audio')) return '[Voice note]'
-  if (mediaType.includes('video')) return '[Video]'
-  if (message.mediaUrl || message.media_url || message.attachmentUrl || message.attachment_url) return '[Attachment]'
+  // Said as a person would, not as a bracketed type tag.
+  if (mediaType.includes('image') || mediaType.includes('photo')) return 'Sent a photo'
+  if (mediaType.includes('voice') || mediaType.includes('audio')) return 'Sent a voice note'
+  if (mediaType.includes('video')) return 'Sent a video'
+  if (message.mediaUrl || message.media_url || message.attachmentUrl || message.attachment_url) return 'Sent an attachment'
   return undefined
 }
 
@@ -472,7 +474,7 @@ function ChatInner() {
           return {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
             event_id: room.event_id || room.eventId || '',
-            event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Unknown Event',
+            event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
             // `memberCount` is what `GET /chat/groups` sends; the rest never arrived.
             participant_count: Number(room.memberCount ?? room.participant_count) || 0,
             event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
@@ -686,7 +688,7 @@ function ChatInner() {
 
         const updated = [...prev]
         const isFromMe = data.message.senderId === user.id
-        const nextPreview = previewFromMessage(data.message) || '[Message]'
+        const nextPreview = previewFromMessage(data.message) || 'New message'
         updated[idx] = {
           ...updated[idx],
           last_message: nextPreview,
@@ -824,7 +826,7 @@ function ChatInner() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
-        showToast(result.error || `Couldn't ${action} that request. Try again.`, 'error')
+        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error')
         await loadChats(true, true)
         return
       }
@@ -877,7 +879,7 @@ function ChatInner() {
           run: async () => {
             const result = await apiClient.respondToMessageRequest(request.request_id, 'block')
             if (!result.success) {
-              return { ok: false, error: `${result.error || "Couldn't block them."} Try again.` }
+              return { ok: false, error: userMessage(result, "Couldn't block them. Try again.") }
             }
             setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
             void loadChats(true, true)
@@ -1078,46 +1080,21 @@ function InboxSkeleton() {
 }
 
 function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View style={styles.empty}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-        Couldn&apos;t load your chats
-      </Text>
-      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-        Check your connection and try again.
-      </Text>
-      <ScalePress
-        style={styles.emptyCta}
-        onPress={onRetry}
-        pressedScale={0.97}
-        accessibilityRole="button"
-      >
-        <Text style={styles.emptyCtaText}>Retry</Text>
-      </ScalePress>
-    </View>
-  )
+  return <LoadError title="Couldn't load your chats" onRetry={onRetry} />
 }
 
 function EmptyInbox() {
   return (
-    <View style={styles.empty}>
-      <View style={styles.emptyGlyph}>
-        <Ionicons name="chatbubbles-outline" size={36} color={EMBER.textTertiary} />
-      </View>
-      <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>
-        No conversations yet
-      </Text>
-      <Text style={styles.emptyBody} maxFontSizeMultiplier={1.4}>
-        Blend in to an event and its room appears here — or message someone you
-        met there.
-      </Text>
-      <ScalePress style={styles.emptyCta} onPress={() => router.push('/(tabs)/events' as any)} pressedScale={0.97}>
-        <Text style={styles.emptyCtaText}>Explore events</Text>
-      </ScalePress>
-    </View>
+    <LoadState
+      icon="chatbubbles-outline"
+      title="No conversations yet"
+      message="Blend in to an event and its room appears here — or message someone you met there."
+      action={{
+        label: 'Explore events',
+        onPress: () => router.push('/(tabs)/events' as any),
+        accessibilityHint: 'Opens the Pulse',
+      }}
+    />
   )
 }
 
@@ -1156,31 +1133,6 @@ const styles = StyleSheet.create({
   skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.md, alignItems: 'center' },
   skeletonBody: { flex: 1, gap: SPACE.sm },
 
-  empty: { alignItems: 'center', paddingVertical: SPACE.xxxl, paddingHorizontal: SPACE.lg, gap: SPACE.sm },
-  // Same glyph tile as the Pulse's empty state (events.tsx `emptyGlyph`).
-  emptyGlyph: {
-    width: 80,
-    height: 80,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACE.sm,
-  },
-  emptyTitle: { ...TYPE.title, textAlign: 'center' },
-  emptyBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
-  emptyCta: {
-    marginTop: SPACE.sm,
-    backgroundColor: EMBER.accent,
-    borderRadius: EMBER_RADIUS.pill,
-    height: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.xl,
-  },
-  // `onGradient`, not white — white fails contrast on the accent fill.
-  emptyCtaText: { ...TYPE.button, color: EMBER.onGradient },
 })
 
 
