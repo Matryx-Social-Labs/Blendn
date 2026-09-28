@@ -406,3 +406,5 @@ Follow-ups (not done):
 - [x] MatchMoment opener → DM `draft` param (fills the composer once, never sends)
 - [ ] Owner decision: roster ignores `friends_see_me_in_rooms` while profile honours it (pre-existing mismatch, see #498)
 - [ ] Untested: signed-out screens, onboarding keyboard on device, Android, VoiceOver end-to-end
+
+- [x] #326 follow-ups merged (after merging #319 into it; import-only conflict). Simulator: tapping the focused Pulse tab scrolls to top (search y -1948 → 218).
