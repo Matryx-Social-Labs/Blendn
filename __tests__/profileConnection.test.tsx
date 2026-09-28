@@ -231,6 +231,34 @@ describe('Connect', () => {
     expect(await screen.findByText('Requested')).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
   })
+
+  /*
+   * The room card as the server now sends it for somebody still anonymous to
+   * you (admin #498): their pseudonym in that room, no `connection`. The lists
+   * carry real ids, so a request you already sent cannot be matched to the
+   * handle: Connect is offered, and the 409 is what says "Requested".
+   */
+  it('for somebody still anonymous, a request the lists cannot match turns Requested on the 409', async () => {
+    mockParams = { id: 'rh_ben', eventId: 'e1', pseudonym: 'Slow Kite', roomSeed: 'e1:rh_ben' }
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', name: 'Slow Kite', age: 27, identityVisible: false, isOwnProfile: false },
+    })
+    api.getMessageRequests.mockResolvedValue({
+      success: true,
+      data: { requests: [{ senderId: 'u_me', recipientId: 'u_ben', status: 'pending' }] },
+    } as never)
+    api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
+    await render(<UserProfile />)
+
+    expect(await screen.findByText('Slow Kite')).toBeTruthy()
+    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByText('Send request'))
+
+    expect(await screen.findByText('Requested')).toBeTruthy()
+    expect(api.createMessageRequest).toHaveBeenCalledWith('rh_ben', 'hi')
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
 })
 
 describe('Like', () => {
