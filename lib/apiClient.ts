@@ -480,6 +480,16 @@ export interface PresencePing {
   nextPingInSeconds?: number
 }
 
+/** What a DM reply quotes; the name is the one you know them by (SCRUM-409). */
+export interface DmReplyQuote {
+  id: string
+  senderName: string
+  text: string | null
+  mediaType: string | null
+  /** Hidden by moderation. */
+  unavailable: boolean
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
@@ -2114,13 +2124,15 @@ class ApiClientClass {
      * optimistic bubble and never sent this, so every reply arrived on the
      * other phones -- and came back on reload -- as a plain message.
      */
-    parentId?: string
+    parentId?: string,
+    /** This send's own id: a retry with it returns the first write (SCRUM-410). */
+    clientId?: string
   ): Promise<ApiResponse<ChatMessageData>> {
     return this.queuedRequest<ChatMessageData>(
       `/api/mobile/chat/groups/${chatGroupId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ content, type, metadata, ...(parentId && { parentId }) }),
+        body: JSON.stringify({ content, type, metadata, ...(parentId && { parentId }), ...(clientId && { clientId }) }),
       },
       true,
       2
@@ -2725,10 +2737,16 @@ class ApiClientClass {
       mediaUrl: string | null
       mediaType: string | null
       isRead: boolean
+      /** Your own messages: when their app got it (✓✓ delivered). */
+      deliveredAt?: string | null
+      replyTo?: DmReplyQuote | null
       createdAt: string
     }>
     hasMore: boolean
     nextCursor: string | null
+    /** First page only: where your unread start, named before the server marked them read. */
+    firstUnreadId?: string | null
+    unreadCount?: number
   }>> {
     const params = new URLSearchParams()
     if (options?.page) params.set('page', String(options.page))
@@ -2740,7 +2758,15 @@ class ApiClientClass {
 
   async sendPrivateMessage(
     conversationId: string,
-    data: { text?: string; mediaUrl?: string; mediaType?: 'image' | 'video' }
+    data: {
+      text?: string
+      mediaUrl?: string
+      mediaType?: 'image' | 'video'
+      /** The message this one replies to (SCRUM-409). */
+      replyToId?: string
+      /** This send's own id: a retry with it returns the first write (SCRUM-410). */
+      clientId?: string
+    }
   ): Promise<ApiResponse<{
     id: string
     conversationId: string
@@ -2750,6 +2776,8 @@ class ApiClientClass {
     mediaUrl: string | null
     mediaType: string | null
     isRead: boolean
+    deliveredAt?: string | null
+    replyTo?: DmReplyQuote | null
     createdAt: string
   }>> {
     return this.queuedRequest(

@@ -158,8 +158,10 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     lowQualityOpacity.setValue(0)
   }, [source, opacity, lowQualityOpacity])
 
+  const hasSource = (typeof source === 'string' ? source : (source as { uri?: string } | null)?.uri ?? '') !== ''
+
   const renderContent = () => {
-    if (loadingState.hasError && fallback) {
+    if ((loadingState.hasError || !hasSource) && fallback) {
       return (
         <Image
           source={fallback}
@@ -231,10 +233,12 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
           </Animated.View>
         ) : null}
 
-        {/* Loading indicator */}
-        {!loadingState.highQualityLoaded && !loadingState.hasError && (
+        {/* Loading indicator — only while there is something to load. An empty
+            source never loads and never fails, so it spun for ever: every
+            person without a photo on the Banter (SCRUM-404). */}
+        {hasSource && !loadingState.highQualityLoaded && !loadingState.hasError && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={EMBER.textSecondary} />
+            <ActivityIndicator size="small" color={EMBER.textSecondary} accessibilityLabel="Loading image" />
           </View>
         )}
       </>

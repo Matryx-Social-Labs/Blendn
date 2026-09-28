@@ -1,3 +1,4 @@
+import type { DmReplyQuote } from './apiClient'
 /**
  * Small, pure decisions for the direct-message thread
  * (`app/private-chat/[conversationId].tsx`), kept here so they can be tested
@@ -52,9 +53,17 @@ export interface PrivateMessage {
   sender: { id: string; name: string | null; image: string | null }
   text: string | null
   isRead: boolean
+  /** Yours: when their app got it — ✓✓ delivered (SCRUM-408). */
+  deliveredAt?: string | null
+  /** The message this one replies to (SCRUM-409). */
+  replyTo?: DmReplyQuote | null
   createdAt: string
   /** Yours, and it did not reach the server. Kept, marked, and retryable. */
   failed?: boolean
+  /** This send's own id, the same on every try of it (SCRUM-410). */
+  clientId?: string
+  /** What a send not yet confirmed replies to, so a retry replies too. */
+  replyToId?: string
 }
 
 let localIdCounter = 0
