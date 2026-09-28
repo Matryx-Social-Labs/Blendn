@@ -311,16 +311,20 @@ npm run ship:local -- --dry-run     # the checks and the commands, nothing built
 lint` check passed on that SHA. So "ship exactly what CI tested" still holds,
 and the build is made from a git archive of the commit, so nothing uncommitted
 could reach it anyway. Then, one platform after the other (16 GB will not hold
-two release builds):
+two release builds), four steps each:
 
-```bash
-npx --yes eas-cli@24.8.0 build --local --platform <p> --profile staging --non-interactive …
-npx --yes eas-cli@24.8.0 submit --platform <p> --profile staging --path <file> --non-interactive
-```
+1. **Toolchain.** For iOS, the Xcode that `eas.json` names (below). All of
+   these are checked for both platforms before either builds, so a missing one
+   refuses its platform before the version counter moves.
+2. **Build.** `npx --yes eas-cli@24.8.0 build --local --platform <p> --profile staging --non-interactive …`
+3. **Smoke test.** The build is launched, and stays up for 30 seconds, or it
+   is not submitted (below).
+4. **Submit.** `npx --yes eas-cli@24.8.0 submit --platform <p> --profile staging --path <file> --non-interactive`,
+   up to three tries.
 
 A failure on one platform does not stop the other, as in the cloud workflow. It
-ends with a table (platform, build, submit, artifact) and exits non-zero if
-anything failed.
+ends with a table (platform, build, smoke, submit, artifact) and exits non-zero
+if anything failed.
 
 **What lands in `dist/`**, which is gitignored:
 
@@ -329,7 +333,116 @@ anything failed.
 | `blendn-<sha>-staging-ios.ipa` | What went to TestFlight |
 | `blendn-<sha>-staging-android.aab` | What went to Play internal |
 | `blendn-<sha>-staging-android-mapping.txt` | R8's mapping, to retrace a native Java crash. EAS kept this as a build artifact; now it is here |
+| `smoke-<sha>-ios.png`, `smoke-<sha>-android.png` | The screen 30 seconds after launch, from the smoke test |
 | `ship-<sha>.log` | Everything the run printed, appended per run |
+
+### Build 118, and the Xcode rule
+
+On 2026-09-28 `npm run ship:local` built iOS **build 118** (`4611f1d`) on a Mac
+whose only Xcode was 27.0, and submitted it. On an iPhone running iOS 27.0 it
+**crashes at launch**: `EXC_BREAKPOINT` in UIKitCore,
+`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`. An app linked
+against the iOS 27 SDK must adopt the UIScene lifecycle, and ours still uses the
+classic AppDelegate window: `ios/blendn/AppDelegate.swift` (`ExpoAppDelegate`,
+`var window`), and no `UIApplicationSceneManifest` in `Info.plist`.
+
+Cloud builds never met this. `eas.json` pins the image
+`macos-tahoe-26.5-xcode-26.6`, so they use Xcode 26.6 and the iOS 26.5 SDK, which
+does not demand scenes. **`eas build --local` ignores `image`** and uses
+whatever Xcode the Mac has, so the local route had silently changed toolchain.
+The `.ipa` said so, for anyone who looked: `DTXcode` 2700, `DTSDKName`
+`iphoneos27.0`. Android build 23 from the same run was fine, and was launched
+before anyone relied on it. Build 118 was never launched before it was
+submitted, and that is the bigger failure.
+
+**The rule: a local iOS build uses the Xcode in `eas.json`'s image.** The
+script reads the version from the `staging` profile's `ios.image`
+(`…-xcode-26.6` → 26.6), looks for an Xcode of that major.minor (`DEVELOPER_DIR`
+if set, then every `/Applications/Xcode*.app`), and exports `DEVELOPER_DIR` to
+it for the build. `xcode-select` is not touched. The Xcode it used is the
+`Xcode:` line at the top of the log, and the smoke test checks that the `.ipa`'s
+`DTXcode` matches it. If there is none it refuses iOS, before building, and says how to get
+it; Android still ships:
+
+```bash
+brew install xcodesorg/made/xcodes && xcodes install 26.6   # asks for an Apple ID
+```
+
+or `Xcode_26.6.xip` from <https://developer.apple.com/download/all/>, moved to
+`/Applications/Xcode-26.6.app`. Several Xcodes live side by side; nothing else
+needs to change. When `eas.json` moves to a new image, the Mac needs that Xcode
+too.
+
+`--allow-xcode <version>` builds with another installed Xcode anyway, under a
+loud warning in the log. **Only after the smoke test below passes on a device
+running the newest iOS.** The simulator catches this class of crash only when
+its runtime is that new: on 2026-09-28 an Xcode 27 build of `dev` crashed in the
+smoke test on the iOS 27.0 simulator with build 118's exact exception, and an
+Xcode 26.6 build of the same commit passed there. On an iOS 26 runtime both
+would have passed.
+
+**The long-term fix is to adopt the UIScene lifecycle** (a scene manifest in
+`Info.plist` and a scene delegate that owns the window, which Expo's
+`ExpoAppDelegate` has to support too), before Apple starts requiring the iOS 27
+SDK for App Store Connect uploads, as it required iOS 26's on 28 April 2026 (see
+*Xcode 26 is required for TestFlight too*, below). Not done yet; it is a
+follow-up. Until then Xcode 27 cannot build this app for release.
+
+### Nothing is submitted until it launches
+
+After each build, before its submit. A failed smoke test leaves the build
+unsubmitted and the table says `smoke fail`.
+
+On both platforms the launch is the Maestro flow
+[`.maestro/smoke/launch.yaml`](../.maestro/smoke/launch.yaml): open the app
+from clean and wait up to 60 seconds for the signed-out screen's "Continue with
+email". It passes only if that flow passes, **and** the app is still running
+30 seconds later, **and** nothing crashed. The flow is one launch and one
+assertion because on iOS the Maestro driver has crashed the app when a flow does
+more, and it gets one retry with a three-minute driver start-up, because under
+host load Maestro's iOS driver times out. The crash checks cover both tries.
+Maestro's own output, with the flow's screenshot, is in
+`dist/smoke-<sha>-<platform>-maestro/`.
+
+**Android.** `bundletool build-apks --mode=universal` makes an APK from the
+`.aab`, signed with `~/.android/debug.keystore`. It goes on the running
+emulator, or the script boots `Blendn_A34` (`SMOKE_AVD` to change it) with
+`-gpu host -no-snapshot-save -no-boot-anim` and waits for `sys.boot_completed`.
+It installs, waits for `pm path` to answer and then 10 seconds more, and runs
+the flow. The wait is not decoration: launching straight after an install on a
+fresh boot threw a `NullPointerException` in `handleBindApplication` for a
+build that was fine, because the package-install broadcast was still going
+round. Alive is `pidof`; a crash is anything for the package in
+`logcat -b crash`, which is cleared first. Then a screenshot, and the app is
+uninstalled. Any copy of
+the app already on the emulator is uninstalled first, since one signed another
+way refuses the install.
+
+**iOS.** The `.ipa` is signed for the store and runs on neither a simulator nor
+an unregistered device, so the smoke test builds the same commit again for the
+simulator: Release, the same `DEVELOPER_DIR`, and the same EAS environment
+(`eas env:exec preview …`, so `EXPO_PUBLIC_*` point at staging as in the real
+build). It does this in a temporary `git worktree` of the commit with a clone of
+`node_modules`, because `pod install` rewrites the committed `ios/Podfile.lock`
+and `ios/blendn.xcodeproj/project.pbxproj`, and it deletes
+`Pods/.last_build_configuration` first: a Release build that segfaults in Hermes
+at launch has picked up Debug Hermes. The app goes on a new simulator on the
+newest iOS runtime installed, which is deleted afterwards along with the
+worktree. Alive is a PID for the app in the simulator's `launchctl list`; a
+crash is a new report for it in `~/Library/Logs/DiagnosticReports`. If it died, the script
+waits up to a minute for the report, which a busy Mac writes late, and prints
+its path and exception. It adds a full Release
+build to the run, about as long as the device build.
+
+To run either on its own, against something already built:
+
+```bash
+npm run ship:local -- --smoke-only android dist/blendn-<sha>-staging-android.aab
+npm run ship:local -- --smoke-only ios      # builds HEAD for the simulator
+```
+
+`--skip-smoke` submits without launching, and refuses unless
+`--i-launched-it-myself` is given with it. Both are written to the log.
 
 Android is built with an artifacts directory, not `--output`: eas-cli 24.8.0
 copies the profile's `buildArtifactPaths` to the `--output` path too, after the
@@ -340,10 +453,14 @@ missing one fails before the version counter moves.
 
 | | |
 |---|---|
-| Xcode | 26 or newer, and not a beta: App Store Connect refuses both. A local build ignores `image` in `eas.json`, so this Mac's Xcode is the one that builds |
+| Xcode | **The version in `eas.json`'s `staging` image**, 26.6 today, not a beta. Others may be installed beside it. See *Build 118, and the Xcode rule* |
+| iOS simulator runtime | The newest iOS, for the smoke test: `xcodebuild -downloadPlatform iOS` with the newest Xcode. The newest installed is used |
 | CocoaPods | `pod` on `PATH` |
 | fastlane | `brew install fastlane`. The iOS build runs it |
-| Android SDK + NDK | `ANDROID_HOME`, default `~/Library/Android/sdk`, with `ndk/` and `android-36` |
+| Android SDK + NDK | `ANDROID_HOME`, default `~/Library/Android/sdk`, with `ndk/`, `android-36`, `platform-tools` and `emulator` |
+| An emulator | Running, or the AVD `Blendn_A34` (`SMOKE_AVD`), for the smoke test. Android Studio makes `~/.android/debug.keystore` with the first debug build |
+| bundletool | `brew install bundletool`, for the smoke test |
+| Maestro | The CLI on `PATH` (2.10), for the smoke test. It wants JDK 17 |
 | JDK | 17 or 21 on `JAVA_HOME` (see the JDK section above; 25 and up fail) |
 | eas-cli | Logged in as a member of the org (`npx eas-cli login`). The script pins 24.8.0, as CI does |
 | gh | Logged in, to read the check |
@@ -362,7 +479,7 @@ missing one fails before the version counter moves.
 2. **`EXPO_PUBLIC_*`.** eas-cli lets the shell override the EAS environment, so
    a `.env` sourced into the shell would ship a staging build pointed at
    localhost. The script unsets every `EXPO_PUBLIC_*` first; `preview` decides.
-3. **Xcode**, above.
+3. **Xcode.** The cloud picks it from `image`; here the script does, above.
 
 **Version numbers stay in step.** `autoIncrement` with `appVersionSource:
 remote` works for a local build. eas-cli bumps the counter on EAS before it
@@ -1017,6 +1134,11 @@ can no longer build it. This is the image Expo pairs with SDK 57.
 ```json
 "ios": { "image": "macos-tahoe-26.5-xcode-26.6" }
 ```
+
+**A build on a Mac does not read that pin.** `eas build --local` uses the Mac's
+Xcode, which is how build 118 came out of Xcode 27 and crashed at launch on
+iOS 27. `npm run ship:local` now finds the pinned Xcode itself: see
+[Build 118, and the Xcode rule](#build-118-and-the-xcode-rule).
 
 SDK 57 also raised the iOS deployment target to **16.4** (`ExpoModulesCore`
 requires it), which is set in `project.pbxproj` and the Podfile. Do not pass
