@@ -191,11 +191,15 @@ export function useTonight(): TonightState {
   )
 
   const refresh = useCallback(async () => {
+    // Retrying from the error state: back to the skeleton while it tries, so
+    // "Try again" visibly does something.
+    if (eventsRef.current.length === 0) setStatus('loading')
     try {
       // A human asked.
       await load(true)
     } catch (e) {
       Logger.error('events', 'Tonight refresh failed', { error: e })
+      if (eventsRef.current.length === 0) setStatus('error')
     }
   }, [load])
 

@@ -11,6 +11,7 @@ import { apiClient } from '../../lib/apiClient'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
 import { meetNext, reasonLine } from '../../lib/roomMoments'
+import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
@@ -21,12 +22,14 @@ import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
+import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { RoomVisibilityBanner } from '../RoomVisibilityBanner'
 import { useToast } from '../Toast'
 import { Text } from '../ui/Text'
 import { ChatDock, type DockLine } from './ChatDock'
 import { MatchMoment } from './MatchMoment'
 import { PersonCard } from './PersonCard'
+import { RoomRecap } from './RoomRecap'
 import {
   FaceGridHead,
   FaceGridMore,
@@ -102,7 +105,37 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     [user?.name, user?.image, user?.profile?.photos]
   )
 
-  const mode = room.status === 'ready' ? 'room' : room.status === 'none' ? 'tonight' : room.status
+  /*
+   * The end of the night. The room carries `endsAt`, and until it was read the
+   * room went on saying LIVE after everybody had gone home — until the
+   * server's sweeper checked you out, when it vanished into Tonight with no
+   * word about the night at all.
+   *
+   * Kept as a snapshot rather than derived: the sweeper can clear the check-in
+   * while the recap is on screen, and the recap must not vanish with it.
+   * "Back to tonight" dismisses it for this room; it never checks you out,
+   * because a manual check-out also closes the room's chat, and after the
+   * event the feedback window decides that.
+   */
+  const now = useNow(15_000)
+  const [recap, setRecap] = useState<Recap | null>(null)
+  const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
+  const endedRecap =
+    room.status === 'ready' && room.event
+      ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now)
+      : null
+  if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) {
+    setRecap(endedRecap)
+  }
+  const roomOver = endedRecap !== null && endedRecap.eventId === dismissedRecap
+
+  const mode = recap
+    ? 'ended'
+    : room.status === 'ready' && !roomOver
+      ? 'room'
+      : room.status === 'none' || roomOver
+        ? 'tonight'
+        : room.status
 
   // --- trays (check-in flow) -------------------------------------------------
   const [tray, setTray] = useState<Tray>(NO_TRAY)
@@ -134,6 +167,29 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const leave = useCallback(async () => {
     if (await controls.checkOut()) onClose()
   }, [controls, onClose])
+  /*
+   * Check out asks first. It was one tap in the top bar, beside the settings
+   * button, and it closes the room: one stray thumb and you are out, and the
+   * way back in is another location fix at the door. A tray rather than the
+   * pass's hold, because this is a button in a bar, not a card you commit on.
+   */
+  const confirmLeave = useCallback(() => {
+    showTray(
+      'Check out of this event?',
+      'You’ll leave the room and its people. To come back in you’ll need to check in again, with your location.',
+      [
+        { label: 'Stay', onPress: closeTray },
+        {
+          label: 'Check out',
+          variant: 'primary',
+          onPress: () => {
+            closeTray()
+            void leave()
+          },
+        },
+      ]
+    )
+  }, [showTray, closeTray, leave])
 
   const eventId = room.event?.id ?? null
   const eventTitle = room.event?.title ?? ''
@@ -241,7 +297,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   }, [incoming, showToast, clearWave])
 
   // --- meet next --------------------------------------------------------------
-  const now = useNow(15_000)
   const shuffle = useMemo(
     () => meetNext(room.people, { now, eventId: room.event?.id ?? '' }),
     // Recomputed on the clock tick; the picks only change when the window does.
@@ -273,6 +328,12 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
               contentContainerStyle={{ paddingTop: topInset, paddingBottom: insets.bottom + SPACE.xxxl * 3 }}
               ListHeaderComponent={
                 <View style={styles.header}>
+                  {/*
+                    Arrivals, waves, matches and the dock are all socket-driven,
+                    so a dead socket is worth saying here: without it the room
+                    sits still and looks quiet rather than broken.
+                  */}
+                  <RealtimeStatusBanner status={room.connection} style={styles.statusBanner} />
                   <RoomHero
                     title={room.event.title}
                     hereCount={room.hereCount}
@@ -330,11 +391,27 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             />
           </View>
         </Animated.View>
+      ) : mode === 'ended' && recap ? (
+        <Animated.View key="ended" style={styles.fill} entering={FadeIn.duration(220)} exiting={FadeOut.duration(160)}>
+          <RoomRecap
+            recap={recap}
+            me={me}
+            topInset={topInset}
+            bottomInset={insets.bottom}
+            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
+            onBack={() => {
+              setDismissedRecap(recap.eventId)
+              setRecap(null)
+            }}
+          />
+        </Animated.View>
       ) : mode === 'tonight' ? (
         <Animated.View key="tonight" style={styles.fill} entering={FadeIn.duration(220)} exiting={FadeOut.duration(200)}>
           <TonightView
             events={tonight.events}
             loading={tonight.status === 'loading'}
+            error={tonight.status === 'error'}
+            onRetry={() => void tonight.refresh()}
             insideEvent={insideEvent}
             tasteMatchCount={insideEvent?.tasteMatchCount ?? null}
             checkingIn={checkIn.checkingIn}
@@ -377,11 +454,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         {mode === 'room' && room.event ? (
           <Animated.View entering={FadeIn.duration(160)} style={styles.topActions}>
             <Pressable
-              onPress={() => void leave()}
+              onPress={confirmLeave}
               disabled={controls.checkOutBusy}
               accessibilityRole="button"
               accessibilityLabel="Check out of this event"
-              accessibilityHint="Removes you from the room. You can check in again while you are here."
+              accessibilityHint="Asks first. Removes you from the room; checking back in needs your location again."
               style={({ pressed }) => [styles.checkOut, pressed && styles.pressed]}
             >
               {controls.checkOutBusy ? (
@@ -480,6 +557,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: { gap: SPACE.xl, marginBottom: SPACE.xs },
   banner: { paddingHorizontal: GUTTER },
+  statusBanner: { marginHorizontal: GUTTER },
   gridRow: { paddingHorizontal: GUTTER, columnGap: GRID_GAP, marginBottom: GRID_ROW_GAP },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   topBar: {
