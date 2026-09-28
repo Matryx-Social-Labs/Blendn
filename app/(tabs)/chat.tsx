@@ -1,5 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -221,6 +221,9 @@ function ChatInner() {
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ list: 0, requests: 0 })
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
+  // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
+  const listRef = useRef<FlatList<InboxItem>>(null)
+  useScrollToTop(listRef)
 
   /*
    * The room open on top of this tab, if any. A message arriving for it is
@@ -1013,6 +1016,7 @@ function ChatInner() {
       />
 
       <FlatList
+        ref={listRef}
         data={listItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

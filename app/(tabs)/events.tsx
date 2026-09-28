@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
-import { router } from 'expo-router'
+import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dimensions,
@@ -360,6 +360,8 @@ function EventsInner() {
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
+  // Tapping Pulse while already on it goes back to the top (the bar emits `tabPress`).
+  useScrollToTop(listRef)
   /** Height of the banners above the header, so the Featured card still clears the bar. */
   const [bannersHeight, setBannersHeight] = useState(0)
   const onBannersLayout = useCallback((e: LayoutChangeEvent) => {

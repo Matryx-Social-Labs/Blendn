@@ -397,6 +397,12 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     }
   }, [])
 
+  /*
+   * `tabPress` is emitted for the focused tab too, and only navigation is
+   * skipped: the four tab lists listen for it with `useScrollToTop`, so a
+   * second tap on the tab you are on scrolls it back to the top
+   * (`__tests__/tabScrollToTop.test.tsx`).
+   */
   const press = useCallback(
     (routeKey: string, routeName: string, isFocused: boolean) => () => {
       const event = navigation.emit({

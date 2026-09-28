@@ -1,6 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -172,6 +172,9 @@ function ProfileInner() {
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const { width: windowWidth } = useWindowDimensions()
   const lastBackgroundRefreshRef = React.useRef(0)
+  // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
+  const scrollRef = React.useRef<ScrollView>(null)
+  useScrollToTop(scrollRef)
 
   const photoList = useMemo(() => {
     const raw = profile?.photos || []
@@ -624,6 +627,7 @@ function ProfileInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         // The tab bar floats over the page's foot: Settings sat under it.
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
