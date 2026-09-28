@@ -15,7 +15,7 @@ import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { ratePeople, type RatePerson } from '../../lib/ratePeople'
+import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -215,11 +215,11 @@ export default function RatePeers() {
   }, [])
 
   /*
-   * Three reads, one of which decides the screen. The ratable list is the
+   * Four reads, one of which decides the screen. The ratable list is the
    * gate: if it fails, nothing here is true and the screen says so. The
-   * conversation list (faces) and the event (its title, and whether you rated
-   * it already) only make it nicer — their failure costs a name or a title,
-   * never the screen.
+   * conversation list (faces), the event (its title) and your own rating
+   * (whether to ask about the night) only make it nicer — their failure costs
+   * a name, a title or a guess from the event's `userStatus`, never the screen.
    */
   useEffect(() => {
     if (!eventId) return
@@ -229,17 +229,17 @@ export default function RatePeers() {
       apiClient.getRatablePeers(id),
       apiClient.getConversations().catch(() => null),
       apiClient.getEvent(id).catch(() => null),
+      apiClient.getMyEventRating(id).catch(() => null),
     ])
-      .then(([peers, conversations, event]) => {
+      .then(([peers, conversations, event, own]) => {
         if (cancelled) return
         if (!peers.success || !peers.data) {
           Logger.warn('match', 'Ratable peers refused', { error: peers.error })
           setLoad({ kind: 'error' })
           return
         }
-        const rated = event?.data?.userStatus?.userRating
         const people = ratePeople(peers.data.userIds, conversations?.success ? conversations.data ?? [] : [])
-        const askEvent = typeof rated !== 'number'
+        const askEvent = askAboutNight(own, event?.data?.userStatus?.userRating)
         setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, askEvent })
         setIndex(askEvent ? -1 : 0)
       })

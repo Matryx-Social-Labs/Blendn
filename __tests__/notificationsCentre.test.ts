@@ -89,6 +89,7 @@ describe('every kind the server can send goes somewhere', () => {
     'reveal', // was falling through
     'friend_request',
     'friend_accepted',
+    'rating_request',
   ]
 
   it('has a case in the switch for every kind', () => {

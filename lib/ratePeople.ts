@@ -47,3 +47,20 @@ export function ratePeople(userIds: readonly string[], conversations: readonly C
     return { id, name: k?.name ?? UNKNOWN_MATCH, photo: k?.photo ?? null }
   })
 }
+
+/**
+ * Whether the rate screen opens on the night itself, or skips to the people.
+ *
+ * Your own rating (`GET /events/:id/rating`) decides: asked when you have not
+ * rated. It used to be guessed from `userStatus.userRating` on the event,
+ * which is still the answer when your own rating could not be read — a failed
+ * read must not ask a second time about a night you already rated, nor hide
+ * the question from somebody who never answered it.
+ */
+export function askAboutNight(
+  own: { success: boolean; data?: { rating: number | null } | null } | null | undefined,
+  fallbackUserRating: unknown
+): boolean {
+  if (own?.success && own.data) return typeof own.data.rating !== 'number'
+  return typeof fallbackUserRating !== 'number'
+}
