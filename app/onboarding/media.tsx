@@ -155,10 +155,10 @@ function MediaScreenInner() {
   return (
     <OnboardingScreen
       step="media"
-      title="Upload your "
-      titleAccent="identity"
-      subtitle="Authenticity is the soul of our gallery. Share moments that capture the real you."
-      ctaLabel="Finalize Identity"
+      title="Add your "
+      titleAccent="photos"
+      subtitle="Up to six. Recent photos where your face is clear work best."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit({ photos })}
       secondaryLabel="Skip for now"

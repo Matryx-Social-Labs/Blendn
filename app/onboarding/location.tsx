@@ -74,8 +74,8 @@ export default function LocationScreen() {
     <OnboardingScreen
       step="location"
       title="See who's around"
-      subtitle="Blend'n uses your location to show you real people in your immediate vicinity, like at a cafe or airport lounge."
-      ctaLabel="Allow Location"
+      subtitle="Blend'n uses your location to show events near you, and to check you in when you arrive at one."
+      ctaLabel="Allow location"
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"

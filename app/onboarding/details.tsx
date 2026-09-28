@@ -17,12 +17,14 @@ import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
  * Writing prompts, not a feature — they exist to unstick a blank textarea,
- * so tapping one is not wired to anything. Copy is the frame's own.
+ * so tapping one is not wired to anything. The frame's were filler ("I thrive
+ * at the intersection of technology and human connection"); these are the
+ * kind of line a stranger at an event can actually open with.
  */
 const BIO_PROMPTS = [
-  'A perfect Sunday involves curated playlists and vintage bookstore hopping.',
-  'Currently mastering the art of the perfect pour-over coffee.',
-  'I thrive at the intersection of technology and human connection.',
+  'A perfect Sunday for me is…',
+  "Lately I've been learning…",
+  'Ask me about…',
 ]
 
 /**
@@ -111,8 +113,8 @@ export default function DetailsScreen() {
       step="details"
       title="The finer "
       titleAccent="details"
-      subtitle="Tell the circle who you are beyond the profile picture. Light up your presence."
-      ctaLabel="Complete Profile"
+      subtitle="A few lines about you and what you're into. It's what people read before they say hello."
+      ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() => void commit({ interests, interestIds, bio: bio.trim() })}
       secondaryLabel="Skip"
@@ -129,7 +131,7 @@ export default function DetailsScreen() {
       */}
       <EmberField
         label="About me"
-        placeholder="Ask me about… surprise experiences, the best hidden coffee in the city, or the recent obsession with blockchain architecture."
+        placeholder="Ask me about… the best coffee in the city, a trip I'm planning, or what I'm reading."
         helper={`${bio.length}/${BIO_LIMIT}`}
         value={bio}
         onChangeText={(text) => setBio(text.slice(0, BIO_LIMIT))}

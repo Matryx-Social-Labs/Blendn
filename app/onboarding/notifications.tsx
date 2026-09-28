@@ -87,8 +87,8 @@ export default function NotificationsScreen() {
       step="notifications"
       title="Never miss "
       titleAccent="a spark."
-      subtitle="Know when someone nearby wants to connect, or when matches are active at your location."
-      ctaLabel="Enable Notifications"
+      subtitle="Know when someone at your event wants to connect, or when a match sends you a message."
+      ctaLabel="Turn on notifications"
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
