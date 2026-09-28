@@ -283,10 +283,14 @@ function ProfileInner() {
    * awaited by the profile; on focus, so accepting someone on Add friends
    * shows here when you come back.
    */
-  const loadFriendsCount = useCallback(async () => {
-    const [result, requests] = await Promise.all([apiClient.getFriends(), apiClient.getFriendRequests()])
-    if (result.success && result.data) setFriendsCount(result.data.count)
-    if (requests.success && requests.data) setRequestCount(requests.data.incoming.length)
+  const loadFriendsCount = useCallback(() => {
+    void apiClient.getFriends().then((result) => {
+      if (result.success && result.data) setFriendsCount(result.data.count)
+    })
+    // Its own request, so a slow one never holds up the friend count.
+    void apiClient.getFriendRequests().then((result) => {
+      if (result.success && result.data) setRequestCount(result.data.incoming.length)
+    })
   }, [])
 
   /*
