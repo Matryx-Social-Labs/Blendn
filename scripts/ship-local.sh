@@ -156,7 +156,7 @@ guards() {
 # A local build ignores `image` in eas.json and uses whatever Xcode this Mac
 # has. That is how build 118 was built by Xcode 27, linked the iOS 27 SDK, and
 # crashed at launch on iOS 27 (docs/RELEASING.md). So find the Xcode the image
-# names (macos-tahoe-26.5-xcode-26.6 → 26.6) and make it the one in use.
+# names (macos-tahoe-26.6-xcode-27.0 → 27.0) and make it the one in use.
 ios_toolchain() {
   need ios xcodebuild pod fastlane maestro || return 1
   local image required want app v installed=""
