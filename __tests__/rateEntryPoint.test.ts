@@ -84,11 +84,20 @@ describe("the entry point to peer rating", () => {
     expect(reads.length).toBeGreaterThan(1)
   })
 
-  it("is a live control, not the disabled ended one", () => {
+  it("is a live control", () => {
     expect(CTA).toContain("rate: 'Rate the people you met'")
-    // SceneCTA disables `ended` alone; `rate` must not be swept in with it.
-    expect(CTA).toMatch(/const disabled = state === 'ended'/)
-    expect(DETAIL).toMatch(/isEnded && attended \? false/)
+    // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
+    expect(CTA).toMatch(/const disabled = !onPress/)
+    expect(DETAIL).toMatch(/const primaryActionDisabled = isEnded \? false/)
+  })
+
+  it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
+    const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
+    const rate = press.indexOf("'/rate/[eventId]'")
+    const tonight = press.indexOf("openBlendn()")
+    // After the rate branch: attending wins.
+    expect(rate).toBeGreaterThan(-1)
+    expect(tonight).toBeGreaterThan(rate)
   })
 })
 
