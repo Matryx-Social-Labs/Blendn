@@ -385,3 +385,24 @@ Admin: #494 merged, migration applied to staging (yamanote) and verified, promot
 Merged: mobile #315 (leave/mute/report room, own rating, invite preview, header fixes), #316 (multi-day by today's day), #317 (Rejoin re-joins the socket), #318 (check-in prefs designed, CTA reflects check-in); admin #494, #496 → promoted to staging via #495, #497. Staging reseeded (scenarios, crowd, my-banter). blendn-admin/.env → staging (backup .env.bak-prod-*); Railway CLI linked to staging.
 Verified on simulator vs staging: mute (DB muted_until), leave → room gone from Banter → "You left this room" → Rejoin (DB active), header a11y + "38 in the room", room check-out confirm, live recap "That's a wrap" (11 min, Rate the night), festival check-in succeeds in today's window, CTA "You're in" after check-in, redesigned prefs screen, "N here now".
 Still untested: signed-out screens (forgot password, invite preview on sign-in, onboarding exit), offline/error states, Android.
+
+# Polish pass + identity leak (2026-09-29)
+
+Three read-only audits (~120 items) → three fix batches, all merged to dev green:
+- [x] #320 discovery/events: filtered paging, filtered empty state, invisible banner buttons, long-press tip, Nearby dates, room Connect failure, error states, copy, Reduce Motion, room overlay hidden from a11y, Going "Happening now" after midnight
+- [x] #321 social/profile: fail-closed profile (`identityVisible`), one avatar seed rule (animal matches pseudonym), optimistic DMs, one accent (white Accept), LoadState, Me tab clearance, blocked-users rebuild
+- [x] #322 grid → profile carries `pseudonym` + `roomSeed`
+- [x] #323 global: ActionTray safe area + drag-to-dismiss, onboarding keyboard/in-flight guards, textTertiary AA contrast, Alerts → trays/toasts (settings/photoUtils), Dynamic Type caps, tab roles, Android back, toast announcements, plain-voice onboarding copy; new lint:design rules (merged dev in first; fixed 3 literals #320/#321 added)
+- [x] admin #498 (→ staging #499): room handles answered in their own room's terms — "Slow Kite" no longer opens as Tanvi Kulkarni
+
+Verified on the simulator vs staging (rebuilt binary incl. #309 UIScene): launch OK; Slow Kite profile shows pseudonym + owl only; tabs hidden from a11y while the room is open; "Happening now" after midnight; avatars match across grid/chat (🦊 Amber Fox, 🐼 Cosmic Panda, 🦦 Quiet Otter); Banter Accept white; Me Settings clears tab bar; room chat header shows the cover; sign-out + delete-account trays clear the home indicator; drag grabber dismisses.
+
+Follow-ups (not done):
+- [ ] useScrollToTop on the four tab lists (needs list refs)
+- [ ] Remove per-screen `<StatusBar style="light" />` (root sets it) — chat, chat-info, Banter, user, PhotoLightbox
+- [ ] Drain `LATE_RULE_ALLOWLIST` in scripts/check-design-tokens.js
+- [ ] PhotoManager upload results still `Alert.alert`
+- [ ] expo-clipboard (RN Clipboard deprecated) — native dep
+- [ ] Pass the MatchMoment opener into the DM as a draft (chat screens need a draft param)
+- [ ] Owner decision: roster ignores `friends_see_me_in_rooms` while profile honours it (pre-existing mismatch, see #498)
+- [ ] Untested: signed-out screens, onboarding keyboard on device, Android, VoiceOver end-to-end
