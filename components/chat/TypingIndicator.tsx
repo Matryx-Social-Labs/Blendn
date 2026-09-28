@@ -81,13 +81,15 @@ export function TypingIndicator({ label }: { label: string }) {
 
 /** `ChatBubble`'s avatar disc. */
 const AVATAR = 40
+/** Quieter than a message: it is a hint that one is coming, not one. */
+const TYPING_OPACITY = 0.6
 
 const styles = StyleSheet.create({
   /*
    * A 40pt avatar plus the 16pt gap beside it, so the dots start exactly
    * where the next inbound bubble will.
    */
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: 0.6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingLeft: AVATAR + SPACE.lg, opacity: TYPING_OPACITY },
   dots: { flexDirection: 'row', gap: SPACE.xs },
   dot: { width: 4, height: 4, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textSecondary },
   /*

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { bannerText, roomVisibility } from '../lib/roomVisibility'
-import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
+import { EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
 
 /**
  * What the room knows about you, for as long as you are in it.
@@ -139,5 +139,5 @@ const styles = StyleSheet.create({
   reason: { ...TYPE.meta, color: EMBER.textTertiary },
   action: { ...TYPE.label, color: EMBER.textPrimary },
   actionBlocked: { color: EMBER.textTertiary },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 })

@@ -21,7 +21,7 @@ import { popIn, popOut } from '../../components/motion/presence'
 import ScalePress from '../../components/motion/ScalePress'
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { openBlendn, useBlendnOpen } from '../../lib/blendnOverlay'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -397,6 +397,12 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     }
   }, [])
 
+  /*
+   * `tabPress` is emitted for the focused tab too, and only navigation is
+   * skipped: the four tab lists listen for it with `useScrollToTop`, so a
+   * second tap on the tab you are on scrolls it back to the top
+   * (`__tests__/tabScrollToTop.test.tsx`).
+   */
   const press = useCallback(
     (routeKey: string, routeName: string, isFocused: boolean) => () => {
       const event = navigation.emit({
@@ -784,5 +790,5 @@ const styles = StyleSheet.create({
   },
   badgeText: { ...TYPE.caption, color: EMBER.bg },
 
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 })

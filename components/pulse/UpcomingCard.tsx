@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { OptimizedImage } from '../OptimizedImage'
 import ScalePress from '../motion/ScalePress'
 import { HeartIcon } from '../motion/HeartIcon'
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
     borderRadius: EMBER_RADIUS.md,
   },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 
   body: { flex: 1, gap: SPACE.xs },
   eyebrow: TYPE.meta,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   // Dimmed while the write is in flight rather than swapped for a spinner: the
   // icon has already changed optimistically, and replacing it mid-write makes
   // the state you just chose vanish for the length of a round trip.
-  favoriteBusy: { opacity: 0.5 },
+  favoriteBusy: { opacity: OPACITY.disabled },
 })
 
 export const UpcomingCard = memo(UpcomingCardImpl)

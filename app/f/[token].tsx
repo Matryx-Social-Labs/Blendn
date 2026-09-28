@@ -12,7 +12,7 @@ import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 
 /** The photo's box and decode hint. */
 const PHOTO = 160
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: EMBER.surface,
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.lg, paddingHorizontal: GUTTER },
   photo: { width: PHOTO, height: PHOTO, borderRadius: EMBER_RADIUS.pill },
   photoEmpty: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },

@@ -1,6 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { router, useFocusEffect } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
@@ -50,7 +49,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -221,6 +220,9 @@ function ChatInner() {
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ list: 0, requests: 0 })
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
+  // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
+  const listRef = useRef<FlatList<InboxItem>>(null)
+  useScrollToTop(listRef)
 
   /*
    * The room open on top of this tab, if any. A message arriving for it is
@@ -997,7 +999,6 @@ function ChatInner() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
       <PulseTopBar
         title="The Banter"
         actions={<NotificationBell />}
@@ -1013,6 +1014,7 @@ function ChatInner() {
       />
 
       <FlatList
+        ref={listRef}
         data={listItems}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -1103,7 +1105,7 @@ const REQUEST_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
   header: { gap: BANTER_SECTION_GAP, marginBottom: BANTER_SECTION_GAP },
   // A heading and its content are 16 apart, not 32.

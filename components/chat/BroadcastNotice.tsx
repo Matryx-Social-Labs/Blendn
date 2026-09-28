@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   rail: { width: 3, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textPrimary },
-  railSponsored: { width: 3, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textSecondary, opacity: 0.4 },
+  railSponsored: { width: 3, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.textTertiary },
   body: { flex: 1, gap: SPACE.sm },
   label: { ...TYPE.label, color: EMBER.textSecondary },
   labelSponsored: { color: EMBER.textTertiary },

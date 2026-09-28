@@ -14,7 +14,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { MOTION_SPRING } from '../../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, tint } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, tint } from '../../lib/theme'
 import { Text } from '../ui/Text'
 
 /** Long enough to be a decision, short enough not to feel like a wait. */
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
   },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: OPACITY.disabled },
   labelRow: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

@@ -14,7 +14,7 @@ import { Logger } from '../../lib/logger'
 import { meetNext, reasonLine } from '../../lib/roomMoments'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
@@ -233,11 +233,15 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     },
     [eventId]
   )
-  const sayHi = useCallback((conversationId: string, p: { id: string; name: string }) => {
+  /**
+   * Into the DM. `draft` is the opener the match moment suggested: it waits in
+   * the composer for you to edit or send, and is never sent for you.
+   */
+  const sayHi = useCallback((conversationId: string, p: { id: string; name: string }, draft?: string | null) => {
     setOpen(null)
     router.push({
       pathname: '/private-chat/[conversationId]',
-      params: { conversationId, otherUserName: p.name, otherUserId: p.id } as never,
+      params: { conversationId, otherUserName: p.name, otherUserId: p.id, ...(draft ? { draft } : {}) } as never,
     })
   }, [])
   const safety = useCallback(
@@ -560,7 +564,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onSayHi={() => {
           const m = room.match
           room.clearMatch()
-          if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name })
+          if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name }, matchPerson ? openerFor(matchPerson) : null)
         }}
       />
 
@@ -613,7 +617,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   centred: { flex: 1, alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER },
   retry: {
     marginTop: SPACE.md,

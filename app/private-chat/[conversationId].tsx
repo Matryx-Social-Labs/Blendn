@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import {
   revealAction,
   revealConfirmation,
@@ -52,8 +51,8 @@ import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { subscribeToConversation, subscribeToDelivered, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
-import { matchOpener } from '../../lib/matchOpener'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { draftParam, matchOpener } from '../../lib/matchOpener'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -223,7 +222,7 @@ const headerStyles = StyleSheet.create({
     gap: SPACE.sm,
   },
   iconBtn: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.5 },
+  pressed: { opacity: OPACITY.pressed },
   // The avatar and the name are one target: either one opens the profile.
   identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   avatarWrap: { position: 'relative' },
@@ -301,7 +300,7 @@ const revealStyles = StyleSheet.create({
 })
 
 function PrivateChatInner() {
-  const { conversationId, otherUserName, otherUserId, otherUserAvatar } = useLocalSearchParams()
+  const { conversationId, otherUserName, otherUserId, otherUserAvatar, draft } = useLocalSearchParams()
   // A push for this conversation is not shown over it (`lib/notifications.ts`).
   useActiveThread(`dm:${String(conversationId)}`)
   const { user: authUser } = useAuth()
@@ -314,7 +313,9 @@ function PrivateChatInner() {
    * (SCRUM-165). Nothing to wave at.
    */
   const [ended, setEnded] = useState(false)
-  const [newMessage, setNewMessage] = useState('')
+  // A suggested opener (the match moment's "Try …") fills the composer once, on
+  // mount. It is only ever a draft: nothing sends until you press send.
+  const [newMessage, setNewMessage] = useState(() => draftParam(draft))
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   // The message the next send replies to (SCRUM-409).
@@ -926,8 +927,6 @@ function PrivateChatInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
-
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param
@@ -1151,7 +1150,7 @@ const styles = StyleSheet.create({
 
   loadingIndicator: { marginVertical: SPACE.xl },
   loadMoreBtn: { alignItems: 'center', paddingVertical: SPACE.md },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
   /*
    * Frame-less by necessity -- the design has no thread header for this. Built
    * from the Banter's own card idiom (radius 32, p24) so it reads as part of

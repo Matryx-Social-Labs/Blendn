@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
 
 /**
@@ -128,5 +128,5 @@ const styles = StyleSheet.create({
   },
   // Opacity, so a disabled arrow keeps its footprint and the heading beside it
   // does not shift when you reach the end of the row.
-  arrowDisabled: { opacity: 0.35 },
+  arrowDisabled: { opacity: OPACITY.disabled },
 })

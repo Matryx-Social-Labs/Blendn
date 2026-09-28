@@ -13,8 +13,8 @@ run it directly with `npm run lint:design [files…]`). It checks:
   `APP_*` palette — the last one in `lib/` too
 - a number added to a safe-area inset (`insets.bottom + 16` → `+ SPACE.lg`),
   a literal `min/maxWidth/Height`, and a literal `opacity: 0.x` (use
-  `OPACITY`). Files that predate these three are listed, with their owner, in
-  the script's `LATE_RULE_ALLOWLIST`
+  `OPACITY`, or a named constant for a decorative fade). Only the dev-only
+  `app/preview/*` screens are exempt (`LATE_RULE_ALLOWLIST`)
 
 It can't check the accent rule or "one row, one height" — those are review items.
 

@@ -22,7 +22,7 @@ import { friendsSinceLabel, type FriendProfile } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 
 /**
  * A friend's profile — opened from the friends list, never from a room.
@@ -289,5 +289,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: EMBER.scrim,
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 })

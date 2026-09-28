@@ -6,7 +6,7 @@ import { OptimizedImage } from '../OptimizedImage'
 import { DayHeading } from '../ui/DayHeading'
 import { initialsOf } from '../../lib/initials'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { liveRoomMeta } from './inbox'
 
 /**
@@ -353,7 +353,7 @@ function RoomCover({ url }: { url?: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
 
   // A search field: `CONTROL.md` tall, a pill on `EMBER.surface`.
   search: {

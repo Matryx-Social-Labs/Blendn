@@ -69,6 +69,9 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
   )
 }
 
+/** The placeholder's logo mark: faint, so it reads as a mark and not as content. */
+const MARK_OPACITY = 0.35
+
 const styles = StyleSheet.create({
   frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
   placeholder: {
@@ -78,5 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // Faint, so it reads as a mark and not as content.
-  mark: { width: 72, height: 72, opacity: 0.35 },
+  mark: { width: 72, height: 72, opacity: MARK_OPACITY },
 })

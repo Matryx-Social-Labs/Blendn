@@ -2,7 +2,6 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -27,7 +26,7 @@ import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentit
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
@@ -89,11 +88,15 @@ function UserProfileInner() {
    * `haveSharedAnEvent`, which the server resolves itself.
    */
   /*
-   * `pseudonym` and `roomSeed` arrive from a room — Room info's member list,
-   * and the Room grid once it passes them (see `docs/PROFILE.md`). The server
-   * has no event context and names anyone you may not identify "Attendee";
-   * the room already knows what this person is called *there*, and the page
-   * should call them the same, with the same creature.
+   * `pseudonym` and `roomSeed` arrive from a room — Room info's member list
+   * and the Room grid (see `docs/PROFILE.md`). Asked by a room handle, the
+   * server now answers in that room's terms: somebody still anonymous to you
+   * comes back as their pseudonym there, with no `connection` (admin #498).
+   * The params still title the page, so the name and the creature match the
+   * card that opened it from the first paint, before the server answers, and
+   * nothing here trusts a `name` for somebody `identityVisible` withholds.
+   * Asked by a real id with no room, the server still says "Attendee", which
+   * this page never shows (`lib/profileIdentity.ts`).
    */
   const { id, eventId, pseudonym, roomSeed } = useLocalSearchParams<{
     id: string
@@ -149,6 +152,12 @@ function UserProfileInner() {
      * conversation and offers Connect, which the server then refuses. Only
      * the server can join a handle to a person, so it says where you stand.
      * An incoming request reads as "Requested", as the lists always did.
+     *
+     * It says so only to somebody allowed to know who this is. For a person
+     * still anonymous to you there is no `connection` (saying "you have a
+     * conversation" would name the pseudonym), so a request you already sent
+     * shows Connect until you try again; the server's 409 then turns it into
+     * "Requested" (`sendConnect`).
      */
     if (connection) {
       if (connection.conversationId) {
@@ -424,7 +433,6 @@ function UserProfileInner() {
   if (!loading && !profile) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar style="light" />
         {loadError === 'gone' ? (
           /*
            * One "gone" state, the same shape as every other: deleted, blocked
@@ -488,8 +496,6 @@ function UserProfileInner() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
-
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + SPACE.xxxl }]}
         showsVerticalScrollIndicator={false}
@@ -719,7 +725,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: EMBER.scrim,
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: OPACITY.pressed },
 })
 
 

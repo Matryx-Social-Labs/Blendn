@@ -8,7 +8,7 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { findViolations, checkSource } = require('../scripts/check-design-tokens')
+const { findViolations, checkSource, LATE_RULE_ALLOWLIST } = require('../scripts/check-design-tokens')
 
 describe('design tokens', () => {
   it('app/ and components/ use only the design system', () => {
@@ -71,8 +71,15 @@ describe('design tokens', () => {
 
   it('lets allowlisted files off the late rules only', () => {
     const src = 'const a = { opacity: 0.7, fontSize: 14 }'
-    const found = checkSource(src, 'app/chat/[id].tsx').map((v: { message: string }) => v.message)
+    const found = checkSource(src, 'app/preview/tonight.tsx').map((v: { message: string }) => v.message)
     expect(found).toEqual(['raw fontSize — use a TYPE role'])
+  })
+
+  it('allows only the dev-only previews off the late rules', () => {
+    // Every shipped screen was converted; a shipped file joining the list is a regression.
+    expect(Object.keys(LATE_RULE_ALLOWLIST).every((f: string) => f.startsWith('app/preview/'))).toBe(true)
+    const found = checkSource('const a = { opacity: 0.7 }', 'app/chat/[id].tsx')
+    expect(found).toHaveLength(1)
   })
 
   it('only holds lib/ to the legacy-palette rule', () => {

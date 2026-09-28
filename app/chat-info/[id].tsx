@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useState } from 'react'
 import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -28,7 +27,7 @@ import {
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { showSheet, type SheetAction, type SheetOutcome } from '../../lib/sheet'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 
 type Member = {
@@ -283,7 +282,6 @@ function ChatInfoInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
       <AppHeader title="Room info" onBack={() => router.back()} />
 
       <FlatList
@@ -419,7 +417,7 @@ const styles = StyleSheet.create({
   actionLabel: TYPE.bodyStrong,
 
   member: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg, paddingVertical: SPACE.md },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: OPACITY.pressed },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill, alignItems: 'center', justifyContent: 'center' },
   // design-exception: an emoji glyph sized to fill the 40pt disc, as in ChatBubble
   avatarGlyph: { fontSize: 20, lineHeight: 26 },
