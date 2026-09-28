@@ -110,10 +110,10 @@ describe("the Going tab's way in to peer rating", () => {
    * rating does not depend on reopening an old event. Past is only events you
    * attended that have ended (`pastEventRows`), the same gate as the CTA above.
    */
-  it("puts RATE PEOPLE YOU MET on the Past row, to the rating screen", () => {
+  it("puts RATE WHO YOU MET on the Past row, to the rating screen", () => {
     const past = GOING.slice(GOING.indexOf("item.kind === 'past'"))
-    expect(past).toMatch(/label: 'RATE PEOPLE YOU MET'/)
+    expect(past).toMatch(/label: 'RATE WHO YOU MET'/)
     expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
-    expect(past).toMatch(/accessibilityLabel: `Rate people you met at \$\{row\.title\}`/)
+    expect(past).toMatch(/accessibilityLabel: `Rate who you met at \$\{row\.title\}`/)
   })
 })
