@@ -81,6 +81,8 @@ export default function TonightPreview() {
       <TonightView
         events={EVENTS}
         loading={false}
+        error={false}
+        onRetry={() => {}}
         insideEvent={EVENTS[0]}
         tasteMatchCount={4}
         checkingIn={false}

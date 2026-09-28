@@ -77,14 +77,15 @@ blendn/
 │   │   ├── chat.tsx            # Chat list (groups + DMs)
 │   │   └── profile.tsx         # Own profile
 │   ├── onboarding/             # Multi-step onboarding flow
-│   │   ├── welcome.tsx
-│   │   ├── basic-info.tsx
-│   │   ├── interests.tsx
-│   │   ├── goals.tsx
-│   │   ├── preferences.tsx
+│   │   ├── basics.tsx          # step order: ONBOARDING_STEPS in lib/onboarding.ts
+│   │   ├── notifications.tsx
 │   │   ├── location.tsx
-│   │   ├── photos.tsx
-│   │   └── complete.tsx
+│   │   ├── preferences.tsx
+│   │   ├── journey.tsx
+│   │   ├── details.tsx
+│   │   ├── media.tsx
+│   │   ├── ready.tsx
+│   │   └── friends.tsx         # after the last step
 │   ├── event/[id].tsx          # Event detail modal (slide_from_bottom)
 │   ├── chat/[id].tsx           # Group chat screen
 │   ├── private-chat/[conversationId].tsx  # 1-on-1 DM screen
@@ -168,11 +169,11 @@ Expo Router creates routes from file paths. The auth guard lives **entirely in `
 ```
 loading=true  →  show splash / nothing
 user=null     →  router.replace('/')         (login screen)
-user + !onboarded  →  router.replace('/onboarding/welcome')
+user + onboarding unfinished  →  router.replace(ONBOARDING_ROUTES[resumeStep(...)])  (first step: /onboarding/basics)
 user + onboarded   →  router.replace('/(tabs)/events')
 ```
 
-Onboarding status is cached in `AsyncStorage` (`user_onboarded_status_<userId>`) to avoid an extra API call on every cold start. A background refresh updates the cache without blocking navigation.
+Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboardingStorage.ts`) and `profiles.onboarded` from the session's user, so routing makes no API call on a cold start.
 
 ### Screen transitions
 

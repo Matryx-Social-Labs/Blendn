@@ -2,24 +2,13 @@ import * as Application from 'expo-application'
 import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 
-import { COMMUNITY_GUIDELINES_URL } from './communityGuidelines'
-
 /**
  * Where people reach us, and what we need to know when they do.
  *
  * One address, here, so Settings, Contact support and the crash screen cannot
- * drift apart. The pages are the published ones Settings has always linked.
+ * drift apart. The pages themselves are in `./links`.
  */
 export const SUPPORT_EMAIL = 'support@blendn.app'
-
-export const BLENDN_LINKS = {
-  safety: 'https://blendn.app/safety',
-  guidelines: COMMUNITY_GUIDELINES_URL,
-  help: 'https://blendn.app/help',
-  terms: 'https://blendn.app/terms',
-  privacy: 'https://blendn.app/privacy',
-  deleteAccount: 'https://www.blendn.app/delete-account',
-} as const
 
 /**
  * "1.0.0 (118)". The binary's own numbers, not app.json's: the build number is

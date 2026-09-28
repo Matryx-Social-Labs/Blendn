@@ -273,6 +273,8 @@ export function VenuePass({
 export function TonightView({
   events,
   loading,
+  error,
+  onRetry,
   insideEvent,
   tasteMatchCount,
   checkingIn,
@@ -285,6 +287,9 @@ export function TonightView({
 }: {
   events: TonightEvent[]
   loading: boolean
+  /** The feed failed and there is nothing on screen to keep. */
+  error: boolean
+  onRetry: () => void
   insideEvent: TonightEvent | null
   tasteMatchCount: number | null
   checkingIn: boolean
@@ -357,6 +362,22 @@ export function TonightView({
           {loading && events.length === 0 ? (
             <View style={styles.skeletonWrap}>
               <View style={styles.skeleton} />
+            </View>
+          ) : error && list.length === 0 && !insideEvent ? (
+            /*
+              A failed load is not "nothing on". The empty state below tells
+              somebody their city is quiet tonight, which is a claim about the
+              world the screen can't make when it never heard back.
+            */
+            <View style={styles.empty}>
+              <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+              <Text variant="bodyStrong">Couldn’t load tonight’s events</Text>
+              <Text variant="meta" style={styles.centre}>
+                Check your connection and try again.
+              </Text>
+              <ScalePress onPress={onRetry} style={styles.browse} accessibilityRole="button">
+                <Text variant="button">Try again</Text>
+              </ScalePress>
             </View>
           ) : list.length === 0 && !insideEvent ? (
             <View style={styles.empty}>

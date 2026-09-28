@@ -4,7 +4,7 @@ import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { clearRoomSignal } from './roomSignal'
 import { Sentry } from './sentry'
-import { subscribeSessionExpired } from './sessionEvents'
+import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -28,6 +28,15 @@ export interface AuthState {
    * launch.
    */
   isNewAccount: boolean
+  /**
+   * A session is stored on this phone, but the server could not be reached to
+   * confirm it and there is no stored user to carry on with.
+   *
+   * Not signed out: nothing refused the session. The entry screen says
+   * "Can't reach Blend'n" with Try again (`retryAuth`) instead of offering a
+   * sign-in the person does not need.
+   */
+  unreachable: boolean
 }
 
 // Global auth state to prevent duplicate checks
@@ -35,6 +44,7 @@ let globalAuthState: AuthState = {
   session: null,
   user: null,
   isNewAccount: false,
+  unreachable: false,
   loading: true,
   initialized: false,
 }
@@ -78,6 +88,9 @@ const registerAppStateListener = () => {
 const updateAuthState = (newState: Partial<AuthState>) => {
   const previousUserId = globalAuthState.user?.id
   globalAuthState = { ...globalAuthState, ...newState }
+  // Any path that produces a user has reached the server, or has a user to
+  // carry on with. Either way the "can't reach" screen no longer applies.
+  if (newState.user) globalAuthState.unreachable = false
   authStateListeners.forEach((listener) => listener(globalAuthState))
 
   if (globalAuthState.user?.id !== previousUserId) {
@@ -117,52 +130,41 @@ const initializeAuth = async (): Promise<AuthState> => {
         const result = await apiClient.getSession()
 
         if (result.success && result.data) {
-          const user = result.data
-          Logger.info('auth', 'Session verified', { userId: user.id })
-
-          updateAuthState({
-            session: { user },
-            user,
-            loading: false,
-            initialized: true,
-          })
-
-          // Store updated user data
-          await TokenStorage.setUser(user)
-
-          // Start session refresh interval
-          startSessionRefresh()
+          await signInVerified(result.data, 'Session verified')
         } else {
-          // Token might be expired, try to refresh
+          /*
+           * Signed out only when the server refused the refresh token.
+           *
+           * This used to read `refreshSession()`, a boolean that folds "the
+           * server said no" and "the server never answered" into one `false`,
+           * and cleared the session on either. So opening the app on a train,
+           * or during a deploy, signed somebody out of a perfectly good session
+           * (P0). `request()` has already tried a refresh on a 401 and cleared
+           * the tokens if it was refused, so no tokens left means refused.
+           */
           Logger.debug('auth', 'Session verification failed, attempting refresh...')
+          const outcome = (await TokenStorage.getAccessToken())
+            ? await apiClient.refreshSessionOutcome()
+            : 'rejected'
 
-          const refreshed = await apiClient.refreshSession()
-
-          if (refreshed) {
-            // Retry getting session after refresh
+          if (outcome === 'ok') {
             const retryResult = await apiClient.getSession()
-
             if (retryResult.success && retryResult.data) {
-              const user = retryResult.data
-              Logger.info('auth', 'Session refreshed successfully', { userId: user.id })
-
-              updateAuthState({
-                session: { user },
-                user,
-                loading: false,
-                initialized: true,
-              })
-
-              await TokenStorage.setUser(user)
-              startSessionRefresh()
+              await signInVerified(retryResult.data, 'Session refreshed successfully')
+            } else if (await TokenStorage.getAccessToken()) {
+              // Refreshed, then the re-read did not land. Nothing refused us.
+              await keepStoredSession()
             } else {
-              // Refresh worked but session still invalid - clear everything
               Logger.warn('auth', 'Session refresh succeeded but session still invalid')
               await clearAuthState()
             }
+          } else if (outcome === 'failed') {
+            await keepStoredSession()
           } else {
-            // Refresh failed - user needs to sign in again
-            Logger.warn('auth', 'Session refresh failed')
+            Logger.warn('auth', 'Session refresh was refused')
+            // A no-op when `request()` already recorded it (the first word
+            // stands), and the notice for a cold start that never got that far.
+            markSessionExpired()
             await clearAuthState()
           }
         }
@@ -174,6 +176,7 @@ const initializeAuth = async (): Promise<AuthState> => {
           user: null,
           loading: false,
           initialized: true,
+          unreachable: false,
         })
       }
 
@@ -193,6 +196,53 @@ const initializeAuth = async (): Promise<AuthState> => {
   })()
 
   return initializationPromise
+}
+
+/** The server confirmed the session: signed in with its copy of the user. */
+const signInVerified = async (user: AuthUser, message: string) => {
+  Logger.info('auth', message, { userId: user.id })
+  updateAuthState({
+    session: { user },
+    user,
+    loading: false,
+    initialized: true,
+  })
+  await TokenStorage.setUser(user)
+  startSessionRefresh()
+}
+
+/**
+ * The server could not be reached. The session is not over.
+ *
+ * Signed in as the user stored at the last sign-in, and the tokens are left
+ * alone: `apiClient` retries the refresh in the background, the ten-minute
+ * refresh keeps trying, and the next request that needs it tries again. With
+ * no stored user there is nobody to carry on as, so the entry screen says it
+ * cannot reach Blend'n and offers Try again rather than a sign-in.
+ */
+const keepStoredSession = async () => {
+  const stored = await TokenStorage.getUser()
+  if (stored) {
+    Logger.warn('auth', 'Could not reach the server; carrying on with the stored user', {
+      userId: stored.id,
+    })
+    updateAuthState({
+      session: { user: stored },
+      user: stored,
+      loading: false,
+      initialized: true,
+    })
+    startSessionRefresh()
+    return
+  }
+  Logger.warn('auth', 'Could not reach the server and no user is stored')
+  updateAuthState({
+    session: null,
+    user: null,
+    loading: false,
+    initialized: true,
+    unreachable: true,
+  })
 }
 
 // Clear auth state
@@ -217,6 +267,7 @@ const clearAuthState = async () => {
     // Left set, the next sign-in on this launch — an onboarded account — was
     // routed back into onboarding step one.
     isNewAccount: false,
+    unreachable: false,
   })
 }
 
@@ -566,7 +617,22 @@ export const cleanupAuth = () => {
     // Cleared with everything else: a resumed or restarted app is not a
     // freshly created account, and re-prompting on resume would be a trap.
     isNewAccount: false,
+    unreachable: false,
   }
+}
+
+/**
+ * "Try again" on the can't-reach screen.
+ *
+ * Not `reinitializeAuth`, which swaps the state without telling anyone: the
+ * screen would drop to the splash for the length of the round trip. This keeps
+ * `unreachable` set while `loading` is, so the screen stays put with its
+ * button busy, and the next state replaces it.
+ */
+export const retryAuth = async (): Promise<AuthState> => {
+  if (isInitializing && initializationPromise) return initializationPromise
+  globalAuthState = { ...globalAuthState, initialized: false }
+  return initializeAuth()
 }
 
 // Reinitialize auth (useful after background refresh or app resume)
@@ -579,6 +645,7 @@ export const reinitializeAuth = async (): Promise<AuthState> => {
     // Cleared with everything else: a resumed or restarted app is not a
     // freshly created account, and re-prompting on resume would be a trap.
     isNewAccount: false,
+    unreachable: false,
   }
   return initializeAuth()
 }

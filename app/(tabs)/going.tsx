@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import {
-    Linking,
     Share,
     StyleSheet,
     Text,
@@ -35,6 +34,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '.
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
+import { addToCalendar as addEventToCalendar } from '../../lib/calendar'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -201,24 +201,7 @@ function GoingScreenInner() {
     } catch {}
   }, [])
 
-  const addToCalendar = useCallback((event: EventRow) => {
-    try {
-      const start = new Date(event.start_time)
-      const end = new Date(event.end_time)
-      const toCal = (d: Date) => {
-        const pad = (n: number) => String(n).padStart(2, '0')
-        const yyyy = d.getUTCFullYear()
-        const mm = pad(d.getUTCMonth() + 1)
-        const dd = pad(d.getUTCDate())
-        const hh = pad(d.getUTCHours())
-        const min = pad(d.getUTCMinutes())
-        const ss = pad(d.getUTCSeconds())
-        return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`
-      }
-      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${toCal(start)}/${toCal(end)}&details=${encodeURIComponent(event.venue_name + '\n' + event.address)}`
-      Linking.openURL(url)
-    } catch {}
-  }, [])
+  const addToCalendar = useCallback((event: EventRow) => addEventToCalendar(event), [])
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })

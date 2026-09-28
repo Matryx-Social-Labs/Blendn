@@ -165,23 +165,31 @@ creatures every panda would be the same blue.
 | when | label | tap |
 |---|---|---|
 | before the doors, not going | I'm going | sets the RSVP |
-| before the doors, going | You're going | cancels it |
+| before the doors, going | You're going | asks, then cancels it (the waitlist: "you'll lose your place") |
 | running, not checked in | Blend in | checks in |
 | checked in | You're in | opens the room |
 | over, attended | Rate the people you met | opens rating |
-| over, did not attend | This event has ended | disabled |
+| over, did not attend | See what's on tonight | closes to the tabs and opens Blend'n |
 
 **"Blend in" before the event was a dead button.** A check-in needs the event to
 be running — `pickInsideEvent` requires `start <= now` and the server
 re-validates — so on a future event the most prominent control on the screen
 offered the one action that could not succeed.
 
+**"This event has ended" was a dead button too**, for exactly the person most
+likely to be looking for a night out. It offers tonight now.
+
+A successful RSVP (a seat, not the waitlist) says "You're going." in a toast
+with **Add to calendar** on it — the Going tab's calendar link, offered in the
+moment rather than as a tray in the way.
+
 `rsvpd` and `going` are drawn quiet. The gradient is for the thing that still
 needs doing; a fully lit pill that only un-does something reads as the primary
 action of the screen.
 
 **Check out is not here.** When you are in, the CTA opens the room, and the
-room's top bar has it — one tap. The Pulse's long-press tray has it too. A test
+room's top bar has it — a tap and a confirm, because it closes the room and
+coming back needs a location fix. The Pulse's long-press tray has it too. A test
 asserts the room really does, so the claim cannot rot.
 
 ---
@@ -243,7 +251,7 @@ The frame draws one CTA. These exist and had to go somewhere:
 | control | where | note |
 |---|---|---|
 | RSVP | the CTA, before the doors | it is the same slot at an earlier hour, not a second action |
-| Check out | the room's top bar | one tap from the CTA |
+| Check out | the room's top bar | one tap from the CTA, then a confirm |
 | Announce / delete | a small organiser column, bottom right | shown only to an organiser; not in any frame |
 | Android announcement composer | a modal | `Alert.prompt` is iOS-only, so on Android this **is** the feature |
 

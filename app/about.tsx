@@ -7,7 +7,8 @@ import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { Text } from '../components/ui/Text'
-import { appVersionLabel, BLENDN_LINKS } from '../lib/support'
+import { appVersionLabel } from '../lib/support'
+import { BLENDN_LINKS } from '../lib/links'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../lib/theme'
 
 /**

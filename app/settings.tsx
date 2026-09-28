@@ -10,9 +10,10 @@ import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
+import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
+import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
-import { BLENDN_LINKS } from '../lib/support'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 
@@ -246,8 +247,10 @@ export default function SettingsScreen() {
 
       if (key === 'pushEnabled') {
         if (next.pushEnabled) {
-          // May ask the phone for the first time; read its answer back either way.
-          initializePushNotifications()
+          // Turning it on is the answer onboarding's "Maybe later" deferred. It may
+          // ask the phone for the first time; read its answer back either way.
+          void clearPushDeclined(user.id)
+            .then(() => initializePushNotifications())
             .catch(() => {})
             .finally(() => void readOsPush().then(setOsPush))
         } else {

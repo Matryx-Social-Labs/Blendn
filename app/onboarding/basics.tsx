@@ -2,7 +2,9 @@ import { ScreenProfiler } from '../../lib/perf'
 import { useRef, useState } from 'react'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+
+import ActionTray from '../../components/ActionTray'
 
 import {
   EmberChip,
@@ -22,7 +24,7 @@ import {
 } from '../../lib/onboarding'
 import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
-import { useAuth } from '../../lib/useAuth'
+import { signOut, useAuth } from '../../lib/useAuth'
 
 const CURATION_ART = require('../../assets/onboarding/curation.png')
 
@@ -98,6 +100,25 @@ function BasicsScreenInner() {
     setDob(splitDateOfBirth(draft.dateOfBirth))
   }
 
+  /*
+   * The way out, on the one step with no back.
+   *
+   * Somebody who signed in with the wrong Google account, or who is under 18
+   * and cannot continue, had no exit: no back button here, swipe-back off at
+   * the root, and Settings is behind the flow. Confirmed first because it
+   * ends the session; what they have typed stays on this phone (the draft is
+   * keyed by account), so signing back in resumes here.
+   */
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const leave = async () => {
+    setSigningOut(true)
+    // The root layout routes to the entry screen when the user clears.
+    await signOut()
+    setSigningOut(false)
+    setConfirmSignOut(false)
+  }
+
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
   const patch = { name: name.trim(), gender, dateOfBirth }
 
@@ -110,6 +131,8 @@ function BasicsScreenInner() {
       ctaDisabled={!canContinue('basics', patch)}
       ctaBusy={saving}
       onContinue={() => void commit(patch)}
+      secondaryLabel="Not you? Sign out"
+      onSecondary={() => setConfirmSignOut(true)}
     >
       {/*
         Full name, first name displayed.
@@ -219,6 +242,17 @@ function BasicsScreenInner() {
         ) : dateOfBirth && !isCompleteDateOfBirth(dateOfBirth) ? (
           <Text style={styles.error}>That is not a date we recognise.</Text>
         ) : null}
+        {/* Under 18 is a dead end on this account, so the exit sits beside it. */}
+        {isUnderAccountAge(dateOfBirth) ? (
+          <Pressable
+            onPress={() => setConfirmSignOut(true)}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={styles.signOutInline}
+          >
+            <Text style={styles.textAction}>SIGN OUT</Text>
+          </Pressable>
+        ) : null}
       </EmberFieldGroup>
 
       {/*
@@ -248,6 +282,17 @@ function BasicsScreenInner() {
           <Text style={styles.curationCaption}>Personalizing your bioluminescent feed...</Text>
         </View>
       </View>
+
+      <ActionTray
+        visible={confirmSignOut}
+        title="Sign out?"
+        message="What you've filled in stays on this phone, so you can pick up here when you sign back in."
+        onClose={() => setConfirmSignOut(false)}
+        buttons={[
+          { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
+          { label: 'Sign out', variant: 'primary', onPress: () => void leave(), loading: signingOut },
+        ]}
+      />
     </OnboardingScreen>
   )
 }
@@ -268,6 +313,9 @@ const styles = StyleSheet.create({
   dateSmall: { flex: 1 },
   dateLarge: { flex: 1.5 },
   error: { ...TYPE.meta, color: EMBER.destructive },
+  signOutInline: { alignSelf: 'flex-start' },
+  // A text action (DESIGN_SYSTEM.md): `label` in `textPrimary`.
+  textAction: { ...TYPE.label, color: EMBER.textPrimary },
 
   curationCard: {
     width: '100%',
