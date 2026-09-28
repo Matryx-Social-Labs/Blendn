@@ -2,6 +2,7 @@ import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
 import { apiClient } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
+import { forgetEventDetailCache } from './eventDetailCache'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -31,12 +32,21 @@ import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from './roo
 const listeners = new Set<() => void>()
 
 /**
- * Somebody checked in or out. Drops the cached active check-ins, so the next
- * read is the server's, and tells whoever is listening — the tab bar's Blend'n
- * button, which otherwise found out on its next 30s poll.
+ * Somebody checked in or out of `eventId`. Drops every cached read that says
+ * whether they are in — the active check-ins, and the event's detail with its
+ * `userStatus` — so the next read is the server's, and tells whoever is
+ * listening: the tab bar's Blend'n button, which otherwise found out on its
+ * next 30s poll, and the event screen's CTA.
+ *
+ * The detail was the one left behind. Only the active list was dropped, so the
+ * centre button said "Open the room" while the event screen, re-reading its
+ * SWR-cached detail on focus or on the socket's check-in, was handed the
+ * pre-check-in `isCheckedIn: false` and went back to "Blend in".
  */
-export function checkInChanged(): void {
+export function checkInChanged(eventId: string): void {
   apiClient.forgetActiveCheckins()
+  apiClient.forgetEvent(eventId)
+  forgetEventDetailCache(eventId)
   for (const fn of listeners) fn()
 }
 
@@ -95,11 +105,11 @@ export async function submitCheckIn(
   if (!result.success) {
     // Dispatch on the server's code, never on its sentence (lib/checkInRefusal.ts).
     const alreadyCheckedIn = result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
-    if (alreadyCheckedIn) checkInChanged()
+    if (alreadyCheckedIn) checkInChanged(eventId)
     return { kind: 'refused', refusal: checkInRefusal(result.errorCode, result.error), alreadyCheckedIn }
   }
 
-  checkInChanged()
+  checkInChanged(eventId)
   return {
     kind: 'checkedIn',
     checkInId: result.data?.checkInId,
@@ -170,7 +180,7 @@ export async function checkOutOf(eventId: string) {
   const result = await apiClient.checkOut(eventId)
   if (result.success) {
     forgetRoster(eventId)
-    checkInChanged()
+    checkInChanged(eventId)
   }
   return result
 }

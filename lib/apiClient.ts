@@ -958,6 +958,23 @@ class ApiClientClass {
     }
   }
 
+  /**
+   * Drop the cached detail of one event, so the next `getEvent` asks the server.
+   *
+   * Called after a check-in or check-out (`lib/checkIn.ts`). The detail carries
+   * `userStatus.isCheckedIn` and is SWR-cached, and SWR serves an expired entry
+   * as-is while it refreshes in the background — so the event screen's re-read
+   * right after a check-in got the pre-check-in answer and put "Blend in" back
+   * over the optimistic "You're in". Only the detail itself, with any query:
+   * `/events/:id?include=…`, not `/events/:id/checkins`.
+   */
+  forgetEvent(eventId: string): void {
+    const detail = `:/api/mobile/events/${eventId}`
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
+    }
+  }
+
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
     if (this.responseCache.size >= this.MAX_CACHED_RESPONSES) this.evictExpiredOrOldest()
     this.responseCache.set(key, { data: data as ApiResponse<unknown>, timestamp: Date.now(), ttl })
