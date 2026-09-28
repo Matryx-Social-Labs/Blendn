@@ -62,7 +62,7 @@ jest.mock('../lib/logger', () => ({
 jest.mock('../lib/sentry', () => ({ Sentry: { captureMessage: jest.fn() } }))
 
 // eslint-disable-next-line import/first
-import { connect, subscribeToBell } from '../lib/socketClient'
+import { connect, handleAppStateChange, subscribeToBell } from '../lib/socketClient'
 
 /** Starts a connection and lets the newest socket complete it. */
 async function connected(): Promise<MockSocket> {
@@ -100,4 +100,37 @@ it('delivers one server event once, however many times the app came back', async
 
   expect(heard).toHaveBeenCalledTimes(1)
   stop()
+})
+
+describe('coming back from the background', () => {
+  /*
+   * iOS suspends a backgrounded app; its socket still says "connected" when
+   * the app returns, on a connection that is dead until the ping times out
+   * (about 85 s). No messages arrive in that window and no banner says why
+   * (SCRUM-407).
+   */
+  it('builds a fresh socket after a long background, even though the old one says connected', async () => {
+    const first = await connected()
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    await handleAppStateChange('background')
+    now.mockReturnValue(1_000_000 + 20_000)
+    const pending = handleAppStateChange('active')
+    await new Promise((r) => setTimeout(r, 0))
+    const second = mockSockets[mockSockets.length - 1]
+    expect(second).not.toBe(first)
+    second.fire('connect')
+    await pending
+    expect(first.disconnect).toHaveBeenCalled()
+    now.mockRestore()
+  })
+
+  it('keeps the socket for a glance away', async () => {
+    const first = await connected()
+    const now = jest.spyOn(Date, 'now').mockReturnValue(2_000_000)
+    await handleAppStateChange('background')
+    now.mockReturnValue(2_000_000 + 5_000)
+    await handleAppStateChange('active')
+    expect(mockSockets[mockSockets.length - 1]).toBe(first)
+    now.mockRestore()
+  })
 })

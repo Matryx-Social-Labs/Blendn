@@ -59,6 +59,8 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
+import { initialsOf } from '../../lib/initials'
+import { useFollowEnd } from '../../lib/useFollowEnd'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import Animated from 'react-native-reanimated'
 import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
@@ -98,11 +100,6 @@ const formatDayLabel = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
-
-const getInitials = (name: string) => {
-  const parts = String(name || '?').trim().split(/\s+/)
-  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : '')).toUpperCase() || '?'
-}
 
 function ChatHeader({ name, avatar, subtitle, onBack, onOptions, onProfile }: {
   name: string
@@ -148,7 +145,7 @@ function ChatHeader({ name, avatar, subtitle, onBack, onOptions, onProfile }: {
           <PseudonymMark seed={avatar.seed} />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarFallback]}>
-            <Text style={headerStyles.avatarText}>{getInitials(name)}</Text>
+            <Text style={headerStyles.avatarText}>{initialsOf(name)}</Text>
           </View>
         )}
       </View>
@@ -376,12 +373,6 @@ function PrivateChatInner() {
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
   /*
-   * Keep following the end while content lays out, as the room does: a
-   * `scrollToEnd` 50ms after the first page measured a list that had not laid
-   * out yet, so a thread could open one message short. Flips only on a drag.
-   */
-  const followEndRef = useRef(true)
-  /*
    * Messages that should rise into place as they mount: the one you just sent,
    * and whichever message is first into an empty thread (it replaces the
    * "Start the conversation" card, which fades out as it arrives).
@@ -473,6 +464,8 @@ function PrivateChatInner() {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  // Follows the end as the first page lays out (lib/useFollowEnd.ts).
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   // State is set only in the callbacks, once the request has settled.
   const loadMessages = (cursor?: string) =>
@@ -498,8 +491,6 @@ function PrivateChatInner() {
             // A message still sending, or one that failed, exists only on
             // this phone; a refresh keeps it rather than replacing the list whole.
             setMessages(prev => [...msgs, ...prev.filter(isLocalMessage)])
-            // Scroll to bottom instantly on initial load — no animation so there's no visible jump
-            setTimeout(() => scrollToBottom(false), 50)
             initialLoadDoneRef.current = true
           }
           setHasMore(result.data.hasMore)
@@ -669,7 +660,8 @@ function PrivateChatInner() {
     setMessages(prev => [...prev, local])
     if (text === undefined) setNewMessage('')
     setSending(true)
-    followEndRef.current = true
+    // Your own send brings the end back into view and follows it again.
+    follow.noteAtEnd(true)
     setTimeout(() => scrollToBottom(true), 80)
 
     if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
@@ -988,15 +980,13 @@ function PrivateChatInner() {
               </ScalePress>
             </Animated.View>
           ) : null}
-          // Follow the end while the reader is at it, as the room does.
-          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
-          onScrollBeginDrag={() => { followEndRef.current = false }}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
-            // Back at the end by hand: follow again.
-            if (atBottom) followEndRef.current = true
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}

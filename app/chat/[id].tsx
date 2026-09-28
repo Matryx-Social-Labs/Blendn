@@ -46,6 +46,7 @@ import { messageReportStep } from '../../lib/safetyUtils'
 import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { useFollowEnd } from '../../lib/useFollowEnd'
 import { useActiveThread } from '../../lib/notifications'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
@@ -263,15 +264,6 @@ function GroupChatInner() {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
-  /*
-   * Whether the list should keep following its end as content lays out.
-   * Distinct from `isAtBottomRef`: that one is derived from scroll geometry,
-   * and during the first layout a programmatic scrollToEnd is followed by the
-   * content growing again, so the geometry read "not at the bottom" and the
-   * next size change was ignored -- the room opened one message short, the
-   * newest bubble under the composer. This flips only on a real drag.
-   */
-  const followEndRef = useRef(true)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -288,6 +280,13 @@ function GroupChatInner() {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  /*
+   * Follows the end as content lays out, until a real drag (lib/useFollowEnd).
+   * Distinct from `isAtBottomRef`, which is scroll geometry: during the first
+   * layout a programmatic scrollToEnd is followed by the content growing again,
+   * so geometry read "not at the bottom" and the room opened one message short.
+   */
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   const transformRawMessages = (raw: any[], userId?: string): Message[] => {
     const list = raw.map((msg: any) => {
@@ -353,8 +352,6 @@ function GroupChatInner() {
           if (cached) {
             setMessages(cached)
             setLoading(false)
-            // Instant jump to bottom when restoring from cache
-            setTimeout(() => scrollToBottom(false), 50)
             if (!refreshEvenIfCached) return
           }
         }
@@ -391,8 +388,6 @@ function GroupChatInner() {
           ...prev.filter(m => m.message_id.startsWith('temp-') && !msgs.some(n => n.message_id === m.message_id)),
         ])
         if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
-        // Scroll to bottom instantly on initial load
-        setTimeout(() => scrollToBottom(false), 50)
       })
       .catch((err) => {
         Logger.error('chat', 'Error loading messages', { error: err })
@@ -1052,14 +1047,14 @@ function GroupChatInner() {
            * Driven 2026-09-13, twice. Content growing while you are reading
            * older messages leaves you where you are.
            */
-          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
-          onScrollBeginDrag={() => { followEndRef.current = false }}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
             // Back at the end by hand: follow again.
-            if (atBottom) followEndRef.current = true
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}

@@ -237,13 +237,15 @@ describe('the screen renders through the rebuilt components', () => {
      * sat on the bottom edge with the day's messages beneath it, unseen.
      */
     const src = codeOnly(SCREEN())
-    expect(src).toMatch(/onContentSizeChange=\{\(\) => \{ if \(followEndRef\.current\) scrollToBottom\(false\) \}\}/)
+    // The rule lives in lib/useFollowEnd.ts now, shared with the DM screen and
+    // pinned behaviourally in followEnd.test.ts.
+    expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
     // Following stops on a real drag, not on the geometry of a programmatic
     // scroll: the first fix keyed off `isAtBottomRef`, and the content growing
     // once more after scrollToEnd read as "not at the bottom", so the room
     // still opened with the newest bubble under the composer.
-    expect(src).toMatch(/onScrollBeginDrag=\{\(\) => \{ followEndRef\.current = false \}\}/)
-    expect(src).toMatch(/if \(atBottom\) followEndRef\.current = true/)
+    expect(src).toMatch(/onScrollBeginDrag=\{follow\.onScrollBeginDrag\}/)
+    expect(src).toMatch(/follow\.noteAtEnd\(atBottom\)/)
   })
 
   it('drops the optimistic bubble when the socket echo beat the response', () => {
