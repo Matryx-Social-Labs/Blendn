@@ -72,6 +72,7 @@ import {
   groupByDay,
   timeLabel,
 } from '../../lib/pulse'
+import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
 import { openInMaps } from '../../lib/openInMaps'
 import { apiClient } from '../../lib/apiClient'
@@ -1700,7 +1701,9 @@ function EventsInner() {
    */
   const renderEventItem = useCallback(({ item: event, index }: { item: Event; index: number }) => {
     const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
-    const isEnded = new Date(event.end_time).getTime() < Date.now()
+    // Today's day of a multi-day run, not the run — `lib/eventSession.ts`.
+    const live = liveWindow(event)
+    const isEnded = sessionOver(event)
     const note = isCheckedIn ? 'Checked in' : isEnded ? 'Ended' : null
 
     return (
@@ -1710,7 +1713,7 @@ function EventsInner() {
             title={event.title}
             category={event.category || null}
             imageUrl={event.cover_image_url}
-            timeLabel={nextUpLabel(event.start_time, event.end_time)}
+            timeLabel={nextUpLabel(live.start_time, live.end_time)}
             placeLabel={placeLabel(event)}
             joinedCount={joinedCount(event)}
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}

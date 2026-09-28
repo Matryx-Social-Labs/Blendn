@@ -31,6 +31,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
+import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
@@ -108,6 +109,8 @@ interface EventDetailData {
   address: string
   start_time: string
   end_time: string
+  /** The day LIVE and check-in are judged by — `lib/eventSession.ts`. */
+  session?: EventSession | null
   timezone?: string
   category: string
   price_cents: number
@@ -354,6 +357,7 @@ export default function EventDetail() {
         address: d.address || '',
         start_time: d.startTime || d.start_time || '',
         end_time: d.endTime || d.end_time || '',
+        session: sessionFromApi(d.session),
         timezone: d.timezone,
         category: d.categories?.[0]?.name || '',
         price_cents: d.priceCents || d.price_cents || 0,
@@ -459,6 +463,7 @@ export default function EventDetail() {
           address: d.address || '',
           start_time: d.startTime || d.start_time || '',
           end_time: d.endTime || d.end_time || '',
+          session: sessionFromApi(d.session),
           timezone: d.timezone,
           category: d.categories?.[0]?.name || '',
           price_cents: d.priceCents || d.price_cents || 0,
@@ -921,9 +926,17 @@ export default function EventDetail() {
    * by the time the event ends.
    */
   const attended = !!checkInStatus?.status
-  const isEnded = useClockPassed(event ? new Date(event.end_time).getTime() : null)
+  /*
+   * Judged by today's day, not the run. On a multi-day event the run said
+   * "started, not ended" for days — between days and through a cancelled last
+   * day — and offered a check-in the door refused. `session` is the day the
+   * server's door goes by (`lib/eventSession.ts`).
+   */
+  const live = event ? liveWindow(event) : null
+  const liveEnd = live?.end_time ? new Date(live.end_time).getTime() : null
+  const isEnded = useClockPassed(liveEnd !== null && Number.isFinite(liveEnd) ? liveEnd : null)
   // Explained with the CTA below; read here, above the early return, because it is a hook.
-  const hasStarted = useClockPassed(event ? new Date(event.start_time).getTime() : null, true)
+  const hasStarted = useClockPassed(live ? new Date(live.start_time).getTime() : null, true)
   const isLive = hasStarted && !isEnded
 
   /*

@@ -30,6 +30,7 @@ import {
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
+import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
@@ -215,7 +216,13 @@ function GoingScreenInner() {
    * actions inside it could not be reached.
    */
   const renderNext = useCallback((row: RsvpEventRow) => {
-    const when = nextUpLabel(row.start_time, row.end_time)
+    /*
+     * Today's day of a multi-day run, not the run (`lib/eventSession.ts`). A
+     * run whose last day that goes ahead is over — the rest cancelled — is
+     * listed until the run's end, and says so rather than naming a start.
+     */
+    const today = liveWindow(row)
+    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time)
     const live = when === HAPPENING_NOW
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
