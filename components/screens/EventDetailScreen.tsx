@@ -33,6 +33,9 @@ import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
+import { addToCalendar } from '../../lib/calendar'
+import { openBlendn } from '../../lib/blendnOverlay'
+import { useToast } from '../Toast'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
@@ -59,6 +62,7 @@ import {
   SceneAttendees,
   SceneBody,
   SceneBodyAccent,
+  SceneByline,
   SceneCTA,
   SceneGallery,
   SceneHeading,
@@ -198,6 +202,7 @@ export default function EventDetail() {
   })
   const { user } = useAuth()
   const feedback = useInteractionFeedback()
+  const { showToast } = useToast()
 
   // Initialize event from params if available for instant display
   const hasParams = !!(title || cover || venue)
@@ -227,6 +232,14 @@ export default function EventDetail() {
     return null
   })
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null)
+  /*
+   * Why the first load failed, when it did. A network failure and a missing
+   * event are different sentences: "Event not found" for a dropped connection
+   * tells somebody the night was cancelled.
+   */
+  const [loadFailure, setLoadFailure] = useState<'network' | 'notFound' | null>(null)
+  /** The room's own "here now", while the event is running. */
+  const [hereNow, setHereNow] = useState<number | null>(null)
   // Don't show loading skeleton if we have params - show content immediately
   const [loading, setLoading] = useState(!hasParams)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
@@ -322,8 +335,11 @@ export default function EventDetail() {
   const applyEventDetails = (result: Awaited<ReturnType<typeof apiClient.getEvent>>) => {
     if (!result.success || !result.data) {
       Logger.error('events', 'detail:fetch:error', { error: result.error })
-      showTray('Error', 'Failed to load event details.')
+      const notFound = result.errorCode === 'NOT_FOUND' || /not found/i.test(result.error ?? '')
+      setLoadFailure(notFound ? 'notFound' : 'network')
+      return notFound ? 'notFound' : 'network'
     } else {
+      setLoadFailure(null)
       // Map API response (camelCase) to EventDetailData interface (snake_case)
       const d = result.data
       lastFetchRef.current = Date.now()
@@ -366,6 +382,10 @@ export default function EventDetail() {
       }
       if (d.stats) {
         setInterestCount(d.stats.favoriteCount || 0)
+        // As the cached path does: the live fetch dropped these, so the
+        // Attendees count only ever showed what the cache last held.
+        setCheckInCount(d.stats.checkInCount || 0)
+        setGoingCount(d.stats.rsvpCount || 0)
       }
       // Set chat group ID if available
       if (d.chatGroup?.id) {
@@ -391,9 +411,23 @@ export default function EventDetail() {
         include: 'interestedUsers',
         interestedLimit: 6,
       })
-      .then(applyEventDetails)
+      .then((result) => {
+        /*
+         * With nothing on screen the page itself says so (below). With the
+         * params' outline on screen, say it once, with a way to try again — a
+         * background refetch that fails later keeps what is there and says
+         * nothing.
+         */
+        if (applyEventDetails(result) === 'network' && event && lastFetchRef.current === 0) {
+          showTray("Couldn't load everything", 'Some details are missing. Check your connection and try again.', [
+            { label: 'Not now', onPress: closeTray },
+            { label: 'Try again', variant: 'primary', onPress: () => { closeTray(); void fetchEventDetails() } },
+          ])
+        }
+      })
       .catch((error) => {
         Logger.error('events', 'detail:fetch:exception', { error: error as any })
+        setLoadFailure('network')
       })
       .finally(() => {
         setLoading(false)
@@ -594,11 +628,56 @@ export default function EventDetail() {
     }
   }, [id, user, userInterested, showTray, closeTray, feedback])
 
-  const handleToggleRsvp = useCallback(async () => {
+  /*
+   * Taking it back. Split out of the toggle because it now sits behind a
+   * confirmation: the CTA is the RSVP *and* its off-switch, so one tap on
+   * "You're going" used to cancel with nothing said — and on a full event it
+   * gave your waitlist place to the next person, with no way back to it.
+   */
+  const withdrawRsvp = useCallback(async () => {
     // Hoisted out of the `try` so the `catch` can put it back: a thrown
-    // request (timeout, no network) left the optimistic "You're going" on
-    // screen with no row behind it. Only the `!result.success` branches
-    // rolled back. Seen on the simulator when the RSVP call timed out.
+    // request (timeout, no network) left the optimistic state on screen with
+    // no row behind it. Seen on the simulator when the RSVP call timed out.
+    const prevStatus = rsvpStatus
+    try {
+      if (!id) return
+      feedback.tap()
+      setRsvpStatus(null)
+      const result = await apiClient.cancelRsvp(String(id))
+      if (!result.success) {
+        setRsvpStatus(prevStatus)
+        feedback.error()
+        showTray('Error', 'Failed to cancel RSVP.')
+      }
+    } catch {
+      setRsvpStatus(prevStatus)
+      feedback.error()
+      showTray('Error', 'Failed to update RSVP.')
+    }
+  }, [id, rsvpStatus, showTray, feedback])
+
+  const confirmWithdrawRsvp = useCallback(() => {
+    const waitlisted = rsvpStatus === 'waitlisted'
+    showTray(
+      waitlisted ? 'Leave the waitlist?' : 'Cancel your RSVP?',
+      waitlisted
+        ? "You'll lose your place in line. If you join again later, you go to the back."
+        : "You'll come off the list of people going. If it fills up, your place goes to someone else.",
+      [
+        { label: waitlisted ? 'Stay on it' : 'Keep it', onPress: closeTray },
+        {
+          label: waitlisted ? 'Leave waitlist' : 'Cancel RSVP',
+          variant: 'destructive',
+          onPress: () => {
+            closeTray()
+            void withdrawRsvp()
+          },
+        },
+      ]
+    )
+  }, [rsvpStatus, showTray, closeTray, withdrawRsvp])
+
+  const handleToggleRsvp = useCallback(async () => {
     const prevStatus = rsvpStatus
     try {
       if (!id) return
@@ -609,35 +688,40 @@ export default function EventDetail() {
         ])
         return
       }
+      // Waitlisted counts as "already committed": tapping should offer to take
+      // you off the list, not try to RSVP again. Treating it as not-going would
+      // send a second RSVP and leave the user unable to withdraw.
+      if (rsvpStatus === 'going' || rsvpStatus === 'waitlisted') {
+        confirmWithdrawRsvp()
+        return
+      }
       feedback.tap()
-      // Waitlisted counts as "already committed": tapping should take you off
-      // the list, not try to RSVP again. Treating it as not-going would send a
-      // second RSVP and leave the user unable to withdraw.
-      const isCommitted = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
-      setRsvpStatus(isCommitted ? null : 'going')
-      if (isCommitted) {
-        const result = await apiClient.cancelRsvp(String(id))
-        if (!result.success) {
-          setRsvpStatus(prevStatus)
-          feedback.error()
-          showTray('Error', 'Failed to cancel RSVP.')
-        }
+      setRsvpStatus('going')
+      const result = await apiClient.rsvpToEvent(String(id), 'going')
+      if (!result.success || !result.data) {
+        setRsvpStatus(prevStatus)
+        feedback.error()
+        showTray('Error', 'Failed to RSVP to event.')
       } else {
-        const result = await apiClient.rsvpToEvent(String(id), 'going')
-        if (!result.success || !result.data) {
-          setRsvpStatus(prevStatus)
-          feedback.error()
-          showTray('Error', 'Failed to RSVP to event.')
-        } else {
-          setRsvpStatus(result.data.rsvpStatus)
-          if (result.data.rsvpStatus === 'waitlisted') {
-            // Say it plainly. An amber icon alone would let someone believe
-            // they have a place and turn up to an event that is full.
-            showTray(
-              "You're on the waitlist",
-              "This event is full. We'll let you know if a place frees up — you'll be first in line in the order you joined."
-            )
-          }
+        setRsvpStatus(result.data.rsvpStatus)
+        if (result.data.rsvpStatus === 'waitlisted') {
+          // Say it plainly. An amber icon alone would let someone believe
+          // they have a place and turn up to an event that is full.
+          showTray(
+            "You're on the waitlist",
+            "This event is full. We'll let you know if a place frees up — you'll be first in line in the order you joined."
+          )
+        } else if (event) {
+          /*
+           * The calendar, offered in the moment and not in the way: a toast
+           * with an action rather than a tray, so saying yes is still one tap
+           * and the offer goes away on its own. Only for a seat — a waitlist
+           * place is not a plan yet.
+           */
+          const planned = event
+          showToast("You're going.", 'success', {
+            action: { label: 'Add to calendar', onPress: () => addToCalendar(planned) },
+          })
         }
       }
     } catch {
@@ -645,7 +729,7 @@ export default function EventDetail() {
       feedback.error()
       showTray('Error', 'Failed to update RSVP.')
     }
-  }, [id, user, rsvpStatus, showTray, closeTray, feedback])
+  }, [id, user, event, rsvpStatus, showTray, closeTray, feedback, confirmWithdrawRsvp, showToast])
 
   // Refresh event data (including check-in status) on focus
   useFocusEffect(
@@ -670,7 +754,7 @@ export default function EventDetail() {
    * The CTA is one slot whose subject changes with the clock, so there is no
    * second control on this screen to hang it from. When you are checked in the
    * CTA reads "You're in" and opens the room, and check out is in the room's
-   * top bar -- one tap from here. The Pulse's long-press tray has it too.
+   * top bar -- a tap and a confirm from here. The Pulse's long-press tray has it too.
    *
    * `apiClient.checkOut` is called from both of those, so this was the third
    * copy of a flow with two homes already.
@@ -840,6 +924,27 @@ export default function EventDetail() {
   const isEnded = useClockPassed(event ? new Date(event.end_time).getTime() : null)
   // Explained with the CTA below; read here, above the early return, because it is a hook.
   const hasStarted = useClockPassed(event ? new Date(event.start_time).getTime() : null, true)
+  const isLive = hasStarted && !isEnded
+
+  /*
+   * "N here now", from the room itself while the event runs. Re-read when the
+   * check-in count moves (the socket refetches the detail on every check-in),
+   * so the two numbers on the page never disagree for long. An older server
+   * 404s the preview; the byline then falls back to the detail's own count.
+   */
+  useEffect(() => {
+    if (!isLive || !id) return
+    let cancelled = false
+    apiClient
+      .getRoomPreview(String(id))
+      .then((r) => {
+        if (!cancelled && r.success && r.data) setHereNow(r.data.hereCount)
+      })
+      .catch((e) => Logger.warn('events', 'detail:roomPreview:failed', { error: e }))
+    return () => {
+      cancelled = true
+    }
+  }, [id, isLive, checkInCount])
 
   const eventTitle = event?.title
   const openEventChat = useCallback(async () => {
@@ -908,13 +1013,12 @@ export default function EventDetail() {
 
 
   /*
-   * `rate` is never disabled. Every other post-doors state routes through
-   * `actionStage`, which is about checking in and is meaningless once the event
-   * is over — leaving it in charge here would disable the button for anyone who
-   * had checked in, which is precisely everyone this state exists for.
+   * Nothing after the end is disabled. Every other post-doors state routes
+   * through `actionStage`, which is about checking in and is meaningless once
+   * the event is over — leaving it in charge here would disable the button for
+   * anyone who had checked in, which is precisely everyone `rate` exists for.
    */
-  const primaryActionDisabled =
-    isEnded && attended ? false : checkingIn || actionStage === 'checked'
+  const primaryActionDisabled = isEnded ? false : checkingIn || actionStage === 'checked'
   const primaryActionPress = () => {
     /*
      * The night is over and you were here. `PLACEHOLDER_SCREENS.md` asks for
@@ -926,6 +1030,17 @@ export default function EventDetail() {
      */
     if (isEnded && attended) {
       router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
+      return
+    }
+    /*
+     * Over, and you weren't here: what's on tonight instead of a dead pill.
+     * Back to the tabs first — the Blend'n screen is an overlay hosted there,
+     * under the root stack, so opening it from here would open it beneath
+     * this page.
+     */
+    if (isEnded) {
+      router.dismissTo('/(tabs)/events')
+      openBlendn()
       return
     }
     if (checkingIn) return
@@ -945,14 +1060,38 @@ export default function EventDetail() {
 
 
   if (!isLoading && !event) {
+    const offline = loadFailure === 'network'
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
         {/* Arrives like any other content, rather than cutting in after the skeleton. */}
         <FadeInUp style={styles.errorBody}>
-          <Text style={styles.errorText}>Event not found</Text>
-          <ScalePress style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </ScalePress>
+          {offline ? (
+            <>
+              <Text style={styles.errorText}>Couldn&apos;t load this event</Text>
+              <Text style={styles.errorHint}>Check your connection and try again.</Text>
+              <ScalePress
+                style={styles.retryButton}
+                onPress={() => {
+                  setLoadFailure(null)
+                  setLoading(true)
+                  void fetchEventDetails()
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.retryButtonText}>Try again</Text>
+              </ScalePress>
+              <ScalePress haptic={false} style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
+                <Text style={styles.backButtonText}>Go Back</Text>
+              </ScalePress>
+            </>
+          ) : (
+            <>
+              <Text style={styles.errorText}>Event not found</Text>
+              <ScalePress style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
+                <Text style={styles.backButtonText}>Go Back</Text>
+              </ScalePress>
+            </>
+          )}
         </FadeInUp>
       </SafeAreaView>
     )
@@ -1021,7 +1160,9 @@ export default function EventDetail() {
 
 
   const ctaIcon =
-    ctaState === 'rsvpd' ? 'checkmark' : actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'
+    ctaState === 'ended'
+      ? 'arrow-forward'
+      : ctaState === 'rsvpd' ? 'checkmark' : actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'
 
   const when = event ? new Date(event.start_time) : null
   const dateLabel = when
@@ -1158,6 +1299,11 @@ export default function EventDetail() {
             re-renders them in place and never replays this. Anything past the
             first screenful shares the last delay; nobody sees it arrive.
           */}
+          {event?.organizer || isLive ? (
+            <FadeInUp delay={SECTION_DELAY[0]}>
+              <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? checkInCount : null} />
+            </FadeInUp>
+          ) : null}
           {event?.description ? (
             <FadeInUp delay={SECTION_DELAY[0]} style={styles.section}>
               <SceneHeading>The Experience</SceneHeading>
@@ -1593,6 +1739,15 @@ const styles = StyleSheet.create({
   },
   errorBody: { alignItems: 'center', gap: SPACE.lg },
   errorText: { ...TYPE.title },
+  errorHint: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center', paddingHorizontal: GUTTER },
+  retryButton: {
+    minHeight: CONTROL.md,
+    paddingHorizontal: SPACE.xl,
+    justifyContent: 'center',
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.accent,
+  },
+  retryButtonText: { ...TYPE.button, color: EMBER.onGradient },
   backButton: {
     minHeight: CONTROL.md,
     paddingHorizontal: SPACE.xl,

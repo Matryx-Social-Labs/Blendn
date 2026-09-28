@@ -116,7 +116,7 @@ describe('the pill is solid, and nothing glows around it', () => {
 })
 
 describe('what the button says', () => {
-  it('says Blend in, and only ended disables', () => {
+  it('says Blend in, and no state is a dead end', () => {
     const src = SRC()
     expect(src).toContain("join: 'Blend in'")
     expect(src).toContain('"You\'re in"')
@@ -124,9 +124,11 @@ describe('what the button says', () => {
      * `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
      * event still takes people; `max_capacity` is a number the organiser
      * watches, not a door the app keeps. A capacity-disabled CTA would block an
-     * interaction the product explicitly allows.
+     * interaction the product explicitly allows. And `ended` offers tonight
+     * rather than greying out: a finished event is somebody looking for one.
      */
-    expect(src).toContain("const disabled = state === 'ended'")
+    expect(src).toContain('const disabled = !onPress')
+    expect(src).toContain(`ended: "See what's on tonight"`)
   })
 })
 

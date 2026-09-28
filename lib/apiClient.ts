@@ -648,6 +648,8 @@ export interface EventApiItem {
   stats?: {
     checkInCount?: number
     favoriteCount?: number
+    /** Seats taken; the Scene's "Going" count before the doors. */
+    rsvpCount?: number
     ratingCount?: number
     averageRating?: number | null
   }
