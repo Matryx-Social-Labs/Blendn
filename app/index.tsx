@@ -1,5 +1,5 @@
 import { ScreenProfiler } from '../lib/perf'
-import { AntDesign } from '@expo/vector-icons'
+import { AntDesign, Ionicons } from '@expo/vector-icons'
 import {
   GoogleSignin,
   statusCodes
@@ -10,11 +10,12 @@ import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
-import { signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
+import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
 /*
@@ -68,7 +69,7 @@ const GOOGLE_FILL = '#FFFFFF'
 const GOOGLE_INK = '#1F1F1F'
 
 function IndexInner() {
-  const { user, loading } = useAuth()
+  const { user, loading, unreachable } = useAuth()
   const [signingIn, setSigningIn] = useState(false)
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false)
   /*
@@ -102,11 +103,11 @@ function IndexInner() {
    */
   const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => {
-    if (user || loading) return
+    if (user || loading || unreachable) return
     consumeSessionEndedNotice().then((ended) => {
       if (ended) setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)
     })
-  }, [user, loading])
+  }, [user, loading, unreachable])
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
@@ -222,6 +223,39 @@ function IndexInner() {
   }
 
   /*
+   * A session is stored, and the server could not be reached to confirm it.
+   *
+   * Nothing refused it, so this is not the sign-in screen: offering Google and
+   * Apple to somebody who is already signed in sends them to redo something
+   * that was never undone. Checked before `loading` so Try again keeps this
+   * screen, with its button busy, instead of dropping to the splash.
+   */
+  if (unreachable) {
+    return (
+      <SafeAreaView style={styles.unreachable} edges={['top', 'bottom']}>
+        <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textSecondary} />
+        <Text style={styles.unreachableTitle}>Can&apos;t reach Blend&apos;n</Text>
+        <Text style={styles.unreachableBody}>
+          You&apos;re still signed in. Check your connection and try again.
+        </Text>
+        <Pressable
+          onPress={() => void retryAuth()}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityState={{ busy: loading }}
+          style={({ pressed }) => [styles.retryButton, (pressed || loading) && styles.pressed]}
+        >
+          {loading ? (
+            <ActivityIndicator color={EMBER.onGradient} />
+          ) : (
+            <Text style={styles.retryLabel}>Try again</Text>
+          )}
+        </Pressable>
+      </SafeAreaView>
+    )
+  }
+
+  /*
    * Auth is still resolving.
    *
    * This used to draw its own `#480D37 -> #000000` gradient, a colour in no
@@ -328,7 +362,14 @@ function IndexInner() {
           </View>
 
           <Pressable
-            onPress={() => router.push('/sign-in')}
+            /*
+             * The notice goes with them. Somebody the server signed out who
+             * picks email lands on a form that otherwise says nothing about
+             * why they are there.
+             */
+            onPress={() =>
+              router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
+            }
             disabled={signingIn}
             accessibilityRole="button"
             style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}
@@ -336,9 +377,7 @@ function IndexInner() {
             <Text style={styles.emailLabel}>Continue with email</Text>
           </Pressable>
 
-          <Text style={styles.legal}>
-            By continuing you agree to our Terms and Privacy Policy.
-          </Text>
+          <LegalLine lead="By continuing you" style={styles.legal} />
         </View>
       </SafeAreaView>
     )
@@ -457,7 +496,29 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
-  legal: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center', marginTop: SPACE.sm },
+  legal: { marginTop: SPACE.sm },
+
+  unreachable: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACE.md,
+    paddingHorizontal: GUTTER,
+    backgroundColor: 'transparent',
+  },
+  unreachableTitle: { ...TYPE.title, textAlign: 'center' },
+  unreachableBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
+  // The state's one action, so it takes the accent.
+  retryButton: {
+    alignSelf: 'stretch',
+    height: CONTROL.lg,
+    borderRadius: EMBER_RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: EMBER.accent,
+    marginTop: SPACE.lg,
+  },
+  retryLabel: { ...TYPE.button, color: EMBER.onGradient },
 })
 
 

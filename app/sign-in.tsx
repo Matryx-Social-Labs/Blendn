@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import Constants from 'expo-constants'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
@@ -17,6 +17,7 @@ import {
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
@@ -89,6 +90,13 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * Why they are here, when the server signed them out: the entry screen hands
+   * its notice on. Without it, somebody signed out mid-use who chose email
+   * met a blank form and had to guess whether they had done something wrong.
+   */
+  const params = useLocalSearchParams<{ notice?: string }>()
+  const notice = typeof params.notice === 'string' && params.notice ? params.notice : null
 
   const isSignup = mode === 'signup'
   /*
@@ -212,6 +220,12 @@ export default function SignIn() {
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           />
+
+          {notice && !error ? (
+            <Text style={styles.notice} accessibilityRole="alert">
+              {notice}
+            </Text>
+          ) : null}
 
           <View
             style={styles.segmented}
@@ -347,7 +361,14 @@ export default function SignIn() {
 
           {!isSignup && (
             <Pressable
-              onPress={() => router.push('/forgot-password')}
+              // The address typed here goes with them, so it is not typed twice.
+              onPress={() =>
+                router.push(
+                  trimmedEmail
+                    ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
+                    : '/forgot-password'
+                )
+              }
               style={styles.linkButton}
               accessibilityRole="button"
             >
@@ -356,9 +377,7 @@ export default function SignIn() {
           )}
 
           {isSignup && (
-            <Text style={styles.legal}>
-              By creating an account you agree to our Terms and Privacy Policy.
-            </Text>
+            <LegalLine lead="By creating an account you" style={styles.legal} />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -433,10 +452,6 @@ const styles = StyleSheet.create({
   linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
   // A text action, so it reads as one: primary, not the grey of a caption.
   link: { ...TYPE.label, color: EMBER.textPrimary },
-  legal: {
-    ...TYPE.meta,
-    color: EMBER.textTertiary,
-    textAlign: 'center',
-    marginTop: SPACE.xs,
-  },
+  legal: { marginTop: SPACE.xs },
+  notice: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center' },
 })
