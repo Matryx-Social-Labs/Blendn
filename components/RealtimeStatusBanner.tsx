@@ -1,4 +1,4 @@
-import React, { useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
@@ -30,6 +30,9 @@ interface RealtimeStatusBannerProps {
   showSocketIssues?: boolean
 }
 
+/** How long the socket may be down before the banner says so. */
+export const SOCKET_GRACE_MS = 3000
+
 export default function RealtimeStatusBanner({
   status,
   style,
@@ -39,7 +42,29 @@ export default function RealtimeStatusBanner({
   const [retrying, setRetrying] = useState(false)
 
   const isOffline = networkState === 'offline'
-  const isSocketIssue = showSocketIssues && status.state !== 'connected'
+  const socketDown = showSocketIssues && status.state !== 'connected'
+
+  /*
+   * A socket that is down for longer than a reconnect takes.
+   *
+   * Every return to the app reconnects, and that takes about a second, so a
+   * banner shown the instant the state left "connected" flashed on every
+   * foreground and taught people to ignore it (SCRUM-407). Offline is still
+   * said at once: actions will fail, and that is worth knowing now.
+   */
+  const [downLong, setDownLong] = useState(false)
+  // Back up: forget the last outage, during render so it never paints stale.
+  const [wasDown, setWasDown] = useState(socketDown)
+  if (socketDown !== wasDown) {
+    setWasDown(socketDown)
+    if (!socketDown) setDownLong(false)
+  }
+  useEffect(() => {
+    if (!socketDown) return
+    const timer = setTimeout(() => setDownLong(true), SOCKET_GRACE_MS)
+    return () => clearTimeout(timer)
+  }, [socketDown])
+  const isSocketIssue = socketDown && downLong
 
   if (!isOffline && !isSocketIssue) return null
 

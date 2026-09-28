@@ -130,6 +130,8 @@ export interface ServerToClientEvents {
     messageIds: string[]
     readBy: string
   }) => void
+  /** These messages reached the other person's app: ✓✓ delivered (SCRUM-408). */
+  "private:delivered": (data: { conversationId: string; messageIds: string[] }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
@@ -172,6 +174,7 @@ interface ClientToServerEvents {
   "private:startTyping": (conversationId: string) => void
   "private:stopTyping": (conversationId: string) => void
   "private:markRead": (conversationId: string, messageIds: string[]) => void
+  "private:delivered": (conversationId: string, messageIds: string[]) => void
   ping: () => void
 }
 
@@ -295,6 +298,10 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 const bellSubscriptions = new Set<BellCallback>()
+type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
+const deliveredSubscriptions = new Set<DeliveredCallback>()
+/** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
+let myUserId: string | null = null
 
 // App state listener
 let appStateSubscription: { remove: () => void } | null = null
@@ -302,8 +309,12 @@ let appStateSubscription: { remove: () => void } | null = null
 /**
  * Initialize the socket connection
  */
-export async function connect(): Promise<boolean> {
-  if (socket?.connected) {
+/**
+ * `force` builds a fresh socket even when the current one says it is
+ * connected — for a phone back from the background, where it may be lying.
+ */
+export async function connect(opts: { force?: boolean } = {}): Promise<boolean> {
+  if (socket?.connected && !opts.force) {
     Logger.debug("socket", "Already connected")
     emitConnectionStatus({
       state: "connected",
@@ -565,6 +576,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("connected", (data) => {
     Logger.info("socket", "Authenticated", { userId: data.userId })
+    myUserId = data.userId
   })
 
   sock.on("error", (data) => {
@@ -668,6 +680,15 @@ function setupSocketHandlers(sock: TypedSocket): void {
   // Private messaging updates
   sock.on("private:message", (data) => {
     markDomainsDirty(["chat", "match"])
+    /*
+     * The app has it: tell the sender ✓✓ (SCRUM-408). Here rather than in a
+     * screen, because a message delivered to the Banter or to a screen that
+     * never opened the thread is still delivered.
+     */
+    const incoming = data.message as { id?: string; senderId?: string } | undefined
+    if (incoming?.id && myUserId && incoming.senderId !== myUserId) {
+      sock.emit("private:delivered", data.conversationId, [incoming.id])
+    }
     // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
@@ -700,6 +721,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("private:read", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((cb) => (cb as PrivateReadCallback)(data))
+  })
+
+  sock.on("private:delivered", (data) => {
+    deliveredSubscriptions.forEach((cb) => cb(data))
   })
 }
 
@@ -1115,6 +1140,14 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   }
 }
 
+/** Your messages reached their app: ✓✓ delivered (SCRUM-408). */
+export function subscribeToDelivered(callback: DeliveredCallback): () => void {
+  deliveredSubscriptions.add(callback)
+  return () => {
+    deliveredSubscriptions.delete(callback)
+  }
+}
+
 /** A row landed in your bell. Same delivery as `subscribeToRoomMatch`. */
 export function subscribeToBell(callback: BellCallback): () => void {
   if (!socket?.connected) connect()
@@ -1143,19 +1176,35 @@ export function initSocketWithAppState(): void {
 /**
  * Handle app state changes
  */
-async function handleAppStateChange(state: AppStateStatus): Promise<void> {
+/**
+ * Longer than this in the background, and the socket is not trusted.
+ *
+ * iOS suspends a backgrounded app, and its socket still says "connected" when
+ * the app returns, on a connection the server may have dropped. Nothing
+ * notices until the ping times out (about 85 s), and until then no message
+ * arrives and no banner says why (SCRUM-407). A fresh socket goes connecting →
+ * connected, which is what makes every screen's `useLiveSync` catch up on what
+ * it missed. Under this, a glance at another app keeps the socket it has.
+ */
+const FRESH_SOCKET_AFTER_MS = 15_000
+let backgroundedAt: number | null = null
+
+export async function handleAppStateChange(state: AppStateStatus): Promise<void> {
   Logger.debug("socket", `App state changed to: ${state}`)
 
-  if (state === "active") {
-    // App came to foreground, reconnect if needed
-    // Room rejoining is handled automatically by the connect handler in setupSocketHandlers
-    if (!socket?.connected) {
-      await connect()
-    }
-  } else {
-    // App went to background, disconnect to save battery
-    // Note: In production, you might want to keep the connection
-    // for push-like functionality
+  if (state === "background") {
+    backgroundedAt ??= Date.now()
+    return
+  }
+  if (state !== "active") return
+
+  const away = backgroundedAt === null ? 0 : Date.now() - backgroundedAt
+  backgroundedAt = null
+  // Room rejoining is handled by the connect handler in setupSocketHandlers.
+  if (!socket?.connected) {
+    await connect()
+  } else if (away > FRESH_SOCKET_AFTER_MS) {
+    await connect({ force: true })
   }
 }
 

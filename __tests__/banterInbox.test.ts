@@ -184,7 +184,7 @@ describe('the list is still a list', () => {
   it('recycles avatars by key', () => {
     // `expo-image` reuses native views in a FlatList; without this a row
     // paints the previous row's face for a frame. Invisible in a screenshot.
-    expect(SECTIONS()).toContain('recyclingKey={item.avatarUrl ?? undefined}')
+    expect(SECTIONS()).toContain('recyclingKey={item.avatarUrl}')
   })
 })
 

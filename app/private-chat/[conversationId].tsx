@@ -51,7 +51,7 @@ import {
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
-import { subscribeToConversation, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
+import { subscribeToConversation, subscribeToDelivered, startPrivateTyping, stopPrivateTyping, markPrivateMessagesRead, PrivateMessageCallback, PrivateTypingCallback, PrivateReadCallback } from '../../lib/socketClient'
 import { matchOpener } from '../../lib/matchOpener'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -59,6 +59,14 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
 import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
+import { initialsOf } from '../../lib/initials'
+import { useFollowEnd } from '../../lib/useFollowEnd'
+import { newClientId } from '../../lib/clientId'
+import { receiptFor } from '../../lib/receipts'
+import { withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
+import type { DmReplyQuote } from '../../lib/apiClient'
+import { ReplyBar } from '../../components/chat/ReplyBar'
+import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import Animated from 'react-native-reanimated'
 import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
@@ -66,6 +74,7 @@ import { fadeOutFast, popIn, popOut } from '../../components/motion/presence'
 type ChatListItem =
   | ({ kind: 'message' } & PrivateMessage)
   | { kind: 'separator'; id: string; label: string }
+  | UnreadDivider
 
 const mapMessage = (msg: any): PrivateMessage => ({
   id: msg.id,
@@ -74,7 +83,24 @@ const mapMessage = (msg: any): PrivateMessage => ({
   sender: msg.sender,
   text: msg.text,
   isRead: msg.isRead,
+  deliveredAt: msg.deliveredAt ?? null,
+  replyTo: msg.replyTo ?? null,
   createdAt: msg.createdAt,
+})
+
+/** A reply's quote as the bubble draws it. */
+const quoteLine = (q: DmReplyQuote) => ({
+  senderName: q.senderName,
+  text: q.unavailable ? 'Message unavailable' : q.text ?? (q.mediaType === 'image' ? '📷 Photo' : q.mediaType === 'video' ? '🎥 Video' : ''),
+})
+
+/** A local quote for a message being replied to, before the server's arrives. */
+const quoteFrom = (m: PrivateMessage): DmReplyQuote => ({
+  id: m.id,
+  senderName: m.sender?.name || '',
+  text: m.text,
+  mediaType: null,
+  unavailable: false,
 })
 
 const formatTime = (iso: string) => {
@@ -98,11 +124,6 @@ const formatDayLabel = (iso: string) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
-
-const getInitials = (name: string) => {
-  const parts = String(name || '?').trim().split(/\s+/)
-  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : '')).toUpperCase() || '?'
-}
 
 function ChatHeader({ name, avatar, subtitle, onBack, onOptions, onProfile }: {
   name: string
@@ -148,7 +169,7 @@ function ChatHeader({ name, avatar, subtitle, onBack, onOptions, onProfile }: {
           <PseudonymMark seed={avatar.seed} />
         ) : (
           <View style={[headerStyles.avatar, headerStyles.avatarFallback]}>
-            <Text style={headerStyles.avatarText}>{getInitials(name)}</Text>
+            <Text style={headerStyles.avatarText}>{initialsOf(name)}</Text>
           </View>
         )}
       </View>
@@ -296,6 +317,10 @@ function PrivateChatInner() {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  // The message the next send replies to (SCRUM-409).
+  const [replyingTo, setReplyingTo] = useState<PrivateMessage | null>(null)
+  // Where the unread started when the thread opened (SCRUM-406).
+  const [unread, setUnread] = useState<{ firstId: string; count: number } | null>(null)
   /*
    * Not a send-in-flight state: `sending` above still guards the double tap.
    * This is the composer lock, and it is set only when the server says the
@@ -375,12 +400,6 @@ function PrivateChatInner() {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
-  /*
-   * Keep following the end while content lays out, as the room does: a
-   * `scrollToEnd` 50ms after the first page measured a list that had not laid
-   * out yet, so a thread could open one message short. Flips only on a drag.
-   */
-  const followEndRef = useRef(true)
   /*
    * Messages that should rise into place as they mount: the one you just sent,
    * and whichever message is first into an empty thread (it replaces the
@@ -473,6 +492,8 @@ function PrivateChatInner() {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  // Follows the end as the first page lays out (lib/useFollowEnd.ts).
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   // State is set only in the callbacks, once the request has settled.
   const loadMessages = (cursor?: string) =>
@@ -498,8 +519,19 @@ function PrivateChatInner() {
             // A message still sending, or one that failed, exists only on
             // this phone; a refresh keeps it rather than replacing the list whole.
             setMessages(prev => [...msgs, ...prev.filter(isLocalMessage)])
-            // Scroll to bottom instantly on initial load — no animation so there's no visible jump
-            setTimeout(() => scrollToBottom(false), 50)
+            /*
+             * Open where they left off (SCRUM-406): the server named the first
+             * unread before marking the thread read. Only on the first open —
+             * a background refresh must not yank someone who is reading.
+             */
+            const firstUnreadId = result.data.firstUnreadId
+            if (!initialLoadDoneRef.current && firstUnreadId && (result.data.unreadCount ?? 0) > 0) {
+              setUnread({ firstId: firstUnreadId, count: result.data.unreadCount ?? 0 })
+              follow.stop()
+              if (!msgs.some(m => m.id === firstUnreadId) && result.data.hasMore && result.data.nextCursor) {
+                void loadBackTo(firstUnreadId, result.data.nextCursor)
+              }
+            }
             initialLoadDoneRef.current = true
           }
           setHasMore(result.data.hasMore)
@@ -514,6 +546,24 @@ function PrivateChatInner() {
         if (!cursor) setLoadError(true)
       })
       .finally(() => setLoading(false))
+
+  /** Older pages until the first unread is on screen — at most three more. */
+  const loadBackTo = async (messageId: string, cursor: string) => {
+    let next: string | null = cursor
+    for (let page = 0; page < 3 && next; page++) {
+      const r = await apiClient.getConversationMessages(String(conversationId), { limit: 50, before: next })
+      if (!r.success || !r.data) return
+      const older = r.data.messages.map(mapMessage).reverse()
+      setMessages(prev => {
+        const ids = new Set(prev.map(m => m.id))
+        return [...older.filter(m => !ids.has(m.id)), ...prev]
+      })
+      setHasMore(r.data.hasMore)
+      setOldestCursor(r.data.nextCursor)
+      if (older.some(m => m.id === messageId)) return
+      next = r.data.hasMore ? r.data.nextCursor : null
+    }
+  }
 
   const loadOlderMessages = async () => {
     if (loadingOlder || !hasMore || !oldestCursor) return
@@ -584,7 +634,13 @@ function PrivateChatInner() {
     const u1 = subscribeToConversation(String(conversationId), handleNewMessage)
     const u2 = subscribeToConversation(String(conversationId), handleTyping)
     const u3 = subscribeToConversation(String(conversationId), handleRead)
-    return () => { u1(); u2(); u3(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
+    // ✓✓ delivered as their app gets them (SCRUM-408).
+    const u4 = subscribeToDelivered((d) => {
+      if (d.conversationId !== String(conversationId)) return
+      const at = new Date().toISOString()
+      setMessages(prev => prev.map(m => d.messageIds.includes(m.id) && !m.deliveredAt ? { ...m, deliveredAt: at } : m))
+    })
+    return () => { u1(); u2(); u3(); u4(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
   }, [conversationId, authUser?.id, markArriving])
 
   useEffect(() => {
@@ -600,14 +656,19 @@ function PrivateChatInner() {
    * (moderation), or marks it "Not sent · Tap to retry" with the reason in a
    * toast.
    */
-  const deliver = async (localId: string, messageText: string) => {
+  const deliver = async (localId: string, messageText: string, opts: { clientId: string; replyToId?: string }) => {
+    const { clientId, replyToId } = opts
     const markFailed = (reason: string) => {
       setMessages(prev => prev.map(m => m.id === localId ? { ...m, failed: true } : m))
       showToast(reason, 'error')
     }
 
     try {
-      const result = await apiClient.sendPrivateMessage(String(conversationId), { text: messageText })
+      const result = await apiClient.sendPrivateMessage(String(conversationId), {
+        text: messageText,
+        clientId,
+        ...(replyToId && { replyToId }),
+      })
 
       if (!result.success) {
         /*
@@ -664,26 +725,34 @@ function PrivateChatInner() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     stopPrivateTyping(String(conversationId))
 
-    const local = optimisticDirectMessage(messageText, String(conversationId), authUser.id)
+    const replyTo = replyingTo
+    const local: PrivateMessage = {
+      ...optimisticDirectMessage(messageText, String(conversationId), authUser.id),
+      // The same id on every try of this send (SCRUM-410), and what it replies to.
+      clientId: newClientId(),
+      ...(replyTo && !replyTo.failed && { replyToId: replyTo.id, replyTo: quoteFrom(replyTo) }),
+    }
     markArriving(local.id)
     setMessages(prev => [...prev, local])
     if (text === undefined) setNewMessage('')
+    setReplyingTo(null)
     setSending(true)
-    followEndRef.current = true
+    // Your own send brings the end back into view and follows it again.
+    follow.noteAtEnd(true)
     setTimeout(() => scrollToBottom(true), 80)
 
     if (authUser?.id) queryCache.invalidate(`personal_chats_${authUser.id}`)
     emitChatListUpdate({ type: 'personal', conversationId: String(conversationId), lastMessage: messageText, lastMessageTime: local.createdAt })
 
     // `deliver` catches its own failures, so this always runs.
-    await deliver(local.id, messageText)
+    await deliver(local.id, messageText, { clientId: local.clientId ?? newClientId(), replyToId: local.replyToId })
     setSending(false)
   }
 
   const retrySend = (message: PrivateMessage) => {
     if (!message.text) return
     setMessages(prev => prev.map(m => m.id === message.id ? { ...m, failed: false } : m))
-    void deliver(message.id, message.text)
+    void deliver(message.id, message.text, { clientId: message.clientId ?? newClientId(), replyToId: message.replyToId })
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -694,8 +763,23 @@ function PrivateChatInner() {
       if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.createdAt) }); lastDay = day }
       items.push({ kind: 'message', ...m })
     }
-    return items
-  }, [messages])
+    return withUnreadDivider(items, unread?.firstId, unread?.count ?? 0)
+  }, [messages, unread])
+
+  /*
+   * Scroll to "N unread messages" once it is in the list (SCRUM-406). Once per
+   * open; rows further up may not be measured yet, which is what
+   * `onScrollToIndexFailed` below answers.
+   */
+  const anchoredRef = useRef(false)
+  const dividerIndex = chatItems.findIndex(i => i.kind === 'unread')
+  useEffect(() => {
+    if (anchoredRef.current || dividerIndex < 0) return
+    anchoredRef.current = true
+    requestAnimationFrame(() =>
+      flatListRef.current?.scrollToIndex({ index: dividerIndex, viewPosition: 0.1, animated: false })
+    )
+  }, [dividerIndex])
 
   /*
    * The long-press menu, as the app's one sheet (`lib/sheet.ts`).
@@ -709,6 +793,7 @@ function PrivateChatInner() {
     const isMe = message.senderId === authUser?.id
     const actions: SheetAction[] = []
     if (message.failed) actions.push({ label: 'Try again', variant: 'primary', then: () => retrySend(message) })
+    else actions.push({ label: 'Reply', then: () => setReplyingTo(message) })
     actions.push({
       label: 'Copy',
       then: () => {
@@ -754,6 +839,7 @@ function PrivateChatInner() {
   const renderMessage = ({ item }: { item: PrivateMessage }) => {
     const isMe = item.senderId === authUser?.id
     return (
+      <SwipeToReply enabled={!item.failed} onReply={() => setReplyingTo(item)}>
       <ChatBubble
         variant="direct"
         mine={isMe}
@@ -768,19 +854,21 @@ function PrivateChatInner() {
          * different answers, so a tick there would either lie or need twenty.
          * A message that never arrived has nothing to tick.
          */
-        receipt={isMe && !isLocalMessage(item) ? (item.isRead ? 'read' : 'sent') : null}
+        receipt={isLocalMessage(item) ? null : receiptFor(item, authUser?.id)}
+        replyTo={item.replyTo ? quoteLine(item.replyTo) : null}
         failed={item.failed}
         onRetry={item.failed ? () => retrySend(item) : undefined}
         // Every message can be copied; the menu decides whether Report is on it.
         onLongPress={() => openMessageMenu(item)}
       />
+      </SwipeToReply>
     )
   }
 
   const renderChatItem = ({ item }: { item: ChatListItem }) => {
     // Same centred pill the room uses -- a date is the conversation narrating
     // itself, not something either person said.
-    if (item.kind === 'separator') return <SystemNotice label={item.label} />
+    if (item.kind === 'separator' || item.kind === 'unread') return <SystemNotice label={item.label} />
     return renderMessage({ item })
   }
 
@@ -988,15 +1076,18 @@ function PrivateChatInner() {
               </ScalePress>
             </Animated.View>
           ) : null}
-          // Follow the end while the reader is at it, as the room does.
-          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
-          onScrollBeginDrag={() => { followEndRef.current = false }}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollToIndexFailed={(info) => {
+            // Not measured yet: get close by the average row, then land on it.
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
+            setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.1, animated: false }), 120)
+          }}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
-            // Back at the end by hand: follow again.
-            if (atBottom) followEndRef.current = true
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}
@@ -1016,6 +1107,14 @@ function PrivateChatInner() {
             </TouchableOpacity>
           </Animated.View>
         )}
+
+        {replyingTo ? (
+          <ReplyBar
+            name={replyingTo.senderId === authUser?.id ? 'yourself' : reveal?.displayName || String(otherUserName || 'them')}
+            text={replyingTo.text || ''}
+            onCancel={() => setReplyingTo(null)}
+          />
+        ) : null}
 
         <ChatComposer
           value={newMessage}

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type View
 
 import { OptimizedImage } from '../OptimizedImage'
 import { DayHeading } from '../ui/DayHeading'
+import { initialsOf } from '../../lib/initials'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { liveRoomMeta } from './inbox'
@@ -268,15 +269,23 @@ export function BanterConversation({
          * to prevent.
          */
         <PseudonymDisc pseudonym={item.title} />
-      ) : (
+      ) : item.avatarUrl ? (
         <OptimizedImage
-          source={item.avatarUrl ?? ''}
-          recyclingKey={item.avatarUrl ?? undefined}
+          source={item.avatarUrl}
+          recyclingKey={item.avatarUrl}
           style={styles.rowAvatar as never}
           width={ROW_AVATAR}
           height={ROW_AVATAR}
           contentFit="cover"
         />
+      ) : (
+        // No photo set: their initials, the same the conversation header
+        // draws. This was an empty source, which spun for ever (SCRUM-404).
+        <View style={styles.rowAvatar}>
+          <Text style={styles.rowInitials} maxFontSizeMultiplier={1.2}>
+            {initialsOf(item.title)}
+          </Text>
+        </View>
       )}
 
       <View style={styles.rowBody}>
@@ -406,6 +415,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowInitials: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
   /*
    * Fixed against Dynamic Type — `maxFontSizeMultiplier={1}`.
    *

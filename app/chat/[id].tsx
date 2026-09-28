@@ -46,10 +46,14 @@ import { messageReportStep } from '../../lib/safetyUtils'
 import { closeSheet, showSheet, type SheetAction } from '../../lib/sheet'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { useFollowEnd } from '../../lib/useFollowEnd'
+import { newClientId } from '../../lib/clientId'
+import { ReplyBar } from '../../components/chat/ReplyBar'
+import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
-import { fadeInFast, fadeOutFast, popIn, popOut } from '../../components/motion/presence'
+import { popIn, popOut } from '../../components/motion/presence'
 
 interface Message {
   message_id: string
@@ -58,6 +62,8 @@ interface Message {
   message_text: string
   message_type: string
   reply_to_message_id: string | null
+  /** This send's own id, kept on the optimistic row so a retry is the same send (SCRUM-410). */
+  client_id?: string
   is_edited: boolean
   created_at: string
   /** Hidden by moderation. Only ever true on the sender's own messages. */
@@ -263,15 +269,6 @@ function GroupChatInner() {
 
   const flatListRef = useRef<FlatList>(null)
   const isAtBottomRef = useRef(true)
-  /*
-   * Whether the list should keep following its end as content lays out.
-   * Distinct from `isAtBottomRef`: that one is derived from scroll geometry,
-   * and during the first layout a programmatic scrollToEnd is followed by the
-   * content growing again, so the geometry read "not at the bottom" and the
-   * next size change was ignored -- the room opened one message short, the
-   * newest bubble under the composer. This flips only on a real drag.
-   */
-  const followEndRef = useRef(true)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -288,6 +285,13 @@ function GroupChatInner() {
   const scrollToBottom = (animated = true) => {
     flatListRef.current?.scrollToEnd({ animated })
   }
+  /*
+   * Follows the end as content lays out, until a real drag (lib/useFollowEnd).
+   * Distinct from `isAtBottomRef`, which is scroll geometry: during the first
+   * layout a programmatic scrollToEnd is followed by the content growing again,
+   * so geometry read "not at the bottom" and the room opened one message short.
+   */
+  const follow = useFollowEnd(() => scrollToBottom(false))
 
   const transformRawMessages = (raw: any[], userId?: string): Message[] => {
     const list = raw.map((msg: any) => {
@@ -353,8 +357,6 @@ function GroupChatInner() {
           if (cached) {
             setMessages(cached)
             setLoading(false)
-            // Instant jump to bottom when restoring from cache
-            setTimeout(() => scrollToBottom(false), 50)
             if (!refreshEvenIfCached) return
           }
         }
@@ -391,8 +393,6 @@ function GroupChatInner() {
           ...prev.filter(m => m.message_id.startsWith('temp-') && !msgs.some(n => n.message_id === m.message_id)),
         ])
         if (messagesCacheKey) queryCache.set(messagesCacheKey, msgs, MESSAGES_CACHE_TTL)
-        // Scroll to bottom instantly on initial load
-        setTimeout(() => scrollToBottom(false), 50)
       })
       .catch((err) => {
         Logger.error('chat', 'Error loading messages', { error: err })
@@ -631,7 +631,14 @@ function GroupChatInner() {
    */
   const deliver = async (optimistic: Message) => {
     try {
-      const result = await apiClient.sendChatMessage(chatRoomId as string, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined)
+      const result = await apiClient.sendChatMessage(
+        chatRoomId as string,
+        optimistic.message_text,
+        'text',
+        undefined,
+        optimistic.reply_to_message_id ?? undefined,
+        optimistic.client_id
+      )
       /*
        * Every answer re-decides the lock: a refusal sets it, and a send that
        * got through lifts it. A mute ends on the server only when a send is
@@ -707,6 +714,7 @@ function GroupChatInner() {
       message_text: messageText,
       message_type: 'text',
       reply_to_message_id: replyingTo ? replyingTo.message_id : null,
+      client_id: newClientId(),
       is_edited: false,
       created_at: new Date().toISOString(),
       replyTo: replyingTo || undefined,
@@ -904,6 +912,7 @@ function GroupChatInner() {
     }
 
     return (
+      <SwipeToReply enabled={!item.removed && !item.failed} onReply={() => setReplyingTo(item)}>
       <ChatBubble
         mine={isMe}
         /*
@@ -929,6 +938,7 @@ function GroupChatInner() {
         onRetry={item.failed ? () => retrySend(item) : undefined}
         onLongPress={item.removed ? undefined : () => openMessageMenu(item)}
       />
+      </SwipeToReply>
     )
   }
 
@@ -1052,14 +1062,14 @@ function GroupChatInner() {
            * Driven 2026-09-13, twice. Content growing while you are reading
            * older messages leaves you where you are.
            */
-          onContentSizeChange={() => { if (followEndRef.current) scrollToBottom(false) }}
-          onScrollBeginDrag={() => { followEndRef.current = false }}
+          onContentSizeChange={follow.onContentSizeChange}
+          onScrollBeginDrag={follow.onScrollBeginDrag}
           onScroll={(e) => {
             const offsetFromBottom = e.nativeEvent.contentSize.height - e.nativeEvent.contentOffset.y - e.nativeEvent.layoutMeasurement.height
             const atBottom = offsetFromBottom < 80
             isAtBottomRef.current = atBottom
             // Back at the end by hand: follow again.
-            if (atBottom) followEndRef.current = true
+            follow.noteAtEnd(atBottom)
             setShowScrollToBottom(!atBottom)
           }}
           scrollEventThrottle={80}
@@ -1080,23 +1090,13 @@ function GroupChatInner() {
           </Animated.View>
         )}
 
-        {replyingTo && (
-          <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.replyBar}>
-            <View style={styles.replyBarLine} />
-            <View style={styles.replyBarContent}>
-              <Text style={styles.replyBarLabel} numberOfLines={1}>Replying to {replyingTo.sender_name}</Text>
-              <Text style={styles.replyBarMessage} numberOfLines={1}>{replyingTo.message_text}</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.replyBarClose, pressed && styles.pressed]}
-              onPress={() => setReplyingTo(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel reply"
-            >
-              <Ionicons name="close" size={ICON.md} color={EMBER.textSecondary} />
-            </Pressable>
-          </Animated.View>
-        )}
+        {replyingTo ? (
+          <ReplyBar
+            name={replyingTo.sender_name}
+            text={replyingTo.message_text}
+            onCancel={() => setReplyingTo(null)}
+          />
+        ) : null}
 
         <ChatComposer
           value={newMessage}
@@ -1149,20 +1149,7 @@ const styles = StyleSheet.create({
 
   // Typing
 
-  // Reply bar above input
-  replyBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: GUTTER, paddingVertical: SPACE.sm,
-    backgroundColor: EMBER.surfaceSunken,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: EMBER.separator,
-    gap: SPACE.md,
-  },
-  replyBarLine: { width: 3, height: 32, backgroundColor: EMBER.textSecondary, borderRadius: EMBER_RADIUS.pill },
-  replyBarContent: { flex: 1 },
-  replyBarLabel: { ...TYPE.caption, color: EMBER.textPrimary },
-  replyBarMessage: { ...TYPE.meta, color: EMBER.textSecondary },
-  // A `CONTROL.md` target: the glyph alone was a 24pt tap beside the composer.
-  replyBarClose: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
+
 
   // Input bar
 
