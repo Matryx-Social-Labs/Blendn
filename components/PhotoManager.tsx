@@ -353,6 +353,9 @@ export default function PhotoManager({
         style={[styles.addPhoto, { width: itemSize, height: itemSize }]}
         onPress={handleAddPhoto}
         disabled={uploading}
+        accessibilityRole="button"
+        accessibilityLabel="Add photo"
+        accessibilityState={{ disabled: uploading, busy: uploading }}
       >
         {uploading ? (
           <ActivityIndicator size="small" color={EMBER.textSecondary} />

@@ -9,7 +9,6 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Dimensions,
   InteractionManager,
@@ -29,6 +28,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
+import { showSheet } from '../../lib/sheet'
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
@@ -881,33 +881,36 @@ export default function EventDetail() {
     }
   }
 
+  // The app's one sheet, like every other "are you sure" (lib/sheet.ts): a
+  // failed delete stays on the sheet with "Try again" rather than a second popup.
   const handleDeleteEvent = () => {
-    Alert.alert(
-      'Delete this event?',
-      "Everyone going loses it, and it can't be undone.",
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showSheet({
+      kind: 'actions',
+      title: 'Delete this event?',
+      message: "Everyone going loses it, and it can't be undone.",
+      actions: [
         {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
+          label: 'Delete event',
+          variant: 'destructive',
+          run: async () => {
             try {
               const result = await apiClient.deleteEvent(String(id))
-              if (result.success) {
-                feedback.success()
-                router.back()
-              } else {
+              if (!result.success) {
                 feedback.error()
-                showTray("Couldn't delete the event", 'Try again.')
+                return { ok: false, error: "Couldn't delete the event. Try again." }
               }
             } catch {
               feedback.error()
-              showTray("Couldn't delete the event", 'Try again.')
+              return { ok: false, error: "Couldn't delete the event. Try again." }
             }
+            feedback.success()
+            router.back()
+            return { ok: true, toast: 'Event deleted' }
           },
         },
-      ]
-    )
+        { label: 'Cancel', cancel: true },
+      ],
+    })
   }
 
   const openInMaps = () => {
