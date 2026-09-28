@@ -125,10 +125,11 @@ describe('one age rule for every form that takes an age', () => {
 
   it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
-    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}>\{ADULTS_ONLY\}<\/Text>/)
+    // Announced as it appears (a live region), so the attributes may grow.
+    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>\{ADULTS_ONLY\}<\/Text>/)
     // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
     expect(src).toMatch(
-      /dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}>That is not a date we recognise\.<\/Text>/
+      /dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>That is not a date we recognise\.<\/Text>/
     )
     expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
     // The two cases are disjoint: an impossible date is never "under 18".

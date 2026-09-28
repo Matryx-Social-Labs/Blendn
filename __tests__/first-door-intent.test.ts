@@ -35,7 +35,8 @@ describe('the question', () => {
     expect(prefs).toMatch(/\.\.\.\(askIntent && intentTouched \? \{ rememberIntent: true \} : \{\}\)/)
     expect(prefs).toContain('{askIntent ? intentBlock : revealBlock}')
     expect(prefs).toContain("askIntent ? 'Why do you go out?' : 'Why are you here tonight?'")
-    expect(prefs).toContain('disabled={saving || (askIntent && intent.length === 0)}')
+    // Off with no answer; busy (and so also off) while saving.
+    expect(prefs).toMatch(/disabled=\{askIntent && intent\.length === 0\}\s*busy=\{saving\}/)
   })
 
   it('never offers Dating to a minor, and shows the server\'s sentence when it refuses', () => {
