@@ -143,8 +143,8 @@ describe('the profile carries the Grid\'s two actions', () => {
      */
     expect(SCREEN()).toMatch(/useLocalSearchParams<\{\s*id: string\s*eventId\?: string/)
     // The room passes the event with the id when it opens a profile.
-    expect(stripComments(read('components/blendn/BlendnScreen.tsx'))).toContain(
-      '...(eventId ? { eventId } : {})'
+    expect(stripComments(read('components/blendn/BlendnScreen.tsx'))).toMatch(
+      /\.\.\.\(eventId \? \{ eventId[,\s}]/
     )
   })
 
