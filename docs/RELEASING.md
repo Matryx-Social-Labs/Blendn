@@ -319,8 +319,17 @@ two release builds), four steps each:
 2. **Build.** `npx --yes eas-cli@24.8.0 build --local --platform <p> --profile staging --non-interactive …`
 3. **Smoke test.** The build is launched, and stays up for 30 seconds, or it
    is not submitted (below).
-4. **Submit.** `npx --yes eas-cli@24.8.0 submit --platform <p> --profile staging --path <file> --non-interactive`,
-   up to three tries.
+4. **Submit**, up to three tries.
+   - **iOS goes straight to App Store Connect** with Apple's `xcrun altool
+     --upload-app`, when the App Store Connect API key is on this Mac at
+     `~/.appstoreconnect/private_keys/AuthKey_F234C2B22X.p8` (chmod 600, never
+     in the repo). It is the same key EAS uses for submissions: key
+     `F234C2B22X`, issuer `45a73825-a8a9-4741-9b94-6ad6aa2bc726`. Override with
+     `ASC_KEY_ID` / `ASC_ISSUER_ID`. Build 120 sat 40 minutes in the free plan's
+     EAS Submit queue without starting; altool uploaded it in 2.5.
+   - Without the key, and always for Android, it's
+     `npx --yes eas-cli@24.8.0 submit --platform <p> --profile staging --path <file> --non-interactive`.
+     Play's service-account key exists only on EAS.
 
 A failure on one platform does not stop the other, as in the cloud workflow. It
 ends with a table (platform, build, smoke, submit, artifact) and exits non-zero
