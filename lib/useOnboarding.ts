@@ -266,10 +266,11 @@ export function useOnboarding(step: OnboardingStep) {
         // In `finally` rather than after the call: a throw here used to leave
         // this stuck true, which is what made the button spin forever.
         setSaving(false)
+        // A failed save stays on the step, so Continue has to work again.
+        if (failure) inFlight.current = false
       }
 
       if (failure) {
-        inFlight.current = false
         showToast(failure, 'error')
         return false
       }
