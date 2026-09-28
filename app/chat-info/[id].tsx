@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useState } from 'react'
 import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -283,7 +282,6 @@ function ChatInfoInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
       <AppHeader title="Room info" onBack={() => router.back()} />
 
       <FlatList

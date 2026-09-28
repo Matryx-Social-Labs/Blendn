@@ -1,6 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
@@ -1000,7 +999,6 @@ function ChatInner() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
       <PulseTopBar
         title="The Banter"
         actions={<NotificationBell />}

@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import {
   revealAction,
   revealConfirmation,
@@ -838,8 +837,6 @@ function PrivateChatInner() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
-
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param

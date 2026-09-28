@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
-import { StatusBar } from 'expo-status-bar'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -122,7 +121,6 @@ export function SceneLightbox({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <StatusBar style="light" />
       <SwipeToDismiss onDismiss={onClose} enabled={!zoomed}>
         <FlatList
           ref={listRef}

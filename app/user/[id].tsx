@@ -2,7 +2,6 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import { StatusBar } from 'expo-status-bar'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -424,7 +423,6 @@ function UserProfileInner() {
   if (!loading && !profile) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <StatusBar style="light" />
         {loadError === 'gone' ? (
           /*
            * One "gone" state, the same shape as every other: deleted, blocked
@@ -488,8 +486,6 @@ function UserProfileInner() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
-
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + SPACE.xxxl }]}
         showsVerticalScrollIndicator={false}
