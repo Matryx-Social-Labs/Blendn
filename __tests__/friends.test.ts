@@ -1,5 +1,4 @@
 import {
-  friendsCountLabel,
   friendsSinceLabel,
   inviteCta,
   inviteLine,
@@ -47,10 +46,5 @@ describe('labels', () => {
   it('says month and year for a friendship, never the day', () => {
     expect(friendsSinceLabel('2026-09-27T21:54:00.000Z')).toBe('Friends since Sep 2026')
     expect(friendsSinceLabel('not a date')).toBe('Friends')
-  })
-
-  it('counts friends in words', () => {
-    expect(friendsCountLabel(1)).toBe('1 friend')
-    expect(friendsCountLabel(3)).toBe('3 friends')
   })
 })

@@ -73,12 +73,12 @@ export type ConfettiArea = {
 }
 
 /** How high a piece launched upwards at `speed` climbs before it turns, with drag. */
-export function apexHeight(speed: number): number {
+function apexHeight(speed: number): number {
   return speed / DRAG - (GRAVITY / (DRAG * DRAG)) * Math.log(1 + (speed * DRAG) / GRAVITY)
 }
 
 /** The launch speed that climbs `height` px. Bisection: `apexHeight` has no closed inverse. */
-export function speedForApex(height: number): number {
+function speedForApex(height: number): number {
   let lo = 0
   let hi = 20_000
   for (let i = 0; i < 40; i++) {

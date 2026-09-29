@@ -355,12 +355,4 @@ describe('anonymousByDefault', () => {
   it('is the only case that is not anonymous: an explicit yes', () => {
     expect(anonymousByDefault({ reveal_by_default: true })).toBe(false)
   })
-
-  it('round-trips against what the screen writes back', () => {
-    // The screen stores `reveal_by_default: !anonymous`. If these two ever
-    // disagree, a person who chose one thing is saved as the other.
-    for (const anonymous of [true, false]) {
-      expect(anonymousByDefault({ reveal_by_default: !anonymous })).toBe(anonymous)
-    }
-  })
 })

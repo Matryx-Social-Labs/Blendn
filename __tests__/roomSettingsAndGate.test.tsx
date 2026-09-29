@@ -34,6 +34,11 @@ describe("the reveal switch when there is nothing to reveal", () => {
     expect(screen.getByText(/Add a photo to your profile first/)).toBeTruthy()
   })
 
+  it("keeps the reason out of the way when nothing is missing", async () => {
+    await render(<RoomVisibilityBanner revealed={false} onToggle={() => {}} />)
+    expect(screen.queryByText(/to your profile first/)).toBeNull()
+  })
+
   it("NEVER blocks going anonymous, whatever the profile looks like", async () => {
     /*
      * The property that matters most here. A gate that could trap somebody in

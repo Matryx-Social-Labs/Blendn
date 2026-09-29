@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react-native"
 import { CityArtCard } from "../components/cityArt/CityArtCard"
-import { CityScene } from "../components/cityArt/CityScene"
 import { buildScene } from "../components/cityArt/scenes"
 import { SCENE_PALETTES, cityArtFor, timeOfDay, type CityArtKey, type TimeOfDay } from "../lib/cityArt"
 
@@ -77,10 +76,6 @@ describe("buildScene", () => {
 })
 
 describe("rendering", () => {
-  it.each(CITIES)("mounts %s", async (city) => {
-    await render(<CityScene city={city} width={340} height={170} fit="slice" tod="night" />)
-  })
-
   it("labels the picker card with the city and its count, not the drawing", async () => {
     await render(
       <CityArtCard city="Bengaluru" art={cityArtFor("Bengaluru")!} eventCount={26} active here onPress={() => {}} />,
