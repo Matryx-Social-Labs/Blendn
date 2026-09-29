@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
@@ -12,7 +13,6 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Pressable,
@@ -805,8 +805,9 @@ function PrivateChatInner() {
     actions.push({
       label: 'Copy',
       then: () => {
-        Clipboard.setString(message.text || '')
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+        Clipboard.setStringAsync(message.text || '')
+          .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+          .catch(() => {})
       },
     })
     if (message.failed) {

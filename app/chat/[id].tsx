@@ -1,11 +1,11 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
+import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { router, Stack, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Pressable,
@@ -827,8 +827,9 @@ function GroupChatInner() {
     const copy: SheetAction = {
       label: 'Copy',
       then: () => {
-        Clipboard.setString(message.message_text)
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+        Clipboard.setStringAsync(message.message_text)
+          .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+          .catch(() => {})
       },
     }
 
