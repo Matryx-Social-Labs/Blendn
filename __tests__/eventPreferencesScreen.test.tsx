@@ -106,6 +106,40 @@ it('leaves the intent alone when only the reveal was opened', async () => {
   expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: undefined, revealed: false })
 })
 
+it('leads with the intent question at the first door, and the reveal question otherwise', async () => {
+  await render(<EventPreferences />)
+  expect(await screen.findByText('Why do you go out?')).toBeTruthy()
+  expect(screen.queryByText('Why are you here tonight?')).toBeNull()
+})
+
+it('asks "Why are you here tonight?" when only the reveal was opened', async () => {
+  Object.assign(mockParams, { askIntent: undefined })
+  await render(<EventPreferences />)
+  expect(await screen.findByText('Why are you here tonight?')).toBeTruthy()
+  expect(screen.queryByText('Why do you go out?')).toBeNull()
+})
+
+it("shows the server's sentence when a save is refused, and stays on the screen", async () => {
+  // "Dating is for 18+" is something a person can act on; "could not save" is not.
+  api.setMatchPreferences.mockResolvedValue({ success: false, error: 'Dating is for 18+' } as never)
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Dating is for 18+', 'error'))
+  expect(router.back).not.toHaveBeenCalled()
+})
+
+it('says it could not save when a refusal carries no sentence', async () => {
+  api.setMatchPreferences.mockResolvedValue({ success: false } as never)
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save. Try again.', 'error'))
+  expect(router.back).not.toHaveBeenCalled()
+})
+
 it('never offers Dating to a minor', async () => {
   api.getProfile.mockResolvedValue({
     success: true,
