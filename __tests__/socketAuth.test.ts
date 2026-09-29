@@ -1,15 +1,12 @@
-import {
-  REFRESH_SKEW_MS,
-  buildAuthPayload,
-  isExpiringSoon,
-  msUntilExpiry,
-} from '../lib/socketAuth'
+import { buildAuthPayload } from '../lib/socketAuth'
 
 /**
  * The bug these pin down took twenty minutes of idling to reproduce by hand and
- * looked fixed by a change that did nothing. Both properties matter:
- * `msUntilExpiry` must read `exp` as seconds, and `buildAuthPayload` must
- * actually refresh rather than re-reading the same dead token.
+ * looked fixed by a change that did nothing. `buildAuthPayload` must actually
+ * refresh rather than re-reading the same dead token, and it must read `exp` as
+ * seconds (RFC 7519) — read as milliseconds every expiry lands in 1970 and every
+ * attempt refreshes, hammering the auth endpoint while looking like it works.
+ * Everything goes through `buildAuthPayload`: the expiry helpers are private.
  */
 
 const NOW = 1_800_000_000_000 // fixed clock, ms
@@ -23,59 +20,6 @@ function jwt(payload: Record<string, unknown>): string {
       .replace(/=+$/, '')
   return `${b64({ alg: 'HS256' })}.${b64(payload)}.signature`
 }
-
-describe('msUntilExpiry', () => {
-  it('reads exp as seconds, not milliseconds', () => {
-    /*
-     * The single highest-value assertion here. RFC 7519 says `exp` is seconds
-     * since epoch. Treating it as milliseconds puts every expiry in January
-     * 1970, which makes `isExpiringSoon` return true forever — so every socket
-     * attempt would trigger a refresh, hammering the auth endpoint while
-     * looking like it works.
-     */
-    const token = jwt({ exp: NOW / 1000 + 600 })
-    expect(msUntilExpiry(token, NOW)).toBe(600_000)
-  })
-
-  it('goes negative for a token that has already expired', () => {
-    expect(msUntilExpiry(jwt({ exp: NOW / 1000 - 30 }), NOW)).toBe(-30_000)
-  })
-
-  it('returns null rather than throwing on anything unreadable', () => {
-    for (const bad of [null, undefined, '', 'not-a-jwt', 'a.b', 'a.b.c.d', 'a.!!!.c']) {
-      expect(msUntilExpiry(bad as string, NOW)).toBeNull()
-    }
-  })
-
-  it('returns null when the payload carries no exp', () => {
-    expect(msUntilExpiry(jwt({ sub: 'user-1' }), NOW)).toBeNull()
-    expect(msUntilExpiry(jwt({ exp: 'soon' }), NOW)).toBeNull()
-  })
-})
-
-describe('isExpiringSoon', () => {
-  it('is false for a token with plenty of life left', () => {
-    expect(isExpiringSoon(jwt({ exp: NOW / 1000 + 600 }), NOW)).toBe(false)
-  })
-
-  it('is true inside the skew window, before actual expiry', () => {
-    // The point of the skew: a handshake takes time, so a token that is
-    // technically still valid can die mid-connection.
-    expect(isExpiringSoon(jwt({ exp: NOW / 1000 + 30 }), NOW)).toBe(true)
-    expect(REFRESH_SKEW_MS).toBeGreaterThan(0)
-  })
-
-  it('is true for an expired token — the original bug', () => {
-    expect(isExpiringSoon(jwt({ exp: NOW / 1000 - 1 }), NOW)).toBe(true)
-  })
-
-  it('treats an unreadable or missing token as expiring', () => {
-    // Fail towards a refresh: an unnecessary refresh is cheap, a failed
-    // handshake costs the user their realtime connection.
-    expect(isExpiringSoon(null, NOW)).toBe(true)
-    expect(isExpiringSoon('garbage', NOW)).toBe(true)
-  })
-})
 
 describe('buildAuthPayload', () => {
   const now = () => NOW
@@ -92,6 +36,39 @@ describe('buildAuthPayload', () => {
 
     expect(result).toEqual({ token: fresh })
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('refreshes a token that is still valid but about to expire', async () => {
+    // The point of the skew: a handshake takes time, so a token that is
+    // technically alive can die mid-connection.
+    const dying = jwt({ exp: NOW / 1000 + 30 })
+    const renewed = jwt({ exp: NOW / 1000 + 900 })
+    const getToken = jest.fn().mockResolvedValueOnce(dying).mockResolvedValueOnce(renewed)
+    const refresh = jest.fn().mockResolvedValue(true)
+
+    const result = await buildAuthPayload({ getToken, refresh, now })
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ token: renewed })
+  })
+
+  it.each([
+    ['not a jwt', 'garbage'],
+    ['too few segments', 'a.b'],
+    ['a payload that is not base64', 'a.!!!.c'],
+    ['a payload with no exp', jwt({ sub: 'user-1' })],
+    ['an exp that is not a number', jwt({ exp: 'soon' })],
+  ])('refreshes rather than trusting %s', async (_name, unreadable) => {
+    // A token we cannot read is one we cannot vouch for; an unnecessary
+    // refresh is cheap, a failed handshake costs the user their realtime.
+    const renewed = jwt({ exp: NOW / 1000 + 900 })
+    const getToken = jest.fn().mockResolvedValueOnce(unreadable).mockResolvedValueOnce(renewed)
+    const refresh = jest.fn().mockResolvedValue(true)
+
+    const result = await buildAuthPayload({ getToken, refresh, now })
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ token: renewed })
   })
 
   it('refreshes an expired token and returns the NEW one', async () => {
