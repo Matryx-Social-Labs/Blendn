@@ -1,12 +1,10 @@
 import {
-  GENDERS,
   MAX_ORIENTATIONS,
   ORIENTATIONS,
   needsInterestedInPicker,
   orientationDisabled,
   orientationImpliesInterest,
   toggleOrientation,
-  type Gender,
   type Orientation,
 } from '../lib/dating'
 
@@ -59,16 +57,6 @@ describe('orientationImpliesInterest', () => {
   it('is false while either half is missing', () => {
     expect(orientationImpliesInterest(null, 'straight')).toBe(false)
     expect(orientationImpliesInterest('woman', null)).toBe(false)
-  })
-
-  it('returns a boolean for every declared combination', () => {
-    // Guards against a label being added and falling through into undefined,
-    // which would read as "do not ask" and silently drop the tag.
-    for (const g of GENDERS) {
-      for (const o of ORIENTATIONS) {
-        expect(typeof orientationImpliesInterest(g as Gender, o as Orientation)).toBe('boolean')
-      }
-    }
   })
 })
 

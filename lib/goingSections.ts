@@ -15,6 +15,9 @@ import {
  * `liveWindow`, so a festival's day 2 is live on day 2 and not through the
  * night between. No end time is not live: "on forever" is a guess.
  */
+/** The heading over RSVPs whose run has nothing left to go to. */
+export const ENDED = 'Ended'
+
 export function isLiveNow(e: SessionSource, now: number = Date.now()): boolean {
   const w = liveWindow(e)
   const start = Date.parse(w.start_time)
@@ -34,6 +37,11 @@ export function isLiveNow(e: SessionSource, now: number = Date.now()): boolean {
  * - **Any other live RSVPs** go under one "Happening now" heading, first.
  * - **The rest** are grouped by the day of the window they will be judged by
  *   (`liveWindow`): a multi-day run's next day, not the day the run began.
+ * - **Runs that are over** — every day that goes ahead has ended, the rest
+ *   cancelled — come last, under "Ended", and never lead. The server lists them
+ *   until the run's end, and their window is the last day that went ahead, so
+ *   they sat under that past date among tonight's plans (staging,
+ *   `blr-design-festival`, 2026-09-29: "Sep 28 Monday" in the upcoming list).
  *
  * Saved and Past are `goingItems`' own, unchanged.
  */
@@ -44,8 +52,9 @@ export function goingSections(
   now: number = Date.now()
 ): GoingItem[] {
   const live = going.filter((r) => isLiveNow(r, now))
-  const later = going.filter((r) => !isLiveNow(r, now))
-  const [next, ...rest] = [...live, ...later]
+  const later = going.filter((r) => !isLiveNow(r, now) && !sessionOver(r, now))
+  const over = going.filter((r) => !isLiveNow(r, now) && sessionOver(r, now))
+  const [next, ...rest] = [...live, ...later, ...over]
 
   const items: GoingItem[] = []
   if (next) items.push({ kind: 'next', key: `n:${next.id}`, row: next })
@@ -57,11 +66,17 @@ export function goingSections(
   }
 
   const restLater = rest
-    .filter((r) => !isLiveNow(r, now))
+    .filter((r) => !isLiveNow(r, now) && !sessionOver(r, now))
     .map((row) => ({ start_time: liveWindow(row).start_time, row }))
   for (const day of groupByDay(restLater, new Date(now))) {
     items.push({ kind: 'day', key: `d:${day.key}`, title: day.title, weekday: day.weekday })
     for (const { row } of day.items) items.push({ kind: 'going', key: `g:${row.id}`, row })
+  }
+
+  const restOver = rest.filter((r) => !isLiveNow(r, now) && sessionOver(r, now))
+  if (restOver.length) {
+    items.push({ kind: 'day', key: 'd:ended', title: ENDED, weekday: '' })
+    for (const row of restOver) items.push({ kind: 'going', key: `g:${row.id}`, row })
   }
 
   // Saved (minus anything above) and Past, exactly as `goingItems` draws them.

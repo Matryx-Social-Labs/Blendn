@@ -1,4 +1,4 @@
-import { apexHeight, buildConfetti, CONFETTI_MS, CONFETTI_PEAK_MS, pieceAt, speedForApex } from '../lib/confetti'
+import { buildConfetti, CONFETTI_MS, CONFETTI_PEAK_MS, pieceAt } from '../lib/confetti'
 
 /**
  * The check-in confetti's flight.
@@ -10,12 +10,6 @@ import { apexHeight, buildConfetti, CONFETTI_MS, CONFETTI_PEAK_MS, pieceAt, spee
  */
 
 const PHONE = { width: 393, height: 852, originBottom: 90, originWidth: 280 }
-
-describe('speedForApex', () => {
-  it('inverts apexHeight', () => {
-    for (const h of [100, 400, 700]) expect(apexHeight(speedForApex(h))).toBeCloseTo(h, 0)
-  })
-})
 
 describe('buildConfetti', () => {
   it('is deterministic per seed and differs across seeds', () => {

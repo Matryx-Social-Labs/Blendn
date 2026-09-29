@@ -41,7 +41,7 @@
  * token. Sixty seconds of slack means we never hand over a credential that
  * dies mid-connection.
  */
-export const REFRESH_SKEW_MS = 60_000
+const REFRESH_SKEW_MS = 60_000
 
 /**
  * Milliseconds until this JWT expires, or `null` if that cannot be determined.
@@ -51,7 +51,7 @@ export const REFRESH_SKEW_MS = 60_000
  * vouch for, and an unnecessary refresh is cheap where a failed handshake costs
  * the user their realtime connection.
  */
-export function msUntilExpiry(token: string | null | undefined, now: number): number | null {
+function msUntilExpiry(token: string | null | undefined, now: number): number | null {
   if (typeof token !== 'string') return null
 
   const segments = token.split('.')
@@ -72,15 +72,11 @@ export function msUntilExpiry(token: string | null | undefined, now: number): nu
   }
 }
 
-export function isExpiringSoon(
-  token: string | null | undefined,
-  now: number,
-  skewMs: number = REFRESH_SKEW_MS
-): boolean {
+function isExpiringSoon(token: string | null | undefined, now: number): boolean {
   const remaining = msUntilExpiry(token, now)
   // Unreadable counts as expiring. Failing towards a refresh is the safe side.
   if (remaining === null) return true
-  return remaining <= skewMs
+  return remaining <= REFRESH_SKEW_MS
 }
 
 export interface AuthPayload {

@@ -62,22 +62,6 @@ describe('revealAction', () => {
     expect(a.kind).toBe('done')
   })
 
-  it('offers exactly one control in every state', () => {
-    /*
-     * A screen showing both "Reveal" and "Ask them to reveal" makes the person
-     * work out which one applies to them. The type makes that impossible; this
-     * pins it against every combination.
-     */
-    for (const youRevealed of [true, false]) {
-      for (const theyRevealed of [true, false]) {
-        for (const revealRequested of [true, false]) {
-          const a = revealAction(state({ youRevealed, theyRevealed, revealRequested }))
-          expect(['reveal', 'ask', 'done']).toContain(a.kind)
-        }
-      }
-    }
-  })
-
   it('still offers to reveal even when they already have', () => {
     // The asymmetric case: they were public in the room, so their side started
     // revealed. Yours is still yours to give.

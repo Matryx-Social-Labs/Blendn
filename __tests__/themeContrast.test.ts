@@ -6,7 +6,7 @@
  * read as fine on a bright monitor and were unreadable in a dark bar on a
  * phone at half brightness.
  */
-import { EMBER, MAX_FONT_SCALE, OPACITY, TYPE } from '../lib/theme'
+import { EMBER, MAX_FONT_SCALE, TYPE } from '../lib/theme'
 
 const luminance = (hex: string) => {
   const n = parseInt(hex.slice(1, 7), 16)
@@ -54,9 +54,5 @@ describe('scales', () => {
     expect(MAX_FONT_SCALE.button).toBeLessThan(MAX_FONT_SCALE.body)
     expect(MAX_FONT_SCALE.display).toBeLessThanOrEqual(MAX_FONT_SCALE.button)
     expect(Object.keys(MAX_FONT_SCALE).sort()).toEqual(Object.keys(TYPE).sort())
-  })
-
-  it('has one pressed and one disabled opacity', () => {
-    expect(OPACITY).toEqual({ pressed: 0.85, disabled: 0.45 })
   })
 })

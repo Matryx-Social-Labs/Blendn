@@ -4,6 +4,7 @@ import { useReducedMotion } from 'react-native-reanimated'
 import { apiClient } from './apiClient'
 import { CONFETTI_PEAK_MS } from './confetti'
 import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from './checkIn'
+import { isExpectedRefusal } from './checkInRefusal'
 import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { NotificationHelpers } from './notifications'
@@ -158,7 +159,13 @@ export function useCheckInFlow({
         ])
         return 'failed'
       } else if (outcome.kind === 'refused') {
-        Logger.error('events', 'checkin:api:error', { title: outcome.refusal.title })
+        // The door saying no (too far, not open yet) is the flow working, not
+        // a failure: info, so Sentry only hears about requests that broke.
+        if (isExpectedRefusal(outcome.errorCode)) {
+          Logger.info('events', 'checkin:refused', { code: outcome.errorCode })
+        } else {
+          Logger.error('events', 'checkin:api:error', { title: outcome.refusal.title })
+        }
         const { refusal } = outcome
         if (outcome.alreadyCheckedIn) {
           Logger.journey('checkin', 'detail:alreadyCheckedIn')

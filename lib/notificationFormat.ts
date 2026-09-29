@@ -81,3 +81,17 @@ export function badgeLabel(unread: number): string | null {
   if (!Number.isFinite(unread) || unread <= 0) return null
   return unread > 9 ? '9+' : String(unread)
 }
+
+/**
+ * A notification row as VoiceOver reads it: title, body, age, one full stop
+ * after each sentence. Joined blindly, bodies that end in one read
+ * "…what you say.. 8h".
+ */
+export function notificationLabel(title: string, body: string, age: string): string {
+  const sentence = (text: string) => {
+    const t = text.trim()
+    if (!t) return ''
+    return /[.!?…]$/.test(t) ? t : `${t}.`
+  }
+  return [sentence(title), sentence(body), age].filter(Boolean).join(' ')
+}

@@ -8,12 +8,16 @@ import { join } from 'path'
  * it was refused the board — "add … why you go out" — for a field the flow
  * never asked for. Driven on both platforms: eight steps, RSVP, 403. The
  * server now says `intentNeeded` on check-in while there is no default; this
- * is the client's half, pinned by source because the flow lives in the
- * check-in handler's tray callbacks.
+ * is the client's half.
+ *
+ * What the question says, that a refused save shows the server's sentence, and
+ * that a minor is never offered Dating are rendered in
+ * `eventPreferencesScreen.test.tsx`; the route both doors push is asserted in
+ * `checkIn.test.ts`. What is read as source here is the two doors' hand-off,
+ * which sits in a tray callback and a 287-line hook that are not rendered.
  */
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 const events = strip(readFileSync(join(__dirname, '..', 'app', '(tabs)', 'events.tsx'), 'utf8'))
-const prefs = strip(readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8'))
 
 describe('after a check-in that says intentNeeded', () => {
   it('every way out of the post-check-in tray leads to the question', () => {
@@ -29,34 +33,12 @@ describe('after a check-in that says intentNeeded', () => {
   })
 })
 
-describe('the question', () => {
-  it('leads with intent, saves it as the default, and cannot be answered with nothing', () => {
-    expect(prefs).toContain("const askIntent = askIntentParam === '1'")
-    expect(prefs).toMatch(/\.\.\.\(askIntent && intentTouched \? \{ rememberIntent: true \} : \{\}\)/)
-    expect(prefs).toContain('{askIntent ? intentBlock : revealBlock}')
-    expect(prefs).toContain("askIntent ? 'Why do you go out?' : 'Why are you here tonight?'")
-    // Off with no answer; busy (and so also off) while saving.
-    expect(prefs).toMatch(/disabled=\{askIntent && intent\.length === 0\}\s*busy=\{saving\}/)
-  })
-
-  it('never offers Dating to a minor, and shows the server\'s sentence when it refuses', () => {
-    // The Android drive: a 17-year-old picked Dating on the last onboarding
-    // step and the screen accepted it because the column it wrote is not the
-    // one the age gate guards. This write is guarded, so the card is not shown.
-    expect(prefs).toContain("setUnder18(typeof age === 'number' && age < 18)")
-    expect(prefs).toContain("under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS")
-    expect(prefs).toContain("showToast(res.error || 'Could not save. Try again.', 'error')")
-  })
-})
-
 describe('both doors ask', () => {
   // Driven on iOS 2026-09-21: the event-detail door ("Blend in") checked a
   // fresh account in with no "Why do you go out?", while the Pulse tray asked.
   // Two doors, one rule (SCRUM-77 / SCRUM-188).
-  const { readFileSync } = require('fs') as typeof import('fs')
-  const { join } = require('path') as typeof import('path')
   // The event screen's door is `lib/useCheckInFlow.ts`, which the Blend'n room
-  // shares; the screen is pinned to it below.
+  // shares.
   it.each([
     'app/(tabs)/events.tsx',
     'lib/useCheckInFlow.ts',
@@ -66,17 +48,5 @@ describe('both doors ask', () => {
     expect(src).toContain('submitCheckIn(')
     expect(src).toContain('askIntentRoute(')
     expect(src).toContain('outcome.revealSuggestion')
-  })
-
-  it('the event screen checks in through the shared flow', () => {
-    const src = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
-    expect(src).toContain("import { useCheckInFlow } from '../../lib/useCheckInFlow'")
-    expect(src).toContain('useCheckInFlow({')
-  })
-
-  it('the helper reads intentNeeded and routes to the question', () => {
-    const helper = readFileSync(join(__dirname, '..', 'lib', 'checkIn.ts'), 'utf8')
-    expect(helper).toContain("askIntent: result.data?.intentNeeded === true")
-    expect(helper).toContain("params: { eventId, revealed: '0', askIntent: '1' }")
   })
 })

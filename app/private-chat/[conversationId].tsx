@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
@@ -12,7 +13,6 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Clipboard,
   FlatList,
   KeyboardAvoidingView,
   Pressable,
@@ -33,9 +33,10 @@ import ScalePress from '../../components/motion/ScalePress'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { messageReportStep, showLeaveConversationActions } from '../../lib/safetyUtils'
+import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
 import { showSheet, type SheetAction } from '../../lib/sheet'
 import { useLatest } from '../../lib/useLatest'
+import { sendOutcome } from '../../lib/sendOutcome'
 import { userMessage } from '../../lib/userMessage'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import {
@@ -429,6 +430,15 @@ function PrivateChatInner() {
     setTrayVisible(true)
   }, [closeTray])
 
+  // Their profile, only once they are a name to you: an accepted request, or
+  // a match who revealed. The server decides both. The header's name and the
+  // ⋮ menu's "View profile" both use it.
+  const profileId = otherId || (otherUserId as string | undefined)
+  const openProfile =
+    reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
+      ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
+      : undefined
+
   /**
    * Revealing, or asking them to.
    *
@@ -596,19 +606,8 @@ function PrivateChatInner() {
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
 
-    /*
-     * One registry, three event kinds.
-     *
-     * `subscribeToConversation` keeps a single callback set per conversation
-     * and the socket layer calls every callback in it for `private:message`,
-     * `private:typing` AND `private:read`. So each handler here received the
-     * other two payloads as well — `handleRead` did `data.messageIds.includes`
-     * on a message payload and threw, which unmounted the screen the moment
-     * the other person's first message arrived (simulator, 2026-09-12). Each
-     * handler now checks the payload is its own before touching it.
-     */
     const handleNewMessage: PrivateMessageCallback = (data) => {
-      if (!('message' in data) || !data.message) return
+      if (!data.message) return
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev
         // Your own send echoed back before the request resolved is still your
@@ -622,7 +621,6 @@ function PrivateChatInner() {
     }
 
     const handleTyping: PrivateTypingCallback = (data) => {
-      if (typeof data.isTyping !== 'boolean') return
       if (data.userId === authUser?.id) return
       setIsOtherTyping(data.isTyping)
       if (data.isTyping) {
@@ -634,21 +632,22 @@ function PrivateChatInner() {
     }
 
     const handleRead: PrivateReadCallback = (data) => {
-      if (!Array.isArray(data.messageIds)) return
       if (data.readBy === authUser?.id) return
       setMessages(prev => prev.map(m => data.messageIds.includes(m.id) ? { ...m, isRead: true } : m))
     }
 
-    const u1 = subscribeToConversation(String(conversationId), handleNewMessage)
-    const u2 = subscribeToConversation(String(conversationId), handleTyping)
-    const u3 = subscribeToConversation(String(conversationId), handleRead)
+    const u1 = subscribeToConversation(String(conversationId), {
+      onMessage: handleNewMessage,
+      onTyping: handleTyping,
+      onRead: handleRead,
+    })
     // ✓✓ delivered as their app gets them (SCRUM-408).
-    const u4 = subscribeToDelivered((d) => {
+    const u2 = subscribeToDelivered((d) => {
       if (d.conversationId !== String(conversationId)) return
       const at = new Date().toISOString()
       setMessages(prev => prev.map(m => d.messageIds.includes(m.id) && !m.deliveredAt ? { ...m, deliveredAt: at } : m))
     })
-    return () => { u1(); u2(); u3(); u4(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
+    return () => { u1(); u2(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
   }, [conversationId, authUser?.id, markArriving])
 
   useEffect(() => {
@@ -678,34 +677,21 @@ function PrivateChatInner() {
         ...(replyToId && { replyToId }),
       })
 
-      if (!result.success) {
-        /*
-         * The server's sentence for a refusal it wrote for the person — a
-         * `SPAM_BLOCKED` (429) arrives with its reason — and the app's own
-         * for anything else (`userMessage`). Both this branch and the `catch`
-         * once flattened every refusal into one generic line, so the user
-         * retried forever against a wall that had already explained itself.
-         */
+      const outcome = sendOutcome(result)
+      if (outcome.kind === 'failed') {
+        // The server's sentence when it wrote one for the person (`sendOutcome`).
         if (result.errorCode === 'RATE_LIMITED' || result.errorCode === 'SPAM_BLOCKED') {
           setComposerLock('rate_limited')
           if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
           const ms = Math.min(Math.max(result.retryAfter ?? 5, 1), 120) * 1000
           lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
         }
-        markFailed(userMessage(result, "Couldn't send. Try again."))
+        markFailed(outcome.reason)
         return
       }
 
-      /*
-       * The server can accept a message and still withhold it.
-       *
-       * Moderation returns 200 with `text: null` and `moderation_hidden: true`.
-       * Showing the bubble as sent would let the sender see their own words
-       * while the recipient got nothing — accidental shadowbanning, in the
-       * *private* channel. Same shape as the room, same answer.
-       */
-      const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
-      if (hidden) {
+      // Withheld by moderation: never left showing as sent (see `sendOutcome`).
+      if (outcome.kind === 'withheld') {
         setMessages(prev => prev.filter(m => m.id !== localId))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
@@ -805,8 +791,9 @@ function PrivateChatInner() {
     actions.push({
       label: 'Copy',
       then: () => {
-        Clipboard.setString(message.text || '')
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+        Clipboard.setStringAsync(message.text || '')
+          .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+          .catch(() => {})
       },
     })
     if (message.failed) {
@@ -942,31 +929,24 @@ function PrivateChatInner() {
           avatar={directHeaderAvatar(reveal, otherImage, (otherUserAvatar as string) || null)}
           subtitle={reveal ? revealSubtitle(reveal) : null}
           onBack={() => router.back()}
-          onProfile={
-            // Only once they are a name to you: an accepted request, or a
-            // match who revealed. The server decides both.
-            reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && (otherId || otherUserId)
-              ? () => router.push({ pathname: '/user/[id]', params: { id: String(otherId || otherUserId) } } as never)
-              : undefined
-          }
+          onProfile={openProfile}
           onOptions={() => {
             /*
              * The conversation sheet, not the profile one.
              *
              * `showUserSafetyActions` blocks and reports a person; it cannot
              * close this conversation, so from here it left the thread sitting
-             * in both inboxes. `showLeaveConversationActions` is about *this*
+             * in both inboxes. `showConversationOptions` is about *this*
              * conversation and bundles the report into the same request.
              */
             if (reveal) {
-              showLeaveConversationActions(
+              showConversationOptions(
                 conversationId as string,
                 reveal.displayName || (otherUserName as string) || 'them',
                 // They know you if you revealed, or if this never was
                 // pseudonymous — an accepted request showed them your name.
                 reveal.youRevealed || reveal.pseudonymous === false,
-                () => router.back(),
-                reveal.fromMatch ?? true
+                { onLeft: () => router.back(), fromMatch: reveal.fromMatch ?? true, onViewProfile: openProfile }
               )
             } else {
               /*

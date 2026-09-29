@@ -17,7 +17,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({
 /* eslint-disable import/first */
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { askIntentRoute, checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
 /* eslint-enable import/first */
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -62,6 +62,15 @@ describe('submitCheckIn', () => {
       checkInId: 'c1',
       askIntent: true,
       revealSuggestion: true,
+    })
+  })
+
+  it('routes an askIntent to the preferences screen with the intent leading', () => {
+    // `askIntent: '1'` is what makes that screen open on "Why do you go out?";
+    // both doors push this route when the server says the intent is needed.
+    expect(askIntentRoute('e1')).toEqual({
+      pathname: '/event-preferences/[eventId]',
+      params: { eventId: 'e1', revealed: '0', askIntent: '1' },
     })
   })
 

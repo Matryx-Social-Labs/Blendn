@@ -289,7 +289,13 @@ const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
 const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCallback>>()
 const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
 const chatMemberLeftSubscriptions = new Map<string, Set<ChatMemberLeftCallback>>()
-const conversationSubscriptions = new Map<string, Set<PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback>>()
+/** One subscriber to a conversation: a callback per event kind, each getting only its own payload. */
+export interface ConversationHandlers {
+  onMessage?: PrivateMessageCallback
+  onTyping?: PrivateTypingCallback
+  onRead?: PrivateReadCallback
+}
+const conversationSubscriptions = new Map<string, Set<ConversationHandlers>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 /*
  * Sets, not maps keyed by id: both arrive on your own `user:{id}` room, which
@@ -691,7 +697,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
     }
     // Notify conversation subscribers
     const callbacks = conversationSubscriptions.get(data.conversationId)
-    callbacks?.forEach((cb) => (cb as PrivateMessageCallback)(data))
+    callbacks?.forEach((h) => h.onMessage?.(data))
 
     // Also notify user-level subscribers (for chat list updates)
     userSubscriptions.forEach((userCallbacks) => {
@@ -715,12 +721,12 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("private:typing", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
-    callbacks?.forEach((cb) => (cb as PrivateTypingCallback)(data))
+    callbacks?.forEach((h) => h.onTyping?.(data))
   })
 
   sock.on("private:read", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
-    callbacks?.forEach((cb) => (cb as PrivateReadCallback)(data))
+    callbacks?.forEach((h) => h.onRead?.(data))
   })
 
   sock.on("private:delivered", (data) => {
@@ -1032,12 +1038,15 @@ export function stopTyping(chatGroupId: string): void {
 // === Private Conversation Subscriptions ===
 
 /**
- * Subscribe to private conversation updates (messages, typing, read receipts)
+ * Subscribe to private conversation updates (messages, typing, read receipts).
+ *
+ * One callback per event kind, and each is called only for its own event. This
+ * was a single callback set that every event was fanned out to, so `handleRead`
+ * ran `data.messageIds.includes` on a message payload and threw, unmounting the
+ * DM screen the moment the other person's first message arrived (simulator,
+ * 2026-09-12). Each handler now receives only the payload it is typed for.
  */
-export function subscribeToConversation(
-  conversationId: string,
-  callback: PrivateMessageCallback | PrivateTypingCallback | PrivateReadCallback
-): () => void {
+export function subscribeToConversation(conversationId: string, handlers: ConversationHandlers): () => void {
   if (!socket?.connected) {
     // connect() is async; room will be joined by the connect handler via rejoinAllRooms()
     connect()
@@ -1049,13 +1058,13 @@ export function subscribeToConversation(
   if (!conversationSubscriptions.has(conversationId)) {
     conversationSubscriptions.set(conversationId, new Set())
   }
-  conversationSubscriptions.get(conversationId)!.add(callback)
+  conversationSubscriptions.get(conversationId)!.add(handlers)
 
   // Return unsubscribe function
   return () => {
     const callbacks = conversationSubscriptions.get(conversationId)
     if (callbacks) {
-      callbacks.delete(callback)
+      callbacks.delete(handlers)
       if (callbacks.size === 0) {
         conversationSubscriptions.delete(conversationId)
         socket?.emit("leave:conversation", conversationId)

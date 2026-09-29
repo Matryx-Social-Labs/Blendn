@@ -71,7 +71,6 @@ describe('packChips', () => {
       [40, 40, 40, 40, 40],
       [90, 90, 90],
     ]) {
-      expect([input, rows(widths(input))]).toEqual([input, expect.any(Number)])
       expect(rows(widths(input))).toBeLessThanOrEqual(rows(input))
     }
   })

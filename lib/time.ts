@@ -37,7 +37,10 @@ export const formatTimeRange = (startIso: string, endIso: string, opts?: { inclu
     const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...tzOptions })
     const time = `${fmtTime(s)} - ${fmtTime(e)}`
     if (opts?.includeDate) {
-      const datePart = e.toLocaleDateString(undefined, { month: 'long', day: 'numeric', ...tzOptions })
+      // The day it starts. An evening that runs past midnight is that
+      // evening's event: "6:00 PM - 12:00 AM, September 30" on the 29th sent
+      // people to the wrong night.
+      const datePart = s.toLocaleDateString(undefined, { month: 'long', day: 'numeric', ...tzOptions })
       return `${time}, ${datePart}`
     }
     return time

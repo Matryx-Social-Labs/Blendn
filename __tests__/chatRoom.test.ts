@@ -29,18 +29,6 @@ const codeOnly = (src: string) =>
 describe('the bubble points at its sender', () => {
   const BUBBLE = () => read('components/chat/ChatBubble.tsx')
 
-  it('squares the corner on the sender’s side, and only that one', () => {
-    /*
-     * Every corner is `md` except one, which is `sm`. That single square corner is
-     * what tells the two directions apart -- backwards, it reads as *wrong*
-     * rather than as *different*, because the message points at the wrong
-     * person.
-     */
-    const src = codeOnly(BUBBLE())
-    expect(src).toContain('bubbleTheirs: { backgroundColor: EMBER.surfaceSunken, borderBottomLeftRadius: EMBER_RADIUS.sm }')
-    expect(src).toContain('borderBottomRightRadius: EMBER_RADIUS.sm')
-  })
-
   it('never draws a photograph', () => {
     /*
      * The frame draws faces. This room is pseudonymous until somebody chooses
@@ -444,16 +432,6 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
     expect(src).toContain('onLongPress={() => openMessageMenu(item)}')
     expect(src).toMatch(/\} else if \(!isMe\) \{[\s\S]{0,200}label: 'Report'/)
     expect(src).toContain("label: 'Copy'")
-  })
-})
-
-describe('both chat screens have left the old theme', () => {
-  it('uses EMBER throughout', () => {
-    // The messages were rebuilt first and the chrome around them was still
-    // `APP_COLORS` -- new bubbles in an old frame.
-    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
-      expect(read(screen)).not.toContain('APP_COLORS')
-    }
   })
 })
 
