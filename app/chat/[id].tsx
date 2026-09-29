@@ -37,6 +37,7 @@ import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction,
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useLatest } from '../../lib/useLatest'
+import { sendOutcome } from '../../lib/sendOutcome'
 import { userMessage } from '../../lib/userMessage'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
@@ -651,20 +652,11 @@ function GroupChatInner() {
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
       // Left on another phone, or here a moment ago: the room becomes the left state.
       if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
-      if (!result.success) throw new Error(userMessage(result, "Couldn't send. Try again."))
+      const outcome = sendOutcome(result)
+      if (outcome.kind === 'failed') throw new Error(outcome.reason)
 
-      /*
-       * The server can accept a message and still withhold it.
-       *
-       * When moderation hides content it returns 200 with `content: null` and
-       * `moderation_hidden: true`. This branch only checked `result.success`,
-       * so the optimistic bubble stayed on screen showing the sender their own
-       * text while nobody else could see it — accidental shadowbanning, in the
-       * one surface the product's trust model rests on. On reload the same
-       * message rendered as an empty bubble, because the text was never stored.
-       */
-      const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
-      if (hidden) {
+      // Withheld by moderation: never left showing as sent (see `sendOutcome`).
+      if (outcome.kind === 'withheld') {
         setMessages(prev => prev.filter(m => m.message_id !== optimistic.message_id))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return

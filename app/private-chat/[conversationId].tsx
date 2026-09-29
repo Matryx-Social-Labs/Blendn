@@ -36,6 +36,7 @@ import { Logger } from '../../lib/logger'
 import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
 import { showSheet, type SheetAction } from '../../lib/sheet'
 import { useLatest } from '../../lib/useLatest'
+import { sendOutcome } from '../../lib/sendOutcome'
 import { userMessage } from '../../lib/userMessage'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import {
@@ -687,34 +688,21 @@ function PrivateChatInner() {
         ...(replyToId && { replyToId }),
       })
 
-      if (!result.success) {
-        /*
-         * The server's sentence for a refusal it wrote for the person — a
-         * `SPAM_BLOCKED` (429) arrives with its reason — and the app's own
-         * for anything else (`userMessage`). Both this branch and the `catch`
-         * once flattened every refusal into one generic line, so the user
-         * retried forever against a wall that had already explained itself.
-         */
+      const outcome = sendOutcome(result)
+      if (outcome.kind === 'failed') {
+        // The server's sentence when it wrote one for the person (`sendOutcome`).
         if (result.errorCode === 'RATE_LIMITED' || result.errorCode === 'SPAM_BLOCKED') {
           setComposerLock('rate_limited')
           if (lockTimerRef.current) clearTimeout(lockTimerRef.current)
           const ms = Math.min(Math.max(result.retryAfter ?? 5, 1), 120) * 1000
           lockTimerRef.current = setTimeout(() => setComposerLock(null), ms)
         }
-        markFailed(userMessage(result, "Couldn't send. Try again."))
+        markFailed(outcome.reason)
         return
       }
 
-      /*
-       * The server can accept a message and still withhold it.
-       *
-       * Moderation returns 200 with `text: null` and `moderation_hidden: true`.
-       * Showing the bubble as sent would let the sender see their own words
-       * while the recipient got nothing — accidental shadowbanning, in the
-       * *private* channel. Same shape as the room, same answer.
-       */
-      const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
-      if (hidden) {
+      // Withheld by moderation: never left showing as sent (see `sendOutcome`).
+      if (outcome.kind === 'withheld') {
         setMessages(prev => prev.filter(m => m.id !== localId))
         showTray('Not sent', 'That message was removed by moderation and was not delivered.')
         return
