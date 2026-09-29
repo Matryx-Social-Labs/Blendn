@@ -39,6 +39,16 @@ export const CHECK_IN_CODES = {
   EVENT_FULL: "EVENT_FULL",
 } as const
 
+/**
+ * A refusal the door gives by design — too far, not open yet, full — as
+ * opposed to a request that failed. Only the second is an error worth a Sentry
+ * event: logging every "Not quite there yet" at error level reported each
+ * person standing outside a venue as a crash (simulator, 2026-09-29).
+ */
+export function isExpectedRefusal(errorCode: string | undefined): boolean {
+  return !!errorCode && (Object.values(CHECK_IN_CODES) as string[]).includes(errorCode)
+}
+
 export type CheckInRefusal = {
   title: string
   message: string

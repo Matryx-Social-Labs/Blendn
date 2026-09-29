@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { badgeLabel, notificationAge, type NotificationItem } from '../../lib/notificationFormat'
+import { badgeLabel, notificationAge, notificationLabel, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { subscribeToBell } from '../../lib/socketClient'
 import ActionTray from '../ActionTray'
@@ -251,7 +251,7 @@ export function NotificationBell() {
                   <Pressable
                     onPress={() => openItem(item)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${item.title}. ${item.body}. ${notificationAge(item.createdAt)}`}
+                    accessibilityLabel={notificationLabel(item.title, item.body, notificationAge(item.createdAt))}
                     style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                   >
                     {/* Unread marker. A dot, not a background wash: a coloured

@@ -61,6 +61,31 @@ describe('goingSections: live events after midnight', () => {
     expect(labels(goingSections([hero, festival], [], [], NOW))).toEqual(['n:hero', 'day:Today', 'g:fest'])
   })
 
+  it('files a run that is over (the rest cancelled) last, under Ended — not under its past day', () => {
+    // Staging, blr-design-festival: day 2 ended at 05:30, day 3 cancelled, so
+    // the server's window is day 2 — which sat under "Sep 28" in the upcoming list.
+    const hero = rsvp('hero', local(29, 10), local(29, 12))
+    const tomorrow = rsvp('tmrw', local(30, 19), local(30, 23))
+    const festival = rsvp('fest', local(27, 21, 30), local(30, 5, 30), {
+      session: { start_time: local(28, 21, 30), end_time: local(29, 0, 15) },
+    })
+    expect(labels(goingSections([festival, hero, tomorrow], [], [], NOW))).toEqual([
+      'n:hero',
+      'day:Tomorrow',
+      'g:tmrw',
+      'day:Ended',
+      'g:fest',
+    ])
+  })
+
+  it('never leads with a run that is over while anything else is ahead', () => {
+    const over = rsvp('over', local(27, 21), local(30, 5), {
+      session: { start_time: local(28, 18), end_time: local(28, 23) },
+    })
+    const later = rsvp('later', local(30, 19), local(30, 23))
+    expect(labels(goingSections([over, later], [], [], NOW))[0]).toBe('n:later')
+  })
+
   it('keeps Saved (minus RSVPs) and Past as goingItems draws them', () => {
     const a = rsvp('a', local(29, 20), local(29, 23))
     const saved: SavedEventRow[] = [

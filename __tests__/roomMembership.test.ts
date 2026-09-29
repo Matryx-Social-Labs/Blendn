@@ -106,6 +106,8 @@ describe('the room header subtitle', () => {
 
   it('does not repeat the title; says how many are in the room instead', () => {
     expect(roomSubtitle('AI Meetup #42', 'AI Meetup #42', 38)).toBe('38 in the room')
+    // "<event> Chat" is the same name: check-in's "Go to Chat" passes it.
+    expect(roomSubtitle('AI Meetup #42 Chat', 'AI Meetup #42', 38)).toBe('38 in the room')
   })
 
   it('shows nothing rather than a repeat or a zero', () => {

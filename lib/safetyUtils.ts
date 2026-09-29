@@ -1,7 +1,7 @@
 import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
-import { showSheet, type Sheet, type SheetOutcome } from './sheet'
+import { showSheet, type Sheet, type SheetAction, type SheetOutcome } from './sheet'
 
 export interface SafetyActionResult {
   success: boolean
@@ -225,6 +225,45 @@ export const showLeaveConversationActions = (
   onLeft?: () => void,
   fromMatch = true
 ): void => {
+  showSheet(leaveConversationSheet(conversationId, displayName, theyKnowYou, onLeft, fromMatch))
+}
+
+/**
+ * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
+ *
+ * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
+ * with Unmatch as its first, red button — so the header's options icon was
+ * one mis-tap from ending a match, with nothing else behind it (simulator,
+ * 2026-09-29). Now it names the person, offers their profile when they are a
+ * name to you, and puts Unmatch (or End conversation) behind its own
+ * confirmation, unchanged.
+ */
+export const showConversationOptions = (
+  conversationId: string,
+  displayName: string,
+  theyKnowYou: boolean,
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+): void => {
+  const fromMatch = opts.fromMatch ?? true
+  const actions: SheetAction[] = []
+  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
+  actions.push({
+    label: fromMatch ? 'Unmatch…' : 'End conversation…',
+    variant: 'destructive',
+    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
+  })
+  actions.push({ label: 'Cancel', cancel: true })
+  showSheet({ kind: 'actions', title: displayName, actions })
+}
+
+/** The leave confirmation `showLeaveConversationActions` shows, as a step. */
+export const leaveConversationSheet = (
+  conversationId: string,
+  displayName: string,
+  theyKnowYou: boolean,
+  onLeft?: () => void,
+  fromMatch = true
+): Sheet => {
   const copy = leaveConfirmation(displayName, theyKnowYou, fromMatch)
   const verb = fromMatch ? 'Unmatch' : 'End conversation'
   const done = fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
@@ -251,7 +290,7 @@ export const showLeaveConversationActions = (
     run: (reason, description) => leave(action, { reason, ...(description ? { description } : {}) }),
   })
 
-  showSheet({
+  return {
     kind: 'actions',
     title: copy.title,
     message: copy.body,
@@ -267,7 +306,7 @@ export const showLeaveConversationActions = (
       },
       { label: 'Cancel', cancel: true },
     ],
-  })
+  }
 }
 
 /**
