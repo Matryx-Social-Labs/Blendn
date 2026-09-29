@@ -29,6 +29,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { showSheet } from '../../lib/sheet'
+import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton';
 import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
@@ -284,7 +285,6 @@ export default function EventDetail() {
   /** Which gallery item the lightbox is on, or null when it is closed. */
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [announcementText, setAnnouncementText] = useState('')
-  const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
@@ -818,9 +818,9 @@ export default function EventDetail() {
     setShowAnnouncementModal(true)
   }
 
-  const sendAnnouncement = async () => {
+  // One broadcast per tap, however fast the taps come (`useSingleFlight`).
+  const { run: sendAnnouncement, pending: sendingAnnouncement } = useSingleFlight(async () => {
     if (!announcementText.trim()) return
-    setSendingAnnouncement(true)
     try {
       const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
       if (result.success) {
@@ -837,10 +837,8 @@ export default function EventDetail() {
       feedback.error()
       showTray("Couldn't send the announcement", 'Try again.')
       setShowAnnouncementModal(false)
-    } finally {
-      setSendingAnnouncement(false)
     }
-  }
+  })
 
   const openEditComposer = () => {
     if (!event) return

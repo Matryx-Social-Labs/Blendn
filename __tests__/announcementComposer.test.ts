@@ -2,19 +2,16 @@ import { readFileSync } from "fs"
 import { join } from "path"
 
 /**
- * One announcement composer, on both platforms.
+ * The announcement composer's wiring.
  *
- * iOS used `Alert.prompt` and Android a modal, for one action. The iOS half was
- * worse in three ways that all point the same direction: no character limit
- * against the server's 1,000, no pending state, and **no disable while
- * sending** — so a second tap broadcast a second announcement to everyone in
- * the room. A system dialog also cannot carry the app's design, which is the
- * reason the modal existed at all.
+ * "A second tap sends nothing" is `useSingleFlight`, run for real in
+ * `useSingleFlight.test.tsx`. What is read as source here is what that test
+ * cannot see: that the send control uses it, that it refuses an empty message,
+ * and the server's length limit. The screen needs a login and an organiser, so
+ * it is not rendered.
  *
- * Comments are stripped before every assertion. This file's own subject is the
- * absence of `Alert.prompt`, and the screen now explains that absence in prose
- * that contains the words — so an unstripped search would match the
- * explanation and pass for ever.
+ * Comments are stripped before every assertion: the screen explains the old
+ * `Alert.prompt` in prose that contains the words.
  */
 const src = readFileSync(
   join(__dirname, "..", "components", "screens", "EventDetailScreen.tsx"),
@@ -23,23 +20,8 @@ const src = readFileSync(
 const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
 
 describe("the announcement composer", () => {
-  it("does not prompt through a system dialog", () => {
-    expect(code).not.toContain("Alert.prompt")
-  })
-
-  it("takes one path on both platforms", () => {
-    // The organiser's button used to choose a handler by Platform.OS.
-    expect(code).not.toMatch(/Platform\.OS === 'android' \?/)
-    expect(code).toContain("onPress={openAnnouncementComposer}")
-  })
-
-  it("refuses to send twice, which the system dialog could not", () => {
-    /*
-     * The guard that matters. `sendingAnnouncement` is set before the request
-     * and the send control reads it; without that, a second tap on a slow
-     * network sends a second announcement to every attendee.
-     */
-    expect(code).toContain("setSendingAnnouncement(true)")
+  it("sends through the single-flight guard, and disables the control while it runs", () => {
+    expect(code).toMatch(/pending: sendingAnnouncement\s*\} = useSingleFlight\(/)
     expect(code).toMatch(/disabled=\{[^}]*sendingAnnouncement[^}]*\}/)
   })
 
