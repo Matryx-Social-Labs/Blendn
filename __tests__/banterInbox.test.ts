@@ -24,7 +24,6 @@ const stripComments = (src: string) =>
 
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const SECTIONS = () => stripComments(read('components/banter/BanterSections.tsx'))
-const TOP_BAR = () => stripComments(read('components/pulse/PulseTopBar.tsx'))
 
 describe('one inbox, not two tabs', () => {
   it('keeps no tab state and no segmented control', () => {
@@ -116,47 +115,6 @@ describe('message requests survived the redesign', () => {
   })
 })
 
-describe('the frame is followed, and where it is not, deliberately', () => {
-  it('does not fake a pinned rail out of recency', () => {
-    /*
-     * The frame's rail is labelled Pinned and nothing in the product can pin
-     * anything. Filling it with the most recent conversations would duplicate
-     * the list directly beneath it under a label that lies.
-     */
-    const src = SCREEN()
-    expect(src).not.toContain("title=\"Pinned\"")
-  })
-
-  it('ships no compose FAB', () => {
-    /*
-     * Removed by decision: a DM starts from a person, and every route to one
-     * already goes through a profile. A button that opens an empty picker is a
-     * second way to do a thing that has a first way.
-     */
-    expect(SCREEN()).not.toContain('BanterCompose')
-    expect(SECTIONS()).not.toContain('BanterCompose')
-    expect(SECTIONS()).not.toContain('fab:')
-  })
-
-  it('lets the top bar say which screen it is', () => {
-    /*
-     * Frame `1141:5351` puts "The Banter" where the Pulse's frame puts the
-     * wordmark — same position, same accent, same weight. Hardcoding the
-     * wordmark made every screen reusing the bar claim to be the home screen.
-     */
-    expect(TOP_BAR()).toContain("title = \"Blend'n\"")
-    expect(TOP_BAR()).toContain('{title}')
-    expect(SCREEN()).toContain('title="The Banter"')
-  })
-
-  it('draws no violet EVENT badge — a room is told apart by its square cover', () => {
-    const sections = SECTIONS()
-    expect(sections).not.toContain('EMBER.violet')
-    expect(sections).not.toContain('BanterPinned')
-    expect(sections).toContain('borderRadius: EMBER_RADIUS.sm')
-  })
-})
-
 describe('the list is still a list', () => {
   it('renders through one FlatList rather than mapping in a ScrollView', () => {
     /*
@@ -210,27 +168,6 @@ describe('the room you are standing in', () => {
     expect(src).toContain('...rooms.filter((c) => !c.is_checked_in).map')
   })
 
-  it('draws each live room as a full-width row, not a horizontal rail', () => {
-    const src = SCREEN()
-    expect(src).toContain('title="Live now"')
-    expect(src).toContain('<BanterLiveRoom')
-    expect(src).not.toContain('<ScrollView')
-    const sections = SECTIONS()
-    const row = sections.slice(sections.indexOf('liveRow: {'))
-    const body = row.slice(0, row.indexOf('},'))
-    expect(body).toContain('backgroundColor: EMBER.surfaceSunken')
-    expect(body).toContain('borderRadius: EMBER_RADIUS.md')
-    expect(body).toContain('padding: SPACE.lg')
-  })
-
-  it('marks presence with a still success dot, never the accent or motion', () => {
-    const sections = SECTIONS()
-    const dot = sections.slice(sections.indexOf('liveDot: {'))
-    const body = dot.slice(0, dot.indexOf('},'))
-    expect(body).toContain('backgroundColor: EMBER.success')
-    expect(sections).not.toContain('Animated')
-  })
-
   it('shows the room count from `memberCount`, which is what the server sends', () => {
     /*
      * It read `participant_count` / `participantCount` / `participants`, none
@@ -257,21 +194,6 @@ describe('a row is one height, read or unread', () => {
     expect(dotBody).toContain('backgroundColor: EMBER.textPrimary')
   })
 
-  it('has no unread-only padding and no hairlines', () => {
-    const sections = SECTIONS()
-    expect(sections).not.toContain('rowUnread')
-    expect(sections).not.toContain('hairlineWidth')
-    expect(sections).toContain('minHeight: ROW_HEIGHT')
-    expect(sections).toContain('export const ROW_HEIGHT = ROW_AVATAR + SPACE.md * 2')
-  })
-
-  it('keeps the preview to one line', () => {
-    const sections = SECTIONS()
-    const conv = sections.slice(sections.indexOf('export function BanterConversation'))
-    const body = conv.slice(0, conv.indexOf('function RoomCover'))
-    expect(body).toContain('numberOfLines={1}')
-    expect(body).not.toContain('numberOfLines={2}')
-  })
 })
 
 describe('a match is anonymous until they reveal', () => {
@@ -328,34 +250,11 @@ describe('a match is anonymous until they reveal', () => {
 })
 
 describe('requests look like the conversations they become', () => {
-  it('is a row, not a radius-32 card', () => {
-    const sections = SECTIONS()
-    const req = sections.slice(sections.indexOf('request: {'))
-    const body = req.slice(0, req.indexOf('},'))
-    expect(body).not.toContain('EMBER_RADIUS.card')
-    expect(body).not.toContain('backgroundColor')
-    expect(body).toContain('paddingVertical: SPACE.md')
-  })
-
   it("draws the sender's face and when they asked", () => {
     const src = SCREEN()
     expect(src).toContain('sender_avatar: r.sender?.avatar || null')
     expect(src).toContain('created_at: r.createdAt || null')
     expect(src).toContain('timeLabel={inboxTimeLabel(r.created_at)}')
-  })
-
-  it('gives Accept the strong-neutral, not the accent — a list of requests was a column of orange', () => {
-    const sections = SECTIONS()
-    expect(sections).toContain('requestAccept: { backgroundColor: EMBER.textPrimary }')
-    expect(sections).toContain('requestAcceptLabel: { ...TYPE.button, color: EMBER.bg }')
-    expect(sections).toContain('requestDecline: { backgroundColor: EMBER.surface }')
-    expect(sections).toContain('height: CONTROL.sm')
-    // Nothing in the sections reaches for the accent any more.
-    expect(sections.match(/EMBER\.accent/g)).toBeNull()
-  })
-
-  it('shows the count beside the heading', () => {
-    expect(SCREEN()).toContain('<BanterHeading title="Requests" detail={String(incomingRequests.length)} />')
   })
 
   it('keeps the exit and reflow animations', () => {

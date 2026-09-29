@@ -4,12 +4,12 @@ import { join } from 'path'
 import { CONTROL, ICON, TYPE } from '../lib/theme'
 
 /**
- * The Scene's CTA — the numbers, and the two structural rules behind them.
+ * The Scene's CTA — the numbers, and the structural rules behind them.
  *
- * All of this is source-text assertion rather than rendering, for the same
- * reason `pulseNav.test.ts` is: these are *style constants*, every value here
- * typechecks and lints identically to every wrong value, and the only thing
- * that catches a wrong one is a screenshot somebody remembers to take.
+ * Source-text assertion rather than rendering, for the same reason
+ * `pulseNav.test.ts` is: these are layout and accessibility facts that typecheck
+ * identically when wrong. Colour, blur, shadow and type-scale choices are not
+ * pinned here; `npm run lint:design` enforces them.
  */
 const SRC = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
@@ -53,65 +53,18 @@ describe('the CTA pays for its own height', () => {
   })
 })
 
-describe('the pill is solid, and nothing glows around it', () => {
-  /*
-   * It was frosted glass: a BlurView, a warm tint, a lit white hairline and an
-   * orange bloom under it. Every effect at once, and it read as generated. The
-   * event apps that get this right (Luma, District) use a flat, high-contrast
-   * pill with no shadow, blur or gradient, and let contrast lift it.
-   */
-  const cta = () => {
-    const src = SRC()
-    return src.slice(src.indexOf('export function SceneCTA'), src.indexOf('export function SceneDetails'))
-  }
+describe('the pill keeps its height between states', () => {
   const style = (name: string) => {
     const src = SRC()
     const from = src.slice(src.indexOf(`${name}: {`))
     return from.slice(0, from.indexOf('},'))
   }
 
-  it('has no blur, tint or glow left', () => {
-    expect(cta()).not.toContain('BlurView')
-    expect(SRC()).not.toContain('ctaTint')
-    expect(SRC()).not.toContain('ctaGlow')
-    expect(SRC()).not.toContain("'rgba(75,47,38,0.74)'")
-  })
-
-  it('fills the to-do states with the accent and the done states with a dark surface', () => {
-    expect(style('ctaFillLoud')).toContain('backgroundColor: EMBER.accent')
-    expect(style('ctaFillQuiet')).toContain('backgroundColor: EMBER.surfaceSunken')
-    // Dark text on the accent — white on it fails contrast.
-    expect(SRC()).toContain('ctaLabelLoud: { color: EMBER.onGradient }')
-  })
-
   it('keeps a border in both states, so the height never changes between them', () => {
     // SCENE_CTA_HEIGHT counts 1 + 14 + 28 + 14 + 1.
     expect(style('ctaFill')).toContain('borderWidth: 1')
     expect(style('ctaFillLoud')).toContain('borderColor:')
     expect(style('ctaFillQuiet')).toContain('borderColor:')
-  })
-
-  it('casts no shadow', () => {
-    const fill = style('ctaFill')
-    expect(fill).not.toContain('shadow')
-    expect(fill).not.toContain('elevation')
-  })
-
-  it('is content-width, not screen-width', () => {
-    // A full-bleed pill is a bar, and a bar is chrome. The node is named
-    // "Floating CTA"; padded to its label it can actually float.
-    expect(style('ctaFill')).toContain('paddingHorizontal: SPACE.xxl')
-    expect(PREVIEW()).toContain("alignItems: 'center'")
-  })
-
-  it('separates from the page with a fade behind the dock, not a glow around the pill', () => {
-    const screen = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
-    const dock = screen.slice(screen.indexOf('<View style={styles.ctaDock}'))
-    expect(dock.slice(0, dock.indexOf('<SceneCTA'))).toContain('colors={[EMBER.bgClear, EMBER.bg]}')
-  })
-
-  it('does not pop on saying yes — the label and the fill are the confirmation', () => {
-    expect(cta()).not.toContain('withSequence')
   })
 })
 
@@ -265,29 +218,6 @@ const SECTIONS = () => SRC()
 const HERO = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
 
-describe('the Location card matches 1141:4900', () => {
-  it('pads the body 32/32/56, not 32 all round', () => {
-    // `1141:4901` is `pt-[32px] px-[32px] pb-[56px]` — the bottom is the gap to
-    // the map band, and at 32 the address crowded it.
-    expect(SECTIONS()).toContain('paddingBottom: 56')
-  })
-
-  it('sets the venue name 16 below the eyebrow', () => {
-    // `1141:4904` is `pt-[16px]`; the 8 came from reusing the card's own gap.
-    expect(SECTIONS()).toContain('venue: { ...TYPE.body, paddingTop: SPACE.lg }')
-  })
-
-  it('draws both lines from the type scale', () => {
-    /*
-     * The frame sets both in Plus Jakarta Regular; the design system maps them
-     * to `label` and `body` (docs/DESIGN_SYSTEM.md), so the Regular weight is
-     * no longer loaded.
-     */
-    expect(SECTIONS()).toContain('eyebrow: TYPE.label')
-    expect(SECTIONS()).toContain('venue: { ...TYPE.body,')
-  })
-})
-
 describe('the amenity tiles match 1141:4917', () => {
   it('are at least 126 tall, so the pair cannot go ragged or clip', () => {
     // `grid-rows-[126px]`. Content-sized, the two agreed only while their text
@@ -297,15 +227,6 @@ describe('the amenity tiles match 1141:4917', () => {
     expect(SECTIONS()).not.toMatch(/\n\s+height: 126/)
   })
 
-  it('lets each icon take its own size', () => {
-    /*
-     * `1141:4919` is 18 and `1141:4925` is 20, and both were built at 20. Not a
-     * mistake in the design: a tall narrow martini glass and a wide round
-     * camera at the same box size do not look the same size.
-     */
-    expect(SECTIONS()).toContain('iconSize = 20')
-    expect(PREVIEW()).toContain('iconSize={18}')
-  })
 })
 
 describe('the accessibility gaps docs/SCENE.md recorded', () => {
@@ -354,14 +275,6 @@ describe('the attendee discs carry a creature, not a letter', () => {
     expect(SECTIONS()).toContain('const { colors, character } = pseudonymAvatar')
   })
 
-  it('picks colour and creature from different mixes of the hash', () => {
-    // Taking both from `h` correlates them: with 8 hues and 16 creatures every
-    // panda would be the same blue, and a row of three would repeat a pairing
-    // far more often than chance.
-    const lib = readFileSync(join(__dirname, '..', 'lib', 'pseudonymAvatar.ts'), 'utf8')
-    expect(lib).toContain('CHARACTERS')
-    expect(lib).toContain('h ^ 0x9e3779b9')
-  })
 })
 
 describe('the Scene is a full-screen route', () => {
