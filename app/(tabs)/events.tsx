@@ -2138,7 +2138,8 @@ function EventsInner() {
               width={containerWidth}
               onPress={handleEventPress as any}
               onLongPress={handleEventPreview as any}
-              timeLabel={formatTimeRange(ev.start_time, ev.end_time, { timezone: ev.timezone })}
+              // The window the door goes by: a multi-day run's day, not the run.
+              timeLabel={formatTimeRange(liveWindow(ev).start_time, liveWindow(ev).end_time ?? ev.end_time, { timezone: ev.timezone })}
               /*
                 How far, when that means something.
 

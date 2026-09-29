@@ -219,7 +219,7 @@ export function ChatDock({
           haptic={false}
           style={styles.composer}
           accessibilityRole="button"
-          accessibilityLabel={`Open the room chat${count ? `, ${count} messages` : ''}`}
+          accessibilityLabel={`Open the room chat${count ? `, ${count} ${count === 1 ? 'message' : 'messages'}` : ''}`}
         >
           <Ionicons name="chatbubbles-outline" size={ICON.md} color={EMBER.textSecondary} />
           <Text variant="body" color={EMBER.textPlaceholder} style={styles.placeholder} numberOfLines={1}>

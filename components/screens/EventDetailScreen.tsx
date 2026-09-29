@@ -665,6 +665,9 @@ export default function EventDetail() {
         setRsvpStatus(prevStatus)
         feedback.error()
         showTray("Couldn't cancel your RSVP", 'Try again.')
+      } else if (typeof result.data?.rsvpCount === 'number') {
+        // The server's count after the change, as on the RSVP below.
+        setGoingCount(result.data.rsvpCount)
       }
     } catch {
       setRsvpStatus(prevStatus)
@@ -721,6 +724,9 @@ export default function EventDetail() {
         showTray("Couldn't RSVP", 'Try again.')
       } else {
         setRsvpStatus(result.data.rsvpStatus)
+        // The response carries the new count; without it "Going" stayed at 24
+        // beside "You're going" until the screen was reopened.
+        if (typeof result.data.rsvpCount === 'number') setGoingCount(result.data.rsvpCount)
         if (result.data.rsvpStatus === 'waitlisted') {
           // Say it plainly. An amber icon alone would let someone believe
           // they have a place and turn up to an event that is full.

@@ -33,7 +33,7 @@ import ScalePress from '../../components/motion/ScalePress'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { messageReportStep, showLeaveConversationActions } from '../../lib/safetyUtils'
+import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
 import { showSheet, type SheetAction } from '../../lib/sheet'
 import { useLatest } from '../../lib/useLatest'
 import { userMessage } from '../../lib/userMessage'
@@ -428,6 +428,15 @@ function PrivateChatInner() {
     setTrayButtons(buttons?.length ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }])
     setTrayVisible(true)
   }, [closeTray])
+
+  // Their profile, only once they are a name to you: an accepted request, or
+  // a match who revealed. The server decides both. The header's name and the
+  // ⋮ menu's "View profile" both use it.
+  const profileId = otherId || (otherUserId as string | undefined)
+  const openProfile =
+    reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
+      ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
+      : undefined
 
   /**
    * Revealing, or asking them to.
@@ -943,31 +952,24 @@ function PrivateChatInner() {
           avatar={directHeaderAvatar(reveal, otherImage, (otherUserAvatar as string) || null)}
           subtitle={reveal ? revealSubtitle(reveal) : null}
           onBack={() => router.back()}
-          onProfile={
-            // Only once they are a name to you: an accepted request, or a
-            // match who revealed. The server decides both.
-            reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && (otherId || otherUserId)
-              ? () => router.push({ pathname: '/user/[id]', params: { id: String(otherId || otherUserId) } } as never)
-              : undefined
-          }
+          onProfile={openProfile}
           onOptions={() => {
             /*
              * The conversation sheet, not the profile one.
              *
              * `showUserSafetyActions` blocks and reports a person; it cannot
              * close this conversation, so from here it left the thread sitting
-             * in both inboxes. `showLeaveConversationActions` is about *this*
+             * in both inboxes. `showConversationOptions` is about *this*
              * conversation and bundles the report into the same request.
              */
             if (reveal) {
-              showLeaveConversationActions(
+              showConversationOptions(
                 conversationId as string,
                 reveal.displayName || (otherUserName as string) || 'them',
                 // They know you if you revealed, or if this never was
                 // pseudonymous — an accepted request showed them your name.
                 reveal.youRevealed || reveal.pseudonymous === false,
-                () => router.back(),
-                reveal.fromMatch ?? true
+                { onLeft: () => router.back(), fromMatch: reveal.fromMatch ?? true, onViewProfile: openProfile }
               )
             } else {
               /*

@@ -75,6 +75,8 @@ export type CheckInOutcome =
   | {
       kind: 'refused'
       refusal: CheckInRefusal
+      /** The server's code, when it sent one (`isExpectedRefusal`). */
+      errorCode?: string
       /** Refused only because they already are — treat as checked in. */
       alreadyCheckedIn: boolean
     }
@@ -106,7 +108,12 @@ export async function submitCheckIn(
     // Dispatch on the server's code, never on its sentence (lib/checkInRefusal.ts).
     const alreadyCheckedIn = result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
     if (alreadyCheckedIn) checkInChanged(eventId)
-    return { kind: 'refused', refusal: checkInRefusal(result.errorCode, result.error), alreadyCheckedIn }
+    return {
+      kind: 'refused',
+      refusal: checkInRefusal(result.errorCode, result.error),
+      errorCode: result.errorCode,
+      alreadyCheckedIn,
+    }
   }
 
   checkInChanged(eventId)

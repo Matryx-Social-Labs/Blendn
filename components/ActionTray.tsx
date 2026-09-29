@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native'
@@ -204,7 +205,19 @@ export default function ActionTray({
                 </View>
               </GestureDetector>
               {children}
-              <View style={styles.buttonsWrap}>
+              {/*
+                The buttons scroll once they outgrow the tray's max height.
+                Before, they ran past it: a muted room's six-button sheet put
+                Cancel below the bottom of an iPhone 17 Pro, out of reach
+                (simulator, 2026-09-29). Fits → no scroll, no bounce.
+              */}
+              <ScrollView
+                style={styles.buttonsScroll}
+                contentContainerStyle={styles.buttonsWrap}
+                alwaysBounceVertical={false}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
                 {buttonRows.map((row, rowIndex) => (
                   <View style={styles.buttonRow} key={`row-${rowIndex}`}>
                     {row.map((button, buttonIndex) => {
@@ -238,7 +251,7 @@ export default function ActionTray({
                     })}
                   </View>
                 ))}
-              </View>
+              </ScrollView>
             </Reanimated.View>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -268,6 +281,7 @@ const styles = StyleSheet.create({
   },
   head: { gap: SPACE.md },
   grabber: { marginBottom: SPACE.sm },
+  buttonsScroll: { flexShrink: 1, flexGrow: 0 },
   buttonsWrap: {
     gap: SPACE.md,
     marginTop: SPACE.sm,
