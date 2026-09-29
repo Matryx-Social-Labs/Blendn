@@ -606,19 +606,8 @@ function PrivateChatInner() {
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
 
-    /*
-     * One registry, three event kinds.
-     *
-     * `subscribeToConversation` keeps a single callback set per conversation
-     * and the socket layer calls every callback in it for `private:message`,
-     * `private:typing` AND `private:read`. So each handler here received the
-     * other two payloads as well — `handleRead` did `data.messageIds.includes`
-     * on a message payload and threw, which unmounted the screen the moment
-     * the other person's first message arrived (simulator, 2026-09-12). Each
-     * handler now checks the payload is its own before touching it.
-     */
     const handleNewMessage: PrivateMessageCallback = (data) => {
-      if (!('message' in data) || !data.message) return
+      if (!data.message) return
       setMessages(prev => {
         if (prev.some(m => m.id === data.message.id)) return prev
         // Your own send echoed back before the request resolved is still your
@@ -632,7 +621,6 @@ function PrivateChatInner() {
     }
 
     const handleTyping: PrivateTypingCallback = (data) => {
-      if (typeof data.isTyping !== 'boolean') return
       if (data.userId === authUser?.id) return
       setIsOtherTyping(data.isTyping)
       if (data.isTyping) {
@@ -644,21 +632,22 @@ function PrivateChatInner() {
     }
 
     const handleRead: PrivateReadCallback = (data) => {
-      if (!Array.isArray(data.messageIds)) return
       if (data.readBy === authUser?.id) return
       setMessages(prev => prev.map(m => data.messageIds.includes(m.id) ? { ...m, isRead: true } : m))
     }
 
-    const u1 = subscribeToConversation(String(conversationId), handleNewMessage)
-    const u2 = subscribeToConversation(String(conversationId), handleTyping)
-    const u3 = subscribeToConversation(String(conversationId), handleRead)
+    const u1 = subscribeToConversation(String(conversationId), {
+      onMessage: handleNewMessage,
+      onTyping: handleTyping,
+      onRead: handleRead,
+    })
     // ✓✓ delivered as their app gets them (SCRUM-408).
-    const u4 = subscribeToDelivered((d) => {
+    const u2 = subscribeToDelivered((d) => {
       if (d.conversationId !== String(conversationId)) return
       const at = new Date().toISOString()
       setMessages(prev => prev.map(m => d.messageIds.includes(m.id) && !m.deliveredAt ? { ...m, deliveredAt: at } : m))
     })
-    return () => { u1(); u2(); u3(); u4(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
+    return () => { u1(); u2(); if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current) }
   }, [conversationId, authUser?.id, markArriving])
 
   useEffect(() => {
