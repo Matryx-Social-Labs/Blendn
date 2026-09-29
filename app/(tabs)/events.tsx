@@ -783,12 +783,14 @@ function EventsInner() {
 
       // Get event chat and offer navigation
       const chatResult = await apiClient.getEventChat(event.id)
-      if (chatResult.success && chatResult.data?.id) {
-        // Captured before the closure: the guard above narrows `data` here, but
-        // TypeScript drops that narrowing inside `onPress`, which runs later and
-        // could in principle see a reassigned value.
-        const chatId = chatResult.data.id
-        const chatName = chatResult.data.name || 'Event chat'
+      /*
+       * The room is `chatGroupId` / `chatGroupName`: `GET /events/:id/chat` has
+       * never sent `id` or `name`, so this never offered "Go to chat" after a
+       * check-in (SCRUM-457). The app's other callers already read it this way.
+       */
+      const chatId = chatResult.success ? (chatResult.data?.chatGroupId ?? chatResult.data?.id) : undefined
+      if (chatId) {
+        const chatName = chatResult.data?.chatGroupName || chatResult.data?.name || 'Event chat'
         showTray({
           title: 'Checked in',
           message: 'You have been checked in and added to the event chat.',

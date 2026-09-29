@@ -226,17 +226,6 @@ export async function getEventInterestCounts(eventIds: string[]) {
 
 // ============== CHAT ==============
 
-export async function ensureUserInEventChat(eventId: string, _eventTitle?: string) {
-  const result = await apiClient.getEventChat(eventId)
-  if (result.success && result.data) {
-    return {
-      chatRoomId: result.data.id,
-      roomName: result.data.name || 'Event Chat',
-    }
-  }
-  return null
-}
-
 export async function sendChatMessage(
   chatGroupId: string,
   content: string,
