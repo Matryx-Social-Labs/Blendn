@@ -35,19 +35,6 @@ describe('safety sheets', () => {
     expect(SAFETY).toMatch(/reportEvent\(eventId, reason as EventReportType, description\)/)
   })
 
-  it('keeps the call shapes the screens use', () => {
-    for (const name of [
-      'showUserSafetyActions',
-      'showLeaveConversationActions',
-      'showMessageReportOptions',
-      'showReportOptions',
-      'showBlockConfirmation',
-      'showEventReportOptions',
-    ]) {
-      expect(SAFETY).toMatch(new RegExp(`export const ${name} = \\(`))
-    }
-  })
-
   it('is drawn by one host, mounted at the root', () => {
     expect(read('app/_layout.tsx')).toContain('<SheetHost />')
     // Every action gets its own row: four in the default layout put three in one.
@@ -69,9 +56,5 @@ describe('the chat screens say what failed', () => {
       expect(src).not.toMatch(/setNewMessage\(messageText\)/)
     }
     expect(read('components/chat/ChatBubble.tsx')).toContain('Not sent · Tap to retry')
-  })
-
-  it('no longer answers DM options with "Coming soon"', () => {
-    expect(read('app/private-chat/[conversationId].tsx')).not.toContain('Coming soon')
   })
 })

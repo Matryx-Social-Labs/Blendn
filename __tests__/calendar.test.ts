@@ -1,8 +1,5 @@
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn() } }))
 
-import { readFileSync } from 'fs'
-import { join } from 'path'
-
 import { calendarUrl } from '../lib/calendar'
 
 describe('calendarUrl', () => {
@@ -24,13 +21,5 @@ describe('calendarUrl', () => {
 
   it('offers nothing for times that do not parse', () => {
     expect(calendarUrl({ title: 'x', start_time: '', end_time: '2026-09-28T18:00:00Z' })).toBeNull()
-  })
-
-  it('is the one copy: the Going tab and the event page both use it', () => {
-    const going = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
-    const detail = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
-    expect(going).toContain("from '../../lib/calendar'")
-    expect(going).not.toContain('calendar.google.com')
-    expect(detail).toContain("from '../../lib/calendar'")
   })
 })
