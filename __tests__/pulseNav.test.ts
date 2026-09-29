@@ -2,17 +2,13 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 /**
- * The bar's shape, pinned to the frame it was measured from.
+ * The Pulse's bar and header: the layout facts that broke on a device.
  *
- * Every fact here is one that broke on a device, was fixed, and was worth a
- * screenshot from the user to find. None of them is visible to a typecheck: all
- * four are valid style objects that render fine and simply draw the wrong thing.
- * A render test cannot see them either — `react-test-renderer` 19 returns
- * `null` for a bare `<View><Text/></View>` in this jest-expo setup, so there is
- * no tree to assert against. So this reads the source, which is crude and
- * catches exactly these.
- *
- * Frame `1141:4827`, 390×104.
+ * Each is a valid style object that renders fine and draws the wrong thing, so
+ * neither a typecheck nor a render test sees it, and this reads the source. Colour,
+ * blur, shadow, `fontWeight` and the type scale are not pinned here:
+ * `npm run lint:design` enforces them (via `designTokens.test.ts`). The bar's
+ * height is called for real in `featuredCardLayout.test.tsx`.
  */
 
 const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
@@ -26,35 +22,6 @@ const TOP_BAR = () => stripComments(read('components/pulse/PulseTopBar.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/events.tsx'))
 
 describe('the overlay header, frame 1141:4819', () => {
-  /*
-   * The bar the old screen had reserved its own height and sat above a bordered
-   * panel. This one occupies nothing: it floats, the feed runs under it, and
-   * the only thing keeping "The Pulse" out from behind it is padding on the
-   * scroll content. Every fact below is one of the two halves of that.
-   */
-  it('floats rather than occupying layout', () => {
-    const src = TOP_BAR()
-    expect(src).toContain("position: 'absolute'")
-    expect(src).toContain('top: 0')
-  })
-
-  it('carries the frame height and fill, on the page margin', () => {
-    const src = TOP_BAR()
-    expect(src).toContain('TOP_BAR_HEIGHT = 64')
-    // Flat and opaque: no glass (tasks/lessons.md).
-    expect(src).toContain('backgroundColor: EMBER.bg')
-    expect(src).not.toContain('<BlurView')
-    expect(src).toContain('paddingHorizontal: GUTTER')
-  })
-
-  it('the wordmark is white, not a second accent', () => {
-    const src = TOP_BAR()
-    // The screen title below carries the one accent (docs/DESIGN_SYSTEM.md).
-    expect(src).toContain('wordmark: { ...TYPE.button')
-    expect(src).not.toContain('EMBER.accent')
-    expect(src).not.toContain("color: '#FFFFFF'")
-  })
-
   it('adds the status bar to the 64 rather than absorbing it', () => {
     /*
      * The frame is a 390pt artboard with no notch. Taking its height literally
@@ -87,15 +54,6 @@ describe('the overlay header, frame 1141:4819', () => {
     expect(src).not.toContain('onPress')
   })
 
-  it('carries the bell, now that the bell goes somewhere', () => {
-    /*
-     * It was left out because "a bell that opens nothing is a dead control in
-     * the most-tapped corner of the screen". `GET /notifications` exists
-     * (blendn-admin #242), so it is not dead any more.
-     */
-    expect(SCREEN()).toContain('<PulseTopBar actions={<NotificationBell />} />')
-  })
-
   it('the feed clears it with padding, not with a spacer', () => {
     const src = SCREEN()
     expect(src).toContain('<PulseTopBar')
@@ -109,24 +67,6 @@ describe('the stylesheet, frame 1141:4643', () => {
     const src = SCREEN()
     return src.slice(src.indexOf('const styles = StyleSheet.create({'))
   }
-
-  it("takes the page's rhythm from the design system", () => {
-    const src = SCREEN()
-    expect(src).toContain('const MAIN_PADDING_HORIZONTAL = GUTTER')
-    expect(src).toContain('const MAIN_PADDING_BOTTOM = 128')
-    expect(src).toContain('const MAIN_GAP = SPACE.xxl')
-    expect(src).toContain('const SECTION_GAP = SPACE.lg')
-    expect(src).toContain('const STACK_GAP = SPACE.xl')
-  })
-
-  it('the page is one flat surface', () => {
-    const sheet = SHEET()
-    expect(sheet).toContain('backgroundColor: EMBER.bg')
-    // No panel: the screen used to stack a bar, a bordered elevated sheet and
-    // the list, and draw every card on the wrong one of the three.
-    expect(sheet).not.toContain('sectionBg')
-    expect(sheet).not.toContain('LinearGradient')
-  })
 
   it('the gutter is applied once, on the scroll content', () => {
     const sheet = SHEET()
@@ -146,96 +86,6 @@ describe('the stylesheet, frame 1141:4643', () => {
     expect([...used].filter((k) => !declared.includes(k))).toEqual([])
   })
 
-  it('never asks for weight with fontWeight', () => {
-    /*
-     * The one rule in here that is a bug rather than a measurement. Custom
-     * fonts on Android ignore `fontWeight` outright and silently render
-     * regular, so `fontWeight: '700'` on Manrope is bold on iOS and regular on
-     * Android from identical code. The old sheet did it in thirty places and no
-     * simulator screenshot would ever have shown it.
-     */
-    expect(SCREEN()).not.toContain('fontWeight')
-  })
-
-  it('is on the shared type scale, with no local one beside it', () => {
-    const src = SCREEN()
-    expect(src).toContain('...TYPE.')
-    expect(src).not.toContain('TYPE_CARD_TITLE_SIZE')
-    expect(src).not.toContain('TYPE_BODY_SIZE')
-    expect(src).not.toContain('TYPE_META_SIZE')
-    expect(src).not.toContain('TYPE_CAPTION_SIZE')
-  })
-
-  it('has no trace of the old blue palette', () => {
-    // One import of `APP_COLORS` is enough to put a cold hairline around a warm
-    // card. These four hexes were all in the sheet a release ago.
-    const src = SCREEN()
-    expect(src).not.toContain('APP_COLORS')
-    expect(src).not.toContain('#007AFF')
-    expect(src).not.toContain('#e8f5e8')
-    expect(src).not.toContain('#4CAF50')
-    expect(src).not.toContain('#fde7ef')
-  })
-})
-
-describe('the previous designs are gone, not merely uncalled', () => {
-  /*
-   * Twelve render functions from three layouts lived in this file, six of them
-   * with no caller — including, for one release, the *only* one built from the
-   * frame. Dead code is not inert here: it is what every restyle landed next
-   * to and contradicted. `expo lint` names an orphan, so these greps are the
-   * half lint cannot see — that the name is gone rather than newly re-wired.
-   */
-  it.each([
-    'renderInterestedCarousel',
-    'renderCarouselWithTitle',
-    'renderCarouselFancy',
-    'renderInviteHero',
-    'renderFeaturedHero',
-  ])('%s does not exist', (name) => {
-    expect(SCREEN()).not.toContain(name)
-  })
-
-  it.each([
-    'interestedItems',
-    'cityTopItems',
-    'bestPartiesItems',
-    'soonestWithImage',
-  ])('%s does not exist', (name) => {
-    expect(SCREEN()).not.toContain(name)
-  })
-
-  it('the hero interpolations went with the hero', () => {
-    const src = SCREEN()
-    expect(src).not.toContain('heroParallaxY')
-    expect(src).not.toContain('heroOpacity')
-  })
-
-  /*
-   * The sections used to lift 8pt and dim to 0.94 as the feed scrolled, driven
-   * by `scrollY.setValue` in a JS `onScroll` — a bridge crossing and a native
-   * update every frame on the most-scrolled screen, for motion nobody could
-   * name a purpose for. Scrolling is a 100+/day interaction; it does not
-   * animate. If scroll-linked motion ever comes back, it belongs in a
-   * Reanimated `useAnimatedScrollHandler`, not here.
-   */
-  it('scrolling the feed drives no animation from the JS thread', () => {
-    const src = SCREEN()
-    expect(src).not.toContain('sectionLiftY')
-    expect(src).not.toContain('sectionOpacity')
-    expect(src).not.toMatch(/scrollY\.setValue/)
-    expect(src).not.toContain('setScrollProgress')
-  })
-
-  it('nothing is fetched that nothing reads', () => {
-    // `favoriteEvents` had one reader, `interestedItems`. Left behind, its
-    // effect would fire `getUserFavorites` on every events refetch into a
-    // state nothing renders.
-    const src = SCREEN()
-    expect(src).not.toContain('favoriteEvents')
-    expect(src).not.toContain('getUserFavorites')
-    expect(src).not.toContain('NIGHTLIFE_GROUPS')
-  })
 })
 
 describe('the bar does not clip the button that overhangs it', () => {
@@ -259,145 +109,4 @@ describe('the bar does not clip the button that overhangs it', () => {
     expect(surface).toContain('borderTopRightRadius: EMBER_RADIUS.card')
   })
 
-  it('the surface is flat and opaque: no blur, no glow', () => {
-    const src = NAV()
-    const surface = src.slice(src.indexOf('  barSurface: {'), src.indexOf('  item: {'))
-    expect(surface).toContain('backgroundColor: EMBER.surfaceSunken')
-    expect(surface).not.toContain('shadowColor')
-    expect(surface).not.toContain('elevation')
-    expect(src).not.toContain('<BlurView')
-  })
 })
-
-describe('the items are sized by their labels', () => {
-  /*
-   * The frame's five slots are 40.08 / 56.23 / 56 / 52.03 / 22.98 wide with a
-   * uniform 26.66 gap — space-between over content-sized children. `flex: 1`
-   * gave every label the widest one's box, which is what made the row read as
-   * cramped under the centre button.
-   */
-  it('no item claims an equal share of the row', () => {
-    const src = NAV()
-    const item = src.slice(src.indexOf('  item: {'), src.indexOf('  itemOn: {'))
-    expect(item).not.toContain('flex: 1')
-  })
-
-  it('the row distributes by space-between, not space-around', () => {
-    expect(NAV()).toContain("justifyContent: 'space-between'")
-    expect(NAV()).not.toContain("justifyContent: 'space-around'")
-  })
-})
-
-describe('the centre is the brand mark', () => {
-  it('carries no label', () => {
-    // The frame's centre slot is a 56pt circle and nothing else. A fifth word
-    // under the mark made the row read as five tabs with one shouting.
-    expect(NAV()).not.toContain('centreLabel')
-    expect(NAV()).not.toContain('roomButtonLabel')
-  })
-
-  it('uses the monogram, in its bold cut, not a glyph', () => {
-    /*
-     * The bold cut is for *small* sizes only. `monogram-white.png` has strokes
-     * at 4.86% of the mark's width — 1.35pt at 32 — against roughly 2pt for
-     * every other glyph in this bar. The bold file is the same artwork dilated
-     * to 6.40%, which lands at 1.78pt with every counter still open.
-     *
-     * A genuinely *filled* variant was tried by flood-filling the enclosed
-     * regions: it turns the B into a blob. That ask stands with the designer.
-     */
-    const src = NAV()
-    expect(src).toContain('monogram-white-bold.png')
-    // Tinted dark-on-warm. The gradient monogram would be orange on orange.
-    expect(src).not.toContain('monogram-gradient.png')
-    expect(src).toContain('tintColor={BRAND_INK}')
-  })
-
-  it('tints the mark with the logo ink, not the on-gradient text token', () => {
-    /*
-     * `EMBER.onGradient` is `#5B1600` — the colour for *text* on a gradient
-     * button. Used on the mark it rendered a muddy maroon at 6.07:1 and made a
-     * thin outline logo look smudged.
-     *
-     * `#1B1931` is sampled from the artwork: both the mono lockup and the full
-     * lockup draw the mark in it, byte-identical. 7.69:1 on `EMBER.accent`.
-     * Pinned because it is a value nobody can re-derive by reading the code —
-     * it came from measuring two PNGs.
-     */
-    expect(NAV()).toContain("const BRAND_INK = '#1B1931'")
-  })
-
-  it('optically centres the mark, which is not the same as centring it', () => {
-    /*
-     * The asset's bounding box is exact — 8pt padding on all four sides — so
-     * `contentFit: 'contain'` places it perfectly *by the box*, and it still
-     * reads as sitting left. The ink is not evenly distributed inside that
-     * box: the left is stacked solid bars, the right tapers to a point, so the
-     * centre of mass is 9.2% left of the canvas centre and the eye follows
-     * mass.
-     *
-     * 1.6pt is 5% of the drawn size — the midpoint between box-centred (0%)
-     * and mass-centred (9%), which disagree by the whole width of the problem.
-     */
-    const mark = NAV().slice(NAV().indexOf('centreMark: {'))
-    expect(mark.slice(0, mark.indexOf('},'))).toContain('translateX: 1.6')
-  })
-
-  it('the centre button is seated in the bar, not hanging above it', () => {
-    /*
-     * The frame puts the container at `y=-16`. On a real screen the Scene's
-     * docked CTA and the Pulse's filter control both end just above the bar, so
-     * a button that leaves the bar overlaps them and bleeds its halo onto them.
-     *
-     * `alignSelf: 'center'` against the row's `flex-start` is what seats it.
-     */
-    const src = NAV()
-    expect(src).not.toContain('marginTop: -34')
-    expect(src).not.toContain('top: -34')
-    expect(src).toContain("centreSlot: { alignItems: 'center', alignSelf: 'center' }")
-  })
-
-  it('the mark is sized from its stroke, not from a ratio of the disc', () => {
-    /*
-     * `monogram-white.png` strokes measure 5.0% of the mark's width, so 28pt
-     * drew a 1.18pt line against ~2pt for every other glyph in the bar — the
-     * lightest thing in the row while being the most important control in it.
-     * 32 puts it at 1.35pt and fits the 39.6pt square inscribed in the 56pt
-     * disc.
-     */
-    const mark = NAV().slice(NAV().indexOf('centreMark: {'))
-    const block = mark.slice(0, mark.indexOf('},'))
-    expect(block).toContain('width: 32')
-    expect(block).toContain('height: 32')
-  })
-
-  it('the bar is 92pt, the same number TAB_BAR_CLEARANCE claims', () => {
-    /*
-     * Seating the centre button made the disc — not the 48pt icon-plus-label
-     * column — the row's tallest child, so the bar grew from 100 to 108 while
-     * `TAB_BAR_CLEARANCE` stayed 88. Padding tolerated the drift; the Pulse's
-     * hero card, which is sized against the bar's real top edge, did not.
-     *
-     * The disc is `CONTROL.lg`: 8 + 56 + max(inset - 6, 20) = 92 on a
-     * home-indicator phone.
-     */
-    const nav = NAV()
-    expect(nav).toContain('TAB_BAR_PADDING_TOP = 8')
-    expect(nav).toContain('const CENTRE_SIZE = CONTROL.lg')
-    expect(nav).toContain('export const TAB_BAR_CLEARANCE = 92')
-    expect(nav).toContain('export function tabBarTop')
-    expect(8 + 56 + Math.max(34 - 6, 20)).toBe(92)
-  })
-
-  it('is a flat accent disc in every state, not only when something is live', () => {
-    // It was a status light and is now a logo; a mark that changes colour with
-    // your proximity to an event is not a mark. The status it used to carry is
-    // in the badge and the still dot instead.
-    expect(NAV()).not.toContain('live ? (')
-    const src = NAV()
-    const button = src.slice(src.indexOf('  centreButton: {'), src.indexOf('  centreMark: {'))
-    expect(button).toContain('backgroundColor: EMBER.accent')
-    expect(src).not.toContain('LinearGradient')
-  })
-})
-
