@@ -205,6 +205,8 @@ PODS:
     - ExpoModulesCore
   - ExpoBlur (57.0.3):
     - ExpoModulesCore
+  - ExpoClipboard (57.0.2):
+    - ExpoModulesCore
   - ExpoDevice (57.0.2):
     - ExpoModulesCore
   - ExpoDomWebView (57.0.1):
@@ -2703,6 +2705,7 @@ DEPENDENCIES:
   - ExpoAppleAuthentication (from `../node_modules/expo-apple-authentication/ios`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoBlur (from `../node_modules/expo-blur/ios`)
+  - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoDevice (from `../node_modules/expo-device/ios`)
   - "ExpoDomWebView (from `../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios/ExpoFileSystem.podspec`)
@@ -2864,6 +2867,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-asset/ios"
   ExpoBlur:
     :path: "../node_modules/expo-blur/ios"
+  ExpoClipboard:
+    :path: "../node_modules/expo-clipboard/ios"
   ExpoDevice:
     :path: "../node_modules/expo-device/ios"
   ExpoDomWebView:
@@ -3108,6 +3113,7 @@ SPEC CHECKSUMS:
   ExpoAppleAuthentication: 16c2955d33ec7315e5a99d17fb5d62ed33cdb5b9
   ExpoAsset: a917b756b2e4fe12cef1ac3bca5fd849ddb2b919
   ExpoBlur: 975b78b65b3c8f475c44bd8f8b53948146b1ff9b
+  ExpoClipboard: 15b8cc88075d7c50af165ed8fca0a76915903bba
   ExpoDevice: 5c638e530304a51992263ab5c1cab726f992b9dc
   ExpoDomWebView: beaec034e51bd028428b98bb1f2633ab79c6d095
   ExpoFileSystem: 28778f942725170102f7c6cf4dee05a526ddacd0
