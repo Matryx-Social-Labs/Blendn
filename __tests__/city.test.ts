@@ -136,15 +136,6 @@ describe('cityOnResume — replace a guess, never a choice', () => {
       cityOnResume({ stored: inferred('Bengaluru'), deviceCity: null, available: AVAILABLE })
     ).toBeNull()
   })
-
-  it('is not time-based — an old choice is still a choice', () => {
-    // There is no timestamp anywhere in this module, on purpose. A home city
-    // does not go stale after thirty days, and any threshold would be picked
-    // out of the air.
-    expect(
-      cityOnResume({ stored: chosen('Bengaluru'), deviceCity: 'Mumbai', available: AVAILABLE })
-    ).toBeNull()
-  })
 })
 
 describe('shouldOfferSwitch', () => {

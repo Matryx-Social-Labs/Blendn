@@ -259,24 +259,13 @@ hint, and a hint does not fit in a chip.
 
 ---
 
-## 3. `lib/matchBand.ts` — Strong / Good / Some
+## 3. Match band — removed
 
-Not a screen; the logic behind the label that replaced the Figma's
-`Match Percentage`.
-
-- **Strong** — two or more shared interests
-- **Good** — one shared interest
-- **Some** — nothing shared, compatible intent
-
-**Please design the band.** It should not resemble a score, a percentage or a
-rank. "Some" in particular must not read as failure: while the interest graph is
-still filling, most of a room will be "Some", and the copy has to be true rather
-than discouraging. The current label is "Worth saying hello".
-
-`sharedInterestSentence()` produces the card's real content — *"You both picked
-Techno and Board games"*. That sentence is the product; the band is decoration
-around it. It returns null when there is nothing to claim, so nothing is ever
-invented.
+`lib/matchBand.ts` (Strong / Good / Some) was never wired into a screen and has
+been deleted. The card's shared-interest copy is built in
+`lib/gridCardContent.ts` and `components/blendn/PersonCard.tsx`. If a band is
+wanted again, design it first: it should not resemble a score, a percentage or
+a rank, and "Some" must not read as failure.
 
 
 ---

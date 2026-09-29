@@ -1727,8 +1727,8 @@ would later refuse. API #181–#182, app #55–#58.
 
 - **Placeholder screens, logic complete** (#50). Peer rating
   (`app/rate/[eventId].tsx`), intent and reveal
-  (`app/event-preferences/[eventId].tsx`), and the Strong/Good/Some band
-  (`lib/matchBand.ts`). Every rule is implemented and every layout is
+  (`app/event-preferences/[eventId].tsx`), and a Strong/Good/Some band
+  (`lib/matchBand.ts`, since removed: it was never wired in). Every rule is implemented and every layout is
   provisional, each carrying a visible PLACEHOLDER banner so nothing gets
   mistaken for finished in a demo.
 

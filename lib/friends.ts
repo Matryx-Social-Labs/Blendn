@@ -107,8 +107,3 @@ export function friendsSinceLabel(iso: string): string {
   if (Number.isNaN(date.getTime())) return 'Friends'
   return `Friends since ${MONTHS[date.getMonth()]} ${date.getFullYear()}`
 }
-
-/** "1 friend", "3 friends". */
-export function friendsCountLabel(count: number): string {
-  return `${count} friend${count === 1 ? '' : 's'}`
-}
