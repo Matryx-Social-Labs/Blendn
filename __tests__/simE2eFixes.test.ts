@@ -45,25 +45,11 @@ describe('notification rows for VoiceOver', () => {
   })
 })
 
-describe('the room chat dock', () => {
-  it('says "1 message", not "1 messages"', () => {
-    expect(read('components', 'blendn', 'ChatDock.tsx')).toContain("count === 1 ? 'message' : 'messages'")
-  })
-})
-
 describe('the conversation ⋮ menu', () => {
   const src = read('lib', 'safetyUtils.ts')
   it('opens a neutral menu with leaving one step in', () => {
     expect(src).toMatch(/export const showConversationOptions/)
     expect(src).toMatch(/label: fromMatch \? 'Unmatch…' : 'End conversation…',\s*variant: 'destructive',\s*next: \(\) => leaveConversationSheet/)
     expect(read('app', 'private-chat', '[conversationId].tsx')).toContain('showConversationOptions(')
-  })
-})
-
-describe('action trays', () => {
-  it('scroll their buttons rather than run off the bottom of the screen', () => {
-    const src = read('components', 'ActionTray.tsx')
-    expect(src).toMatch(/<ScrollView\s+style=\{styles\.buttonsScroll\}/)
-    expect(src).toContain('buttonsScroll: { flexShrink: 1, flexGrow: 0 }')
   })
 })

@@ -33,26 +33,13 @@ import { join } from 'path'
  */
 
 const CHAT_SCREEN = join(__dirname, '..', 'app', 'chat', '[id].tsx')
-const API_CLIENT = join(__dirname, '..', 'lib', 'apiClient.ts')
 
 const chatSource = readFileSync(CHAT_SCREEN, 'utf8')
-const apiSource = readFileSync(API_CLIENT, 'utf8')
 
-describe('the chat composer surfaces what the server actually did', () => {
-  it('reads moderation_hidden, so a withheld message is not shown as sent', () => {
-    expect(chatSource).toContain('moderation_hidden')
-  })
-
-  it('binds the caught error instead of discarding it', () => {
-    // `catch {` throws away USER_MUTED, CHAT_LOCKED, CHAT_CLOSED and
-    // SPAM_BLOCKED, which is every reason the server bothered to distinguish.
-    expect(chatSource).not.toMatch(/\}\s*catch\s*\{/)
-  })
-
-  it('renders the server sentence rather than a hardcoded failure string', () => {
-    expect(chatSource).toMatch(/error instanceof Error \? error\.message/)
-  })
-})
+// "A withheld message is not shown as sent" and "the caught error is bound and
+// its sentence shown" are pinned for the room and the DM together in
+// `withheldMessage.test.ts`; `errorCode` reaching the caller is pinned against
+// a real 403 body in `roomLeaveMuteApi.test.ts`.
 
 describe('a removed message is a placeholder, not a blank', () => {
   /*
@@ -76,18 +63,6 @@ describe('a removed message is a placeholder, not a blank', () => {
     expect(bubble).toContain('This message was removed by moderation.')
     expect(bubble).toMatch(/onLongPress=\{removed \? undefined : onLongPress\}/)
     expect(bubble).toMatch(/bubbleRemoved: \{[\s\S]*?borderStyle: 'dashed'/)
-  })
-})
-
-describe('ApiResponse carries the machine-readable reason', () => {
-  it('declares errorCode', () => {
-    // Without a field to carry it, every coded refusal degrades to prose and
-    // no screen can branch on the reason.
-    expect(apiSource).toMatch(/errorCode\?:\s*string/)
-  })
-
-  it('populates errorCode from the response body on failure', () => {
-    expect(apiSource).toMatch(/errorCode:\s*typeof parsed\.errorCode === 'string'/)
   })
 })
 
