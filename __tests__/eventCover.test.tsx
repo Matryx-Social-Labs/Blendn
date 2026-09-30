@@ -58,5 +58,8 @@ describe('EventCover', () => {
     expect(markWidth()).toBe(72)
     await rerender(<EventCover uri={null} height={96} />)
     expect(markWidth()).toBe(38)
+    // And never larger than it is on the card.
+    await rerender(<EventCover uri={null} height={240} />)
+    expect(markWidth()).toBe(72)
   })
 })
