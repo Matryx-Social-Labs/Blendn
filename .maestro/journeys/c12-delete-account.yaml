@@ -16,9 +16,11 @@ tags:
     visible: "The Pulse"
     timeout: 60000
 - runFlow: ../subflows/dismiss-tip.yaml
-- tapOn: "Me tab"
-- extendedWaitUntil:
-    visible: "Settings"
+# The tab reads "Me" (#323), and Settings is the last row, below the fold.
+- tapOn: "Me"
+- scrollUntilVisible:
+    element: "Settings"
+    direction: DOWN
     timeout: 20000
 - tapOn: "Settings"
 - scrollUntilVisible:

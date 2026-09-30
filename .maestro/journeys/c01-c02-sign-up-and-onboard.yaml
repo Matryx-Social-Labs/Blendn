@@ -28,22 +28,34 @@ tags:
 - tapOn:
     text: "Create account"
     index: 0
+# The form since #323: Name, Email, Password, Age.
 - tapOn: "What should we call you?"
 - inputText: ${NEW_NAME}
-- runFlow: ../subflows/keyboard-done.yaml
-- tapOn: "You must be 18 or over"
-- inputText: ${AGE}
-- runFlow: ../subflows/keyboard-done.yaml
+- runFlow: ../subflows/field-done.yaml
 - tapOn: "you@example.com"
 - inputText: ${NEW_EMAIL}
-- runFlow: ../subflows/keyboard-done.yaml
+- runFlow: ../subflows/field-done.yaml
 - tapOn: "At least 12 characters"
 - inputText: ${NEW_PASSWORD}
-- runFlow: ../subflows/keyboard-done.yaml
-- tapOn:
-    text: "Create account"
-    index: 1
-    optional: true
+- runFlow: ../subflows/field-done.yaml
+- tapOn: "You must be 18 or over"
+- inputText: ${AGE}
+# Age is a number pad. On iOS it has no return key and hideKeyboard cannot
+# dismiss it, but its toolbar has "Go", which submits the form (2026-09-30).
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Go"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - runFlow: ../subflows/keyboard-done.yaml
+      - tapOn:
+          text: "Create account"
+          index: 1
+          optional: true
 - extendedWaitUntil:
     visible: "The basics"
     timeout: 45000
