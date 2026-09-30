@@ -278,6 +278,8 @@ function EventsInner() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  // Pull-to-refresh count: a failed Upcoming thumb tries its cover again (SCRUM-480).
+  const [pulls, setPulls] = useState(0)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
   const proximityData = useMemo(
     () => (userLocation ? proximityFor(events, userLocation) : {}),
@@ -1345,6 +1347,7 @@ function EventsInner() {
    */
   const onRefresh = async () => {
     setRefreshing(true)
+    setPulls((n) => n + 1)
     await fetchEvents({ silent: true, force: true })
     setRefreshing(false)
   }
@@ -1779,6 +1782,7 @@ function EventsInner() {
             title={event.title}
             category={event.category || null}
             imageUrl={event.cover_image_url}
+            retry={pulls}
             timeLabel={nextUpLabel(live.start_time, live.end_time)}
             placeLabel={placeLabel(event)}
             joinedCount={joinedCount(event)}
@@ -1793,7 +1797,7 @@ function EventsInner() {
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest, pulls])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -2057,6 +2061,7 @@ function EventsInner() {
                   title={item.title}
                   category={item.category || null}
                   imageUrl={item.cover_image_url}
+                  retry={pulls}
                   timeLabel={timeLabel(item.start_time)}
                   placeLabel={placeLabel(item)}
                   joinedCount={joinedCount(item)}

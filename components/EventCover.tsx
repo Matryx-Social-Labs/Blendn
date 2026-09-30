@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
+import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS } from '../lib/theme'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
@@ -52,7 +53,14 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
           // already failed on just because it rendered again.
           key={attempt}
           source={{ uri }}
-          onError={() => setFailedAttempt(attempt)}
+          // Lists reuse native views; without this a row can flash the last one's picture.
+          recyclingKey={uri}
+          onError={() => {
+            // Said out loud: a host that starts refusing the app (SCRUM-285) is
+            // otherwise a screen of quiet placeholders.
+            Logger.warn('general', 'Event cover failed to load', { uri })
+            setFailedAttempt(attempt)
+          }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={150}

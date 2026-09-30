@@ -385,7 +385,7 @@ function GoingScreenInner() {
           <UpcomingCard
             title={row.title}
             imageUrl={row.cover_image_url}
-          retry={refreshCount}
+            retry={refreshCount}
             // Today's day of a multi-day run, as the heading above it is.
             timeLabel={timeLabel(liveWindow(row).start_time)}
             placeLabel={placeLabel(row)}
@@ -404,7 +404,7 @@ function GoingScreenInner() {
           <UpcomingCard
             title={row.title}
             imageUrl={row.cover_image_url}
-          retry={refreshCount}
+            retry={refreshCount}
             timeLabel={featuredDateLabel(row.start_time)}
             placeLabel={placeLabel(row)}
             onPress={() => openEvent(row.id)}
