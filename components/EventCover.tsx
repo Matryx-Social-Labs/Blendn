@@ -64,13 +64,22 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
 
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
-      <Image source={monogram} style={styles.mark} resizeMode="contain" accessible={false} accessibilityIgnoresInvertColors />
+      <Image
+        testID="event-cover-mark"
+        source={monogram}
+        style={[styles.mark, { width: markSize(height), height: markSize(height) }]}
+        resizeMode="contain"
+        accessible={false}
+        accessibilityIgnoresInvertColors
+      />
     </View>
   )
 }
 
 /** The placeholder's logo mark: faint, so it reads as a mark and not as content. */
 const MARK_OPACITY = 0.35
+/** 72pt on the 180pt card, and the same share of a smaller box (a list row's thumb). */
+const markSize = (height: number) => Math.min(72, Math.round(height * 0.4))
 
 const styles = StyleSheet.create({
   frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
@@ -81,5 +90,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // Faint, so it reads as a mark and not as content.
-  mark: { width: 72, height: 72, opacity: MARK_OPACITY },
+  mark: { opacity: MARK_OPACITY },
 })

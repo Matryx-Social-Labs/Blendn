@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
-import { OptimizedImage } from '../OptimizedImage'
+import { EventCover } from '../EventCover'
 import ScalePress from '../motion/ScalePress'
 import { HeartIcon } from '../motion/HeartIcon'
 
@@ -78,6 +78,8 @@ interface Props {
   isFavorited?: boolean
   favoriteBusy?: boolean
   onToggleFavorite?: () => void
+  /** Bump to try a failed picture again (pull-to-refresh); see `EventCover`. */
+  retry?: number
 }
 
 /** Hoisted so the prop keeps one identity across renders. */
@@ -99,6 +101,7 @@ function UpcomingCardImpl({
   isFavorited,
   favoriteBusy,
   onToggleFavorite,
+  retry,
 }: Props) {
   const showJoined = typeof joinedCount === 'number' && joinedCount > 0
   const eyebrow = [timeLabel, category].filter(Boolean).join(' · ')
@@ -185,15 +188,11 @@ function UpcomingCardImpl({
       </View>
 
       <View style={styles.thumb}>
-        {imageUrl ? (
-          <OptimizedImage
-            source={imageUrl}
-            recyclingKey={imageUrl ?? undefined}
-            style={StyleSheet.absoluteFill as never}
-            height={UPCOMING_THUMB}
-            contentFit="cover"
-          />
-        ) : null}
+        {/*
+          Never an empty square: no picture, or one that fails, draws the brand
+          mark (SCRUM-480, which is SCRUM-286 again after the rows moved here).
+        */}
+        <EventCover uri={imageUrl ?? null} height={UPCOMING_THUMB} radius={0} retry={retry} />
 
         {onToggleFavorite ? (
           <Pressable
