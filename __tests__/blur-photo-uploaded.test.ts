@@ -81,6 +81,15 @@ it('a blur that cannot be made does not stop the photos saving; the server then 
   expect(updateProfile).toHaveBeenCalledWith('u1', { photos: [NEW, OLD] })
 })
 
+it('a save hands back the URLs the server stored, which PhotoManager keeps (SCRUM-489)', async () => {
+  const stored = ['https://blendn-media.fly.storage.tigris.dev/profile/u1/9-z-sealed', OLD]
+  updateProfile.mockResolvedValueOnce({ success: true, data: { profile: { photos: stored } } })
+  expect(await reorderPhotos('u1', [OLD, NEW], OLD)).toEqual({ ok: true, photos: stored })
+  const manager = readFileSync(join(__dirname, '../components/PhotoManager.tsx'), 'utf8')
+  // add, make main, remove: each success takes the stored list.
+  expect(manager.match(/adoptStoredUrls\(prev, saved\.photos\)/g)).toHaveLength(3)
+})
+
 it('every PhotoManager save says what the primary was, and onboarding blurs its first photo', () => {
   const manager = readFileSync(join(__dirname, '../components/PhotoManager.tsx'), 'utf8')
   const calls = manager.split('\n').filter((l) => l.includes('reorderPhotos('))

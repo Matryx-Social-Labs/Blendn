@@ -680,7 +680,7 @@ const uploadBlurOf = async (photoUrl: string): Promise<string | null> => {
 /**
  * Reorder profile photos via API
  */
-export type PhotoWrite = { ok: true } | { ok: false; error: string }
+export type PhotoWrite = { ok: true; photos?: string[] } | { ok: false; error: string }
 
 /**
  * Write the photo list, and say why when it is refused.
@@ -710,7 +710,15 @@ export const reorderPhotos = async (
     // `user.image` mirrors photos[0] server-side; the in-memory user must follow.
     void refreshAuthUser()
     Logger.info('profile', 'photoUtils: Photos reordered', { userId, count: photoUrls.length })
-    return { ok: true }
+    /*
+     * The list as stored. A new photo is stored as the server's sealed copy
+     * (SCRUM-425), not the upload URL sent, and the upload is gone once
+     * sealed: a later write re-sending the upload URL was refused ("That photo
+     * did not finish uploading"), so every remove or reorder after an add
+     * failed until the screen was reopened (SCRUM-489).
+     */
+    const stored = (result.data as { profile?: { photos?: unknown } } | undefined)?.profile?.photos
+    return { ok: true, photos: Array.isArray(stored) ? (stored as string[]) : undefined }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Reorder error', { error, userId })
     return { ok: false, error: error instanceof Error ? error.message : 'Could not save your photos' }
