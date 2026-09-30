@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native'
 
+import { StyleSheet } from 'react-native'
+
 import { EventCover } from '../components/EventCover'
 
 /*
@@ -47,5 +49,17 @@ describe('EventCover', () => {
     expect(await screen.findByTestId('event-cover-placeholder')).toBeTruthy()
     await rerender(card(1))
     expect(await screen.findByTestId('event-cover-image')).toBeTruthy()
+  })
+
+  it('keeps the mark to the same share of a small box, a list row thumb (SCRUM-480)', async () => {
+    const markWidth = () =>
+      StyleSheet.flatten(screen.getByTestId('event-cover-mark').props.style).width
+    const { rerender } = await render(<EventCover uri={null} height={180} />)
+    expect(markWidth()).toBe(72)
+    await rerender(<EventCover uri={null} height={96} />)
+    expect(markWidth()).toBe(38)
+    // And never larger than it is on the card.
+    await rerender(<EventCover uri={null} height={240} />)
+    expect(markWidth()).toBe(72)
   })
 })

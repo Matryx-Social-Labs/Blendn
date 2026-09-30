@@ -385,6 +385,7 @@ function GoingScreenInner() {
           <UpcomingCard
             title={row.title}
             imageUrl={row.cover_image_url}
+            retry={refreshCount}
             // Today's day of a multi-day run, as the heading above it is.
             timeLabel={timeLabel(liveWindow(row).start_time)}
             placeLabel={placeLabel(row)}
@@ -403,6 +404,7 @@ function GoingScreenInner() {
           <UpcomingCard
             title={row.title}
             imageUrl={row.cover_image_url}
+            retry={refreshCount}
             timeLabel={featuredDateLabel(row.start_time)}
             placeLabel={placeLabel(row)}
             onPress={() => openEvent(row.id)}
@@ -430,6 +432,7 @@ function GoingScreenInner() {
         <UpcomingCard
           title={row.title}
           imageUrl={row.cover_image_url}
+          retry={refreshCount}
           timeLabel={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
           placeLabel={placeLabel(row)}
           note={cancelled ? 'Cancelled' : null}
@@ -440,7 +443,7 @@ function GoingScreenInner() {
         />
       </Animated.View>
     )
-  }, [openEvent, removeSave, reduceMotion, renderNext, restoredId])
+  }, [openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId])
 
   // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
   const items = useMemo(() => goingSections(going, events, attended), [going, events, attended])
