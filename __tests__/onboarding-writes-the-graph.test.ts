@@ -19,6 +19,8 @@ jest.mock('../lib/logger', () => ({
 jest.mock('expo-router', () => ({ router: {} }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: null }), clearNewAccountFlag: jest.fn(), refreshAuthUser: jest.fn() }))
 jest.mock('../lib/onboardingStorage', () => ({}))
+// The photos step's blur (SCRUM-478) is photoUtils' concern; it pulls native modules this suite has none of.
+jest.mock('../lib/photoUtils', () => ({ withBlurForPrimary: jest.fn(async (body: unknown) => body) }))
 
 import { syncInterests } from '../lib/useOnboarding'
 

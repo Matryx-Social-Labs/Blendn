@@ -152,7 +152,7 @@ export default function PhotoManager({
          * it was gone, with the object orphaned in storage.
          */
         const newPhotoUrls = [...photos.map(p => p.url), result.url]
-        const saved = await reorderPhotos(userId, newPhotoUrls)
+        const saved = await reorderPhotos(userId, newPhotoUrls, photos[0]?.url)
         if (!saved.ok) {
           setPhotos(prev => prev.filter(p => p.url !== result.url))
           // The server's sentence when it gave one -- "That looks like a
@@ -206,7 +206,7 @@ export default function PhotoManager({
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
 
-      const saved = await reorderPhotos(userId, reordered.map((p) => p.url))
+      const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
       if (!saved.ok) {
         setPhotos(photos)
         showToast(saved.error, 'error')
@@ -239,7 +239,7 @@ export default function PhotoManager({
               // held. Deleting the object while the profile still lists the
               // URL left a broken image on every screen that shows this
               // person, and nothing had told them the removal failed.
-              const saved = await reorderPhotos(userId, newPhotos.map(p => p.url))
+              const saved = await reorderPhotos(userId, newPhotos.map(p => p.url), photos[0]?.url)
               if (!saved.ok) {
                 setPhotos(photos)
                 showToast(saved.error, 'error')
