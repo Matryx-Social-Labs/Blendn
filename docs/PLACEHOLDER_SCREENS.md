@@ -539,7 +539,7 @@ Named so the gap is visible, not to imply they are next.
 |---|---|
 | **Presence prompt** — "are you still here?" | Logic exists in `lib/usePresence.ts`, which knows when the server says you are outside the geofence. Nothing renders it |
 | ~~**First-check-in screen**~~ | **Built as `app/about-you.tsx`, and moved.** It is asked once at signup rather than at every check-in — see section 4 below |
-| **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. See `ROADMAP.md` |
+| **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. Superseded 2026-10-01 by the owner: this is crews, step 9 of plan v2 — see `ROADMAP.md` |
 | **Map, notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like |
 | **`/join` attendee landing page** | Deferred by decision. Spec in `BlendnLanding/docs/JOIN_PAGE_BRIEF.md` |
 
