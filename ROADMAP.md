@@ -61,6 +61,25 @@ compares metres to kilometres.
 
 ## Now
 
+### Product-completion plan v2 (2026-10-01) — the app half
+
+Confirmed by the owner on 2026-10-01. The full step list, the server half and
+the pricing model are in `blendn-admin/docs/ROADMAP.md`; the journey rows
+(Places, the home map, crews, the Board, Blendn+, regulars, claim from the app)
+are in its `docs/USER_JOURNEY.md`. Steps keep the plan's numbers, and only the
+ones with app work are listed here. The server half of each ships to staging
+before the client does. Every new screen ships working, with a
+`PlaceholderBanner` (not yet in the repo), an entry in
+[`docs/PLACEHOLDER_SCREENS.md`](docs/PLACEHOLDER_SCREENS.md) and a Jira design
+ticket for Hemanth.
+
+| Step | What | State |
+|---|---|---|
+| 1 | **"Running this event? Claim it"** on the detail of a curated event (one the team added), linking out to the public `/claim/[eventId]` on the **dashboard host**. The app refuses organiser and venue-owner accounts, so the claim cannot happen inside it | In progress |
+
+The rest are under *Next*. **The PRO tier is no longer cut:** see *Blendn+ —
+superseding the PRO tier cut* there.
+
 ### The door asks, the room says, the session explains — **Done** (SCRUM-77, SCRUM-141, SCRUM-142)
 
 Three findings from driving the staging build end to end, all landed together
@@ -529,6 +548,8 @@ frame and the only one needing backend work.
 onboarding, not just on this screen.
 
 **`PRO`** — no subscription or tier. A much larger decision than a badge.
+Decided on 2026-10-01: the tier is Blendn+ (see *Blendn+ — superseding the PRO
+tier cut* under *Next*); whether the profile shows a badge for it is not.
 
 **One gradient-filled interest chip** among five outlined. Nothing says which
 interest is special, and `ProfileInterests` already uses that treatment for
@@ -789,6 +810,31 @@ the save returns 200 and stores nothing.
 
 ## Next
 
+### Product-completion plan v2 — the app steps still to come
+
+Step 1 is under *Now*. Each step starts once its server half is on staging.
+
+| Step | What |
+|---|---|
+| 2 | **Home: the map, the drawer, Events / Places.** MapLibre RN v11 + OpenFreeMap, restyled in the Ember palette, on the home screen only (event detail keeps its small `react-native-maps` map). The buildings under events and open venues are lit in brand shades, with a glow where there is no building; live counts in buckets. **No fence is ever drawn.** The Pulse list moves into the drawer unchanged |
+| 5 | **Places live.** Venue detail, the Go Live sheet (20 / 45 / 60 / Stay), the live pill and countdown, the expiry prompt (extend free, or stay with Blendn+), the hand-off to event check-in when an event is live there, "Own this place? Claim it" linking to `/claim/venue/[venueId]` on the dashboard host |
+| 6 | **The Board.** Off event detail; compose, ask to join, the inbox in Banter; accepting opens a conversation without the match opener; a 409 shown as a state, not an error. The server is already built |
+| 9 | **Crews.** Create from friends, invite, crew chat, "We're here", the Crews view in the Grid, crew cards (anonymous menagerie, revealed collage), the Blend room in Banter's "Live now", the join-time consent copy and the "Keep me anonymous" switch |
+| 10 | **Matching v2 cards and profile fields.** Person and crew cards with one sentence of overlap; profile editor fields for languages, home state, this-or-that and an opt-in sign (Western or rashi), and IPL teams as interests. Languages, home state and sign are display only, never a ranking signal |
+| 11 | **Blendn+.** `react-native-purchases` (RevenueCat) in a dev build, the paywall, triggers and cooldowns logged to `product_events`, Night Pass, restore and manage |
+| 12 | **Regulars.** The door pass — live, animated, one per day, staff tap "Redeemed" — and the per-venue "Let this venue know I'm a regular" opt-in, revocable at any time |
+
+### Blendn+ — superseding the PRO tier cut
+
+**Owner's ruling, 2026-10-01.** [`docs/HANDOFF.md`](docs/HANDOFF.md) lists the
+PRO membership tier under *Cut, for now*. That is superseded: the attendee tier
+exists and is called **Blendn+** — ₹199/mo · ₹499/quarter · ₹1,499/yr · Night
+Pass ₹49 — sold only through Apple and Google in-app purchase via RevenueCat,
+**never Razorpay inside the app**. It buys staying live while you are there,
+partner perks, full night history, cosmetics and crew extras. What it never
+sells is under *Validated — not doing*. Prices are first bets to verify. Built
+in step 11.
+
 ### The Expo SDK upgrade, sized
 
 **The stopgap is verified, so this is hygiene rather than a blocker.** Google
@@ -993,7 +1039,9 @@ Map · Notifications centre · Search and filters · Profile strength.
 
 All four are in `Blendn.fig` and in neither repo. Search is closest — the
 endpoint exists and nothing calls it. Map needs a bounding-box query on the API
-side (a map pans; it does not search a radius). Notifications is the largest —
+side (a map pans; it does not search a radius) — superseded 2026-10-01: the map
+is step 2 of plan v2, and the existing `lat`/`lon`/`radius` filter serves it, so
+no new endpoint. Notifications is the largest —
 it needs a table and endpoints that do not exist yet.
 
 ### 11. Brand and design tokens — deferred by decision, recorded so it is not rediscovered
@@ -1047,6 +1095,25 @@ not the build. See `DESIGN_HANDOFF.md`.
 
 **Client-side geofencing.** The server judges. Reimplementing it here produces
 two answers to one question, and the client's is the one an attacker controls.
+
+**Selling what the product guarantees.** Owner's ruling, 2026-10-01 (plan v2
+§9.3). Blendn+ never sells, at any price: seeing who liked you; more asks or
+board requests than the caps allow; seeing a venue's room without going live
+there; a way round the reveal; boosting yourself in someone's Grid. Each sells
+away a guarantee the free app makes to everyone else — nobody learns of interest
+before it is mutual, everyone has the same limits, presence in a room is real, a
+reveal is the person's own act, and the order of a room is not for sale. A
+paywall screen that offers any of them is wrong, however it converts.
+
+**Kundli, caste and their proxies.** Owner's ruling, 2026-10-01 (plan v2 §8.4).
+Never asked for, stored or shown, on a profile, a card or a filter: kundli or
+guna milan (one of its scores is a varna — caste-class — hierarchy, scored
+groom above bride), caste, community, religion, gotra, surname, skin tone,
+veg/non-veg (a documented caste proxy in India), height, education level,
+income, and college or neighbourhood before reveal. Each encodes caste, class or
+appearance, or identifies a person before they chose to be identified. **Zodiac
+is allowed only as an opt-in chip:** off by default, picked by the person
+(Western, or their rashi), shown as an icebreaker, never used to order a room.
 
 ---
 
