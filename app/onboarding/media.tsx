@@ -128,10 +128,15 @@ function MediaScreenInner() {
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
   const { showToast } = useToast()
 
-  // Prefilled once, in the render that first sees `loaded`.
-  const [prefilled, setPrefilled] = useState(false)
-  if (loaded && !prefilled) {
-    setPrefilled(true)
+  /*
+   * The draft's photos, whenever they change: once it has loaded, and again
+   * when a save swaps each upload for the copy the server stored and deleted
+   * the upload (SCRUM-491). Back from the next step returns to this screen
+   * still mounted, and Continue re-sending a deleted upload was refused.
+   */
+  const [shown, setShown] = useState<string[] | undefined>(undefined)
+  if (loaded && draft.photos !== shown) {
+    setShown(draft.photos)
     setPhotos(draft.photos ?? [])
   }
 
