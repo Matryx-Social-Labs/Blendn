@@ -256,11 +256,11 @@ describe('the face grid names people at a readable size (SCRUM-503)', () => {
      * its size — far below minimumFontScale — and stayed that way until
      * something else re-rendered the room. Seen on fresh launches with the
      * grid under no Meet next. One line, ellipsised, is always legible.
+     * Meet next's card keeps shrink-to-fit: full size in every drive so far.
      */
     const src = SECTIONS()
     const grid = src.slice(src.indexOf('export const GridFace'), src.indexOf('export function FaceGridHead'))
-    expect(grid).toContain('{person.name}')
+    expect(grid).toMatch(/<Text variant="bodyStrong" numberOfLines=\{1\} style=\{styles\.centre\}>\s*\{person\.name\}/)
     expect(grid).not.toContain('adjustsFontSizeToFit')
   })
 })
-
