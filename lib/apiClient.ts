@@ -994,6 +994,21 @@ class ApiClientClass {
     }
   }
 
+  /**
+   * Drop one room's cached matches, so the next `getEventMatches` asks the server.
+   *
+   * Called when somebody checks in or out of that room (`lib/socketClient.ts`).
+   * The event marks the room dirty, and the sync that follows read the
+   * 30-second SWR entry from before it — which put somebody who had just walked
+   * back in down as "Was here" again (SCRUM-502).
+   */
+  forgetEventMatches(eventId: string): void {
+    const matches = `:/api/mobile/events/${eventId}/matches`
+    for (const key of this.responseCache.keys()) {
+      if (key.includes(`${matches}:`) || key.includes(`${matches}?`)) this.responseCache.delete(key)
+    }
+  }
+
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
     if (this.responseCache.size >= this.MAX_CACHED_RESPONSES) this.evictExpiredOrOldest()
     this.responseCache.set(key, { data: data as ApiResponse<unknown>, timestamp: Date.now(), ttl })
