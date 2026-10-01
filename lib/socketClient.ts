@@ -632,20 +632,24 @@ function setupSocketHandlers(sock: TypedSocket): void {
     reconnectAttempts = 0
   })
 
-  // Event updates
+  // Event updates. A check-in or check-out changes who is in the room, so the
+  // room's cached matches go before the dirty mark starts its sync (SCRUM-502).
   sock.on("event:checkin", (data) => {
+    apiClient.forgetEventMatches(data.eventId)
     markDomainsDirty(["events", "match"])
     const callbacks = eventCheckInSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
   })
 
   sock.on("event:room:checkin", (data) => {
+    apiClient.forgetEventMatches(data.eventId)
     markDomainsDirty(["events", "match"])
     const callbacks = eventRoomCheckInSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
   })
 
   sock.on("event:checkout", (data) => {
+    apiClient.forgetEventMatches(data.eventId)
     markDomainsDirty(["events", "match"])
     const callbacks = eventCheckOutSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
