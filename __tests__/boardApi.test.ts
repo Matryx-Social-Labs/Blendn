@@ -111,3 +111,24 @@ it('returns the conversation an accept opened', async () => {
   const r = await apiClient.answerBoardRequest('r1', 'accept')
   expect(r.data?.conversationId).toBe('c1')
 })
+
+it('reports and blocks by the post or the ask, never a person', async () => {
+  const seen = server(ok({}))
+  await apiClient.reportBoardPost('e1', 'p1', { reason: 'spam', description: 'selling tickets' })
+  await apiClient.blockBoardPost('e1', 'p1')
+  await apiClient.reportBoardRequest('r1', { reason: 'harassment' })
+  await apiClient.blockBoardRequest('r1')
+  expect(seen.map((s) => [`${s.method} ${s.path}`, s.body])).toEqual([
+    ['POST /api/mobile/events/e1/board/p1/report', { reason: 'spam', description: 'selling tickets' }],
+    ['POST /api/mobile/events/e1/board/p1/block', undefined],
+    ['POST /api/mobile/board/requests/r1/report', { reason: 'harassment' }],
+    ['POST /api/mobile/board/requests/r1/block', undefined],
+  ])
+  expect(seen.every((s) => s.auth === 'Bearer tok')).toBe(true)
+})
+
+it('brings a report rate limit back as RATE_LIMITED', async () => {
+  server(() => json(429, { success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED', retryAfter: 60 }))
+  const r = await apiClient.reportBoardPost('e1', 'p1', { reason: 'spam' })
+  expect(r).toMatchObject({ success: false, errorCode: 'RATE_LIMITED', retryAfter: 60 })
+})

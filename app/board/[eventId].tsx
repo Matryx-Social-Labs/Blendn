@@ -18,9 +18,12 @@ import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
+  askConflictLine,
+  BOARD_CLOSED_SENTENCE,
   BOARD_ENABLED,
   boardClosed,
   boardMessage,
+  CLOSED_LINE,
   isSettled,
   outgoingLine,
   sortBoardPosts,
@@ -30,6 +33,7 @@ import {
 import { openBlendn } from '../../lib/blendnOverlay'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
+import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../../lib/theme'
 
@@ -97,7 +101,9 @@ export function BoardScreen() {
   const created = useRef(new Map<string, BoardPost>())
   const removed = useRef(new Set<string>())
 
-  const closed = boardClosed(event?.startTime)
+  // The doors by the event's own time, or by the board saying so — whichever is known first.
+  const [doorsShut, setDoorsShut] = useState(false)
+  const closed = doorsShut || boardClosed(event?.startTime)
 
   const fetchBoard = useCallback(async (): Promise<boolean> => {
     if (!eventId) return false
@@ -113,6 +119,10 @@ export function BoardScreen() {
         setEvent({ title: facts.data.title, startTime: facts.data.startTime ?? facts.data.start_time ?? null })
       }
       if (!board.success || !board.data) {
+        if (board.error?.trim() === BOARD_CLOSED_SENTENCE) {
+          setDoorsShut(true)
+          return true
+        }
         const code = board.errorCode
         if (code === 'FORBIDDEN' || code === 'AGE_RESTRICTED' || code === 'NOT_FOUND') {
           setLoad({ kind: 'refused', code, line: boardMessage(board, 'This board is not open to you.') })
@@ -123,9 +133,13 @@ export function BoardScreen() {
       }
       if (mine.success && mine.data) {
         const next: Record<string, AskState> = {}
-        // Pending first, then newest (the server's order): the first per post is the one that counts.
+        /*
+         * Live first, then settled, then lapsed (the server's order): the first
+         * per post is the one that counts. One ask per post, ever — a withdrawn
+         * ask is not an invitation to ask again, so it keeps its line too.
+         */
         for (const r of mine.data.outgoing) {
-          if (r.event.id !== eventId || next[r.post.id] || r.status === 'withdrawn') continue
+          if (r.event.id !== eventId || next[r.post.id]) continue
           next[r.post.id] = { kind: 'settled', line: outgoingLine(r) }
         }
         setListedAsks(next)
@@ -173,12 +187,14 @@ export function BoardScreen() {
       let next: AskState
       try {
         const result = await apiClient.askOnBoard(eventId, post.id)
-        if (result.success || isSettled(result)) {
-          /*
-           * A 409 says "already asked" or "already answered" — and the second
-           * is a decline told to the asker. It reads as waiting, like any ask.
-           */
+        if (result.success) {
           next = { kind: 'settled', line: WAITING_LINE }
+        } else if (isSettled(result)) {
+          // One ask per post, ever: a re-ask reads as waiting. A full offer says full.
+          next = { kind: 'settled', line: askConflictLine(result) }
+        } else if (result.errorCode === 'NOT_FOUND') {
+          // The post is gone — taken down, or its author and you are blocked. Same answer for both.
+          next = { kind: 'settled', line: CLOSED_LINE }
         } else {
           // Which gate, in the server's words; the button stays for another try.
           next = { kind: 'refused', line: boardMessage(result, "Couldn't send that. Try again.") }
@@ -258,6 +274,23 @@ export function BoardScreen() {
     [eventId, fetchBoard]
   )
 
+  /** Report or block the author, by the post: the board never names anybody to the client. */
+  const more = useCallback(
+    (post: BoardPost) => {
+      if (!eventId) return
+      showSheet(
+        boardSafetySheet({ kind: 'post', eventId, postId: post.id }, post.author, () => {
+          removed.current.add(post.id)
+          setLoad((prev) =>
+            prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id) } : prev
+          )
+          void fetchBoard()
+        })
+      )
+    },
+    [eventId, fetchBoard]
+  )
+
   const askFor = useCallback(
     (id: string): AskState => {
       const local = localAsks[id]
@@ -270,9 +303,16 @@ export function BoardScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: BoardPost }) => (
-      <BoardPostCard post={item} eventId={eventId} ask={askFor(item.id)} onAsk={ask} onTakeDown={takeDown} />
+      <BoardPostCard
+        post={item}
+        eventId={eventId}
+        ask={askFor(item.id)}
+        onAsk={ask}
+        onTakeDown={takeDown}
+        onMore={more}
+      />
     ),
-    [eventId, askFor, ask, takeDown]
+    [eventId, askFor, ask, takeDown, more]
   )
 
   const header = (

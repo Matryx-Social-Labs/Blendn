@@ -8,7 +8,7 @@ import { useToast } from '../Toast'
 import { Text } from '../ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
-  askStillOpen,
+  acceptConflictLine,
   boardMarkSeed,
   boardMessage,
   inboxRequests,
@@ -18,6 +18,8 @@ import {
   type BoardRequests,
 } from '../../lib/board'
 import { Logger } from '../../lib/logger'
+import { boardSafetySheet } from '../../lib/safetyUtils'
+import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, OPACITY, SPACE } from '../../lib/theme'
 import { BoardMark } from './BoardSections'
 
@@ -31,10 +33,10 @@ type Answer = 'accept' | 'decline' | 'withdraw'
  * somebody asking to start talking — so it is a second instance of the
  * Banter's Requests pattern rather than a new place.
  *
- * Asks waiting on you are answered here. Asks you sent sit under them,
- * quieter, and **never let a decline be read**: a declined ask looks exactly
- * like one still waiting (`askStillOpen`), and withdrawing one that turns out
- * to be already answered says nothing — it just goes, as any withdrawal does.
+ * Asks waiting on you are answered here, with Report and Block behind More.
+ * Asks you sent sit under them, quieter. Nothing here can tell an asker they
+ * were declined: the server never sends it (their declined ask reads pending
+ * until the night lapses), and the lines follow what it sends.
  *
  * Owns its own load, so the Banter screen only has to place it. `refreshKey`
  * moves on the Banter's pull-to-refresh and live sync; `onCount` says whether
@@ -53,8 +55,8 @@ export function BoardRequestsSection({
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set())
   // The guard is a ref: two taps in one frame both see the state from before either.
   const busyRef = useRef(new Set<string>())
-  // Withdrawn here, whatever the server said: a reload must not bring one back.
-  const gone = useRef(new Set<string>())
+  // What became of an accept that did not go through, said quietly on the ask.
+  const [notes, setNotes] = useState<Record<string, string>>({})
 
   const apply = useCallback((result: Awaited<ReturnType<typeof apiClient.getBoardRequests>>) => {
     // A failure keeps what was drawn: these are secondary to the conversations.
@@ -62,11 +64,7 @@ export function BoardRequestsSection({
       Logger.warn('board', 'requests load failed', { error: result.error })
       return
     }
-    const shown = inboxRequests(result.data)
-    setRequests({
-      incoming: shown.incoming,
-      outgoing: shown.outgoing.filter((r) => !gone.current.has(r.id)),
-    })
+    setRequests(inboxRequests(result.data))
   }, [])
   const load = useCallback(
     () =>
@@ -115,10 +113,11 @@ export function BoardRequestsSection({
    * conversation is pseudonymous and carries `origin_board_request_id`, so the
    * server answers `fromMatch: false` and the thread draws no match opener.
    *
-   * Decline and withdraw leave at once. If the answer does not go out, the row
-   * comes back where it was — except a withdrawal the server calls already
-   * answered, which stays gone and silent: anything else would tell the asker
-   * that the other person had said no.
+   * Decline and withdraw leave at once, and come back where they were if the
+   * answer does not go out. A 409 is never an error: an accept that cannot go
+   * through leaves a quiet line on the ask (`acceptConflictLine`), and the
+   * reload settles the rest — the server keeps a decline from the asker, so
+   * nothing here has to hide one.
    */
   const answer = async (request: BoardRequest, action: Answer) => {
     if (busyRef.current.has(request.id)) return
@@ -137,7 +136,6 @@ export function BoardRequestsSection({
     }
 
     if (result.success) {
-      if (action === 'withdraw') gone.current.add(request.id)
       if (action === 'accept') {
         setRequests((prev) => without(prev, request.id))
         if (result.data?.conversationId) {
@@ -150,20 +148,24 @@ export function BoardRequestsSection({
       return
     }
 
-    if (action === 'withdraw') {
-      if (isSettled(result)) gone.current.add(request.id)
-      else restore(request, side, at)
-      return
-    }
     if (isSettled(result)) {
-      // "Already answered", "That event has ended": what happened, not a failure.
-      if (action === 'accept') showToast(boardMessage(result, 'That request has already been answered'), 'info')
+      if (action === 'accept') setNotes((prev) => ({ ...prev, [request.id]: acceptConflictLine(result) }))
       void load()
       return
     }
-    if (action === 'decline') restore(request, side, at)
-    showToast(boardMessage(result, `Couldn't ${action} that. Try again.`), 'error')
+    if (action !== 'accept') restore(request, side, at)
+    // Withdrawing is yours alone and nothing hangs on it: the row coming back is the answer.
+    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn't ${action} that. Try again.`), 'error')
   }
+
+  /** Report or block the asker, by the ask: the board never names anybody to the client. */
+  const more = (request: BoardRequest) =>
+    showSheet(
+      boardSafetySheet({ kind: 'request', requestId: request.id }, request.counterpart, () => {
+        setRequests((prev) => without(prev, request.id))
+        void load()
+      })
+    )
 
   if (shown === 0) return null
 
@@ -180,9 +182,11 @@ export function BoardRequestsSection({
           markSeed={boardMarkSeed(r.counterpart, r.event.id, r.id)}
           timeLabel={inboxTimeLabel(r.createdAt)}
           message={incomingMessage(r)}
+          note={notes[r.id]}
           pending={busy.has(r.id)}
           onAccept={() => void answer(r, 'accept')}
           onDecline={() => void answer(r, 'decline')}
+          onMore={() => more(r)}
         />
       ))}
       {requests.outgoing.length > 0 ? (
@@ -234,7 +238,7 @@ function OutgoingRow({
         </Text>
         <Text variant="meta">{line}</Text>
       </View>
-      {askStillOpen(request) ? (
+      {request.live ? (
         <Pressable
           onPress={onWithdraw}
           disabled={busy}

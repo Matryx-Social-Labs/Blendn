@@ -1,12 +1,13 @@
 # SCRUM-126, BD-M02. Somebody the board refuses sees why, in the server's
 # words, never a generic failure. Run once per account:
 #   teen.tester@ (read-only)         → the age or onboarding sentence
-#   someone who only saved the event → "Mark yourself as going to post here"
+#   someone not going, nor saved      → "Mark yourself as going to post here"
 #   an incomplete profile, going     → "Add your name, age, two interests …"
 # Needs a build with EXPO_PUBLIC_BOARD_ENABLED=true.
-# Env: EMAIL, PASSWORD, EVENT (a regex for the event's title, on Going or
-# Saved), REASON (a regex for the sentence), TRY_POST ("true" to try posting —
-# the not-going and incomplete-profile gates refuse the post, not the read).
+# Env: EMAIL, PASSWORD, EVENT (a regex for the event's title), SEARCH (a word
+# of the title, for an account that has no Going row for it; leave unset to go
+# through Going), REASON (a regex for the sentence), TRY_POST ("true" to try
+# posting — the incomplete-profile and cap gates refuse the post, not the read).
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c19
@@ -28,7 +29,20 @@ tags:
     visible: "The Pulse"
     timeout: 60000
 - runFlow: ../subflows/dismiss-tip.yaml
-- tapOn: "Going"
+# Somebody not going has no Going row for it: they find it by searching the
+# Pulse (SEARCH = a word of its title). Otherwise, Going.
+- runFlow:
+    when:
+      true: ${SEARCH != undefined && SEARCH != ''}
+    commands:
+      - tapOn: "Search events"
+      - inputText: ${SEARCH}
+      - runFlow: ../subflows/keyboard-done.yaml
+- runFlow:
+    when:
+      true: ${SEARCH == undefined || SEARCH == ''}
+    commands:
+      - tapOn: "Going"
 - extendedWaitUntil:
     visible: ${EVENT}
     timeout: 30000
@@ -43,7 +57,7 @@ tags:
       true: ${TRY_POST == 'true'}
     commands:
       - tapOn: "Write a post"
-      - tapOn: "Your post"
+      - tapOn: "Your post.*"
       - inputText: "Anyone heading over?"
       - tapOn: "Post to the board"
 - extendedWaitUntil:

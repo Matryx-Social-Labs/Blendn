@@ -11,12 +11,12 @@ import { markSeed } from './pseudonymAvatar'
  */
 
 /**
- * Whether the board is reachable at all. **Off** until its server half lands
- * (step 6b: block and report by post or request, blocked authors filtered out,
- * a decline never told to the asker, spaces that go down). Every way in reads
- * this one constant — the event screen's row, the Banter's section and the
- * route itself — so turning it on is one line, and a build can try it with
- * `EXPO_PUBLIC_BOARD_ENABLED=true` without a code change.
+ * Whether the board is reachable at all. It was off until its server half
+ * landed (step 6b: block and report by post or request, blocked authors
+ * filtered out, a decline never told to the asker, spaces that go down).
+ * Every way in reads this one constant — the event screen's row, the Banter's
+ * section and the route itself — so switching it is one line, and a build can
+ * try either way with `EXPO_PUBLIC_BOARD_ENABLED` without a code change.
  */
 export const BOARD_ENABLED = process.env.EXPO_PUBLIC_BOARD_ENABLED === 'true'
 
@@ -25,6 +25,20 @@ export const BOARD_MAX_POST_LENGTH = 500
 
 /** What an ask that has not been accepted reads, whatever happened to it. */
 export const WAITING_LINE = 'Waiting on them'
+/** An offer with no seats left. */
+export const FULL_LINE = 'Full'
+/** An ask that can no longer go anywhere: the post is gone, the night is over. */
+export const CLOSED_LINE = 'Closed'
+
+/*
+ * The server's sentences the client branches on (blendn-admin, board routes).
+ * Each is a CONFLICT or a FORBIDDEN with no code of its own, so the words are
+ * the only signal. A change on the server lands in board.test.ts.
+ */
+const OFFER_FULL = 'That offer is full'
+const ALREADY_ANSWERED = 'That request has already been answered'
+/** The board's read, post and ask after doors — 403, judged on `start_time`. */
+export const BOARD_CLOSED_SENTENCE = 'The board closes when the doors open — the room is open instead'
 
 /** `offer` has spaces to give, `seeking` wants one, `chat` asks nothing. */
 export type BoardPostKind = 'offer' | 'seeking' | 'chat'
@@ -46,6 +60,9 @@ export interface BoardPost {
 }
 
 export type BoardRequestStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn'
+
+/** Why a post or an ask is reported: the app's message-report reasons, as the server takes them. */
+export type BoardReportReason = 'harassment' | 'hate_speech' | 'inappropriate_content' | 'spam' | 'other'
 
 /** One request as `GET /board/requests` sends it, in either direction. */
 export interface BoardRequest {
@@ -142,31 +159,44 @@ export function isSettled(result: Refusal): boolean {
 }
 
 /**
- * Whether an ask you sent still reads as waiting — and so keeps Withdraw.
- *
- * **A decline reads exactly as waiting.** The server delivers no decline (no
- * push, by design), and the client must not let one be inferred: a row that
- * flipped from "Waiting" to anything else while the post is still up could
- * only mean no. So `declined` is drawn as pending for as long as the row is
- * shown. The server will stop sending `declined` to the asker at all
- * (step 6b); this keeps the rule if it ever does.
- *
- * ponytail: the payload carries no `end_time`, so a declined row reads waiting
- * until the Banter drops it (a day after doors), where a lapsed pending one
- * reads closed from the end of the event. After the night, that gap tells
- * nobody anything worth knowing; send `endTime` if it ever matters.
- */
-export function askStillOpen(request: Pick<BoardRequest, 'live' | 'status'>): boolean {
-  return request.live || request.status === 'declined'
-}
-
-/**
  * The one line an ask you sent carries, on the board card and in the Banter.
- * There is no "declined" — see `askStillOpen`.
+ *
+ * **There is no "declined", and the client needs no rule for it.** The server
+ * never tells the asker (step 6b): their declined ask arrives `pending` and
+ * `live` until the night lapses, exactly like one nobody has answered, and an
+ * ask to somebody blocked either way arrives as an ask on a withdrawn post. So
+ * the line follows `live` and nothing else.
  */
 export function outgoingLine(request: Pick<BoardRequest, 'live' | 'status'>): string {
   if (request.status === 'accepted') return "They said yes — you're in each other's chats"
-  return askStillOpen(request) ? WAITING_LINE : 'Closed'
+  if (request.live) return WAITING_LINE
+  return request.status === 'withdrawn' ? 'You withdrew this' : CLOSED_LINE
+}
+
+/**
+ * What an ask that came back 409 reads.
+ *
+ * One ask per post, ever: a re-ask is "You have already asked", whatever became
+ * of the first, so it reads as waiting. The one 409 that is not about the ask is
+ * a full offer, which the card should say is full.
+ */
+export function askConflictLine(result: Refusal): string {
+  return result?.error?.trim() === OFFER_FULL ? FULL_LINE : WAITING_LINE
+}
+
+/**
+ * The quiet line an accept that came back 409 leaves on the ask.
+ *
+ * Every one leaves the ask pending and is a fact about the night, not a fault:
+ * the offer filled, somebody already answered, or it can no longer go anywhere
+ * (the post was taken down, the event ended, a block or a closed pair — the
+ * server gives those one sentence on purpose, and so does this).
+ */
+export function acceptConflictLine(result: Refusal): string {
+  const said = result?.error?.trim()
+  if (said === OFFER_FULL) return 'Your offer is full'
+  if (said === ALREADY_ANSWERED) return 'Already answered'
+  return CLOSED_LINE
 }
 
 /** How long a closed ask stays in the Banter after its event's doors. */

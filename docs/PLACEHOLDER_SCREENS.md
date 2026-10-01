@@ -572,7 +572,9 @@ Event screen ──▶ The Board                       Banter
 | **A refusal names its gate, in the server's words** | Not going, profile incomplete, five asks waiting, the weekly limit, the content filter — each has a different fix. It stays on screen (not a toast) until the next try |
 | **A 409 is a state, never an error** | "You have already asked", "That request has already been answered" are what a double tap on a slow connection looks like. Never red, never an error toast |
 | **No confirm on Ask** | Asking is the moment someone feels most exposed; "Are you sure?" says it is dangerous. An inline spinner, then the card says what happened |
-| **A decline is never delivered, or inferable** | There is no decline push and no "declined" anywhere. A declined ask reads exactly like one still waiting — "Waiting on them", with Withdraw — because a row that changed while the post was still up could only mean no. A 409 on an ask reads "Waiting on them" whatever the server's sentence; withdrawing one that turns out already answered goes like any withdrawal, silently. Only the night ending closes an ask |
+| **A decline is never delivered, or inferable** | There is no decline push and no "declined" anywhere. The server sends the asker their declined ask as pending and live until the night lapses, and an ask to somebody blocked as an ask on a withdrawn post; the lines follow what it sends. A 409 on an ask reads "Waiting on them" (one ask per post, ever) or "Full"; never the server's sentence |
+| **Report and block are by the post or the ask** | The board never gives the app a user id. ⋯ on a post and More on an incoming ask open Report (the message reasons, an optional note) and Block (confirmed first); the server resolves who. A blocked post or ask leaves the screen at once. A rate-limited report says so rather than "try again" |
+| **An accept that cannot go through is a quiet line** | "Your offer is full", "Already answered", or "Closed" (taken down, ended, or a block or closed pair — one line for all three, as the server gives one sentence) under the ask; never a red toast |
 | **Accepting never draws the match opener** | The conversation carries `origin_board_request_id`, so the server answers `fromMatch: false`. Greeting two people who agreed to share a car with "You both said yes" is the silent failure this rule exists for (`__tests__/boardConversationNoOpener.test.tsx`) |
 | **Pushes carry no text** | `board_request` and `board_request_accepted` say only that something happened — a lock screen is read by other people. Nothing renders a preview from them |
 | **Before doors only** | After them the room is the place, gated on presence. A board left open would be a second room with a weaker gate |
@@ -583,15 +585,14 @@ Event screen ──▶ The Board                       Banter
 |---|---|---|
 | Event screen row | the event's `start_time` (hidden from doors on) | — |
 | The Board | `GET /events/:id/board` (posts: `kind`, `body`, `spacesLeft`, `author` handle, `mine`, `requestCount`); `GET /board/requests` (which posts already carry your ask) | `POST /events/:id/board` `{kind, body, spacesLeft?}`; `DELETE /events/:id/board/:postId` (take down your own); `POST /events/:id/board/:postId/requests` (ask, no message) |
-| Banter, The Board | `GET /board/requests` → incoming that are `live`; outgoing that are live, or closed until a day after their doors; your withdrawals hidden | `PATCH /board/requests/:id` `{accept \| decline \| withdraw}`; accept returns the `conversationId` the screen opens |
+| Banter, The Board | `GET /board/requests` → incoming that are `live`; outgoing that are live, or closed until a day after their doors; your withdrawals hidden | `PATCH /board/requests/:id` `{accept \| decline \| withdraw}`; accept returns the `conversationId` the screen opens; `POST /board/requests/:id/report` `{reason, description?}`, `POST /board/requests/:id/block` |
+| A post's ⋯ | — | `POST /events/:id/board/:postId/report` `{reason, description?}`, `POST /events/:id/board/:postId/block` |
 
 ### Still open — decisions and work, not styling
 
 | | |
 |---|---|
-| **Spaces never go down** | The server does not decrement `spaces_left` when an ask is accepted, and nothing lets an author edit it, so "2 spaces left" stays 2 after two people are in. Filed against the server |
 | **A board conversation looks like any other in the inbox** | The conversations payload says `fromMatch: false` but not "from the board", so the Banter row cannot say where it came from. Needs `originBoardRequestId` (or a kind) on `GET /conversations` |
-| **No report or block on a board request or post** | A request carries a handle, not a user id, so the Banter's More sheet (Block / Report) cannot name anybody, and the board does not filter blocked authors. Step 6b; the board stays off until then |
 | **`chat` posts** | The server accepts a third kind that asks nothing of anybody. The composer offers only offer and seeking; a `chat` post renders in the seeking shape |
 
 ---

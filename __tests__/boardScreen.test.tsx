@@ -38,6 +38,8 @@ jest.mock('../lib/apiClient', () => ({
     postToBoard: jest.fn(),
     askOnBoard: jest.fn(),
     withdrawBoardPost: jest.fn(),
+    reportBoardPost: jest.fn(),
+    blockBoardPost: jest.fn(),
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
@@ -293,6 +295,26 @@ describe('asking', () => {
     }
   )
 
+  it('says an offer that filled is full', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That offer is full' })
+    await render(<BoardScreen />)
+
+    await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
+    expect(await screen.findByText('Full')).toBeTruthy()
+    expect(screen.queryByText('That offer is full')).toBeNull()
+  })
+
+  it('says a post that went — taken down, or a block either way — is closed', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'That post is no longer on the board' })
+    await render(<BoardScreen />)
+
+    await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
+    expect(await screen.findByText('Closed')).toBeTruthy()
+    expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
+  })
+
   it('names the gate on an ask, and leaves the button for after the fix', async () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
     api.askOnBoard.mockResolvedValue({
@@ -347,11 +369,16 @@ describe('a card remembers your ask, and never says how it was answered', () => 
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
   })
 
-  it('declined: exactly as pending', async () => {
-    await at([ask({ status: 'declined', live: false, decidedAt: '2026-10-01T11:00:00Z' })])
+  it('declined, as its asker is sent it (pending, live): waiting', async () => {
+    await at([ask({ status: 'pending', live: true, decidedAt: null })])
     expect(screen.getByText('Waiting on them')).toBeTruthy()
-    expect(screen.queryByText(/declin|closed/i)).toBeNull()
+    expect(screen.queryByText(/declin/i)).toBeNull()
     expect(screen.queryByLabelText(/declin/i)).toBeNull()
+  })
+
+  it('blocked either way, as its asker is sent it (a withdrawn post): closed', async () => {
+    await at([ask({ live: false, post: { id: 'p-offer', kind: 'offer', body: null } })])
+    expect(screen.getByText('Closed')).toBeTruthy()
   })
 
   it('accepted: they said yes', async () => {
@@ -364,12 +391,13 @@ describe('a card remembers your ask, and never says how it was answered', () => 
     expect(screen.getByText('Closed')).toBeTruthy()
   })
 
-  it('withdrawn: the ask is yours to make again', async () => {
+  it('withdrawn: yours, and not to be made again — one ask per post, ever', async () => {
     await at([ask({ status: 'withdrawn', live: false })])
-    expect(screen.getByLabelText('Ask to join, Velvet Heron')).toBeTruthy()
+    expect(screen.getByText('You withdrew this')).toBeTruthy()
+    expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
   })
 
-  it('a pending ask beats an older withdrawn one on the same post', async () => {
+  it('a live ask, listed first, beats an older withdrawn one on the same post', async () => {
     await at([ask({ id: 'r2' }), ask({ id: 'r1', status: 'withdrawn', live: false })])
     expect(screen.getByText('Waiting on them')).toBeTruthy()
   })
@@ -393,6 +421,18 @@ describe('a board you may not read says why', () => {
     expect(screen.getByText(error)).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Back to the event'))
     expect(router.back).toHaveBeenCalled()
+  })
+
+  it('is the closed board when the server says the doors have opened', async () => {
+    api.getEvent.mockResolvedValue({ success: false, error: 'No internet connection.' } as never)
+    api.getBoard.mockResolvedValue({
+      success: false,
+      errorCode: 'FORBIDDEN',
+      error: 'The board closes when the doors open — the room is open instead',
+    })
+    await render(<BoardScreen />)
+    expect(await screen.findByText("The board's closed")).toBeTruthy()
+    expect(screen.getByLabelText('Open the room')).toBeTruthy()
   })
 
   it('says the board did not load, rather than that it is empty', async () => {
@@ -465,6 +505,63 @@ describe('your own post', () => {
     const run = await takeDownSheet()
     expect(await run()).toEqual({ ok: false, error: "Couldn't take it down. Try again." })
     expect(screen.getByText(MINE.body)).toBeTruthy()
+  })
+})
+
+describe('report and block, by the post', () => {
+  type Steps = { label: string; next?: () => unknown; run?: (...a: string[]) => Promise<unknown> }[]
+  const menu = async () => {
+    await fireEvent.press(await screen.findByLabelText("More options for Velvet Heron's post"))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as { title: string; actions: Steps }
+    const step = (label: string) => sheet.actions.find((a) => a.label === label)!
+    return { sheet, step }
+  }
+
+  it('is on anybody’s post but yours', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER, { ...SEEKING, id: 'p-mine', author: 'Lunar Fox', mine: true }]))
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText("More options for Velvet Heron's post")).toBeTruthy()
+    expect(screen.queryByLabelText("More options for Lunar Fox's post")).toBeNull()
+  })
+
+  it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
+    // A read already in flight still lists the post; it must not bring it back.
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    await render(<BoardScreen />)
+
+    const { sheet, step } = await menu()
+    expect(sheet.title).toBe('Velvet Heron')
+    const confirm = step('Block').next!() as { title: string; actions: Steps }
+    expect(confirm.title).toBe('Block Velvet Heron?')
+    const run = confirm.actions.find((a) => a.label === 'Block')!.run!
+    expect(await run()).toEqual({ ok: true, toast: 'Velvet Heron is blocked' })
+    expect(api.blockBoardPost).toHaveBeenCalledWith('e1', 'p-offer')
+    await waitFor(() => expect(screen.queryByText(OFFER.body)).toBeNull())
+  })
+
+  it('reports by the post, with a reason and a note', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.reportBoardPost.mockResolvedValue({ success: true, data: { reported: true } })
+    await render(<BoardScreen />)
+
+    const { step } = await menu()
+    const reasons = step('Report').next!() as { kind: string; reasons: { value: string }[]; run: (r: string, d?: string) => Promise<unknown> }
+    expect(reasons.kind).toBe('reasons')
+    expect(reasons.reasons.map((r) => r.value)).toEqual(['harassment', 'hate_speech', 'inappropriate_content', 'spam', 'other'])
+    expect(await reasons.run('spam', 'selling tickets')).toEqual({ ok: true, toast: 'Report sent. Our team will review it.' })
+    expect(api.reportBoardPost).toHaveBeenCalledWith('e1', 'p-offer', { reason: 'spam', description: 'selling tickets' })
+  })
+
+  it('says so when reports are rate-limited, rather than "try again" into the same wall', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.reportBoardPost.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'Too many requests' })
+    await render(<BoardScreen />)
+
+    const { step } = await menu()
+    const reasons = step('Report').next!() as { run: (r: string) => Promise<unknown> }
+    expect(await reasons.run('harassment')).toEqual({ ok: false, error: "You've sent a lot of reports. Try again later." })
+    expect(api.reportBoardPost).toHaveBeenCalledWith('e1', 'p-offer', { reason: 'harassment' })
   })
 })
 

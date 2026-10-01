@@ -13,7 +13,7 @@ import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
-import type { BoardPost, BoardRequestStatus, BoardRequests } from './board'
+import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
@@ -3174,6 +3174,54 @@ class ApiClientClass {
     return this.queuedRequest(
       `/api/mobile/board/requests/${encodeURIComponent(requestId)}`,
       { method: 'PATCH', body: JSON.stringify({ action }) },
+      true,
+      2
+    )
+  }
+
+  /*
+   * Report and block on the board are **by the post or the ask** a person
+   * wrote: the board never hands the client a user id, and the server never
+   * returns the one it resolves. Reasons are the message-report reasons.
+   */
+  async reportBoardPost(
+    eventId: string,
+    postId: string,
+    report: { reason: BoardReportReason; description?: string }
+  ): Promise<ApiResponse<{ reported: true }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/report`,
+      { method: 'POST', body: JSON.stringify(report) },
+      true,
+      2
+    )
+  }
+
+  async blockBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
+      { method: 'POST' },
+      true,
+      2
+    )
+  }
+
+  async reportBoardRequest(
+    requestId: string,
+    report: { reason: BoardReportReason; description?: string }
+  ): Promise<ApiResponse<{ reported: true }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/report`,
+      { method: 'POST', body: JSON.stringify(report) },
+      true,
+      2
+    )
+  }
+
+  async blockBoardRequest(requestId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
+      { method: 'POST' },
       true,
       2
     )

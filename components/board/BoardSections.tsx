@@ -107,12 +107,15 @@ export const BoardPostCard = memo(function BoardPostCard({
   ask,
   onAsk,
   onTakeDown,
+  onMore,
 }: {
   post: BoardPost
   eventId: string
   ask: AskState
   onAsk: (post: BoardPost) => void
   onTakeDown: (post: BoardPost) => void
+  /** Report or block the author — anybody's post but yours. */
+  onMore: (post: BoardPost) => void
 }) {
   const offer = post.kind === 'offer'
   const spaces = offer ? spacesLabel(post.spacesLeft) : null
@@ -126,6 +129,16 @@ export const BoardPostCard = memo(function BoardPostCard({
         <Text variant="bodyStrong">{post.author}</Text>
         <Text variant="meta">{post.mine ? `${kindWord} · yours` : kindWord}</Text>
       </View>
+      {post.mine ? null : (
+        <Pressable
+          onPress={() => onMore(post)}
+          accessibilityRole="button"
+          accessibilityLabel={`More options for ${post.author}'s post`}
+          style={({ pressed }) => [styles.more, pressed && styles.pressed]}
+        >
+          <Ionicons name="ellipsis-horizontal" size={ICON.md} color={EMBER.textSecondary} />
+        </Pressable>
+      )}
     </View>
   )
 
@@ -415,6 +428,8 @@ const styles = StyleSheet.create({
   seeking: { gap: SPACE.md, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
 
   byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  // 48pt: a menu is a target, not an icon.
+  more: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
   bylineText: { flex: 1 },
 
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md },

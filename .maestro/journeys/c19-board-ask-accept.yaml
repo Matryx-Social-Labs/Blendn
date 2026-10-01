@@ -43,7 +43,7 @@ tags:
     visible: ".*(Nobody's posted yet|Write a post).*"
     timeout: 20000
 - tapOn: "Write a post"
-- tapOn: "Your post"
+- tapOn: "Your post.*"
 - inputText: ${POST_TEXT}
 # A multiline field: return is a newline. Tapping plain text lets go of it.
 - tapOn: "Spaces"

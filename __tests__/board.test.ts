@@ -7,7 +7,9 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 
 import {
-  askStillOpen,
+  acceptConflictLine,
+  askConflictLine,
+  BOARD_CLOSED_SENTENCE,
   BOARD_ENABLED,
   BOARD_MAX_POST_LENGTH,
   boardClosed,
@@ -154,19 +156,23 @@ describe('BD-CU02: a 409 is a state, not an error', () => {
   })
 })
 
-describe('an ask you sent never lets a decline be read', () => {
-  it('reads a declined ask exactly as a waiting one, Withdraw included', () => {
-    const declined = request({ status: 'declined', live: false, decidedAt: '2026-10-01T11:00:00Z' })
-    expect(outgoingLine(declined)).toBe(outgoingLine(request({})))
-    expect(outgoingLine(declined)).toBe(WAITING_LINE)
-    expect(askStillOpen(declined)).toBe(askStillOpen(request({})))
+describe('an ask you sent reads what the server sends, and never a no', () => {
+  /*
+   * The server keeps a decline from the asker (step 6b): their declined ask
+   * arrives `pending` and `live` until the night lapses, and an ask to somebody
+   * blocked either way arrives as an ask on a withdrawn post. So the line
+   * follows `live`, and needs no rule of its own for a decline.
+   */
+  it('reads waiting while live — which is all a declined ask ever looks like to its asker', () => {
+    expect(outgoingLine(request({ status: 'pending', live: true, decidedAt: null }))).toBe(WAITING_LINE)
   })
 
-  it('says yes once accepted, and closed once the night is over', () => {
+  it('says yes once accepted, closed once nothing can come of it, and owns a withdrawal', () => {
     expect(outgoingLine(request({ live: false, status: 'accepted' }))).toMatch(/said yes/)
-    expect(askStillOpen(request({ live: false, status: 'accepted' }))).toBe(false)
     expect(outgoingLine(request({ live: false }))).toBe('Closed')
-    expect(askStillOpen(request({ live: false }))).toBe(false)
+    // A block reads as a withdrawn post: pending, not live, no words.
+    expect(outgoingLine(request({ live: false, post: { id: 'p1', kind: 'offer', body: null } }))).toBe('Closed')
+    expect(outgoingLine(request({ live: false, status: 'withdrawn' }))).toBe('You withdrew this')
   })
 
   it('has no word for no, in any state', () => {
@@ -175,6 +181,31 @@ describe('an ask you sent never lets a decline be read', () => {
         expect(outgoingLine(request({ status, live })).toLowerCase()).not.toMatch(/declin|refus|reject|\bno\b/)
       }
     }
+  })
+})
+
+describe('a 409 has fixed words, never the server’s', () => {
+  it('reads a re-ask as waiting — one ask per post, ever — and a full offer as full', () => {
+    const conflict = (error: string) => ({ errorCode: 'CONFLICT', error })
+    expect(askConflictLine(conflict('You have already asked — give them a moment'))).toBe(WAITING_LINE)
+    // The sentence the server used to send after a decline; the decline it delivered must stay unsaid.
+    expect(askConflictLine(conflict('They have already answered this one'))).toBe(WAITING_LINE)
+    expect(askConflictLine(conflict('That offer is full'))).toBe('Full')
+  })
+
+  it.each([
+    ['That offer is full', 'Your offer is full'],
+    ['That request has already been answered', 'Already answered'],
+    ['That post was taken down', 'Closed'],
+    ['That event has ended', 'Closed'],
+    // A block or a closed pair: one sentence on the server, one line here.
+    ['This request can no longer be accepted', 'Closed'],
+  ])('an accept refused with "%s" reads "%s"', (error, line) => {
+    expect(acceptConflictLine({ errorCode: 'CONFLICT', error })).toBe(line)
+  })
+
+  it('knows the doors by the server’s sentence', () => {
+    expect(BOARD_CLOSED_SENTENCE).toBe('The board closes when the doors open — the room is open instead')
   })
 })
 
