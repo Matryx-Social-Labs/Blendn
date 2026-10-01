@@ -177,7 +177,9 @@ describe('who is here now', () => {
   })
 
   it('never suggests meeting somebody who has left, and still finds three who are here', () => {
-    const people = [left('a'), left('b'), left('c'), left('d'), ...['e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(here)]
+    // Eight who left rank above four who are here: the rotation's pool of nine
+    // must be nine people inside, not nine people with one inside among them.
+    const people = [...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(left), ...['i', 'j', 'k', 'l'].map(here)]
     for (let w = 0; w < 8; w++) {
       const { picks } = meetNext(people, { now: NOW + w * 15 * 60_000, eventId: 'e1' })
       expect(picks).toHaveLength(3)
