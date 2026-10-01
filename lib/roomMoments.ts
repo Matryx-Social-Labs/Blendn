@@ -90,9 +90,30 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
     if (Number.isFinite(at) && now - at >= 0 && now - at < JUST_ARRIVED_MS) return 'Just walked in'
   }
 
-  // Presence is the one thing always true of a checked-in person — unless it
-  // says they stepped out, and then "Here now" would be the lie.
-  return p.insideNow === false ? 'Checked in' : 'Here now'
+  // The room's pool is everyone who came at all, so `insideNow: false` is
+  // somebody who checked out — "Checked in" on them was false (SCRUM-495).
+  return p.insideNow === false ? 'Was here' : 'Here now'
+}
+
+/**
+ * The faces under "N here now": arrivals first, then the rest, only people
+ * inside. The pool keeps whoever checked out, and one of them sat under
+ * "1 here now" in place of the one person who was (SCRUM-495).
+ */
+export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
+  arrivals: readonly T[],
+  people: readonly T[],
+  size: number
+): T[] {
+  const seen = new Set(arrivals.map((a) => a.id))
+  return [...arrivals, ...people.filter((p) => !seen.has(p.id))]
+    .filter((p) => p.insideNow !== false)
+    .slice(0, size)
+}
+
+/** The face grid's heading: "Everyone here" stops being true once someone leaves. */
+export function everyoneHeading(people: readonly { insideNow?: boolean }[]): string {
+  return people.every((p) => p.insideNow !== false) ? 'Everyone here' : 'Everyone who came'
 }
 
 /* -------------------------------------------------------------------------- */
@@ -143,11 +164,12 @@ function hash(text: string): number {
  *   experience rather than a per-device accident.
  *
  * Matched people are skipped: there is nothing left to suggest about them.
+ * So is anyone who has left — you can't walk up to them (SCRUM-495).
  * Picks come back in rank order, so the strongest of the three reads first.
  * With `size` or fewer candidates there is nothing to rotate and the list is
  * returned as is.
  */
-export function meetNext<T extends { id: string; matched?: boolean }>(
+export function meetNext<T extends { id: string; matched?: boolean; insideNow?: boolean }>(
   people: readonly T[],
   { now, eventId, windowMs = 15 * 60_000, size = 3, pool = 9 }: MeetNextOptions
 ): MeetNextResult<T> {
@@ -155,7 +177,7 @@ export function meetNext<T extends { id: string; matched?: boolean }>(
   const window = Math.floor(now / safeWindow)
   const nextShuffleAt = (window + 1) * safeWindow
 
-  const candidates = people.filter((p) => !p.matched).slice(0, Math.max(size, pool))
+  const candidates = people.filter((p) => !p.matched && p.insideNow !== false).slice(0, Math.max(size, pool))
   if (candidates.length <= size) return { picks: candidates, nextShuffleAt }
 
   const n = candidates.length

@@ -11,7 +11,7 @@ import { apiClient } from '../../lib/apiClient'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
-import { meetNext, reasonLine } from '../../lib/roomMoments'
+import { everyoneHeading, meetNext, reasonLine } from '../../lib/roomMoments'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
@@ -377,6 +377,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                     while there is more the number is the room's, not the page's.
                   */}
                   <FaceGridHead
+                    title={everyoneHeading(everyone)}
                     count={room.hasMore ? Math.max(room.hereCount - 1, everyone.length) : everyone.length}
                     empty={everyone.length === 0}
                   />

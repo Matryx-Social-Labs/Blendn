@@ -232,3 +232,14 @@ describe('Join Chat is a door, not a pane', () => {
     expect(SCREEN()).toContain('The chat for this event is not open yet.')
   })
 })
+
+describe('the room says who is here now (SCRUM-495)', () => {
+  it('builds the face stack under "here now" from people inside only', () => {
+    expect(SECTIONS()).toContain('hereNowStack(arrivals, people, STACK)')
+  })
+
+  it('heads the face grid with what is true of everyone in it', () => {
+    expect(SCREEN()).toContain('title={everyoneHeading(everyone)}')
+    expect(SECTIONS()).toContain('<Text variant="heading">{title}</Text>')
+  })
+})

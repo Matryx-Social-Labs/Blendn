@@ -1,6 +1,8 @@
 import {
   JUST_ARRIVED_MS,
   REASON_MAX,
+  everyoneHeading,
+  hereNowStack,
   meetNext,
   pickTonight,
   reasonLine,
@@ -59,8 +61,8 @@ describe('reasonLine', () => {
     expect(reasonLine({ arrivedAt: 'not a date' }, NOW)).toBe('Here now')
   })
 
-  it('does not say "Here now" about somebody presence says stepped out', () => {
-    expect(reasonLine({ insideNow: false }, NOW)).toBe('Checked in')
+  it('says somebody who checked out was here, never that they are checked in (SCRUM-495)', () => {
+    expect(reasonLine({ insideNow: false }, NOW)).toBe('Was here')
     expect(reasonLine({}, NOW)).toBe('Here now')
   })
 
@@ -144,6 +146,39 @@ describe('meetNext', () => {
     expect(a.picks.map((p) => p.id)).toEqual(['p0', 'p1'])
     expect(b.picks).toEqual(a.picks)
     expect(meetNext([], { now: NOW, eventId: 'e1' }).picks).toEqual([])
+  })
+})
+
+/*
+ * The room's pool is everyone who checked in to the event at all, so somebody
+ * who has gone home is still in `people` with `insideNow: false` (SCRUM-495).
+ * "1 here now" sat over the face of the one person who had left.
+ */
+describe('who is here now', () => {
+  const here = (id: string) => ({ id, insideNow: true })
+  const left = (id: string) => ({ id, insideNow: false })
+
+  it('puts only people inside under "here now", arrivals first, without repeats', () => {
+    const stack = hereNowStack([here('a'), left('b')], [left('c'), here('a'), here('d')], 5)
+    expect(stack.map((p) => p.id)).toEqual(['a', 'd'])
+  })
+
+  it('keeps the stack to its size', () => {
+    expect(hereNowStack([], ['a', 'b', 'c', 'd'].map(here), 3)).toHaveLength(3)
+  })
+
+  it('never suggests meeting somebody who has left', () => {
+    const people = [left('a'), here('b'), left('c'), here('d'), here('e'), here('f')]
+    for (let w = 0; w < 8; w++) {
+      const { picks } = meetNext(people, { now: NOW + w * 15 * 60_000, eventId: 'e1' })
+      expect(picks.some((p) => !p.insideNow)).toBe(false)
+    }
+  })
+
+  it('calls the grid "Everyone here" only while everyone in it is', () => {
+    expect(everyoneHeading([here('a'), here('b')])).toBe('Everyone here')
+    expect(everyoneHeading([])).toBe('Everyone here')
+    expect(everyoneHeading([here('a'), left('b')])).toBe('Everyone who came')
   })
 })
 
