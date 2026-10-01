@@ -44,19 +44,32 @@ export const REQUEST_TIMEOUT_MS = 15_000
 
 export const TIMEOUT_MESSAGE = 'This is taking too long. Check your connection and try again.'
 
+/** A response whose body has been read: what is left to look at. */
+export type ResponseHead = Pick<Response, 'ok' | 'status' | 'statusText' | 'headers'>
+
 /**
  * `fetch`, but it rejects once `timeoutMs` has passed.
  *
  * `fetchImpl` exists so tests can supply a promise that never settles — the
  * exact condition being defended against, and one you cannot produce with a
  * real network.
+ *
+ * ## The body is read inside the deadline
+ *
+ * Since SDK 56 the global `fetch` is `expo/fetch`, which resolves when the
+ * headers arrive and streams the body after. A deadline that stops at the
+ * headers leaves `response.text()` with none, and a body that stalls holds its
+ * queue slot for good — the Me tab on its skeleton with requests "still
+ * running" after two minutes (SCRUM-498). So this reads the body itself and
+ * hands it back with only the head of the response, so there is no stream
+ * left to read.
  */
 export async function fetchWithTimeout(
   input: string,
   init: RequestInit = {},
   timeoutMs: number = REQUEST_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch
-): Promise<Response> {
+): Promise<{ response: ResponseHead; body: string }> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -84,7 +97,11 @@ export async function fetchWithTimeout(
   })
 
   try {
-    return await Promise.race([fetchImpl(input, { ...init, signal: controller.signal }), deadline])
+    const answer = fetchImpl(input, { ...init, signal: controller.signal }).then(async (response) => ({
+      response,
+      body: await response.text(),
+    }))
+    return await Promise.race([answer, deadline])
   } finally {
     // Always, including the success path. A pending timer holds a reference to
     // the controller and, on some engines, keeps a task queued long after the
