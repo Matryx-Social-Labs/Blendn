@@ -95,6 +95,7 @@ export default function BoardScreen() {
       setAsks(next)
     }
     setLoad({ kind: 'ready', posts: board.data.posts })
+    setRefreshFailed(false)
     return true
   }, [eventId])
 
