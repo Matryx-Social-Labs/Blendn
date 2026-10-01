@@ -7,14 +7,19 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 
 import {
+  askStillOpen,
+  BOARD_ENABLED,
+  BOARD_MAX_POST_LENGTH,
   boardClosed,
   boardMarkSeed,
   boardMessage,
   inboxRequests,
   isSettled,
   outgoingLine,
+  scrubBoardUrl,
   sortBoardPosts,
   spacesLabel,
+  WAITING_LINE,
   type BoardPost,
   type BoardRequest,
 } from '../lib/board'
@@ -94,9 +99,19 @@ describe('the board closes at doors', () => {
 
 describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
   /*
-   * The sentences `boardDenialMessage` and the routes send (blendn-admin
-   * lib/board.ts, app/api/mobile/…/board). Each has a different fix, so each
-   * must reach the screen as itself — one generic "Couldn't post" names none.
+   * Copied verbatim from blendn-admin at origin/dev 02730b4 — the client cannot
+   * import the server — with where each one is written, so a change there has
+   * an address here:
+   *
+   *   lib/board.ts `boardDenialMessage` — the four write gates
+   *   app/api/mobile/events/[eventId]/board/route.ts — the doors (403)
+   *   app/api/mobile/events/[eventId]/board/[postId]/requests/route.ts — a
+   *     post gone or blocked (404)
+   *   lib/age.ts `FINISH_ONBOARDING`, `minAgeRefusal` — the access gate (403)
+   *   lib/rate-limit.ts — "Too many requests" (429)
+   *
+   * Each gate has a different fix, so each must reach the screen as itself —
+   * one generic "Couldn't post" names none of them.
    */
   const refusals: Array<[string, string]> = [
     ['FORBIDDEN', 'Mark yourself as going to post here'],
@@ -107,9 +122,10 @@ describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
     ['FORBIDDEN', 'You have 5 asks waiting for an answer. Give them a moment.'],
     ['FORBIDDEN', 'You have sent a lot of requests this week. Try again in a few days.'],
     ['FORBIDDEN', 'The board closes when the doors open — the room is open instead'],
-    ['AGE_RESTRICTED', "Blend'n is for people 18 and over."],
+    ['FORBIDDEN', "Finish setting up your profile first. Blend'n is for people 18 and over."],
+    ['AGE_RESTRICTED', 'This event is 21+. Add your age to your profile to check in.'],
     ['NOT_FOUND', 'That post is no longer on the board'],
-    ['RATE_LIMITED', 'Too many requests. Try again in a minute.'],
+    ['RATE_LIMITED', 'Too many requests'],
   ]
 
   it.each(refusals)('%s → %s', (errorCode, error) => {
@@ -138,14 +154,26 @@ describe('BD-CU02: a 409 is a state, not an error', () => {
   })
 })
 
-describe('an ask you sent never says it was declined', () => {
-  it('reads waiting while live, yes once accepted, and closed otherwise', () => {
-    expect(outgoingLine(request({}))).toBe('Waiting on them')
+describe('an ask you sent never lets a decline be read', () => {
+  it('reads a declined ask exactly as a waiting one, Withdraw included', () => {
+    const declined = request({ status: 'declined', live: false, decidedAt: '2026-10-01T11:00:00Z' })
+    expect(outgoingLine(declined)).toBe(outgoingLine(request({})))
+    expect(outgoingLine(declined)).toBe(WAITING_LINE)
+    expect(askStillOpen(declined)).toBe(askStillOpen(request({})))
+  })
+
+  it('says yes once accepted, and closed once the night is over', () => {
     expect(outgoingLine(request({ live: false, status: 'accepted' }))).toMatch(/said yes/)
-    for (const status of ['declined', 'withdrawn', 'pending'] as const) {
-      const line = outgoingLine(request({ live: false, status }))
-      expect(line).toBe('Closed')
-      expect(line.toLowerCase()).not.toMatch(/declin|refus|reject|no\b/)
+    expect(askStillOpen(request({ live: false, status: 'accepted' }))).toBe(false)
+    expect(outgoingLine(request({ live: false }))).toBe('Closed')
+    expect(askStillOpen(request({ live: false }))).toBe(false)
+  })
+
+  it('has no word for no, in any state', () => {
+    for (const status of ['pending', 'accepted', 'declined', 'withdrawn'] as const) {
+      for (const live of [true, false]) {
+        expect(outgoingLine(request({ status, live })).toLowerCase()).not.toMatch(/declin|refus|reject|\bno\b/)
+      }
     }
   })
 })
@@ -216,5 +244,89 @@ describe('board pushes carry no text, and open where the thing lives', () => {
       params: { conversationId: 'c1' },
     })
     expect(notificationTarget({ type: 'board_request_accepted' })).toBe('/(tabs)/chat')
+  })
+})
+
+describe('the board is off until its safety half ships', () => {
+  it('is off unless a build asks for it', () => {
+    // Step 6b (block/report by post, blocked authors filtered, no decline told,
+    // spaces that go down) turns it on. Nothing here sets the variable.
+    expect(process.env.EXPO_PUBLIC_BOARD_ENABLED).toBeUndefined()
+    expect(BOARD_ENABLED).toBe(false)
+  })
+
+  it('reads one constant at every way in', () => {
+    const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
+    expect(src('components/screens/EventDetailScreen.tsx')).toContain(
+      'event && BOARD_ENABLED && !boardClosed(event.start_time) ?'
+    )
+    expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED \? \(\s*<BoardRequestsSection/)
+    expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
+  })
+})
+
+describe('the event screen offers the board by the run’s doors, not the day’s', () => {
+  /*
+   * A three-day festival that opened yesterday: today's session starts
+   * tonight, so the day's window says "not started" — but the server closed
+   * the board at the first doors. Keyed on the day, the row opened onto
+   * "The board's closed".
+   */
+  it('is closed on day two of a multi-day event whose day has not started', () => {
+    const now = Date.parse('2026-10-02T12:00:00Z')
+    const run = { start_time: '2026-10-01T18:00:00Z', session: { startTime: '2026-10-02T18:00:00Z' } }
+    expect(boardClosed(run.session.startTime, now)).toBe(false)
+    expect(boardClosed(run.start_time, now)).toBe(true)
+  })
+})
+
+describe('a post’s length', () => {
+  it('is the server’s, named once', () => {
+    expect(BOARD_MAX_POST_LENGTH).toBe(500)
+    const composer = readFileSync(join(__dirname, '..', 'components/board/BoardSections.tsx'), 'utf8')
+    expect(composer).toContain('maxLength={BOARD_MAX_POST_LENGTH}')
+    expect(composer).not.toMatch(/maxLength=\{\d/)
+  })
+})
+
+describe('crash reports never pair a person with a board', () => {
+  it('takes the ids out of board URLs and leaves others alone', () => {
+    const e = '3f1c2a9e-1b2c-4d5e-8f90-123456789abc'
+    const p = 'aa1c2a9e-1b2c-4d5e-8f90-123456789abc'
+    expect(scrubBoardUrl(`https://staging-api.blendn.app/api/mobile/events/${e}/board`)).toBe(
+      'https://staging-api.blendn.app/api/mobile/events/:id/board'
+    )
+    expect(scrubBoardUrl(`GET https://x/api/mobile/events/${e}/board/${p}/requests`)).toBe(
+      'GET https://x/api/mobile/events/:id/board/:id/requests'
+    )
+    expect(scrubBoardUrl(`https://x/api/mobile/board/requests/${p}`)).toBe('https://x/api/mobile/board/requests/:id')
+    expect(scrubBoardUrl(`https://x/api/mobile/events/${e}`)).toBe(`https://x/api/mobile/events/${e}`)
+    expect(scrubBoardUrl(`https://x/dashboard/events/${e}`)).toBe(`https://x/dashboard/events/${e}`)
+  })
+
+  it('is wired into every place Sentry sends a URL', () => {
+    const sentry = readFileSync(join(__dirname, '..', 'lib/sentry.ts'), 'utf8')
+    for (const hook of ['beforeBreadcrumb', 'beforeSend', 'beforeSendTransaction']) expect(sentry).toContain(hook)
+    expect(sentry.match(/scrubBoardUrl\(/g)?.length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('the Banter counts board requests as something to show', () => {
+  const chat = () => readFileSync(join(__dirname, '..', 'app/(tabs)/chat.tsx'), 'utf8')
+
+  it('does not claim an empty inbox under them', () => {
+    expect(chat()).toContain(
+      'const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0'
+    )
+    expect(chat()).toContain('onCount={setBoardRequestCount}')
+  })
+
+  it('reads them again on pull-to-refresh and on live sync', () => {
+    const src = chat()
+    const refresh = src.slice(src.indexOf('const onRefresh = useCallback'), src.indexOf('// Real-time private message updates'))
+    expect(refresh).toContain('setBoardRefreshKey((k) => k + 1)')
+    const sync = src.slice(src.indexOf('const socketStatus = useLiveSync({'), src.indexOf('const respondToRequest'))
+    expect(sync).toContain('setBoardRefreshKey((k) => k + 1)')
+    expect(sync).toContain('return loadChats(false, true)')
   })
 })

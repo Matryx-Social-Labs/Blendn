@@ -533,10 +533,18 @@ currently in the selected city.
 
 ## 6. The Board — `app/board/[eventId].tsx`, and its requests in the Banter
 
-**Route:** `/board/{eventId}` (params `title`, `startTime`) · **Reached from:**
-the event screen's "The Board" row, **before doors only**. Requests are answered
-in the Banter (`components/board/BoardRequestsSection.tsx`, under message
-requests), which is also where a `board_request` push lands.
+**Route:** `/board/{eventId}` — the title and the doors come from the server,
+never the link · **Reached from:** the event screen's "The Board" row, **before
+the run's first doors only** (`!boardClosed(event.start_time)`, not the day's
+window). Requests are answered in the Banter
+(`components/board/BoardRequestsSection.tsx`, under message requests), which is
+also where a `board_request` push lands.
+
+**Off until its server half ships.** `BOARD_ENABLED` in `lib/board.ts` (default
+off; a build can try it with `EXPO_PUBLIC_BOARD_ENABLED=true`) gates the event
+row, the Banter section and the route, which sends a deep link home. It turns on
+after step 6b: block and report by post or request, blocked authors filtered out
+of the board, a decline never sent to the asker, and spaces that go down.
 
 **What it does.** Going alone, and looking for somebody to go with. People who
 are going post an **offer** (a car, a table — with spaces) or a **seeking**.
@@ -564,7 +572,7 @@ Event screen ──▶ The Board                       Banter
 | **A refusal names its gate, in the server's words** | Not going, profile incomplete, five asks waiting, the weekly limit, the content filter — each has a different fix. It stays on screen (not a toast) until the next try |
 | **A 409 is a state, never an error** | "You have already asked", "That request has already been answered" are what a double tap on a slow connection looks like. Never red, never an error toast |
 | **No confirm on Ask** | Asking is the moment someone feels most exposed; "Are you sure?" says it is dangerous. An inline spinner, then the card says what happened |
-| **A decline is never delivered** | There is no decline push and no "declined" anywhere. An ask that stops being pending reads **Closed** — the same as one that was never answered. Both mean move on |
+| **A decline is never delivered, or inferable** | There is no decline push and no "declined" anywhere. A declined ask reads exactly like one still waiting — "Waiting on them", with Withdraw — because a row that changed while the post was still up could only mean no. A 409 on an ask reads "Waiting on them" whatever the server's sentence; withdrawing one that turns out already answered goes like any withdrawal, silently. Only the night ending closes an ask |
 | **Accepting never draws the match opener** | The conversation carries `origin_board_request_id`, so the server answers `fromMatch: false`. Greeting two people who agreed to share a car with "You both said yes" is the silent failure this rule exists for (`__tests__/boardConversationNoOpener.test.tsx`) |
 | **Pushes carry no text** | `board_request` and `board_request_accepted` say only that something happened — a lock screen is read by other people. Nothing renders a preview from them |
 | **Before doors only** | After them the room is the place, gated on presence. A board left open would be a second room with a weaker gate |
@@ -583,7 +591,7 @@ Event screen ──▶ The Board                       Banter
 |---|---|
 | **Spaces never go down** | The server does not decrement `spaces_left` when an ask is accepted, and nothing lets an author edit it, so "2 spaces left" stays 2 after two people are in. Filed against the server |
 | **A board conversation looks like any other in the inbox** | The conversations payload says `fromMatch: false` but not "from the board", so the Banter row cannot say where it came from. Needs `originBoardRequestId` (or a kind) on `GET /conversations` |
-| **No report or block on a board request** | A request carries a handle, not a user id, so the Banter's More sheet (Block / Report) cannot name anybody. Needs a request-scoped report route |
+| **No report or block on a board request or post** | A request carries a handle, not a user id, so the Banter's More sheet (Block / Report) cannot name anybody, and the board does not filter blocked authors. Step 6b; the board stays off until then |
 | **`chat` posts** | The server accepts a third kind that asks nothing of anybody. The composer offers only offer and seeking; a `chat` post renders in the seeking shape |
 
 ---

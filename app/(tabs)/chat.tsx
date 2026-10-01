@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
+import { BOARD_ENABLED } from '../../lib/board'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
@@ -811,7 +812,11 @@ function ChatInner() {
   const socketStatus = useLiveSync({
     enabled: !!user && !authLoading,
     // Background sync should not force blocking skeleton UI.
-    onSync: () => loadChats(false, true),
+    onSync: () => {
+      // A board request arrives by push and live sync too, not only on focus.
+      setBoardRefreshKey((k) => k + 1)
+      return loadChats(false, true)
+    },
     domains: ['chat'],
     connectedIntervalMs: 20000,
     disconnectedIntervalMs: 8000,
@@ -994,8 +999,13 @@ function ChatInner() {
         </View>
       ) : null}
 
-      {/* Beside message requests: the same object, somebody asking to start talking. */}
-      <BoardRequestsSection refreshKey={boardRefreshKey} onCount={setBoardRequestCount} />
+      {/*
+        Beside message requests: the same object, somebody asking to start
+        talking. Behind BOARD_ENABLED until the board's safety half ships.
+      */}
+      {BOARD_ENABLED ? (
+        <BoardRequestsSection refreshKey={boardRefreshKey} onCount={setBoardRequestCount} />
+      ) : null}
     </View>
   )
 

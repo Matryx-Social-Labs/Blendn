@@ -10,6 +10,22 @@ import { markSeed } from './pseudonymAvatar'
  * Design of record: "Part 3b — the board, designed" in the client plan.
  */
 
+/**
+ * Whether the board is reachable at all. **Off** until its server half lands
+ * (step 6b: block and report by post or request, blocked authors filtered out,
+ * a decline never told to the asker, spaces that go down). Every way in reads
+ * this one constant — the event screen's row, the Banter's section and the
+ * route itself — so turning it on is one line, and a build can try it with
+ * `EXPO_PUBLIC_BOARD_ENABLED=true` without a code change.
+ */
+export const BOARD_ENABLED = process.env.EXPO_PUBLIC_BOARD_ENABLED === 'true'
+
+/** The server's `BOARD.MAX_POST_LENGTH` (blendn-admin lib/constants.ts). */
+export const BOARD_MAX_POST_LENGTH = 500
+
+/** What an ask that has not been accepted reads, whatever happened to it. */
+export const WAITING_LINE = 'Waiting on them'
+
 /** `offer` has spaces to give, `seeking` wants one, `chat` asks nothing. */
 export type BoardPostKind = 'offer' | 'seeking' | 'chat'
 
@@ -126,17 +142,31 @@ export function isSettled(result: Refusal): boolean {
 }
 
 /**
- * The one line an ask you sent carries, on the board card and in the Banter.
+ * Whether an ask you sent still reads as waiting — and so keeps Withdraw.
  *
- * **There is no "declined".** The server sends no decline (there is no push
- * for one, by design), and the client must not invent one: a declined ask,
- * a lapsed one and one on a post that was taken down all quietly stop being
- * pending and read the same. Both mean move on.
+ * **A decline reads exactly as waiting.** The server delivers no decline (no
+ * push, by design), and the client must not let one be inferred: a row that
+ * flipped from "Waiting" to anything else while the post is still up could
+ * only mean no. So `declined` is drawn as pending for as long as the row is
+ * shown. The server will stop sending `declined` to the asker at all
+ * (step 6b); this keeps the rule if it ever does.
+ *
+ * ponytail: the payload carries no `end_time`, so a declined row reads waiting
+ * until the Banter drops it (a day after doors), where a lapsed pending one
+ * reads closed from the end of the event. After the night, that gap tells
+ * nobody anything worth knowing; send `endTime` if it ever matters.
+ */
+export function askStillOpen(request: Pick<BoardRequest, 'live' | 'status'>): boolean {
+  return request.live || request.status === 'declined'
+}
+
+/**
+ * The one line an ask you sent carries, on the board card and in the Banter.
+ * There is no "declined" — see `askStillOpen`.
  */
 export function outgoingLine(request: Pick<BoardRequest, 'live' | 'status'>): string {
-  if (request.live) return 'Waiting on them'
   if (request.status === 'accepted') return "They said yes — you're in each other's chats"
-  return 'Closed'
+  return askStillOpen(request) ? WAITING_LINE : 'Closed'
 }
 
 /** How long a closed ask stays in the Banter after its event's doors. */
@@ -169,4 +199,18 @@ export function inboxRequests(requests: BoardRequests, now: number = Date.now())
  */
 export function boardMarkSeed(author: string, eventId: string, postId: string): string {
   return markSeed(author, `${eventId}:${postId}`)
+}
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+
+/**
+ * A board URL with its ids taken out, for crash reports.
+ *
+ * Sentry records every fetch as a breadcrumb and tags the report with the
+ * user's id. A board URL carries the event, the post and the request, so a
+ * report would tie one person to who they asked and whose post — exactly the
+ * pairing the board keeps pseudonymous. Other URLs pass through unchanged.
+ */
+export function scrubBoardUrl(url: string): string {
+  return /\/board(\/|$|\?)/.test(url) ? url.replace(UUID, ':id') : url
 }

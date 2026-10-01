@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { memo, useState, type ReactNode } from 'react'
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native'
 
 import { Text } from '../ui/Text'
-import { boardMarkSeed, spacesLabel, type BoardPost } from '../../lib/board'
+import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel, type BoardPost } from '../../lib/board'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
@@ -19,21 +20,34 @@ export const BOARD_MARK = 40
 export const MAX_SPACES = 20
 
 /**
+ * Say it aloud on iOS. Android reads `accessibilityLiveRegion`; iOS has none,
+ * so a result that appears where the finger is not is otherwise silent.
+ */
+export function announce(text: string) {
+  if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
+}
+
+/**
  * A person on the board, drawn as their generated mark.
  *
  * Seeded on the handle (`boardMarkSeed`), never a user id — the board does not
  * send one — and never a photo: the board is pseudonymous, and a face would be
  * the one place identity is handed over before anybody agreed to it.
+ *
+ * Hidden from screen readers: the creature is decoration, and the handle beside
+ * it is what identifies somebody. Read aloud it was "fox" before every name.
  */
 export function BoardMark({ seed }: { seed: string }) {
   const { colors, character } = pseudonymAvatar(seed)
   return (
-    <LinearGradient colors={colors} style={styles.mark}>
-      {/* design-exception: an emoji glyph sized to the 40pt disc, fixed against Dynamic Type */}
-      <Text style={styles.markGlyph} maxFontSizeMultiplier={1}>
-        {character}
-      </Text>
-    </LinearGradient>
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <LinearGradient colors={colors} style={styles.mark}>
+        {/* design-exception: an emoji glyph sized to the 40pt disc, fixed against Dynamic Type */}
+        <Text style={styles.markGlyph} maxFontSizeMultiplier={1}>
+          {character}
+        </Text>
+      </LinearGradient>
+    </View>
   )
 }
 
@@ -63,10 +77,12 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
 export type AskState =
   | { kind: 'idle' }
   | { kind: 'asking' }
-  /** A state, never an error: "Waiting on them", "Closed", a 409's sentence. */
+  /** A state, never an error: "Waiting on them", "They said yes", "Closed". */
   | { kind: 'settled'; line: string }
   /** The server said no, and said which gate. Shown with the button still there. */
   | { kind: 'refused'; line: string }
+
+export const IDLE: AskState = { kind: 'idle' }
 
 /**
  * One post.
@@ -81,8 +97,11 @@ export type AskState =
  * The kind is also said in words ("Offering", "Looking"), so the counter is
  * never the only thing telling them apart — not to a screen reader, and not at
  * the largest text size, where every line here wraps rather than truncates.
+ *
+ * Memoised: a post and its ask state are stable objects, so a keystroke or one
+ * card's spinner does not redraw the rest of the board.
  */
-export function BoardPostCard({
+export const BoardPostCard = memo(function BoardPostCard({
   post,
   eventId,
   ask,
@@ -92,8 +111,8 @@ export function BoardPostCard({
   post: BoardPost
   eventId: string
   ask: AskState
-  onAsk: () => void
-  onTakeDown: () => void
+  onAsk: (post: BoardPost) => void
+  onTakeDown: (post: BoardPost) => void
 }) {
   const offer = post.kind === 'offer'
   const spaces = offer ? spacesLabel(post.spacesLeft) : null
@@ -110,11 +129,16 @@ export function BoardPostCard({
     </View>
   )
 
+  let footer: ReactNode = null
+  if (post.mine) {
+    footer = <MineFooter count={post.requestCount} onTakeDown={() => void onTakeDown(post)} />
+  } else if (post.kind !== 'chat' || ask.kind === 'settled') {
+    // A `chat` post asks nothing of anybody, so it offers nothing to ask.
+    footer = <AskFooter ask={ask} full={full} author={post.author} onAsk={() => void onAsk(post)} />
+  }
+
   return (
-    <View
-      style={offer ? styles.offer : styles.seeking}
-      accessibilityLabel={`${kindWord}${spaces ? `, ${spaces}` : ''}. ${post.author}: ${post.body}`}
-    >
+    <View style={offer ? styles.offer : styles.seeking}>
       {offer ? byline : null}
       {spaces ? (
         <Text variant="title" color={full ? EMBER.textSecondary : EMBER.textPrimary}>
@@ -123,15 +147,10 @@ export function BoardPostCard({
       ) : null}
       <Text variant="body">{post.body}</Text>
       {offer ? null : byline}
-
-      {post.mine ? (
-        <MineFooter count={post.requestCount} onTakeDown={onTakeDown} />
-      ) : (
-        <AskFooter ask={ask} full={full} author={post.author} onAsk={onAsk} />
-      )}
+      {footer}
     </View>
   )
-}
+})
 
 function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => void }) {
   return (
@@ -143,7 +162,6 @@ function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => vo
         onPress={onTakeDown}
         accessibilityRole="button"
         accessibilityLabel="Take down your post"
-        hitSlop={SPACE.md}
         style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}
       >
         <Text variant="button" color={EMBER.textSecondary}>
@@ -193,7 +211,8 @@ function AskFooter({
         onPress={onAsk}
         disabled={asking}
         accessibilityRole="button"
-        accessibilityLabel={`Ask ${author} to join`}
+        // The visible words first, so voice control's "tap Ask to join" works (WCAG 2.5.3).
+        accessibilityLabel={`Ask to join, ${author}`}
         accessibilityState={{ busy: asking, disabled: asking }}
         style={({ pressed }) => [styles.askButton, (pressed || asking) && styles.pressed]}
       >
@@ -210,37 +229,37 @@ function AskFooter({
 }
 
 export type ComposeKind = 'offer' | 'seeking'
+export interface BoardDraft {
+  kind: ComposeKind
+  body: string
+  spacesLeft?: number
+}
 
 /**
  * Write a post. Two kinds, the two shapes the board draws.
  *
- * A refusal stays under the button until the next try — a toast is gone
- * before somebody has read which of three gates they missed.
+ * Owns its draft, so typing redraws this and not the board under it. The
+ * screen closes it on success, which drops the draft; on a refusal it stays
+ * open with every word kept. The refusal stays under the button until the next
+ * try — a toast is gone before somebody has read which of three gates they
+ * missed.
  */
 export function BoardComposer({
-  kind,
-  body,
-  spaces,
   posting,
   refusal,
-  onKind,
-  onBody,
-  onSpaces,
   onPost,
   onCancel,
 }: {
-  kind: ComposeKind
-  body: string
-  spaces: number
   posting: boolean
   refusal: string | null
-  onKind: (kind: ComposeKind) => void
-  onBody: (body: string) => void
-  onSpaces: (spaces: number) => void
-  onPost: () => void
+  onPost: (draft: BoardDraft) => void
   onCancel: () => void
 }) {
+  const [kind, setKind] = useState<ComposeKind>('offer')
+  const [body, setBody] = useState('')
+  const [spaces, setSpaces] = useState(1)
   const empty = body.trim().length === 0
+
   return (
     <View style={styles.composer}>
       <View style={styles.kinds} accessibilityRole="radiogroup">
@@ -254,9 +273,9 @@ export function BoardComposer({
           return (
             <Pressable
               key={value}
-              onPress={() => onKind(value)}
+              onPress={() => setKind(value)}
               accessibilityRole="radio"
-              accessibilityState={{ selected }}
+              accessibilityState={{ checked: selected }}
               accessibilityLabel={label}
               style={[styles.kind, selected && styles.kindSelected]}
             >
@@ -270,9 +289,9 @@ export function BoardComposer({
 
       <TextInput
         value={body}
-        onChangeText={onBody}
+        onChangeText={setBody}
         multiline
-        maxLength={500}
+        maxLength={BOARD_MAX_POST_LENGTH}
         placeholder={
           kind === 'offer'
             ? 'Driving over from Indiranagar at 8 — room for two.'
@@ -280,19 +299,19 @@ export function BoardComposer({
         }
         placeholderTextColor={EMBER.textPlaceholder}
         accessibilityLabel="Your post"
+        accessibilityHint={`Up to ${BOARD_MAX_POST_LENGTH} characters`}
         style={styles.input}
       />
+      <Text variant="meta" style={styles.counter}>
+        {`${body.length}/${BOARD_MAX_POST_LENGTH}`}
+      </Text>
 
       {kind === 'offer' ? (
         <View style={styles.spacesRow}>
           <Text variant="bodyStrong" style={styles.spacesLabel}>
             Spaces
           </Text>
-          <Stepper
-            label="space"
-            value={spaces}
-            onChange={onSpaces}
-          />
+          <Stepper label="space" value={spaces} onChange={setSpaces} />
         </View>
       ) : null}
 
@@ -303,16 +322,12 @@ export function BoardComposer({
       ) : null}
 
       <Pressable
-        onPress={onPost}
+        onPress={() => onPost({ kind, body: body.trim(), ...(kind === 'offer' ? { spacesLeft: spaces } : {}) })}
         disabled={posting || empty}
         accessibilityRole="button"
         accessibilityLabel="Post to the board"
         accessibilityState={{ busy: posting, disabled: posting || empty }}
-        style={({ pressed }) => [
-          styles.post,
-          empty && styles.disabled,
-          (pressed || posting) && styles.pressed,
-        ]}
+        style={({ pressed }) => [styles.post, empty && styles.disabled, (pressed || posting) && styles.pressed]}
       >
         {posting ? (
           <ActivityIndicator color={EMBER.onGradient} />
@@ -404,7 +419,8 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md },
   footerLine: { flex: 1 },
-  textButton: { minHeight: CONTROL.sm, justifyContent: 'center' },
+  // 44pt and over without a hit slop: the target is the box.
+  textButton: { minHeight: CONTROL.md, justifyContent: 'center' },
 
   askBlock: { gap: SPACE.sm },
   // Strong-neutral, not the accent: the accent is the screen's one Post.
@@ -442,6 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     textAlignVertical: 'top',
   },
+  counter: { alignSelf: 'flex-end' },
   spacesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   spacesLabel: { flex: 1 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },

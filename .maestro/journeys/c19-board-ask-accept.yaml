@@ -1,0 +1,91 @@
+# SCRUM-126, BD-M01 / BD-D01. The board, two people, one phone: the author
+# here, the asker through the API.
+#   event screen → The Board → post an offer → (asker asks, by API) →
+#   the Banter shows the ask → Accept → the DM opens, with no match opener.
+# Needs a build with EXPO_PUBLIC_BOARD_ENABLED=true (the board is off until its
+# server half ships), an upcoming event both people are RSVP'd *going* to, and
+# complete profiles for both (name, age, two interests, an intent).
+# Env: EMAIL, PASSWORD (the author); EVENT (a regex for the event's title on
+# Going); EVENT_ID; POST_TEXT (unique per run); API
+# (https://staging-api.blendn.app); ASKER_TOKEN (`qa token <asker>`).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c19
+  - board
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Going"
+- extendedWaitUntil:
+    visible: ${EVENT}
+    timeout: 30000
+- tapOn: ${EVENT}
+- scrollUntilVisible:
+    element: "The Board.*"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "The Board.*"
+- extendedWaitUntil:
+    visible: ".*(Nobody's posted yet|Write a post).*"
+    timeout: 20000
+- tapOn: "Write a post"
+- tapOn: "Your post"
+- inputText: ${POST_TEXT}
+# A multiline field: return is a newline. Tapping plain text lets go of it.
+- tapOn: "Spaces"
+- tapOn: "One space more"
+- tapOn: "Post to the board"
+# The offer lands at the top, its spaces the loudest line.
+- extendedWaitUntil:
+    visible: ${POST_TEXT}
+    timeout: 20000
+- assertVisible: "2 spaces left"
+- assertVisible: "Offering · yours"
+- takeScreenshot: c19-posted
+- runScript:
+    file: ../scripts/board-ask.js
+    env:
+      API: ${API}
+      EVENT_ID: ${EVENT_ID}
+      ASKER_TOKEN: ${ASKER_TOKEN}
+      POST_TEXT: ${POST_TEXT}
+# The author's card counts the ask, and never names who.
+- tapOn: "Go back"
+- tapOn: "The Board.*"
+- extendedWaitUntil:
+    visible: "1 asked — answer in the Banter"
+    timeout: 20000
+- tapOn: "Go back"
+- tapOn: "Back"
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: "Accept the request from .*"
+    timeout: 30000
+- takeScreenshot: c19-ask-in-banter
+- tapOn: "Accept the request from .*"
+# The conversation the accept opened — pseudonymous, and not a match.
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+- assertNotVisible: "You both said yes."
+- assertNotVisible: ".*liked each other.*"
+- takeScreenshot: c19-dm-no-opener
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT bp.id, bp.kind::text AS kind, bp.spaces_left AS left FROM board_posts bp WHERE bp.body = '<POST_TEXT>'"
+#   npm run -s qa sq "SELECT br.id, br.status::text AS status, br.decided_at::text AS decided FROM board_requests br WHERE br.post_id = '<post>'"
+#   npm run -s qa sq "SELECT pc.id, pc.origin_board_request_id AS from_req, pc.origin_event_id AS from_event, pc.user1_revealed AS r1, pc.user2_revealed AS r2 FROM private_conversations pc WHERE pc.origin_board_request_id = '<request>'"
+# spaces_left stays 2 until SCRUM-514 lands.
