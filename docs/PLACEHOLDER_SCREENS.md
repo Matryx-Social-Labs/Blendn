@@ -531,6 +531,63 @@ currently in the selected city.
 
 ---
 
+## 6. The Board — `app/board/[eventId].tsx`, and its requests in the Banter
+
+**Route:** `/board/{eventId}` (params `title`, `startTime`) · **Reached from:**
+the event screen's "The Board" row, **before doors only**. Requests are answered
+in the Banter (`components/board/BoardRequestsSection.tsx`, under message
+requests), which is also where a `board_request` push lands.
+
+**What it does.** Going alone, and looking for somebody to go with. People who
+are going post an **offer** (a car, a table — with spaces) or a **seeking**.
+Anyone who RSVP'd or saved the event reads the board. Asking is one tap; the
+author answers in the Banter; accepting opens a pseudonymous conversation.
+Design of record: "Part 3b — the board, designed" in the client plan.
+
+```
+Event screen ──▶ The Board                       Banter
+  "The Board"     ├─ Write a post (offer|seeking)  ├─ The Board: asks waiting on you
+  (pre-doors)     ├─ offers (spaces left) first    │    Decline · Accept ──▶ the DM
+                  ├─ seekings, text first          └─ YOU ASKED (quieter)
+                  └─ Ask to join ──▶ "Waiting on them"    Waiting on them · Withdraw
+                                                          They said yes / Closed
+```
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Pseudonyms only — never a name, never a photo** | The board is read by people deciding whether to travel with a stranger. A name or a face here hands over identity before anybody agreed to it. Marks are `boardMarkSeed(handle, eventId, id)` — the handle, never a user id (the server does not even send one) |
+| **Offer and seeking are two shapes, one accent** | An offer's spaces-left is the board's only real-time signal; it is the loudest line on its card and offers sort above seekings. Identical cards bury it. The accent is the screen's one primary action (Write a post / Post) |
+| **The counter is never the only difference** | Each card also says "Offering" / "Looking" in words — for a screen reader, and at the largest text size, where every line wraps rather than truncates |
+| **Two empty states, not one** | "Nobody's posted yet" is the common case and invites the first post. "The board's closed" is a different fact (the doors opened) and offers the room instead |
+| **A refusal names its gate, in the server's words** | Not going, profile incomplete, five asks waiting, the weekly limit, the content filter — each has a different fix. It stays on screen (not a toast) until the next try |
+| **A 409 is a state, never an error** | "You have already asked", "That request has already been answered" are what a double tap on a slow connection looks like. Never red, never an error toast |
+| **No confirm on Ask** | Asking is the moment someone feels most exposed; "Are you sure?" says it is dangerous. An inline spinner, then the card says what happened |
+| **A decline is never delivered** | There is no decline push and no "declined" anywhere. An ask that stops being pending reads **Closed** — the same as one that was never answered. Both mean move on |
+| **Accepting never draws the match opener** | The conversation carries `origin_board_request_id`, so the server answers `fromMatch: false`. Greeting two people who agreed to share a car with "You both said yes" is the silent failure this rule exists for (`__tests__/boardConversationNoOpener.test.tsx`) |
+| **Pushes carry no text** | `board_request` and `board_request_accepted` say only that something happened — a lock screen is read by other people. Nothing renders a preview from them |
+| **Before doors only** | After them the room is the place, gated on presence. A board left open would be a second room with a weaker gate |
+
+### Data each screen reads and writes
+
+| Surface | Reads | Writes |
+|---|---|---|
+| Event screen row | the event's `start_time` (hidden from doors on) | — |
+| The Board | `GET /events/:id/board` (posts: `kind`, `body`, `spacesLeft`, `author` handle, `mine`, `requestCount`); `GET /board/requests` (which posts already carry your ask) | `POST /events/:id/board` `{kind, body, spacesLeft?}`; `DELETE /events/:id/board/:postId` (take down your own); `POST /events/:id/board/:postId/requests` (ask, no message) |
+| Banter, The Board | `GET /board/requests` → incoming that are `live`; outgoing that are live, or closed until a day after their doors; your withdrawals hidden | `PATCH /board/requests/:id` `{accept \| decline \| withdraw}`; accept returns the `conversationId` the screen opens |
+
+### Still open — decisions and work, not styling
+
+| | |
+|---|---|
+| **Spaces never go down** | The server does not decrement `spaces_left` when an ask is accepted, and nothing lets an author edit it, so "2 spaces left" stays 2 after two people are in. Filed against the server |
+| **A board conversation looks like any other in the inbox** | The conversations payload says `fromMatch: false` but not "from the board", so the Banter row cannot say where it came from. Needs `originBoardRequestId` (or a kind) on `GET /conversations` |
+| **No report or block on a board request** | A request carries a handle, not a user id, so the Banter's More sheet (Block / Report) cannot name anybody. Needs a request-scoped report route |
+| **`chat` posts** | The server accepts a third kind that asks nothing of anybody. The composer offers only offer and seeking; a `chat` post renders in the seeking shape |
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
