@@ -13,6 +13,7 @@ import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
+import type { BoardPost, BoardRequestStatus, BoardRequests } from './board'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
@@ -3078,6 +3079,63 @@ class ApiClientClass {
     return this.queuedRequest(
       `/api/mobile/friends/requests/${encodeURIComponent(requestId)}`,
       { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  // === THE BOARD ===
+  // See lib/board.ts. Uncached, like the friends lists: a board is read to
+  // decide, and a stale one offers a seat that has gone. Every refusal on these
+  // routes is a sentence for the person (`boardMessage`).
+
+  async getBoard(eventId: string): Promise<ApiResponse<{ posts: BoardPost[] }>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board`)
+  }
+
+  async postToBoard(
+    eventId: string,
+    post: { kind: 'offer' | 'seeking'; body: string; spacesLeft?: number }
+  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'>>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board`,
+      { method: 'POST', body: JSON.stringify(post) },
+      true,
+      2
+    )
+  }
+
+  async withdrawBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ id: string; withdrawn: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  /** No message: asking is one tap, and "can I join?" needs no essay. */
+  async askOnBoard(eventId: string, postId: string): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/requests`,
+      { method: 'POST', body: JSON.stringify({}) },
+      true,
+      2
+    )
+  }
+
+  async getBoardRequests(): Promise<ApiResponse<BoardRequests>> {
+    return this.queuedRequest('/api/mobile/board/requests')
+  }
+
+  /** `conversationId` comes back on accept: the pseudonymous DM it opened. */
+  async answerBoardRequest(
+    requestId: string,
+    action: 'accept' | 'decline' | 'withdraw'
+  ): Promise<ApiResponse<{ id: string; status: BoardRequestStatus; conversationId?: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}`,
+      { method: 'PATCH', body: JSON.stringify({ action }) },
       true,
       2
     )
