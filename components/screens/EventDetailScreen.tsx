@@ -12,6 +12,7 @@ import {
   Pressable,
   Dimensions,
   InteractionManager,
+  Linking,
   Modal,
   Share,
   StyleSheet,
@@ -83,6 +84,7 @@ import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
+import { claimUrlFrom } from '../../lib/claimLink';
 
 const NO_CLOCK_SUBSCRIPTION = () => () => {}
 
@@ -136,6 +138,8 @@ interface EventDetailData {
    * hero and the gallery are the two things the frame is mostly made of.
    */
   media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
+  /** The public claim page, for a curated event nobody has claimed. See `claimUrlFrom`. */
+  claim_url?: string | null
 }
 
 type EventAmenity = ServerAmenity
@@ -211,6 +215,10 @@ export default function EventDetail() {
   const { user } = useAuth()
   const feedback = useInteractionFeedback()
   const { showToast } = useToast()
+  /** Out to the browser; the dashboard's claim page needs no account. */
+  const openClaimPage = (url: string) => {
+    Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+  }
 
   // Initialize event from params if available for instant display
   const hasParams = !!(title || cover || venue)
@@ -375,6 +383,7 @@ export default function EventDetail() {
         media: Array.isArray(d.media) ? d.media : [],
         amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
         details: (d.details ?? undefined) as ServerEventDetails | undefined,
+        claim_url: claimUrlFrom(d.claim),
       })
       // Set interest info and check-in status from userStatus
       if (d.userStatus) {
@@ -481,6 +490,7 @@ export default function EventDetail() {
           media: Array.isArray(d.media) ? d.media : [],
           amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
           details: (d.details ?? undefined) as ServerEventDetails | undefined,
+          claim_url: claimUrlFrom(d.claim),
         })
         if (d.stats) {
           setInterestCount(d.stats.favoriteCount || 0)
@@ -1479,6 +1489,32 @@ export default function EventDetail() {
           ) : null}
 
           {/*
+            DESIGN IS A PLACEHOLDER — LOGIC IS NOT (docs/PLACEHOLDER_SCREENS.md,
+            "Claim it"). Only on a curated event nobody has claimed, which the
+            server decides. It leaves the app for the public claim page on the
+            dashboard host: the app refuses host accounts by design, and that
+            page needs no account. Filing there grants nothing until a person
+            reviews it.
+          */}
+          {event?.claim_url ? (
+            <FadeInUp delay={SECTION_DELAY[3]}>
+              <Pressable
+                testID="claim-event-link"
+                onPress={() => openClaimPage(event.claim_url!)}
+                accessibilityRole="link"
+                accessibilityLabel="Running this event? Claim it. Opens the Blend'n dashboard in your browser."
+                hitSlop={SPACE.md}
+                style={styles.claimRow}
+              >
+                <Text style={styles.claimText} maxFontSizeMultiplier={1.4}>
+                  Running this event? <Text style={styles.claimAction}>Claim it</Text>
+                </Text>
+                <Ionicons name="open-outline" size={ICON.sm} color={EMBER.textSecondary} />
+              </Pressable>
+            </FadeInUp>
+          ) : null}
+
+          {/*
             No amenities row. `#244` added them server-side and the mobile
             payload does not carry them yet, so the frame's two tiles would be
             the interface asserting two facts it has not been told. They appear
@@ -1771,6 +1807,9 @@ const styles = StyleSheet.create({
     gap: SCENE_SECTION_GAP,
   },
   section: { gap: SPACE.lg },
+  claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start' },
+  claimText: { ...TYPE.meta },
+  claimAction: { color: EMBER.textPrimary, textDecorationLine: 'underline' },
   ctaDock: {
     position: 'absolute',
     left: 0,

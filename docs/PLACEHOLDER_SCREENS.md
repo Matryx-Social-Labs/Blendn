@@ -596,6 +596,41 @@ Event screen ──▶ The Board                       Banter
 
 ---
 
+## 7. "Running this event? Claim it" — event detail (`components/screens/EventDetailScreen.tsx`)
+
+**A link, not a screen, and the first of two.** Added 2026-10-01 (step 1 of the
+product-completion plan). The venue half, "Own this place? Claim it", lands with
+the venue detail screen (step 5).
+
+### What it does
+
+On an event **added by Blend'n** (curated) that nobody has claimed, a line under
+the location card reads *Running this event? Claim it*. Tapping it opens the
+public claim page in the browser — `https://<dashboard host>/claim/<eventId>`.
+
+### Rules the design must keep
+
+- **The server decides whether it shows.** `GET /events/:eventId` sends
+  `claim: { url }` only for a curated, unclaimed event; otherwise `null`. Never
+  show it from anything the app infers (the host name "Blendn" is not the
+  rule: a legacy event with no organiser reads the same).
+- **Open the URL as given.** It is built on the dashboard host for the
+  environment the app is talking to. The API host has no page there, and a
+  hard-coded host sends staging users to production.
+- **It leaves the app, on purpose.** The app refuses organiser and venue
+  accounts, and the claim page needs no account. Filing there grants nothing:
+  a person reviews every claim. Say nothing that promises ownership.
+- **Quiet.** Most people reading this screen are attendees; the line is for the
+  one organiser in a thousand who finds their own event. Never a button, never
+  in the CTA dock.
+
+### Open for design
+
+Placement (currently the last line of the page), wording, and whether it
+belongs beside the host byline instead.
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.

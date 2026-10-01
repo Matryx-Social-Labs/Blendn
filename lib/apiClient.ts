@@ -646,6 +646,13 @@ export interface EventApiItem {
     image?: string | null
     email?: string
   }
+  /**
+   * "Running this event? Claim it" — detail endpoint only. `{ url }` for a
+   * curated event nobody has claimed, null otherwise (or absent from an older
+   * server). The URL is the dashboard's public claim page; read it through
+   * `claimUrlFrom`.
+   */
+  claim?: { url: string } | null
   details?: {
     fullDescription?: string
     houseRules?: string | null
