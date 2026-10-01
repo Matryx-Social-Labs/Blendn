@@ -540,11 +540,13 @@ window). Requests are answered in the Banter
 (`components/board/BoardRequestsSection.tsx`, under message requests), which is
 also where a `board_request` push lands.
 
-**Off until its server half ships.** `BOARD_ENABLED` in `lib/board.ts` (default
-off; a build can try it with `EXPO_PUBLIC_BOARD_ENABLED=true`) gates the event
-row, the Banter section and the route, which sends a deep link home. It turns on
-after step 6b: block and report by post or request, blocked authors filtered out
-of the board, a decline never sent to the asker, and spaces that go down.
+**On since its server half shipped** (step 6b, admin #608 and #614: block and
+report by post or request, blocked authors filtered out of the board, a decline
+never sent to the asker, spaces that go down). `BOARD_ENABLED` in `lib/board.ts`
+gates the event row, the Banter section and the route, which sends a deep link
+home when it is off; a build can switch it off with
+`EXPO_PUBLIC_BOARD_ENABLED=false`, and reverting the one commit that turned it on
+is the other way back.
 
 **What it does.** Going alone, and looking for somebody to go with. People who
 are going post an **offer** (a car, a table — with spaces) or a **seeking**.
