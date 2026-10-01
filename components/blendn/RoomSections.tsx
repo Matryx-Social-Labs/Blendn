@@ -296,7 +296,12 @@ export const GridFace = memo(function GridFace({
           ) : null}
         </Animated.View>
       </GestureDetector>
-      <Text variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.centre}>
+      {/*
+        One line, ellipsised — not shrink-to-fit. iOS sometimes laid the shrunk
+        name out on first render at a fraction of its size, below the 0.75
+        floor, until something re-rendered the room (SCRUM-503).
+      */}
+      <Text variant="bodyStrong" numberOfLines={1} style={styles.centre}>
         {person.name}
       </Text>
       <Text variant="caption" numberOfLines={1} style={styles.centre}>
