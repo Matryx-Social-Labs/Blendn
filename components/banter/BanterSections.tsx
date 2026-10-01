@@ -495,6 +495,7 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
 export function BanterRequest({
   name,
   avatarUrl,
+  markSeed,
   timeLabel,
   message,
   pending,
@@ -505,6 +506,11 @@ export function BanterRequest({
 }: {
   name: string
   avatarUrl?: string | null
+  /**
+   * A board request: the asker is a handle, so draw the generated mark seeded
+   * on it instead of any photo. Never a user id (`boardMarkSeed`).
+   */
+  markSeed?: string
   timeLabel?: string
   message: string
   pending?: boolean
@@ -513,30 +519,45 @@ export function BanterRequest({
   onOpenProfile?: () => void
   onMore?: () => void
 }) {
+  const avatar = markSeed ? (
+    <PseudonymDisc pseudonym={markSeed} />
+  ) : avatarUrl ? (
+    <OptimizedImage
+      source={avatarUrl}
+      recyclingKey={avatarUrl}
+      style={styles.rowAvatar as never}
+      width={ROW_AVATAR}
+      height={ROW_AVATAR}
+      contentFit="cover"
+    />
+  ) : (
+    <View style={requestStyles.glyphAvatar}>
+      <MaterialIcons name="person" size={ICON.lg} color={EMBER.textSecondary} />
+    </View>
+  )
+
   return (
     <View style={requestStyles.request}>
-      <Pressable
-        onPress={onOpenProfile}
-        disabled={!onOpenProfile}
-        accessibilityRole="button"
-        accessibilityLabel={`${name}'s profile`}
-        style={({ pressed }) => [pressed && styles.pressed]}
-      >
-      {avatarUrl ? (
-        <OptimizedImage
-          source={avatarUrl}
-          recyclingKey={avatarUrl}
-          style={styles.rowAvatar as never}
-          width={ROW_AVATAR}
-          height={ROW_AVATAR}
-          contentFit="cover"
-        />
+      {/*
+        A button only when there is a profile to open. A board request has
+        none to offer before it is accepted, and a disabled button still
+        announced itself as "profile, button".
+      */}
+      {onOpenProfile ? (
+        <Pressable
+          onPress={onOpenProfile}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}'s profile`}
+          style={({ pressed }) => [pressed && styles.pressed]}
+        >
+          {avatar}
+        </Pressable>
       ) : (
-        <View style={requestStyles.glyphAvatar}>
-          <MaterialIcons name="person" size={ICON.lg} color={EMBER.textSecondary} />
+        // Decoration without a button: the name beside it is what is read.
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {avatar}
         </View>
       )}
-      </Pressable>
 
       <View style={requestStyles.requestBody}>
         <View style={styles.rowLine}>
@@ -545,9 +566,10 @@ export function BanterRequest({
             numberOfLines={1}
             maxFontSizeMultiplier={1.4}
             onPress={onOpenProfile}
-            // The avatar above is the labelled button; this is the same target.
-            accessibilityElementsHidden
-            importantForAccessibility="no"
+            // With a profile, the avatar is the labelled button and this is the
+            // same target. Without one, this name is what a screen reader reads.
+            accessibilityElementsHidden={!!onOpenProfile}
+            importantForAccessibility={onOpenProfile ? 'no' : 'auto'}
           >
             {name}
           </Text>

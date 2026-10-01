@@ -90,6 +90,8 @@ describe('every kind the server can send goes somewhere', () => {
     'friend_request',
     'friend_accepted',
     'rating_request',
+    'board_request',
+    'board_request_accepted',
   ]
 
   it('has a case in the switch for every kind', () => {

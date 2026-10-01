@@ -25,6 +25,8 @@ people your session creates get a passphrase you choose.
 | `c03-sign-in-and-out` | SCRUM-223 | `EMAIL PASSWORD` |
 | `c03-staff-refused` | SCRUM-223, SCRUM-198 | `STAFF_EMAIL PASSWORD` |
 | `c08-room-post` | SCRUM-228 | `EMAIL PASSWORD ROOM MESSAGE` (needs a live event) |
+| `c19-board-ask-accept` | SCRUM-126 (BD-M01, BD-D01) | `EMAIL PASSWORD EVENT EVENT_ID POST_TEXT API ASKER_TOKEN` — a build with `EXPO_PUBLIC_BOARD_ENABLED=true`; both people going, profiles complete |
+| `c19-board-refusals` | SCRUM-126 (BD-M02) | `EMAIL PASSWORD EVENT REASON TRY_POST` — once per refused account |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that

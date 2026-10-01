@@ -1,0 +1,52 @@
+# SCRUM-126, BD-M02. Somebody the board refuses sees why, in the server's
+# words, never a generic failure. Run once per account:
+#   teen.tester@ (read-only)         → the age or onboarding sentence
+#   someone who only saved the event → "Mark yourself as going to post here"
+#   an incomplete profile, going     → "Add your name, age, two interests …"
+# Needs a build with EXPO_PUBLIC_BOARD_ENABLED=true.
+# Env: EMAIL, PASSWORD, EVENT (a regex for the event's title, on Going or
+# Saved), REASON (a regex for the sentence), TRY_POST ("true" to try posting —
+# the not-going and incomplete-profile gates refuse the post, not the read).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c19
+  - board
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Going"
+- extendedWaitUntil:
+    visible: ${EVENT}
+    timeout: 30000
+- tapOn: ${EVENT}
+- scrollUntilVisible:
+    element: "The Board.*"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "The Board.*"
+- runFlow:
+    when:
+      true: ${TRY_POST == 'true'}
+    commands:
+      - tapOn: "Write a post"
+      - tapOn: "Your post"
+      - inputText: "Anyone heading over?"
+      - tapOn: "Post to the board"
+- extendedWaitUntil:
+    visible: ${REASON}
+    timeout: 20000
+- takeScreenshot: c19-refused

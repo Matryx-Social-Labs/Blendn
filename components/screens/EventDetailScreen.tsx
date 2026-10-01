@@ -55,6 +55,8 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { PulseTopBar } from '../pulse/PulseTopBar';
 import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
+import { BoardEntry } from '../board/BoardSections';
+import { BOARD_ENABLED, boardClosed } from '../../lib/board';
 import {
   SCENE_CTA_HEIGHT,
   SCENE_CTA_ICON,
@@ -1424,6 +1426,27 @@ export default function EventDetail() {
                 count={attendeeBlock.count}
                 label={attendeeBlock.label}
                 seed={event?.id || 'scene'}
+              />
+            </FadeInUp>
+          ) : null}
+
+          {/*
+            The board: going alone, and looking for somebody to go with. Before
+            doors only — after them the room is the place, and the board is
+            closed (client plan Part 3b). Reading needs an RSVP or a save; the
+            board itself says so if neither.
+
+            The run's start, not today's session: the server closes the board
+            at the first doors, so on day 2 of a festival the day's window
+            would offer a board that opens onto "closed". Behind BOARD_ENABLED
+            until the board's safety half ships (lib/board.ts).
+          */}
+          {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
+            <FadeInUp delay={SECTION_DELAY[3]}>
+              <BoardEntry
+                onPress={() =>
+                  router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)
+                }
               />
             </FadeInUp>
           ) : null}
