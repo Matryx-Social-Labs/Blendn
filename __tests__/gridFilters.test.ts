@@ -232,3 +232,19 @@ describe('Join Chat is a door, not a pane', () => {
     expect(SCREEN()).toContain('The chat for this event is not open yet.')
   })
 })
+
+describe('the room says who is here now (SCRUM-495)', () => {
+  it('builds the face stack under "here now" from people inside only', () => {
+    expect(SECTIONS()).toContain('hereNowStack(arrivals, people, STACK)')
+  })
+
+  it('heads the face grid with what is true of everyone in it', () => {
+    expect(SCREEN()).toMatch(/const head = everyoneHead\(everyone, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
+    expect(SCREEN()).toContain('<FaceGridHead title={head.title} count={head.count}')
+    expect(SECTIONS()).toContain('<Text variant="heading">{title}</Text>')
+  })
+
+  it('names as just walked in only somebody who is still here', () => {
+    expect(SECTIONS()).toContain('const latest = arrivals.find((a) => a.insideNow !== false)')
+  })
+})

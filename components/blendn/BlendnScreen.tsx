@@ -11,7 +11,7 @@ import { apiClient } from '../../lib/apiClient'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
-import { meetNext, reasonLine } from '../../lib/roomMoments'
+import { everyoneHead, meetNext, reasonLine } from '../../lib/roomMoments'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
@@ -322,6 +322,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   )
   const pickIds = new Set(shuffle.picks.map((p) => p.id))
   const everyone = room.people
+  const head = everyoneHead(everyone, { hasMore: room.hasMore, hereCount: room.hereCount })
 
   const cell = useGridCell()
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
@@ -374,12 +375,10 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   <MeetNext picks={shuffle.picks} nextShuffleAt={shuffle.nextShuffleAt} onOpen={setOpen} />
                   {/*
                     Everyone but you. The loaded page is 20 of a bigger room, so
-                    while there is more the number is the room's, not the page's.
+                    while there is more the number is the room's, not the page's
+                    — see everyoneHead for when that number is the wrong one.
                   */}
-                  <FaceGridHead
-                    count={room.hasMore ? Math.max(room.hereCount - 1, everyone.length) : everyone.length}
-                    empty={everyone.length === 0}
-                  />
+                  <FaceGridHead title={head.title} count={head.count} empty={everyone.length === 0} />
                 </View>
               }
               renderItem={({ item, index }) => (
