@@ -20,3 +20,24 @@ export function socialSignInMessage(
   if (result.errorCode === 'FORBIDDEN' && result.error) return result.error
   return `Couldn't sign in with ${provider}. Please try again.`
 }
+
+/**
+ * What the form says when the server refused for too many tries (SCRUM-487).
+ *
+ * The 429 carries `retryAfter` in seconds, and the form used to show only the
+ * server's "Too many requests": try again now, later, or never? The limit is
+ * keyed on the network (the IP), which is why it says so — on venue Wi-Fi it
+ * is somebody else's sign-ups that used it up.
+ */
+export function rateLimitedMessage(what: 'sign-ups' | 'sign-in attempts', retryAfter: number | undefined): string {
+  return `Too many ${what} from this network. Try again ${waitPhrase(retryAfter)}.`
+}
+
+function waitPhrase(seconds: number | undefined): string {
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return 'later'
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes <= 1) return 'in a minute'
+  if (minutes < 60) return `in ${minutes} minutes`
+  const hours = Math.ceil(minutes / 60)
+  return hours === 1 ? 'in an hour' : `in ${hours} hours`
+}
