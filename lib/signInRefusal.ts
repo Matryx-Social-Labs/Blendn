@@ -15,9 +15,10 @@
  */
 export function socialSignInMessage(
   provider: 'Google' | 'Apple',
-  result: { error?: string; errorCode?: string }
+  result: { error?: string; errorCode?: string; retryAfter?: number }
 ): string {
   if (result.errorCode === 'FORBIDDEN' && result.error) return result.error
+  if (result.errorCode === 'RATE_LIMITED') return rateLimitedMessage('sign-in attempts', result.retryAfter)
   return `Couldn't sign in with ${provider}. Please try again.`
 }
 
@@ -25,12 +26,23 @@ export function socialSignInMessage(
  * What the form says when the server refused for too many tries (SCRUM-487).
  *
  * The 429 carries `retryAfter` in seconds, and the form used to show only the
- * server's "Too many requests": try again now, later, or never? The limit is
- * keyed on the network (the IP), which is why it says so — on venue Wi-Fi it
- * is somebody else's sign-ups that used it up.
+ * server's "Too many requests": try again now, later, or never?
+ *
+ * Only sign-ups say "from this network": that limit is keyed on the IP alone,
+ * so on venue Wi-Fi it is somebody else's sign-ups that used it up. Sign-in and
+ * the reset link are also limited per account, and the 429 does not say which.
  */
-export function rateLimitedMessage(what: 'sign-ups' | 'sign-in attempts', retryAfter: number | undefined): string {
-  return `Too many ${what} from this network. Try again ${waitPhrase(retryAfter)}.`
+export function rateLimitedMessage(
+  what: 'sign-ups from this network' | 'sign-in attempts' | 'reset requests',
+  retryAfter: number | undefined
+): string {
+  return `Too many ${what}. Try again ${waitPhrase(retryAfter)}.`
+}
+
+/** The reset-link screen's sentence for a refused request (SCRUM-487). */
+export function forgotPasswordMessage(result: { error?: string; errorCode?: string; retryAfter?: number }): string {
+  if (result.errorCode === 'RATE_LIMITED') return rateLimitedMessage('reset requests', result.retryAfter)
+  return result.error || "Couldn't send the reset link. Try again."
 }
 
 function waitPhrase(seconds: number | undefined): string {
