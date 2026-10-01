@@ -242,7 +242,7 @@ export default function PreferencesScreen() {
       <EmberSection title="Anonymity" caption="You can change this in any room.">
         <EmberToggle
           label="Stay anonymous at events"
-          helper="Join rooms under a made-up name. Off, everyone there sees your name and photo."
+          helper="Join rooms under a made-up name. Off, we'll offer to show your name and photo when you check in."
           value={anonymous}
           onValueChange={setAnonymous}
         />

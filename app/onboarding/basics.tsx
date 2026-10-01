@@ -140,7 +140,9 @@ function BasicsScreenInner() {
       onSecondary={() => setConfirmSignOut(true)}
     >
       {/*
-        Full name, first name displayed.
+        Full name; a made-up name in rooms until the person shows theirs, and
+        then the whole of it (`roomIdentity`, admin lib/identity.ts). The
+        helper said "only your first name" and nothing shortens it (SCRUM-493).
         
         `User.name` is one field and holds whatever signup wrote, so collecting
         the whole thing costs nothing and the room is protected by the pseudonym
@@ -155,7 +157,7 @@ function BasicsScreenInner() {
       <EmberField
         label="Your name"
         placeholder="First and last name"
-        helper="Only your first name shows in an event room. Your full name is for people you match or talk with."
+        helper="In event rooms you go by a made-up name. If you choose to show yours, people there see your full name."
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
