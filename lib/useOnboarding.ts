@@ -45,6 +45,23 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
   return ok
 }
 
+const FINISH_FAILED =
+  'We could not finish setting up your profile. Check your connection and try again — nothing you entered has been lost.'
+
+/**
+ * The photos as the server stored them, after a save that sent photos.
+ *
+ * A new photo is stored as the server's own sealed copy and the upload is
+ * deleted (SCRUM-425). The draft kept the upload's URL, `finish()` re-sent it,
+ * the server refused a photo that no longer existed, and nobody who added a
+ * photo could finish onboarding (SCRUM-491).
+ */
+function withStoredPhotos(draft: OnboardingDraft, data: unknown): OnboardingDraft {
+  const stored = (data as { profile?: { photos?: unknown } } | undefined)?.profile?.photos
+  const ok = Array.isArray(stored) && stored.every((url) => typeof url === 'string')
+  return ok ? { ...draft, photos: stored as string[] } : draft
+}
+
 /**
  * The draft, and moving through the flow.
  *
@@ -219,6 +236,7 @@ export function useOnboarding(step: OnboardingStep) {
        * and left the Continue button spinning with no way past it.
        */
       let failure: string | null = null
+      let saved = merged
       try {
         /*
          * The structured graph, before the profile write.
@@ -260,6 +278,8 @@ export function useOnboarding(step: OnboardingStep) {
             // The server's sentence when it gave one: a refused field says
             // which, and that is what somebody needs to fix it.
             failure = result.error || "Couldn't save that. Try again."
+          } else if (body.photos) {
+            saved = withStoredPhotos(merged, result.data)
           }
         }
       } catch (error) {
@@ -279,8 +299,9 @@ export function useOnboarding(step: OnboardingStep) {
       }
 
       setProgress(nextProgress)
+      setDraft(saved)
       try {
-        await writeOnboarding(userId, { progress: nextProgress, draft: merged })
+        await writeOnboarding(userId, { progress: nextProgress, draft: saved })
         const after = nextStep(step)
         if (after) advanceTo(after)
       } finally {
@@ -355,6 +376,9 @@ export function useOnboarding(step: OnboardingStep) {
 
       if (!result.success) {
         Logger.warn('auth', 'Could not complete onboarding', { error: result.error })
+        // A toast, as every other step reports a failed save: the ready
+        // screen's own sentence sat below the fold (SCRUM-492).
+        showToast(result.error || FINISH_FAILED, 'error')
         return false
       }
 
@@ -369,12 +393,13 @@ export function useOnboarding(step: OnboardingStep) {
     } catch (error) {
       // A throw here used to leave `saving` true and the button spinning.
       Logger.warn('auth', 'Finishing onboarding threw', { error })
+      showToast(FINISH_FAILED, 'error')
       return false
     } finally {
       inFlight.current = false
       setSaving(false)
     }
-  }, [draft, userId])
+  }, [draft, showToast, userId])
 
   return { draft, progress, loaded, saving, update, commit, skip, finish, goBack, jumpTo }
 }

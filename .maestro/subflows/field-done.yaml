@@ -1,0 +1,17 @@
+# After typing into a form field: get the keyboard out of the way of the next
+# one. iOS: hideKeyboard. On the sign-up form (#323) the keyboard covers Age and
+# the button, and the return key tap typed stray characters into the next
+# field (measured 2026-09-30, iPhone 17 Pro sim). Android: the keyboard's
+# bottom-right key, as keyboard-done.yaml measured it, because hideKeyboard
+# sends BACK there and leaves the app when no keyboard is up.
+appId: com.matryxsociallabs.blendn
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - hideKeyboard
+- runFlow:
+    when:
+      platform: Android
+    file: keyboard-done.yaml
