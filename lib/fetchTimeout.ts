@@ -44,6 +44,9 @@ export const REQUEST_TIMEOUT_MS = 15_000
 
 export const TIMEOUT_MESSAGE = 'This is taking too long. Check your connection and try again.'
 
+/** A response whose body has been read: what is left to look at. */
+export type ResponseHead = Pick<Response, 'ok' | 'status' | 'statusText' | 'headers'>
+
 /**
  * `fetch`, but it rejects once `timeoutMs` has passed.
  *
@@ -58,14 +61,15 @@ export const TIMEOUT_MESSAGE = 'This is taking too long. Check your connection a
  * headers leaves `response.text()` with none, and a body that stalls holds its
  * queue slot for good — the Me tab on its skeleton with requests "still
  * running" after two minutes (SCRUM-498). So this reads the body itself and
- * hands it back; callers use `body`, never `response.text()` or `.json()`.
+ * hands it back with only the head of the response, so there is no stream
+ * left to read.
  */
 export async function fetchWithTimeout(
   input: string,
   init: RequestInit = {},
   timeoutMs: number = REQUEST_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch
-): Promise<{ response: Response; body: string }> {
+): Promise<{ response: ResponseHead; body: string }> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
 

@@ -8,7 +8,7 @@ import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from '.
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
@@ -1050,7 +1050,7 @@ class ApiClientClass {
   }
 
   private buildErrorMessage(
-    response: Response,
+    response: ResponseHead,
     payload: unknown,
     endpoint: string
   ): string {
@@ -1072,7 +1072,7 @@ class ApiClientClass {
   }
 
   private async parseResponse<T>(
-    response: Response,
+    response: ResponseHead,
     raw: string,
     endpoint: string
   ): Promise<ApiResponse<T>> {

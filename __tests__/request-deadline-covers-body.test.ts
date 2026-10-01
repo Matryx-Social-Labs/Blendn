@@ -70,6 +70,29 @@ describe('fetchWithTimeout', () => {
     expect(signal?.aborted).toBe(true)
   })
 
+  it('gives headers and body one budget, not one each', async () => {
+    let settled = false
+    const pending = fetchWithTimeout(
+      '/x',
+      {},
+      1000,
+      () => new Promise<Response>((resolve) => setTimeout(() => resolve(stalledBody()), 600))
+    )
+    pending.catch(() => (settled = true))
+
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(settled).toBe(true)
+  })
+
+  it('rejects when the body fails part-way, rather than answering empty', async () => {
+    const torn = { ...stalledBody(), text: () => Promise.reject(new TypeError('Network request failed')) }
+
+    await expect(fetchWithTimeout('/x', {}, 1000, async () => torn as unknown as Response)).rejects.toBeInstanceOf(
+      TypeError
+    )
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
   it('hands back the body it read inside the deadline, with the response', async () => {
     const { response, body } = await fetchWithTimeout('/x', {}, 1000, async () => json(201, { ok: 1 }))
 
@@ -90,35 +113,33 @@ describe('apiClient', () => {
     await TokenStorage.setRefreshToken('ref')
   })
 
-  it('answers a stalled body with the timeout sentence, and frees its slot for the next call', async () => {
-    let calls = 0
-    global.fetch = jest.fn(async () => (++calls === 1 ? stalledBody() : json(200, { success: true, data: { id: 'e2' } }))) as typeof fetch
-
-    let first: unknown
-    void apiClient.getEventChat('e1').then((r) => (first = r))
-    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
-
-    expect(first).toEqual({ success: false, error: TIMEOUT_MESSAGE })
-
-    const next = apiClient.getEventChat('e2')
-    await jest.advanceTimersByTimeAsync(50)
-    await expect(next).resolves.toMatchObject({ success: true })
-  })
-
-  it('treats a refresh whose body stalls as a failed refresh, not a hang', async () => {
+  it('gives six stalled bodies the timeout sentence, and the seventh call its turn', async () => {
+    // Six is the queue's whole width: before, six stalled bodies were every
+    // slot, and the seventh call waited for good.
     global.fetch = jest.fn(async (input: RequestInfo | URL) =>
-      String(input).endsWith('/api/mobile/auth/refresh')
-        ? stalledBody()
-        : json(401, { success: false, error: 'Unauthorized' })
+      String(input).includes('/events/e7/') ? json(200, { success: true, data: { id: 'e7' } }) : stalledBody()
     ) as typeof fetch
 
-    let result: unknown
-    void apiClient.getEventChat('e1').then((r) => (result = r))
-    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 50)
+    const stalled = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map((id) => apiClient.getEventChat(id))
+    let seventh: unknown
+    void apiClient.getEventChat('e7').then((r) => (seventh = r))
 
-    expect(result).toEqual({ success: false, error: TIMEOUT_MESSAGE })
-    // Not signed out: the server never finished answering.
-    expect(await TokenStorage.getRefreshToken()).toBe('ref')
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(seventh).toBeUndefined()
+
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
+    for (const result of await Promise.all(stalled)) {
+      expect(result).toEqual({ success: false, error: TIMEOUT_MESSAGE })
+    }
+    expect(seventh).toMatchObject({ success: true, data: { id: 'e7' } })
+  })
+
+  it('takes an empty answer as success, read from the body it was handed', async () => {
+    global.fetch = jest.fn(async () => new Response(null, { status: 204 })) as typeof fetch
+
+    const result = apiClient.getEventChat('e8')
+    await jest.advanceTimersByTimeAsync(50)
+    await expect(result).resolves.toEqual({ success: true })
   })
 
   it('reads a refresh that answers from the body it was handed, and retries signed with the new token', async () => {
@@ -140,5 +161,38 @@ describe('apiClient', () => {
     await expect(result).resolves.toMatchObject({ success: true, data: { id: 'e4' } })
     expect(auth).toEqual(['Bearer tok', 'Bearer tok2'])
     expect(await TokenStorage.getRefreshToken()).toBe('ref2')
+  })
+
+  it('times out the retry after a refresh when its body stalls', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/mobile/auth/refresh')) {
+        return json(200, { success: true, data: { accessToken: 'tok3', refreshToken: 'ref3' } })
+      }
+      const sent = (init?.headers as Record<string, string>).Authorization
+      return sent === 'Bearer tok3' ? stalledBody() : json(401, { success: false, error: 'Unauthorized' })
+    }) as typeof fetch
+
+    let result: unknown
+    void apiClient.getEventChat('e9').then((r) => (result = r))
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 100)
+
+    expect(result).toEqual({ success: false, error: TIMEOUT_MESSAGE })
+  })
+
+  // Last: a failed refresh arms the 2-second refresh retry on this shared clock.
+  it('treats a refresh whose body stalls as a failed refresh, not a hang', async () => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh')
+        ? stalledBody()
+        : json(401, { success: false, error: 'Unauthorized' })
+    ) as typeof fetch
+
+    let result: unknown
+    void apiClient.getEventChat('e10').then((r) => (result = r))
+    await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 100)
+
+    expect(result).toEqual({ success: false, error: TIMEOUT_MESSAGE })
+    // Not signed out: the server never finished answering.
+    expect(await TokenStorage.getRefreshToken()).toBe('ref')
   })
 })
