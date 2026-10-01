@@ -86,7 +86,7 @@ export const RoomHero = memo(function RoomHero({
 }) {
   const reduceMotion = useReducedMotion()
   const now = useNow(30_000)
-  const latest = arrivals[0]
+  const latest = arrivals.find((a) => a.insideNow !== false)
   const fresh = latest?.arrivedAt && now - Date.parse(latest.arrivedAt) < 5 * 60_000 ? latest : null
   const stack = hereNowStack(arrivals, people, STACK)
   const others = Math.max(0, hereCount - stack.length - 1)
@@ -115,7 +115,7 @@ export const RoomHero = memo(function RoomHero({
             here now
           </Text>
         </View>
-        {stack.length ? (
+        {stack.length || others > 0 ? (
           <View style={styles.stackRow}>
             <View style={styles.stack}>
               {stack.map((p, i) => (

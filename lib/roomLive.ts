@@ -130,23 +130,26 @@ export interface ArrivalPayload {
  * Your own check-in only moves the count, and only to the server's number:
  * the seed already counted you, so a +1 for yourself would count you twice.
  * Somebody already on the roster is a duplicate delivery, not a second
- * arrival, and is treated the same way.
+ * arrival, and is treated the same way — unless the roster has them as gone
+ * (`insideNow: false`): then they came back, which is an arrival (SCRUM-495).
  */
 export function applyArrival(
   state: LiveRoster,
   data: ArrivalPayload,
   selfId: string | null | undefined
 ): LiveRoster {
-  const known = data.userId === selfId || state.attendees.some((a) => a.user_id === data.userId)
+  const listed = state.attendees.find((a) => a.user_id === data.userId)
+  const known = data.userId === selfId || (listed !== undefined && listed.insideNow !== false)
   if (known) {
     const hereCount = nextHereCount(state.hereCount, data.hereCount, 0)
     return hereCount === state.hereCount ? state : { ...state, hereCount }
   }
 
   const person: AttendeeProfile = {
+    ...listed,
     user_id: data.userId,
     name: data.userName,
-    profile_photos: data.userImage ? [data.userImage] : undefined,
+    profile_photos: data.userImage ? [data.userImage] : listed?.profile_photos,
     last_seen: data.checkInTime,
     // Somebody who just checked in is, by definition, in the room.
     insideNow: true,
@@ -154,7 +157,7 @@ export function applyArrival(
 
   return {
     ...state,
-    attendees: [person, ...state.attendees],
+    attendees: [person, ...state.attendees.filter((a) => a.user_id !== data.userId)],
     arrivals: [person, ...state.arrivals.filter((a) => a.user_id !== data.userId)].slice(
       0,
       ARRIVALS_MAX

@@ -85,14 +85,17 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
     return head + fit(p.workField, REASON_MAX - head.length)
   }
 
+  // The room's pool is everyone who came at all, so `insideNow: false` is
+  // somebody who checked out — "Checked in" on them was false, and so is
+  // "Just walked in" for the ten minutes after they did (SCRUM-495).
+  if (p.insideNow === false) return 'Was here'
+
   if (p.arrivedAt) {
     const at = new Date(p.arrivedAt).getTime()
     if (Number.isFinite(at) && now - at >= 0 && now - at < JUST_ARRIVED_MS) return 'Just walked in'
   }
 
-  // The room's pool is everyone who came at all, so `insideNow: false` is
-  // somebody who checked out — "Checked in" on them was false (SCRUM-495).
-  return p.insideNow === false ? 'Was here' : 'Here now'
+  return 'Here now'
 }
 
 /**
@@ -111,9 +114,21 @@ export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
     .slice(0, size)
 }
 
-/** The face grid's heading: "Everyone here" stops being true once someone leaves. */
-export function everyoneHeading(people: readonly { insideNow?: boolean }[]): string {
-  return people.every((p) => p.insideNow !== false) ? 'Everyone here' : 'Everyone who came'
+/**
+ * The face grid's heading and its number.
+ *
+ * "Everyone here" stops being true once somebody in it has left. With more to
+ * load, the number is the room's count of people inside — right under
+ * "Everyone here", the wrong kind of number under "Everyone who came", which
+ * then shows none (0 hides it).
+ */
+export function everyoneHead(
+  people: readonly { insideNow?: boolean }[],
+  { hasMore, hereCount }: { hasMore: boolean; hereCount: number }
+): { title: string; count: number } {
+  const allHere = people.every((p) => p.insideNow !== false)
+  if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
+  return { title: 'Everyone here', count: hasMore ? Math.max(hereCount - 1, people.length) : people.length }
 }
 
 /* -------------------------------------------------------------------------- */

@@ -87,6 +87,19 @@ describe('applyArrival', () => {
     expect(applyArrival(state, arrival('a', { hereCount: 7 }), ME).hereCount).toBe(7)
   })
 
+  it('brings back somebody who had left, inside again and at the top (SCRUM-495)', () => {
+    // The roster keeps people who checked out, as insideNow: false. Coming
+    // back is an arrival, not a duplicate: treated as one, they stayed "left".
+    const state = room({ attendees: [person('a'), person('b', { insideNow: false })] })
+    const next = applyArrival(state, arrival('b'), ME)
+    expect(next.attendees.map((a) => [a.user_id, a.insideNow !== false])).toEqual([
+      ['b', true],
+      ['a', true],
+    ])
+    expect(next.arrivals.map((a) => a.user_id)).toEqual(['b'])
+    expect(next.hereCount).toBe(4)
+  })
+
   it('moves only the count for your own check-in, and only to the server number', () => {
     const state = room()
     expect(applyArrival(state, arrival(ME), ME)).toBe(state)
