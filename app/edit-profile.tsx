@@ -30,6 +30,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
+import { toggleIntent } from '../lib/intents'
 
 interface UserProfile {
   id: string
@@ -140,8 +141,7 @@ export default function EditProfile() {
   const typedAge = Number(age)
   const liveAge = age.trim() && Number.isInteger(typedAge) ? typedAge : profile?.age
 
-  const toggleIntent = (value: Intent) =>
-    setIntents((prev) => (prev.includes(value) ? prev.filter((i) => i !== value) : [...prev, value]))
+  const onToggleIntent = (value: Intent) => setIntents((prev) => toggleIntent(prev, value))
   const [nameError, setNameError] = useState<string | null>(null)
   const [ageError, setAgeError] = useState<string | null>(null)
   const [tagModalVisible, setTagModalVisible] = useState(false)
@@ -733,7 +733,7 @@ export default function EditProfile() {
             <Text style={styles.cardTitle}>YOU AND MATCHING</Text>
             <MatchingFields
               intents={intents}
-              onToggleIntent={toggleIntent}
+              onToggleIntent={onToggleIntent}
               workField={workField}
               onChangeWorkField={setWorkField}
               workFields={workFields}
