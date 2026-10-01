@@ -248,3 +248,19 @@ describe('the room says who is here now (SCRUM-495)', () => {
     expect(SECTIONS()).toContain('const latest = arrivals.find((a) => a.insideNow !== false)')
   })
 })
+
+describe('the face grid names people at a readable size (SCRUM-503)', () => {
+  it('does not shrink the name to fit', () => {
+    /*
+     * On iOS the grid name's first render sometimes came out at a fraction of
+     * its size — far below minimumFontScale — and stayed that way until
+     * something else re-rendered the room. Seen on fresh launches with the
+     * grid under no Meet next. One line, ellipsised, is always legible.
+     * Meet next's card keeps shrink-to-fit: full size in every drive so far.
+     */
+    const src = SECTIONS()
+    const grid = src.slice(src.indexOf('export const GridFace'), src.indexOf('export function FaceGridHead'))
+    expect(grid).toMatch(/<Text variant="bodyStrong" numberOfLines=\{1\} style=\{styles\.centre\}>\s*\{person\.name\}/)
+    expect(grid).not.toContain('adjustsFontSizeToFit')
+  })
+})
