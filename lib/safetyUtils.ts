@@ -554,3 +554,72 @@ export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => vo
     },
   })
 }
+
+/** What a board report or block is about: a post, or an ask. Never a person's id. */
+export type BoardTarget =
+  | { kind: 'post'; eventId: string; postId: string }
+  | { kind: 'request'; requestId: string }
+
+/** A board report refused for volume says so, rather than "try again" into the same wall. */
+const boardReportFailed = (result: { error?: string; errorCode?: string }): SheetOutcome =>
+  result.errorCode === 'RATE_LIMITED'
+    ? { ok: false, error: "You've sent a lot of reports. Try again later." }
+    : failed(result.error, "Couldn't send your report.")
+
+/**
+ * Report or block somebody on the board — from a post's ⋯ or an ask's More.
+ *
+ * **By the post or the ask, not the person.** The board sends no user id, so
+ * these call the board's own routes, and the server resolves who. `name` is
+ * their handle at that event. `onBlocked` is the caller's chance to take the
+ * thing off screen at once; the server has already hidden them both ways.
+ */
+export const boardSafetySheet = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
+  kind: 'actions',
+  title: name,
+  message: 'Blocking hides you from each other here and everywhere else. A report goes to our team, and they are not told who sent it.',
+  actions: [
+    { label: 'Report', next: () => boardReportStep(target, name) },
+    { label: 'Block', variant: 'destructive', next: () => boardBlockStep(target, name, onBlocked) },
+    { label: 'Cancel', cancel: true },
+  ],
+})
+
+const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
+  kind: 'actions',
+  title: `Block ${name}?`,
+  message: "Their posts and asks leave your boards, and you won't see each other in rooms or messages. They aren't told.",
+  actions: [
+    {
+      label: 'Block',
+      variant: 'destructive',
+      run: async () => {
+        const result =
+          target.kind === 'post'
+            ? await apiClient.blockBoardPost(target.eventId, target.postId)
+            : await apiClient.blockBoardRequest(target.requestId)
+        if (!result.success) return failed(result.error, "Couldn't block them.")
+        onBlocked()
+        return { ok: true, toast: `${name} is blocked` }
+      },
+    },
+    { label: 'Cancel', cancel: true },
+  ],
+})
+
+const boardReportStep = (target: BoardTarget, name: string): Sheet => ({
+  kind: 'reasons',
+  title: target.kind === 'post' ? 'Report this post' : `Report ${name}'s ask`,
+  message: target.kind === 'post' ? 'Why are you reporting this post?' : 'Why are you reporting this ask?',
+  reasons: MESSAGE_REPORT_REASONS,
+  submitLabel: 'Send report',
+  run: async (reason, description) => {
+    const report = { reason: reason as MessageReportType, ...(description ? { description } : {}) }
+    const result =
+      target.kind === 'post'
+        ? await apiClient.reportBoardPost(target.eventId, target.postId, report)
+        : await apiClient.reportBoardRequest(target.requestId, report)
+    if (!result.success) return boardReportFailed(result)
+    return { ok: true, toast: REPORTED }
+  },
+})

@@ -498,6 +498,7 @@ export function BanterRequest({
   markSeed,
   timeLabel,
   message,
+  note,
   pending,
   onAccept,
   onDecline,
@@ -513,6 +514,8 @@ export function BanterRequest({
   markSeed?: string
   timeLabel?: string
   message: string
+  /** A quiet line under the message: what became of an answer that did not go through. */
+  note?: string
   pending?: boolean
   onAccept: () => void
   onDecline: () => void
@@ -582,6 +585,11 @@ export function BanterRequest({
         <Text style={requestStyles.requestMessage} numberOfLines={2} maxFontSizeMultiplier={1.4}>
           {message}
         </Text>
+        {note ? (
+          <Text style={styles.rowTime} maxFontSizeMultiplier={1.4} accessibilityLiveRegion="polite">
+            {note}
+          </Text>
+        ) : null}
 
         <View style={requestStyles.requestActions}>
           {/*
