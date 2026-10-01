@@ -18,7 +18,7 @@ import { markSeed } from './pseudonymAvatar'
  * section and the route itself — so switching it is one line, and a build can
  * try either way with `EXPO_PUBLIC_BOARD_ENABLED` without a code change.
  */
-export const BOARD_ENABLED = process.env.EXPO_PUBLIC_BOARD_ENABLED === 'true'
+export const BOARD_ENABLED = process.env.EXPO_PUBLIC_BOARD_ENABLED !== 'false'
 
 /** The server's `BOARD.MAX_POST_LENGTH` (blendn-admin lib/constants.ts). */
 export const BOARD_MAX_POST_LENGTH = 500

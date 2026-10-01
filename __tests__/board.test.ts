@@ -278,12 +278,13 @@ describe('board pushes carry no text, and open where the thing lives', () => {
   })
 })
 
-describe('the board is off until its safety half ships', () => {
-  it('is off unless a build asks for it', () => {
-    // Step 6b (block/report by post, blocked authors filtered, no decline told,
-    // spaces that go down) turns it on. Nothing here sets the variable.
+describe('the board is on, now its safety half has shipped', () => {
+  it('is on unless a build turns it off', () => {
+    // Step 6b shipped (admin #608, #614): block and report by post or ask,
+    // blocked authors filtered, no decline told, spaces that go down.
+    // EXPO_PUBLIC_BOARD_ENABLED=false is the off switch. Nothing here sets it.
     expect(process.env.EXPO_PUBLIC_BOARD_ENABLED).toBeUndefined()
-    expect(BOARD_ENABLED).toBe(false)
+    expect(BOARD_ENABLED).toBe(true)
   })
 
   it('reads one constant at every way in', () => {
