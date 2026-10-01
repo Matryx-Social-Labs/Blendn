@@ -114,8 +114,22 @@ beforeEach(() => {
 })
 
 describe('the route', () => {
-  it('goes home while the board is switched off', async () => {
+  it('opens the board now that it is on', async () => {
+    api.getBoard.mockResolvedValue(board([]))
     await render(<BoardRoute />)
+    expect(await screen.findByText("Nobody's posted yet")).toBeTruthy()
+    expect(mockRedirect).not.toHaveBeenCalled()
+  })
+
+  it('goes home when a build switches it off', async () => {
+    // Its own module registry, so only this render sees the board off.
+    let Off: typeof BoardRoute = BoardRoute
+    jest.isolateModules(() => {
+      jest.doMock('../lib/board', () => ({ ...jest.requireActual('../lib/board'), BOARD_ENABLED: false }))
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      Off = (require('../app/board/[eventId]') as typeof import('../app/board/[eventId]')).default
+    })
+    await render(<Off />)
     expect(mockRedirect).toHaveBeenCalledWith('/(tabs)/events')
     expect(api.getBoard).not.toHaveBeenCalled()
   })
