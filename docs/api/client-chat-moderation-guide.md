@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/client-chat-moderation-guide.md.
-  From Blendn-Admin @ 8d22d34 (v0.56.0, 2026-08-08).
+  From Blendn-Admin @ 88ecea1 (v0.69.0, 2026-10-01).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
