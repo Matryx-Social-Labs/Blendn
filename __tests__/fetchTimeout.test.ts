@@ -66,7 +66,7 @@ describe('fetchWithTimeout', () => {
     const seen: RequestInit[] = []
     const capture: typeof fetch = (_input, init) => {
       seen.push(init as RequestInit)
-      return Promise.resolve({ ok: true } as Response)
+      return Promise.resolve(new Response(''))
     }
 
     await fetchWithTimeout('/x', { method: 'PUT', body: 'hi' }, 1000, capture)
@@ -105,7 +105,7 @@ describe('fetchWithTimeout', () => {
   })
 
   it('clears its timer on the success path', async () => {
-    const ok: typeof fetch = () => Promise.resolve({ ok: true } as Response)
+    const ok: typeof fetch = () => Promise.resolve(new Response(''))
     const clearSpy = jest.spyOn(global, 'clearTimeout')
 
     await fetchWithTimeout('/x', {}, 1000, ok)

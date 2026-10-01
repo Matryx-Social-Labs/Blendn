@@ -1073,9 +1073,9 @@ class ApiClientClass {
 
   private async parseResponse<T>(
     response: Response,
+    raw: string,
     endpoint: string
   ): Promise<ApiResponse<T>> {
-    const raw = await response.text()
     if (!raw) {
       if (response.ok) {
         return { success: true } as ApiResponse<T>
@@ -1163,7 +1163,7 @@ class ApiClientClass {
       try {
         // Every fetch in this class goes through fetchWithTimeout. A deadline
         // on the first call alone still hangs the queue on the other two.
-        const response = await fetchWithTimeout(url, { ...options, headers })
+        const { response, body } = await fetchWithTimeout(url, { ...options, headers })
 
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
@@ -1173,8 +1173,8 @@ class ApiClientClass {
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
-            const retryResponse = await fetchWithTimeout(url, { ...options, headers })
-            return this.parseResponse<T>(retryResponse, endpoint)
+            const retry = await fetchWithTimeout(url, { ...options, headers })
+            return this.parseResponse<T>(retry.response, retry.body, endpoint)
           }
           if (refreshed === 'failed') {
             // Not signed out: the server never answered. Reported as the
@@ -1193,7 +1193,7 @@ class ApiClientClass {
           continue
         }
 
-        const result = await this.parseResponse<T>(response, endpoint)
+        const result = await this.parseResponse<T>(response, body, endpoint)
         if (result.success) markOnline()
         return result
       } catch (error) {
@@ -1257,7 +1257,7 @@ class ApiClientClass {
         // of this bug: `isRefreshing` gates every other caller behind one
         // promise, so a single stalled refresh silently blocks re-auth for the
         // whole app until it is killed.
-        const response = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
+        const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
@@ -1270,15 +1270,14 @@ class ApiClientClass {
           // in the attendee app. Keep the sentence for the entry screen.
           if (response.status === 403) {
             try {
-              const body = (await response.json()) as { error?: unknown }
+              const body = JSON.parse(raw) as { error?: unknown }
               if (typeof body?.error === 'string') rejectedReason = body.error
             } catch {}
           }
           return 'rejected'
         }
 
-        const data: ApiResponse<{ accessToken: string; refreshToken: string }> =
-          await response.json()
+        const data: ApiResponse<{ accessToken: string; refreshToken: string }> = JSON.parse(raw)
 
         if (data.success && data.data) {
           await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
