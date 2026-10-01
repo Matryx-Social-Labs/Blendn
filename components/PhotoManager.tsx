@@ -69,6 +69,19 @@ export default function PhotoManager({
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  /*
+   * One photo write at a time (SCRUM-497).
+   *
+   * A new tile carries its upload's URL until the add's write returns the
+   * sealed copy the server keeps — it deletes the upload. Make main and Remove
+   * stayed live meanwhile, so a quick tap re-sent the upload ("That photo did
+   * not finish uploading"), and a failed write put back a grid that still held
+   * it. The ref refuses a second write even within one frame; `saving` is what
+   * the buttons show.
+   */
+  const writing = useRef(false)
+  const [saving, setSaving] = useState(false)
+  const busy = uploading || saving
   const { showToast } = useToast()
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
   const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange'] | undefined>(undefined)
@@ -132,8 +145,9 @@ export default function PhotoManager({
       return
     }
 
-    if (!editable) return
+    if (!editable || writing.current) return
 
+    writing.current = true
     setUploading(true)
     AccessibilityInfo.announceForAccessibility('Uploading photo')
     try {
@@ -186,6 +200,7 @@ export default function PhotoManager({
       Logger.error('profile', 'PhotoManager: Add photo error', { error, userId })
       showToast("Couldn't upload that photo. Try again.", 'error')
     } finally {
+      writing.current = false
       setUploading(false)
     }
   }
@@ -204,7 +219,9 @@ export default function PhotoManager({
    */
   const handleMakePrimary = useCallback(
     async (photoIndex: number) => {
-      if (!editable || photoIndex === 0) return
+      if (!editable || photoIndex === 0 || writing.current) return
+      writing.current = true
+      setSaving(true)
 
       const reordered = [
         photos[photoIndex],
@@ -216,19 +233,24 @@ export default function PhotoManager({
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
 
-      const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
-      if (!saved.ok) {
-        setPhotos(photos)
-        showToast(saved.error, 'error')
-        return
+      try {
+        const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
+        if (!saved.ok) {
+          setPhotos(photos)
+          showToast(saved.error, 'error')
+          return
+        }
+        setPhotos(prev => adoptStoredUrls(prev, saved.photos))
+      } finally {
+        writing.current = false
+        setSaving(false)
       }
-      setPhotos(prev => adoptStoredUrls(prev, saved.photos))
     },
     [editable, photos, userId, showToast]
   )
 
   const handleRemovePhoto = useCallback((photoIndex: number) => {
-    if (!editable) return
+    if (!editable || writing.current) return
 
     const photo = photos[photoIndex]
     
@@ -242,6 +264,9 @@ export default function PhotoManager({
           label: 'Remove photo',
           variant: 'destructive',
           then: async () => {
+            if (writing.current) return
+            writing.current = true
+            setSaving(true)
             try {
               // Remove from state immediately for better UX
               const newPhotos = photos.filter((_, index) => index !== photoIndex)
@@ -272,6 +297,9 @@ export default function PhotoManager({
               // Reload photos to restore state
               setLoading(true)
               loadPhotos()
+            } finally {
+              writing.current = false
+              setSaving(false)
             }
           },
         },
@@ -334,6 +362,7 @@ export default function PhotoManager({
               <TouchableOpacity
                 style={styles.makePrimaryButton}
                 onPress={() => handleMakePrimary(index)}
+                disabled={busy}
                 accessibilityRole="button"
                 accessibilityLabel="Make this my main photo"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -347,6 +376,7 @@ export default function PhotoManager({
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => handleRemovePhoto(index)}
+              disabled={busy}
               accessibilityRole="button"
               accessibilityLabel={`Remove photo ${index + 1}`}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -357,7 +387,7 @@ export default function PhotoManager({
         </TouchableOpacity>
       </Animated.View>
     )
-  }, [cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
+  }, [busy, cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
 
   const renderAddPhoto = () => {
     if (!editable || photos.length >= maxPhotos) return null
@@ -366,10 +396,10 @@ export default function PhotoManager({
       <TouchableOpacity
         style={[styles.addPhoto, { width: itemSize, height: itemSize }]}
         onPress={handleAddPhoto}
-        disabled={uploading}
+        disabled={busy}
         accessibilityRole="button"
         accessibilityLabel="Add photo"
-        accessibilityState={{ disabled: uploading, busy: uploading }}
+        accessibilityState={{ disabled: busy, busy: uploading }}
       >
         {uploading ? (
           <ActivityIndicator size="small" color={EMBER.textSecondary} />
