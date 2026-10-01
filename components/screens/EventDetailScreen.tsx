@@ -1204,6 +1204,8 @@ export default function EventDetail() {
    */
   const amenities = amenityTiles(event?.amenities)
   const detailBlocks = eventDetailBlocks(event?.details)
+  /** The public claim page, when the server offers one (curated, unclaimed). */
+  const claimUrl = event?.claim_url ?? null
 
   const attendeeBlock = hasStarted
     ? { label: 'Attendees', count: checkInCount }
@@ -1496,17 +1498,17 @@ export default function EventDetail() {
             page needs no account. Filing there grants nothing until a person
             reviews it.
           */}
-          {event?.claim_url ? (
+          {claimUrl ? (
             <FadeInUp delay={SECTION_DELAY[3]}>
               <Pressable
                 testID="claim-event-link"
-                onPress={() => openClaimPage(event.claim_url!)}
+                onPress={() => openClaimPage(claimUrl)}
                 accessibilityRole="link"
-                accessibilityLabel="Running this event? Claim it. Opens the Blend'n dashboard in your browser."
-                hitSlop={SPACE.md}
+                accessibilityLabel="Running this event? Claim it"
+                accessibilityHint="Opens the Blend'n dashboard in your browser"
                 style={styles.claimRow}
               >
-                <Text style={styles.claimText} maxFontSizeMultiplier={1.4}>
+                <Text style={styles.claimText}>
                   Running this event? <Text style={styles.claimAction}>Claim it</Text>
                 </Text>
                 <Ionicons name="open-outline" size={ICON.sm} color={EMBER.textSecondary} />
@@ -1807,7 +1809,8 @@ const styles = StyleSheet.create({
     gap: SCENE_SECTION_GAP,
   },
   section: { gap: SPACE.lg },
-  claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start' },
+  // The whole row is the target, taller than the 44pt minimum (Apple HIG).
+  claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start', minHeight: CONTROL.md },
   claimText: { ...TYPE.meta },
   claimAction: { color: EMBER.textPrimary, textDecorationLine: 'underline' },
   ctaDock: {
