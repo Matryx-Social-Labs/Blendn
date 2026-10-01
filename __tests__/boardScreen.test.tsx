@@ -524,8 +524,9 @@ describe('report and block, by the post', () => {
     expect(screen.queryByLabelText("More options for Lunar Fox's post")).toBeNull()
   })
 
-  it('blocks by the post, after asking, and takes it off the board', async () => {
-    api.getBoard.mockResolvedValueOnce(board([OFFER])).mockResolvedValue(board([]))
+  it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
+    // A read already in flight still lists the post; it must not bring it back.
+    api.getBoard.mockResolvedValue(board([OFFER]))
     api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
     await render(<BoardScreen />)
 
