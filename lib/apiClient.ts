@@ -930,6 +930,16 @@ let rejectedReason: string | undefined
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
+  /**
+   * Bumped by `forgetEventMatches`. A response to a request sent before the
+   * bump answers an older question than the event that forgot it, so it is
+   * returned to its caller but not cached.
+   *
+   * ponytail: one counter for every key, so a forget also stops unrelated reads
+   * in flight at that moment from caching — each costs one extra fetch later.
+   * Per-key epochs if that ever shows up.
+   */
+  private cacheEpoch = 0
   private responseCache = new Map<string, { data: ApiResponse<unknown>; timestamp: number; ttl: number }>()
 
   /**
@@ -1004,9 +1014,12 @@ class ApiClientClass {
    */
   forgetEventMatches(eventId: string): void {
     const matches = `:/api/mobile/events/${eventId}/matches`
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`${matches}:`) || key.includes(`${matches}?`)) this.responseCache.delete(key)
-    }
+    const isRoom = (key: string) => key.includes(`${matches}:`) || key.includes(`${matches}?`)
+    this.cacheEpoch++
+    for (const key of this.responseCache.keys()) if (isRoom(key)) this.responseCache.delete(key)
+    // A read already on the wire was answered before the event: the next one
+    // must not join it.
+    for (const key of this.inFlight.keys()) if (isRoom(key)) this.inFlight.delete(key)
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
@@ -1057,8 +1070,9 @@ class ApiClientClass {
     key: string,
     ttl: number
   ) {
+    const epoch = this.cacheEpoch
     this.queuedRequest<T>(endpoint, options, requireAuth, priority).then((result) => {
-      if (result.success) {
+      if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
     }).catch(() => {})
@@ -1360,7 +1374,8 @@ class ApiClientClass {
     if (isGet) {
       this.inFlight.set(key, promise as Promise<ApiResponse<unknown>>)
       promise.finally(() => {
-        this.inFlight.delete(key)
+        // Only its own entry: a forget may have let a newer read take the key.
+        if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
       })
     }
 
@@ -1393,8 +1408,9 @@ class ApiClientClass {
       }
     }
 
+    const epoch = this.cacheEpoch
     const result = await this.queuedRequest<T>(endpoint, options, requireAuth, priority)
-    if (result.success) {
+    if (result.success && epoch === this.cacheEpoch) {
       this.setCache(key, result, cache.ttl)
     }
     return result

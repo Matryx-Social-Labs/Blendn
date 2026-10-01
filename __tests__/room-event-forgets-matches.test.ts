@@ -82,6 +82,122 @@ describe('forgetEventMatches', () => {
   })
 })
 
+/*
+ * A read already on the wire when the event arrives was answered before it:
+ * the next read must not join it, and its answer must not refill the cache.
+ * The common shape is SWR's own background refresh — every sync more than 30
+ * seconds after the last one starts one.
+ */
+describe('a read in flight at the event', () => {
+  type Pending = { path: string; answer: (body: unknown) => void }
+  const pending: Pending[] = []
+  const settle = () => new Promise((r) => setTimeout(r, 30))
+
+  beforeEach(async () => {
+    pending.length = 0
+    mockSecure.clear()
+    await TokenStorage.setAccessToken('tok')
+    global.fetch = jest.fn(
+      (input: RequestInfo | URL) =>
+        new Promise<Response>((resolve) =>
+          pending.push({
+            path: String(input).replace(/^https?:\/\/[^/]+/, ''),
+            answer: (body) => resolve(json(body)),
+          })
+        )
+    ) as typeof fetch
+  })
+
+  it('is not joined by the next read, and does not refill the cache', async () => {
+    const before = apiClient.getEventMatches('e3', { limit: 20 })
+    await settle()
+    expect(pending).toHaveLength(1)
+
+    apiClient.forgetEventMatches('e3')
+    const after = apiClient.getEventMatches('e3', { limit: 20 })
+    await settle()
+    // A second request, not the first one's promise.
+    expect(pending).toHaveLength(2)
+
+    pending[0].answer({ success: true, data: { matches: [{ id: 'old' }] } })
+    await expect(before).resolves.toMatchObject({ data: { matches: [{ id: 'old' }] } })
+    // The old read finishing must not unregister the new one: a third read
+    // still joins it rather than going out again.
+    const third = apiClient.getEventMatches('e3', { limit: 20 })
+    await settle()
+    expect(pending).toHaveLength(2)
+
+    pending[1].answer({ success: true, data: { matches: [{ id: 'new' }] } })
+    await expect(after).resolves.toMatchObject({ data: { matches: [{ id: 'new' }] } })
+    await expect(third).resolves.toMatchObject({ data: { matches: [{ id: 'new' }] } })
+
+    // And the cache holds the answer given after the event.
+    await expect(apiClient.getEventMatches('e3', { limit: 20 })).resolves.toMatchObject({
+      data: { matches: [{ id: 'new' }] },
+    })
+    expect(pending).toHaveLength(2)
+  })
+
+  it("drops the old answer even when it lands after the event's read is done", async () => {
+    const before = apiClient.getEventMatches('e4', { limit: 20 })
+    await settle()
+    apiClient.forgetEventMatches('e4')
+    const after = apiClient.getEventMatches('e4', { limit: 20 })
+    await settle()
+
+    pending[1].answer({ success: true, data: { matches: [{ id: 'new' }] } })
+    await after
+    pending[0].answer({ success: true, data: { matches: [{ id: 'old' }] } })
+    await before
+
+    await expect(apiClient.getEventMatches('e4', { limit: 20 })).resolves.toMatchObject({
+      data: { matches: [{ id: 'new' }] },
+    })
+  })
+})
+
+describe("SWR's background refresh in flight at the event", () => {
+  type Pending = { answer: (body: unknown) => void }
+  const pending: Pending[] = []
+  const settle = () => new Promise((r) => setTimeout(r, 30))
+  const matches = (id: string) => ({ success: true, data: { matches: [{ id }] } })
+
+  beforeEach(async () => {
+    pending.length = 0
+    mockSecure.clear()
+    await TokenStorage.setAccessToken('tok')
+    global.fetch = jest.fn(
+      () => new Promise<Response>((resolve) => pending.push({ answer: (body) => resolve(json(body)) }))
+    ) as typeof fetch
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('does not put its older answer back over the one fetched after the event', async () => {
+    const first = apiClient.getEventMatches('e5', { limit: 20 })
+    await settle()
+    pending[0].answer(matches('first'))
+    await first
+
+    // 31 seconds on: expired, so served as-is with a refresh behind it.
+    const now = Date.now()
+    jest.spyOn(Date, 'now').mockReturnValue(now + 31_000)
+    await expect(apiClient.getEventMatches('e5', { limit: 20 })).resolves.toMatchObject(matches('first'))
+    await settle()
+    expect(pending).toHaveLength(2)
+
+    apiClient.forgetEventMatches('e5')
+    const after = apiClient.getEventMatches('e5', { limit: 20 })
+    await settle()
+    expect(pending).toHaveLength(3)
+    pending[2].answer(matches('new'))
+    await after
+    pending[1].answer(matches('refresh'))
+    await settle()
+
+    await expect(apiClient.getEventMatches('e5', { limit: 20 })).resolves.toMatchObject(matches('new'))
+  })
+})
+
 describe('the socket forgets before it marks the room dirty', () => {
   const src = readFileSync(join(__dirname, '..', 'lib', 'socketClient.ts'), 'utf8')
 
