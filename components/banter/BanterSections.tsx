@@ -495,6 +495,7 @@ function PseudonymDisc({ pseudonym }: { pseudonym: string }) {
 export function BanterRequest({
   name,
   avatarUrl,
+  markSeed,
   timeLabel,
   message,
   pending,
@@ -505,6 +506,11 @@ export function BanterRequest({
 }: {
   name: string
   avatarUrl?: string | null
+  /**
+   * A board request: the asker is a handle, so draw the generated mark seeded
+   * on it instead of any photo. Never a user id (`boardMarkSeed`).
+   */
+  markSeed?: string
   timeLabel?: string
   message: string
   pending?: boolean
@@ -522,7 +528,9 @@ export function BanterRequest({
         accessibilityLabel={`${name}'s profile`}
         style={({ pressed }) => [pressed && styles.pressed]}
       >
-      {avatarUrl ? (
+      {markSeed ? (
+        <PseudonymDisc pseudonym={markSeed} />
+      ) : avatarUrl ? (
         <OptimizedImage
           source={avatarUrl}
           recyclingKey={avatarUrl}

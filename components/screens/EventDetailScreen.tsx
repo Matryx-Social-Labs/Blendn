@@ -55,6 +55,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { PulseTopBar } from '../pulse/PulseTopBar';
 import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
+import { BoardEntry } from '../board/BoardSections';
 import {
   SCENE_CTA_HEIGHT,
   SCENE_CTA_ICON,
@@ -1424,6 +1425,25 @@ export default function EventDetail() {
                 count={attendeeBlock.count}
                 label={attendeeBlock.label}
                 seed={event?.id || 'scene'}
+              />
+            </FadeInUp>
+          ) : null}
+
+          {/*
+            The board: going alone, and looking for somebody to go with. Before
+            doors only — after them the room is the place, and the board is
+            closed (client plan Part 3b). Reading needs an RSVP or a save; the
+            board itself says so if neither.
+          */}
+          {event && !hasStarted ? (
+            <FadeInUp delay={SECTION_DELAY[3]}>
+              <BoardEntry
+                onPress={() =>
+                  router.push({
+                    pathname: '/board/[eventId]',
+                    params: { eventId: event.id, title: event.title, startTime: event.start_time },
+                  } as never)
+                }
               />
             </FadeInUp>
           ) : null}
