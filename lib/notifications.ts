@@ -430,6 +430,22 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       target = '/(tabs)/chat'
       break
     }
+    /*
+     * The board. The push says only that something happened — no handle, no
+     * words, because a lock screen is read by other people — so the client
+     * draws nothing from it either. A request is answered in the Banter;
+     * an acceptance opens the conversation it made.
+     */
+    case 'board_request': {
+      target = '/(tabs)/chat'
+      break
+    }
+    case 'board_request_accepted': {
+      target = data.conversationId
+        ? { pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any }
+        : '/(tabs)/chat'
+      break
+    }
     case 'friend_request': {
       /*
        * Where requests are answered. Not the asker's profile: a friend's

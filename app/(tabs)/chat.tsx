@@ -12,6 +12,7 @@ import Reanimated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
+import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
@@ -216,6 +217,9 @@ function ChatInner() {
   const [listFailed, setListFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
+  // Board requests load themselves; this only knows whether they drew anything.
+  const [boardRequestCount, setBoardRequestCount] = useState(0)
+  const [boardRefreshKey, setBoardRefreshKey] = useState(0)
   const latestLoadIdRef = useRef(0)
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ list: 0, requests: 0 })
@@ -665,6 +669,7 @@ function ChatInner() {
   const onRefresh = useCallback(async () => {
     if (isLoadingRef.current) return
     setRefreshing(true)
+    setBoardRefreshKey((k) => k + 1)
     await loadChats(true, true)
     setRefreshing(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -988,6 +993,9 @@ function ChatInner() {
           </View>
         </View>
       ) : null}
+
+      {/* Beside message requests: the same object, somebody asking to start talking. */}
+      <BoardRequestsSection refreshKey={boardRefreshKey} onCount={setBoardRequestCount} />
     </View>
   )
 
@@ -995,7 +1003,7 @@ function ChatInner() {
    * Live rooms or requests with nothing else is not an empty inbox, so it does
    * not say "No conversations yet" under them.
    */
-  const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0
+  const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
 
   return (
     <View style={styles.container}>
