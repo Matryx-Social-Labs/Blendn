@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { toggleIntent } from '../lib/intents'
+import { normaliseIntents, toggleIntent } from '../lib/intents'
 
 /**
  * "Just here" is exclusive, on every screen that offers it (SCRUM-518).
@@ -32,6 +32,26 @@ describe('toggleIntent', () => {
   })
 })
 
+describe('a stored row that already mixes them', () => {
+  // 16 of 280 staging profiles hold one, from before the server refused it.
+  it('opens as "Just here" alone: the opt-out wins over a contradiction', () => {
+    expect(normaliseIntents(['friendship', 'just_here'])).toEqual(['just_here'])
+    expect(normaliseIntents(['dating', 'just_here', 'networking', 'friendship'])).toEqual(['just_here'])
+  })
+
+  it('leaves a coherent answer as it is', () => {
+    expect(normaliseIntents(['networking', 'friendship'])).toEqual(['networking', 'friendship'])
+    expect(normaliseIntents(['just_here'])).toEqual(['just_here'])
+    expect(normaliseIntents([])).toEqual([])
+  })
+
+  it('never mutates what it was given', () => {
+    const held = Object.freeze(['networking', 'just_here'] as const)
+    expect(toggleIntent(held, 'friendship')).toEqual(['networking', 'friendship'])
+    expect(normaliseIntents(held)).toEqual(['just_here'])
+  })
+})
+
 describe('both screens use it', () => {
   const read = (p: string) =>
     readFileSync(join(__dirname, '..', p), 'utf8')
@@ -40,5 +60,13 @@ describe('both screens use it', () => {
 
   it.each(['app/edit-profile.tsx', 'app/event-preferences/[eventId].tsx'])('%s', (file) => {
     expect(read(file)).toMatch(/\(prev\) => toggleIntent\(prev, value\)/)
+  })
+
+  it('Edit profile opens a stored mix normalised, and measures changes against that', () => {
+    // So a name-only save does not resend an invalid set — the 400 with no way out.
+    const src = read('app/edit-profile.tsx')
+    expect(src).toMatch(/const loadedIntents = normaliseIntents\(/)
+    expect(src).toMatch(/setIntents\(loadedIntents\)/)
+    expect(src).toMatch(/intents: loadedIntents,/)
   })
 })

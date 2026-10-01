@@ -14,3 +14,16 @@ export function toggleIntent<T extends string>(prev: readonly T[], value: T): T[
     ? withoutJustHere.filter((i) => i !== value)
     : [...withoutJustHere, value]
 }
+
+/**
+ * A stored answer, made coherent before a form shows it.
+ *
+ * Rows written before the server refused the mix still hold "Just here" next
+ * to other intents (16 of 280 profiles on staging). Shown as-is, the form lit
+ * them all; with Dating then dropped for age, every save — a name change
+ * included — resent the mix and came back 400 with no way out. The opt-out
+ * wins: a contradiction is not consent to be matched.
+ */
+export function normaliseIntents<T extends string>(stored: readonly T[]): T[] {
+  return stored.includes('just_here' as T) ? (['just_here'] as T[]) : [...stored]
+}

@@ -30,7 +30,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
-import { toggleIntent } from '../lib/intents'
+import { normaliseIntents, toggleIntent } from '../lib/intents'
 
 interface UserProfile {
   id: string
@@ -271,7 +271,7 @@ export default function EditProfile() {
          * "nothing chosen".
          */
         const p2 = profileData.profile
-        const loadedIntents = (p2?.intent_default || []) as Intent[]
+        const loadedIntents = normaliseIntents((p2?.intent_default || []) as Intent[])
         const loadedWorkField = p2?.work_field ?? null
         const loadedGender = (p2?.gender ?? null) as Gender | null
         const loadedOrientations = (p2?.orientations || []) as Orientation[]
