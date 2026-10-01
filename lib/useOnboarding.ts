@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { withBlurForPrimary } from './photoUtils'
 import { Logger } from './logger'
 import {
   EMPTY_PROGRESS,
@@ -264,7 +265,9 @@ export function useOnboarding(step: OnboardingStep) {
           }
         }
 
-        const body = stepPayload(step, merged)
+        const payload = stepPayload(step, merged)
+        // The photos step sends the blurred copy of its first photo (SCRUM-478).
+        const body = step === 'media' ? await withBlurForPrimary(payload) : payload
         if (!failure && Object.keys(body).length > 0) {
           const result = await apiClient.updateProfile(userId, body)
           if (!result.success) {

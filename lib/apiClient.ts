@@ -1926,6 +1926,8 @@ class ApiClientClass {
       education?: string
       interests?: string[]
       photos?: string[]
+      /** The blurred copy of `photos[0]`, sent with every new primary (SCRUM-478). */
+      blur_photo?: string | null
       goals?: string[]
       looking_for?: string[]
       onboarded?: boolean

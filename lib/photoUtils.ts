@@ -642,9 +642,45 @@ export const createBlurDerivative = async (uri: string): Promise<string | null> 
 }
 
 /**
+ * A profile write that changes `photos[0]` sends the blurred copy with it
+ * (SCRUM-478).
+ *
+ * The server clears the blur whenever the primary changes without a new one
+ * (SCRUM-476), so every new primary needs one, and a write that keeps the
+ * primary must not make one. Best-effort: when the blur cannot be made the
+ * photos still save, and the server clearing the old blur is the right answer
+ * for a photo that has none.
+ */
+export const withBlurForPrimary = async <T extends { photos?: string[] }>(
+  body: T,
+  previousPrimary?: string | null
+): Promise<T & { blur_photo?: string }> => {
+  const primary = body.photos?.[0]
+  if (!primary || primary === previousPrimary) return body
+  const blur = await uploadBlurOf(primary)
+  return blur ? { ...body, blur_photo: blur } : body
+}
+
+/** The blurred copy of a photo, uploaded; its upload URL, or null. */
+const uploadBlurOf = async (photoUrl: string): Promise<string | null> => {
+  try {
+    const source = photoUrl.startsWith('file:')
+      ? photoUrl
+      : (await FileSystem.downloadAsync(photoUrl, `${FileSystem.cacheDirectory}blur-source-${Date.now()}.jpg`)).uri
+    const blur = await createBlurDerivative(source)
+    if (!blur) return null
+    const uploaded = await uploadToTigris(blur, `profile_blur_${Date.now()}.jpg`, 'profile')
+    return uploaded.success ? (uploaded.url ?? null) : null
+  } catch (error) {
+    Logger.warn('profile', 'Could not make the blurred photo; saving without it', { error })
+    return null
+  }
+}
+
+/**
  * Reorder profile photos via API
  */
-export type PhotoWrite = { ok: true } | { ok: false; error: string }
+export type PhotoWrite = { ok: true; photos?: string[] } | { ok: false; error: string }
 
 /**
  * Write the photo list, and say why when it is refused.
@@ -654,9 +690,13 @@ export type PhotoWrite = { ok: true } | { ok: false; error: string }
  * yourself." tells a person what to do; "could not be added, try again"
  * sends them round the same loop.
  */
-export const reorderPhotos = async (userId: string, photoUrls: string[]): Promise<PhotoWrite> => {
+export const reorderPhotos = async (
+  userId: string,
+  photoUrls: string[],
+  previousPrimary?: string | null
+): Promise<PhotoWrite> => {
   try {
-    const result = await apiClient.updateProfile(userId, { photos: photoUrls })
+    const result = await apiClient.updateProfile(userId, await withBlurForPrimary({ photos: photoUrls }, previousPrimary))
 
     if (!result.success) {
       Logger.error('profile', 'photoUtils: Reorder failed', { error: result.error, userId })
@@ -670,7 +710,15 @@ export const reorderPhotos = async (userId: string, photoUrls: string[]): Promis
     // `user.image` mirrors photos[0] server-side; the in-memory user must follow.
     void refreshAuthUser()
     Logger.info('profile', 'photoUtils: Photos reordered', { userId, count: photoUrls.length })
-    return { ok: true }
+    /*
+     * The list as stored. A new photo is stored as the server's sealed copy
+     * (SCRUM-425), not the upload URL sent, and the upload is gone once
+     * sealed: a later write re-sending the upload URL was refused ("That photo
+     * did not finish uploading"), so every remove or reorder after an add
+     * failed until the screen was reopened (SCRUM-489).
+     */
+    const stored = (result.data as { profile?: { photos?: unknown } } | undefined)?.profile?.photos
+    return { ok: true, photos: Array.isArray(stored) ? (stored as string[]) : undefined }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Reorder error', { error, userId })
     return { ok: false, error: error instanceof Error ? error.message : 'Could not save your photos' }

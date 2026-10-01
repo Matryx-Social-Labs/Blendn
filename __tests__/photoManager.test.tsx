@@ -87,7 +87,8 @@ describe('PhotoManager', () => {
 
     const remove = sheet.actions[0] as unknown as { then: () => Promise<void> }
     await act(() => remove.then())
-    expect(photoUtils.reorderPhotos).toHaveBeenCalledWith('u1', ['https://cdn/p0.jpg'])
+    // The third argument is the main photo before the change: a new main photo needs its blur (SCRUM-478).
+    expect(photoUtils.reorderPhotos).toHaveBeenCalledWith('u1', ['https://cdn/p0.jpg'], 'https://cdn/p0.jpg')
     expect(photoUtils.deletePhoto).toHaveBeenCalledWith('https://cdn/p1.jpg')
     expect(mockShowToast).not.toHaveBeenCalled()
   })

@@ -22,6 +22,8 @@ jest.mock('../lib/useAuth', () => ({
   refreshAuthUser: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { updateProfile: jest.fn() } }))
+// The photos step's blur needs native image modules; what it adds is pinned in blur-photo-uploaded.
+jest.mock('../lib/photoUtils', () => ({ withBlurForPrimary: jest.fn(async (body: object) => body) }))
 jest.mock('../lib/onboardingStorage', () => ({
   readOnboarding: jest.fn(async () => null),
   writeOnboarding: jest.fn(async () => undefined),
