@@ -640,7 +640,7 @@ belongs beside the host byline instead.
 tab (`app/(tabs)/events.tsx`) is now a map with a pull-up drawer. The drawer
 holds a segmented control, **Events | Places**. Events is The Pulse exactly as
 it was — the same component, moved, with its sections, search, city picker and
-empty states. Design ticket: Jira, label `design` (see the step 2 PR).
+empty states. Design ticket: SCRUM-541.
 
 ### What it does
 
@@ -677,7 +677,7 @@ handle, whether `peek` shows a summary line, what the map shows at each height.
 **Added 2026-10-02 (step 2, PR A).** The venues in the Pulse's city, nearest
 first when the phone has a fix. Each row: the name, the type, the area, the
 distance, how many are live, and tonight's event if there is one. A tap opens
-the place (§10). Design ticket: Jira, label `design` (see the step 2 PR).
+the place (§10). Design ticket: SCRUM-542.
 
 ### Rules the design must not break
 
