@@ -93,6 +93,7 @@ describe('the building a pin lights', () => {
     const inFront = building('in-front', [square(77.6, 12.97, 0.001)])
     const under = building('under', [square(77.59, 12.97, 0.001)])
     expect(buildingUnder(pin, [inFront, under])?.id).toBe('under')
+    expect(buildingUnder(pin, [inFront, under])?.geometry.coordinates).toEqual([square(77.59, 12.97, 0.001)])
   })
 
   it("is the stadium around a pin on its pitch (the ring's hole): the place is the ring", () => {
@@ -106,9 +107,16 @@ describe('the building a pin lights', () => {
     expect(buildingUnder(pin, [])).toBeNull()
   })
 
-  it('finds a part of a multipolygon', () => {
-    const parts = { id: 'parts', geometry: { type: 'MultiPolygon', coordinates: [[square(77.6, 12.97, 0.001)], [square(77.59, 12.97, 0.001)]] } }
-    expect(buildingUnder(pin, [parts])?.id).toBe('parts')
+  it('lights only the part of a merged multipolygon that holds the pin, never the whole block', () => {
+    // The tiles merge neighbouring buildings into one feature; lighting the feature lit a whole neighbourhood.
+    const block = {
+      id: 'block',
+      properties: { render_height: 12 },
+      geometry: { type: 'MultiPolygon', coordinates: [[square(77.6, 12.97, 0.001)], [square(77.59, 12.97, 0.001)], [square(77.58, 12.97, 0.001)]] },
+    }
+    const lit = buildingUnder(pin, [block])
+    expect(lit?.id).toBe('block')
+    expect(lit?.geometry).toEqual({ type: 'Polygon', coordinates: [square(77.59, 12.97, 0.001)] })
   })
 })
 

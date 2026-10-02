@@ -79,7 +79,7 @@ tags:
     visible: "PLACEHOLDER DESIGN.*"
     timeout: 30000
 - assertVisible: ".*live"
-- tapOn: "Back"
+- tapOn: "Go back"
 - assertVisible: "Places"
 # Read back (HM-D01), from blendn-admin:
 #   npm run -s qa sq "SELECT e.slug, e.status::text AS status, e.visibility::text AS vis, coalesce(e.venue_link_status::text,'null') AS link, e.kind::text AS kind, e.start_time::text AS starts, e.end_time::text AS ends FROM events e JOIN venues v ON v.id = e.venue_id WHERE v.name = 'The Humming Tree' AND e.deleted_at IS NULL AND e.end_time > now() ORDER BY e.start_time LIMIT 5"
