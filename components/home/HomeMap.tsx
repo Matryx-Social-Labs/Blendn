@@ -1,4 +1,13 @@
-import { Camera, GeoJSONSource, Layer, Map, type CameraRef, type MapRef, type ViewStateChangeEvent } from '@maplibre/maplibre-react-native'
+import {
+  Camera,
+  GeoJSONSource,
+  Layer,
+  Map,
+  type CameraRef,
+  type MapRef,
+  type PressEventWithFeatures,
+  type ViewStateChangeEvent,
+} from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, type NativeSyntheticEvent } from 'react-native'
@@ -103,7 +112,7 @@ export function HomeMap({
     }
   }, [query, segment])
 
-  /** Find each pin's building among those drawn, and light it. Runs once the map has settled. */
+  /** Find each pin's building among those drawn, and light it. Runs once the tiles under new pins are drawn. */
   const light = async () => {
     const m = map.current
     if (!m || !needsLight.current) return
@@ -126,6 +135,8 @@ export function HomeMap({
             type: 'Feature',
             geometry: building.geometry,
             properties: {
+              id: pin.id,
+              kind: pin.kind,
               color: shadeOf(pin.kind, pin.live),
               height: Number(building.properties?.render_height ?? 10),
               base: Number(building.properties?.render_min_height ?? 0),
@@ -139,6 +150,14 @@ export function HomeMap({
     )
     const features = found.filter((f) => f !== null)
     setLit({ type: 'FeatureCollection', features })
+  }
+
+  /** A pin or a lit building, tapped: the event or the place it stands for. */
+  const openPlace = (e: NativeSyntheticEvent<PressEventWithFeatures>) => {
+    const f = e.nativeEvent.features[0]
+    const id = f?.properties?.id
+    if (typeof id !== 'string') return
+    router.push((f?.properties?.kind === 'venue' ? `/venue/${id}` : `/event/${id}`) as never)
   }
 
   const pinData = useMemo<FeatureCollection>(
@@ -164,14 +183,17 @@ export function HomeMap({
       attributionPosition={{ top: topInset + SPACE.sm, left: SPACE.sm }}
       compass={false}
       onRegionDidChange={onRegionDidChange}
-      onDidFinishRenderingMapFully={() => void light()}
+      // Each frame drawn with every tile loaded; `needsLight` makes it once per new set of pins.
+      // Not `onDidFinishRenderingMapFully`: on iOS that fires once, when the map first loads.
+      onDidFinishRenderingFrameFully={() => void light()}
       accessibilityLabel="Map of events and places"
     >
       <Camera
         ref={camera}
         initialViewState={{ center: center ? [center.longitude, center.latitude] : DEFAULT_CENTRE, zoom: ZOOM, pitch: PITCH }}
       />
-      <GeoJSONSource id="lit-buildings" data={lit as never}>
+      {/* A pin inside a building is hidden by it, so the lit building is the marker: tap it too. */}
+      <GeoJSONSource id="lit-buildings" data={lit as never} onPress={openPlace}>
         <Layer
           id="lit-buildings"
           type="fill-extrusion"
@@ -186,12 +208,7 @@ export function HomeMap({
       <GeoJSONSource
         id="pins"
         data={pinData as never}
-        onPress={(e) => {
-          const f = e.nativeEvent.features[0]
-          const id = f?.properties?.id
-          if (typeof id !== 'string') return
-          router.push((f?.properties?.kind === 'venue' ? `/venue/${id}` : `/event/${id}`) as never)
-        }}
+        onPress={openPlace}
       >
         <Layer
           id="pin-glow"

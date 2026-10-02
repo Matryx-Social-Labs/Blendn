@@ -149,12 +149,18 @@ export const BUILDING_SEARCH_PX = 48
 export function buildingUnder<F extends { geometry: { type: string; coordinates: unknown } }>(
   pin: { latitude: number; longitude: number },
   features: F[]
-): F | null {
+): (Omit<F, 'geometry'> & { geometry: { type: 'Polygon'; coordinates: Ring[] } }) | null {
   const point: [number, number] = [pin.longitude, pin.latitude]
   for (const f of features) {
     const g = f.geometry as BuildingGeometry
-    if (g.type === 'Polygon' && inPolygon(point, g.coordinates)) return f
-    if (g.type === 'MultiPolygon' && g.coordinates.some((p) => inPolygon(point, p))) return f
+    /*
+     * The tiles merge neighbouring buildings into one MultiPolygon feature, so
+     * only the part holding the pin is returned — lighting the feature lit a
+     * whole block on the device.
+     */
+    const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []
+    const part = parts.find((rings) => inPolygon(point, rings))
+    if (part) return { ...f, geometry: { type: 'Polygon', coordinates: part } }
   }
   return null
 }
