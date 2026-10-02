@@ -644,10 +644,14 @@ empty states. Design ticket: SCRUM-541.
 
 ### What it does
 
-- **The map** (`HomeMap.tsx`) fills the screen behind everything. In PR A it is
-  a plain dark 2D map you can pan, centred on the phone's fix. PR B replaces it
-  with the 3D map: MapLibre, the buildings under event and venue pins lit in
-  brand shades, a glow where there is no building.
+- **The map** (`HomeMap.tsx`) fills the screen behind everything: MapLibre
+  over OpenFreeMap, restyled dark in Ember (`lib/mapStyleEmber.ts`), tilted
+  55°. Pins follow the segment — events on Events, venues on Places — for the
+  part of the map on screen. The building under a pin is lit: the ember shade
+  for an event, violet-rose for a venue, brighter when live; where there is no
+  building, the pin's glow is all there is, and at a venue the glow steps with
+  its live bucket. Tap a pin to open it. OpenFreeMap's attribution stays on
+  (the OpenStreetMap licence), under the top bar.
 - **The top bar** (wordmark and bell) floats over the map. The drawer never
   covers it.
 - **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
@@ -659,7 +663,8 @@ empty states. Design ticket: SCRUM-541.
 
 | Rule | Why |
 |---|---|
-| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/home.test.ts` refuses the shapes that would draw one |
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, and any read of an area |
+| **The map shows what the server sent** | Pins are the lists' own query for the viewport. Nothing on the phone decides which places are listed |
 | **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
 | **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |

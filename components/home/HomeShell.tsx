@@ -64,7 +64,7 @@ export function HomeShell({ renderEvents }: { renderEvents: (onBrowse: (browse: 
 
   return (
     <View style={styles.root}>
-      <HomeMap center={browse.location} />
+      <HomeMap center={browse.location} segment={segment} topInset={insets.top + TOP_BAR_HEIGHT} />
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer
         points={points}
