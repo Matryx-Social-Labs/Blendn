@@ -663,7 +663,12 @@ empty states. Design ticket: SCRUM-541.
 | **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
 | **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
-| **Switching never refetches** | Both panes stay mounted once opened |
+| **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
+| **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
+| **44pt targets** | The handle and each segment |
+| **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |
+| **The map follows the city** | Picking a city moves the map to it (`/events/cities` `centre`) |
 
 ### Open for design
 

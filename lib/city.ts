@@ -48,6 +48,8 @@ export interface StoredCity {
 export interface CityOption {
   city: string
   eventCount: number
+  /** Where the home map goes when this city is picked; null (or absent, an older server) leaves it. */
+  centre?: { latitude: number; longitude: number } | null
 }
 
 /**

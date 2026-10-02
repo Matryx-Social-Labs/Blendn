@@ -4,18 +4,25 @@
  * in a plain node test.
  */
 
-import { nextUpLabel, HAPPENING_NOW } from './pulse'
+import { nextUpLabel } from './pulse'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
 /** Top to bottom: the order a drag passes them in. */
 export const DRAWER_SNAPS: readonly DrawerSnap[] = ['full', 'half', 'peek']
 
+/** The handle's touch target: 44pt tall, the platform minimum (step 2 review). */
+export const DRAWER_HANDLE_HEIGHT = 44
+/** The Events | Places control: 44pt segments inside a 4pt inset. */
+export const DRAWER_SEGMENTED_HEIGHT = 52
+/** Space under the control, before the pane. */
+const DRAWER_HEADER_GAP = 8
+
 /**
- * The drawer's header: the grabber, then the Events | Places control — what is
+ * The drawer's header: the handle, then the Events | Places control — what is
  * left showing at `peek`, so the control can always be reached.
  */
-export const DRAWER_HEADER_HEIGHT = 84
+export const DRAWER_HEADER_HEIGHT = DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT + DRAWER_HEADER_GAP
 
 /**
  * How far ahead a release is projected, in seconds of its velocity. A flick
@@ -66,6 +73,28 @@ export function stepSnap(snap: DrawerSnap, direction: 'up' | 'down'): DrawerSnap
   return DRAWER_SNAPS[next]
 }
 
+/**
+ * How tall the pane under the header is at a settled snap: exactly what shows
+ * above the screen's bottom, so a list's last row can be scrolled into view
+ * at half as at full. Set when a snap settles, never per frame.
+ */
+export function drawerContentHeight(points: Record<DrawerSnap, number>, snap: DrawerSnap, screenHeight: number): number {
+  return Math.max(0, screenHeight - points[snap] - DRAWER_HEADER_HEIGHT)
+}
+
+/**
+ * The keyboard and the drawer: typing in the Pulse's search opens the drawer
+ * fully, so the field is not under the keyboard, and closing the keyboard puts
+ * it back where it was — unless the person moved it meanwhile.
+ */
+export function snapOnKeyboard(
+  state: { snap: DrawerSnap; restore: DrawerSnap | null },
+  event: 'show' | 'hide'
+): { snap: DrawerSnap; restore: DrawerSnap | null } {
+  if (event === 'show') return state.snap === 'full' ? state : { snap: 'full', restore: state.snap }
+  return state.restore ? { snap: state.restore, restore: null } : state
+}
+
 export const DRAWER_SNAP_LABEL: Record<DrawerSnap, string> = {
   full: 'Expanded',
   half: 'Half open',
@@ -102,7 +131,11 @@ export function tonightLine(
   now: Date = new Date()
 ): string | null {
   if (!next) return null
-  const label = nextUpLabel(next.startTime, next.endTime, now)
-  const today = label === HAPPENING_NOW || label.startsWith('Tonight') || label.startsWith('Today')
-  return today ? `${label} · ${next.title}` : null
+  const start = new Date(next.startTime)
+  const end = new Date(next.endTime)
+  if (Number.isNaN(start.getTime())) return null
+  const running = start <= now && now < end
+  // Today by the calendar, not by what the label happens to say.
+  const today = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth() && start.getDate() === now.getDate()
+  return running || today ? `${nextUpLabel(next.startTime, next.endTime, now)} · ${next.title}` : null
 }

@@ -1,11 +1,19 @@
-import { useEffect, type ReactNode } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
-import { DRAWER_HEADER_HEIGHT, DRAWER_SNAP_LABEL, settleSnap, stepSnap, type DrawerSnap } from '../../lib/home'
+import {
+  DRAWER_HANDLE_HEIGHT,
+  DRAWER_HEADER_HEIGHT,
+  DRAWER_SNAP_LABEL,
+  drawerContentHeight,
+  settleSnap,
+  stepSnap,
+  type DrawerSnap,
+} from '../../lib/home'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 
 /** Settles without a bounce: a drawer, not a toy. */
@@ -20,9 +28,10 @@ const SETTLE = { damping: 28, stiffness: 260, mass: 0.9 } as const
  * of a list inside the sheet — exactly this screen, on exactly our versions.
  *
  * Dragged by its header only. The list inside scrolls as a list and never
- * fights the drawer for the gesture; at `half` its lower part is simply below
- * the screen until the drawer is pulled up. A tap on the handle steps it up
- * (from `full`, back down), and a screen reader adjusts it like a slider.
+ * fights the drawer for the gesture. The pane is as tall as what shows at the
+ * settled snap, so a list's last row is reachable at half too (set when a
+ * snap settles, never per frame). A tap on the handle steps it up (from
+ * `full`, back down), and a screen reader adjusts it like a slider.
  */
 export function HomeDrawer({
   points,
@@ -37,6 +46,7 @@ export function HomeDrawer({
   header: ReactNode
   children: ReactNode
 }) {
+  const { height } = useWindowDimensions()
   const reduceMotion = useReducedMotion()
   const y = useSharedValue(points[snap])
   const dragStart = useSharedValue(0)
@@ -45,20 +55,26 @@ export function HomeDrawer({
     y.set(reduceMotion ? points[snap] : withSpring(points[snap], SETTLE))
   }, [snap, points, reduceMotion, y])
 
-  const pan = Gesture.Pan()
-    // Vertical intent only, so a tap on a segment stays a tap.
-    .activeOffsetY([-8, 8])
-    .onStart(() => {
-      dragStart.set(y.get())
-    })
-    .onUpdate((e) => {
-      y.set(Math.min(points.peek, Math.max(points.full, dragStart.get() + e.translationY)))
-    })
-    .onEnd((e) => {
-      const next = settleSnap(y.get(), e.velocityY, points)
-      y.set(withSpring(points[next], SETTLE))
-      scheduleOnRN(onSnap, next)
-    })
+  // Built once per set of snap points, not on every render.
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        // Vertical intent only, so a tap on a segment stays a tap.
+        .activeOffsetY([-8, 8])
+        .onStart(() => {
+          dragStart.set(y.get())
+        })
+        .onUpdate((e) => {
+          y.set(Math.min(points.peek, Math.max(points.full, dragStart.get() + e.translationY)))
+        })
+        .onEnd((e) => {
+          const next = settleSnap(y.get(), e.velocityY, points)
+          // The release's own speed carries into the settle, so a flick does not stall and restart.
+          y.set(withSpring(points[next], { ...SETTLE, velocity: e.velocityY }))
+          scheduleOnRN(onSnap, next)
+        }),
+    [points, onSnap, y, dragStart]
+  )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
   const tapStep = () => onSnap(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
@@ -70,7 +86,6 @@ export function HomeDrawer({
           <Pressable
             onPress={tapStep}
             style={styles.handle}
-            hitSlop={SPACE.sm}
             accessibilityRole="adjustable"
             accessibilityLabel="Events and places"
             accessibilityHint="Swipe up or down to show more or less of the list"
@@ -83,7 +98,7 @@ export function HomeDrawer({
           {header}
         </View>
       </GestureDetector>
-      <View style={styles.content}>{children}</View>
+      <View style={{ height: drawerContentHeight(points, snap, height) }}>{children}</View>
     </Animated.View>
   )
 }
@@ -101,7 +116,7 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
     overflow: 'hidden',
   },
-  header: { height: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl, gap: SPACE.sm },
-  handle: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: SPACE.sm },
-  content: { flex: 1 },
+  header: { height: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl },
+  // The whole width and 44pt tall: the grabber is the drawing, this is the target.
+  handle: { height: DRAWER_HANDLE_HEIGHT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
 })

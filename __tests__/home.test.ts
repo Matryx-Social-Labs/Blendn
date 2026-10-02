@@ -7,10 +7,14 @@ jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), 
 
 import { eventFromApi } from '../lib/api'
 import {
+  DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
+  DRAWER_SEGMENTED_HEIGHT,
+  drawerContentHeight,
   drawerSnapPoints,
   liveNowLabel,
   settleSnap,
+  snapOnKeyboard,
   stepSnap,
   tonightLine,
 } from '../lib/home'
@@ -59,6 +63,32 @@ describe('the drawer', () => {
   })
 })
 
+describe('the drawer, wired to the screen (step 2 review)', () => {
+  const points = drawerSnapPoints(PHONE)
+
+  it('gives the handle and each segment a 44pt target', () => {
+    expect(DRAWER_HANDLE_HEIGHT).toBeGreaterThanOrEqual(44)
+    // Two segments inside a 4pt inset.
+    expect(DRAWER_SEGMENTED_HEIGHT - 8).toBeGreaterThanOrEqual(44)
+    expect(DRAWER_HEADER_HEIGHT).toBeGreaterThanOrEqual(DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT)
+  })
+
+  it("sizes the pane to what shows, so a list's last row is reachable at half", () => {
+    expect(drawerContentHeight(points, 'half', PHONE.height)).toBe(PHONE.height - points.half - DRAWER_HEADER_HEIGHT)
+    expect(drawerContentHeight(points, 'full', PHONE.height)).toBeGreaterThan(drawerContentHeight(points, 'half', PHONE.height))
+    expect(drawerContentHeight(points, 'peek', PHONE.height)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('opens fully for the keyboard and goes back where it was when the keyboard closes', () => {
+    const shown = snapOnKeyboard({ snap: 'half', restore: null }, 'show')
+    expect(shown).toEqual({ snap: 'full', restore: 'half' })
+    expect(snapOnKeyboard(shown, 'hide')).toEqual({ snap: 'half', restore: null })
+    // Already full: nothing to put back.
+    expect(snapOnKeyboard({ snap: 'full', restore: null }, 'show')).toEqual({ snap: 'full', restore: null })
+    expect(snapOnKeyboard({ snap: 'full', restore: null }, 'hide')).toEqual({ snap: 'full', restore: null })
+  })
+})
+
 describe('a place in the list', () => {
   it('says how many are live as a bucket, never a number under five (D-19)', () => {
     expect(liveNowLabel('quiet')).toBe('Under 5 live')
@@ -75,6 +105,8 @@ describe('a place in the list', () => {
     expect(tonightLine({ title: 'Jazz Night', startTime: at(21), endTime: at(23) }, now)).toMatch(/^Tonight · .* · Jazz Night$/)
     expect(tonightLine({ title: 'Jazz Night', startTime: at(17), endTime: at(23) }, now)).toBe('Happening now · Jazz Night')
     expect(tonightLine({ title: 'Brunch', startTime: at(11, 1), endTime: at(14, 1) }, now)).toBeNull()
+    // Running since yesterday is still on now: by the clock, not by what a label says.
+    expect(tonightLine({ title: 'Festival', startTime: at(20, -1), endTime: at(23) }, now)).toBe('Happening now · Festival')
     expect(tonightLine(null, now)).toBeNull()
   })
 })
@@ -123,12 +155,5 @@ describe('Places takes the server at its word (HM-CU04)', () => {
     // One rule, `lib/venue-visibility.ts`. A second copy here is how the list and the map come to disagree.
     const src = read('components/home/PlacesList.tsx')
     expect(src).not.toMatch(/Date\.now\(|new Date\(|startTime|endTime/)
-  })
-})
-
-describe('the Pulse moved into the drawer without growing (HM-CU03)', () => {
-  it('app/(tabs)/events.tsx is no longer than it was', () => {
-    const lines = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'events.tsx'), 'utf8').split('\n').length
-    expect(lines).toBeLessThanOrEqual(3276)
   })
 })

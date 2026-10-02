@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { TAB_BAR_CLEARANCE } from '../../app/(tabs)/_layout'
@@ -12,12 +12,11 @@ import { apiClient, type VenueListItem } from '../../lib/apiClient'
 import { formatDistance } from '../../lib/geo'
 import { liveNowLabel, tonightLine } from '../../lib/home'
 import { Logger } from '../../lib/logger'
+import { initialPlaces, mayLoadMore, placesKey, placesReducer } from '../../lib/places'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 import type { HomeBrowse } from './HomeShell'
 
 const PAGE = 30
-
-type Load = { status: 'loading' | 'ready' | 'error'; venues: VenueListItem[]; page: number; hasMore: boolean }
 
 /**
  * Places — the venues in the Pulse's city, nearest first when the phone has a
@@ -27,74 +26,106 @@ type Load = { status: 'loading' | 'ready' | 'error'; venues: VenueListItem[]; pa
  * hour before it starts until it ends) is not in the response, and its event's
  * card in Events says "at <Venue>" instead; nothing here filters by time, so
  * the list and the map can never disagree with the server (HM-CU04).
+ *
+ * The loading rules are `lib/places.ts` (a reducer, tested): a new city or a
+ * new spot starts the list again, a page for an old one is dropped, a failed
+ * refresh keeps the list and says so, and a later page never repeats a venue.
  */
 export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boolean }) {
   const insets = useSafeAreaInsets()
-  const [load, setLoad] = useState<Load>({ status: 'loading', venues: [], page: 0, hasMore: false })
+  const { city, location, ready } = browse
+  const key = placesKey(city, location)
+  // To ~100 m, as the key is: a GPS jitter is not a new request.
+  const lat = location ? Number(location.latitude.toFixed(3)) : undefined
+  const lon = location ? Number(location.longitude.toFixed(3)) : undefined
+  const [state, dispatch] = useReducer(placesReducer, key, initialPlaces)
   const [refreshing, setRefreshing] = useState(false)
-  const { city, location } = browse
-  const lat = location?.latitude
-  const lon = location?.longitude
-  const latest = useRef(0)
+  const inFlight = useRef(false)
 
-  /** One page from the server, tagged so only the newest ask is applied. */
+  // A new city or a new spot is a new list.
+  useEffect(() => {
+    dispatch({ type: 'reset', key })
+  }, [key])
+
   const request = useCallback(
-    (page: number, force: boolean) => {
-      const call = ++latest.current
-      const sortBy = lat !== undefined && lon !== undefined ? 'distance' : 'name'
-      return apiClient
-        .getVenues({ page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy }, { force })
-        .then((res) => ({ call, page, res }))
+    async (page: number, fresh: boolean) => {
+      dispatch({ type: 'request', key, page })
+      try {
+        const res = await apiClient.getVenues(
+          { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name' },
+          // Opening the pane, pull-to-refresh and Try again are the person asking: never a cached page.
+          fresh ? { force: true } : undefined
+        )
+        if (res.success && res.data) {
+          dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore })
+        } else {
+          Logger.warn('events', 'Could not load places', { page, error: res.error })
+          dispatch({ type: 'failed', key, page })
+        }
+      } catch (error) {
+        Logger.warn('events', 'Places request threw', { page, error: String(error) })
+        dispatch({ type: 'failed', key, page })
+      }
     },
-    [city, lat, lon]
+    [key, city, lat, lon]
   )
 
-  const apply = useCallback(({ call, page, res }: Awaited<ReturnType<typeof request>>) => {
-    // A newer ask (another city, a refresh) has the screen now.
-    if (call !== latest.current) return
-    if (!res.success || !res.data) {
-      Logger.warn('events', 'Could not load places', { error: res.error })
-      setLoad((prev) => (page === 1 ? { ...prev, status: 'error' } : prev))
-      return
-    }
-    const data = res.data
-    setLoad((prev) => ({
-      status: 'ready',
-      venues: page === 1 ? data.venues : [...prev.venues, ...data.venues.filter((v) => !prev.venues.some((p) => p.id === v.id))],
-      page,
-      hasMore: data.pagination.hasMore,
-    }))
-  }, [])
-
-  // On opening, and again each time the tab comes back: a place can be taken over meanwhile.
+  /*
+   * Each time the pane is opened (or the tab comes back to it), a fresh read:
+   * that is the person asking, and a venue an event has taken over since must
+   * not linger from a cached page. Not before the city is decided — a list for
+   * no city would be the wrong list, briefly.
+   */
   useEffect(() => {
-    if (active) void request(1, false).then(apply)
-  }, [active, request, apply])
+    if (!active || !ready) return
+    void request(1, true)
+  }, [active, ready, request])
 
-  // Pull-to-refresh and Try again are the person asking, so they skip the cache.
   const refresh = async () => {
     setRefreshing(true)
-    await request(1, true).then(apply)
-    setRefreshing(false)
+    try {
+      await request(1, true)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const loadMore = async () => {
+    if (inFlight.current || !mayLoadMore(state)) return
+    inFlight.current = true
+    try {
+      await request(state.page + 1, false)
+    } finally {
+      inFlight.current = false
+    }
   }
 
   const header = (
     <View style={styles.header}>
       <PlaceholderBanner />
-      {load.status === 'error' && load.venues.length === 0 ? (
-        <View style={styles.empty} accessibilityLiveRegion="polite">
-          <Text variant="heading">Couldn&apos;t load places</Text>
-          <Text variant="meta">Check your connection and try again.</Text>
-          <ScalePress
-            style={styles.retry}
-            onPress={() => void request(1, true).then(apply)}
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-          >
+      {state.refreshFailed ? (
+        <View style={styles.inlineError} accessibilityLiveRegion="polite">
+          <Text variant="meta" style={styles.inlineErrorText}>
+            Couldn&apos;t refresh places.
+          </Text>
+          <ScalePress onPress={() => void refresh()} accessibilityRole="button" accessibilityLabel="Try again" style={styles.inlineRetry}>
             <Text variant="bodyStrong">Try again</Text>
           </ScalePress>
         </View>
-      ) : load.status === 'ready' && load.venues.length === 0 ? (
+      ) : null}
+      {state.status === 'idle' || state.status === 'loading' ? (
+        <View style={styles.empty}>
+          <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading places" />
+        </View>
+      ) : state.status === 'error' ? (
+        <View style={styles.empty} accessibilityLiveRegion="polite">
+          <Text variant="heading">Couldn&apos;t load places</Text>
+          <Text variant="meta">Check your connection and try again.</Text>
+          <ScalePress style={styles.retry} onPress={() => void refresh()} accessibilityRole="button" accessibilityLabel="Try again">
+            <Text variant="bodyStrong">Try again</Text>
+          </ScalePress>
+        </View>
+      ) : state.venues.length === 0 ? (
         <View style={styles.empty}>
           <Text variant="heading">No places here yet</Text>
           <Text variant="meta">{city ? `Nothing listed in ${city} right now.` : 'Nothing listed near you right now.'}</Text>
@@ -105,15 +136,14 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
 
   return (
     <FlatList
-      data={load.venues}
+      data={state.venues}
       keyExtractor={(v) => v.id}
       renderItem={({ item }) => <PlaceRow venue={item} />}
       ListHeaderComponent={header}
+      ListFooterComponent={state.loadingMore ? <ActivityIndicator style={styles.more} color={EMBER.textSecondary} /> : null}
       onEndReachedThreshold={0.5}
-      onEndReached={() => {
-        if (load.status === 'ready' && load.hasMore) void request(load.page + 1, false).then(apply)
-      }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={EMBER.textSecondary} />}
+      onEndReached={() => void loadMore()}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={EMBER.textSecondary} />}
       contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
       ItemSeparatorComponent={Separator}
       showsVerticalScrollIndicator={false}
@@ -128,7 +158,8 @@ function Separator() {
 function PlaceRow({ venue }: { venue: VenueListItem }) {
   const area = venue.address ?? venue.city
   const distance = formatDistance(venue.distance)
-  const live = liveNowLabel(venue.liveNow)
+  // No chip when the server tells this person nothing (it is null for anyone it would refuse).
+  const live = venue.liveNow ? liveNowLabel(venue.liveNow) : null
   const tonight = tonightLine(venue.nextEvent)
   const details = [venue.venueTypeLabel, area, distance].filter(Boolean).join(' · ')
   return (
@@ -147,9 +178,11 @@ function PlaceRow({ venue }: { venue: VenueListItem }) {
         <Text variant="meta" numberOfLines={1}>
           {details}
         </Text>
-        <Text variant="meta" color={venue.liveNow === 'quiet' ? EMBER.textTertiary : EMBER.textPrimary}>
-          {live}
-        </Text>
+        {live ? (
+          <Text variant="meta" color={venue.liveNow === 'quiet' ? EMBER.textTertiary : EMBER.textPrimary}>
+            {live}
+          </Text>
+        ) : null}
         {tonight ? (
           <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1}>
             {tonight}
@@ -173,6 +206,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: EMBER.separator,
   },
+  inlineError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    padding: SPACE.md,
+    borderRadius: EMBER_RADIUS.md,
+    backgroundColor: EMBER.surfaceSunken,
+  },
+  inlineErrorText: { flex: 1 },
+  inlineRetry: { paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm },
+  more: { paddingVertical: SPACE.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.lg },
   rowText: { flex: 1, gap: SPACE.xxs },
   separator: { height: 1, backgroundColor: EMBER.separator },

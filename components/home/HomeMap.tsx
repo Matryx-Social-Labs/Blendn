@@ -17,7 +17,14 @@ const CITY_DELTA = 0.06
  * PR B. Draws no pins yet, and never a check-in boundary: no payload carries
  * one, and `__tests__/homeMap.test.ts` refuses the shapes that would draw it.
  */
-export function HomeMap({ center }: { center: { latitude: number; longitude: number } | null }) {
+export function HomeMap({
+  center,
+  cityCentre,
+}: {
+  center: { latitude: number; longitude: number } | null
+  /** The picked city's centre: the map goes there whenever the city changes. */
+  cityCentre: { latitude: number; longitude: number } | null
+}) {
   const map = useRef<MapView>(null)
   const centred = useRef(false)
 
@@ -27,6 +34,12 @@ export function HomeMap({ center }: { center: { latitude: number; longitude: num
     centred.current = true
     map.current?.animateToRegion({ ...center, latitudeDelta: CITY_DELTA, longitudeDelta: CITY_DELTA }, 0)
   }, [center])
+
+  // A city picked in the Pulse is a place to look at: follow it.
+  useEffect(() => {
+    if (!cityCentre) return
+    map.current?.animateToRegion({ ...cityCentre, latitudeDelta: CITY_DELTA, longitudeDelta: CITY_DELTA }, 400)
+  }, [cityCentre?.latitude, cityCentre?.longitude]) // eslint-disable-line react-hooks/exhaustive-deps -- the point, not the object
 
   return (
     <MapView

@@ -9,6 +9,7 @@ import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type VenueDetail } from '../../lib/apiClient'
 import { liveNowLabel, tonightLine } from '../../lib/home'
+import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
 
 /**
@@ -26,16 +27,23 @@ export default function VenueScreen() {
 
   const load = useCallback(() => {
     if (!id) return
-    void apiClient.getVenue(id).then((res) => {
-      setFailed(res.success && res.data ? null : res.error || "This place didn't load.")
-      if (res.success && res.data) setDetail(res.data)
-    })
+    apiClient
+      .getVenue(id)
+      .then((res) => {
+        setFailed(res.success && res.data ? null : res.error || "This place didn't load.")
+        if (res.success && res.data) setDetail(res.data)
+      })
+      .catch((error) => {
+        Logger.warn('events', 'Venue screen load threw', { error: String(error) })
+        setFailed("This place didn't load.")
+      })
   }, [id])
 
   // On focus, so coming back to it shows the count as it is now.
   useFocusEffect(load)
 
-  const tonight = detail?.tonight ? tonightLine(detail.tonight) : null
+  const tonightEvent = detail?.tonight ?? null
+  const tonight = tonightEvent ? tonightLine(tonightEvent) : null
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -50,11 +58,11 @@ export default function VenueScreen() {
             <Text variant="meta">
               {[detail.venue.venueTypeLabel, detail.venue.address ?? detail.venue.city].filter(Boolean).join(' · ')}
             </Text>
-            <Text variant="bodyStrong">{liveNowLabel(detail.live.liveNow)}</Text>
-            {tonight && detail.tonight ? (
+            {detail.live.liveNow ? <Text variant="bodyStrong">{liveNowLabel(detail.live.liveNow)}</Text> : null}
+            {tonight && tonightEvent ? (
               <ScalePress
                 style={styles.tonight}
-                onPress={() => router.push(`/event/${detail.tonight!.id}` as never)}
+                onPress={() => router.push(`/event/${tonightEvent.id}` as never)}
                 accessibilityRole="button"
                 accessibilityLabel={tonight}
               >

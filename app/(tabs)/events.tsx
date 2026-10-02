@@ -271,7 +271,7 @@ const proximityFor = (
   return proximityMap
 }
 
-function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
+function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean }) {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
@@ -358,11 +358,16 @@ function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
    */
   const [selection, setSelection] = useState<StoredCity | null>(null)
   const selectedCity = selection?.city ?? null
-  // Places browses the same city from the same spot (components/home/HomeShell.tsx).
-  useEffect(() => onBrowse({ city: selectedCity, location: userLocation }), [onBrowse, selectedCity, userLocation])
+  // Decided once the city list has been read: stored, inferred, or none at all.
+  const [cityResolved, setCityResolved] = useState(false)
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  // Places browses the same city from the same spot (components/home/HomeShell.tsx).
+  useEffect(
+    () => onBrowse({ city: selectedCity, location: userLocation, ready: cityResolved, cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null }),
+    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions]
+  )
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
@@ -1489,6 +1494,7 @@ function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
         // Never overwrite a choice the user made while this was in flight.
         current ?? resolveBrowseCity({ stored, deviceCity: null, available })
       )
+      setCityResolved(true)
     })()
     return () => {
       cancelled = true
@@ -1983,7 +1989,7 @@ function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
               title={featuredItems[0].title}
               tag={featuredItems[0].category || null}
               playlist={feedPlaylist(featuredItems[0].media, featuredItems[0].cover_image_url)}
-              isActive
+              isActive={visible}
               dateLabel={featuredDateLabel(featuredItems[0].start_time)}
               placeLabel={placeLabel(featuredItems[0])}
               width={featured.width}
@@ -2023,7 +2029,7 @@ function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
                 title={item.title}
                 tag={item.tag}
                 playlist={item.playlist}
-                isActive={index === featuredActiveIndex}
+                isActive={visible && index === featuredActiveIndex}
                 dateLabel={item.dateLabel}
                 placeLabel={item.placeLabel}
                 width={featured.width}
@@ -3257,5 +3263,8 @@ export default function Events() {
   )
 }
 
-/** The Pulse, as the home drawer's Events pane. Module-level, so the shell's state never re-renders it. */
-const renderPulse = (onBrowse: (browse: HomeBrowse) => void) => <EventsInner onBrowse={onBrowse} />
+/**
+ * The Pulse, as the home drawer's Events pane. Module-level, so only `visible`
+ * (its pane showing, the drawer past peek) re-renders it, never a drag.
+ */
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => <EventsInner onBrowse={onBrowse} visible={visible} />

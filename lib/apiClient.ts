@@ -9,6 +9,7 @@ import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
 import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
@@ -750,8 +751,8 @@ export interface VenueListItem {
   /** Kilometres from the `lat`/`lon` sent, or null. */
   distance: number | null
   upcomingEventCount: number
-  /** How many are live here, as a bucket and never a number (D-19). */
-  liveNow: 'quiet' | '5-9' | '10-19' | '20+'
+  /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
+  liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
   nextEvent: {
     id: string
     title: string
@@ -1766,8 +1767,8 @@ class ApiClientClass {
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: { city: string; eventCount: number }[] }>> {
-    return this.cachedRequest<{ cities: { city: string; eventCount: number }[] }>(
+  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
+    return this.cachedRequest<{ cities: CityOption[] }>(
       '/api/mobile/events/cities',
       { ttl: 5 * 60 * 1000, swr: true }
     )
