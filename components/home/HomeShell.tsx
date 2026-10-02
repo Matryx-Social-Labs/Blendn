@@ -115,7 +115,13 @@ export function HomeShell({
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        <HomeMap center={browse.location} cityCentre={browse.cityCentre} segment={segment} topInset={insets.top + TOP_BAR_HEIGHT} />
+        <HomeMap
+          center={browse.location}
+          cityCentre={browse.cityCentre}
+          segment={segment}
+          topInset={insets.top + TOP_BAR_HEIGHT}
+          bottomInset={height - points[snap]}
+        />
       </View>
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer

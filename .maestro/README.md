@@ -28,7 +28,7 @@ people your session creates get a passphrase you choose.
 | `c19-board-ask-accept` | SCRUM-126 (BD-M01, BD-D01) | `EMAIL PASSWORD EVENT EVENT_ID POST_TEXT API ASKER_TOKEN` — a build with `EXPO_PUBLIC_BOARD_ENABLED=true`; both people going, profiles complete |
 | `c19-board-safety` | SCRUM-126, SCRUM-322 | `EMAIL PASSWORD EVENT AUTHOR THEIR_POST` — after an API setup (their ask on your post, their own post); **blocks them**, undo after |
 | `c19-board-refusals` | SCRUM-126 (BD-M02) | `EMAIL PASSWORD EVENT REASON` (+ `SEARCH` for an account with no Going row, `TRY_POST`) — once per refused account |
-| `c15-home-map-drawer` | SCRUM-540 (HM-M01, HM-D01) | `EMAIL PASSWORD PLACE` (+ `EVENT HIDDEN_VENUE` for the hiding check: an event within an hour of its start at a venue with a confirmed link). `MAESTRO_PASSWORD` instead of `-e PASSWORD` keeps the secret off the command line |
+| `c15-home-map-drawer` | SCRUM-540 (HM-M01, HM-D01) | `EMAIL PASSWORD PLACE` (+ `EVENT HIDDEN_VENUE` for the hiding check: an event within an hour of its start at a venue with a confirmed link; + `PIN_POINT` for the pin tap, e.g. `79%,33%`). `MAESTRO_PASSWORD` instead of `-e PASSWORD` keeps the secret off the command line |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that

@@ -10,8 +10,21 @@
  * venue shades sit above. The tiles carry no Blendn data.
  *
  * Free, no key: OpenFreeMap. Its attribution stays on (`HomeMap.tsx`), as the
- * OpenStreetMap licence requires.
+ * OpenStreetMap licence requires. OpenFreeMap has no SLA, so the style can be
+ * moved without a release: `EXPO_PUBLIC_MAP_STYLE_URL` (a full style JSON URL,
+ * e.g. this style self-hosted over our own tiles) replaces it when set. A
+ * replacement must keep a `building-3d` fill-extrusion layer for the lighting.
  */
+import type {
+  LineLayerSpecification,
+  StyleSpecification,
+  SymbolLayerSpecification,
+} from '@maplibre/maplibre-react-native'
+
+// The spec's own property types, read off the layer types the package exports.
+type LineWidth = NonNullable<LineLayerSpecification['paint']>['line-width']
+type TextSize = NonNullable<SymbolLayerSpecification['layout']>['text-size']
+type TextField = NonNullable<SymbolLayerSpecification['layout']>['text-field']
 
 const GROUND = '#141313'
 const PARK = '#18201A'
@@ -23,10 +36,10 @@ const BUILDING = '#2A2827'
 const LABEL = '#8A8584'
 const LABEL_HALO = '#0F0E0E'
 
-const NAME = ['coalesce', ['get', 'name_en'], ['get', 'name']]
+const NAME: TextField = ['coalesce', ['get', 'name_en'], ['get', 'name']]
 const FONT = ['Noto Sans Regular']
 
-const road = (id: string, classes: string[], color: string, width: unknown[]) => ({
+const road = (id: string, classes: string[], color: string, width: LineWidth): LineLayerSpecification => ({
   id,
   type: 'line',
   source: 'openmaptiles',
@@ -36,7 +49,7 @@ const road = (id: string, classes: string[], color: string, width: unknown[]) =>
   paint: { 'line-color': color, 'line-width': width },
 })
 
-const place = (id: string, cls: string, minzoom: number, size: unknown[]) => ({
+const place = (id: string, cls: string, minzoom: number, size: TextSize): SymbolLayerSpecification => ({
   id,
   type: 'symbol',
   source: 'openmaptiles',
@@ -50,7 +63,7 @@ const place = (id: string, cls: string, minzoom: number, size: unknown[]) => ({
 /** The id of the extruded building layer: lit buildings are queried from it. */
 export const BUILDING_LAYER_ID = 'building-3d'
 
-export const EMBER_MAP_STYLE = {
+export const EMBER_MAP_STYLE: StyleSpecification = {
   version: 8,
   name: 'Blendn Ember (OpenFreeMap Liberty, dark)',
   sources: {
@@ -115,4 +128,20 @@ export const EMBER_MAP_STYLE = {
     place('label_town', 'town', 6, ['interpolate', ['exponential', 1.2], ['zoom'], 7, 12, 11, 14]),
     place('label_city', 'city', 3, ['interpolate', ['exponential', 1.2], ['zoom'], 4, 11, 7, 13, 11, 18]),
   ],
+}
+
+/** The style the home map loads: the env's URL when set, else this one. */
+export function homeMapStyle(): string | StyleSpecification {
+  const url = process.env.EXPO_PUBLIC_MAP_STYLE_URL?.trim()
+  return url ? url : EMBER_MAP_STYLE
+}
+
+/** The host a style comes from, for an error report (no PII, and never throws). */
+export function styleHost(style: string | StyleSpecification): string {
+  if (typeof style !== 'string') return 'tiles.openfreemap.org'
+  try {
+    return new URL(style).host
+  } catch {
+    return 'invalid-url'
+  }
 }

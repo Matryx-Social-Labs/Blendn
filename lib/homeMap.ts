@@ -164,3 +164,103 @@ export function buildingUnder<F extends { geometry: { type: string; coordinates:
   }
   return null
 }
+
+/* -------------------------------------------------------------------------- */
+/* Asking for pins (step 2 review)                                             */
+/* -------------------------------------------------------------------------- */
+
+export type PinQuery = { lat: number; lon: number; radius: number }
+
+/** To ~100 m and 10 m of radius: a pan of a few metres is the same question. */
+export function roundQuery(q: PinQuery): PinQuery {
+  return { lat: Math.round(q.lat * 1e3) / 1e3, lon: Math.round(q.lon * 1e3) / 1e3, radius: Math.round(q.radius * 100) / 100 }
+}
+
+/**
+ * Whether `next` asks for nothing `last` did not: its whole circle inside the
+ * last one asked for. Panning about inside what is loaded costs no request —
+ * the lists and the map share one person's 60 reads a minute.
+ */
+export function insideLastCircle(last: PinQuery | null, next: PinQuery): boolean {
+  if (!last) return false
+  return getDistanceKm(last.lat, last.lon, next.lat, next.lon) + next.radius <= last.radius
+}
+
+/** How long to wait after `failures` refusals in a row: 2 s, 4 s, 8 s … at most a minute. */
+export function backoffMs(failures: number, retryAfterS?: number): number {
+  if (failures <= 0) return 0
+  const doubling = Math.min(60_000, 1_000 * 2 ** failures)
+  return Math.max(doubling, (retryAfterS ?? 0) * 1_000)
+}
+
+type Answer<T> = { success: boolean; data?: T; errorCode?: string; retryAfter?: number }
+
+export type PinsResult = { kind: 'pins'; pins: Pin[] } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
+
+/**
+ * The pins for one viewport and segment: the lists' own query, read fresh (a
+ * venue an event has taken over must not linger), as the server answered.
+ */
+export async function loadPins(
+  segment: 'events' | 'places',
+  q: PinQuery,
+  api: {
+    getEvents: (q: PinQuery & { limit: number }) => Promise<Answer<{ events: EventLike[] }>>
+    getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => Promise<Answer<{ venues: VenueLike[] }>>
+  },
+  limit: number,
+  now: number = Date.now()
+): Promise<PinsResult> {
+  try {
+    const res = segment === 'places' ? await api.getVenues({ ...q, limit, sortBy: 'distance' }) : await api.getEvents({ ...q, limit })
+    if (res.errorCode === 'RATE_LIMITED') return { kind: 'rate_limited', retryAfter: res.retryAfter }
+    if (!res.success || !res.data) return { kind: 'failed' }
+    const data = res.data as { events?: EventLike[]; venues?: VenueLike[] }
+    return { kind: 'pins', pins: pinsFor(segment, { events: data.events ?? [], venues: data.venues ?? [] }, now) }
+  } catch {
+    return { kind: 'failed' }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lighting (step 2 review)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** Below this zoom the tiles carry no buildings: no lookups at all. */
+export const LIGHT_MIN_ZOOM = 14
+
+/** Whether a projected point is on the map's view, with a margin for a building around it. */
+export function onScreen([x, y]: [number, number], size: { width: number; height: number }, margin = 48): boolean {
+  return x >= -margin && y >= -margin && x <= size.width + margin && y <= size.height + margin
+}
+
+/** What a lighting pass was for: the same pins over the same view need no second pass. */
+export function lightSignature(pins: Pin[], bounds: Bounds | null): string {
+  const view = bounds ? bounds.map((b) => b.toFixed(4)).join(',') : '-'
+  return `${view}|${pins.map((p) => `${p.id}:${p.live ? 1 : 0}`).join(',')}`
+}
+
+export interface LitBuilding {
+  geometry: { type: 'Polygon'; coordinates: Ring[] }
+  kind: PinKind
+  live: boolean
+  id: string
+  height: number
+  base: number
+}
+
+/**
+ * One lit copy per building. Two pins in one building would draw two
+ * extrusions in the same place and flicker between their colours; the live
+ * one wins (it is the one to go to now), else the first.
+ */
+export function dedupeLit(lit: LitBuilding[]): LitBuilding[] {
+  const byBuilding = new Map<string, LitBuilding>()
+  for (const b of lit) {
+    const ring = b.geometry.coordinates[0] ?? []
+    const key = `${ring.length}:${ring[0]?.map((n) => n.toFixed(6)).join(',') ?? ''}`
+    const held = byBuilding.get(key)
+    if (!held || (b.live && !held.live)) byBuilding.set(key, b)
+  }
+  return [...byBuilding.values()]
+}

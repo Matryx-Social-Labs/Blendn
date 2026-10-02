@@ -8,6 +8,8 @@
 # line), PLACE (a regex for a venue Places lists), and, for the hiding check
 # (HM-D01): EVENT (a regex for the event's title, found by search),
 # HIDDEN_VENUE (its venue's name — "The Humming Tree" for blr-hiding-soon).
+# PIN_POINT (optional, e.g. "79%,33%"): a screen point over a pin or a lit
+# building for the pin tap, which ends the run on that event or place.
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c15
@@ -54,6 +56,16 @@ tags:
 - tapOn: "Events and places.*"
 - assertVisible: "The Pulse"
 - tapOn: "Events and places.*"
+# The keyboard never covers the search: typing opens the drawer fully (the
+# screenshot is the evidence; Maestro cannot see what the keyboard covers).
+- tapOn: "Search events"
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: c15-keyboard-open
+- runFlow: ../subflows/keyboard-done.yaml
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: c15-keyboard-closed
 # The event that has its venue names it ("at The Humming Tree")…
 - runFlow:
     when:
@@ -85,6 +97,21 @@ tags:
 - assertVisible: ".*live"
 - tapOn: "Go back"
 - assertVisible: "Places"
+# A pin (or the building it lights) opens what it stands for. Last: iOS has no
+# Maestro `back` to come home from it.
+- runFlow:
+    when:
+      true: ${PIN_POINT != undefined && PIN_POINT != ''}
+    commands:
+      - tapOn: "Events"
+      - waitForAnimationToEnd:
+          timeout: 8000
+      - tapOn:
+          point: ${PIN_POINT}
+      - extendedWaitUntil:
+          visible: ".*(I'm going|Going|PLACEHOLDER DESIGN|Check in).*"
+          timeout: 30000
+      - takeScreenshot: c15-pin-opened
 # Read back (HM-D01), from blendn-admin:
 #   npm run -s qa sq "SELECT e.slug, e.status::text AS status, e.visibility::text AS vis, coalesce(e.venue_link_status::text,'null') AS link, e.kind::text AS kind, e.start_time::text AS starts, e.end_time::text AS ends FROM events e JOIN venues v ON v.id = e.venue_id WHERE v.name = 'The Humming Tree' AND e.deleted_at IS NULL AND e.end_time > now() ORDER BY e.start_time LIMIT 5"
 #   curl -s -H "Authorization: Bearer $(npm run -s qa token <EMAIL>)" "https://staging-api.blendn.app/api/mobile/venues?lat=12.9716&lon=77.5946&radius=5" | jq -r '.. | objects | select(has("upcomingEventCount")) | .name'   # HIDDEN_VENUE absent

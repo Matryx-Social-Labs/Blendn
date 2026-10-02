@@ -1,8 +1,22 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { buildingUnder, MAX_QUERY_RADIUS_KM, pinsFor, shadeOf, viewportQuery } from '../lib/homeMap'
-import { EMBER_MAP_STYLE } from '../lib/mapStyleEmber'
+import {
+  backoffMs,
+  buildingUnder,
+  dedupeLit,
+  insideLastCircle,
+  lightSignature,
+  loadPins,
+  MAX_QUERY_RADIUS_KM,
+  onScreen,
+  pinsFor,
+  roundQuery,
+  shadeOf,
+  viewportQuery,
+  type LitBuilding,
+} from '../lib/homeMap'
+import { EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
 
 /**
  * The 3D home map (plan v2 §4, step 2 PR B): what a viewport asks for, which
@@ -143,9 +157,104 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(pitch).toBeLessThanOrEqual(60)
   })
 
+  it('sizes circles only as the glow (by bucket) or the fixed dot: never a radius in metres', () => {
+    const radii = [...map.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
+    expect(radii.length).toBeGreaterThan(0)
+    for (const r of radii) expect(["['*', ['get', 'glow'], 12]", '6']).toContain(r)
+  })
+
   it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
     expect(EMBER_MAP_STYLE.layers.some((l) => l.id === 'building-3d' && l.type === 'fill-extrusion')).toBe(true)
     expect(map).toMatch(/\battribution\b(?!=\{false\})/)
     expect(map).not.toMatch(/attribution=\{false\}/)
+  })
+})
+
+describe('asking for pins (step 2 review)', () => {
+  it('rounds a view to ~100 m, so a nudge is the same question', () => {
+    expect(roundQuery({ lat: 12.971634, lon: 77.594612, radius: 1.23456 })).toEqual({ lat: 12.972, lon: 77.595, radius: 1.23 })
+  })
+
+  it('asks nothing for a view inside the circle already loaded, and asks for one that leaves it', () => {
+    const last = { lat: 12.97, lon: 77.59, radius: 2 }
+    expect(insideLastCircle(last, { lat: 12.971, lon: 77.591, radius: 1 })).toBe(true)
+    expect(insideLastCircle(last, { lat: 12.99, lon: 77.59, radius: 1 })).toBe(false)
+    expect(insideLastCircle(last, { lat: 12.97, lon: 77.59, radius: 3 })).toBe(false)
+    expect(insideLastCircle(null, last)).toBe(false)
+  })
+
+  it("backs off on refusals, doubling to a minute, and never earlier than the server's Retry-After", () => {
+    expect(backoffMs(0)).toBe(0)
+    expect(backoffMs(1)).toBe(2_000)
+    expect(backoffMs(3)).toBe(8_000)
+    expect(backoffMs(10)).toBe(60_000)
+    expect(backoffMs(1, 30)).toBe(30_000)
+  })
+
+  const ok = <T,>(data: T) => Promise.resolve({ success: true, data })
+  const venues = [{ id: 'v', name: 'V', latitude: 12.97, longitude: 77.59, liveNow: '5-9' as const }]
+  const events = [event('e', -10, 60)]
+
+  it('asks the segment showing, and only it', async () => {
+    const api = { getEvents: jest.fn(() => ok({ events })), getVenues: jest.fn(() => ok({ venues })) }
+    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const places = await loadPins('places', q, api, 50)
+    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })] })
+    expect(api.getVenues).toHaveBeenCalledWith({ ...q, limit: 50, sortBy: 'distance' })
+    expect(api.getEvents).not.toHaveBeenCalled()
+    const evts = await loadPins('events', q, api, 50)
+    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })] })
+  })
+
+  it('reports a refusal as rate-limited (with its wait) and anything else as failed, never throwing', async () => {
+    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const refused = { getEvents: jest.fn(), getVenues: jest.fn(() => Promise.resolve({ success: false, errorCode: 'RATE_LIMITED', retryAfter: 12 })) }
+    expect(await loadPins('places', q, refused, 50)).toEqual({ kind: 'rate_limited', retryAfter: 12 })
+    const broken = { getEvents: jest.fn(() => Promise.reject(new Error('offline'))), getVenues: jest.fn() }
+    expect(await loadPins('events', q, broken, 50)).toEqual({ kind: 'failed' })
+  })
+})
+
+describe('lighting, once per view (step 2 review)', () => {
+  it('looks only at pins on (or just off) the screen', () => {
+    const size = { width: 400, height: 800 }
+    expect(onScreen([200, 400], size)).toBe(true)
+    expect(onScreen([-40, 400], size)).toBe(true)
+    expect(onScreen([-100, 400], size)).toBe(false)
+    expect(onScreen([200, 900], size)).toBe(false)
+  })
+
+  it('needs no second pass for the same pins over the same view', () => {
+    const pins = pinsFor('places', { events: [], venues: [{ id: 'v', name: 'V', latitude: 12.97, longitude: 77.59, liveNow: 'quiet' }] })
+    const view: [number, number, number, number] = [77.58, 12.96, 77.6, 12.98]
+    expect(lightSignature(pins, view)).toBe(lightSignature(pins, view))
+    expect(lightSignature(pins, [77.581, 12.96, 77.6, 12.98])).not.toBe(lightSignature(pins, view))
+  })
+
+  it('draws one copy per building, the live one winning', () => {
+    const ring = [[77.59, 12.97], [77.591, 12.97], [77.591, 12.971], [77.59, 12.97]]
+    const at = (id: string, live: boolean): LitBuilding => ({ id, live, kind: 'event', geometry: { type: 'Polygon', coordinates: [ring] }, height: 10, base: 0 })
+    expect(dedupeLit([at('later', false), at('now', true)]).map((b) => b.id)).toEqual(['now'])
+    expect(dedupeLit([at('first', false), at('second', false)]).map((b) => b.id)).toEqual(['first'])
+  })
+})
+
+describe('the map style can move without a release (step 2 review)', () => {
+  const saved = process.env.EXPO_PUBLIC_MAP_STYLE_URL
+  afterEach(() => {
+    process.env.EXPO_PUBLIC_MAP_STYLE_URL = saved
+  })
+
+  it('uses EXPO_PUBLIC_MAP_STYLE_URL when set, else the Ember style over OpenFreeMap', () => {
+    delete process.env.EXPO_PUBLIC_MAP_STYLE_URL
+    expect(homeMapStyle()).toBe(EMBER_MAP_STYLE)
+    process.env.EXPO_PUBLIC_MAP_STYLE_URL = 'https://maps.blendn.app/styles/ember.json'
+    expect(homeMapStyle()).toBe('https://maps.blendn.app/styles/ember.json')
+  })
+
+  it('reports only the host of a style that failed, and never throws on a bad URL', () => {
+    expect(styleHost('https://maps.blendn.app/styles/ember.json')).toBe('maps.blendn.app')
+    expect(styleHost('not a url')).toBe('invalid-url')
+    expect(styleHost(EMBER_MAP_STYLE)).toBe('tiles.openfreemap.org')
   })
 })

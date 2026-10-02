@@ -650,8 +650,11 @@ empty states. Design ticket: SCRUM-541.
   part of the map on screen. The building under a pin is lit: the ember shade
   for an event, violet-rose for a venue, brighter when live; where there is no
   building, the pin's glow is all there is, and at a venue the glow steps with
-  its live bucket. Tap a pin to open it. OpenFreeMap's attribution stays on
-  (the OpenStreetMap licence), under the top bar.
+  its live bucket. Tap a pin (or a lit building) to open it. The camera keeps
+  its centre above the drawer, follows the picked city and your first location
+  fix (until you move the map yourself), and shows your position. OpenFreeMap's
+  attribution stays on (the OpenStreetMap licence), under the top bar; the
+  style can be moved off OpenFreeMap with `EXPO_PUBLIC_MAP_STYLE_URL`.
 - **The top bar** (wordmark and bell) floats over the map. The drawer never
   covers it.
 - **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
