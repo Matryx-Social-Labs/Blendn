@@ -707,6 +707,8 @@ function RootLayout() {
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
+      <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*

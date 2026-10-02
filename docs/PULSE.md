@@ -7,6 +7,11 @@ next.
 Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md). The frame-by-frame
 audit of all nine screens is [`HOMEPAGE_AUDIT.md`](./HOMEPAGE_AUDIT.md).
 
+**Since plan v2 step 2 (2026-10-02) The Pulse is the Events pane of the home
+drawer**, over a map, beside Places — `docs/PLACEHOLDER_SCREENS.md` §8. The
+screen below is unchanged inside it; only the top bar moved up to float over
+the map, and the feed now starts under the drawer's header.
+
 ---
 
 ## The thing to know first
@@ -208,7 +213,7 @@ white, which is what makes it read as a mark and not as a second heading above
 
 | Glyph | Status |
 |---|---|
-| hamburger, 18×12, left | Absent. There is no drawer in this app. Inventing one to justify a glyph is the tail wagging the dog |
+| hamburger, 18×12, left | Absent. Still nothing for it to open: the home drawer (plan v2 step 2, `docs/PLACEHOLDER_SCREENS.md` §8) is the pull-up sheet The Pulse lives in, not a side menu |
 | bell, 16×20, right | **Built.** `GET /notifications` shipped (admin #242), and `NotificationBell` is passed into `PulseTopBar`'s `actions` slot from `app/(tabs)/events.tsx`. This line used to say the endpoint didn't exist — it does now, and the bell is live, not a placeholder |
 
 An earlier draft of this component put a **Pulse / Hotspots** feed switch in the

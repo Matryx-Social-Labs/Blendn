@@ -54,10 +54,19 @@ describe('the overlay header, frame 1141:4819', () => {
     expect(src).not.toContain('onPress')
   })
 
-  it('the feed clears it with padding, not with a spacer', () => {
+  it('floats over the home map, and the drawer stops under it (plan v2 step 2)', () => {
+    /*
+     * The Pulse is the home drawer's Events pane now, so the bar moved up a
+     * level with it: the shell draws it over the map, the drawer's `full`
+     * stops under it, and the feed clears only the drawer's own header — with
+     * padding still, never a spacer.
+     */
+    const shell = stripComments(read('components/home/HomeShell.tsx'))
+    expect(shell).toContain('<PulseTopBar')
+    expect(shell).toContain('topChrome: insets.top + TOP_BAR_HEIGHT')
     const src = SCREEN()
-    expect(src).toContain('<PulseTopBar')
-    expect(src).toContain('paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg')
+    expect(src).not.toContain('<PulseTopBar')
+    expect(src).toContain('paddingTop: SPACE.lg,')
   })
 })
 

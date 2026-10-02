@@ -27,7 +27,6 @@ import {
   FEATURED_CARD_GAP,
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
-import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
@@ -35,7 +34,8 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { DayHeading } from '../../components/ui/DayHeading'
-import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
+import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
+import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
 import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -271,10 +271,12 @@ const proximityFor = (
   return proximityMap
 }
 
-function EventsInner() {
+function EventsInner({ onBrowse }: { onBrowse: (browse: HomeBrowse) => void }) {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
+  // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
+  const cardInsets = useMemo(() => ({ top: insets.top + DRAWER_HEADER_HEIGHT, bottom: insets.bottom }), [insets.top, insets.bottom])
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -356,6 +358,8 @@ function EventsInner() {
    */
   const [selection, setSelection] = useState<StoredCity | null>(null)
   const selectedCity = selection?.city ?? null
+  // Places browses the same city from the same spot (components/home/HomeShell.tsx).
+  useEffect(() => onBrowse({ city: selectedCity, location: userLocation }), [onBrowse, selectedCity, userLocation])
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
@@ -1952,7 +1956,7 @@ function EventsInner() {
      * screen opens on, that is sized to clear it.
      */
     const featured = featuredCardLayout(
-      insets,
+      cardInsets,
       tabBarTop(SCREEN_HEIGHT, insets.bottom),
       featuredItems.length === 1,
       bannersHeight
@@ -2368,7 +2372,7 @@ function EventsInner() {
    * as a prop would couple two render paths that would otherwise stay
    * independent.
    */
-  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
+  const featuredSkeleton = featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
 
   const emptyKind = pulseEmptyKind({
     searching: isSearching,
@@ -2389,28 +2393,6 @@ function EventsInner() {
      * and ends clear of the hardware.
      */
     <View style={styles.container}>
-      {/*
-        No panel around the list, and the bar is an overlay.
-
-        This screen used to be two things stacked: a sticky bar, and a rounded
-        bordered elevated sheet holding everything else — `sectionBg`, absolutely
-        positioned below the bar with its own background, its own border and its
-        own gradient. A homepage mounted as a screen inside a screen, which is
-        why nothing lined up with the frame: the frame has one flat surface and
-        this had three.
-
-        The frame is one background, `#0F0E0E`, edge to edge, with the content
-        sitting directly on it. So the list is the page now, and `PulseTopBar`
-        floats over it holding nothing but the wordmark — it reserves no height
-        and the feed scrolls under it.
-
-        The old bar's other two controls did not come back with it. The avatar
-        is the Me tab, where a profile picture is the more usual place to find
-        yourself; settings is reached through it, as it already was from the
-        profile screen; and the city picker had already moved into the headline.
-      */}
-        <PulseTopBar actions={<NotificationBell />} />
-
         <VirtualizedList
           forwardedRef={listRef as any}
           data={showLoadingSkeleton ? [] : mainListData}
@@ -2425,12 +2407,12 @@ function EventsInner() {
           contentContainerStyle={[
             styles.listContainer,
             {
-              // The status bar and the overlay header at the top; the floating
-              // nav plus the home indicator at the bottom. Padding, not layout,
-              // so the feed still scrolls under all four.
+              // The drawer's header above (the top bar and the status bar are
+              // above the drawer); the floating nav plus the home indicator at
+              // the bottom, which the feed still scrolls under.
               //
               // Kept in step with `CHROME_ABOVE_CARD`, which sizes the hero card.
-              paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg,
+              paddingTop: SPACE.lg,
               // The frame's 128 already clears the 88pt nav. `Math.max` so it
               // still does if the nav grows — the bar's height has changed
               // twice, and a feed that ends underneath it is not a visible
@@ -3270,7 +3252,10 @@ const styles = StyleSheet.create({
 export default function Events() {
   return (
     <ScreenProfiler id="pulse">
-      <EventsInner />
+      <HomeShell renderEvents={renderPulse} />
     </ScreenProfiler>
   )
 }
+
+/** The Pulse, as the home drawer's Events pane. Module-level, so the shell's state never re-renders it. */
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void) => <EventsInner onBrowse={onBrowse} />

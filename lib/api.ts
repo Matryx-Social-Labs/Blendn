@@ -59,6 +59,8 @@ export function eventFromApi(e: EventPayload) {
       description: e.description || '',
       short_description: e.shortDescription || '',
       venue_name: e.venueName || '',
+      /** The linked venue the card names ("at …"), or null — `placeLabel`. */
+      venue: e.venue ?? null,
       address: e.address || '',
       start_time: e.startTime,
       end_time: e.endTime,
