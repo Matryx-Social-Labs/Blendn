@@ -32,7 +32,11 @@ tags:
     timeout: 60000
 - runFlow: ../subflows/dismiss-tip.yaml
 # The drawer and its two segments.
-- assertVisible: "Events and places"
+# The handle's description carries its state on Android ("Events and places,
+# Expanded"), hence the trailing .*. Under Maestro on Android, React Native
+# reports a screen reader (UiAutomation), so the drawer opens at full there —
+# by design for a screen reader; a person without one gets half.
+- assertVisible: "Events and places.*"
 - assertVisible: "Events"
 - assertVisible: "Places"
 # Ten switches without a crash.
@@ -46,10 +50,10 @@ tags:
       - tapOn: "Events"
       - assertVisible: "The Pulse"
 # Up to full and back down: the handle steps it.
-- tapOn: "Events and places"
-- tapOn: "Events and places"
+- tapOn: "Events and places.*"
+- tapOn: "Events and places.*"
 - assertVisible: "The Pulse"
-- tapOn: "Events and places"
+- tapOn: "Events and places.*"
 # The event that has its venue names it ("at The Humming Tree")…
 - runFlow:
     when:
