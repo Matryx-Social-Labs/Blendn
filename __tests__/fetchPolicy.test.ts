@@ -68,6 +68,9 @@ const ALLOWED: Record<string, string> = {
   'components/PresenceMonitor.tsx':
     'presence is correctness, not freshness: a stale check-in decides whether ' +
     'somebody is shown as in the room',
+  'components/home/PlacesList.tsx':
+    'opening Places (a tap on the segment or back to the tab), pull-to-refresh and Try again — ' +
+    'and a venue an event has taken over must not linger from a cached page',
   'lib/useRoom.ts':
     'load-more raises the limit, which is a different query rather than a ' +
     're-read of the same one',

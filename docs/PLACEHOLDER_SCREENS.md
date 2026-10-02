@@ -634,6 +634,80 @@ belongs beside the host byline instead.
 
 ---
 
+## 8. The home screen — a map, and a drawer of Events | Places (`components/home/HomeShell.tsx`)
+
+**Added 2026-10-02 (step 2 of the product-completion plan, PR A).** The Pulse
+tab (`app/(tabs)/events.tsx`) is now a map with a pull-up drawer. The drawer
+holds a segmented control, **Events | Places**. Events is The Pulse exactly as
+it was — the same component, moved, with its sections, search, city picker and
+empty states. Design ticket: SCRUM-541.
+
+### What it does
+
+- **The map** (`HomeMap.tsx`) fills the screen behind everything. In PR A it is
+  a plain dark 2D map you can pan, centred on the phone's fix. PR B replaces it
+  with the 3D map: MapLibre, the buildings under event and venue pins lit in
+  brand shades, a glow where there is no building.
+- **The top bar** (wordmark and bell) floats over the map. The drawer never
+  covers it.
+- **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
+  header, above the tab bar), `half` (the default) and `full` (under the top
+  bar). Drag its header, or tap the handle to step it up. The list inside
+  scrolls on its own and never moves the drawer.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/home.test.ts` refuses the shapes that would draw one |
+| **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
+| **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
+| **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
+| **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
+| **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
+| **44pt targets** | The handle and each segment |
+| **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |
+| **The map follows the city** | Picking a city moves the map to it (`/events/cities` `centre`) |
+
+### Open for design
+
+Everything visual: the drawer's heights and edge, the segmented control, the
+handle, whether `peek` shows a summary line, what the map shows at each height.
+
+---
+
+## 9. Places — the list in the drawer (`components/home/PlacesList.tsx`)
+
+**Added 2026-10-02 (step 2, PR A).** The venues in the Pulse's city, nearest
+first when the phone has a fix. Each row: the name, the type, the area, the
+distance, how many are live, and tonight's event if there is one. A tap opens
+the place (§10). Design ticket: SCRUM-542.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **A place an event has taken over is not in the list, and the app does not decide that** | From an hour before a real event at a venue starts until it ends, the server leaves the venue out, and the event's card in Events says "at ‹Venue›" instead. One rule, on the server (`lib/venue-visibility.ts` in blendn-admin). The list filters nothing by time; a second rule here is how the list and the map come to disagree |
+| **Live is a bucket, never a number** | "Under 5 live", "5–9 live", "10–19 live", "20+ live" — the server's `liveNow`. A count that moved from 4 to 5 as you watched would tell you somebody just walked in (D-19) |
+| **Never who** | The list says how many, never which people. People are the venue's room, which only somebody live there may see |
+
+### Data it needs
+
+`GET /api/mobile/venues?city=…&lat=…&lon=…&sortBy=distance` — `apiClient.getVenues`.
+
+---
+
+## 10. A place — `app/venue/[id].tsx`
+
+**A stand-in, until step 5.** Added 2026-10-02 so a row in Places opens
+something true: the place's name, type and area, how many are live (as a
+bucket), and tonight's event, which opens the event. `GET /api/mobile/venues/:venueId`.
+Step 5 replaces it with the real venue screen: Go Live, the live pill and
+countdown, and "Own this place? Claim it".
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
@@ -643,7 +717,7 @@ Named so the gap is visible, not to imply they are next.
 | **Presence prompt** — "are you still here?" | Logic exists in `lib/usePresence.ts`, which knows when the server says you are outside the geofence. Nothing renders it |
 | ~~**First-check-in screen**~~ | **Built as `app/about-you.tsx`, and moved.** It is asked once at signup rather than at every check-in — see section 4 below |
 | **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. Superseded 2026-10-01 by the owner: this is crews, step 9 of plan v2 — see `ROADMAP.md` |
-| **Map, notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like |
+| **Notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like. The map is §8 |
 | **`/join` attendee landing page** | Deferred by decision. Spec in `BlendnLanding/docs/JOIN_PAGE_BRIEF.md` |
 
 ---

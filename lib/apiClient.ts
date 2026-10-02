@@ -9,6 +9,7 @@ import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
 import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
@@ -599,6 +600,12 @@ export interface EventApiItem {
   visibility: string
   venueName: string | null
   venue_name?: string | null
+  /**
+   * The venue the event is linked to, `{ id, name }`, or null when its owner
+   * disputed the link, it is archived, or there is none (then say `venueName`).
+   * Absent from an older server.
+   */
+  venue?: { id: string; name: string } | null
   address: string | null
   city: string | null
   state: string | null
@@ -729,6 +736,50 @@ export interface EventsListResponse {
   pagination: PaginationMeta
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
   profile?: UserProfileData
+}
+
+/** One place in the Places list — `GET /api/mobile/venues`. */
+export interface VenueListItem {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  latitude: number | null
+  longitude: number | null
+  venueType: string | null
+  venueTypeLabel: string
+  /** Kilometres from the `lat`/`lon` sent, or null. */
+  distance: number | null
+  upcomingEventCount: number
+  /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
+  liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
+  nextEvent: {
+    id: string
+    title: string
+    slug: string | null
+    coverImageUrl: string | null
+    startTime: string
+    endTime: string
+  } | null
+}
+
+export interface VenuesListResponse {
+  venues: VenueListItem[]
+  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
+}
+
+/** One venue — `GET /api/mobile/venues/:venueId`. The fields the placeholder screen reads. */
+export interface VenueDetail {
+  venue: {
+    id: string
+    name: string
+    address: string | null
+    city: string | null
+    venueTypeLabel: string
+    claimed: boolean
+  }
+  live: { open: boolean; closedReason: 'event_live_here' | 'no_check_in_area' | null; eventId: string | null; liveNow: VenueListItem['liveNow']; youAreLive: boolean }
+  tonight: { id: string; title: string; startTime: string; endTime: string } | null
 }
 
 export interface CheckinPagination {
@@ -1682,6 +1733,30 @@ class ApiClientClass {
   }
 
   /**
+   * Places — `GET /venues`. Takes the Pulse's vocabulary (`city`, `lat`/`lon`,
+   * no default radius). A venue an event has taken over is not in it; its
+   * event's card names the venue instead.
+   */
+  async getVenues(
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance' },
+    options?: { force?: boolean }
+  ): Promise<ApiResponse<VenuesListResponse>> {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) searchParams.append(key, String(value))
+    })
+    const query = searchParams.toString()
+    const endpoint = `/api/mobile/venues${query ? `?${query}` : ''}`
+    if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
+    return this.cachedRequest<VenuesListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+  }
+
+  /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
+  async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
+    return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /**
    * The cities that currently have events, busiest first.
    *
    * Server-owned rather than derived on the device: a reverse-geocode on the
@@ -1692,8 +1767,8 @@ class ApiClientClass {
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: { city: string; eventCount: number }[] }>> {
-    return this.cachedRequest<{ cities: { city: string; eventCount: number }[] }>(
+  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
+    return this.cachedRequest<{ cities: CityOption[] }>(
       '/api/mobile/events/cities',
       { ttl: 5 * 60 * 1000, swr: true }
     )
