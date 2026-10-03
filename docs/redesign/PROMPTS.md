@@ -266,3 +266,215 @@ Constraints:
 
 Give me every timing and easing as numbers, frame by frame, so it can be rebuilt with Reanimated. There is no Lottie or video export.
 ```
+
+---
+
+# Round 2 · Delta prompts and new flows (2026-10-03)
+
+Flows 1–8 are already built in Claude Design. Round 2 adds what was never designed:
+- notifications
+- crews and group matching
+- Places live
+- Blend'n+
+- regulars
+- matching v2
+- system states
+- sharing and link previews
+
+It also changes some screens you've already approved. **Don't re-run the round-1 prompts.**
+- **Delta prompts** are run *inside* an existing project and change only what they name.
+- **New-flow prompts** start new projects.
+
+What each screen must contain is in [`SCREENS-ADDITIONS.md`](./SCREENS-ADDITIONS.md). The system additions are in [`DESIGN-BRIEF.md` §21](./DESIGN-BRIEF.md).
+
+**Before you start:**
+- Re-attach the updated `docs/redesign/` folder to every project you'll touch (it now has `SCREENS-ADDITIONS.md` and `research/round2/`).
+- Upload 2–3 screenshots of the phone's current notification shade and lock screen (iOS and Android, dark mode) so push frames match the real OS chrome.
+
+## Order
+
+1. **R2-D0** in the design-system project (the new components). Publish.
+2. New flows that the server already serves:
+   - **R2-9** Notifications
+   - **R2-10** Crews
+   - **R2-11** Places live
+   - **R2-16** Sharing
+   - **R2-15** System states
+3. Deltas into the flows you've already built (they reuse the new components):
+   - **R2-D1** core loop
+   - **R2-D2** Banter
+   - **R2-D3** profile
+   - **R2-D4** discovery
+   - **R2-D5** settings
+   - **R2-D6** entry
+4. Proposal flows (no server yet):
+   - **R2-14** Matching v2
+   - **R2-12** Blend'n+
+   - **R2-13** Regulars
+5. **R2-D7**: place the proposal pieces into the existing projects (only after step 4).
+6. **Prompt 10** again: the consistency audit, now across every project.
+
+---
+
+## R2-D0 · Design-system additions (in "Blend'n — design system")
+
+```
+Round 2 adds screens that need new components. Read docs/redesign/DESIGN-BRIEF.md §21 (the additions) and skim docs/redesign/SCREENS-ADDITIONS.md so you know what they serve. Add only these, in the published system's existing language, without changing any approved component:
+
+1. Notifications: Bell + badge (1–9, "9+"), NotificationRow (every leading-visual type in SCREENS-ADDITIONS 9.3: photo, creature disc, glyph tile, crew emblem, event cover + kind badge, stacked discs), the request-row variant with inline actions, NotificationSection header, InAppBanner (glass capsule), PushNotification mock frames (iOS lock screen and Android shade, dark).
+2. Crews: CrewEmblem system (squircle × 12 palettes × 12 night motifs, seeded, no text; sizes 24/40/56/96/160; a page showing all 144 combinations at 40pt), CountTicks, CrewCard, LikingAsChip, BlendMoment, RevealSheet, RevealedCollage, CrewStrip.
+3. Places live: GoLiveSheet (20/45/60/Stay), LivePill (minutes; mm:ss in the last 5), SessionSheet, ExpiryPrompt, the centre button's live-at-a-venue variants (§21), and LiveActivity and Android ongoing-notification mocks labelled "Sketch — later" (no action buttons).
+4. Money and regulars (proposal styling): TonightSheet, PlanCard, NightPassRow, NeverForSalePanel, ManageStatusRow, OfferCard + "Why you got this", PassDisc ("the pour", with its states).
+5. Matching v2: OverlapLine, Badge (achievement, never a count), ThisOrThat card.
+6. System: StateScreen (one pattern for suspended, update required, maintenance, not found, no longer available), PollBubble (open / voted / closed, withheld counts).
+7. Sharing: ShareSheet, LinkPreviewCard templates (OG 1200×630 and square), StoryCard (1080×1920), PublicEventPage and PublicVenuePage (web).
+
+For each: every state, iOS and Android variants where they differ, Reduce Motion behaviour, haptic annotation. Before drawing the emblem system and the pass, show me 2 variants of each. Publish when I approve.
+```
+
+---
+
+## New-flow prompts (one new project each, with the published design system)
+
+Use this template. Fill in the flow number and name from the table.
+
+| Prompt | Flow | Server status |
+|---|---|---|
+| R2-9 | Flow 9 · Notifications | Built |
+| R2-10 | Flow 10 · Crews and group matching | Built (a new crew of one is currently dissolved by the server, so draw the forming state as blocked) |
+| R2-11 | Flow 11 · Places live | Built |
+| R2-15 | Flow 15 · System states | Built |
+| R2-16 | Flow 16 · Sharing and link previews | Needs build (public pages and OG images) |
+| R2-14 | Flow 14 · Matching v2 | Mostly proposal |
+| R2-12 | Flow 12 · Blend'n+ | Proposal (no server) |
+| R2-13 | Flow 13 · Regulars | Proposal (no server) |
+
+```
+Using the published Blend'n design system (with the round-2 additions), design Flow <N> · <name> from docs/redesign/SCREENS-ADDITIONS.md.
+
+- The flow's "Rules" list is non-negotiable; most of it is the server's own behaviour or an owner ruling. Where the file quotes server copy, use it word for word, or show it beside the proposed copy and label which is which.
+- Draw every state in every "Draw" list.
+- **Screens that belong to an existing project are changed by a delta prompt, not here:** 9.1, 9.6, 10.7, 11.1, 11.6, 11.7, 14.1–14.3, and Flow 15 #5–11. For those, draw only the new components on an artboard; the delta places them into the approved screens. Don't redraw approved screens in this project.
+- Frames: iPhone 402×874 pt for every state; Android 412×915 dp for the main state of each screen (DESIGN-BRIEF §13); push and lock-screen frames in both OS styles where the flow has them.
+- If the flow is marked "proposal", label every frame "Proposal — not built" in the corner.
+- Use real photos I uploaded, never placeholders. Crew emblems and creature avatars come from the design system.
+- Annotate each interactive element with its motion and haptic token.
+- Make the main path a clickable prototype.
+
+Finish with:
+(1) a screen × state table;
+(2) the flow's open questions with your recommendation for each;
+(3) anything you think breaks a rule. Ask, don't change.
+```
+
+---
+
+## Delta prompts (inside the existing flow projects)
+
+Use this wrapper around each delta:
+
+```
+Make only the changes listed below in this project. Keep every other screen and state exactly as I approved it. For each screen you change, show it before and after, side by side. If a change forces something I didn't list (spacing, another screen's state), stop and tell me instead of doing it. Read the SCREENS-ADDITIONS.md sections named for each change.
+
+<the delta's list>
+```
+
+**R2-D1 · Flow 4 (core loop)**
+- **The Room:**
+  - a **People | Crews** segmented control;
+  - the Crews view;
+  - the crew strip;
+  - "You're the first from Nebula";
+  - the "Open to joining a crew tonight" card for solo people (10.7).
+- **Check-in success:** a "Tell your crew — We're here" row per crew; sent and already-sent states (10.6).
+- **PersonCard:**
+  - "Like for Nebula" / "Like as yourself" when you're in a present crew (10.7);
+  - the still "Waved" state (Flow 15 #18).
+- **The Blend moment** as a sibling of the Match moment (10.8).
+- **The centre button:** the live-at-a-venue variants (11.3; the Go Live invite is a proposal).
+- **The Blend'n overlay:** the venue-room header variant; NOT_LIVE and every `live:ended` state (11.4–11.6).
+- **Going:**
+  - Past lists places you went live at, labelled by venue;
+  - share from a row's overflow (16.1).
+- **Check-in:**
+  - the refusal-tray actions Finish profile / Add your age (Flow 15 #22);
+  - after RSVP "Going", the "Bring someone?" share row (16.1) and the in-context push ask (9.7).
+- **Offline banner** wherever it's missing in this flow (Flow 15 #16).
+
+**R2-D2 · Flow 5 (Banter and chat)**
+- **The inbox:**
+  - crew chat rows (square emblem);
+  - crew invites as request rows (Join opens the consent screen);
+  - Blend rooms under Live now, then as rows with "closes 4 am";
+  - the bell in the header opens the Notifications screen (9.1).
+- **Crew chat:** first names, and only the two system lines (10.5).
+- **The Blend room:** first-open card, two-sided people sheet, reveal sheet, closing, closed (10.9).
+- **Room info** for crew and Blend rooms: no room report; crew report; leave (10.4, 10.9).
+- **The composer:**
+  - one state per server reason, including not_open_yet, not_live, hidden, archived;
+  - banned;
+  - mute arriving live (Flow 15 #6–7).
+- **Room-level states:** removed from the room, the room is gone (Flow 15 #5); realtime cut by the server (#21).
+- **The pre-event room:** the countdown header (Flow 15 #8).
+- **Poll bubbles** (Flow 15 #17).
+- **An ended DM:** remove the composer (Flow 15 #11).
+
+**R2-D3 · Flow 6 (people and profile)**
+- **Me:**
+  - a Crews row (with an invite dot) and the Crews screen (10.1);
+  - **Friends › Invite** opens the share tray (16.1).
+- **Friends:**
+  - "Make a crew" from the friends list (10.2);
+  - the friend-link refusals (Flow 15 #19).
+- **Edit profile:** expertise as step 2 of field of work (14.3, served today).
+- **Offline banner** wherever it's missing in this flow (Flow 15 #16).
+
+**R2-D4 · Flow 3 (discovery)**
+- **The home top bar's bell** opens the Notifications screen (9.1).
+- **Venue detail** replaces the placeholder, with share (11.1, 16.1). Places rows show the live bucket.
+- **The home map lit** (11.7).
+- **The Scene:**
+  - Share opens the share tray (16.1);
+  - the cancelled and "no longer available" states (Flow 15 #10);
+  - the age-gated, finish-profile and broken-link refusals (#9);
+  - field validation errors (#15);
+  - the in-context push ask after RSVP (9.7).
+- **The Pulse:** the one-time "You were sent Neon Nights" banner after onboarding from a shared link (16.7).
+- **Offline banner** wherever it's missing in this flow (Flow 15 #16).
+
+**R2-D5 · Flow 7 (settings and system)**
+- **Settings:**
+  - Notifications (9.6), with muted rooms;
+  - How you match (14.4).
+- **The one sheet:** crew report reasons, and the Blend block copy ("You won't see each other in this Blend, or in crews tonight. The Blend carries on for everyone else.", research/round2/research-crews.md §6.3).
+- **System screens** from Flow 15 that live in this project's family:
+  - not found (#12);
+  - can't reach / maintenance (#13);
+  - update required (#14);
+  - rate limited (#15).
+
+**R2-D6 · Flows 1–2 (entry and onboarding)**
+- **The landing:** the account-suspended, staff-account and deleted-account screens; a reason-aware session-ended notice (Flow 15 #1–4).
+- **Sign-in and onboarding:**
+  - field validation errors (Flow 15 #15);
+  - expertise as step 2 of field of work (14.3);
+  - the in-context permission asks (9.7) don't change onboarding's own notifications step.
+- **Links:** opened while signed out are held through sign-in (Flow 15 #12).
+
+**R2-D7 · Proposal pieces into existing projects** (only after R2-12, R2-13 and R2-14 are drawn)
+- **Flow 4 (core loop):**
+  - the one-sentence overlap on PersonCard and crew cards (14.1, crew cards from crew tags and intent only);
+  - the locked "earlier nights" row in Going › Past (12.4).
+- **Flow 6 (profile):**
+  - a "Passes & offers" row (13.1);
+  - a Blend'n+ row (12.2);
+  - badges (14.5);
+  - the new matching fields with "who sees this" lines (14.2);
+  - crew extras, locked: a crew photo seen only inside the crew, emblem colours from the 12 palettes (12.4).
+- **Flow 7 (settings):**
+  - Blend'n+ manage (12.3);
+  - Privacy › Regulars (13.4);
+  - Notifications › Offers from venues (13.3).
+- **Flow 11 (Places live):**
+  - "Stay" locked behind Blend'n+;
+  - the expiry prompt's Plus row (11.4, 12.1).

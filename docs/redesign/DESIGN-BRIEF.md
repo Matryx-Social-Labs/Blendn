@@ -247,7 +247,7 @@ These are starting values. You may tune them, but every text token must stay **�
 
 ### 4.7 The one-primary rule (kept, sharpened)
 
-At most **one** thing per screen wears `gradientFill`: that screen's primary action. Repeats of the same action count as one (the Like on every person card). A sheet or modal is its own screen. **The complete list of exceptions:** the tab bar's centre disc (and its state-(b) ring), and the onboarding progress bar. Nothing else.
+At most **one** thing per screen wears `gradientFill`: that screen's primary action. Repeats of the same action count as one (the Like on every person card). A sheet or modal is its own screen. **The complete list of exceptions:** the tab bar's centre disc (and its state-(b) ring), the onboarding progress bar, and (Round 2) the door pass's liquid. Nothing else.
 
 Everything that used to reach for orange gets one neutral answer:
 
@@ -985,12 +985,125 @@ When flows are handed to Claude Code, these old guards are rewritten in the same
 - **The Live Activity / Android Live Update**: sketch only (§11.6).
 - **New features.** If a screen seems to want one, note it; don't design it in.
 
-**Coming next** (product-completion plan v2, `ROADMAP.md`). Don't draw these now, but make sure the system has room for them:
+**Coming next** (product-completion plan v2, `ROADMAP.md`). **Round 2 now designs all of these**, in [`SCREENS-ADDITIONS.md`](./SCREENS-ADDITIONS.md) Flows 9–16 and §21 below. The table stays as the summary:
 
 | Step | Feature | What it will need from the system |
 |---|---|---|
 | 5 | **Places live** | The venue screen, a **Go Live** sheet (20 / 45 / 60 min / Stay), a live pill with a countdown, an expiry prompt, the hand-off to event check-in, "Own this place? Claim it" |
-| 9 | **Crews** | Create from friends, crew chat, "We're here", crew cards (an anonymous menagerie, then a revealed collage), a Blend room in the Banter's Live now |
+| 9 | **Crews** (now designed in SCREENS-ADDITIONS Flow 10) | Create from friends, crew chat, "We're here", crew cards that carry **counts, never people** (the shipped API overrides the plan's menagerie), a Blend room in the Banter's Live now, a reveal scoped to one Blend |
 | 10 | **Matching v2** | Person and crew cards with one sentence of overlap; profile fields for languages, home state, this-or-that, an opt-in sign, IPL teams |
 | 11 | **Blend'n+** | The paywall: ₹199/mo · ₹499/quarter · ₹1,499/yr · Night Pass ₹49, **App Store / Play in-app purchase only**; restore and manage |
 | 12 | **Regulars** | A **live, animated door pass** (one per day; staff tap "Redeemed"). It's the cousin of DICE's activating ticket, and a natural place for the "disc fills" language. Plus a revocable "Let this venue know I'm a regular" opt-in |
+
+---
+
+## 21. Round 2 additions (2026-10-03)
+
+Round 2 designs the flows in [`SCREENS-ADDITIONS.md`](./SCREENS-ADDITIONS.md):
+- notifications
+- crews and Blends
+- Places live
+- Blend'n+
+- regulars
+- matching v2
+- system states
+- sharing
+
+Everything in §0–§20 still holds. This section adds to it.
+
+### 21.1 New rules for §16 (non-negotiable)
+
+**Notifications**
+- A lock screen is not an authenticated surface. Pushes about people name no person and no place. Pushes about events name the event in the body, never the title.
+- No declined state, in a push or anywhere (the server's message-request decline push is flagged for removal).
+- No action buttons on pushes, and none on the (later) Live Activity or ongoing notification.
+- Nothing arriving makes a haptic or an in-app sound. The one exception is `H.arrive` (§10.2): a wave or like-back aimed at you while you're in the Room.
+- DMs and room replies are the open exception on names (SCREENS-ADDITIONS Flow 9, open question 6).
+
+**Crews**
+- Made from friends only.
+- **A crew card carries counts, never people.**
+- No voting.
+- Joining is consent ("Anyone in this crew can reveal the crew…"), with a personal "Keep me anonymous" override.
+- **A reveal is scoped to one Blend.**
+- **No one checks anyone else in.**
+- Never show "declined", "hasn't arrived", per-member presence to non-members, or which crewmate kept private.
+- **A crew's overlap line uses the crew's own tags and intent only**, never a member's interests.
+- **Crew extras never leak people:** a crew photo shows only inside the crew. Emblem colours come only from the 12 palettes (no paid prominence).
+
+**Places live**
+- Live is a bucket, never a number, never who.
+- No check-in boundary ever drawn.
+- Refusals never show a distance.
+- An event takes over its venue.
+- Seeing a venue's room requires going live there.
+
+**Money**
+- Store purchase only.
+- The billed price is the biggest number.
+- Night Pass is never a plan card.
+- The free path always has a full-weight button.
+- **The five never-sold things** never appear on any paywall: who liked you, more than the caps, a venue's room without going live, a way round the reveal, boosting.
+
+**Regulars**
+- Blind targeting: the venue never sees who.
+- Audiences under 5 are refused.
+- Visible regular is opt-in and one tap to undo.
+- Every offer explains "Why you got this".
+
+**Matching v2**
+- Positive only, two labels at most, never a number.
+- Tier B labels only in rooms of 8+, one per card.
+- The never-build list (caste, religion, kundli, veg/non-veg, and proxies such as "cuisine loves") never appears as a field, chip or filter.
+- Badges are tiers, never counts.
+
+**Sharing** (Flow 16)
+- People, matches, crews, rooms and check-ins are never shareable.
+- A shared event or venue shows public information only: never who's going, **never live data of any kind** (no bucket, no count, no "open now"), never the sharer's identity on the card, never an event price.
+
+### 21.2 New components
+
+They're listed in [`PROMPTS.md` R2-D0](./PROMPTS.md). Their names are the contract with the code:
+- `NotificationRow`, `InAppBanner`
+- `CrewEmblem`, `CountTicks`, `CrewCard`, `LikingAsChip`, `BlendMoment`, `RevealSheet`
+- `GoLiveSheet`, `LivePill`, `ExpiryPrompt`
+- `TonightSheet`, `PlanCard`, `NightPassRow`, `NeverForSalePanel`
+- `OfferCard`, `PassDisc`
+- `OverlapLine`, `Badge`
+- `StateScreen`, `PollBubble`
+- `ShareSheet`, `LinkPreviewCard`, `StoryCard`
+
+### 21.3 The crew emblem
+
+A crew is a **square**; a person is **round**.
+- **Shape:** a squircle with continuous corners.
+- **Variety:** 12 palettes (a deep base plus a mid tone, at an even luminance) × 12 night motifs (crescent, sunburst, dance-floor tiles, stacked rings, tide lines, star cluster, bolt, arch, chevrons, orbit, spark grid, wave stack), drawn as flat geometry.
+- **Seed:** the server's random `emblemSeed`, and nothing else. It never changes on a rename or as membership changes.
+- **No text, creature, face, initials or brand gradient.**
+- **Count ticks** sit on cards only.
+- **Revealed** (inside one Blend): the emblem + a row of photo tiles + a neutral "+N private" tile.
+
+### 21.4 The centre button, live at a venue
+
+§11's four states hold. Two additions:
+
+- **(d) at a venue:** the disc is live (full gradient, green dot), and the overlay's header shows "Live at Toit · 32 min left".
+  - **Variant to show:** the **fill level is the time left**, a still level stepped once a minute and never animated between steps. Extend refills it with the rise from §11.4.
+  - The owner picks.
+- **(c′) "Go live · Toit":** the disc inviting Go Live when you're inside a venue with no event. **A proposal.** The button's state today is computed from events, and needs venue check-in-area data first.
+
+### 21.5 Motion and haptics additions
+
+| Moment | Motion | Haptic |
+|---|---|---|
+| A crew's present count rises | One tick fills (`base`, `standard`); nothing else moves | none |
+| It's a Blend | Two emblems slide in and stop overlapping ~12% (`M.pop`), ≤1.2s, skippable | `H.match` on landing, **for the person whose like made it only**; none for people who see it later |
+| A crew reveal lands | Each creature disc cross-fades to its photo in place (`base`, 40ms stagger) | `H.success` for the person who revealed; none for others |
+| Go Live | The same hold as check-in (900ms, `H.tick` ramp, `H.commit`), then `H.success` on the server's answer | as listed |
+| The live pill | Updates once a minute; mm:ss only in the last 5 minutes | none |
+| The door pass | The liquid stays level with the phone's tilt (device motion, low-pass filtered); a slow ~4s surface wave; bubbles rise toward real "up". **Reduce Motion and the "Ambient motion" setting stop the wave and bubbles but keep the tilt response and the ticking clock** (essential motion). The pass's liquid gradient is a listed exception to the one-primary rule | staff hold: `H.tick`; redeemed: `H.success` |
+| In-app banner | 16pt down + fade, `base` in / `quick` out; 5s dwell; Reduce Motion: fade | **none** |
+| A notification arrives | Badge `quick` fade + scale from 0.8; a row fades in at the top | **none** |
+| Accept from the bell (friend requests) | Button → spinner → an inline line, then the row collapses (`base`) | `H.success` |
+| Join from the bell (crew invites) | Opens the consent screen (SCREENS-ADDITIONS 10.3); never a one-tap join | `H.success` on the join itself |
+| Decline anywhere | The row collapses; nothing celebrates, nothing errors | none |
