@@ -29,7 +29,7 @@ people your session creates get a passphrase you choose.
 | `c19-board-safety` | SCRUM-126, SCRUM-322 | `EMAIL PASSWORD EVENT AUTHOR THEIR_POST` — after an API setup (their ask on your post, their own post); **blocks them**, undo after |
 | `c19-board-refusals` | SCRUM-126 (BD-M02) | `EMAIL PASSWORD EVENT REASON` (+ `SEARCH` for an account with no Going row, `TRY_POST`) — once per refused account |
 | `c20-crew-create-chat` | TQ-C19 (CR-M01, CR-CU01) | `EMAIL CREW_NAME FRIEND API MESSAGE` + `MAESTRO_PASSWORD`, `MAESTRO_FRIEND_TOKEN` as environment variables — friends, both 18+; the phone checked in at a live event, the friend not |
-| `c21-blend-room` | TQ-C20 (CR-M02, CR-I11, CR-I14) | `EMAIL MY_CREW THEIR_CREW EVENT_ID API REVEALED_NAME ANON_NAME` + `MAESTRO_PASSWORD`, `MAESTRO_THEIR_TOKEN` — two crews here (two of each checked in), one of theirs keeping themselves anonymous |
+| `c21-blend-room` | TQ-C20 (CR-M02, CR-I11, CR-I14) | `EMAIL MY_CREW THEIR_CREW EVENT_ID API REVEALED_NAME ANON_NAME MESSAGE` + `MAESTRO_PASSWORD`, `MAESTRO_THEIR_TOKEN` — two crews here (two of each checked in), one of theirs keeping themselves anonymous |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that

@@ -1,11 +1,13 @@
 # TQ-C20 · CR-M02, CR-I11, CR-I14. Crew ↔ crew on a phone: the Grid's Crews
 # view, like the other crew as yours, they like back (API) — the Blend under
-# the Banter's Live now — reveal, the other crew reveals (API), a member who
-# kept themselves anonymous stays a pseudonym, leave.
+# the Banter's Live now — its chat, reveal, the other crew reveals (API), a
+# member who kept themselves anonymous stays a pseudonym, leave and rejoin,
+# then block them by the Blend's handle — which takes the pair out, so the
+# Blend reads "This Blend has closed" here and goes on for the others.
 # Needs: a live event with crews on; the phone's crew (two of them checked in)
 # and THEIR_CREW (two or more checked in, one member with "keep me anonymous");
 # no block between anybody on the two sides.
-# Env: EMAIL; MAESTRO_PASSWORD (environment variable; delete the run dir after);
+# Env: EMAIL; MAESTRO_PASSWORD (environment variable; delete the run dir after); MESSAGE;
 # MY_CREW; THEIR_CREW; MAESTRO_THEIR_TOKEN (an environment variable: a THEIR_CREW member’s `qa token`);
 # EVENT_ID; API; REVEALED_NAME (a THEIR_CREW first name that reveals);
 # ANON_NAME (the first name of the member who stays anonymous — must NOT appear).
@@ -62,12 +64,26 @@ tags:
 - extendedWaitUntil:
     visible: ".*Share your thoughts.*"
     timeout: 20000
-# The room's (i): the Blend's people.
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 15000
+- assertVisible: ".*${MESSAGE}.*"
+# The room's (i): the Blend's people — tonight's pseudonyms, nobody named yet.
 - tapOn: "Room info"
 - extendedWaitUntil:
-    visible: "Reveal our crew"
+    visible: "Open the chat"
     timeout: 20000
-- assertNotVisible: ${ANON_NAME}
+- assertNotVisible: ".*${REVEALED_NAME}.*"
+- assertNotVisible: ".*${ANON_NAME}.*"
+- takeScreenshot: c21-menagerie
+- scrollUntilVisible:
+    element: "Reveal our crew"
+    direction: DOWN
 - tapOn: "Reveal our crew"
 - tapOn: "Reveal"
 - extendedWaitUntil:
@@ -79,22 +95,71 @@ tags:
       API: ${API}
       TOKEN: ${MAESTRO_THEIR_TOKEN}
       BLEND_ID: ${output.blendId}
-# Pull to refresh: the other crew's reveal arrives with GET /blends.
+# Pull to refresh: their reveal arrives with GET /blends. The member who kept
+# themselves anonymous stays a pseudonym tile (CR-I11).
+- scrollUntilVisible:
+    element: "Open the chat"
+    direction: UP
 - swipe:
-    direction: DOWN
+    start: "50%, 30%"
+    end: "50%, 80%"
 - extendedWaitUntil:
-    visible: ${REVEALED_NAME}
+    visible: ".*${REVEALED_NAME}.*"
     timeout: 20000
-- assertNotVisible: ${ANON_NAME}
+- assertNotVisible: ".*${ANON_NAME}.*"
+- assertVisible: ".*keeps it private.*"
 - takeScreenshot: c21-revealed
+# Leave on your own: only you go (CR-I14); the chat underneath offers Rejoin.
 - scrollUntilVisible:
     element: "Leave this Blend"
     direction: DOWN
 - tapOn: "Leave this Blend"
 - tapOn: "Leave"
+- tapOn:
+    text: ".*Share your thoughts.*"
+    optional: true
+- inputText: "after leaving"
+- tapOn:
+    text: "Send"
+    optional: true
 - extendedWaitUntil:
-    visible: ".*Share your thoughts.*|This Blend has closed"
+    visible: "Rejoin"
     timeout: 20000
+- takeScreenshot: c21-left
+- tapOn: "Rejoin"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# Block the anonymous member by their handle in this Blend (the second
+# person on their side). A block across the sides takes that pair out —
+# you included — and the Blend goes on for the rest (D-9). From here it reads closed.
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Open the chat"
+    timeout: 20000
+- tapOn:
+    text: ".*Block or report"
+    index: 1
+- tapOn: "Block"
+- extendedWaitUntil:
+    visible: "This Blend has closed"
+    timeout: 20000
+- takeScreenshot: c21-blocked
+- tapOn: "Go back"
+- tapOn: ".*Share your thoughts.*"
+- inputText: "is anyone still here"
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: "This Blend has closed"
+    timeout: 20000
+- takeScreenshot: c21-closed
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "The Banter"
+    timeout: 20000
+- assertNotVisible: "Blend with ${THEIR_CREW}.*"
 # Read back (blendn-admin):
 #   npm run -s qa sq "SELECT b.id, b.closes_at::text AS closes, b.closed_at IS NULL AS open_, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.blend_id = b.id ORDER BY b.created_at DESC LIMIT 1"
 #   npm run -s qa sq "SELECT from_crew_id, to_crew_id, liked_by_user_id FROM crew_likes WHERE occurrence_id = '<occ>'"
