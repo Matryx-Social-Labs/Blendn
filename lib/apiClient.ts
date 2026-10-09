@@ -519,6 +519,11 @@ export interface ApiResponse<T = unknown> {
    * the rejoin (`rejoinChatGroup`) without a second lookup.
    */
   chatGroupId?: string
+  /**
+   * The event a refusal hands off to. Go Live answers `EVENT_LIVE_HERE` with
+   * it (`POST /venues/:venueId/live`): check in to that event instead.
+   */
+  eventId?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -768,18 +773,51 @@ export interface VenuesListResponse {
   pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
 }
 
-/** One venue — `GET /api/mobile/venues/:venueId`. The fields the placeholder screen reads. */
+/** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
 export interface VenueDetail {
   venue: {
     id: string
     name: string
     address: string | null
     city: string | null
+    latitude: number | null
+    longitude: number | null
     venueTypeLabel: string
+    /** False: "Own this place? Claim it" applies. */
     claimed: boolean
   }
-  live: { open: boolean; closedReason: 'event_live_here' | 'no_check_in_area' | null; eventId: string | null; liveNow: VenueListItem['liveNow']; youAreLive: boolean }
+  live: {
+    /** Whether going live here would be accepted now, the fence aside. */
+    open: boolean
+    closedReason: 'event_live_here' | 'no_check_in_area' | null
+    /** The event that has the place, when `closedReason` is `event_live_here`. */
+    eventId: string | null
+    liveNow: VenueListItem['liveNow']
+    youAreLive: boolean
+    /** Your window's end. Count down from this, never from a tap. */
+    expiresAt?: string | null
+    stay?: boolean
+    venueDayId?: string | null
+    chatGroupId?: string | null
+  }
+  /**
+   * The public claim page, when the place is unclaimed and the server offers
+   * one (`{ url }`, built on the dashboard host). Read through `claimUrlFrom`.
+   */
+  claim?: { url?: unknown } | null
   tonight: { id: string; title: string; startTime: string; endTime: string } | null
+}
+
+/** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
+export interface GoLiveResult {
+  venueDayId: string
+  chatGroupId: string | null
+  expiresAt: string
+  stay: boolean
+  stayUntil: string | null
+  checkIn: { id: string; status: string; checkInTime: string }
+  revealSuggestion: boolean
+  intentNeeded: boolean
 }
 
 export interface CheckinPagination {
@@ -1196,6 +1234,7 @@ class ApiClientClass {
           ? parsed.retryAfter
           : Number(response.headers.get('Retry-After')) || undefined,
         ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
+        ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -1754,6 +1793,23 @@ class ApiClientClass {
   /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
   async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
     return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /**
+   * Go Live at a place for 20, 45 or 60 minutes, or "stay". Going live again
+   * while live extends, never shortens. `gpsAccuracy` rides in `deviceInfo`,
+   * the key the server reads (as for check-in). A mutation: never retried.
+   */
+  async goLive(
+    venueId: string,
+    body: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> } & ({ minutes: 20 | 45 | 60 } | { stay: true })
+  ): Promise<ApiResponse<GoLiveResult>> {
+    return this.queuedRequest<GoLiveResult>(
+      `/api/mobile/venues/${encodeURIComponent(venueId)}/live`,
+      { method: 'POST', body: JSON.stringify(body) },
+      true,
+      2
+    )
   }
 
   /**
@@ -2945,6 +3001,11 @@ class ApiClientClass {
        * is wrong about your own anonymity is worse than no chip.
        */
       revealed?: boolean
+      /** `venue_day`: a Go Live at a place — name it by `event.venueName`, count down to `expiresAt`. */
+      kind?: 'event' | 'venue_day'
+      /** A Go Live's end; null at an event. */
+      expiresAt?: string | null
+      stay?: boolean
       event: {
         id: string
         title: string

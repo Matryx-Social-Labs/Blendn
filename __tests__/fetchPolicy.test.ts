@@ -68,6 +68,9 @@ const ALLOWED: Record<string, string> = {
   'components/PresenceMonitor.tsx':
     'presence is correctness, not freshness: a stale check-in decides whether ' +
     'somebody is shown as in the room',
+  'components/LiveAtVenue.tsx':
+    'which window you are live in is correctness, not freshness: a cached answer ' +
+    'would prompt for a Go Live that already ended, or miss one just started',
   'components/home/PlacesList.tsx':
     'opening Places (a tap on the segment or back to the tab), pull-to-refresh and Try again — ' +
     'and a venue an event has taken over must not linger from a cached page',

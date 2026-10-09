@@ -481,7 +481,8 @@ function ChatInner() {
           return {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
             event_id: room.event_id || room.eventId || '',
-            event_title: room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
+            // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
+            event_title: (room.event?.kind === 'venue_day' && room.name) || room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
             // `memberCount` is what `GET /chat/groups` sends; the rest never arrived.
             participant_count: Number(room.memberCount ?? room.participant_count) || 0,
             event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,

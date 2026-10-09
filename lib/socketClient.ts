@@ -156,6 +156,13 @@ export interface ServerToClientEvents {
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
   /** A row landed in your notifications bell (blendn-admin `announceToBell`). The kind only. */
   "notification:new": (data: { kind: string }) => void
+  /**
+   * Your Go Live at a place ended, and the server took your sockets out of its
+   * rooms (blendn-admin/docs/SOCKET_EVENTS.md). `eventId` is the venue day;
+   * `reason` is `expired`, `event_started`, `switched_event`, `manual` or
+   * `left_area`.
+   */
+  "live:ended": (data: { eventId: string; reason: string }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -207,6 +214,7 @@ type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
 type BellCallback = (data: ServerToClientEvents["notification:new"] extends (data: infer D) => void ? D : never) => void
+type LiveEndedCallback = (data: ServerToClientEvents["live:ended"] extends (data: infer D) => void ? D : never) => void
 
 // Connection state
 let socket: TypedSocket | null = null
@@ -304,6 +312,7 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 const bellSubscriptions = new Set<BellCallback>()
+const liveEndedSubscriptions = new Set<LiveEndedCallback>()
 type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
 const deliveredSubscriptions = new Set<DeliveredCallback>()
 /** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
@@ -721,6 +730,19 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("notification:new", (data) => {
     bellSubscriptions.forEach((cb) => cb(data))
+  })
+
+  /*
+   * A Go Live ended. The venue's room leaves the Banter's list on the server,
+   * so the cached list goes and the Banter re-reads (it syncs on `chat`); the
+   * active check-ins and the room's roster go with it.
+   */
+  sock.on("live:ended", (data) => {
+    apiClient.forgetChatGroups()
+    apiClient.forgetActiveCheckins()
+    apiClient.forgetEventMatches(data.eventId)
+    markDomainsDirty(["chat", "events", "match"])
+    liveEndedSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("private:typing", (data) => {
@@ -1158,6 +1180,15 @@ export function subscribeToDelivered(callback: DeliveredCallback): () => void {
   deliveredSubscriptions.add(callback)
   return () => {
     deliveredSubscriptions.delete(callback)
+  }
+}
+
+/** Your Go Live ended. Same delivery as `subscribeToRoomMatch`: your `user:{id}` room. */
+export function subscribeToLiveEnded(callback: LiveEndedCallback): () => void {
+  if (!socket?.connected) connect()
+  liveEndedSubscriptions.add(callback)
+  return () => {
+    liveEndedSubscriptions.delete(callback)
   }
 }
 

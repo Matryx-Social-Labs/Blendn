@@ -16,17 +16,40 @@ import ScalePress from '../motion/ScalePress'
  * history is not yours to read any more, and a composer would invite a message
  * the server will refuse.
  *
+ * `not_live` is a place's room after your Go Live ended (the server's
+ * `NOT_LIVE`, or `live:ended`): the room is for the people live there, so the
+ * way back is going live again at the place, not a rejoin.
+ *
  * Rejoin is the accent: with the composer gone, it is this state's one action.
  */
+const COPY = {
+  left: {
+    title: 'You left this room',
+    body: "You won't get its messages or notifications. Rejoin to read and post again, or check in at the event.",
+    cta: 'Rejoin',
+  },
+  out: {
+    title: "You're not in this room",
+    body: 'If you left it, you can rejoin. Otherwise, check in at the event to join its room.',
+    cta: 'Rejoin',
+  },
+  not_live: {
+    title: "You're not live here any more",
+    body: "Today's room is for the people live at this place. Go live there again to rejoin it.",
+    cta: 'Go live again',
+  },
+} as const
+
 export function RoomLeftState({
   kind,
   rejoining,
   onRejoin,
 }: {
-  kind: 'left' | 'out'
+  kind: keyof typeof COPY
   rejoining: boolean
   onRejoin: () => void
 }) {
+  const copy = COPY[kind]
   return (
     <View style={styles.root}>
       <View style={styles.glyph}>
@@ -34,12 +57,10 @@ export function RoomLeftState({
         <Ionicons name="exit-outline" size={36} color={EMBER.textTertiary} />
       </View>
       <Text style={styles.title} maxFontSizeMultiplier={1.4} accessibilityRole="header">
-        {kind === 'left' ? 'You left this room' : "You're not in this room"}
+        {copy.title}
       </Text>
       <Text style={styles.body} maxFontSizeMultiplier={1.4}>
-        {kind === 'left'
-          ? "You won't get its messages or notifications. Rejoin to read and post again, or check in at the event."
-          : 'If you left it, you can rejoin. Otherwise, check in at the event to join its room.'}
+        {copy.body}
       </Text>
       <ScalePress
         style={styles.cta}
@@ -47,13 +68,13 @@ export function RoomLeftState({
         disabled={rejoining}
         pressedScale={0.97}
         accessibilityRole="button"
-        accessibilityLabel="Rejoin"
+        accessibilityLabel={copy.cta}
         accessibilityState={{ busy: rejoining, disabled: rejoining }}
       >
         {rejoining ? (
           <ActivityIndicator color={EMBER.onGradient} />
         ) : (
-          <Text style={styles.ctaText}>Rejoin</Text>
+          <Text style={styles.ctaText}>{copy.cta}</Text>
         )}
       </ScalePress>
     </View>

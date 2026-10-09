@@ -33,7 +33,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
+import { subscribeToLiveEnded, subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useLatest } from '../../lib/useLatest'
@@ -257,9 +257,16 @@ function GroupChatInner() {
    * which is also what the server says to a leave made on another phone.
    */
   const [outOfRoom, setOutOfRoom] = useState(false)
+  /*
+   * A place's room after your Go Live there ended (`NOT_LIVE`): the room is
+   * for the people live at the place, so the way back is going live again,
+   * not a rejoin. `venueId` comes from the place screen that opened it.
+   */
+  const [notLive, setNotLive] = useState(false)
+  const venueId = typeof params.venueId === 'string' ? params.venueId : null
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(String(chatRoomId))
-  const outside = left || outOfRoom
+  const outside = left || outOfRoom || notLive
   const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
   /** From the room list (`memberCount`), for the header when the title says nothing new. */
   const [memberCount, setMemberCount] = useState<number | null>(null)
@@ -370,10 +377,12 @@ function GroupChatInner() {
          */
         if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
         if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
+        if (!result.success && result.errorCode === 'NOT_LIVE') { setNotLive(true); setLoading(false); return }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
         // Served as a member, so whatever this phone thought, you are in.
         setOutOfRoom(false)
+        setNotLive(false)
         markRoomJoined(String(chatRoomId))
 
         const raw = Array.isArray(result.data)
@@ -469,7 +478,7 @@ function GroupChatInner() {
       if (count > 0) setMemberCount(count)
       // The same fields the Banter reads for its row, so the header matches it.
       const image = room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url
-      const title = room.event?.title || room.event_title || room.eventTitle
+      const title = (room.event?.kind === 'venue_day' && room.name) || room.event?.title || room.event_title || room.eventTitle
       setRoomInfo({ title: title ? String(title) : undefined, image: image ? String(image) : undefined })
     }).catch(() => {})
     return () => { live = false }
@@ -652,6 +661,8 @@ function GroupChatInner() {
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
       // Left on another phone, or here a moment ago: the room becomes the left state.
       if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      // Your Go Live at the place ended: the room is closed to you.
+      if (!result.success && result.errorCode === 'NOT_LIVE') setNotLive(true)
       const outcome = sendOutcome(result)
       if (outcome.kind === 'failed') throw new Error(outcome.reason)
 
@@ -779,6 +790,18 @@ function GroupChatInner() {
     setLoading(true)
     showToast("You're back in the room", 'success')
     void loadMessages(true)
+  }
+
+  /*
+   * A Go Live ended — yours, wherever this room is. Re-reading is how this
+   * room learns whether it was the one: a place's room answers NOT_LIVE.
+   */
+  const loadMessagesRef = useLatest(loadMessages)
+  useEffect(() => subscribeToLiveEnded(() => void loadMessagesRef.current(true)), [loadMessagesRef])
+
+  const goLiveAgain = () => {
+    if (venueId) router.replace(`/venue/${venueId}` as never)
+    else router.back()
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
@@ -979,7 +1002,9 @@ function GroupChatInner() {
               },
             } as never)}
           />
-        {outside ? (
+        {notLive ? (
+          <RoomLeftState kind="not_live" rejoining={false} onRejoin={goLiveAgain} />
+        ) : outside ? (
           <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
         ) : (<>
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />
