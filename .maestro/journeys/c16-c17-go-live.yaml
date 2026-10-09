@@ -154,6 +154,7 @@ tags:
     timeout: 45000
 - takeScreenshot: c16-b-extended
 - tapOn: "Stop being live"
+# The last window chosen here was the extension's.
 - extendedWaitUntil:
-    visible: "Go live again.*20 minutes"
+    visible: "Go live again.*45 minutes"
     timeout: 30000
