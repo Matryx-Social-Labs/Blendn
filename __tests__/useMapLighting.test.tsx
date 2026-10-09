@@ -145,3 +145,52 @@ it("lights a pin as live as it is now, not as it was when its building was found
   expect(m.queryRenderedFeatures).toHaveBeenCalledTimes(1)
   expect(result.current.lit.chips[0].live).toBe(true)
 })
+
+describe('on our own tiles (stage 2, SCRUM-572)', () => {
+  const withId = (id: number, lng: number, lat: number) => ({ ...buildingAt(lng, lat), id })
+
+  it('lights a building as itself through feature-state, with no GeoJSON copy over it', async () => {
+    const pins = venues(2)
+    const m = fakeMap(async () => [withId(101, pins[0].longitude, pins[0].latitude)])
+    const { result } = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: true, litBy: 'feature-state' })
+    )
+    await pass(result)
+    expect(result.current.lit.states).toEqual([{ featureId: 101, pinId: pins[0].id, kind: 'venue', live: false }])
+    // The building is lit as itself; the pin with no building still gets its beacon, and both their glows.
+    expect(result.current.lit.bands.features).toHaveLength(MAP_THEME.beacon.bands)
+    expect(result.current.lit.glow.features).toHaveLength(2)
+  })
+
+  it('falls back to the copy when asked, and never lights a merged tile by its id', async () => {
+    const pins = venues(1)
+    const m = fakeMap(async () => [withId(101, pins[0].longitude, pins[0].latitude)])
+    const copy = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: true, litBy: 'copy' })
+    )
+    await pass(copy.result)
+    expect(copy.result.current.lit.states).toEqual([])
+    expect(copy.result.current.lit.bands.features).toHaveLength(MAP_THEME.lit.wallBands + 1)
+    const merged = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: false, litBy: 'feature-state' })
+    )
+    await pass(merged.result)
+    expect(merged.result.current.lit.states).toEqual([])
+  })
+
+  it('looks a building up again when the tiles drawing it change', async () => {
+    const pins = venues(1)
+    const m = fakeMap(async () => [withId(101, pins[0].longitude, pins[0].latitude)])
+    let featureIds = false
+    const { result, rerender } = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds, litBy: 'feature-state' })
+    )
+    await pass(result)
+    expect(result.current.lit.states).toEqual([])
+    featureIds = true
+    await act(async () => rerender({}))
+    await pass(result)
+    expect(m.queryRenderedFeatures).toHaveBeenCalledTimes(2)
+    expect(result.current.lit.states.map((s) => s.featureId)).toEqual([101])
+  })
+})

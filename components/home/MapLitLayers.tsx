@@ -1,15 +1,30 @@
 import { Ionicons } from '@expo/vector-icons'
-import { GeoJSONSource, Layer, Marker, type CircleLayerSpecification, type PressEventWithFeatures } from '@maplibre/maplibre-react-native'
-import { memo, useEffect, useState } from 'react'
+import {
+  GeoJSONSource,
+  Layer,
+  Marker,
+  VectorSource,
+  type CircleLayerSpecification,
+  type PressEventWithFeatures,
+  type VectorSourceRef,
+} from '@maplibre/maplibre-react-native'
+import { memo, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
 import { glowBreathes, glowOpacity, glowRadius, type BandFeature, type GlowFeature } from '../../lib/mapLit'
-import { BUILDING_LAYER_ID, CITY_BUILDINGS, LABELS_FROM_LAYER_ID } from '../../lib/mapStyleEmber'
+import {
+  BUILDING_LAYER_ID,
+  CITY_BUILDINGS,
+  LABELS_FROM_LAYER_ID,
+  OWN_BUILDINGS,
+  OWN_BUILDINGS_ATTRIBUTION,
+  type OwnBuildingState,
+} from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
 import { Text } from '../ui/Text'
-import type { Chip, Collection } from './useMapLighting'
+import type { Chip, Collection, LitState } from './useMapLighting'
 
 /**
  * The home map's layers that are ours, not the basemap's (step 2c): the city's
@@ -35,6 +50,67 @@ export const CityBuildings = memo(function CityBuildings() {
       beforeId={LABELS_FROM_LAYER_ID}
       paint={paint}
     />
+  )
+})
+
+/**
+ * The city's buildings from our own tiles (stage 2, SCRUM-572): one feature
+ * per building, each with its own id. A lit one is lit as itself, through
+ * feature-state (`states`, applied as a diff: set for the new, removed for the
+ * gone), so there is no copy over it and nothing to flicker; tapping it opens
+ * the place it stands for. Credited next to OpenFreeMap.
+ */
+export const OwnBuildings = memo(function OwnBuildings({
+  url,
+  states,
+  onOpen,
+}: {
+  url: string
+  states: LitState[]
+  onOpen: (kind: LitState['kind'], id: string) => void
+}) {
+  const source = useRef<VectorSourceRef>(null)
+  const applied = useRef(new Map<number, string>())
+  useEffect(() => {
+    const src = source.current
+    if (!src) return
+    const at = (featureId: number) => ({ id: featureId, sourceLayer: OWN_BUILDINGS.sourceLayer })
+    const next = new Map(states.map((s) => [s.featureId, `${s.kind}:${s.live}`]))
+    for (const featureId of applied.current.keys()) {
+      if (!next.has(featureId)) src.removeFeatureState(at(featureId)).catch((error) => Logger.warn('events', 'Could not unlight a building', { error: String(error) }))
+    }
+    for (const s of states) {
+      if (applied.current.get(s.featureId) === next.get(s.featureId)) continue
+      const state: OwnBuildingState = { lit: s.kind, live: s.live }
+      src.setFeatureState(at(s.featureId), state).catch((error) => Logger.warn('events', 'Could not light a building', { error: String(error) }))
+    }
+    applied.current = next
+  }, [states])
+  const onPress = (e: NativeSyntheticEvent<PressEventWithFeatures>) => {
+    const featureId = e.nativeEvent.features[0]?.id
+    const lit = states.find((s) => s.featureId === featureId)
+    if (lit) onOpen(lit.kind, lit.pinId)
+  }
+  return (
+    <VectorSource
+      id="blendn-buildings"
+      ref={source}
+      tiles={[url]}
+      // Built at z14 only; MapLibre overzooms past it.
+      minzoom={OWN_BUILDINGS.minzoom}
+      maxzoom={OWN_BUILDINGS.minzoom}
+      attribution={OWN_BUILDINGS_ATTRIBUTION}
+      onPress={onPress}
+    >
+      <Layer
+        id={OWN_BUILDINGS.id}
+        type="fill-extrusion"
+        source-layer={OWN_BUILDINGS.sourceLayer}
+        minzoom={OWN_BUILDINGS.minzoom}
+        beforeId={LABELS_FROM_LAYER_ID}
+        paint={OWN_BUILDINGS.paint}
+      />
+    </VectorSource>
   )
 })
 

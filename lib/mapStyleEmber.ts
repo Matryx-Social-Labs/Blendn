@@ -118,6 +118,78 @@ export const CITY_BUILDINGS: {
   },
 }
 
+/* -------------------------------------------------------------------------- */
+/* Our own building tiles (stage 2, SCRUM-572)                                */
+/* -------------------------------------------------------------------------- */
+
+/** Credits for our building tiles, shown with OpenFreeMap's (Blendn-Admin `scripts/map-buildings/README.md`). */
+export const OWN_BUILDINGS_ATTRIBUTION = '© OpenStreetMap contributors · Overture Maps Foundation · Google Open Buildings · Microsoft'
+
+/**
+ * The cities our tiles cover, by the box they were built for (Blendn-Admin
+ * `scripts/map-buildings/cities.json`; only the built and uploaded ones). A
+ * view centred outside them draws OpenFreeMap's buildings instead: our tiles
+ * have nothing there.
+ */
+export const OWN_BUILDINGS_CITIES: { name: string; bbox: [number, number, number, number] }[] = [{ name: 'bengaluru', bbox: [77.45, 12.83, 77.78, 13.14] }]
+
+/**
+ * Our tiles' URL template, from `EXPO_PUBLIC_BUILDINGS_TILES_URL`
+ * (`https://…/map/buildings/v2/{z}/{x}/{y}.pbf`); null when unset or not an
+ * https `{z}/{x}/{y}` template, and the map keeps OpenFreeMap's buildings.
+ */
+export function ownBuildingsUrl(raw: string | undefined = process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL): string | null {
+  const url = raw?.trim()
+  if (!url || !url.startsWith('https://') || !['{z}', '{x}', '{y}'].every((t) => url.includes(t))) return null
+  return url
+}
+
+/** Whether a view centred here draws our buildings. */
+export function drawsOwnBuildings(url: string | null, centre: [number, number] | null): boolean {
+  if (!url || !centre) return false
+  const [lng, lat] = centre
+  return OWN_BUILDINGS_CITIES.some(({ bbox: [w, s, e, n] }) => lng >= w && lng <= e && lat >= s && lat <= n)
+}
+
+/**
+ * How a building in our tiles is lit: through feature-state on the building
+ * itself (its parts share its id, so one call lights a whole landmark), or, if
+ * the native SDK ever ignores feature-state on extrusion paint
+ * (maplibre-native#4737), by the stage 1 GeoJSON copy over it.
+ */
+export const OWN_BUILDINGS_LIT_BY: 'feature-state' | 'copy' = 'feature-state'
+
+/** The feature-state a lit building in our tiles carries. */
+export type OwnBuildingState = { lit: 'event' | 'venue'; live: boolean }
+
+type ExtrusionHeight = NonNullable<FillExtrusionLayerSpecification['paint']>['fill-extrusion-height']
+
+/** Which kind lit a building in our tiles, '' when none. */
+const litKind: ['to-string', ['coalesce', ['feature-state', string], string]] = ['to-string', ['coalesce', ['feature-state', 'lit'], '']]
+
+/**
+ * Our buildings: every building its own feature with a numeric id, building
+ * parts drawn under their outline's id (no `hide_3d`: filtering on it would cut
+ * a tower down to its podium). A lit one takes its crown colour and stands at
+ * least the stylised minimum, through feature-state.
+ */
+export const OWN_BUILDINGS: {
+  id: string
+  sourceLayer: string
+  minzoom: number
+  paint: NonNullable<FillExtrusionLayerSpecification['paint']>
+} = {
+  id: BUILDING_LAYER_ID,
+  sourceLayer: 'building',
+  minzoom: MAP_THEME.city.minZoom,
+  paint: {
+    'fill-extrusion-color': ['match', litKind, 'event', MAP_THEME.event.crown, 'venue', MAP_THEME.venue.crown, cityColour()] as unknown as ExtrusionColor,
+    'fill-extrusion-height': ['case', ['==', litKind, ''], metres(BUILDING_PROPS.height), ['max', metres(BUILDING_PROPS.height), MAP_THEME.lit.minHeightM]] as unknown as ExtrusionHeight,
+    'fill-extrusion-base': metres(BUILDING_PROPS.base),
+    'fill-extrusion-opacity': 1,
+  },
+}
+
 export const EMBER_MAP_STYLE: StyleSpecification = {
   version: 8,
   name: 'Blendn Ember (OpenFreeMap Liberty, dark)',

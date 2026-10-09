@@ -667,7 +667,11 @@ empty states. Design ticket: SCRUM-541.
   location fix (until you move the map yourself), and shows your position.
   OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
   top bar; the style can be moved off OpenFreeMap with
-  `EXPO_PUBLIC_MAP_STYLE_URL`. **Every map colour, size, timing, the light and
+  `EXPO_PUBLIC_MAP_STYLE_URL`. Inside a city our own building tiles cover
+  (`EXPO_PUBLIC_BUILDINGS_TILES_URL`; Bengaluru today), the buildings are ours
+  — real outlines with baked heights, each its own feature — and a lit one is
+  lit as itself (feature-state) in its crown colour, with their credits in the
+  map's attribution. **Every map colour, size, timing, the light and
   the camera are `lib/mapTheme.ts`, and provisional**: the owner will redesign
   the app from a design link, and the map's look is that one file
   (SCRUM-566).
