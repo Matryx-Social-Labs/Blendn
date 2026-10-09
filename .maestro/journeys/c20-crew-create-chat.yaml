@@ -40,26 +40,34 @@ tags:
 - tapOn:
     text: "Make a crew"
     index: 0
-# CR-CU01: the consent and the anonymity switch are on screen before anything is tapped.
 - extendedWaitUntil:
-    visible: "Anyone in this crew can reveal the crew.*"
+    visible: "Crew name"
     timeout: 20000
-- assertVisible: "Keep me anonymous even when my crew reveals"
-- tapOn: "Crew name"
+# By id: a tap on the field's label does not focus it (read-back-and-maestro-traps).
+- tapOn:
+    id: "crew-name"
 - inputText: ${CREW_NAME}
 - runFlow: ../subflows/keyboard-done.yaml
 - scrollUntilVisible:
     element: ${FRIEND}
     direction: DOWN
 - tapOn: ${FRIEND}
-- assertVisible: "Will be asked"
-- scrollUntilVisible:
-    element: "I understand.*"
-    direction: DOWN
-- tapOn: "I understand.*"
+- assertVisible: "${FRIEND}, Will be asked"
+# CR-CU01: the consent and the anonymity switch sit above the Make button,
+# untapped — and the button is off until the consent is ticked.
 - scrollUntilVisible:
     element: "Make the crew"
     direction: DOWN
+- assertVisible: "Anyone in this crew can reveal the crew.*"
+- assertVisible: "Keep me anonymous even when my crew reveals.*"
+- assertVisible:
+    text: "Make the crew"
+    enabled: false
+- takeScreenshot: c20-consent
+- tapOn: "I understand.*"
+- assertVisible:
+    text: "Make the crew"
+    enabled: true
 - tapOn: "Make the crew"
 # The count asked for, never who.
 - extendedWaitUntil:

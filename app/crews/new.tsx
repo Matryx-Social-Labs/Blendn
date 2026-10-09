@@ -94,6 +94,7 @@ export default function NewCrewScreen() {
           <PlaceholderBanner />
           <EmberField
             label="Crew name"
+            testID="crew-name"
             value={name}
             onChangeText={setName}
             maxLength={CREW_NAME_MAX}
