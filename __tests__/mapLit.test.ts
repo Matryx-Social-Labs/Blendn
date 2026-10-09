@@ -193,6 +193,7 @@ describe('a live event wins at its venue', () => {
   it('else to whoever is live now, else the first', () => {
     expect(dedupeLit([event(false), venue(true)]).map((p) => p.id)).toEqual(['venue-live'])
     expect(dedupeLit([event(false), venue(false)]).map((p) => p.id)).toEqual(['event-later'])
+    expect(dedupeLit([place({ id: 'first' }), place({ id: 'second' })]).map((p) => p.id)).toEqual(['first'])
   })
 
   it('keeps one beacon per spot, and different buildings apart', () => {
