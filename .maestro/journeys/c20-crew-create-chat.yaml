@@ -100,6 +100,7 @@ tags:
     timeout: 20000
 - takeScreenshot: c20-were-here
 # Read back (blendn-admin):
-#   npm run -s qa sq "SELECT c.name, c.open_to_solo AS solo, count(m.*) FILTER (WHERE m.left_at IS NULL) AS members FROM crews c JOIN crew_members m ON m.crew_id = c.id WHERE c.name = '<CREW_NAME>' GROUP BY c.name, c.open_to_solo"
-#   npm run -s qa sq "SELECT g.kind::text AS kind, g.event_id IS NULL AS no_event, count(cm.*) AS msgs FROM chat_groups g JOIN crews c ON c.chat_group_id = g.id LEFT JOIN chat_messages cm ON cm.chat_group_id = g.id WHERE c.name = '<CREW_NAME>' GROUP BY g.kind, g.event_id"
+#   npm run -s qa sq "SELECT c.name, c.open_to_solo AS solo, count(m.*) AS members_ FROM crews c JOIN crew_members m ON m.crew_id = c.id WHERE c.name = '<CREW_NAME>' AND c.dissolved_at IS NULL GROUP BY c.name, c.open_to_solo"
+#   npm run -s qa sq "SELECT m.role::text AS role, m.keep_me_anonymous AS anon, m.consented_reveal_at IS NOT NULL AS consented FROM crew_members m JOIN crews c ON c.id = m.crew_id WHERE c.name = '<CREW_NAME>'"
+#   npm run -s qa sq "SELECT g.kind::text AS kind, g.event_id IS NULL AS no_event, count(cm.*) AS msgs FROM chat_groups g JOIN crews c ON g.crew_id = c.id LEFT JOIN chat_messages cm ON cm.chat_group_id = g.id WHERE c.name = '<CREW_NAME>' GROUP BY g.kind, g.event_id"
 #   npm run -s qa sq "SELECT count(*) AS checkins_for_friend FROM event_check_ins ci JOIN \"User\" u ON u.id = ci.user_id WHERE u.email = '<friend>' AND ci.created_at > now() - interval '15 minutes'"   # 0

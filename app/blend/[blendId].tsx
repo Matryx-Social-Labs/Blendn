@@ -116,7 +116,7 @@ export default function BlendScreen() {
     showSheet({
       kind: 'actions',
       title: 'Leave this Blend?',
-      message: 'Only you leave — it goes on for everyone else. You can’t come back in.',
+      message: 'Only you leave — it goes on for everyone else, and it leaves your Banter.',
       actions: [
         {
           label: 'Leave',

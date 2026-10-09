@@ -96,7 +96,7 @@ tags:
     visible: ".*Share your thoughts.*|This Blend has closed"
     timeout: 20000
 # Read back (blendn-admin):
-#   npm run -s qa sq "SELECT b.id, b.event_id, b.closes_at::text AS closes, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.id = b.chat_group_id ORDER BY b.created_at DESC LIMIT 1"
-#   npm run -s qa sq "SELECT count(*) AS likes_ FROM crew_likes WHERE occurrence_id = '<occ>'"
-#   npm run -s qa sq "SELECT br.user_id, br.created_at::text AS at FROM blend_reveals br WHERE br.blend_id = '<blend>'"   # never the anonymous member
-#   npm run -s qa sq "SELECT status::text AS status, left_at IS NOT NULL AS left_ FROM chat_group_members WHERE chat_group_id = '<blend group>' AND user_id = '<phone>'"
+#   npm run -s qa sq "SELECT b.id, b.closes_at::text AS closes, b.closed_at IS NULL AS open_, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.blend_id = b.id ORDER BY b.created_at DESC LIMIT 1"
+#   npm run -s qa sq "SELECT from_crew_id, to_crew_id, liked_by_user_id FROM crew_likes WHERE occurrence_id = '<occ>'"
+#   npm run -s qa sq "SELECT user_id, revealed_at::text AS at FROM blend_reveals WHERE blend_id = '<blend>'"   # never the anonymous member
+#   npm run -s qa sq "SELECT user_id, status::text AS status, left_at IS NOT NULL AS left_ FROM chat_group_members WHERE chat_group_id = '<blend group>'"
