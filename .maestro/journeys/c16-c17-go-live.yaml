@@ -1,4 +1,4 @@
-# TQ-C16 + TQ-C17 (plan v2 step 5): Go Live at a place from Places, open its
+# TQ-C16 (SCRUM-558) + TQ-C17 (SCRUM-559), plan v2 step 5: Go Live at a place from Places, open its
 # room and post, the expiry prompt, the window ending (the room's not-live
 # state, the room gone from the Banter), back to the place; then a second
 # place: Go Live, the prompt, "Extend 45 min · free".
@@ -11,6 +11,9 @@
 #   PLACE_B_ID, LAT_B, LNG_B  a second fenced place, opened by link
 #   MESSAGE                 posted in A's room
 # Delete ~/.maestro/tests/<run> and the --test-output-dir afterwards.
+# The sim's Keychain session wins over MAESTRO_EMAIL: launchApp does not sign
+# out on iOS, so a sim another session signed in to goes live as THAT person.
+# Sign out first, or `xcrun simctl keychain <udid> reset`, and log the lane.
 #
 # Read back (blendn-admin):
 #   npm run -s qa sq "SELECT v.name AS venue, ps.arrived_at::text AS arrived, ps.departed_at::text AS departed, coalesce(ps.departed_source::text,'open') AS how, ci.expires_at::text AS expires FROM presence_sessions ps JOIN \"User\" u ON u.id = ps.user_id JOIN events e ON e.id = ps.event_id JOIN venues v ON v.id = e.venue_id LEFT JOIN event_check_ins ci ON ci.event_id = ps.event_id AND ci.user_id = ps.user_id WHERE e.kind = 'venue_day' AND u.email = '<email>' ORDER BY ps.arrived_at DESC LIMIT 4"
