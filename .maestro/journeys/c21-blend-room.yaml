@@ -6,7 +6,7 @@
 # and THEIR_CREW (two or more checked in, one member with "keep me anonymous");
 # no block between anybody on the two sides.
 # Env: EMAIL; MAESTRO_PASSWORD (environment variable; delete the run dir after);
-# MY_CREW; THEIR_CREW; THEIR_TOKEN (a THEIR_CREW member, `qa token`);
+# MY_CREW; THEIR_CREW; MAESTRO_THEIR_TOKEN (an environment variable: a THEIR_CREW member’s `qa token`);
 # EVENT_ID; API; REVEALED_NAME (a THEIR_CREW first name that reveals);
 # ANON_NAME (the first name of the member who stays anonymous — must NOT appear).
 appId: com.matryxsociallabs.blendn
@@ -49,7 +49,7 @@ tags:
     file: ../scripts/crew-like-back.js
     env:
       API: ${API}
-      TOKEN: ${THEIR_TOKEN}
+      TOKEN: ${MAESTRO_THEIR_TOKEN}
       EVENT_ID: ${EVENT_ID}
       LIKE_CREW: ${MY_CREW}
 - tapOn: "Close Blend'n"
@@ -77,7 +77,7 @@ tags:
     file: ../scripts/blend-reveal.js
     env:
       API: ${API}
-      TOKEN: ${THEIR_TOKEN}
+      TOKEN: ${MAESTRO_THEIR_TOKEN}
       BLEND_ID: ${output.blendId}
 # Pull to refresh: the other crew's reveal arrives with GET /blends.
 - swipe:

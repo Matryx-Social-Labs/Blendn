@@ -7,7 +7,7 @@
 # Env: EMAIL; MAESTRO_PASSWORD (an environment variable, never -e — and delete
 # ~/.maestro/tests/<run> afterwards: Maestro logs MAESTRO_* values);
 # CREW_NAME (unique per run); FRIEND (their first name as the friends list
-# shows it); FRIEND_TOKEN (`npm run -s qa token <friend>`); API
+# shows it); MAESTRO_FRIEND_TOKEN (an environment variable: `npm run -s qa token <friend>`); API
 # (https://staging-api.blendn.app); MESSAGE (unique per run).
 appId: com.matryxsociallabs.blendn
 tags:
@@ -70,7 +70,7 @@ tags:
     file: ../scripts/crew-accept.js
     env:
       API: ${API}
-      TOKEN: ${FRIEND_TOKEN}
+      TOKEN: ${MAESTRO_FRIEND_TOKEN}
       CREW_NAME: ${CREW_NAME}
       KEEP_ANON: "false"
 # The crew chat: the friend's acceptance is a member row, the send is a message.
