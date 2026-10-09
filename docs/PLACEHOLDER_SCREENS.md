@@ -644,10 +644,33 @@ empty states. Design ticket: SCRUM-541.
 
 ### What it does
 
-- **The map** (`HomeMap.tsx`) fills the screen behind everything. In PR A it is
-  a plain dark 2D map you can pan, centred on the phone's fix. PR B replaces it
-  with the 3D map: MapLibre, the buildings under event and venue pins lit in
-  brand shades, a glow where there is no building.
+- **The map** (`HomeMap.tsx`) fills the screen behind everything: MapLibre
+  over OpenFreeMap, restyled dark (`lib/mapStyleEmber.ts`), at zoom 16 tilted
+  55°, the city's buildings an opaque cool dark grey under one map-anchored
+  moonlight (prototype v2's night). Pins follow the segment — events on
+  Events, venues on Places — for the part of the map on screen. Zoomed out, a
+  pin is a dot (at a venue its glow steps with its live bucket). Zoomed in
+  (step 2c), the twelve pins nearest the centre are lit (`lib/mapLit.ts`,
+  `useMapLighting.ts`): the building a pin stands in stands at least 15 m tall,
+  its walls banded from a dark foot to the brand colour under a bright crown —
+  ember walls and an accent roof for an event, rose walls and an orchid roof
+  for a venue — with a glow on the ground around its pin. A live event's glow
+  breathes for a few seconds after the map settles, then holds (never with
+  Reduce Motion, the drawer full or a screen reader on), and its look wins its
+  building. A pin with no building gets a banded pillar (10 m across, 70 m
+  tall) with a stronger glow at its foot. The nearest four carry a chip above
+  the roof: the name and "LIVE ●" or the start (in India's time, with the date
+  past six days), or a venue glyph and its bucket; a screen reader hears plain
+  words. Tap a pin, a lit building or a chip to open it. An event lights up
+  when its doors open, without a new read. The camera keeps its centre above
+  the drawer from the first frame, follows the picked city and your first
+  location fix (until you move the map yourself), and shows your position.
+  OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
+  top bar; the style can be moved off OpenFreeMap with
+  `EXPO_PUBLIC_MAP_STYLE_URL`. **Every map colour, size, timing, the light and
+  the camera are `lib/mapTheme.ts`, and provisional**: the owner will redesign
+  the app from a design link, and the map's look is that one file
+  (SCRUM-566).
 - **The top bar** (wordmark and bell) floats over the map. The drawer never
   covers it.
 - **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
@@ -659,7 +682,8 @@ empty states. Design ticket: SCRUM-541.
 
 | Rule | Why |
 |---|---|
-| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/home.test.ts` refuses the shapes that would draw one |
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. Every lit shape is a public building outline or a public pin, and every glow a fixed radius from the theme. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, any read of an area, and any circle sized by something a place carries |
+| **The map shows what the server sent** | Pins are the lists' own query for the viewport. Nothing on the phone decides which places are listed |
 | **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
 | **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
