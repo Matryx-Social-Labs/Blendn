@@ -9,9 +9,11 @@
 # (HM-D01): EVENT (a regex for the event's title, found by search),
 # HIDDEN_VENUE (its venue's name — "The Humming Tree" for blr-hiding-soon).
 # PIN_POINT (optional, e.g. "50%,25%") and PIN_OPENS (a regex for what it opens,
-# e.g. the event's title): a screen point over a pin or a lit building with the
-# drawer at half — set the device's location to the pin and the camera centres
-# it at about 50%,25% — for the pin tap, which ends the run there.
+# e.g. the event's title): a screen point over a pin, a lit building, a beacon or
+# a name chip with the drawer at half — set the device's location to the pin and
+# the camera centres it at about 50%,25% — for the pin tap, which ends the run
+# there. Chips are tapped by point: on iOS a map marker's view is not in the
+# hierarchy Maestro reads, so its text cannot be matched (step 2c drive).
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c15

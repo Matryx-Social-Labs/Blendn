@@ -62,8 +62,8 @@ import { Text } from '../ui/Text'
 
 /** Where the map opens before the phone has a fix: central Bengaluru. */
 const DEFAULT_CENTRE: [number, number] = [77.5946, 12.9716]
-/** Close enough for buildings (they start at 14), wide enough for a neighbourhood. */
-const ZOOM = 15
+/** Close enough that a lit building and a beacon read as 3D (step 2c drive: at 15 a beacon was a hairline), wide enough for a few streets. */
+const ZOOM = 16
 /** Tilted, so the lit buildings read as buildings (plan v2 §4: 45–60°). */
 const PITCH = 55
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
@@ -487,7 +487,7 @@ function MapChip({ chip }: { chip: Chip }) {
     <View style={styles.chipWrap} accessibilityRole="button" accessibilityLabel={`${chip.title}, ${chip.line}`}>
       <View style={[styles.chip, { borderColor: look.crown }]}>
         {chip.kind === 'venue' ? <Ionicons name="storefront-outline" size={ICON.sm} color={look.crown} /> : null}
-        <View>
+        <View style={styles.chipText}>
           <Text variant="caption" color={EMBER.textPrimary} numberOfLines={1}>
             {chip.title}
           </Text>
@@ -516,5 +516,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     backgroundColor: EMBER.bg,
   },
+  // Lets a long name shrink to the chip's width and end in an ellipsis.
+  chipText: { flexShrink: 1 },
   stem: { width: SPACE.xxs, height: SPACE.md },
 })
