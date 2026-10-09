@@ -646,15 +646,24 @@ empty states. Design ticket: SCRUM-541.
 
 - **The map** (`HomeMap.tsx`) fills the screen behind everything: MapLibre
   over OpenFreeMap, restyled dark in Ember (`lib/mapStyleEmber.ts`), tilted
-  55°. Pins follow the segment — events on Events, venues on Places — for the
-  part of the map on screen. The building under a pin is lit: the ember shade
-  for an event, violet-rose for a venue, brighter when live; where there is no
-  building, the pin's glow is all there is, and at a venue the glow steps with
-  its live bucket. Tap a pin (or a lit building) to open it. The camera keeps
-  its centre above the drawer, follows the picked city and your first location
-  fix (until you move the map yourself), and shows your position. OpenFreeMap's
-  attribution stays on (the OpenStreetMap licence), under the top bar; the
-  style can be moved off OpenFreeMap with `EXPO_PUBLIC_MAP_STYLE_URL`.
+  55°, the city's buildings an opaque warm grey under one map-anchored light.
+  Pins follow the segment — events on Events, venues on Places — for the part
+  of the map on screen. Zoomed out, a pin is a dot (at a venue its glow steps
+  with its live bucket). Zoomed in (step 2c), the building a pin stands in is
+  lit (`lib/mapLit.ts`): at least 15 m tall, ember walls with a lighter crown
+  for an event, rose with a light-purple crown for a venue; a live event also
+  breathes a glow on the ground around its pin (steady with Reduce Motion), and
+  its look wins its building. A pin with no building gets a slim banded pillar
+  with a glow at its foot. The nearest four carry a chip above the roof: the
+  name and "LIVE ●" or the start, or a venue glyph and its bucket. Tap a pin, a
+  lit building or a chip to open it. The camera keeps its centre above the
+  drawer, follows the picked city and your first location fix (until you move
+  the map yourself), and shows your position. OpenFreeMap's attribution stays
+  on (the OpenStreetMap licence), under the top bar; the style can be moved off
+  OpenFreeMap with `EXPO_PUBLIC_MAP_STYLE_URL`. **Every map colour, height,
+  radius, timing and the light are `lib/mapTheme.ts`, and provisional**: the
+  owner will redesign the app from a design link, and the map's look is that
+  one file.
 - **The top bar** (wordmark and bell) floats over the map. The drawer never
   covers it.
 - **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
@@ -666,7 +675,7 @@ empty states. Design ticket: SCRUM-541.
 
 | Rule | Why |
 |---|---|
-| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, and any read of an area |
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. Every lit shape is a public building outline or a public pin, and every glow a fixed radius from the theme. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, any read of an area, and any circle sized by something a place carries |
 | **The map shows what the server sent** | Pins are the lists' own query for the viewport. Nothing on the phone decides which places are listed |
 | **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
 | **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |

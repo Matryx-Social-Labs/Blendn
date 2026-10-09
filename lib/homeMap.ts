@@ -11,6 +11,9 @@
 import { getDistanceKm } from './geo'
 import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
+import type { LitPlace } from './mapLit'
+import { buildingHeights } from './mapStyleEmber'
+import { MAP_THEME } from './mapTheme'
 
 /** The server's bound on `radius` for `/events` and `/venues`, in km. */
 export const MAX_QUERY_RADIUS_KM = 100
@@ -45,6 +48,10 @@ export interface Pin {
   live: boolean
   /** 1–4: how strongly it glows. A venue's step follows its bucket, never a count. */
   glow: number
+  /** An event's start (its session's, when it has one), for its chip; null for a venue. */
+  startsAt: string | null
+  /** A venue's live bucket, for its chip; null for an event. */
+  bucket: LiveNow | null
 }
 
 const VENUE_GLOW: Record<LiveNow, number> = { quiet: 1, '5-9': 2, '10-19': 3, '20+': 4 }
@@ -87,6 +94,8 @@ export function pinsFor(
         title: v.name,
         live: bucket !== 'quiet',
         glow: VENUE_GLOW[bucket] ?? 1,
+        startsAt: null,
+        bucket,
       }
     })
   }
@@ -95,20 +104,22 @@ export function pinsFor(
     const start = new Date(w.start_time).getTime()
     const end = w.end_time ? new Date(w.end_time).getTime() : NaN
     const live = start <= now && Number.isFinite(end) && now < end
-    return { id: e.id, kind: 'event' as const, latitude: e.latitude, longitude: e.longitude, title: e.title, live, glow: live ? 3 : 1 }
+    return {
+      id: e.id,
+      kind: 'event' as const,
+      latitude: e.latitude,
+      longitude: e.longitude,
+      title: e.title,
+      live,
+      glow: live ? 3 : 1,
+      startsAt: w.start_time,
+      bucket: null,
+    }
   })
 }
 
-/**
- * The building colours: the event shade is the ember ramp, the venue shade
- * the violet-rose end of the brand gradient; brighter when live.
- */
-export const SHADE = {
-  event: { live: '#FF6A3D', later: '#B8553A' },
-  venue: { live: '#F79EFF', later: '#B0577A' },
-} as const
-
-export const shadeOf = (kind: PinKind, live: boolean) => SHADE[kind][live ? 'live' : 'later']
+/** A pin's dot colour (`MAP_THEME.pin`): ember for an event, rose for a venue, brighter when live. */
+export const shadeOf = (kind: PinKind, live: boolean) => MAP_THEME.pin[kind][live ? 'live' : 'later']
 
 type Ring = number[][]
 type BuildingGeometry = { type: 'Polygon'; coordinates: Ring[] } | { type: 'MultiPolygon'; coordinates: Ring[][] }
@@ -163,6 +174,21 @@ export function buildingUnder<F extends { geometry: { type: string; coordinates:
     if (part) return { ...f, geometry: { type: 'Polygon', coordinates: part } }
   }
   return null
+}
+
+/**
+ * What a pin lights (step 2c): the building it stands in, among those the map
+ * drew around it, or — none there, or none could be read — a beacon on the
+ * pin itself. A pin is never left unmarked once buildings are drawn.
+ */
+export function litPlaceFor<F extends { geometry: { type: string; coordinates: unknown }; properties?: Record<string, unknown> | null }>(
+  pin: Pin,
+  drawn: F[] | null
+): LitPlace {
+  const place: LitPlace = { id: pin.id, kind: pin.kind, live: pin.live, at: [pin.longitude, pin.latitude], footprint: null, height: 0, base: 0 }
+  const building = drawn ? buildingUnder(pin, drawn) : null
+  if (!building) return place
+  return { ...place, footprint: building.geometry.coordinates, ...buildingHeights(building.properties) }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -227,7 +253,7 @@ export async function loadPins(
 /* -------------------------------------------------------------------------- */
 
 /** Below this zoom the tiles carry no buildings: no lookups at all. */
-export const LIGHT_MIN_ZOOM = 14
+export const LIGHT_MIN_ZOOM = MAP_THEME.city.minZoom
 
 /** Whether a projected point is on the map's view, with a margin for a building around it. */
 export function onScreen([x, y]: [number, number], size: { width: number; height: number }, margin = 48): boolean {
@@ -238,31 +264,6 @@ export function onScreen([x, y]: [number, number], size: { width: number; height
 export function lightSignature(pins: Pin[], bounds: Bounds | null): string {
   const view = bounds ? bounds.map((b) => b.toFixed(4)).join(',') : '-'
   return `${view}|${pins.map((p) => `${p.id}:${p.live ? 1 : 0}`).join(',')}`
-}
-
-export interface LitBuilding {
-  geometry: { type: 'Polygon'; coordinates: Ring[] }
-  kind: PinKind
-  live: boolean
-  id: string
-  height: number
-  base: number
-}
-
-/**
- * One lit copy per building. Two pins in one building would draw two
- * extrusions in the same place and flicker between their colours; the live
- * one wins (it is the one to go to now), else the first.
- */
-export function dedupeLit(lit: LitBuilding[]): LitBuilding[] {
-  const byBuilding = new Map<string, LitBuilding>()
-  for (const b of lit) {
-    const ring = b.geometry.coordinates[0] ?? []
-    const key = `${ring.length}:${ring[0]?.map((n) => n.toFixed(6)).join(',') ?? ''}`
-    const held = byBuilding.get(key)
-    if (!held || (b.live && !held.live)) byBuilding.set(key, b)
-  }
-  return [...byBuilding.values()]
 }
 
 /**

@@ -121,6 +121,7 @@ export function HomeShell({
           segment={segment}
           topInset={insets.top + TOP_BAR_HEIGHT}
           bottomInset={height - points[snap]}
+          active={focused}
         />
       </View>
       <PulseTopBar actions={<NotificationBell />} />

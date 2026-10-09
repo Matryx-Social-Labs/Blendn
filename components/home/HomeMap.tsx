@@ -1,28 +1,32 @@
+import { Ionicons } from '@expo/vector-icons'
 import {
   Camera,
   GeoJSONSource,
   Layer,
   Map,
+  Marker,
   NativeUserLocation,
   type CameraRef,
+  type CircleLayerSpecification,
+  type LightSpecification,
   type MapRef,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import { StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
+import { useReducedMotion } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
 import { apiClient } from '../../lib/apiClient'
 import {
   backoffMs,
   BUILDING_SEARCH_PX,
-  buildingUnder,
-  dedupeLit,
   insideLastCircle,
   LIGHT_MIN_ZOOM,
   lightSignature,
+  litPlaceFor,
   loadPins,
   onScreen,
   roundQuery,
@@ -31,13 +35,30 @@ import {
   shouldFollowFix,
   viewportQuery,
   type Bounds,
-  type LitBuilding,
   type Pin,
   type PinQuery,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
+import {
+  bandsFor,
+  chipLiftPx,
+  chipLine,
+  dedupeLit,
+  glowBreathes,
+  glowFor,
+  glowOpacity,
+  glowRadius,
+  nearest,
+  topOfM,
+  type BandFeature,
+  type GlowFeature,
+  type LitPlace,
+  type LngLat,
+} from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, homeMapStyle, styleHost } from '../../lib/mapStyleEmber'
-import { EMBER, SPACE } from '../../lib/theme'
+import { MAP_THEME } from '../../lib/mapTheme'
+import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
+import { Text } from '../ui/Text'
 
 /** Where the map opens before the phone has a fix: central Bengaluru. */
 const DEFAULT_CENTRE: [number, number] = [77.5946, 12.9716]
@@ -52,15 +73,22 @@ const PIN_LIMIT = 50
 
 type Point = { type: 'Point'; coordinates: [number, number] }
 type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
-type LitFeature = {
-  type: 'Feature'
-  geometry: LitBuilding['geometry']
-  properties: { id: string; kind: string; color: string; height: number; base: number }
-}
 type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 type Drawn = { geometry: { type: string; coordinates: unknown }; properties: Record<string, unknown> | null }
+/** A name above a lit roof. */
+type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; at: LngLat; lift: number }
+type Lit = { bands: Collection<BandFeature>; glow: Collection<GlowFeature>; chips: Chip[] }
 
-const NO_LIT: Collection<LitFeature> = { type: 'FeatureCollection', features: [] }
+type Segment = 'events' | 'places'
+
+const collection = <F,>(features: F[]): Collection<F> => ({ type: 'FeatureCollection', features })
+const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [] }
+const NO_PINS: Pin[] = []
+
+/** `MAP_THEME.light`, as the spec's (mutable) type. */
+const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
+/** The ground glow's radius: metres from the theme at every zoom, nothing else. */
+const GLOW_RADIUS = glowRadius()
 
 /** The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger. */
 const pinApi = {
@@ -72,8 +100,8 @@ const pinApi = {
 }
 
 /**
- * The map behind the home drawer (plan v2 §4, step 2 PR B): MapLibre over
- * OpenFreeMap, restyled dark in Ember, tilted.
+ * The map behind the home drawer (plan v2 §4, step 2 PR B; restyled step 2c):
+ * MapLibre over OpenFreeMap, dark in Ember, tilted, one map-anchored light.
  *
  * - **Pins follow the segment**: events on Events, venues on Places, for the
  *   part of the map on screen (its centre and a radius reaching its corners,
@@ -81,17 +109,21 @@ const pinApi = {
  *   no request while the view stays inside the circle already loaded; a
  *   refusal backs off. Which venues exist is the server's rule; the map draws
  *   what it is sent.
- * - **The building under a pin is lit** at zoom 14 and up: once the tiles
- *   under new pins are drawn, each on-screen pin's building is found among the
- *   rendered ones and drawn again over it in the event shade (ember) or the
- *   venue shade (violet-rose), brighter when live; one copy per building, the
- *   live one winning. MapLibre RN has no `setFeatureState`, so the lit copy is a
- *   GeoJSON layer of the same footprints and heights. Where there is no
- *   building, the pin's glow is all there is.
- * - **Glow steps with the bucket** at a venue (quiet → 20+), never a number.
+ * - **Below the buildings' zoom a pin is a dot**, a venue's glow stepping with
+ *   its bucket (quiet → 20+), never a number.
+ * - **From there up, each on-screen pin is lit** (`lib/mapLit.ts`), once the
+ *   tiles under it are drawn: the building it stands in is drawn again over
+ *   the city's copy, wider and taller so the two never flicker, in ember (an
+ *   event) or rose (a venue) with a lighter crown; with no building, a slim
+ *   pillar stands on the pin. A live event's ground glow breathes, unless
+ *   motion is reduced or the screen is out of view. The nearest few carry a
+ *   chip with the name above the roof. The tiles merge buildings and carry no
+ *   per-building id, so the lit copy is a GeoJSON layer of the footprint.
  * - **The camera keeps what matters above the drawer**: its bottom padding is
- *   the drawer's height at the settled snap.
- * - **The check-in boundary is never drawn.** No payload carries it.
+ *   the drawer's height at the settled snap, on every move.
+ * - **The check-in boundary is never drawn.** No payload carries it; every
+ *   lit shape is a public building outline or a public pin, sized by
+ *   `lib/mapTheme.ts` alone.
  */
 export const HomeMap = memo(function HomeMap({
   center,
@@ -99,15 +131,18 @@ export const HomeMap = memo(function HomeMap({
   segment,
   topInset,
   bottomInset,
+  active,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The picked city's centre: the map goes there whenever the city changes. */
   cityCentre: { latitude: number; longitude: number } | null
-  segment: 'events' | 'places'
+  segment: Segment
   /** Where the top bar ends, so the attribution is not under it. */
   topInset: number
   /** How much of the map the drawer covers at its settled snap. */
   bottomInset: number
+  /** The screen is in view: a live glow breathes only then. */
+  active: boolean
 }) {
   const { width, height } = useWindowDimensions()
   const map = useRef<MapRef>(null)
@@ -116,22 +151,32 @@ export const HomeMap = memo(function HomeMap({
   const touched = useRef(false)
   const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastQuery = useRef<PinQuery | null>(null)
+  // The last circle answered, and for which segment: a switch asks again.
+  const lastQuery = useRef<{ segment: Segment; q: PinQuery } | null>(null)
   const failures = useRef(0)
   const blockedUntil = useRef(0)
   const needsLight = useRef(false)
   const lastLit = useRef('')
-  const view = useRef<{ bounds: Bounds | null; zoom: number }>({ bounds: null, zoom: ZOOM })
+  const view = useRef<{ bounds: Bounds | null; zoom: number; pitch: number }>({ bounds: null, zoom: ZOOM, pitch: PITCH })
   /*
    * The drawer covers the bottom of the map. A camera move without the padding
    * drops it (the declarative prop applies at mount only), so every move
    * carries it — the first iOS drive showed the person's own dot under the drawer.
    */
   const padding = useRef({ bottom: bottomInset })
-  padding.current = { bottom: bottomInset }
+  useEffect(() => {
+    padding.current = { bottom: bottomInset }
+  }, [bottomInset])
   const [query, setQuery] = useState<PinQuery | null>(null)
-  const [pins, setPins] = useState<Pin[]>([])
-  const [lit, setLit] = useState<Collection<LitFeature>>(NO_LIT)
+  /*
+   * Pins and their lighting belong to the segment they were loaded for: a
+   * switch shows the other segment's at once, never the old ones, and the
+   * query effect below asks again for the same view.
+   */
+  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
+  const pins = loaded.segment === segment ? loaded.pins : NO_PINS
+  const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit }>({ segment, lit: NO_LIT })
+  const lit = litFor.segment === segment ? litFor.lit : NO_LIT
 
   // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
@@ -163,14 +208,15 @@ export const HomeMap = memo(function HomeMap({
   /** Ask for this view's pins, unless it is inside what is loaded or a refusal is still cooling off. */
   const ask = (bounds: Bounds) => {
     const next = roundQuery(viewportQuery(bounds))
-    if (insideLastCircle(lastQuery.current, next) || Date.now() < blockedUntil.current) return
+    const last = lastQuery.current?.segment === segment ? lastQuery.current.q : null
+    if (insideLastCircle(last, next) || Date.now() < blockedUntil.current) return
     setQuery(next)
   }
 
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
-    const { bounds, zoom, userInteraction } = e.nativeEvent
+    const { bounds, zoom, pitch, userInteraction } = e.nativeEvent
     if (userInteraction) touched.current = true
-    view.current = { bounds: bounds as Bounds, zoom }
+    view.current = { bounds: bounds as Bounds, zoom, pitch }
     needsLight.current = true
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
@@ -187,14 +233,6 @@ export const HomeMap = memo(function HomeMap({
       .catch((error) => Logger.warn('events', 'Home map bounds unavailable', { error: String(error) }))
   }
 
-  // A switch of segment is a new question: the old segment's pins go at once, and the circle is asked again.
-  useEffect(() => {
-    setPins([])
-    setLit(NO_LIT)
-    lastQuery.current = null
-    if (view.current.bounds) ask(view.current.bounds)
-  }, [segment])
-
   useEffect(() => {
     if (!query) return
     let stale = false
@@ -203,8 +241,8 @@ export const HomeMap = memo(function HomeMap({
         if (stale) return
         if (result.kind === 'pins') {
           failures.current = 0
-          lastQuery.current = query
-          setPins(result.pins)
+          lastQuery.current = { segment, q: query }
+          setLoaded({ segment, pins: result.pins })
         } else if (result.kind === 'rate_limited') {
           failures.current += 1
           blockedUntil.current = Date.now() + backoffMs(failures.current, result.retryAfter)
@@ -225,64 +263,77 @@ export const HomeMap = memo(function HomeMap({
     needsLight.current = true
   }, [pins])
 
-  /** Find each on-screen pin's building among those drawn, and light it. */
+  /** Find each on-screen pin's building among those drawn, and light it (or stand a beacon on the pin). */
   const light = async () => {
     const m = map.current
     if (!m || !needsLight.current) return
     needsLight.current = false
-    if (view.current.zoom < LIGHT_MIN_ZOOM) {
-      if (lit.features.length > 0) setLit(NO_LIT)
+    const { zoom, pitch, bounds } = view.current
+    const shown = segment
+    if (zoom < LIGHT_MIN_ZOOM) {
+      lastLit.current = ''
+      if (lit !== NO_LIT) setLitFor({ segment: shown, lit: NO_LIT })
       return
     }
-    const signature = lightSignature(pins, view.current.bounds)
+    const signature = lightSignature(pins, bounds)
     if (signature === lastLit.current) return
     lastLit.current = signature
     const found = await Promise.all(
-      pins.map(async (pin): Promise<LitBuilding | null> => {
+      pins.map(async (pin): Promise<(LitPlace & { screen: [number, number]; pin: Pin }) | null> => {
+        let screen: [number, number]
         try {
-          const [x, y] = await m.project([pin.longitude, pin.latitude])
-          if (!onScreen([x, y], { width, height })) return null
-          const r = BUILDING_SEARCH_PX
-          const drawn = (await m.queryRenderedFeatures(
+          screen = (await m.project([pin.longitude, pin.latitude])) as [number, number]
+        } catch (error) {
+          Logger.warn('events', 'Could not place a pin on screen', { error: String(error) })
+          return null
+        }
+        if (!onScreen(screen, { width, height })) return null
+        const [x, y] = screen
+        const r = BUILDING_SEARCH_PX
+        const drawn = await m
+          .queryRenderedFeatures(
             [
               [x - r, y - r],
               [x + r, y + r],
             ],
             { layers: [BUILDING_LAYER_ID] }
-          )) as Drawn[]
-          const building = buildingUnder(pin, drawn)
-          if (!building) return null
-          return {
-            geometry: building.geometry,
-            kind: pin.kind,
-            live: pin.live,
-            id: pin.id,
-            height: Number(building.properties?.render_height ?? 10),
-            base: Number(building.properties?.render_min_height ?? 0),
-          }
-        } catch (error) {
-          Logger.warn('events', 'Could not light a building', { error: String(error) })
-          return null
-        }
+          )
+          .then((features) => features as Drawn[])
+          .catch((error) => {
+            // Unread buildings still leave the pin marked: it gets a beacon.
+            Logger.warn('events', 'Could not read the buildings under a pin', { error: String(error) })
+            return null
+          })
+        return { ...litPlaceFor(pin, drawn), screen, pin }
       })
     )
-    const buildings = dedupeLit(found.filter((b): b is LitBuilding => b !== null))
-    setLit({
-      type: 'FeatureCollection',
-      features: buildings.map((b) => ({
-        type: 'Feature',
-        geometry: b.geometry,
-        properties: { id: b.id, kind: b.kind, color: shadeOf(b.kind, b.live), height: b.height, base: b.base },
-      })),
+    const places = dedupeLit(found.filter((p): p is NonNullable<typeof p> => p !== null))
+    // The camera's centre sits above the drawer: the nearest to it get chips.
+    const centre: [number, number] = [width / 2, (height - padding.current.bottom) / 2]
+    setLitFor({
+      segment: shown,
+      lit: {
+        bands: collection(places.flatMap(bandsFor)),
+        glow: collection(places.map(glowFor).filter((g): g is GlowFeature => g !== null)),
+        chips: nearest(places, centre, MAP_THEME.chip.max).map((p) => ({
+          id: p.id,
+          kind: p.kind,
+          live: p.live,
+          title: p.pin.title,
+          line: chipLine(p.pin),
+          at: p.at,
+          lift: chipLiftPx(topOfM(p), { zoom, pitch, latitude: p.at[1] }),
+        })),
+      },
     })
   }
 
-  /** A pin or a lit building, tapped: the event or the place it stands for. */
+  /** A pin, a lit building or a chip, tapped: the event or the place it stands for. */
+  const open = (kind: unknown, id: string) => router.push(kind === 'venue' ? `/venue/${id}` : `/event/${id}`)
   const openPlace = (e: NativeSyntheticEvent<PressEventWithFeatures>) => {
     const f = e.nativeEvent.features[0]
     const id = f?.properties?.id
-    if (typeof id !== 'string') return
-    router.push(f?.properties?.kind === 'venue' ? `/venue/${id}` : `/event/${id}`)
+    if (typeof id === 'string') open(f?.properties?.kind, id)
   }
 
   const pinData = useMemo<Collection<PinFeature>>(
@@ -305,6 +356,7 @@ export const HomeMap = memo(function HomeMap({
       ref={map}
       style={StyleSheet.absoluteFill}
       mapStyle={style}
+      light={LIGHT}
       logo={false}
       attribution
       attributionPosition={{ top: topInset + SPACE.sm, left: SPACE.sm }}
@@ -325,16 +377,21 @@ export const HomeMap = memo(function HomeMap({
         padding={{ bottom: bottomInset }}
       />
       {center ? <NativeUserLocation /> : null}
+      <GroundGlow data={lit.glow} active={active} />
       {/* A pin inside a building is hidden by it, so the lit building is the marker: tap it too. */}
-      <GeoJSONSource id="lit-buildings" data={lit} onPress={openPlace}>
+      <GeoJSONSource id="lit-buildings" data={lit.bands} onPress={openPlace}>
         <Layer
           id="lit-buildings"
           type="fill-extrusion"
+          // Over the city's copy, under the road names.
+          afterId={BUILDING_LAYER_ID}
           paint={{
             'fill-extrusion-color': ['get', 'color'],
             'fill-extrusion-height': ['get', 'height'],
             'fill-extrusion-base': ['get', 'base'],
-            'fill-extrusion-opacity': 0.95,
+            'fill-extrusion-opacity': 1,
+            // Each band is one solid colour: the walls-to-crown step is the gradient.
+            'fill-extrusion-vertical-gradient': false,
           }}
         />
       </GeoJSONSource>
@@ -342,24 +399,122 @@ export const HomeMap = memo(function HomeMap({
         <Layer
           id="pin-glow"
           type="circle"
+          maxzoom={LIGHT_MIN_ZOOM}
           paint={{
             'circle-color': ['get', 'color'],
-            'circle-radius': ['*', ['get', 'glow'], 12],
+            'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
             'circle-blur': 1,
-            'circle-opacity': 0.5,
+            'circle-opacity': MAP_THEME.pin.glowOpacity,
           }}
         />
         <Layer
           id="pin-dot"
           type="circle"
+          maxzoom={LIGHT_MIN_ZOOM}
           paint={{
             'circle-color': ['get', 'color'],
-            'circle-radius': 6,
-            'circle-stroke-color': EMBER.bg,
-            'circle-stroke-width': 2,
+            'circle-radius': MAP_THEME.pin.dotRadiusPx,
+            'circle-stroke-color': MAP_THEME.pin.dotStroke,
+            'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
           }}
         />
       </GeoJSONSource>
+      {lit.chips.map((chip) => (
+        <Marker
+          key={chip.id}
+          id={`chip-${chip.id}`}
+          lngLat={chip.at}
+          anchor="bottom"
+          offset={[0, -chip.lift]}
+          onPress={() => open(chip.kind, chip.id)}
+        >
+          <MapChip chip={chip} />
+        </Marker>
+      ))}
     </Map>
   )
+})
+
+/**
+ * The glow on the ground under a live event and at a beacon's foot, under the
+ * buildings. A live one breathes by flipping its opacity every half period and
+ * letting the paint transition carry it — no per-frame JavaScript — and holds
+ * steady when motion is reduced or the screen is out of view. Its own
+ * component, so a breath re-renders this source and nothing else.
+ */
+function GroundGlow({ data, active }: { data: Collection<GlowFeature>; active: boolean }) {
+  const reduceMotion = useReducedMotion()
+  const breathing = glowBreathes({ focused: active, reduceMotion, anyLive: data.features.some((f) => f.properties.pulse) })
+  const [high, setHigh] = useState(false)
+  const half = MAP_THEME.glow.periodMs / 2
+  useEffect(() => {
+    if (!breathing) return
+    const timer = setInterval(() => setHigh((h) => !h), half)
+    return () => clearInterval(timer)
+  }, [breathing, half])
+  const look: NonNullable<CircleLayerSpecification['paint']> = {
+    'circle-color': ['get', 'color'],
+    'circle-radius': GLOW_RADIUS,
+    'circle-blur': 1,
+    // Flat on the ground, shrinking into the distance like the ground does.
+    'circle-pitch-alignment': 'map',
+    'circle-pitch-scale': 'map',
+  }
+  return (
+    <GeoJSONSource id="lit-glow" data={data}>
+      <Layer
+        id="glow-still"
+        type="circle"
+        beforeId={BUILDING_LAYER_ID}
+        filter={['!=', ['get', 'pulse'], true]}
+        paint={{ ...look, 'circle-opacity': MAP_THEME.glow.still }}
+      />
+      <Layer
+        id="glow-live"
+        type="circle"
+        beforeId={BUILDING_LAYER_ID}
+        filter={['==', ['get', 'pulse'], true]}
+        paint={{ ...look, 'circle-opacity': glowOpacity(breathing, high), 'circle-opacity-transition': { duration: half, delay: 0 } }}
+      />
+    </GeoJSONSource>
+  )
+}
+
+/** The name above a lit roof: "LIVE ●" or the start for an event, a glyph and the bucket for a venue. */
+function MapChip({ chip }: { chip: Chip }) {
+  const look = MAP_THEME[chip.kind]
+  return (
+    <View style={styles.chipWrap} accessibilityRole="button" accessibilityLabel={`${chip.title}, ${chip.line}`}>
+      <View style={[styles.chip, { borderColor: look.crown }]}>
+        {chip.kind === 'venue' ? <Ionicons name="storefront-outline" size={ICON.sm} color={look.crown} /> : null}
+        <View>
+          <Text variant="caption" color={EMBER.textPrimary} numberOfLines={1}>
+            {chip.title}
+          </Text>
+          {chip.line ? (
+            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : EMBER.textSecondary} numberOfLines={1}>
+              {chip.line}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={[styles.stem, { backgroundColor: look.crown }]} />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  chipWrap: { alignItems: 'center' },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.xs,
+    paddingVertical: SPACE.xs,
+    paddingHorizontal: SPACE.sm,
+    maxWidth: MAP_THEME.chip.maxWidthPx,
+    borderRadius: EMBER_RADIUS.pill,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    backgroundColor: EMBER.bg,
+  },
+  stem: { width: SPACE.xxs, height: SPACE.md },
 })

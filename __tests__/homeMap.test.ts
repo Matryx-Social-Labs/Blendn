@@ -4,7 +4,6 @@ import { join } from 'path'
 import {
   backoffMs,
   buildingUnder,
-  dedupeLit,
   insideLastCircle,
   lightSignature,
   loadPins,
@@ -16,9 +15,10 @@ import {
   shouldFollowCity,
   shouldFollowFix,
   viewportQuery,
-  type LitBuilding,
 } from '../lib/homeMap'
+import { glowRadius } from '../lib/mapLit'
 import { EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
+import { MAP_THEME } from '../lib/mapTheme'
 
 /**
  * The 3D home map (plan v2 §4, step 2 PR B): what a viewport asks for, which
@@ -142,12 +142,14 @@ const code = (rel: string) =>
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   const map = code('components/home/HomeMap.tsx')
+  // Everything that decides what the map draws: the component, its pure parts, its style and its theme.
+  const drawing = ['components/home/HomeMap.tsx', 'lib/homeMap.ts', 'lib/mapLit.ts', 'lib/mapStyleEmber.ts', 'lib/mapTheme.ts']
 
-  it('reads no area off any payload', () => {
-    expect(map).not.toMatch(/geofence|checkInRadius|check_in_radius|buffer/i)
+  it.each(drawing)('%s reads no area off any payload', (file) => {
+    expect(code(file)).not.toMatch(/geofence|checkInRadius|check_in_radius|buffer|fence/i)
   })
 
-  it('adds only extruded buildings and pin circles: no fill or line that could outline an area', () => {
+  it('adds only extruded buildings and circles: no fill or line that could outline an area', () => {
     const types = [...map.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
     expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
@@ -165,10 +167,21 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(pitch).toBeLessThanOrEqual(60)
   })
 
-  it('sizes circles only as the glow (by bucket) or the fixed dot: never a radius in metres', () => {
+  it("sizes circles only by the theme: the bucket's glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
     const radii = [...map.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
-    expect(radii.length).toBeGreaterThan(0)
-    for (const r of radii) expect(["['*', ['get', 'glow'], 12]", '6']).toContain(r)
+    expect(radii.length).toBe(3)
+    for (const r of radii) {
+      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'GLOW_RADIUS']).toContain(r)
+    }
+    expect(map).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
+    // The ground glow is the theme's metres at every zoom, read off nothing.
+    expect(JSON.stringify(glowRadius())).not.toMatch(/get|feature|properties/)
+  })
+
+  it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
+    // The only geometry read is the city's own buildings; the only coordinates written are a pin's or a building's.
+    const queried = [...map.matchAll(/layers:\s*\[([^\]]*)\]/g)].map((m) => m[1].trim())
+    expect(queried).toEqual(['BUILDING_LAYER_ID'])
   })
 
   it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
@@ -237,13 +250,6 @@ describe('lighting, once per view (step 2 review)', () => {
     const view: [number, number, number, number] = [77.58, 12.96, 77.6, 12.98]
     expect(lightSignature(pins, view)).toBe(lightSignature(pins, view))
     expect(lightSignature(pins, [77.581, 12.96, 77.6, 12.98])).not.toBe(lightSignature(pins, view))
-  })
-
-  it('draws one copy per building, the live one winning', () => {
-    const ring = [[77.59, 12.97], [77.591, 12.97], [77.591, 12.971], [77.59, 12.97]]
-    const at = (id: string, live: boolean): LitBuilding => ({ id, live, kind: 'event', geometry: { type: 'Polygon', coordinates: [ring] }, height: 10, base: 0 })
-    expect(dedupeLit([at('later', false), at('now', true)]).map((b) => b.id)).toEqual(['now'])
-    expect(dedupeLit([at('first', false), at('second', false)]).map((b) => b.id)).toEqual(['first'])
   })
 })
 
