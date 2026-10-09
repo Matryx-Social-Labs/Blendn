@@ -74,6 +74,7 @@ describe('making a crew (CR-CU01)', () => {
     expect(screen.getByText(KEEP_ANONYMOUS_LABEL)).toBeTruthy()
 
     await fireEvent.changeText(screen.getByLabelText('Crew name'), 'Two')
+    expect(screen.getByLabelText('Make the crew')).toBeDisabled()
     await fireEvent.press(screen.getByLabelText('Make the crew'))
     expect(crews.create).not.toHaveBeenCalled()
   })
