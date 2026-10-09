@@ -259,6 +259,12 @@ const clearAuthState = async () => {
    * background refresh reaches this path without going through it.
    */
   clearRoomSignal()
+  /*
+   * A Go Live remembered on this phone is that account's (step 5 review, M5).
+   * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on
+   * the auth path does.
+   */
+  void import('./goLive').then((m) => m.clearLiveSession()).catch(() => {})
   updateAuthState({
     session: null,
     user: null,
