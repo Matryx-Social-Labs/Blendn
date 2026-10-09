@@ -122,6 +122,13 @@ export const HomeMap = memo(function HomeMap({
   const needsLight = useRef(false)
   const lastLit = useRef('')
   const view = useRef<{ bounds: Bounds | null; zoom: number }>({ bounds: null, zoom: ZOOM })
+  /*
+   * The drawer covers the bottom of the map. A camera move without the padding
+   * drops it (the declarative prop applies at mount only), so every move
+   * carries it — the first iOS drive showed the person's own dot under the drawer.
+   */
+  const padding = useRef({ bottom: bottomInset })
+  padding.current = { bottom: bottomInset }
   const [query, setQuery] = useState<PinQuery | null>(null)
   const [pins, setPins] = useState<Pin[]>([])
   const [lit, setLit] = useState<Collection<LitFeature>>(NO_LIT)
@@ -130,7 +137,7 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (!center || !shouldFollowFix(followedFix.current, center, touched.current)) return
     followedFix.current = center
-    camera.current?.easeTo({ center: [center.longitude, center.latitude], duration: 400 })
+    camera.current?.easeTo({ center: [center.longitude, center.latitude], padding: padding.current, duration: 400 })
   }, [center])
 
   // A city picked in the Pulse is a place to look at: follow it (`shouldFollowCity`).
@@ -143,7 +150,7 @@ export const HomeMap = memo(function HomeMap({
     const firstCity = !seenCity.current
     seenCity.current = true
     if (!shouldFollowCity({ firstCity, hasFix, touched: touched.current })) return
-    camera.current?.easeTo({ center: [cityLon, cityLat], duration: 600 })
+    camera.current?.easeTo({ center: [cityLon, cityLat], padding: padding.current, duration: 600 })
   }, [cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
 
   useEffect(

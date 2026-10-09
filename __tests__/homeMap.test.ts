@@ -153,6 +153,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
   })
 
+  it('moves the camera only with the drawer padding, so the centre stays above the drawer', () => {
+    const moves = map.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo)\(/.test(line))
+    expect(moves.length).toBeGreaterThan(0)
+    for (const line of moves) expect(line).toMatch(/padding:/)
+  })
+
   it('is tilted between 45° and 60°', () => {
     const pitch = Number(map.match(/const PITCH = (\d+)/)?.[1])
     expect(pitch).toBeGreaterThanOrEqual(45)
