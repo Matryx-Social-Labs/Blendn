@@ -130,3 +130,18 @@ it('lights nothing below the buildings zoom', async () => {
   expect(m.project).not.toHaveBeenCalled()
   expect(result.current.lit.bands.features).toHaveLength(0)
 })
+
+it("lights a pin as live as it is now, not as it was when its building was found (M1)", async () => {
+  const later = venues(1)
+  const m = fakeMap(async () => [buildingAt(later[0].longitude, later[0].latitude)])
+  const v = view()
+  let pins = later
+  const { result, rerender } = await renderHook(() => useMapLighting({ map: { current: m as never }, view: v, pins, segment: 'places', size: SIZE }))
+  await pass(result)
+  expect(result.current.lit.chips[0].live).toBe(false)
+  pins = [{ ...later[0], live: true }]
+  await act(async () => rerender({}))
+  await pass(result)
+  expect(m.queryRenderedFeatures).toHaveBeenCalledTimes(1)
+  expect(result.current.lit.chips[0].live).toBe(true)
+})

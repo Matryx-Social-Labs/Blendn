@@ -317,6 +317,12 @@ describe('chips above the roofs', () => {
     expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Under 5 live')
   })
 
+  it("put a late-night start on India's day, not UTC's", () => {
+    const now = Date.UTC(2026, 9, 9, 6, 0)
+    // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 am in India.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toMatch(/^Sat · 1:30\s?am$/i)
+  })
+
   it('name the date for a start more than six days off, so "Fri" is never the wrong Friday', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-16T14:30:00Z', bucket: null }, now)).toMatch(/16 Oct/)
