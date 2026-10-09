@@ -264,3 +264,33 @@ export function dedupeLit(lit: LitBuilding[]): LitBuilding[] {
   }
   return [...byBuilding.values()]
 }
+
+/**
+ * Whether the camera goes to the city's centre. A city picked in the Pulse is
+ * the person asking: always. The city resolved at launch only when there is
+ * nothing better — no fix of their own and no map they have moved: on a phone
+ * the first drive found it dragging people from where they stood to the middle
+ * of town.
+ */
+export function shouldFollowCity(s: { firstCity: boolean; hasFix: boolean; touched: boolean }): boolean {
+  if (!s.firstCity) return true
+  return !s.hasFix && !s.touched
+}
+
+/** How far a fix must move before the camera follows it: past GPS jitter. */
+const FOLLOW_FIX_KM = 0.05
+
+/**
+ * Whether the camera follows a new fix. The first position the app has may
+ * be a cached one (last known, another city even); the live fix that follows
+ * must still move the camera — until the person moves the map themselves.
+ */
+export function shouldFollowFix(
+  last: { latitude: number; longitude: number } | null,
+  next: { latitude: number; longitude: number },
+  touched: boolean
+): boolean {
+  if (touched) return false
+  if (!last) return true
+  return getDistanceKm(last.latitude, last.longitude, next.latitude, next.longitude) > FOLLOW_FIX_KM
+}

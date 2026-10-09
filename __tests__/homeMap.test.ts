@@ -13,6 +13,8 @@ import {
   pinsFor,
   roundQuery,
   shadeOf,
+  shouldFollowCity,
+  shouldFollowFix,
   viewportQuery,
   type LitBuilding,
 } from '../lib/homeMap'
@@ -256,5 +258,32 @@ describe('the map style can move without a release (step 2 review)', () => {
     expect(styleHost('https://maps.blendn.app/styles/ember.json')).toBe('maps.blendn.app')
     expect(styleHost('not a url')).toBe('invalid-url')
     expect(styleHost(EMBER_MAP_STYLE)).toBe('tiles.openfreemap.org')
+  })
+})
+
+describe('the map and the city (step 2 drive)', () => {
+  it("follows a city the person picks, but the city resolved at launch never takes the map from their own position", () => {
+    // Launch: the city arrives after the fix — the fix wins.
+    expect(shouldFollowCity({ firstCity: true, hasFix: true, touched: false })).toBe(false)
+    // Launch with no fix: the city is the best place to look.
+    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: false })).toBe(true)
+    // Launch after the person already moved the map: theirs.
+    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: true })).toBe(false)
+    // A later pick is the person asking: follow it, fix or not.
+    expect(shouldFollowCity({ firstCity: false, hasFix: true, touched: true })).toBe(true)
+  })
+})
+
+describe('the map and the fix (step 2 drive)', () => {
+  it('follows a fix that moved, a cached one then the live one, until the person moves the map', () => {
+    const cached = { latitude: 12.9655, longitude: 77.5855 }
+    const live = { latitude: 12.9672, longitude: 77.5855 }
+    expect(shouldFollowFix(null, cached, false)).toBe(true)
+    // The live fix ~190 m from the cached one: follow it.
+    expect(shouldFollowFix(cached, live, false)).toBe(true)
+    // A jitter of a few metres is not a move.
+    expect(shouldFollowFix(live, { latitude: 12.96721, longitude: 77.58551 }, false)).toBe(false)
+    // Once the person has moved the map, it is theirs.
+    expect(shouldFollowFix(cached, live, true)).toBe(false)
   })
 })

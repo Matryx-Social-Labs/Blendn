@@ -27,6 +27,8 @@ import {
   onScreen,
   roundQuery,
   shadeOf,
+  shouldFollowCity,
+  shouldFollowFix,
   viewportQuery,
   type Bounds,
   type LitBuilding,
@@ -112,7 +114,7 @@ export const HomeMap = memo(function HomeMap({
   const camera = useRef<CameraRef>(null)
   // The person has moved the map: the first live fix no longer takes it over.
   const touched = useRef(false)
-  const centredOnFix = useRef(false)
+  const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastQuery = useRef<PinQuery | null>(null)
   const failures = useRef(0)
@@ -124,20 +126,25 @@ export const HomeMap = memo(function HomeMap({
   const [pins, setPins] = useState<Pin[]>([])
   const [lit, setLit] = useState<Collection<LitFeature>>(NO_LIT)
 
-  // The first live fix, until the person moves the map themselves.
+  // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
-    if (!center || centredOnFix.current || touched.current) return
-    centredOnFix.current = true
+    if (!center || !shouldFollowFix(followedFix.current, center, touched.current)) return
+    followedFix.current = center
     camera.current?.easeTo({ center: [center.longitude, center.latitude], duration: 400 })
   }, [center])
 
-  // A city picked in the Pulse is a place to look at: follow it.
+  // A city picked in the Pulse is a place to look at: follow it (`shouldFollowCity`).
   const cityLat = cityCentre?.latitude
   const cityLon = cityCentre?.longitude
+  const seenCity = useRef(false)
+  const hasFix = center !== null
   useEffect(() => {
     if (cityLat === undefined || cityLon === undefined) return
+    const firstCity = !seenCity.current
+    seenCity.current = true
+    if (!shouldFollowCity({ firstCity, hasFix, touched: touched.current })) return
     camera.current?.easeTo({ center: [cityLon, cityLat], duration: 600 })
-  }, [cityLat, cityLon])
+  }, [cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
 
   useEffect(
     () => () => {

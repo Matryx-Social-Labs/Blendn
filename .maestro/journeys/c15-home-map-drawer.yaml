@@ -8,8 +8,10 @@
 # line), PLACE (a regex for a venue Places lists), and, for the hiding check
 # (HM-D01): EVENT (a regex for the event's title, found by search),
 # HIDDEN_VENUE (its venue's name — "The Humming Tree" for blr-hiding-soon).
-# PIN_POINT (optional, e.g. "79%,33%"): a screen point over a pin or a lit
-# building for the pin tap, which ends the run on that event or place.
+# PIN_POINT (optional, e.g. "50%,25%") and PIN_OPENS (a regex for what it opens,
+# e.g. the event's title): a screen point over a pin or a lit building with the
+# drawer at half — set the device's location to the pin and the camera centres
+# it at about 50%,25% — for the pin tap, which ends the run there.
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c15
@@ -20,6 +22,10 @@ tags:
 - extendedWaitUntil:
     visible: ".*(Continue with email|The Pulse).*"
     timeout: 60000
+# A fresh launch draws the entry screen before it takes taps; under host load the
+# first tap otherwise lands on nothing.
+- waitForAnimationToEnd:
+    timeout: 10000
 - runFlow:
     when:
       visible: "Continue with email"
@@ -46,8 +52,9 @@ tags:
     times: 5
     commands:
       - tapOn: "Places"
+      # Loaded, whatever the list holds: the live chip is shown only to somebody who may go live.
       - extendedWaitUntil:
-          visible: ".*(live|No places here yet|Couldn.t load places).*"
+          notVisible: "Loading places"
           timeout: 30000
       - tapOn: "Events"
       - assertVisible: "The Pulse"
@@ -80,7 +87,7 @@ tags:
       # …and Places does not list that venue while it does (the negative control).
       - tapOn: "Places"
       - extendedWaitUntil:
-          visible: ".*live.*"
+          notVisible: "Loading places"
           timeout: 30000
       - assertNotVisible: "${HIDDEN_VENUE}.*"
       - tapOn: "Events"
@@ -94,7 +101,7 @@ tags:
 - extendedWaitUntil:
     visible: "PLACEHOLDER DESIGN.*"
     timeout: 30000
-- assertVisible: ".*live"
+- takeScreenshot: c15-place
 - tapOn: "Go back"
 - assertVisible: "Places"
 # A pin (or the building it lights) opens what it stands for. Last: iOS has no
@@ -104,12 +111,15 @@ tags:
       true: ${PIN_POINT != undefined && PIN_POINT != ''}
     commands:
       - tapOn: "Events"
+      # The keyboard left the drawer full; one step down to half shows the map above it.
+      - tapOn: "Events and places.*"
       - waitForAnimationToEnd:
           timeout: 8000
+      - takeScreenshot: c15-map-half
       - tapOn:
           point: ${PIN_POINT}
       - extendedWaitUntil:
-          visible: ".*(I'm going|Going|PLACEHOLDER DESIGN|Check in).*"
+          visible: ${PIN_OPENS}
           timeout: 30000
       - takeScreenshot: c15-pin-opened
 # Read back (HM-D01), from blendn-admin:
