@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import {
+  choiceLabel,
   countdownLabel,
   countdownSpoken,
   EXPIRY_PROMPT_LEAD_MS,
@@ -76,6 +77,14 @@ describe('the expiry prompt (PL-M02)', () => {
     // Tomorrow's room is another night.
     await rememberLiveSession({ venueDayId: 'day-2', venueId: 'v1', venueName: 'The Humming Tree' })
     expect(await readLiveSession()).toEqual({ venueDayId: 'day-2', venueId: 'v1', venueName: 'The Humming Tree', prompted: false })
+  })
+
+  it('remembers the window chosen, so the place offers it again in one tap after the screen is gone (PL-M05)', async () => {
+    await AsyncStorage.clear()
+    await rememberLiveSession({ venueDayId: 'day-1', venueId: 'v1', venueName: 'Cubbon Park Bandstand', choice: { minutes: 20 } })
+    expect((await readLiveSession())?.choice).toEqual({ minutes: 20 })
+    expect(choiceLabel({ minutes: 20 })).toBe('20 minutes')
+    expect(choiceLabel({ stay: true })).toBe("Stay while I'm here")
   })
 })
 

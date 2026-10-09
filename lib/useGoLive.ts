@@ -97,7 +97,7 @@ export function useGoLive({
       })
       if (result.success && result.data) {
         feedback.success()
-        await rememberLiveSession({ venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name })
+        await rememberLiveSession({ venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         checkInChanged(result.data.venueDayId)
         onLive?.(result.data)
         return true

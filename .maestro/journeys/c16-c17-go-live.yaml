@@ -109,14 +109,19 @@ tags:
 - tapOn: "Go live again"
 # Back on the place: one tap goes again with the same window (PL-M05).
 - extendedWaitUntil:
-    visible: "Go live again · 20 minutes"
+    visible: "Go live again.*20 minutes"
     timeout: 30000
 - assertVisible: ".*Only people live here.*"
 - assertNotVisible: "LIVE · .*"
 - takeScreenshot: c16-a-after
 
 # --- The room left the Banter with the window ---
-- tapOn: "Go back"
+- repeat:
+    times: 3
+    while:
+      notVisible: "Banter"
+    commands:
+      - tapOn: "Go back"
 - tapOn: "Banter"
 - extendedWaitUntil:
     visible: "The Banter"
@@ -150,5 +155,5 @@ tags:
 - takeScreenshot: c16-b-extended
 - tapOn: "Stop being live"
 - extendedWaitUntil:
-    visible: "Go live again · 20 minutes"
+    visible: "Go live again.*20 minutes"
     timeout: 30000

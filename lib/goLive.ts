@@ -204,7 +204,14 @@ export function liveEndedMessage(reason: string, venueName: string | null): stri
  */
 const LIVE_KEY = 'blendn.goLive.session'
 
-export type LiveSession = { venueDayId: string; venueId: string; venueName: string; prompted: boolean }
+export type LiveSession = {
+  venueDayId: string
+  venueId: string
+  venueName: string
+  prompted: boolean
+  /** The window chosen, so the place offers "Go live again" in one tap (PL-M05). */
+  choice?: GoLiveChoice
+}
 
 export async function readLiveSession(): Promise<LiveSession | null> {
   try {

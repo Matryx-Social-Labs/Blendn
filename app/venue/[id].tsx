@@ -20,6 +20,7 @@ import {
   countdownSpoken,
   GO_LIVE_CHOICES,
   liveCountLine,
+  readLiveSession,
   remainingMs,
   venueAction,
   type GoLiveChoice,
@@ -49,7 +50,7 @@ export default function VenueScreen() {
   const [detail, setDetail] = useState<VenueDetail | null>(null)
   const [failed, setFailed] = useState<{ message: string; final: boolean } | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  /** The window chosen on this screen, so "Go live again" is one tap (PL-M05). */
+  /** The window last chosen at this place, so "Go live again" is one tap (PL-M05). */
   const [lastChoice, setLastChoice] = useState<GoLiveChoice | null>(null)
   const [leaving, setLeaving] = useState(false)
 
@@ -83,6 +84,15 @@ export default function VenueScreen() {
   // On focus, so coming back to it shows the count and your window as they are now.
   useFocusEffect(load)
 
+  // The window last chosen here, from the remembered session: it outlives this screen (PL-M05).
+  const readLastChoice = useCallback(() => {
+    if (!id) return
+    readLiveSession()
+      .then((session) => setLastChoice(session?.venueId === id ? session.choice ?? null : null))
+      .catch(() => {})
+  }, [id])
+  useFocusEffect(readLastChoice)
+
   // Back from the background: the server's window, not a timer iOS suspended (PL-CU02).
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -92,7 +102,14 @@ export default function VenueScreen() {
   }, [load])
 
   // A Go Live, an extend from the expiry prompt, a check-out anywhere: the window moved.
-  useEffect(() => subscribeCheckInChanged(load), [load])
+  useEffect(
+    () =>
+      subscribeCheckInChanged(() => {
+        load()
+        readLastChoice()
+      }),
+    [load, readLastChoice]
+  )
 
   const live = detail?.live
   const venueDayId = live?.venueDayId ?? null
@@ -133,9 +150,7 @@ export default function VenueScreen() {
 
   const choose = (choice: GoLiveChoice) => {
     closeTray()
-    void goLive(choice).then((ok) => {
-      if (ok) setLastChoice(choice)
-    })
+    void goLive(choice)
   }
 
   const openSheet = () =>
