@@ -119,6 +119,19 @@ describe('the place screen', () => {
     expect((apiClient.getVenue as jest.Mock).mock.calls.length - before).toBeGreaterThanOrEqual(2)
   })
 
+  it('an older read that answers last does not undo a newer one (H2)', async () => {
+    let releaseOld: (v: unknown) => void = () => {}
+    ;(apiClient.getVenue as jest.Mock)
+      .mockReturnValueOnce(new Promise((r) => { releaseOld = r })) // the first read, still on the wire
+      .mockResolvedValue(venue({ youAreLive: false, expiresAt: null, venueDayId: null, chatGroupId: null }))
+    await mount()
+    await act(async () => { mockAppStateCb?.('active') }) // a newer read: the window has ended
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByText(/LIVE ·/)).toBeNull()
+    await act(async () => { releaseOld(venue()) }) // the old read, from when you were live, lands last
+    expect(screen.queryByText(/LIVE ·/)).toBeNull()
+  })
+
   it('opens the claim page exactly as the server gave it, only while unclaimed', async () => {
     const url = 'https://staging-dashboard.blendn.app/claim/venue/v1'
     ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue({ youAreLive: false, expiresAt: null }, { url }, false))

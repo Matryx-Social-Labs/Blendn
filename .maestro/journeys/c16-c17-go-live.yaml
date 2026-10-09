@@ -3,7 +3,7 @@
 # state, the room gone from the Banter), back to the place; then a second
 # place: Go Live, the prompt, "Extend 45 min · free".
 #
-# Real windows: about 40 minutes end to end. Nothing is faked.
+# Real windows: about an hour end to end. Nothing is faked.
 #
 # Env, as MAESTRO_* environment variables (Maestro logs typed text, and -e is
 # visible in ps): MAESTRO_EMAIL, MAESTRO_PASSWORD. The rest with -e:
@@ -72,11 +72,31 @@ tags:
 - assertVisible: "You and .* others"
 - takeScreenshot: c16-a-live
 
+# --- "See who's here": the Blend'n room opens on top, not under the place (H3) ---
+- tapOn: "See who's here"
+- extendedWaitUntil:
+    visible: "Close Blend'n"
+    timeout: 20000
+- assertNotVisible: ".*Only people live here.*"
+- assertNotVisible: "Today.s room"
+- takeScreenshot: c16-a-blendn-on-top
+- tapOn: "Close Blend'n"
+
+# --- The Banter while live: the place's name, no count (H5, D-19) ---
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: ".*${PLACE_A}.*"
+    timeout: 30000
+- assertNotVisible: ".*${PLACE_A}.*in the room.*"
+- assertNotVisible: ".*Venue day.*"
+- takeScreenshot: c17-banter-live
+
 # --- A's room: post, then the window runs out around it (PL-M02, PL-K01) ---
-- tapOn: "Open the room"
+- tapOn: ".*${PLACE_A}.*"
 - extendedWaitUntil:
     visible: ".*(Share your thoughts|Start the room).*"
     timeout: 30000
+- assertNotVisible: ".*in the room.*"
 - tapOn: ".*Share your thoughts.*"
 - inputText: ${MESSAGE}
 - runFlow: ../subflows/keyboard-done.yaml
@@ -106,26 +126,41 @@ tags:
     visible: "You're not live here any more"
     timeout: 480000
 - takeScreenshot: c17-a-not-live
+# Opened from the Banter, "Go live again" opens the place from the room's own row (M4).
 - tapOn: "Go live again"
-# Back on the place: one tap goes again with the same window (PL-M05).
+# One tap goes again with the same window, on the same venue day (PL-M05).
 - extendedWaitUntil:
     visible: "Go live again.*20 minutes"
     timeout: 30000
 - assertVisible: ".*Only people live here.*"
 - assertNotVisible: "LIVE · .*"
 - takeScreenshot: c16-a-after
+- tapOn: "Go live again.*20 minutes"
+- extendedWaitUntil:
+    visible: "LIVE · .* left"
+    timeout: 45000
+
+# --- The second window at A tonight: no second prompt (PL-M02, once a night) ---
+- tapOn: "Open the room"
+- extendedWaitUntil:
+    visible: "You're not live here any more"
+    timeout: 1320000
+- assertNotVisible: "Still at .*"
+- takeScreenshot: c17-a-second-window-ended
+- tapOn: "Go live again"
 
 # --- The room left the Banter with the window ---
 - repeat:
-    times: 3
+    times: 4
     while:
       notVisible: "Banter"
     commands:
       - tapOn: "Go back"
 - tapOn: "Banter"
+# Wait for the list itself, so the absence below is not read off an empty screen.
 - extendedWaitUntil:
-    visible: "The Banter"
-    timeout: 20000
+    visible: ".*(Live now|Recent|Requests|No conversations yet).*"
+    timeout: 30000
 - assertNotVisible: ".*${PLACE_A}.*"
 - takeScreenshot: c17-banter-after
 

@@ -60,7 +60,8 @@ jest.mock('../lib/checkIn', () => ({
     return () => mockChanged.delete(f)
   },
 }))
-jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected', connected: true }) }))
+const mockLiveSync = jest.fn((_opts: { enabled?: boolean }) => ({ state: 'connected', connected: true }))
+jest.mock('../lib/useLiveSync', () => ({ useLiveSync: (opts: { enabled?: boolean }) => mockLiveSync(opts) }))
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
@@ -100,6 +101,8 @@ it('the window ends: the room becomes "not live", and comes back — socket rejo
   await act(async () => mockEnded.forEach((f) => f({ eventId: 'day-1', reason: 'expired' })))
   await flush()
   expect(screen.getByText("You're not live here any more")).toBeTruthy()
+  // Out of the room: no live sync (and no socket join) for a room that refuses you (X3).
+  expect(mockLiveSync.mock.calls[mockLiveSync.mock.calls.length - 1][0].enabled).toBe(false)
 
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await act(async () => mockChanged.forEach((f) => f()))

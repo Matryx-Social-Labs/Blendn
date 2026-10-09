@@ -713,11 +713,15 @@ SCRUM-555.
   "5–9 live here", … When you are live it reads as the others ("You and under
   5 others"): the server's figure never counts you.
 - **Go Live** (`live.open`) opens the Go Live sheet (§11). After a window ends
-  on this screen the button becomes **"Go live again · 20 minutes"** — one tap,
-  the same window (PL-M05) — with "Pick another time" under it.
+  the button becomes **"Go live again · 20 minutes"** — one tap, the same
+  window (PL-M05) — with "Pick another time" under it. Only for the window last
+  chosen at this place on its current venue day, never for "stay", and only for
+  the account that chose it.
 - **Live**: a pill, `LIVE · 18:42 left` ("LIVE · STAYING" for "stay"), counting
-  down from the server's `expiresAt`; "Open the room" (the place's chat),
-  "See who's here" (the Blend'n room), and "Stop being live".
+  down from the server's `expiresAt` by the server's clock (the `Date` header);
+  at zero it asks the server every few seconds until the window is gone.
+  "Open the room" (the place's chat), "See who's here" (the Blend'n room — the
+  place screen closes first, so it opens on top), and "Stop being live".
 - **An event has the place** (`closedReason: event_live_here`): instead of Go
   Live, "‹Event› has this place now" and **Go to the event**, the event's
   check-in. A Go Live refused with `EVENT_LIVE_HERE` gets the same hand-off as a
@@ -756,10 +760,13 @@ available).
 
 - **The sheet**: "Go live at ‹place›", a sentence on what live means (you see
   who is here and join today's room; they see you by your room name; it ends),
-  then **20 minutes · 45 minutes · An hour · Stay while I'm here**, Cancel.
-  Where you are goes through the check-in's own gates (permission, a fix, a
-  weak fix refused). "Stay" is sent as asked: whether it is Blendn+'s is the
-  server's to say (`PLUS_REQUIRED`), which today it is not.
+  then **20 minutes · 45 minutes · An hour · Stay while Blendn is open here**,
+  Cancel. Where you are goes through the check-in's own gates (permission,
+  Precise Location, a fix); Go Live sends any fix up to the server's 150 m and
+  lets the server judge, and "Try Again" on a weak fix runs Go Live again.
+  "Stay" is sent as asked: whether it is Blendn+'s is the server's to say
+  (`PLUS_REQUIRED`), which today it is not; it holds only while the app pings
+  from the place, in the foreground.
 - **The expiry prompt**: five minutes before a fixed window ends, wherever you
   are in the app, **at most once a night** per place (a "stay" window is never
   prompted — it follows you). "Still at ‹place›?" · "You stop being live at
