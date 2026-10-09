@@ -121,7 +121,9 @@ export function HomeShell({
           segment={segment}
           topInset={insets.top + TOP_BAR_HEIGHT}
           bottomInset={height - points[snap]}
-          active={focused}
+          focused={focused}
+          // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
+          glowVisible={focused && snap !== 'full' && !screenReader}
         />
       </View>
       <PulseTopBar actions={<NotificationBell />} />

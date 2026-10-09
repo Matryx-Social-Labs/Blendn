@@ -5,10 +5,11 @@ import {
   backoffMs,
   buildingUnder,
   insideLastCircle,
+  lightCandidates,
   lightSignature,
+  liveAt,
   loadPins,
   MAX_QUERY_RADIUS_KM,
-  onScreen,
   pinsFor,
   roundQuery,
   shadeOf,
@@ -17,7 +18,7 @@ import {
   viewportQuery,
 } from '../lib/homeMap'
 import { glowRadius } from '../lib/mapLit'
-import { EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
+import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
 
 /**
@@ -117,6 +118,19 @@ describe('the building a pin lights', () => {
     expect(buildingUnder(pin, [stadium])?.id).toBe('stadium')
   })
 
+  it('is a building standing in the courtyard of another, not the ring around it (holes count first)', () => {
+    const ring = building('ring', [square(77.589, 12.969, 0.003), square(77.5902, 12.9702, 0.0006)])
+    const inCourtyard = building('in-courtyard', [square(77.5903, 12.9703, 0.0004)])
+    expect(buildingUnder(pin, [ring, inCourtyard])?.id).toBe('in-courtyard')
+  })
+
+  it('is the tallest of the parts that hold the pin (a tower over its podium)', () => {
+    const podium = { ...building('podium', [square(77.59, 12.97, 0.001)]), properties: { render_height: 10 } }
+    const tower = { ...building('tower', [square(77.5902, 12.9702, 0.0005)]), properties: { render_height: 60 } }
+    expect(buildingUnder(pin, [podium, tower])?.id).toBe('tower')
+    expect(buildingUnder(pin, [tower, podium])?.id).toBe('tower')
+  })
+
   it('is none on open ground, so only the glow shows', () => {
     const away = building('away', [square(77.6, 12.98, 0.001)])
     expect(buildingUnder(pin, [away])).toBeNull()
@@ -141,53 +155,68 @@ const code = (rel: string) =>
   readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
-  const map = code('components/home/HomeMap.tsx')
-  // Everything that decides what the map draws: the component, its pure parts, its style and its theme.
-  const drawing = ['components/home/HomeMap.tsx', 'lib/homeMap.ts', 'lib/mapLit.ts', 'lib/mapStyleEmber.ts', 'lib/mapTheme.ts']
+  const component = code('components/home/HomeMap.tsx')
+  // The map's own layers live in two files: the component and its lit layers.
+  const layers = component + code('components/home/MapLitLayers.tsx')
+  // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
+  const drawing = [
+    'components/home/HomeMap.tsx',
+    'components/home/MapLitLayers.tsx',
+    'components/home/useMapLighting.ts',
+    'lib/homeMap.ts',
+    'lib/mapLit.ts',
+    'lib/mapStyleEmber.ts',
+    'lib/mapTheme.ts',
+  ]
 
   it.each(drawing)('%s reads no area off any payload', (file) => {
     expect(code(file)).not.toMatch(/geofence|checkInRadius|check_in_radius|buffer|fence/i)
   })
 
   it('adds only extruded buildings and circles: no fill or line that could outline an area', () => {
-    const types = [...map.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
+    const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
     expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
   })
 
   it('moves the camera only with the drawer padding, so the centre stays above the drawer', () => {
-    const moves = map.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo)\(/.test(line))
+    const moves = component.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo)\(/.test(line))
     expect(moves.length).toBeGreaterThan(0)
     for (const line of moves) expect(line).toMatch(/padding:/)
+    // …and the first frame has it too: a padding-only camera change is a no-op on Android (review H3).
+    expect(component).toMatch(/initialViewState=\{\{[\s\S]*?padding: \{ bottom: bottomInset \}/)
   })
 
   it('is tilted between 45° and 60°', () => {
-    const pitch = Number(map.match(/const PITCH = (\d+)/)?.[1])
-    expect(pitch).toBeGreaterThanOrEqual(45)
-    expect(pitch).toBeLessThanOrEqual(60)
+    expect(MAP_THEME.camera.pitch).toBeGreaterThanOrEqual(45)
+    expect(MAP_THEME.camera.pitch).toBeLessThanOrEqual(60)
+    expect(component).toMatch(/pitch: MAP_THEME\.camera\.pitch/)
   })
 
   it("sizes circles only by the theme: the bucket's glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
-    const radii = [...map.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
+    const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
     expect(radii.length).toBe(3)
     for (const r of radii) {
       expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'GLOW_RADIUS']).toContain(r)
     }
-    expect(map).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
+    expect(layers).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.
     expect(JSON.stringify(glowRadius())).not.toMatch(/get|feature|properties/)
   })
 
   it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
     // The only geometry read is the city's own buildings; the only coordinates written are a pin's or a building's.
-    const queried = [...map.matchAll(/layers:\s*\[([^\]]*)\]/g)].map((m) => m[1].trim())
+    const queried = [...code('components/home/useMapLighting.ts').matchAll(/layers:\s*\[([^\]]*)\]/g)].map((m) => m[1].trim())
     expect(queried).toEqual(['BUILDING_LAYER_ID'])
+    expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
   it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
-    expect(EMBER_MAP_STYLE.layers.some((l) => l.id === 'building-3d' && l.type === 'fill-extrusion')).toBe(true)
-    expect(map).toMatch(/\battribution\b(?!=\{false\})/)
-    expect(map).not.toMatch(/attribution=\{false\}/)
+    expect(CITY_BUILDINGS).toMatchObject({ id: 'building-3d', source: 'openmaptiles', sourceLayer: 'building' })
+    expect(layers).toMatch(/<CityBuildings \/>/)
+    expect(EMBER_MAP_STYLE.sources).toHaveProperty('openmaptiles')
+    expect(component).toMatch(/\battribution\b(?!=\{false\})/)
+    expect(component).not.toMatch(/attribution=\{false\}/)
   })
 })
 
@@ -220,11 +249,18 @@ describe('asking for pins (step 2 review)', () => {
     const api = { getEvents: jest.fn(() => ok({ events })), getVenues: jest.fn(() => ok({ venues })) }
     const q = { lat: 12.97, lon: 77.59, radius: 1 }
     const places = await loadPins('places', q, api, 50)
-    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })] })
+    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], truncated: false })
     expect(api.getVenues).toHaveBeenCalledWith({ ...q, limit: 50, sortBy: 'distance' })
     expect(api.getEvents).not.toHaveBeenCalled()
     const evts = await loadPins('events', q, api, 50)
-    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })] })
+    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], truncated: false })
+  })
+
+  it('says a full page may not be all there is, so it never counts as covering the circle (review M2)', async () => {
+    const api = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: [...venues, { ...venues[0], id: 'w' }] })) }
+    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    expect(await loadPins('places', q, api, 2)).toMatchObject({ kind: 'pins', truncated: true })
+    expect(await loadPins('places', q, api, 3)).toMatchObject({ kind: 'pins', truncated: false })
   })
 
   it('reports a refusal as rate-limited (with its wait) and anything else as failed, never throwing', async () => {
@@ -237,19 +273,42 @@ describe('asking for pins (step 2 review)', () => {
 })
 
 describe('lighting, once per view (step 2 review)', () => {
-  it('looks only at pins on (or just off) the screen', () => {
-    const size = { width: 400, height: 800 }
-    expect(onScreen([200, 400], size)).toBe(true)
-    expect(onScreen([-40, 400], size)).toBe(true)
-    expect(onScreen([-100, 400], size)).toBe(false)
-    expect(onScreen([200, 900], size)).toBe(false)
+  const venue = (id: string, latitude: number, longitude: number) => ({ id, name: id, latitude, longitude, liveNow: 'quiet' as const })
+  const view = { centre: [77.59, 12.97] as [number, number], zoom: 16, pitch: 55 }
+
+  it('needs no second pass for the same pins over the same view, and one when the view or a pin\'s liveness moves', () => {
+    const pins = pinsFor('places', { events: [], venues: [venue('v', 12.97, 77.59)] })
+    expect(lightSignature(pins, view)).toBe(lightSignature(pins, view))
+    expect(lightSignature(pins, { ...view, centre: [77.591, 12.97] })).not.toBe(lightSignature(pins, view))
+    expect(lightSignature(pins, { ...view, zoom: 17 })).not.toBe(lightSignature(pins, view))
+    expect(lightSignature([{ ...pins[0], live: true }], view)).not.toBe(lightSignature(pins, view))
   })
 
-  it('needs no second pass for the same pins over the same view', () => {
-    const pins = pinsFor('places', { events: [], venues: [{ id: 'v', name: 'V', latitude: 12.97, longitude: 77.59, liveNow: 'quiet' }] })
-    const view: [number, number, number, number] = [77.58, 12.96, 77.6, 12.98]
-    expect(lightSignature(pins, view)).toBe(lightSignature(pins, view))
-    expect(lightSignature(pins, [77.581, 12.96, 77.6, 12.98])).not.toBe(lightSignature(pins, view))
+  it('looks at the pins in view only, the nearest to the centre first, at most the cap (review H1)', () => {
+    const pins = pinsFor('places', {
+      events: [],
+      venues: [venue('far', 12.979, 77.599), venue('outside', 13.5, 77.59), venue('centre', 12.97, 77.59), venue('near', 12.971, 77.591)],
+    })
+    const bounds: [number, number, number, number] = [77.58, 12.96, 77.6, 12.98]
+    expect(lightCandidates(pins, bounds, [77.59, 12.97], 2).map((p) => p.id)).toEqual(['centre', 'near'])
+    expect(lightCandidates(pins, bounds, [77.59, 12.97], 10).map((p) => p.id)).toEqual(['centre', 'near', 'far'])
+  })
+})
+
+describe('an event lights up when its doors open, without a new read (review M1)', () => {
+  it('reads liveness from the window as the clock moves', () => {
+    const t0 = Date.now()
+    const [pin] = pinsFor('events', { events: [event('e', 30, 90)], venues: [] }, t0)
+    expect(pin.live).toBe(false)
+    expect(liveAt(pin, t0 + 31 * 60_000)).toMatchObject({ live: true, glow: 3 })
+    expect(liveAt(pin, t0 + 91 * 60_000)).toMatchObject({ live: false, glow: 1 })
+    // Unchanged is the same object, so nothing downstream re-renders.
+    expect(liveAt(pin, t0)).toBe(pin)
+  })
+
+  it("leaves a venue's liveness to its bucket", () => {
+    const [busy] = pinsFor('places', { events: [], venues: [{ id: 'b', name: 'B', latitude: 12.97, longitude: 77.59, liveNow: '20+' }] })
+    expect(liveAt(busy, Date.now() + 10 * 86_400_000)).toBe(busy)
   })
 })
 

@@ -11,7 +11,7 @@
 import { getDistanceKm } from './geo'
 import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
-import type { LitPlace } from './mapLit'
+import { footprintKey, nearestTo, type LitPlace } from './mapLit'
 import { buildingHeights } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
 
@@ -44,12 +44,16 @@ export interface Pin {
   latitude: number
   longitude: number
   title: string
-  /** Happening now (an event) or somebody live there (a venue): drawn brighter. */
+  /**
+   * Happening now (an event) or somebody live there (a venue): drawn brighter.
+   * As of when the pins loaded; `liveAt` reads an event's afresh from its window.
+   */
   live: boolean
   /** 1–4: how strongly it glows. A venue's step follows its bucket, never a count. */
   glow: number
-  /** An event's start (its session's, when it has one), for its chip; null for a venue. */
+  /** An event's start and end (its session's, when it has one); null for a venue. */
   startsAt: string | null
+  endsAt: string | null
   /** A venue's live bucket, for its chip; null for an event. */
   bucket: LiveNow | null
 }
@@ -95,27 +99,40 @@ export function pinsFor(
         live: bucket !== 'quiet',
         glow: VENUE_GLOW[bucket] ?? 1,
         startsAt: null,
+        endsAt: null,
         bucket,
       }
     })
   }
   return data.events.filter(located).map((e) => {
     const w = liveWindow(e)
-    const start = new Date(w.start_time).getTime()
-    const end = w.end_time ? new Date(w.end_time).getTime() : NaN
-    const live = start <= now && Number.isFinite(end) && now < end
-    return {
+    const pin = {
       id: e.id,
       kind: 'event' as const,
       latitude: e.latitude,
       longitude: e.longitude,
       title: e.title,
-      live,
-      glow: live ? 3 : 1,
+      live: false,
+      glow: 1,
       startsAt: w.start_time,
+      endsAt: w.end_time ?? null,
       bucket: null,
     }
+    return liveAt(pin, now)
   })
+}
+
+/**
+ * A pin as of `now`: an event is live from its start to its end, read from its
+ * window each time, so a pin loaded before the doors opened lights up when they
+ * do. A venue's liveness is its bucket, which only a fresh read can change.
+ */
+export function liveAt(pin: Pin, now: number): Pin {
+  if (pin.kind !== 'event') return pin
+  const start = pin.startsAt ? new Date(pin.startsAt).getTime() : NaN
+  const end = pin.endsAt ? new Date(pin.endsAt).getTime() : NaN
+  const live = start <= now && Number.isFinite(end) && now < end
+  return live === pin.live ? pin : { ...pin, live, glow: live ? 3 : 1 }
 }
 
 /** A pin's dot colour (`MAP_THEME.pin`): ember for an event, rose for a venue, brighter when live. */
@@ -136,15 +153,6 @@ function inRing([x, y]: [number, number], ring: Ring): boolean {
 }
 
 /**
- * Inside the outer ring; holes ignored on purpose. A pin on a stadium's pitch
- * or in a building's courtyard is at that building — the ring around it is
- * the place to light.
- */
-function inPolygon(point: [number, number], rings: Ring[]): boolean {
-  return rings.length > 0 && inRing(point, rings[0])
-}
-
-/**
  * Half the side of the box around a pin's screen point that buildings are
  * looked for in. At a tilt a pin's own spot can be the open ground of a pitch
  * or a courtyard, with the building it belongs to drawn around it, not under it.
@@ -152,43 +160,79 @@ function inPolygon(point: [number, number], rings: Ring[]): boolean {
 export const BUILDING_SEARCH_PX = 48
 
 /**
- * The building a pin stands in, from the features the map rendered around the
- * pin's screen point. At a tilt the box catches buildings in front too, so the
- * one chosen is the one whose footprint (its outer ring) holds the pin; none
- * means the pin gets only its glow (a park, an open-air ground).
+ * The building a pin stands in, from the features the map rendered around it.
+ * At a tilt the box catches buildings in front too, so the one chosen holds
+ * the pin. In order:
+ *
+ * 1. A part that holds the pin outside its holes (a building standing in
+ *    another's courtyard is that building, not the ring around it).
+ * 2. Else a part whose outer ring holds it: a pin on a stadium's pitch or in a
+ *    courtyard is at the building around it.
+ * 3. Among equals, the tallest (a tower over its podium).
+ *
+ * The tiles merge neighbouring buildings into one MultiPolygon feature, so only
+ * the part holding the pin is returned — lighting the feature lit a whole block
+ * on the device. None: the pin gets a beacon (a park, an open-air ground).
  */
-export function buildingUnder<F extends { geometry: { type: string; coordinates: unknown } }>(
+export function buildingUnder<F extends { geometry: { type: string; coordinates: unknown }; properties?: Record<string, unknown> | null }>(
   pin: { latitude: number; longitude: number },
   features: F[]
 ): (Omit<F, 'geometry'> & { geometry: { type: 'Polygon'; coordinates: Ring[] } }) | null {
   const point: [number, number] = [pin.longitude, pin.latitude]
+  let best: { f: F; part: Ring[]; solid: boolean; height: number } | null = null
   for (const f of features) {
     const g = f.geometry as BuildingGeometry
-    /*
-     * The tiles merge neighbouring buildings into one MultiPolygon feature, so
-     * only the part holding the pin is returned — lighting the feature lit a
-     * whole block on the device.
-     */
     const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []
-    const part = parts.find((rings) => inPolygon(point, rings))
-    if (part) return { ...f, geometry: { type: 'Polygon', coordinates: part } }
+    const height = buildingHeights(f.properties).height
+    for (const part of parts) {
+      if (part.length === 0 || !inRing(point, part[0])) continue
+      const solid = !part.slice(1).some((hole) => inRing(point, hole))
+      if (!best || (solid && !best.solid) || (solid === best.solid && height > best.height)) best = { f, part, solid, height }
+    }
   }
-  return null
+  return best ? { ...best.f, geometry: { type: 'Polygon', coordinates: best.part } } : null
 }
 
 /**
  * What a pin lights (step 2c): the building it stands in, among those the map
- * drew around it, or — none there, or none could be read — a beacon on the
- * pin itself. A pin is never left unmarked once buildings are drawn.
+ * drew around it, or — none there — a beacon on the pin itself.
+ *
+ * `featureIds`: the building tiles give each building its own numeric id (our
+ * tiles, stage 2), so the building can be lit by that id through feature-state.
+ * OpenFreeMap's ids cover a whole merged block, so they are never used.
  */
-export function litPlaceFor<F extends { geometry: { type: string; coordinates: unknown }; properties?: Record<string, unknown> | null }>(
-  pin: Pin,
-  drawn: F[] | null
-): LitPlace {
-  const place: LitPlace = { id: pin.id, kind: pin.kind, live: pin.live, at: [pin.longitude, pin.latitude], footprint: null, height: 0, base: 0 }
-  const building = drawn ? buildingUnder(pin, drawn) : null
+export function litPlaceFor<
+  F extends { id?: string | number; geometry: { type: string; coordinates: unknown }; properties?: Record<string, unknown> | null },
+>(pin: Pin, drawn: F[], featureIds = false): LitPlace {
+  const place: LitPlace = { id: pin.id, kind: pin.kind, live: pin.live, at: [pin.longitude, pin.latitude], building: null }
+  const building = buildingUnder(pin, drawn)
   if (!building) return place
-  return { ...place, footprint: building.geometry.coordinates, ...buildingHeights(building.properties) }
+  const featureId = featureIds && typeof building.id === 'number' ? building.id : null
+  const footprint = building.geometry.coordinates
+  return {
+    ...place,
+    building: {
+      key: featureId !== null ? `id:${featureId}` : footprintKey(footprint),
+      footprint,
+      featureId,
+      ...buildingHeights(building.properties),
+    },
+  }
+}
+
+/**
+ * Which pins a lighting pass looks at: those inside the view, nearest its
+ * centre first, at most `max`. Each one is a building lookup, so a city's worth
+ * of pins is never looked up at once.
+ */
+export function lightCandidates(pins: Pin[], bounds: Bounds, centre: [number, number], max: number): Pin[] {
+  const [west, south, east, north] = bounds
+  const inView = pins.filter((p) => p.longitude >= west && p.longitude <= east && p.latitude >= south && p.latitude <= north)
+  return nearestTo(
+    inView.map((p) => ({ ...p, at: [p.longitude, p.latitude] as [number, number] })),
+    centre,
+    max
+  )
 }
 
 /* -------------------------------------------------------------------------- */
@@ -221,7 +265,11 @@ export function backoffMs(failures: number, retryAfterS?: number): number {
 
 type Answer<T> = { success: boolean; data?: T; errorCode?: string; retryAfter?: number }
 
-export type PinsResult = { kind: 'pins'; pins: Pin[] } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
+/**
+ * `truncated`: the server sent as many as were asked for, so there may be more
+ * in the circle — it does not count as covering it.
+ */
+export type PinsResult = { kind: 'pins'; pins: Pin[]; truncated: boolean } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
 
 /**
  * The pins for one viewport and segment: the lists' own query, read fresh (a
@@ -242,7 +290,8 @@ export async function loadPins(
     if (res.errorCode === 'RATE_LIMITED') return { kind: 'rate_limited', retryAfter: res.retryAfter }
     if (!res.success || !res.data) return { kind: 'failed' }
     const data = res.data as { events?: EventLike[]; venues?: VenueLike[] }
-    return { kind: 'pins', pins: pinsFor(segment, { events: data.events ?? [], venues: data.venues ?? [] }, now) }
+    const sent = segment === 'places' ? (data.venues ?? []).length : (data.events ?? []).length
+    return { kind: 'pins', pins: pinsFor(segment, { events: data.events ?? [], venues: data.venues ?? [] }, now), truncated: sent >= limit }
   } catch {
     return { kind: 'failed' }
   }
@@ -255,15 +304,13 @@ export async function loadPins(
 /** Below this zoom the tiles carry no buildings: no lookups at all. */
 export const LIGHT_MIN_ZOOM = MAP_THEME.city.minZoom
 
-/** Whether a projected point is on the map's view, with a margin for a building around it. */
-export function onScreen([x, y]: [number, number], size: { width: number; height: number }, margin = 48): boolean {
-  return x >= -margin && y >= -margin && x <= size.width + margin && y <= size.height + margin
-}
-
-/** What a lighting pass was for: the same pins over the same view need no second pass. */
-export function lightSignature(pins: Pin[], bounds: Bounds | null): string {
-  const view = bounds ? bounds.map((b) => b.toFixed(4)).join(',') : '-'
-  return `${view}|${pins.map((p) => `${p.id}:${p.live ? 1 : 0}`).join(',')}`
+/**
+ * What a lighting pass was for: the same pins, as live as before, over the same
+ * view (a chip's lift depends on zoom and tilt) need no second pass.
+ */
+export function lightSignature(pins: Pin[], view: { centre: [number, number]; zoom: number; pitch: number }): string {
+  const v = `${view.centre.map((n) => n.toFixed(4)).join(',')}@${view.zoom.toFixed(1)}/${Math.round(view.pitch)}`
+  return `${v}|${pins.map((p) => `${p.id}:${p.live ? 1 : 0}`).join(',')}`
 }
 
 /**

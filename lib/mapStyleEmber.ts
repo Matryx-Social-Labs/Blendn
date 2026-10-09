@@ -6,7 +6,7 @@
  * (no sprite), no road shields, no boundaries.
  *
  * Muted so the lit buildings are the brightest thing on it: roads a step above
- * the ground, labels low-contrast, buildings an opaque warm grey that gets
+ * the ground, labels low-contrast, buildings an opaque cool dark grey that gets
  * lighter with height. Every colour and size is `lib/mapTheme.ts`. The tiles
  * carry no Blendn data.
  *
@@ -14,11 +14,16 @@
  * OpenStreetMap licence requires. OpenFreeMap has no SLA, so the style can be
  * moved without a release: `EXPO_PUBLIC_MAP_STYLE_URL` (a full style JSON URL,
  * e.g. this style self-hosted over our own tiles) replaces it when set. A
- * replacement must keep a `building-3d` fill-extrusion layer for the lighting,
- * with the heights `BUILDING_PROPS` names.
+ * replacement must keep the `openmaptiles` source (its `building` layer is
+ * extruded from it) and the `highway-name-major` layer (buildings go under it).
+ *
+ * The city's buildings are not in the style: `CITY_BUILDINGS` is drawn by the
+ * component, so the source it reads can be swapped for our own building tiles
+ * (stage 2) and held by a ref for feature-state.
  */
 import type {
   FillExtrusionLayerSpecification,
+  FilterSpecification,
   LineLayerSpecification,
   StyleSpecification,
   SymbolLayerSpecification,
@@ -62,6 +67,9 @@ const place = (id: string, cls: string, minzoom: number, size: TextSize): Symbol
 /** The id of the extruded building layer: lit buildings are queried from it. */
 export const BUILDING_LAYER_ID = 'building-3d'
 
+/** The first label layer: the city's buildings go under it, so road names stay readable. */
+export const LABELS_FROM_LAYER_ID = 'highway-name-major'
+
 /**
  * Where a building's height and base are in the tiles (OpenMapTiles). The one
  * place that knows the building data's shape: a different building source
@@ -69,15 +77,45 @@ export const BUILDING_LAYER_ID = 'building-3d'
  */
 export const BUILDING_PROPS = { height: 'render_height', base: 'render_min_height' } as const
 
-/** A building's height and base off a rendered feature's properties, in metres. */
+/** A building's height and base off a rendered feature's properties, in metres; a missing one is 0. */
 export function buildingHeights(properties: Record<string, unknown> | null | undefined): { height: number; base: number } {
   const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0)
   return { height: n(properties?.[BUILDING_PROPS.height]), base: n(properties?.[BUILDING_PROPS.base]) }
 }
 
-/** The city's warm-grey ramp on height (`MAP_THEME.city.ramp`). */
+/** A height property, 0 where a feature has none (a `get` of a missing key is null, and null breaks the paint). */
+const metres = (key: string): ['coalesce', ['get', string], number] => ['coalesce', ['get', key], 0]
+
+/** The city's cool-dark ramp on height (`MAP_THEME.city.ramp`). */
 export function cityColour(): ExtrusionColor {
-  return ['interpolate', ['linear'], ['get', BUILDING_PROPS.height], ...MAP_THEME.city.ramp.flat()] as ExtrusionColor
+  return ['interpolate', ['linear'], metres(BUILDING_PROPS.height), ...MAP_THEME.city.ramp.flat()] as ExtrusionColor
+}
+
+/**
+ * The city's buildings, as the component draws them over OpenFreeMap: opaque
+ * (translucent extrusions show through each other in no fixed order), without
+ * the outlines whose parts are drawn on their own (`hide_3d`: extruding those
+ * too stacks a block over its own parts), shaded by height.
+ */
+export const CITY_BUILDINGS: {
+  id: string
+  source: string
+  sourceLayer: string
+  minzoom: number
+  filter: FilterSpecification
+  paint: NonNullable<FillExtrusionLayerSpecification['paint']>
+} = {
+  id: BUILDING_LAYER_ID,
+  source: 'openmaptiles',
+  sourceLayer: 'building',
+  minzoom: MAP_THEME.city.minZoom,
+  filter: ['!=', ['get', 'hide_3d'], true],
+  paint: {
+    'fill-extrusion-color': cityColour(),
+    'fill-extrusion-height': metres(BUILDING_PROPS.height),
+    'fill-extrusion-base': metres(BUILDING_PROPS.base),
+    'fill-extrusion-opacity': 1,
+  },
 }
 
 export const EMBER_MAP_STYLE: StyleSpecification = {
@@ -118,22 +156,6 @@ export const EMBER_MAP_STYLE: StyleSpecification = {
     road('road_secondary_tertiary', ['secondary', 'tertiary'], ROAD_MAJOR, ['interpolate', ['exponential', 1.2], ['zoom'], 6.5, 0, 8, 0.5, 20, 12]),
     road('road_trunk_primary', ['primary', 'trunk'], ROAD_MAJOR, ['interpolate', ['exponential', 1.2], ['zoom'], 5, 0, 7, 1, 20, 16]),
     road('road_motorway', ['motorway'], ROAD_MOTORWAY, ['interpolate', ['exponential', 1.2], ['zoom'], 5, 0, 7, 1, 20, 16]),
-    {
-      id: BUILDING_LAYER_ID,
-      type: 'fill-extrusion',
-      source: 'openmaptiles',
-      'source-layer': 'building',
-      minzoom: MAP_THEME.city.minZoom,
-      // An outline whose parts are drawn on their own: extruding it too stacks a block over its own parts.
-      filter: ['!=', ['get', 'hide_3d'], true],
-      paint: {
-        'fill-extrusion-color': cityColour(),
-        'fill-extrusion-height': ['get', BUILDING_PROPS.height],
-        'fill-extrusion-base': ['get', BUILDING_PROPS.base],
-        // Opaque: translucent extrusions show through each other in no fixed order.
-        'fill-extrusion-opacity': 1,
-      },
-    },
     {
       id: 'highway-name-major',
       type: 'symbol',
