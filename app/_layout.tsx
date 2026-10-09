@@ -21,6 +21,7 @@ import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRo
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
+import { LiveAtVenue } from '../components/LiveAtVenue';
 import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
@@ -723,6 +724,8 @@ function RootLayout() {
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
           {user ? <PresenceMonitor /> : null}
+          {/* Your Go Live at a place: its pings, the expiry prompt, and `live:ended` (step 5). */}
+          {user ? <LiveAtVenue /> : null}
           {/*
             The one sheet the safety flows and message menus open from
             anywhere (`lib/sheet.ts`). Inside the toast provider, so a

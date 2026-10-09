@@ -28,6 +28,8 @@ people your session creates get a passphrase you choose.
 | `c19-board-ask-accept` | SCRUM-126 (BD-M01, BD-D01) | `EMAIL PASSWORD EVENT EVENT_ID POST_TEXT API ASKER_TOKEN` — a build with `EXPO_PUBLIC_BOARD_ENABLED=true`; both people going, profiles complete |
 | `c19-board-safety` | SCRUM-126, SCRUM-322 | `EMAIL PASSWORD EVENT AUTHOR THEIR_POST` — after an API setup (their ask on your post, their own post); **blocks them**, undo after |
 | `c19-board-refusals` | SCRUM-126 (BD-M02) | `EMAIL PASSWORD EVENT REASON` (+ `SEARCH` for an account with no Going row, `TRY_POST`) — once per refused account |
+| `c16-c17-go-live` | TQ-C16 SCRUM-558, TQ-C17 SCRUM-559 | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `PLACE_A LAT_A LNG_A PLACE_B_ID LAT_B LNG_B MESSAGE` — two fenced places; real windows, about an hour (two windows at A: the second must not prompt); needs Blendn-Admin #641 on the API for the Banter title and "Go live again" from the Banter; the read-back is in the file |
+| `c16-handoff` | TQ-C16 SCRUM-558 (PL-M03) | `VENUE_ID EVENT` — a place a public event has now (opened by link: Places leaves it out); signed in already; writes nothing |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that

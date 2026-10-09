@@ -1,0 +1,25 @@
+# TQ-C16 (SCRUM-558) PL-M03: a place an event has taken over hands off to the
+# event's check-in, never an error. Needs a place with a public event on now
+# or within the hour (Places leaves it out, so it is opened by link).
+# Env: VENUE_ID (the place), EVENT (a regex for the event's title).
+# Signed in already (any lane attendee); nothing is written.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c16
+  - needs-live-event
+---
+- openLink: blendn://venue/${VENUE_ID}
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*has this place now"
+    timeout: 30000
+- assertNotVisible: "Go Live"
+- assertVisible: ".*Only people live here.*"
+- takeScreenshot: c16-handoff
+- tapOn: "Go to the event"
+- extendedWaitUntil:
+    visible: ".*${EVENT}.*"
+    timeout: 30000
+- takeScreenshot: c16-handoff-event
