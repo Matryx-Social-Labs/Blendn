@@ -51,6 +51,8 @@ import { newClientId } from '../../lib/clientId'
 import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
+import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { RoomClosedNotice } from '../../components/crews/CrewParts'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import Animated from 'react-native-reanimated'
 import { popIn, popOut } from '../../components/motion/presence'
@@ -257,9 +259,16 @@ function GroupChatInner() {
    * which is also what the server says to a leave made on another phone.
    */
   const [outOfRoom, setOutOfRoom] = useState(false)
+  /*
+   * A crew's or a Blend's room (step 9), told by the opener; null for an
+   * event's. Those close differently — a Blend on its clock or for a blocked
+   * pair, a crew when it dissolves — and the room becomes one line saying so.
+   */
+  const roomKind = roomKindParam(params.kind)
+  const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(String(chatRoomId))
-  const outside = left || outOfRoom
+  const outside = left || outOfRoom || closedLine !== null
   const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
   /** From the room list (`memberCount`), for the header when the title says nothing new. */
   const [memberCount, setMemberCount] = useState<number | null>(null)
@@ -368,6 +377,8 @@ function GroupChatInner() {
          * Refused as somebody not in the room: the left state, not "Couldn't
          * load" — Try again would be refused the same way for ever.
          */
+        const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+        if (closed) { setClosedLine(closed); setLoading(false); return }
         if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
         if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
@@ -650,6 +661,8 @@ function GroupChatInner() {
        * bubble is the one send left -- so its success has to unlock the field.
        */
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
+      const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+      if (closed) setClosedLine(closed)
       // Left on another phone, or here a moment ago: the room becomes the left state.
       if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
       const outcome = sendOutcome(result)
@@ -964,12 +977,16 @@ function GroupChatInner() {
       <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <GroupChatHeader
-            name={roomName || 'Event chat'}
+            name={roomName || defaultRoomName(roomKind)}
             imageUrl={eventImage || null}
-            subtitle={roomSubtitle(roomName || 'Event chat', eventTitle || undefined, memberCount)}
+            subtitle={roomSubtitle(roomName || defaultRoomName(roomKind), eventTitle || undefined, memberCount)}
             muted={muted}
             onBack={() => router.back()}
-            onInfo={() => router.push({
+            onInfo={() => typeof params.blendId === 'string'
+              ? router.push({ pathname: '/blend/[blendId]', params: { blendId: params.blendId } })
+              : typeof params.crewId === 'string'
+                ? router.push({ pathname: '/crews/[crewId]', params: { crewId: params.crewId } })
+                : router.push({
               pathname: '/chat-info/[id]',
               params: {
                 id: String(chatRoomId),
@@ -979,7 +996,9 @@ function GroupChatInner() {
               },
             } as never)}
           />
-        {outside ? (
+        {closedLine ? (
+          <RoomClosedNotice line={closedLine} onBack={() => router.back()} />
+        ) : outside ? (
           <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
         ) : (<>
         <RealtimeStatusBanner status={socketStatus} style={styles.banner} />

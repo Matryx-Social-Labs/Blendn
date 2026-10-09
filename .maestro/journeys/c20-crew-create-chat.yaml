@@ -1,0 +1,105 @@
+# TQ-C19 · CR-M01, CR-CU01. Crews on a phone: make a crew from a friend (the
+# consent on screen before it is ticked), the friend accepts through the API,
+# the crew chat, and "We're here" — twice, the second telling nobody.
+# Needs: the phone's account and FRIEND are friends, both 18+ and onboarded;
+# the phone's account checked in at a live event with crews on; FRIEND not
+# checked in (the read-back proves "We're here" checked nobody else in).
+# Env: EMAIL; MAESTRO_PASSWORD (an environment variable, never -e — and delete
+# ~/.maestro/tests/<run> afterwards: Maestro logs MAESTRO_* values);
+# CREW_NAME (unique per run); FRIEND (their first name as the friends list
+# shows it); FRIEND_TOKEN (`npm run -s qa token <friend>`); API
+# (https://staging-api.blendn.app); MESSAGE (unique per run).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c19
+  - crews
+  - needs-live-event
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+    env:
+      PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Me"
+- tapOn: "Crews"
+- extendedWaitUntil:
+    visible: "Make a crew"
+    timeout: 20000
+- tapOn:
+    text: "Make a crew"
+    index: 0
+# CR-CU01: the consent and the anonymity switch are on screen before anything is tapped.
+- extendedWaitUntil:
+    visible: "Anyone in this crew can reveal the crew.*"
+    timeout: 20000
+- assertVisible: "Keep me anonymous even when my crew reveals"
+- tapOn: "Crew name"
+- inputText: ${CREW_NAME}
+- runFlow: ../subflows/keyboard-done.yaml
+- scrollUntilVisible:
+    element: ${FRIEND}
+    direction: DOWN
+- tapOn: ${FRIEND}
+- assertVisible: "Will be asked"
+- scrollUntilVisible:
+    element: "I understand.*"
+    direction: DOWN
+- tapOn: "I understand.*"
+- scrollUntilVisible:
+    element: "Make the crew"
+    direction: DOWN
+- tapOn: "Make the crew"
+# The count asked for, never who.
+- extendedWaitUntil:
+    visible: "Asked 1 friend"
+    timeout: 20000
+- takeScreenshot: c20-crew-made
+- runScript:
+    file: ../scripts/crew-accept.js
+    env:
+      API: ${API}
+      TOKEN: ${FRIEND_TOKEN}
+      CREW_NAME: ${CREW_NAME}
+      KEEP_ANON: "false"
+# The crew chat: the friend's acceptance is a member row, the send is a message.
+- tapOn: "Open crew chat"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- tapOn:
+    text: "Send"
+    optional: true
+# The composer emptied (the placeholder is back) before the bubble counts.
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 15000
+- assertVisible: ".*${MESSAGE}.*"
+- takeScreenshot: c20-crew-chat
+- tapOn: "Go back"
+- tapOn: "We’re here"
+- extendedWaitUntil:
+    visible: "Told your crew you’re here 👋"
+    timeout: 20000
+- tapOn: "We’re here"
+- extendedWaitUntil:
+    visible: "Your crew already knows you’re here tonight"
+    timeout: 20000
+- takeScreenshot: c20-were-here
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT c.name, c.open_to_solo AS solo, count(m.*) FILTER (WHERE m.left_at IS NULL) AS members FROM crews c JOIN crew_members m ON m.crew_id = c.id WHERE c.name = '<CREW_NAME>' GROUP BY c.name, c.open_to_solo"
+#   npm run -s qa sq "SELECT g.kind::text AS kind, g.event_id IS NULL AS no_event, count(cm.*) AS msgs FROM chat_groups g JOIN crews c ON c.chat_group_id = g.id LEFT JOIN chat_messages cm ON cm.chat_group_id = g.id WHERE c.name = '<CREW_NAME>' GROUP BY g.kind, g.event_id"
+#   npm run -s qa sq "SELECT count(*) AS checkins_for_friend FROM event_check_ins ci JOIN \"User\" u ON u.id = ci.user_id WHERE u.email = '<friend>' AND ci.created_at > now() - interval '15 minutes'"   # 0

@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { BOARD_ENABLED } from '../../lib/board'
+import { blendTitle } from '../../lib/crews'
+import { useBlends } from '../../lib/useBlends'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
@@ -296,6 +298,12 @@ function ChatInner() {
     [membership.mutes]
   )
   const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
+  /*
+   * Your open Blends (step 9), beside the rooms you are standing in: a Blend
+   * is tonight's, and closes 12 h after the night. `GET /chat/groups` lists
+   * event rooms only, so they come from `GET /blends`, read on focus.
+   */
+  const { blends, reload: reloadBlends } = useBlends()
 
   /*
    * The merged list.
@@ -671,6 +679,7 @@ function ChatInner() {
     if (isLoadingRef.current) return
     setRefreshing(true)
     setBoardRefreshKey((k) => k + 1)
+    void reloadBlends()
     await loadChats(true, true)
     setRefreshing(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -945,7 +954,7 @@ function ChatInner() {
         </Text>
       ) : null}
 
-      {liveRooms.length > 0 ? (
+      {liveRooms.length > 0 || blends.length > 0 ? (
         <View style={styles.section}>
           <BanterHeading title="Live now" />
           <View style={styles.liveList}>
@@ -957,6 +966,19 @@ function ChatInner() {
                 memberCount={c.participant_count}
                 muted={roomMuted(c.chat_room_id)}
                 onPress={() => handleGroupChatPress(c)}
+              />
+            ))}
+            {blends.map((b) => (
+              <BanterLiveRoom
+                key={b.blendId}
+                title={blendTitle(b, user?.id)}
+                memberCount={b.sides.reduce((n, side) => n + side.people.length, 0)}
+                onPress={() =>
+                  router.push({
+                    pathname: '/chat/[id]',
+                    params: { id: b.chatGroupId, roomName: blendTitle(b, user?.id), kind: 'blend', blendId: b.blendId } as never,
+                  })
+                }
               />
             ))}
           </View>
@@ -1013,7 +1035,7 @@ function ChatInner() {
    * Live rooms or requests with nothing else is not an empty inbox, so it does
    * not say "No conversations yet" under them.
    */
-  const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
+  const hasHeaderContent = liveRooms.length > 0 || blends.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
 
   return (
     <View style={styles.container}>

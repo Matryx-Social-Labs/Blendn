@@ -46,6 +46,7 @@ export function PersonCard({
   onSafety,
   onOpenProfile,
   waveState,
+  crewLike,
 }: {
   person: RoomPerson | null
   onClose: () => void
@@ -58,6 +59,11 @@ export function PersonCard({
   onOpenProfile: (p: RoomPerson) => void
   /** 'sent' once waved this session, 'too-soon' when the server refused a repeat. */
   waveState?: 'sent' | 'too-soon' | null
+  /**
+   * Like them on your crew's behalf — only while a crew of yours is here
+   * (step 9). Quiet, under the three verbs: it is the crew's like, not yours.
+   */
+  crewLike?: { label: string; onPress: (p: RoomPerson) => void } | null
 }) {
   const insets = useSafeAreaInsets()
   const [pop, setPop] = useState(0)
@@ -217,6 +223,18 @@ export function PersonCard({
           <Text variant="meta" style={styles.centre}>
             {waveState === 'sent' ? `${p.name} knows you waved` : 'You waved a moment ago'}
           </Text>
+        ) : null}
+
+        {crewLike && !p.matched ? (
+          <Pressable
+            onPress={() => crewLike.onPress(p)}
+            style={styles.link}
+            accessibilityRole="button"
+            accessibilityLabel={`${crewLike.label}: ${p.name}`}
+            accessibilityHint="Your crew matches with them if they like your crew back"
+          >
+            <Text variant="button">{crewLike.label}</Text>
+          </Pressable>
         ) : null}
 
         <Pressable

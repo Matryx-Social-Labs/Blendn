@@ -8,12 +8,15 @@ import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
+import { crewMessage, likeAs } from '../../lib/crews'
+import { crewsApi } from '../../lib/crewsApi'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
 import { everyoneHead, meetNext, reasonLine } from '../../lib/roomMoments'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
+import { sheetClosed } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
@@ -21,6 +24,7 @@ import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
+import { chooseCrew, CrewsView, openBlend, useCrewsHere } from '../crews/CrewsView'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
 import ScalePress from '../motion/ScalePress'
@@ -198,6 +202,15 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
 
+  /*
+   * The Grid is people or crews (step 9). The crews here are read once the
+   * room is, because the person card needs them too: a crew of yours here
+   * is what lets you like somebody on its behalf.
+   */
+  const [gridView, setGridView] = useState<'people' | 'crews'>('people')
+  const crews = useCrewsHere(mode === 'room' ? eventId : null)
+  const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
+
   // --- people ---------------------------------------------------------------
   const [open, setOpen] = useState<RoomPerson | null>(null)
   const [connectTo, setConnectTo] = useState<RoomPerson | null>(null)
@@ -251,6 +264,33 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     },
     [remove]
   )
+  /*
+   * A like on your crew's behalf. The answer is `{ liked: true }` whatever
+   * the server learned about them — not here, not open to crews, kept apart
+   * — so all this may say is that the like went, unless it made a Blend.
+   */
+  const likeForCrew = async (p: RoomPerson) => {
+    const as = likeAs(myCrewsHere)
+    if (as.as === 'me' || !eventId) return
+    let crewId: string | null = as.as === 'crew' ? as.crewId : null
+    if (as.as === 'choose') {
+      setOpen(null)
+      await sheetClosed()
+      crewId = await chooseCrew(myCrewsHere, `Like ${p.name} for…`)
+    }
+    if (!crewId) return
+    const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
+    if (!result.success || !result.data) {
+      showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+      return
+    }
+    if (result.data.blend) {
+      setOpen(null)
+      openBlend(result.data.blend, `Blend with ${p.name}`)
+    } else {
+      showToast('Liked for your crew', 'success')
+    }
+  }
 
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
@@ -336,7 +376,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         <Animated.View key="room" style={styles.fill} entering={reduceMotion ? FadeIn : FadeInUp.duration(320)} exiting={FadeOut.duration(160)}>
           <GestureDetector gesture={native}>
             <Animated.FlatList
-              data={everyone}
+              data={gridView === 'people' ? everyone : []}
               keyExtractor={(p) => p.id}
               numColumns={3}
               onScroll={onScroll}
@@ -372,13 +412,20 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                       onUnhide={() => router.push('/settings')}
                     />
                   </View>
-                  <MeetNext picks={shuffle.picks} nextShuffleAt={shuffle.nextShuffleAt} onOpen={setOpen} />
-                  {/*
-                    Everyone but you. The loaded page is 20 of a bigger room, so
-                    while there is more the number is the room's, not the page's
-                    — see everyoneHead for when that number is the wrong one.
-                  */}
-                  <FaceGridHead title={head.title} count={head.count} empty={everyone.length === 0} />
+                  <GridTabs value={gridView} onChange={setGridView} />
+                  {gridView === 'crews' && eventId ? (
+                    <CrewsView eventId={eventId} crews={crews} />
+                  ) : (
+                    <>
+                      <MeetNext picks={shuffle.picks} nextShuffleAt={shuffle.nextShuffleAt} onOpen={setOpen} />
+                      {/*
+                        Everyone but you. The loaded page is 20 of a bigger room, so
+                        while there is more the number is the room's, not the page's
+                        — see everyoneHead for when that number is the wrong one.
+                      */}
+                      <FaceGridHead title={head.title} count={head.count} empty={everyone.length === 0} />
+                    </>
+                  )}
                 </View>
               }
               renderItem={({ item, index }) => (
@@ -392,7 +439,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                 />
               )}
               ListFooterComponent={
-                room.hasMore && everyone.length > 0 ? (
+                gridView === 'people' && room.hasMore && everyone.length > 0 ? (
                   <FaceGridMore loading={room.loadingMore} onMore={() => void room.loadMore()} />
                 ) : null
               }
@@ -524,6 +571,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onSafety={safety}
         onOpenProfile={openProfile}
         waveState={openLive ? waves[openLive.id] ?? null : null}
+        crewLike={
+          myCrewsHere.length
+            ? {
+                label: myCrewsHere.length === 1 ? `Like for ${myCrewsHere[0].name}` : 'Like for your crew',
+                onPress: (p) => void likeForCrew(p),
+              }
+            : null
+        }
       />
 
       <ConnectSheet
@@ -584,8 +639,38 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** People | Crews — the Grid's two views (step 9). */
+function GridTabs({ value, onChange }: { value: 'people' | 'crews'; onChange: (v: 'people' | 'crews') => void }) {
+  return (
+    <View style={styles.tabs} accessibilityRole="tablist">
+      {(['people', 'crews'] as const).map((v) => (
+        <Pressable
+          key={v}
+          onPress={() => onChange(v)}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: value === v }}
+          style={({ pressed }) => [styles.tab, value === v && styles.tabOn, pressed && styles.pressed]}
+        >
+          <Text variant="button" color={value === v ? EMBER.bg : EMBER.textPrimary}>
+            {v === 'people' ? 'People' : 'Crews'}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  tabs: { flexDirection: 'row', gap: SPACE.sm, paddingHorizontal: GUTTER },
+  tab: {
+    height: CONTROL.sm,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: EMBER_RADIUS.pill,
+    backgroundColor: EMBER.surface,
+    justifyContent: 'center',
+  },
+  tabOn: { backgroundColor: EMBER.textPrimary },
   header: { gap: SPACE.xl, marginBottom: SPACE.xs },
   banner: { paddingHorizontal: GUTTER },
   statusBanner: { marginHorizontal: GUTTER },

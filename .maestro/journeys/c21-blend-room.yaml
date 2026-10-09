@@ -1,0 +1,102 @@
+# TQ-C20 · CR-M02, CR-I11, CR-I14. Crew ↔ crew on a phone: the Grid's Crews
+# view, like the other crew as yours, they like back (API) — the Blend under
+# the Banter's Live now — reveal, the other crew reveals (API), a member who
+# kept themselves anonymous stays a pseudonym, leave.
+# Needs: a live event with crews on; the phone's crew (two of them checked in)
+# and THEIR_CREW (two or more checked in, one member with "keep me anonymous");
+# no block between anybody on the two sides.
+# Env: EMAIL; MAESTRO_PASSWORD (environment variable; delete the run dir after);
+# MY_CREW; THEIR_CREW; THEIR_TOKEN (a THEIR_CREW member, `qa token`);
+# EVENT_ID; API; REVEALED_NAME (a THEIR_CREW first name that reveals);
+# ANON_NAME (the first name of the member who stays anonymous — must NOT appear).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c20
+  - crews
+  - needs-live-event
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+    env:
+      PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Open the room.*"
+- extendedWaitUntil:
+    visible: "Crews"
+    timeout: 30000
+- tapOn: "Crews"
+- extendedWaitUntil:
+    visible: ${THEIR_CREW}
+    timeout: 30000
+- takeScreenshot: c21-crews-view
+- tapOn: "Like ${THEIR_CREW}"
+- extendedWaitUntil:
+    visible: "You liked ${THEIR_CREW}"
+    timeout: 20000
+- runScript:
+    file: ../scripts/crew-like-back.js
+    env:
+      API: ${API}
+      TOKEN: ${THEIR_TOKEN}
+      EVENT_ID: ${EVENT_ID}
+      LIKE_CREW: ${MY_CREW}
+- tapOn: "Close Blend'n"
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: "Blend with ${THEIR_CREW}.*"
+    timeout: 30000
+- takeScreenshot: c21-banter-live-now
+- tapOn: "Blend with ${THEIR_CREW}.*"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# The room's (i): the Blend's people.
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Reveal our crew"
+    timeout: 20000
+- assertNotVisible: ${ANON_NAME}
+- tapOn: "Reveal our crew"
+- tapOn: "Reveal"
+- extendedWaitUntil:
+    visible: ".*revealed.*"
+    timeout: 20000
+- runScript:
+    file: ../scripts/blend-reveal.js
+    env:
+      API: ${API}
+      TOKEN: ${THEIR_TOKEN}
+      BLEND_ID: ${output.blendId}
+# Pull to refresh: the other crew's reveal arrives with GET /blends.
+- swipe:
+    direction: DOWN
+- extendedWaitUntil:
+    visible: ${REVEALED_NAME}
+    timeout: 20000
+- assertNotVisible: ${ANON_NAME}
+- takeScreenshot: c21-revealed
+- scrollUntilVisible:
+    element: "Leave this Blend"
+    direction: DOWN
+- tapOn: "Leave this Blend"
+- tapOn: "Leave"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*|This Blend has closed"
+    timeout: 20000
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT b.id, b.event_id, b.closes_at::text AS closes, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.id = b.chat_group_id ORDER BY b.created_at DESC LIMIT 1"
+#   npm run -s qa sq "SELECT count(*) AS likes_ FROM crew_likes WHERE occurrence_id = '<occ>'"
+#   npm run -s qa sq "SELECT br.user_id, br.created_at::text AS at FROM blend_reveals br WHERE br.blend_id = '<blend>'"   # never the anonymous member
+#   npm run -s qa sq "SELECT status::text AS status, left_at IS NOT NULL AS left_ FROM chat_group_members WHERE chat_group_id = '<blend group>' AND user_id = '<phone>'"

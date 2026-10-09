@@ -708,6 +708,53 @@ countdown, and "Own this place? Claim it".
 
 ---
 
+## 13. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
+
+**Added 2026-10-09 (step 9 of the product-completion plan).** The server half
+is blendn-admin #630, #631 and #639; the contract is `docs/api/API.md` →
+Crews and Blends. Owner decision (a): one member's tap reveals the crew,
+consent is taken at join time, and each member can keep themselves anonymous.
+
+```
+Me ─ Crews ─▶ Your crews + invites ──▶ a crew: chat · We're here · invite · keep me anonymous · leave
+               └─ Make a crew (name, bio, tags, room for one more, friends, consent)
+Room (Blend'n) ─ People | Crews ─▶ your crews (We're here), "Open to joining a crew tonight",
+                                   crews here as cards: Like (as your crew, or you) · Report
+Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, Reveal our crew, Block, Leave
+```
+
+| Screen | File | Hemanth ticket |
+|---|---|---|
+| Your crews and invites | `app/crews/index.tsx` | see the step 9 report |
+| Make a crew | `app/crews/new.tsx` | see the step 9 report |
+| A crew | `app/crews/[crewId].tsx` | see the step 9 report |
+| The Grid's Crews view and the crew card | `components/crews/CrewsView.tsx`, `CrewParts.tsx` | see the step 9 report |
+| A Blend: its sides, reveal, block, leave | `app/blend/[blendId].tsx` | see the step 9 report |
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The consent is beside every way in, and starts unticked** | Create and accept both show *"Anyone in this crew can reveal the crew — your name and photos — to people you match with."* with an "I understand" the person ticks, and the "Keep me anonymous even when my crew reveals" switch under it. Never behind a "more" (CR-CU01). The server refuses a join without `revealConsent: true`; a client that defaulted it would consent for them |
+| **A crew card is counts, never people** | The Grid's card is the emblem, the name, "Crew of N", "Here now · 3 of 5", tags and bio. The server sends no pseudonym on it on purpose: a list of tonight's pseudonyms beside a crew that later reveals singles out the ones who stayed anonymous. The menagerie (pseudonym animals) appears inside a Blend, where the server sends it |
+| **In a Blend, names come only from `GET /blends`** | A side is a menagerie until its crew reveals; then the revealed are a collage of faces and first names, and anybody who kept themselves anonymous stays a pseudonym tile — never a blank and never their photo. "N revealed · M keep it private" says how many, never who |
+| **`invited` is a count of who you asked** | "Asked 3 friends", never "Invited Rohan" or "2 of 3 invited": the server skips people silently (a block, a decline in the last 30 days) so inviting can't be used to learn about them |
+| **One line for every "not yours"** | A crew that dissolved, an invite that lapsed, a Blend that closed or a block across its sides each read as one plain line ("This Blend has closed") — never a reason |
+| **"We're here" checks nobody in** | It tells the crew; the second tap of the night says "Your crew already knows you're here tonight". Each member checks in with their own GPS |
+| **A crew like of a person tells you nothing about them** | The answer is always "Liked for your crew" unless it made a Blend — not here, not open to crews and blocked all look the same |
+| **"Open to joining a crew tonight" lapses** | It ends with the night, so the switch is read from the server each time the Crews view opens (an empty `PUT …/matches/preferences` answers it; there is no GET) |
+| **Block from a Blend uses the Blend's handle** | `POST /users/<rh_ handle>/block`; the room goes on for everyone else |
+
+### Still open — decisions and work, not styling
+
+| | |
+|---|---|
+| **Crew chats in the Banter list** | `GET /chat/groups` lists event rooms only, so a crew's chat is reached from the crew and from its "We're here" push. A row per crew needs the last message on `GET /crews` |
+| **Owner tools** | Editing the crew (`PATCH /crews/:id`) and removing a member are on the server and not on a screen yet |
+| **Crew history and badges** | "Nights out together", "Regulars at Toit" (plan §6) wait for the showcase work |
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
@@ -716,7 +763,7 @@ Named so the gap is visible, not to imply they are next.
 |---|---|
 | **Presence prompt** — "are you still here?" | Logic exists in `lib/usePresence.ts`, which knows when the server says you are outside the geofence. Nothing renders it |
 | ~~**First-check-in screen**~~ | **Built as `app/about-you.tsx`, and moved.** It is asked once at signup rather than at every check-in — see section 4 below |
-| **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. Superseded 2026-10-01 by the owner: this is crews, step 9 of plan v2 — see `ROADMAP.md` |
+| ~~**Group check-in / group matching**~~ | **Built as crews (step 9, 2026-10-09)** — see section 13 |
 | **Notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like. The map is §8 |
 | **`/join` attendee landing page** | Deferred by decision. Spec in `BlendnLanding/docs/JOIN_PAGE_BRIEF.md` |
 

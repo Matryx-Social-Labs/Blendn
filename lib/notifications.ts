@@ -446,6 +446,33 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
         : '/(tabs)/chat'
       break
     }
+    /*
+     * Crews (step 9). None of these names anybody, and none renders a
+     * preview: an invite is answered on the crews screen; "We're here" opens
+     * the crew's chat, where its line is; a Blend opens its room.
+     */
+    case 'crew_invite': {
+      target = '/crews'
+      break
+    }
+    case 'crew_here': {
+      target = data.chatGroupId
+        ? {
+            pathname: '/chat/[id]',
+            params: { id: String(data.chatGroupId), kind: 'crew', ...(data.crewId ? { crewId: String(data.crewId) } : {}) } as any,
+          }
+        : '/crews'
+      break
+    }
+    case 'blend': {
+      target = data.chatGroupId
+        ? {
+            pathname: '/chat/[id]',
+            params: { id: String(data.chatGroupId), kind: 'blend', ...(data.blendId ? { blendId: String(data.blendId) } : {}) } as any,
+          }
+        : '/(tabs)/chat'
+      break
+    }
     case 'friend_request': {
       /*
        * Where requests are answered. Not the asker's profile: a friend's
