@@ -478,3 +478,192 @@ Make only the changes listed below in this project. Keep every other screen and 
 - **Flow 11 (Places live):**
   - "Stay" locked behind Blend'n+;
   - the expiry prompt's Plus row (11.4, 12.1).
+
+---
+
+# Round 3 · Fix the system, the small paths, and motion (2026-10-09)
+
+Round 3 comes from reading the built Claude Design project against the app and the server. Everything is in [`ROUND3.md`](./ROUND3.md):
+- **A:** rulings on every open question;
+- **B:** fixes to the system;
+- **C:** corrections to drawn frames;
+- **D:** the screens and states nobody drew;
+- **E:** motion pack 2;
+- **F:** the server and client work that isn't design.
+
+**Every prompt runs in the "Blend'n Design System" project.** That is where every flow was built (`guidelines/flow-N/`). Use the delta wrapper from Round 2 for every R3-D prompt.
+
+**Before you start:**
+- Re-sync `docs/redesign/` into the project from the `docs/redesign-brief` branch. It now has `ROUND3.md`, `research/round3-motion.md` and the `research/round2/` folder the project is missing.
+- Hand off nothing to Claude Code until R3-0 is published. Today's export would build the app with Reduce Motion on for everyone (ROUND3 B1).
+
+## Order
+
+1. **R3-0:** fix the system, apply the rulings and the corrections. Publish.
+2. **R3-1:** the component library, sent in groups P0 → P5.
+3. **R3-2:** motion pack 2.
+4. The deltas, in this order:
+   - **R3-D4** core loop;
+   - **R3-D5** chat;
+   - **R3-D6** profile;
+   - **R3-D3** discovery;
+   - **R3-D7** settings;
+   - **R3-D9** notifications;
+   - **R3-D10** crews;
+   - **R3-D1** entry and onboarding (it carries the never-run R2-D6);
+   - **R3-D12/16**.
+5. **R2-D7** as written above. Its proposal flows are drawn now.
+6. **R3-A:** accessibility frames, the icon inventory, the creature set.
+7. **Prompt 10** again, across every flow.
+
+## R3-0 · Fix the system, apply the rulings
+
+```
+Read docs/redesign/ROUND3.md parts A, B and C. Do these, in order, and show me each before moving on.
+
+1. The token export (B1). Declare every Reduce Motion value as its own token in :root (e.g. --dur-quick-reduce-motion, @kind other). Make the prefers-reduced-motion block alias them with no @kind annotation, or move it to styles.css. Use 160ms, not 0, for the faded durations, and --shake-distance-reduce-motion: 0 instead of zeroing --dur-medium. Then show me _ds_manifest.json: --rise-list must read 8px, --dur-base 220ms and --orb-drift 24px, with the -reduce-motion tokens listed beside them. (--dur-quick can't show the bug: its Reduce Motion value is 160ms too.)
+2. The missing tokens (B2): the 0.80 bar and sheet tint, the 0.86 blur tier, --dur-hold 900ms, --dur-hold-staff 1000ms, the creature palettes (8), the venue-type plates and the map ramps.
+3. tokens/tokens.json (B3), generated from the CSS: base motion values plus a separate Reduce Motion table, the seven springs as {stiffness, damping, mass: 1}, the type roles, the corrected kinds.
+4. The rulings (A1–A4). Make the copy changes and removals their "Frames" column names, before and after side by side. Where it says "As drawn", change nothing. Draw no new frames here: N3, S2, C1 and C4 are drawn by R3-D9, R3-D12/16 and R3-D10. A5–A7 change frames only through the C rows and the R3-D prompts that cite them, except: remove any drawn organiser tools on the Scene (D1), goals on the profile edit screens (D3) and conversation pinning (D4).
+5. The corrections (C, rows 1–21). Before and after.
+6. The type floor (B8), the annotations (B9) and the rule drift (B10). List each change.
+7. The project's records (B11). Renumber the duplicate decisions. Add log entries for Flows 13 and 14 and the deltas. Register the delta canvases as cards. Update github.md.
+
+Don't redraw anything that isn't listed. If a change forces another, stop and ask. Publish when I approve.
+```
+
+## R3-1 · The component library (send one group at a time)
+
+```
+Prompt 1c was never run: _ds_manifest.json has components: []. Every component lives inside a flow builder and is copied from flow to flow. Read docs/redesign/ROUND3.md B4 and DESIGN-BRIEF §12 and §21.
+
+Build canonical component pages for group <P0 | P1 | P2 | P3 | P4 | P5> from the B4 table. One page per component, registered as a card. Each page shows:
+- default · pressed (iOS scale; Android ripple and squared corner) · focused · selected · disabled · loading · error, where they apply;
+- iOS and Android;
+- Reduce Motion · Reduce Transparency · Increase Contrast;
+- text at 2.0× (1.3× cap inside fixed-height controls) and Bold Text;
+- a 360 dp width;
+- the haptic token (or "none"), the screen-reader label and the reading order.
+
+Lift each component from the flow builder that draws it best (B4 names the copies). Then point every flow at the canonical version and delete the copies, without changing how any approved frame looks. If unifying two copies would change an approved frame, show me both and ask.
+
+Finish with a table: component · page · states drawn · the flow copies it replaced.
+```
+
+## R3-2 · Motion pack 2
+
+```
+Read docs/redesign/ROUND3.md part E and research/round3-motion.md. The principle: alive through change, calm otherwise. Nothing loops except the orbs, the typing dots while someone types (#14), and the door pass's wave (§21.5).
+
+1. Add a motion card for each of #25–#53, in the same format as cards 01–24:
+   - the storyboard with real timings, and the spec;
+   - the haptic token;
+   - the Reduce Motion version, playable;
+   - the Android difference.
+2. Don't add them to any flow's prototype yet. Each flow's R3-D prompt does that, inside the delta wrapper, once the frames they animate exist.
+3. Draw the three time-of-night orb sets for #53 as assets, with the orbs-off frame unchanged.
+4. Draw the "Rejected" list from part E as one card, so nobody adds those later.
+```
+
+## R3 delta prompts
+
+Each goes inside the Round 2 delta wrapper. The sections named are in [`ROUND3.md`](./ROUND3.md) part D.
+
+**R3-D4 · Flow 4 (core loop)**
+- **4.1 · The PersonCard from every entry point:**
+  - every variant (a–h) and every state in the table;
+  - View profile;
+  - motion #33.
+- **4.2 · Responding to a wave:**
+  - the tappable dock row and toast;
+  - "Waved at you · 2 min";
+  - Wave back.
+- **4.3:** like and wave refusals, with no haptic.
+- **4.4:** the Match moment in three identity pairings.
+- **4.5:** "People from tonight" from the Recap.
+- **4.6:** the event cancelled while you're inside.
+- **4.7:** precise location off at the door, iOS and Android.
+- **4.8:** checking in elsewhere.
+- **4.9:** multi-day on Tonight and the pass.
+- **4.10:** the Board's ⋯ sheets, and a post taken down.
+- **Prototype:** add motion #25, #33 and #51 to the Flow 4 prototype.
+
+**R3-D5 · Flow 5 (Banter and chat)**
+- **5.1:** tap the sender: avatar, name, long-press row, Block from a message.
+- **5.2:** the long-press menu for every kind of message in the table, iOS and Android.
+- **5.3:** keyboard up, the composer at 1/3/5 lines, the counter, Android resize.
+- **5.4:** spam and rate limits.
+- **5.5:** sponsored video.
+- **5.6:** the Banter preview table.
+- **5.7:** the safety sheets: request ⋯, report sent, "Something else".
+- **5.8:** failed and draft rows; sending offline.
+- **5.9:** photos in DMs.
+- **5.10:** the contact-details warning (needs server; label it).
+- **5.11:** swipe actions, links, emoji-only.
+- **5.12:** room-info members open the card.
+- **Prototype:** add motion #27, #35, #36 and #37 to the Flow 5 prototypes.
+
+**R3-D6 · Flow 6 (people and profile)**
+- **6.1:** the anonymous profile, as the server sends it.
+- **6.2:** a received message request on a profile.
+- **6.3:** the photo path, every step in the table.
+
+**R3-D3 · Flow 3 (discovery)**
+- **3.1:** the event changed while you're going, on the Scene and in Going.
+- **3.2:** multi-day events.
+- **3.3:** the venue page loading and failed; leave the waitlist.
+- **Prototype:** add motion #45 to I'm going.
+
+**R3-D7 · Flow 7 (settings and system)**
+- **7.1:** the Account card: signed in as, Password, Sign out of every device.
+- **7.2:** Grievances on About; "Get a copy of your data".
+
+**R3-D9 · Flow 9 (notifications)**
+- **9.1:** the wave banner.
+- **9.2:** a report acted on.
+- **9.3:** the app-icon badge on both home screens.
+- **9.4:** copy rulings N2 and N6.
+
+**R3-D10 · Flow 10 (crews)**
+- **10.1:** the reduced person sheet in crew chat and the Blend room (needs server; label it).
+- **10.2:** the reveal line in crew chat.
+- **10.3:** a dissolved crew or a closed Blend leaves the Banter: replace the drawn read-only "Archived" and "Closed" states with Flow 15 #11's cards.
+- **Prototype:** add motion #45 to Join.
+
+**R3-D1 · Flows 1–2 (entry and onboarding)**
+- **1.1:** everything in R2-D6 above. It was never run.
+- **1.2:** the password-reset web pages: entry, dead link, done for an attendee.
+- **2.1:** "Looking for" becomes intent (Dating · Friendship · Networking · Just here for the event).
+- **2.2:** expertise as step 2 of field of work.
+- **2.3:** the pulled photo tile.
+
+**R3-D12/16 · Flows 12 and 16**
+- **12:** remove Quarterly and Yearly from the page and Manage.
+- **16:** each public page in its "listings not public" variant.
+
+## R3-A · Accessibility, icons, creatures
+
+```
+Read docs/redesign/ROUND3.md B5–B7.
+
+1. Accessibility frames (B5). Draw:
+   - the tab bar, the VenuePass, the composer and the PersonCard at 200% text on a 360 dp screen;
+   - the tab bar, a sheet and the Room under Reduce Transparency, Increase Contrast and Bold Text;
+   - the screen-reader order for the Room, a chat and the PersonCard, as numbered overlays.
+2. The icon inventory (B6). One page with every Lucide glyph the project uses: name, sizes used, where. One name per glyph. Redraw the filled zap as an outline.
+3. The creature set (B7). Show me 2 variants first, then the set:
+   - one creature per noun group the client maps (read lib/pseudonymAvatar.ts);
+   - outlined, at the monogram's stroke;
+   - legible at 24 pt;
+   - on the 8 palettes as tokens.
+   Then replace the stock Lucide animals in every flow.
+```
+
+## Handoff prefix: two lines to add once R3-0 is published
+
+Add to the "Rules" list of the handoff prefix above:
+
+```
+- Tokens come from tokens/tokens.json (base motion values; Reduce Motion is a separate table read through useReducedMotion()), never from the frames' literals or the manifest.
+- Before building, check that the manifest's --rise-list reads 8px and --dur-base 220ms. If either reads its Reduce Motion value, stop: the export still carries the Reduce Motion values as defaults.
+```
