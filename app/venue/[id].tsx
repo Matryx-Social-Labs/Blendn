@@ -12,7 +12,7 @@ import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type VenueDetail } from '../../lib/apiClient'
 import { openBlendn } from '../../lib/blendnOverlay'
-import { checkOutOf } from '../../lib/checkIn'
+import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
 import {
   choiceLabel,
@@ -90,6 +90,9 @@ export default function VenueScreen() {
     })
     return () => sub.remove()
   }, [load])
+
+  // A Go Live, an extend from the expiry prompt, a check-out anywhere: the window moved.
+  useEffect(() => subscribeCheckInChanged(load), [load])
 
   const live = detail?.live
   const venueDayId = live?.venueDayId ?? null

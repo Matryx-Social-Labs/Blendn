@@ -799,9 +799,10 @@ function GroupChatInner() {
   const loadMessagesRef = useLatest(loadMessages)
   useEffect(() => subscribeToLiveEnded(() => void loadMessagesRef.current(true)), [loadMessagesRef])
 
+  // Opened from the place, the place is underneath (it re-reads on focus).
   const goLiveAgain = () => {
-    if (venueId) router.replace(`/venue/${venueId}` as never)
-    else router.back()
+    if (router.canGoBack()) router.back()
+    else router.replace((venueId ? `/venue/${venueId}` : '/(tabs)/events') as never)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {
