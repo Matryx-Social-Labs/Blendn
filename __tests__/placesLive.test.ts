@@ -131,10 +131,7 @@ describe('the screens read the server', () => {
   const CHAT = read('app/chat/[id].tsx')
   const LIVE = read('components/LiveAtVenue.tsx')
 
-  it("counts down from the server's expiresAt, and re-reads when the app comes back (PL-CU02)", () => {
-    expect(VENUE).toContain('remainingMs(live.expiresAt, now)')
-    expect(VENUE).toMatch(/AppState\.addEventListener\('change'/)
-  })
+  // The countdown and the foreground re-read are driven in venueScreen.test.tsx, not pinned here.
 
   it('offers the claim link only through claimUrlFrom, and only for an unclaimed place', () => {
     expect(VENUE).toContain('!detail.venue.claimed ? claimUrlFrom(detail.claim)')
@@ -144,10 +141,20 @@ describe('the screens read the server', () => {
     expect(VENUE).not.toMatch(/Polygon|Circle|geofence/)
   })
 
-  it("a place's room answers NOT_LIVE with the not-live state, on load and on send", () => {
-    expect(CHAT.match(/errorCode === 'NOT_LIVE'\) \{? ?setNotLive\(true\)/g)?.length).toBe(2)
+  it("a place's room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
+    // The map itself is table-tested in placeRoom.test.ts; this pins that the room uses it at all three doors.
+    expect(CHAT.match(/roomRefusalState\(result\.errorCode\)/g)?.length).toBe(3)
     expect(CHAT).toContain('<RoomLeftState kind="not_live"')
     expect(CHAT).toContain('subscribeToLiveEnded(')
+  })
+
+  it('names and counts a room through the one rule, in all three places that draw a room (H5)', () => {
+    // The rule is table-tested with the real row shape in placeRoom.test.ts; these pin that it is used.
+    expect(read('app/(tabs)/chat.tsx')).toContain('event_title: roomDisplayTitle(room) ||')
+    expect(read('app/(tabs)/chat.tsx')).toContain('participant_count: roomMemberCount(room) ?? 0')
+    expect(CHAT).toContain('const count = roomMemberCount(room)')
+    expect(CHAT).toContain('const title = roomDisplayTitle(room) ||')
+    expect(read('lib/activeRoom.ts')).toContain('eventTitle: roomDisplayTitle(checkin)')
   })
 
   it('the expiry prompt offers the free extension and keeps "stay with Plus" locked', () => {

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -20,6 +20,7 @@ import {
   countdownSpoken,
   GO_LIVE_CHOICES,
   liveCountLine,
+  oneTapChoice,
   readLiveSession,
   remainingMs,
   venueAction,
@@ -29,7 +30,9 @@ import { tonightLine } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { subscribeToLiveEnded } from '../../lib/socketClient'
 import { useGoLive } from '../../lib/useGoLive'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint } from '../../lib/theme'
+import { serverNow } from '../../lib/serverClock'
+import { useAuth } from '../../lib/useAuth'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, tint } from '../../lib/theme'
 
 /** Refusals of the page itself that no retry fixes: not onboarded, no known adult age. */
 const FINAL_REFUSALS = new Set(['FORBIDDEN', 'AGE_RESTRICTED', 'NOT_FOUND'])
@@ -47,10 +50,11 @@ const FINAL_REFUSALS = new Set(['FORBIDDEN', 'AGE_RESTRICTED', 'NOT_FOUND'])
 export default function VenueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const userId = user?.id ?? null
   const [detail, setDetail] = useState<VenueDetail | null>(null)
   const [failed, setFailed] = useState<{ message: string; final: boolean } | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-  /** The window last chosen at this place, so "Go live again" is one tap (PL-M05). */
+  /** The window to repeat in one tap here, or null (`oneTapChoice`, PL-M05). */
   const [lastChoice, setLastChoice] = useState<GoLiveChoice | null>(null)
   const [leaving, setLeaving] = useState(false)
 
@@ -62,20 +66,24 @@ export default function VenueScreen() {
     []
   )
 
+  // Only the newest read is the truth: an older one that answers last is dropped (H2).
+  const loadSeq = useRef(0)
   const load = useCallback(() => {
     if (!id) return
+    const mine = ++loadSeq.current
     apiClient
       .getVenue(id)
       .then((res) => {
+        if (mine !== loadSeq.current) return
         if (res.success && res.data) {
           setDetail(res.data)
           setFailed(null)
         } else {
           setFailed({ message: res.error || "This place didn't load.", final: FINAL_REFUSALS.has(res.errorCode ?? '') })
         }
-        setNow(Date.now())
       })
       .catch((error) => {
+        if (mine !== loadSeq.current) return
         Logger.warn('events', 'Venue screen load threw', { error: String(error) })
         setFailed({ message: "This place didn't load.", final: false })
       })
@@ -84,13 +92,13 @@ export default function VenueScreen() {
   // On focus, so coming back to it shows the count and your window as they are now.
   useFocusEffect(load)
 
-  // The window last chosen here, from the remembered session: it outlives this screen (PL-M05).
+  // The window to repeat here, from the remembered session: it outlives this screen (PL-M05).
   const readLastChoice = useCallback(() => {
     if (!id) return
-    readLiveSession()
-      .then((session) => setLastChoice(session?.venueId === id ? session.choice ?? null : null))
+    readLiveSession(userId)
+      .then((session) => setLastChoice(oneTapChoice(session, id, serverNow())))
       .catch(() => {})
-  }, [id])
+  }, [id, userId])
   useFocusEffect(readLastChoice)
 
   // Back from the background: the server's window, not a timer iOS suspended (PL-CU02).
@@ -117,23 +125,6 @@ export default function VenueScreen() {
   useEffect(() => subscribeToLiveEnded((data) => {
     if (data.eventId === venueDayId) load()
   }), [venueDayId, load])
-
-  const left = live?.youAreLive ? remainingMs(live.expiresAt, now) : null
-  // Tick while live; at zero, ask the server rather than assume.
-  const reloadedAtZero = useRef(false)
-  useEffect(() => {
-    if (left === null) return
-    if (left === 0) {
-      if (!reloadedAtZero.current) {
-        reloadedAtZero.current = true
-        load()
-      }
-      return
-    }
-    reloadedAtZero.current = false
-    const timer = setTimeout(() => setNow(Date.now()), 1000)
-    return () => clearTimeout(timer)
-  }, [left, load])
 
   const place = detail
     ? { id: detail.venue.id, name: detail.venue.name, latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address }
@@ -187,6 +178,12 @@ export default function VenueScreen() {
     }
   }
 
+  // The Blend'n room is hosted by the tab layout: from a pushed screen it would open underneath (H3).
+  const seeWhoIsHere = () => {
+    router.dismissTo('/(tabs)/events' as never)
+    openBlendn()
+  }
+
   const action = live ? venueAction(live) : null
   const countLine = live ? liveCountLine(live.liveNow, live.youAreLive) : null
   const claimUrl = detail && !detail.venue.claimed ? claimUrlFrom(detail.claim) : null
@@ -208,14 +205,7 @@ export default function VenueScreen() {
               {[detail.venue.venueTypeLabel, detail.venue.address ?? detail.venue.city].filter(Boolean).join(' · ')}
             </Text>
 
-            {action.kind === 'live' && left !== null ? (
-              <View style={styles.livePill} accessibilityRole="text" accessibilityLabel={`You're live here. ${countdownSpoken(left)}`}>
-                <View style={styles.liveDot} />
-                <Text variant="label" color={EMBER.onGradient}>
-                  {live.stay ? 'LIVE · STAYING' : `LIVE · ${countdownLabel(left)} left`}
-                </Text>
-              </View>
-            ) : null}
+            {action.kind === 'live' ? <LiveCountdown expiresAt={live.expiresAt ?? null} stay={live.stay === true} onZero={load} /> : null}
             {countLine ? <Text variant="bodyStrong">{countLine}</Text> : null}
 
             {action.kind === 'goLive' ? (
@@ -237,7 +227,13 @@ export default function VenueScreen() {
               </ScalePress>
             ) : null}
             {action.kind === 'goLive' && lastChoice ? (
-              <Pressable onPress={openSheet} accessibilityRole="button" style={styles.quiet}>
+              <Pressable
+                onPress={openSheet}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                style={[styles.quiet, busy && styles.dimmed]}
+              >
                 <Text variant="meta">Pick another time</Text>
               </Pressable>
             ) : null}
@@ -275,7 +271,7 @@ export default function VenueScreen() {
                         <Text variant="button">Open the room</Text>
                       </ScalePress>
                     ) : null}
-                    <ScalePress style={styles.secondary} onPress={openBlendn} accessibilityRole="button" accessibilityLabel="See who's here">
+                    <ScalePress style={styles.secondary} onPress={seeWhoIsHere} accessibilityRole="button" accessibilityLabel="See who's here">
                       <Text variant="button">{"See who's here"}</Text>
                     </ScalePress>
                   </View>
@@ -341,6 +337,43 @@ export default function VenueScreen() {
   )
 }
 
+/** At zero with the server still saying live, ask again this often (M10). */
+const ZERO_RETRY_MS = 3_000
+
+/**
+ * The pill and its countdown, a leaf: it ticks itself, once a second and only
+ * while the screen is focused, so the place screen above it does not re-render
+ * every second (L1). The clock is the server's (`serverNow`, M10); at zero it
+ * asks the server (`onZero`) every few seconds until the window is gone.
+ */
+function LiveCountdown({ expiresAt, stay, onZero }: { expiresAt: string | null; stay: boolean; onZero: () => void }) {
+  const focused = useIsFocused()
+  const [now, setNow] = useState(serverNow)
+  const left = remainingMs(expiresAt, now) ?? 0
+  useEffect(() => {
+    if (!focused || stay) return
+    const timer = setTimeout(() => {
+      if (left === 0) onZero()
+      setNow(serverNow())
+    }, left === 0 ? ZERO_RETRY_MS : 1000)
+    return () => clearTimeout(timer)
+  }, [focused, stay, left, now, onZero])
+
+  return (
+    <View
+      style={styles.livePill}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={stay ? 'Live here, staying' : `Live here. ${countdownSpoken(left)}`}
+    >
+      <View style={styles.liveDot} />
+      <Text variant="label" color={EMBER.onGradient}>
+        {stay ? 'LIVE · STAYING' : `LIVE · ${countdownLabel(left)} left`}
+      </Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xl },
@@ -376,6 +409,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   quiet: { minHeight: CONTROL.md, justifyContent: 'center', alignSelf: 'flex-start' },
+  dimmed: { opacity: OPACITY.disabled },
   panel: {
     gap: SPACE.sm,
     padding: SPACE.lg,

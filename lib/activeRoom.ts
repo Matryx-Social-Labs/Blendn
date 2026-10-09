@@ -36,6 +36,8 @@
  * honest failure beats a spinner that never stops.
  */
 
+import { roomDisplayTitle } from './placeRoom'
+
 export interface RoomAttendee {
   userId: string
   displayName: string
@@ -188,7 +190,7 @@ export async function pickActiveRoom(
       kind: 'room',
       eventId,
       // A place's day is titled for bookkeeping ("Venue day · …"); the room is the place.
-      eventTitle: (checkin.kind === 'venue_day' && checkin.event?.venueName) || checkin.event?.title,
+      eventTitle: roomDisplayTitle(checkin) ?? undefined,
       // Absent reads as anonymous: that matches the server default and is the
       // safe thing to claim about somebody's own visibility.
       revealed: checkin.revealed === true,

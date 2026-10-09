@@ -52,6 +52,8 @@ import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
+import { roomDisplayTitle, roomMemberCount, roomRefusalState, roomVenueId } from '../../lib/placeRoom'
+import { subscribeCheckInChanged } from '../../lib/checkIn'
 import Animated from 'react-native-reanimated'
 import { popIn, popOut } from '../../components/motion/presence'
 
@@ -219,7 +221,7 @@ function GroupChatInner() {
    * is missing — the Room's chat dock opens this with no cover, and the header
    * drew a generic people glyph there while the Banter's path showed the event.
    */
-  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string }>({})
+  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string; venueId?: string; eventId?: string }>({})
   const roomName = (params.roomName as string) || roomInfo.title
   const eventTitle = (params.eventTitle as string) || roomInfo.title
   const eventImage = (params.eventImage as string) || roomInfo.image
@@ -263,7 +265,10 @@ function GroupChatInner() {
    * not a rejoin. `venueId` comes from the place screen that opened it.
    */
   const [notLive, setNotLive] = useState(false)
-  const venueId = typeof params.venueId === 'string' ? params.venueId : null
+  const notLiveRef = useLatest(notLive)
+  /** The place, from the opener (the place screen) or the room's own row (M4). */
+  const openedFromPlace = typeof params.venueId === 'string' ? params.venueId : null
+  const venueId = openedFromPlace ?? roomInfo.venueId ?? null
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(String(chatRoomId))
   const outside = left || outOfRoom || notLive
@@ -375,13 +380,20 @@ function GroupChatInner() {
          * Refused as somebody not in the room: the left state, not "Couldn't
          * load" — Try again would be refused the same way for ever.
          */
-        if (!result.success && result.errorCode === 'LEFT_ROOM') { markRoomLeft(String(chatRoomId)); setLoading(false); return }
-        if (!result.success && result.errorCode === 'FORBIDDEN') { setOutOfRoom(true); setLoading(false); return }
-        if (!result.success && result.errorCode === 'NOT_LIVE') { setNotLive(true); setLoading(false); return }
+        const refused = result.success ? null : roomRefusalState(result.errorCode)
+        if (refused) {
+          if (refused === 'left') markRoomLeft(String(chatRoomId))
+          else if (refused === 'out') setOutOfRoom(true)
+          else setNotLive(true)
+          setLoading(false)
+          return
+        }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
         // Served as a member, so whatever this phone thought, you are in.
         setOutOfRoom(false)
+        // Live again at the place: the socket was taken out of the room at the end (M3).
+        if (notLiveRef.current) rejoinChatSocket(String(chatRoomId))
         setNotLive(false)
         markRoomJoined(String(chatRoomId))
 
@@ -474,12 +486,18 @@ function GroupChatInner() {
       const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
       if (!room) return
       rememberRoomMute(String(chatRoomId), room.mute)
-      const count = Number(room.memberCount ?? room.participant_count)
-      if (count > 0) setMemberCount(count)
+      // Never for a place's room: an exact count there is a differencing channel (H5).
+      const count = roomMemberCount(room)
+      if (count) setMemberCount(count)
       // The same fields the Banter reads for its row, so the header matches it.
       const image = room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url
-      const title = (room.event?.kind === 'venue_day' && room.name) || room.event?.title || room.event_title || room.eventTitle
-      setRoomInfo({ title: title ? String(title) : undefined, image: image ? String(image) : undefined })
+      const title = roomDisplayTitle(room) || room.event_title || room.eventTitle
+      setRoomInfo({
+        title: title ? String(title) : undefined,
+        image: image ? String(image) : undefined,
+        venueId: roomVenueId(room) ?? undefined,
+        eventId: room.event?.id ? String(room.event.id) : undefined,
+      })
     }).catch(() => {})
     return () => { live = false }
   }, [chatRoomId])
@@ -660,9 +678,10 @@ function GroupChatInner() {
        */
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
       // Left on another phone, or here a moment ago: the room becomes the left state.
-      if (!result.success && result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
-      // Your Go Live at the place ended: the room is closed to you.
-      if (!result.success && result.errorCode === 'NOT_LIVE') setNotLive(true)
+      // Your Go Live at the place ended: the not-live state.
+      const sendRefused = result.success ? null : roomRefusalState(result.errorCode)
+      if (sendRefused === 'left') markRoomLeft(String(chatRoomId))
+      else if (sendRefused === 'not_live') setNotLive(true)
       const outcome = sendOutcome(result)
       if (outcome.kind === 'failed') throw new Error(outcome.reason)
 
@@ -758,7 +777,9 @@ function GroupChatInner() {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: tally } : m))
     } else {
       setMessages(prev => prev.map(m => m.message_id === message.message_id ? { ...m, reactions: before } : m))
-      if (result.errorCode === 'LEFT_ROOM') markRoomLeft(String(chatRoomId))
+      const reactRefused = roomRefusalState(result.errorCode)
+      if (reactRefused === 'left') markRoomLeft(String(chatRoomId))
+      else if (reactRefused === 'not_live') setNotLive(true)
       else if (result.errorCode === 'CHAT_CLOSED' || result.errorCode === 'CHAT_LOCKED') applyComposerLock(result.errorCode)
       showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error')
     }
@@ -793,20 +814,32 @@ function GroupChatInner() {
   }
 
   /*
-   * A Go Live ended — yours, wherever this room is. Re-reading is how this
-   * room learns whether it was the one: a place's room answers NOT_LIVE.
+   * A Go Live ended. Only this room's (its event is the venue day) re-reads,
+   * and answers NOT_LIVE; a room whose event is not known yet re-reads too (L2).
    */
   const loadMessagesRef = useLatest(loadMessages)
-  useEffect(() => subscribeToLiveEnded(() => void loadMessagesRef.current(true)), [loadMessagesRef])
+  const roomEventIdRef = useLatest(roomInfo.eventId ?? null)
+  useEffect(
+    () =>
+      subscribeToLiveEnded((data) => {
+        const mine = roomEventIdRef.current
+        if (!mine || mine === data.eventId) void loadMessagesRef.current(true)
+      }),
+    [loadMessagesRef, roomEventIdRef]
+  )
+  // Not live here: going live again (anywhere in the app) is the way back in (M3).
+  useEffect(() => {
+    if (!notLive) return
+    return subscribeCheckInChanged(() => void loadMessagesRef.current(true))
+  }, [notLive, loadMessagesRef])
 
   /*
-   * The header's back, so the place it was opened from is underneath (and
-   * re-reads on focus) — a replace stacked a second copy of the place. Opened
-   * any other way, with nothing to go back to, it opens the place.
+   * Opened from the place, the place is underneath (it re-reads on focus).
+   * Opened from the Banter or a link, the place is opened (M4).
    */
   const goLiveAgain = () => {
-    if (router.canGoBack() || !venueId) router.back()
-    else router.replace(`/venue/${venueId}` as never)
+    if (openedFromPlace || !venueId) router.back()
+    else router.push(`/venue/${venueId}` as never)
   }
 
   const chatItems: ChatListItem[] = React.useMemo(() => {

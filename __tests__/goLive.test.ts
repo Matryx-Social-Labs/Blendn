@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import {
   choiceLabel,
+  clearLiveSession,
   countdownLabel,
   countdownSpoken,
   EXPIRY_PROMPT_LEAD_MS,
@@ -9,6 +10,8 @@ import {
   liveCountLine,
   liveEndedMessage,
   markLivePrompted,
+  noteLiveDayEnd,
+  oneTapChoice,
   promptDelayMs,
   readLiveSession,
   rememberLiveSession,
@@ -69,22 +72,50 @@ describe('the expiry prompt (PL-M02)', () => {
 
   it('remembers a prompt for the venue day it was shown on, and forgets it for a new one', async () => {
     await AsyncStorage.clear()
-    await rememberLiveSession({ venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree' })
-    await markLivePrompted('day-1')
+    const session = { userId: 'u1', venueId: 'v1', venueName: 'The Humming Tree' }
+    await rememberLiveSession({ ...session, venueDayId: 'day-1' })
+    await markLivePrompted('u1', 'day-1')
     // Going live again the same night (extend, or go again) keeps it asked.
-    await rememberLiveSession({ venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree' })
-    expect((await readLiveSession())?.prompted).toBe(true)
+    await rememberLiveSession({ ...session, venueDayId: 'day-1' })
+    expect((await readLiveSession('u1'))?.prompted).toBe(true)
     // Tomorrow's room is another night.
-    await rememberLiveSession({ venueDayId: 'day-2', venueId: 'v1', venueName: 'The Humming Tree' })
-    expect(await readLiveSession()).toEqual({ venueDayId: 'day-2', venueId: 'v1', venueName: 'The Humming Tree', prompted: false })
+    await rememberLiveSession({ ...session, venueDayId: 'day-2' })
+    expect(await readLiveSession('u1')).toEqual({ ...session, venueDayId: 'day-2', prompted: false })
   })
 
-  it('remembers the window chosen, so the place offers it again in one tap after the screen is gone (PL-M05)', async () => {
+  it("is one account's: another account on the phone reads nothing, and sign-out clears it (M5)", async () => {
     await AsyncStorage.clear()
-    await rememberLiveSession({ venueDayId: 'day-1', venueId: 'v1', venueName: 'Cubbon Park Bandstand', choice: { minutes: 20 } })
-    expect((await readLiveSession())?.choice).toEqual({ minutes: 20 })
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 20 } })
+    expect(await readLiveSession('u2')).toBeNull()
+    expect(await readLiveSession(null)).toBeNull()
+    await clearLiveSession()
+    expect(await readLiveSession('u1')).toBeNull()
+  })
+})
+
+describe('"Go live again" in one tap (PL-M05, M5)', () => {
+  const base = { userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'Cubbon Park Bandstand', prompted: false }
+
+  it('repeats the window chosen at this place, on its venue day', async () => {
+    await AsyncStorage.clear()
+    await rememberLiveSession({ ...base, choice: { minutes: 20 } })
+    await noteLiveDayEnd('u1', 'day-1', at(600))
+    const session = await readLiveSession('u1')
+    expect(oneTapChoice(session, 'v1', NOW)).toEqual({ minutes: 20 })
     expect(choiceLabel({ minutes: 20 })).toBe('20 minutes')
-    expect(choiceLabel({ stay: true })).toBe("Stay while I'm here")
+  })
+
+  it("not at another place, not after the day's reset, not before the day is known, never \"stay\"", () => {
+    const today = { ...base, choice: { minutes: 20 } as const, dayEndsAt: at(600) }
+    expect(oneTapChoice(today, 'v2', NOW)).toBeNull()
+    expect(oneTapChoice({ ...today, dayEndsAt: at(-1) }, 'v1', NOW)).toBeNull()
+    expect(oneTapChoice({ ...today, dayEndsAt: undefined }, 'v1', NOW)).toBeNull()
+    expect(oneTapChoice({ ...today, choice: { stay: true } }, 'v1', NOW)).toBeNull()
+    expect(oneTapChoice(null, 'v1', NOW)).toBeNull()
+  })
+
+  it('says what "stay" really holds: the app open, nearby', () => {
+    expect(choiceLabel({ stay: true })).toBe('Stay while Blendn is open here')
   })
 })
 
@@ -150,6 +181,7 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
       title: 'Not quite there yet',
       message: "You're not at The Humming Tree yet.",
       offerDirections: true,
+      action: 'directions',
     })
     expect(goLiveRefusal('AGE_RESTRICTED', 'Blendn is for adults.')).toMatchObject({ title: 'Not open to you', offerDirections: false })
     expect(goLiveRefusal('FORBIDDEN', 'Finish onboarding.')).toMatchObject({ title: 'Finish your profile first', offerDirections: false })
@@ -157,8 +189,30 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
     expect(goLiveRefusal('RATE_LIMITED', 'Slow down.')).toMatchObject({ title: 'Too many tries' })
   })
 
+  it('the split codes (#641): a weak fix offers a retry, no area offers nothing, outside offers Maps', () => {
+    expect(goLiveRefusal('GPS_TOO_VAGUE', 'GPS signal is too weak (accuracy: 400m).')).toMatchObject({ title: 'GPS signal too weak', offerDirections: false, action: 'retry' })
+    expect(goLiveRefusal('NO_CHECK_IN_AREA', 'This place has no check-in area yet.')).toEqual({
+      kind: 'refused',
+      title: 'No check-in area here',
+      message: 'This place has no check-in area yet.',
+      offerDirections: false,
+    })
+    expect(goLiveRefusal('OUT_OF_RANGE', 'x')).toMatchObject({ action: 'directions', offerDirections: true })
+  })
+
+  it('AGE_RESTRICTED leads to adding your age; a rate limit says how long to wait', () => {
+    expect(goLiveRefusal('AGE_RESTRICTED', 'Adults only.')).toMatchObject({ action: 'add_age' })
+    expect(goLiveRefusal('RATE_LIMITED', 'Too many requests', null, 42)).toMatchObject({ message: 'Try again in 42 seconds.' })
+    expect(goLiveRefusal('RATE_LIMITED', 'Too many requests', null, 90)).toMatchObject({ message: 'Try again in 2 minutes.' })
+    expect(goLiveRefusal('RATE_LIMITED', 'Too many requests')).toMatchObject({ message: 'Too many requests' })
+  })
+
+  it('no code at all (a timeout, no network) offers a retry', () => {
+    expect(goLiveRefusal(undefined, 'Request timed out')).toMatchObject({ title: "Couldn't go live", action: 'retry' })
+  })
+
   it('an unknown code still shows the sentence; an event hand-off without its id is not a hand-off', () => {
-    expect(goLiveRefusal(undefined, 'Something specific')).toMatchObject({ kind: 'refused', title: "Couldn't go live", message: 'Something specific' })
+    expect(goLiveRefusal('SOMETHING_NEW', 'Something specific')).toMatchObject({ kind: 'refused', title: "Couldn't go live", message: 'Something specific' })
     expect(goLiveRefusal(undefined, undefined)).toMatchObject({ message: expect.stringMatching(/try again/) })
     expect(goLiveRefusal('EVENT_LIVE_HERE', 'On here.', null)).toMatchObject({ kind: 'refused' })
   })

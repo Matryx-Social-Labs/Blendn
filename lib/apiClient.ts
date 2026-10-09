@@ -16,6 +16,7 @@ import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
+import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
 // API Configuration
@@ -1079,9 +1080,27 @@ class ApiClientClass {
    * room was answered from the cache that still had you in it.
    */
   forgetActiveCheckins(): void {
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(':/api/mobile/checkins/active:')) this.responseCache.delete(key)
-    }
+    this.forgetMatching((key) => key.includes(':/api/mobile/checkins/active:'))
+  }
+
+  /**
+   * Drop what is known about places' detail, so the next `getVenue` asks the
+   * server. Not cached, but a read already on the wire was answered before
+   * the change (a Go Live, an extend, `live:ended`) and must not be joined.
+   */
+  forgetVenues(): void {
+    this.forgetMatching((key) => /:\/api\/mobile\/venues\/[^/:?]+:/.test(key))
+  }
+
+  /**
+   * Forget every cached and in-flight read `matches` picks, and make a read
+   * that started before now unable to refill the cache — `forgetEventMatches`'s
+   * rule, for every list a change makes stale (step 5 review, H2).
+   */
+  private forgetMatching(matches: (key: string) => boolean): void {
+    this.cacheEpoch++
+    for (const key of this.responseCache.keys()) if (matches(key)) this.responseCache.delete(key)
+    for (const key of this.inFlight.keys()) if (matches(key)) this.inFlight.delete(key)
   }
 
   /**
@@ -1202,6 +1221,8 @@ class ApiClientClass {
     raw: string,
     endpoint: string
   ): Promise<ApiResponse<T>> {
+    // A Go Live counts down to the server's clock, not this phone's (lib/serverClock.ts).
+    noteServerDate(response.headers?.get?.('date'))
     if (!raw) {
       if (response.ok) {
         return { success: true } as ApiResponse<T>
@@ -2466,9 +2487,7 @@ class ApiClientClass {
    * SWR-cached, and answering from the old copy would put a left room back.
    */
   forgetChatGroups(): void {
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(':/api/mobile/chat/groups:')) this.responseCache.delete(key)
-    }
+    this.forgetMatching((key) => key.includes(':/api/mobile/chat/groups:'))
   }
 
   /**
@@ -3003,6 +3022,8 @@ class ApiClientClass {
       revealed?: boolean
       /** `venue_day`: a Go Live at a place — name it by `event.venueName`, count down to `expiresAt`. */
       kind?: 'event' | 'venue_day'
+      /** The place a Go Live is at (`venue_day` only), to extend or go again from anywhere. */
+      venueId?: string | null
       /** A Go Live's end; null at an event. */
       expiresAt?: string | null
       stay?: boolean

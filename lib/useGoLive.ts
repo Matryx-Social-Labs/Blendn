@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
 import { apiClient, type GoLiveResult } from './apiClient'
@@ -8,6 +8,7 @@ import { goLiveRefusal, rememberLiveSession, type GoLiveChoice, type GoLiveRefus
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
+import { useAuth } from './useAuth'
 import { useInteractionFeedback } from './useInteractionFeedback'
 
 /**
@@ -18,6 +19,35 @@ import { useInteractionFeedback } from './useInteractionFeedback'
  */
 
 export type GoLivePlace = { id: string; name: string; latitude: number | null; longitude: number | null; address?: string | null }
+
+/**
+ * Go Live sends any fix up to the server's own ceiling and lets the server
+ * judge (blendn-admin `MAX_GPS_ACCURACY_METERS`). The event door's stricter
+ * 50 m turned a usable fix into a dead end (step 5 review, H4).
+ */
+export const GO_LIVE_MAX_ACCURACY_M = 150
+
+/*
+ * One Go Live at a time, across every button that starts one — the sheet and
+ * the expiry prompt are different components, and a ref in each let a second
+ * tap through while the first was on the wire (step 5 review, M1).
+ */
+let inFlight = false
+const busyListeners = new Set<() => void>()
+function setInFlight(next: boolean) {
+  inFlight = next
+  for (const fn of busyListeners) fn()
+}
+const subscribeBusy = (fn: () => void) => {
+  busyListeners.add(fn)
+  return () => {
+    busyListeners.delete(fn)
+  }
+}
+/** True while any Go Live is on its way, wherever it was started. */
+export function useGoLiveBusy(): boolean {
+  return useSyncExternalStore(subscribeBusy, () => inFlight)
+}
 
 /** "Stay" behind Blendn+ — a placeholder until the paywall exists (step 11; docs/PLACEHOLDER_SCREENS.md §11). */
 export function showPlusPlaceholder(showTray: ShowTray, closeTray: () => void) {
@@ -31,7 +61,7 @@ export function showPlusPlaceholder(showTray: ShowTray, closeTray: () => void) {
 export function showGoLiveRefusal(
   refusal: GoLiveRefusal,
   place: GoLivePlace,
-  { showTray, closeTray }: { showTray: ShowTray; closeTray: () => void }
+  { showTray, closeTray, retry }: { showTray: ShowTray; closeTray: () => void; retry?: () => void }
 ) {
   if (refusal.kind === 'plus') return showPlusPlaceholder(showTray, closeTray)
   if (refusal.kind === 'handoff') {
@@ -48,23 +78,47 @@ export function showGoLiveRefusal(
       },
     ])
   }
-  showTray(
-    refusal.title,
-    refusal.message,
-    refusal.offerDirections
-      ? [
-          { label: 'Done', onPress: closeTray },
-          {
-            label: 'Open Maps',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              openInMaps({ latitude: place.latitude, longitude: place.longitude, address: place.address, venue_name: place.name }).catch(() => {})
-            },
-          },
-        ]
-      : undefined
-  )
+  const done = { label: 'Done', onPress: closeTray }
+  if (refusal.offerDirections) {
+    return showTray(refusal.title, refusal.message, [
+      done,
+      {
+        label: 'Open Maps',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          openInMaps({ latitude: place.latitude, longitude: place.longitude, address: place.address, venue_name: place.name }).catch(() => {})
+        },
+      },
+    ])
+  }
+  if (refusal.action === 'retry' && retry) {
+    return showTray(refusal.title, refusal.message, [
+      { label: 'Cancel', onPress: closeTray },
+      {
+        label: 'Try Again',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          retry()
+        },
+      },
+    ])
+  }
+  if (refusal.action === 'add_age') {
+    return showTray(refusal.title, refusal.message, [
+      done,
+      {
+        label: 'Add your age',
+        variant: 'primary',
+        onPress: () => {
+          closeTray()
+          router.push('/edit-profile' as never)
+        },
+      },
+    ])
+  }
+  showTray(refusal.title, refusal.message)
 }
 
 export function useGoLive({
@@ -79,14 +133,17 @@ export function useGoLive({
   onLive?: (result: GoLiveResult) => void
 }) {
   const feedback = useInteractionFeedback()
-  const [busy, setBusy] = useState(false)
+  const { user } = useAuth()
+  const userId = user?.id ?? null
+  const busy = useGoLiveBusy()
 
   /** True when live. Every other outcome has already been shown in a tray. */
   const goLive = async (choice: GoLiveChoice): Promise<boolean> => {
-    if (!place || busy) return false
-    setBusy(true)
+    if (!place || inFlight) return false
+    setInFlight(true)
+    const again = () => void goLive(choice)
     try {
-      const at = await getCurrentLocation({ showTray, closeTray })
+      const at = await getCurrentLocation({ showTray, closeTray, maxAccuracyM: GO_LIVE_MAX_ACCURACY_M, onRetry: again })
       if (!at) return false
       const result = await apiClient.goLive(place.id, {
         latitude: at.latitude,
@@ -97,22 +154,27 @@ export function useGoLive({
       })
       if (result.success && result.data) {
         feedback.success()
-        await rememberLiveSession({ venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
+        if (userId) {
+          await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
+        }
         checkInChanged(result.data.venueDayId)
         onLive?.(result.data)
         return true
       }
-      const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId)
+      // No code: a timeout or no network. The POST may have landed, so everything that shows it re-reads (M2).
+      if (!result.errorCode) checkInChanged()
+      const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
       if (refusal.kind === 'refused') feedback.error()
       Logger.info('events', 'go live refused', { code: result.errorCode })
-      showGoLiveRefusal(refusal, place, { showTray, closeTray })
+      showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again })
       return false
     } catch (error) {
       Logger.error('events', 'go live failed', { error: String(error) })
-      showTray("Couldn't go live", 'Please try again.')
+      checkInChanged()
+      showGoLiveRefusal(goLiveRefusal(undefined, 'Check your connection and try again.'), place, { showTray, closeTray, retry: again })
       return false
     } finally {
-      setBusy(false)
+      setInFlight(false)
     }
   }
 

@@ -24,7 +24,8 @@ export const GO_LIVE_CHOICES: readonly { choice: GoLiveChoice; label: string }[]
   { choice: { minutes: 45 }, label: '45 minutes' },
   { choice: { minutes: 60 }, label: 'An hour' },
   // The server decides whether "stay" is Blendn+'s (`PLUS_REQUIRED`); today it is everyone's.
-  { choice: { stay: true }, label: "Stay while I'm here" },
+  // It holds only while the app pings from inside the place, and it pings in the foreground.
+  { choice: { stay: true }, label: 'Stay while Blendn is open here' },
 ]
 
 export function choiceLabel(choice: GoLiveChoice): string {
@@ -134,16 +135,36 @@ export const GO_LIVE_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   FORBIDDEN: 'FORBIDDEN',
   RATE_LIMITED: 'RATE_LIMITED',
+  /** Split from OUT_OF_RANGE (Blendn-Admin #641): no position fixes either. */
+  NO_CHECK_IN_AREA: 'NO_CHECK_IN_AREA',
+  GPS_TOO_VAGUE: 'GPS_TOO_VAGUE',
 } as const
+
+/**
+ * What a refusal's tray offers besides closing: directions (you are in the
+ * wrong place), a retry (a weak fix, a request that never answered), or the
+ * way to add your age (`AGE_RESTRICTED` — the one refusal you can fix).
+ */
+export type RefusalAction = 'directions' | 'retry' | 'add_age'
 
 export type GoLiveRefusal =
   /** A sheet that sends you to the event's check-in — a state, never an error toast (PL-CU01). */
   | { kind: 'handoff'; eventId: string; message: string }
   /** "Stay" while Blendn+ gates it: the Plus placeholder, not a failure. */
   | { kind: 'plus' }
-  | { kind: 'refused'; title: string; message: string; offerDirections: boolean }
+  | { kind: 'refused'; title: string; message: string; offerDirections: boolean; action?: RefusalAction }
 
 const GENERIC = "We couldn't make you live here. Please try again."
+
+/** "1 minute", "45 seconds" — for a rate limit's wait. */
+function waitLabel(seconds: number): string {
+  const s = Math.ceil(seconds)
+  if (s >= 60) {
+    const m = Math.ceil(s / 60)
+    return `${m} minute${m > 1 ? 's' : ''}`
+  }
+  return `${s} second${s > 1 ? 's' : ''}`
+}
 
 /**
  * Why Go Live was refused, by the server's code — never by its sentence. The
@@ -153,7 +174,8 @@ const GENERIC = "We couldn't make you live here. Please try again."
 export function goLiveRefusal(
   errorCode: string | undefined,
   serverMessage: string | undefined,
-  eventId?: string | null
+  eventId?: string | null,
+  retryAfter?: number
 ): GoLiveRefusal {
   const message = serverMessage?.trim() || GENERIC
   switch (errorCode) {
@@ -164,15 +186,27 @@ export function goLiveRefusal(
     case GO_LIVE_CODES.PLUS_REQUIRED:
       return { kind: 'plus' }
     case CHECK_IN_CODES.OUT_OF_RANGE:
-      return { kind: 'refused', title: 'Not quite there yet', message, offerDirections: true }
+      return { kind: 'refused', title: 'Not quite there yet', message, offerDirections: true, action: 'directions' }
+    case GO_LIVE_CODES.GPS_TOO_VAGUE:
+      return { kind: 'refused', title: 'GPS signal too weak', message, offerDirections: false, action: 'retry' }
+    case GO_LIVE_CODES.NO_CHECK_IN_AREA:
+      return { kind: 'refused', title: 'No check-in area here', message, offerDirections: false }
     case CHECK_IN_CODES.AGE_RESTRICTED:
-      return { kind: 'refused', title: 'Not open to you', message, offerDirections: false }
+      return { kind: 'refused', title: 'Not open to you', message, offerDirections: false, action: 'add_age' }
     case GO_LIVE_CODES.FORBIDDEN:
       return { kind: 'refused', title: 'Finish your profile first', message, offerDirections: false }
     case GO_LIVE_CODES.NOT_FOUND:
       return { kind: 'refused', title: "This place isn't available", message, offerDirections: false }
     case GO_LIVE_CODES.RATE_LIMITED:
-      return { kind: 'refused', title: 'Too many tries', message, offerDirections: false }
+      return {
+        kind: 'refused',
+        title: 'Too many tries',
+        message: retryAfter && retryAfter > 0 ? `Try again in ${waitLabel(retryAfter)}.` : message,
+        offerDirections: false,
+      }
+    case undefined:
+      // No code: a timeout, no network, a 5xx. It may have landed — the caller re-reads.
+      return { kind: 'refused', title: "Couldn't go live", message, offerDirections: false, action: 'retry' }
     default:
       return { kind: 'refused', title: "Couldn't go live", message, offerDirections: false }
   }
@@ -201,22 +235,29 @@ export function liveEndedMessage(reason: string, venueName: string | null): stri
  * (`/checkins/active` names the day, not the venue, and extending needs the
  * venue) and whether tonight's expiry prompt has been shown. One record: the
  * server allows one open session, and going live elsewhere ends the last.
+ * Per account (`userId`), and dropped at sign-out (`clearLiveSession`).
  */
 const LIVE_KEY = 'blendn.goLive.session'
 
 export type LiveSession = {
+  userId: string
   venueDayId: string
   venueId: string
   venueName: string
   prompted: boolean
   /** The window chosen, so the place offers "Go live again" in one tap (PL-M05). */
   choice?: GoLiveChoice
+  /** When that venue day resets (its event's `endTime`, from `/checkins/active`). */
+  dayEndsAt?: string
 }
 
-export async function readLiveSession(): Promise<LiveSession | null> {
+/** This account's session, or null — never another account's on a shared phone. */
+export async function readLiveSession(userId: string | null | undefined): Promise<LiveSession | null> {
+  if (!userId) return null
   try {
     const raw = await AsyncStorage.getItem(LIVE_KEY)
-    return raw ? (JSON.parse(raw) as LiveSession) : null
+    const session = raw ? (JSON.parse(raw) as LiveSession) : null
+    return session?.userId === userId ? session : null
   } catch (error) {
     Logger.warn('events', 'Could not read the live session', { error: String(error) })
     return null
@@ -225,14 +266,45 @@ export async function readLiveSession(): Promise<LiveSession | null> {
 
 /** After a Go Live. The same venue day keeps its `prompted`: the prompt shows at most once a night (PL-M02). */
 export async function rememberLiveSession(next: Omit<LiveSession, 'prompted'>): Promise<void> {
-  const current = await readLiveSession()
-  const prompted = current?.venueDayId === next.venueDayId ? current.prompted : false
-  await writeLiveSession({ ...next, prompted })
+  const current = await readLiveSession(next.userId)
+  const sameDay = current?.venueDayId === next.venueDayId
+  await writeLiveSession({
+    ...next,
+    prompted: sameDay ? current.prompted : false,
+    dayEndsAt: next.dayEndsAt ?? (sameDay ? current.dayEndsAt : undefined),
+  })
 }
 
-export async function markLivePrompted(venueDayId: string): Promise<void> {
-  const current = await readLiveSession()
+export async function markLivePrompted(userId: string, venueDayId: string): Promise<void> {
+  const current = await readLiveSession(userId)
   if (current?.venueDayId === venueDayId) await writeLiveSession({ ...current, prompted: true })
+}
+
+/** The venue day's reset, once the active check-in says it. */
+export async function noteLiveDayEnd(userId: string, venueDayId: string, dayEndsAt: string): Promise<void> {
+  const current = await readLiveSession(userId)
+  if (current?.venueDayId === venueDayId && current.dayEndsAt !== dayEndsAt) await writeLiveSession({ ...current, dayEndsAt })
+}
+
+/** At sign-out: the next account on this phone starts with nothing. */
+export async function clearLiveSession(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(LIVE_KEY)
+  } catch (error) {
+    Logger.warn('events', 'Could not clear the live session', { error: String(error) })
+  }
+}
+
+/**
+ * The window "Go live again" repeats in one tap at this place, or null: only
+ * the window chosen at this place on its current venue day (tomorrow is a new
+ * room), and never "stay" — a window that follows you is a choice to make on
+ * purpose, not a reflex (step 5 review, M5).
+ */
+export function oneTapChoice(session: LiveSession | null, venueId: string, now: number): GoLiveChoice | null {
+  if (!session || session.venueId !== venueId || !session.choice || 'stay' in session.choice) return null
+  const dayEnd = session.dayEndsAt ? Date.parse(session.dayEndsAt) : NaN
+  return Number.isFinite(dayEnd) && dayEnd > now ? session.choice : null
 }
 
 async function writeLiveSession(session: LiveSession): Promise<void> {

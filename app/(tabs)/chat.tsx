@@ -39,6 +39,7 @@ import { apiClient } from '../../lib/apiClient'
 import { userReportStep } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
+import { roomDisplayTitle, roomMemberCount } from '../../lib/placeRoom'
 import { hasDirtyDomain } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
 import { userMessage } from '../../lib/userMessage'
@@ -482,9 +483,9 @@ function ChatInner() {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
             event_id: room.event_id || room.eventId || '',
             // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
-            event_title: (room.event?.kind === 'venue_day' && room.name) || room.event?.title || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
-            // `memberCount` is what `GET /chat/groups` sends; the rest never arrived.
-            participant_count: Number(room.memberCount ?? room.participant_count) || 0,
+            event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
+            // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
+            participant_count: roomMemberCount(room) ?? 0,
             event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
             last_message: preview.text,
             last_message_time: preview.time,
