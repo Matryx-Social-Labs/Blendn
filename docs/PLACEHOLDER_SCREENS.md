@@ -725,11 +725,11 @@ Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, 
 
 | Screen | File | Hemanth ticket |
 |---|---|---|
-| Your crews and invites | `app/crews/index.tsx` | see the step 9 report |
-| Make a crew | `app/crews/new.tsx` | see the step 9 report |
-| A crew | `app/crews/[crewId].tsx` | see the step 9 report |
-| The Grid's Crews view and the crew card | `components/crews/CrewsView.tsx`, `CrewParts.tsx` | see the step 9 report |
-| A Blend: its sides, reveal, block, leave | `app/blend/[blendId].tsx` | see the step 9 report |
+| Your crews and invites | `app/crews/index.tsx` | SCRUM-567 |
+| Make a crew | `app/crews/new.tsx` | SCRUM-569 |
+| A crew | `app/crews/[crewId].tsx` | SCRUM-571 |
+| The Grid's Crews view and the crew card | `components/crews/CrewsView.tsx`, `CrewParts.tsx` | SCRUM-573 |
+| A Blend: its sides, reveal, block, leave | `app/blend/[blendId].tsx` | SCRUM-574 |
 
 ### Rules the design must not break
 
