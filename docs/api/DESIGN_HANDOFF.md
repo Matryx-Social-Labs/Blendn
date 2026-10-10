@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/DESIGN_HANDOFF.md.
-  From Blendn-Admin @ 88ecea1 (v0.69.0, 2026-10-01).
+  From Blendn-Admin @ 34658d0 (v0.69.0, 2026-10-09).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 

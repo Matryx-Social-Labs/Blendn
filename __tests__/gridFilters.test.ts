@@ -173,7 +173,8 @@ describe('the rebuilt room kept what the old Grid had', () => {
      */
     const src = SCREEN()
     expect(src).toContain('<Animated.FlatList')
-    expect(src).toContain('numColumns={3}')
+    // Three to a row for faces; the Crews view (step 9) is one card to a row in the same list.
+    expect(src).toContain("numColumns={gridView === 'people' ? 3 : 1}")
     expect(src).toContain('renderItem=')
     expect(src).not.toMatch(/everyone\.map\(|people\.map\(/)
   })

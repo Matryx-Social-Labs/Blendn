@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/API.md.
-  From Blendn-Admin @ 88ecea1 (v0.69.0, 2026-10-01).
+  From Blendn-Admin @ 34658d0 (v0.69.0, 2026-10-09).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
@@ -23,7 +23,7 @@ All endpoints require `Authorization: Bearer <access_token>` unless noted.
 { "success": false, "error": "Validation failed", "errorCode": "VALIDATION_FAILED", "errors": [{ "field": "email", "message": "Required" }] }
 ```
 
-Error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `SERVER_ERROR`, `EVENT_FULL`, `EVENT_NOT_STARTED`, `EVENT_ENDED`, `OUT_OF_RANGE`, `ALREADY_CHECKED_IN`, `STORAGE_UNAVAILABLE`, `USER_MUTED`, `USER_BANNED`, `CHAT_LOCKED`, `NOT_CHECKED_IN`, `SPAM_BLOCKED`
+Error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `SERVER_ERROR`, `EVENT_FULL`, `EVENT_NOT_STARTED`, `EVENT_ENDED`, `OUT_OF_RANGE`, `ALREADY_CHECKED_IN`, `STORAGE_UNAVAILABLE`, `USER_MUTED`, `USER_BANNED`, `CHAT_LOCKED`, `NOT_CHECKED_IN`, `SPAM_BLOCKED`, `NOT_LIVE`, `EVENT_LIVE_HERE`, `PLUS_REQUIRED` (the last three: Go Live, below)
 
 A refusal that names no specific code carries the one its status stands for:
 401 `UNAUTHORIZED`, 403 `FORBIDDEN`, 404 `NOT_FOUND`, 409 `CONFLICT`,
@@ -247,6 +247,12 @@ an opaque, url-safe string. Field names and shapes did not change.
   found`, waves `403 RECIPIENT_NOT_HERE`): these two answer from who is in the
   room right now, so a raw id asked "is this account here", and the per-pair
   wave window turned one raw-id wave into a way to find which handle it was.
+- **A handle belongs to one room, of one kind.** An event's room scopes its
+  handles by the event, exactly as before. A room of another kind scopes them
+  by its own id and kind, so its handles are refused in every other room (an
+  event's likes and waves included) and are not accepted by the profile,
+  friend, block, report or message-request routes above: there they read as an
+  unknown id, until those rooms say who may recognise whom.
 - **A handle is not a lookup key for what the room hides.** The friends routes
   and `POST /conversations` resolve a handle only for someone you may already
   see (`identityVisible`); otherwise they answer exactly as for a stranger. A
@@ -287,7 +293,7 @@ GET /api/mobile/me/attendance?page=1&limit=20
 ```json
 { "success": true, "data": {
   "events": [
-    { "id": "…", "slug": "…", "title": "Design Week",
+    { "id": "…", "kind": "event", "slug": "…", "title": "Design Week",
       "cover_image_url": null, "start_time": "…", "end_time": "…",
       "venue_name": "The Humming Tree", "city": "Bengaluru",
       "attendedAt": "2026-08-14T18:04:00.000Z" }
@@ -316,6 +322,10 @@ disagree. Working an event as staff is not attending it, and appears in neither.
 An event the platform has since deleted is in neither the list nor the count,
 so every page is full and `totalCount` is the number of events listed
 (SCRUM-432).
+
+**Places you went live at are in it too** (D-6), with `kind: "venue_day"`:
+show them labelled as a place, by `venue_name`. A venue day's `title` is
+bookkeeping ("Venue day · … · date") and is not for display.
 
 ### GET /me/rsvps
 
@@ -355,7 +365,7 @@ GET /api/mobile/me/rsvps?page=1&limit=20
 |--------|----------|-------------|
 | GET | `/events` | List events (paginated, filterable) |
 | GET | `/events/:eventId` | Get event details. Also carries `doorPolicy`, `details` (or null) and `amenities`, none of which the list has. `chatGroup` is `{ id, name, status, member_count }` — snake_case, the row as selected — or null. `categories[]` are the leaves as stored, `{ id, name, slug, description, icon }`, with no `parent`. `distance` is kilometres from `lat`/`lon`, and `null` (never absent) without them. `organizer.id` is null when the host is the platform |
-| POST | `/events/:eventId/checkin` | Check in to event |
+| POST | `/events/:eventId/checkin` | Check in to event. 404 for a venue day's id: a venue's room is entered by going live (`POST /venues/:venueId/live`) |
 | POST | `/events/:eventId/checkout` | Check out of event |
 | POST | `/events/:eventId/favorite` | Toggle favorite/interest |
 | DELETE | `/events/:eventId/favorite` | Remove favorite |
@@ -537,6 +547,16 @@ to the API host. It carries the event id and nothing about the viewer. The
 page it opens is public: the claimant needs no account, filing grants nothing,
 and a person reviews every claim. Computed by `offersClaim` in `lib/curation.ts`.
 
+**`venue` on each card of `GET /events` is the place to name** — `{ id, name }`
+of the venue the event is at, by the takeover's own test: a `confirmed` link,
+or the event's own area at the venue (`atTheVenue`). `null` for a disputed
+link, an auto-link whose area is elsewhere (any organiser can link any venue,
+and a card must not lend them a famous bar's name), an archived or deleted
+venue, or none; then say the organiser's free-text `venueName`. Only those two fields: never the venue's area
+or owner. While the event has the venue (an hour before it starts until it
+ends) `GET /venues` leaves the venue out, so this card is where the app says
+"at The Humming Tree". Computed by `eventVenue` in `lib/venue-visibility.ts`.
+
 **`session` is the window "live" is judged by** — on `GET /events`,
 `GET /events/:eventId` and `GET /me/rsvps`. `startTime`/`endTime` span the
 whole run, so a three-day festival read as LIVE for three days straight,
@@ -568,12 +588,19 @@ The city picker's list — every city with events, busiest first.
 
 ```json
 { "success": true, "data": { "cities": [
-  { "city": "Bengaluru", "eventCount": 12 },
-  { "city": "Mumbai", "eventCount": 3 }
+  { "city": "Bengaluru", "eventCount": 12, "centre": { "latitude": 12.9716, "longitude": 77.5946 } },
+  { "city": "Mumbai", "eventCount": 3, "centre": null }
 ] } }
 ```
 
 Pass `city` straight back to `GET /events` or `GET /events/search`.
+
+**`centre` is where the home map goes when the city is picked** (plan v2
+step 2): the mean of the city's listed events' points, folded on the same key
+as the counts. Events with no point, or the 0,0 an unset point reads as, are
+left out; `null` when none has a point, and the app leaves its map where it
+is. A mean rather than a stored point, so it follows where the city's events
+actually are (`cityCentres`, lib/address.ts).
 
 **A city listed with N events opens with N events.** The counts apply the same
 visibility, end-time and age rules as the browse query, so the two cannot drift
@@ -608,6 +635,16 @@ feature is worth. Rows cascade on account deletion.
 { "pagination": { "page": 1, "limit": 20, "totalCount": 100, "totalPages": 5, "hasMore": true } }
 ```
 
+### A venue day's id is not an event's
+
+A venue's live room hangs off a hidden `events` row (`kind = venue_day`,
+docs/VENUES.md). Its id is **not an event** to `GET /events/:eventId`, RSVP,
+favourite, interest, the board, the room preview, rating or the plain
+check-in: each answers `404` as for an unknown id. Go Live is its one door. The
+room's own routes — `GET /events/:venueDayId/checkins`, `/matches`,
+`/matches/likes`, `/matches/preferences`, `/waves`, `/presence`,
+`/checkout`, `/chat` — work with it, for somebody live there now.
+
 ---
 
 ## Venues — the Hotspots feed
@@ -627,6 +664,7 @@ vocabulary, meaning exactly what it means there.
   "venueType": "live_music_venue", "venueTypeLabel": "Live music venue",
   "distance": 1.4,
   "upcomingEventCount": 2,
+  "liveNow": "quiet",
   "nextEvent": {
     "id": "…", "title": "Friday session", "slug": "friday-session",
     "coverImageUrl": "https://…", "startTime": "…", "endTime": "…"
@@ -642,8 +680,37 @@ vocabulary, meaning exactly what it means there.
 | `venueType` | One of the 35 slugs; anything else is a 400 |
 | `sortBy` | `name` (default) or `distance` |
 
+60 a minute per person, then 429 — every row carries a live count, as on the
+venue page.
+
 **Active venues only.** `archived` is how a venue is retired without deleting
 the events that happened in it, so it never appears in discovery.
+
+**A venue a real event has taken over is not listed** (plan v2 step 2). From an
+hour before an event at it starts until that event ends, the place is the
+event's: the venue is left out of this list (and its `totalCount`), Go Live
+there answers `EVENT_LIVE_HERE`, and the event's card on `GET /events` names the
+venue (`venue`). The event must be published, public and not deleted; its link
+not `disputed` (an unset link is a link); linked by a `confirmed` link, or with
+its area at the venue; judged per day of a multi-day run (D-2), so the nights
+between days hide nothing; and one the caller may attend (D-3), so a 21+ night
+does not hide its venue from a 19-year-old. A venue's own Go Live day never
+hides it (F3). One rule, `lib/venue-visibility.ts`, for this list, the venue
+page and the door.
+
+**`liveNow` is a bucket, never a number** — `quiet` (fewer than 5, none
+included), `5-9`, `10-19` or `20+`: the same figure as `live.liveNow` on
+`GET /venues/:venueId` (both count through `liveGuestIds`: distinct guests,
+never staff), read at most once a minute per venue and slow to fall (D-19,
+F14). You are left out only when the figure counted you, so going live or
+leaving inside the minute moves nothing you see. **`null`** for a caller the
+venue page would refuse — not onboarded, or no known adult age — and the app
+hides the chip.
+
+**Order** is by name, then id (or distance, then id): two venues with one name
+keep one order, so a page boundary between them never repeats or skips one.
+A venue taken over between your page reads shifts the offsets (a venue may be
+skipped, none repeated); dedupe by `id` regardless.
 
 **The card image comes from the next event.** `venues` has no image column.
 Rather than a wall of grey cards or an invented placeholder, each venue carries
@@ -654,7 +721,8 @@ is; draw the type-based fallback.
 
 **`upcomingEventCount` and `nextEvent` are one question asked once.** Same
 filter object, so a card cannot say "3 upcoming" and then headline an event that
-is not one of them.
+is not one of them. An event whose link the venue disputed is in neither: the
+owner said it is not theirs.
 
 **The age gate applies here too.** `nextEvent` is a real event shown to a real
 person, so it passes the same `min_age` rule as the browse query — otherwise the
@@ -670,6 +738,100 @@ counts *every* related row, so it would rank by an all-time total including
 cancelled drafts — a different number from the one on the card. Ranking the page
 you were handed is not ranking the set, and the difference shows the moment
 there is a second page. Needs raw SQL.
+
+### GET /venues/:venueId
+
+One venue, as the Go Live screen needs it. 404 for an unknown, archived or
+deleted venue; 403 `FORBIDDEN` for a profile not onboarded, `AGE_RESTRICTED`
+for one with no known adult age (as at its door). 60 a minute per person, then
+429.
+
+```json
+{ "success": true, "data": {
+  "venue": { "id": "…", "name": "The Humming Tree", "address": "…", "city": "Bengaluru",
+             "latitude": 12.97, "longitude": 77.64,
+             "venueType": "live_music_venue", "venueTypeLabel": "Live music venue",
+             "claimed": false },
+  "live": { "open": true, "closedReason": null, "eventId": null,
+            "liveNow": "quiet",
+            "youAreLive": true, "expiresAt": "2026-10-02T21:20:00.000Z", "stay": false,
+            "venueDayId": "…", "chatGroupId": "…" },
+  "tonight": { "id": "…", "title": "Friday session", "slug": "…", "coverImageUrl": null,
+               "startTime": "…", "endTime": "…" }
+} }
+```
+
+| Field | Meaning |
+|---|---|
+| `live.open` | Whether going live here would be accepted now, the fence aside |
+| `live.closedReason` | `event_live_here` (a real event has the venue: check in to `live.eventId`) or `no_check_in_area` (nobody drew this venue's area — judged against the same area as the door: today's copy once anybody went live) |
+| `live.liveNow` | `quiet` (fewer than 5, none included), `5-9`, `10-19` or `20+`. **Never a number** (D-19, D-x2): a count that moved from 4 to 5 as you watched would tell you somebody just walked in. Guests only (not the venue's staff), never counting you, read at most once a minute per venue, and slow to fall (it drops a bucket only once one more person would not hold it) |
+| `live.youAreLive` … `chatGroupId` | Your own window. Count down from `expiresAt`, never from the tap; open the room by `venueDayId` / `chatGroupId` |
+| `venue.claimed` | False: the app may offer "Own this place? Claim it" |
+| `tonight` | The next public event here before the venue's day resets (06:00 local by default), age-filtered for you, or null |
+
+**Not on it:** the check-in area (no payload draws the boundary), and who is
+live. People are the venue day's roster and grid
+(`GET /events/:venueDayId/checkins`, `/matches`), which only somebody live
+there may read — you see people only while you can be seen.
+
+### POST /venues/:venueId/live
+
+Go Live: be visible at this venue for a window you choose.
+
+```json
+{ "latitude": 12.9784, "longitude": 77.6408, "deviceInfo": { "gpsAccuracy": 12 },
+  "minutes": 20 }
+```
+
+`minutes` is `20`, `45` or `60`; or send `"stay": true` instead — 60 minutes,
+then each presence ping **inside** the area carries it on 20 minutes past the
+ping, up to four hours from the first time you chose "stay" at this venue
+today (choosing it again does not restart the four hours). Anything else is
+`400`.
+
+```json
+{ "success": true, "data": {
+  "venueDayId": "…", "chatGroupId": "…",
+  "expiresAt": "2026-10-02T21:20:00.000Z", "stay": false, "stayUntil": null,
+  "checkIn": { "id": "…", "status": "checked_in", "checkInTime": "…" },
+  "revealSuggestion": false, "intentNeeded": false
+} }
+```
+
+- **No window runs past the venue's reset** (06:00 local by default): a session
+  open then ends `expired` there, and tomorrow is a new room with new
+  pseudonyms. In the last five minutes before the reset, Go Live opens
+  tomorrow's room.
+- **Going live again while live extends**, never shortens, and the room is not
+  told of an arrival. Going live somewhere else, or checking in to an event,
+  ends it as a switch.
+- **When it ends** you are checked out (`departed_source = expired`), and the
+  venue's room is closed to you at that second — reading, posting, the socket,
+  the roster and the grid answer `403 NOT_LIVE` ("You're not live here any
+  more. Go live at the venue to join today's room."). Your sockets get
+  `live:ended` (docs/SOCKET_EVENTS.md) and leave its rooms. Leave early with
+  `POST /events/:venueDayId/checkout`.
+- **When a public event at the venue starts** — its link confirmed by the
+  venue, or its own area at the venue — everyone live there is checked out
+  (`ended`) and pushed once: "An event just started here — tap to check in"
+  (`kind: event_update`, `data.eventId`). The words are ours, never the event's.
+- `POST /events/:venueDayId/presence` answers `expiresAt` too, and a ping past
+  the end answers `{ status: "checked_out", reason: "expired" }`.
+
+| Refusal | When |
+|---|---|
+| 403 `PLUS_REQUIRED` | `stay` while Plus gating is on (off today: "stay" is everyone's) |
+| 404 | Unknown, archived or deleted venue, or today's room there was deleted |
+| 403 `FORBIDDEN` / `AGE_RESTRICTED` | Not onboarded / no known adult age (an unknown age is refused here) |
+| 409 `EVENT_LIVE_HERE` | A public event at this venue (link confirmed, or its own area at the venue) is on, or starts within the hour. The body carries `eventId`: hand off to that event's check-in. Checked before the fence |
+| 400 `OUT_OF_RANGE` | A fix worse than 150 m, a venue with no check-in area, or a position outside it — "You're not at ‹venue› yet.", never a distance. A refusal writes nothing: no venue day is made for it |
+| 429 `RATE_LIMITED` | 20 a minute per person; ceilings per address and per venue |
+
+```json
+{ "success": false, "error": "Friday session is on here. Check in to it instead.",
+  "errorCode": "EVENT_LIVE_HERE", "eventId": "…" }
+```
 
 ---
 
@@ -691,8 +853,26 @@ Body: `{ "eventIds": ["uuid", ...] }` (max 50)
 |--------|----------|-------------|
 | GET | `/chat/groups` | List user's chat groups |
 
+**Rooms of every kind (step 7).** A room has a kind: an event's room, a board
+post's (its author and the askers the author accepted), a crew's (its members
+now — see Crews), and a Blend's (see Blends). The `/chat/groups/:chatGroupId/...` routes take a room of any kind and
+admit whoever its owner admits — for a room that is not an event's, a
+membership row alone is not enough, and a refusal reads exactly as "not a
+member". Every id they send is a handle in that room's own scope (see Room
+handles). `GET /chat/groups` still lists event rooms only, so every row keeps
+its `event`; other kinds get their place in the list with the app that shows
+them. In a board post's room the roster (`/participants`) lists only the
+people its owner admits, an asker in a block with the author is out, writes
+stop 12 hours after the event ends (`CHAT_CLOSED`), and a withdrawn or
+taken-down post closes the room (404). To block or report somebody there, use
+the board's own routes (by post or by ask): the user routes read a board
+room's handle as an unknown id. In a crew's room people are named by **first
+name** (history, live messages, typing, roster, reply push) — they are there
+because a friend invited them and they said yes — and a member who leaves or is
+removed is out of the room at once, their row kept `left` for the history.
+
 ### GET /chat/groups
-Lists every room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organiser reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
+Lists every **event** room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organiser reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
 
 ### POST /message-requests
 **`message` is required.** A request with no message is indistinguishable from a
@@ -754,7 +934,7 @@ The response carries a **`write`** block:
 ```
 
 `reason` is one of `locked | archived | window_closed | not_open_yet | hidden |
-muted | banned | left`, or `null` when writing is allowed; `message` is null
+not_live | muted | banned | left`, or `null` when writing is allowed; `message` is null
 when allowed and for `muted`, `banned` and `left`. The composer used to guess: every refusal came
 back as a single `NOT_CHECKED_IN` covering several unrelated situations, so the
 app either showed the wrong reason or let someone type a paragraph and then threw
@@ -764,7 +944,16 @@ it away. `closesAt` lets the room show an honest countdown.
 you were physically at the event; checking out does not revoke it. See
 `mayWriteToRoom` in `lib/chat-window.ts`.
 
+**Except in a venue's room.** A venue day's room is for the people live in it:
+read, write and the socket join answer `403 NOT_LIVE` once your Go Live has
+ended, and there is no auto-join — going live is the only way in. It closes at
+the venue's reset (`closesAt` is the reset, not a day later).
+
 ### GET /chat/groups
+A venue's room (a venue day) is listed only while your Go Live there is open;
+once it ends the room leaves the list — its last message and counts are not
+readable from outside a room you can no longer open.
+
 Each group carries `isCheckedIn` — the caller is `checked_in` to that event with
 no `check_out_time`, so the room is live for them right now. The app lifts those
 rooms into The Banter's "Live now" rail and leaves them out of Recent.
@@ -797,7 +986,7 @@ turned up, or who left an hour ago, has a room whose event is mid-flight.
 If caught, response returns `{ moderation_hidden: true, content: null }`. The message is never emitted via socket.
 If OpenAI times out (>1s), message is broadcast and moderation falls back to async (socket delete event).
 
-**Error codes:** `USER_MUTED` (403), `USER_BANNED` (403), `CHAT_LOCKED` (403), `NOT_CHECKED_IN` (403), `LEFT_ROOM` (403), `SPAM_BLOCKED` (429)
+**Error codes:** `USER_MUTED` (403), `USER_BANNED` (403), `CHAT_LOCKED` (403), `NOT_CHECKED_IN` (403), `LEFT_ROOM` (403), `NOT_LIVE` (403, a venue's room after your Go Live ended), `SPAM_BLOCKED` (429)
 
 **Rate limit:** 30 sends a minute per person, across this route and `POST /events/:eventId/chat` together, whichever token or device they send from → `429 RATE_LIMITED` (SCRUM-439).
 
@@ -815,8 +1004,11 @@ Same moderation pipeline and error codes apply.
 | POST | `/chat/groups/:chatGroupId/report` | Body `{ reason, description? }` → 201 `{ reported: true }` |
 
 All five answer one `404 NOT_FOUND` for a malformed id, an unknown room, a draft
-or deleted event's room, or a room you have no membership in (report alone
-still accepts a room whose event was taken down).
+or deleted event's room, a room whose owner does not admit you, or a room you
+have no membership in (report alone still accepts a room whose event was taken
+down). **Reporting a room is an event room's only** — it is filed against the
+event — so it answers 404 for a room of any other kind; report its messages one
+by one (`POST /messages/:messageId/report`), which works in every room.
 
 **Leaving** marks the membership `left` with `left_at` — kept, not deleted,
 because your pseudonym on past messages resolves through it. Until you come
@@ -1154,6 +1346,216 @@ forwarded — and refuses with the same 404 for a malformed, unknown or reset
 token or a deleted or suspended owner. A caller who sends a bearer token also
 gets the block rule, so the public door never shows what the signed-in one
 hides.
+
+## Crews
+
+Friends who go out together (plan v2 §6). 2–12 people, made from the friend
+graph, with a crew chat (a room of kind `crew`), "We're here", and crew cards
+at an event. `lib/crews/`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/crews` | My crews `{ crews, invites }` — open invites waiting for me, by the inviting friend's first name |
+| POST | `/crews` | Make one: `{ name, bio?, intent?, tags?, openToSolo?, inviteUserIds?, revealConsent: true, keepMeAnonymous? }` → 201 `{ crewId, chatGroupId, invited }` |
+| GET | `/crews/:crewId` | One of my crews: members by first name and photo, each by their handle in the crew's room |
+| PATCH | `/crews/:crewId` | The owner edits `name`, `bio`, `intent`, `tags`, `openToSolo` |
+| POST | `/crews/:crewId/invites` | Any member invites their own friends `{ userIds }` → `{ invited }` |
+| POST | `/crews/:crewId/join` | Accept my invite `{ revealConsent: true, keepMeAnonymous? }` → `{ chatGroupId }` |
+| DELETE | `/crews/:crewId/join` | Decline my invite — told to nobody |
+| PATCH | `/crews/:crewId/members/:userId` | My own settings (`userId` = my id): `{ keepMeAnonymous }` |
+| DELETE | `/crews/:crewId/members/:userId` | Leave (my id), or the owner removes a member (their handle) → `{ dissolved }` |
+| POST | `/crews/:crewId/here` | "We're here" `{ eventId }` → `{ notified, repeated }` |
+| POST | `/crews/:crewId/report` | Report a crew's card `{ reason, description? }` → 201 `{ reported: true }` |
+| GET | `/events/:eventId/crews` | The crews here now, as cards, a page at a time (`?limit=&offset=`) → `{ crewsEnabled, crews, myCrews, total, hasMore }` |
+
+**Made from friends.** Every invitee must be a friend of whoever invites them —
+at creation and on every later invite, by any member. Anybody else (a stranger,
+an erased account, an id nobody has) is the **same 404** and nothing is
+written, so inviting cannot be used to learn who uses the app. Crews are 18+
+with a **known** age and need a finished profile (403 otherwise, an account
+with no age included).
+
+**Who is asked, and who is skipped.** `invited` is always how many friends you
+asked for, so the answer says nothing about any of them. Each is invited, or
+skipped without a word: already in the crew, or invited and the invite still
+open; **declined in the last 30 days** (a no is not re-asked or re-pushed for a
+month; after that, asking is a new ask); **removed by the owner** (only an
+owner's invite brings them back, and clears the removal); **kept apart from
+anybody in the crew** — a block or a closed conversation, either way. An
+invite **lapses after 14 days**: it stops showing, holds no seat, and can be
+sent again. One invite push per inviter and invitee a day, whatever the crew
+(read from the invites, so it holds across restarts).
+
+**Accepting asks again**, under the crew's lock: the invite open; whoever sent
+it still in the crew and still your friend; nobody in the crew kept apart from
+you. Any of those failing is the same 404 as no invite. A block or an unfriend
+also withdraws the invites between the two people at once.
+
+**Caps.** You can own 3 standing crews and be in 10 (409 past either), and make
+3 new crews in 24 hours (429).
+
+**2–12.** `CREW.MAX_MEMBERS` is 12. An invite that would take members plus open
+invites past 12 is 409, and an accept counts the members under a row lock on
+the crew, so two accepts at once can never both take the last seat. A crew left
+with fewer than two **active** members — suspended and erased people do not
+count — **dissolves** (D-15): its chat archives and closes (404 from then on),
+the rest are let go, open invites are withdrawn. A crew without an active owner
+passes to the active member who has been in it longest — when its owner leaves,
+is erased or is suspended. The chat sweeper repairs any crew left below two or
+without an owner every 15 minutes, so a suspension (which writes no crew row)
+or a failed erasure settle is not left standing.
+
+**Joining is consent.** Creating or joining requires `revealConsent: true`. The
+app shows, beside it: *"Anyone in this crew can reveal the crew — your name and
+photos — to people you match with."* `keepMeAnonymous` is the personal override
+("Keep me anonymous even when my crew reveals"); changing it later applies from
+then on — a reveal already made can't be unseen (D-10).
+
+**The name and bio** — 2–32 characters (not unique) and ≤ 140 — are shown to
+strangers on the crew card. They are **folded** first (`lib/moderation/fold.ts`):
+compatibility forms to ordinary ones (fullwidth `９８４５`, ligatures, `․` to
+`.`), any script's digits to 0–9 (`९८४५`), Cyrillic and Greek look-alikes to
+Latin — and the folded form is what is stored. A name with an invisible
+character (zero-width space, bidi override; an emoji's own joiner aside) is
+400; a bio has them stripped. Then the moderation pipeline and a **strict**
+contact-detail check (`findProfileContactInfo`): phone numbers, any @handle,
+emails and web addresses, written out or spelled ("nine eight four…", "at
+gmail dot com", "dot in"). A refusal is 400 with a sentence naming what was
+found, and nothing is stored. Tags are curated slugs (`quiz-team`, `run-club`,
+`techno-heads`, `office-gang`, `birthday-crew`, `foodies`, `board-gamers`,
+`gig-goers`, `book-club`, `dance-floor`), at most 3. Intent is the person
+intent enum.
+
+**Reports.** `POST /crews/:crewId/report` (`reason`: `spam`, `offensive`,
+`contact_details`, `impersonation`, `other`) files a `message_reports` row
+(`message_type: "crew"`, the name and bio as they read then). Nobody in the
+crew is told. In the admin queue a moderator can **hide** the crew — off every
+surface outside it: no card, no like, no Blend; its members keep their crew and
+its chat — or **dissolve** it (D-15). Both are audited.
+
+**Inside a crew people are named** — first name and one photo, never the full
+name — on `/crews` and in the crew's room. Member ids are handles in the crew's
+room (yours is your own id); `DELETE /crews/:crewId/members/:userId` takes that
+handle back, and a raw id or another room's handle names nobody (404). Two
+members kept apart (a block or a closed conversation) are not listed to each
+other on `/crews`, and the crew chat already hides each one's messages and
+roster entry from the other; `size` still counts everybody active.
+
+**"We're here"** needs the tapper checked in at the event now (403 otherwise)
+and checks **nobody else** in: every member checks in by their own GPS. It
+writes a line in the crew chat (type `system`, `"We're here 👋"`, metadata
+`{ kind: "crew_here", eventId, occurrenceId }`) and sends `crew_here`
+(`crewId`, `chatGroupId`) to every other member who has not muted the crew
+chat or blocked the tapper — **once per person per crew per occurrence**; a
+second tap answers `repeated: true` and tells nobody. The line itself is the
+record (read and written in one transaction under a lock), so it holds across
+restarts and replicas; the next occurrence is a new night. A member who turned
+notifications off (`push_enabled`) gets the bell line, not a push. The push
+names nobody and no place: *"Someone from your crew is here 👋"*, titled with
+the crew's name. A crew invite sends `crew_invite` (`crewId`), naming nobody.
+
+**Presence is derived, never stored.** A crew is *here* when two or more of its
+active members are checked in at the same occurrence now (`checked_in`, no
+checkout; at a venue day, while live). `GET /events/:eventId/crews` is for
+people checked in there now (403 `NOT_CHECKED_IN` otherwise) and lists the
+crews here, never your own (those are `myCrews`, what a like is sent as). A
+card is the emblem seed, name, bio, `size` ("Crew of N", active members),
+`presentCount`, tags and intent — **counts, never people**: no name, photo,
+id or pseudonym of anybody on it (a list of pseudonyms beside a crew that later
+reveals would single out the ones who stayed anonymous). Most here first, then
+by id; `limit` 30 by default, at most 50, `offset`, with `total` and
+`hasMore`. Hidden from you: a hidden crew, and any crew with a member kept
+apart — a block or a closed conversation, either way — from you or from any
+member of your crews here. Here without a crew of your own, you see crews only
+after opting in ("Open to joining a crew tonight", `open_to_crews_until`: it
+lasts until the end of the occurrence you said it at), and only crews with
+"room for one more" (`openToSolo`) of 6 or fewer active members. When the host
+turns crews off (`events.crews_enabled`, the dashboard's "Allow crews at this
+event" switch), the list is `crewsEnabled: false` and "We're here" is 403.
+
+**Safety.** A suspended member is on no crew surface (cards, counts, the crew
+room). Reinstating them does not undo what the suspension did: the ban it wrote
+into the crew chat stays until a person lifts it (as in every room), and a crew
+that dissolved or passed to another owner meanwhile stays that way. Deleting
+your account takes you out of every crew — inside the erasure's transaction,
+the crews locked first — and deletes every crew invite to or from you; each of
+those crews is then settled (dissolved below two, owner handed on). Your
+messages in a crew chat stay, as in any room.
+
+### Blends — crews matching crews, or a crew and one person
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/events/:eventId/crews/:crewId/like` | Like a crew here: `{ asCrewId? }` — as one of your crews here, or as yourself → `{ liked: true, blend }` |
+| POST | `/events/:eventId/matches/likes` | With `asCrewId`: like one person on your crew's behalf → `{ liked: true, blend }` |
+| PUT | `/events/:eventId/matches/preferences` | `openToCrews` — "Open to joining a crew tonight" (until the end of your occurrence) |
+| POST | `/blends/:blendId/reveal` | One tap reveals your crew **in this Blend** → `{ revealed, keptPrivate }` |
+| GET | `/blends` | My open Blends: room, clock, both sides' people |
+
+**No voting.** Any member of a crew that is here (two or more checked in) likes
+on the crew's behalf; the crew chat gets a line, *"liked Crew Nebula for the
+crew"*, from the member who tapped — transparency instead of a quorum. Only
+for a like of a crew: a like of a person gets no line, because a line only for a
+like that stood would tell the crew what the answer hides. Nobody else is told: no push, no bell row, and the card's
+`youLiked` is only ever about your side. Liking twice is liking once. When the
+host turned crews off, every crew like is 403.
+
+**Crew ↔ person** has guardrails (§8.3): the person turned on `openToCrews` —
+which lasts until the end of the occurrence they said it at, and `false` clears
+it (403 for their own like until they do — it is their switch); the crew has
+"Room for one more" (`openToSolo`) and 6 or fewer **active** members (403 for a
+crew member's like until it does); and if the crew is out for dating, the
+person must be too. A crew member's like of a **person** tells them nothing
+about that person: not here, not opted in, not out for dating, or kept apart
+from anybody in the crew — each answers `{ liked: true, blend: null }`, exactly
+as a like that stood, and nothing is stored. Anything about the other side of a
+like of a **crew** — not here, hidden, a guardrail, anybody on one side kept
+apart (a block or a closed conversation) from anybody on the other, two crews
+sharing a member — is the same 404 as a crew that does not exist. The block
+check is asked again inside the transaction that would write the like and the
+Blend: a block landing in between aborts both.
+
+**A Blend.** Crew A liked crew B and B liked A (any members), or a crew and a
+person liked each other: `blends` gets one row — two likes at the same instant
+still make one, under a lock on the pair and a unique per pair per occurrence —
+and a room of kind `blend`. A Blend between the pair that has closed stays
+their one row for the occurrence: liking again answers `blend: null`. Everyone
+it lets in but the person whose like made it gets `blend` (`blendId`,
+`chatGroupId`): *"It's a Blend"*, naming nobody.
+
+**Who is in it: who was here when it matched.** The room gets a member row for
+each member of either crew **checked in at the occurrence at that moment**, and
+the person — a snapshot. A crewmate who arrives later is not in it (no row, and
+every door to a room starts from the row). A member who leaves their crew
+leaves its Blends (out live, refused after); a suspended or erased one is out
+too. They speak in **tonight's pseudonyms** (the ones they carry in the event's
+room), handles scoped to the Blend's room. `GET /blends` lists the snapshot as
+its door admits it now, minus anybody kept apart from you and anybody who
+turned "show online" off. Anyone may leave on their own
+(`POST /chat/groups/:id/leave`); the room stays for the rest.
+
+**A block inside a Blend hides that pair; the room goes on** (D-9). Anybody on
+one side kept apart from anybody on the other — a block, or a closed
+conversation, either way — is refused by the Blend's door, both of them, and
+every writer of a block takes their sockets out at once; everyone else keeps
+the room. A Blend handle (from its roster) is enough to block somebody: the
+block route opens it for the people that Blend lets in, and for nobody else.
+
+**It closes** 12 hours after the occurrence ends — the door on the clock, the
+sweeper archiving it from `blends.closes_at` (`blends_open_closes_at`) — and
+earlier when either side's crew dissolves or a moderator hides it. Crew likes
+that never made a Blend are deleted 12 hours after their occurrence ends.
+
+**The crew reveal is scoped to one Blend** (owner decision (a), C2). In an open
+Blend, any member taps reveal: each member of their crew who is checked in now
+and in the Blend's room, and has not switched on "keep me anonymous" (read
+again as the reveal is written) — consent was given on joining — is revealed
+**to that Blend's people only** (`blend_reveals`): first name and one photo on
+`GET /blends`. Not to the event's room, its roster or deck, not in any DM, not
+in another Blend. The matched person in a crew ↔ person Blend reveals only
+themselves. `GET /blends` says *"N revealed · M keep it private"* per crew.
+Switching "keep me anonymous" on afterwards applies from then on (D-10): a
+reveal already made is not undone. Deleting your account deletes your reveals.
 
 ---
 
@@ -1776,7 +2178,8 @@ be seen.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/users/:userId` | Get user profile. `:userId` may be a room handle, echoed back as `id`, and is then answered in that room's terms — see Room handles. When `identityVisible` is true it also carries `connection: { conversationId, request: "sent" \| "received" \| null }` — your open conversation and any pending message request between you; absent otherwise |
-| POST | `/users/:userId/block` | Block/unblock user |
+| POST | `/users/:userId/block` | Block/unblock user (`DELETE` to unblock) |
+| GET | `/users/blocked` | The people you blocked. `blocked_id` is an **opaque ref to the block** (`bk_…`), not their account id — somebody blocked by their board post or room handle was never shown one, and this list must not be where it arrives. Send it back to `DELETE /users/:userId/block` to unblock; only a block you made is removed. A raw id still unblocks, for older clients, on your own block only. Name and photo appear only where the identity rules allow |
 | GET | `/users/:userId/favorites` | Get your saved events — your own id only (403 otherwise); drafts are dropped, cancelled ones stay with `status` set (SCRUM-176) |
 | GET | `/profiles/:userId` | Get a profile. Your own carries `email` and the whole `profile` row except `date_of_birth` (`age` derived) — `name`, `gender`, `interested_in`, `intent_default`, `reveal_by_default`, `blur_photo`, `interests`, `created_at`, `updated_at` included, and `expertise` as slugs. Anybody else's `profile` is `id, age, onboarded, location, interests, work_field, expertise` (labels), plus `bio, occupation, education, photos` if you can see who they are, else `blurPhoto`; no `email`, and `image` only if you can see who they are |
 | PUT | `/profiles/:userId` | Update profile |
@@ -1862,15 +2265,17 @@ Requires `OPENAI_API_KEY` env var. Degrades gracefully to keyword-only if absent
 | POST | `/messages/:messageId/report` | `message_reports` (`messageType: "group" \| "private"`) |
 | POST | `/events/:eventId/report` | `event_reports` |
 | POST | `/chat/groups/:chatGroupId/report` | `event_reports` with `chat_group_id` — shown as "Room" |
+| POST | `/events/:eventId/board/:postId/report` | `message_reports` with `message_type: "board_post"` — shown as "Board · offer\|seeking\|chat" |
+| POST | `/board/requests/:requestId/report` | `message_reports` with `message_type: "board_request"` — shown as "Board ask" |
 
 ### The pre-event board
 
 | Method | Endpoint | Gate |
 |--------|----------|------|
-| GET | `/events/:eventId/board` | RSVP'd (any committed status) **or** favourited |
+| GET | `/events/:eventId/board` | RSVP'd (any committed status) **or** favourited; before doors. Posts by anybody blocked either way are left out |
 | POST | `/events/:eventId/board` | RSVP'd **going**, complete profile, under both caps; the text passes moderation |
 | DELETE | `/events/:eventId/board/:postId` | Your own post (anyone else's is a 404) |
-| POST | `/events/:eventId/board/:postId/requests` | Same as posting, plus not blocked and not already declined |
+| POST | `/events/:eventId/board/:postId/requests` | Same as posting, plus not blocked, not a `chat` post, not a full offer, and not asked before |
 | GET | `/board/requests` | Yours, both directions |
 | PATCH | `/board/requests/:requestId` | `{ action: accept \| decline \| withdraw }` |
 
@@ -1904,9 +2309,17 @@ nowhere else. `requestCount` is a number and never a list: how many have asked
 is useful, naming them would disclose who is looking for company to everyone
 browsing.
 
-**The board closes at doors.** After that the room is the place, and it is gated
-on presence rather than intent — a board that stayed open would be a second room
-with a weaker gate running beside the real one.
+**The board closes at doors** — for reading as well as posting and asking, all
+three **403** *"The board closes when the doors open — the room is open
+instead"*, judged on the event's `start_time`. After that the room is the place,
+and it is gated on presence rather than intent — a board that stayed open would
+be a second room with a weaker gate running beside the real one, and a readable
+one would be a list of who came alone, open during the night.
+
+**Blocks apply both ways.** A post by somebody who blocked you, or whom you
+blocked, is not on your board; asking on one is refused exactly as asking on a
+post that is gone; and an ask from somebody blocked either way is left out of
+your incoming list.
 
 **A post is checked before it is stored** (SCRUM-301). The text gets the room's
 checks: the keyword filter, contact details, then OpenAI within one second. A
@@ -1925,8 +2338,61 @@ It has no second look, because a request has nowhere to be hidden later.
 **An author can withdraw their own post** with `DELETE /events/:eventId/board/:postId`.
 It is soft (`deleted_at`): the post leaves every board read, requests filed against
 it stop counting toward their senders' caps, and `GET /board/requests` returns its
-`body` as `null`. Removal by a moderator, and reporting a post, come with the
-board's dashboard surface (SCRUM-322).
+`body` as `null`.
+
+#### Reporting, blocking and removal (SCRUM-322)
+
+| Method | Endpoint | Who |
+|--------|----------|-----|
+| POST | `/events/:eventId/board/:postId/report` | Anyone who was ever this event's audience — an RSVP of any answer (one later changed to not going included) or a save — or who has an ask on the post |
+| POST | `/events/:eventId/board/:postId/block` | The same |
+| POST | `/board/requests/:requestId/report` | Either of the ask's two people |
+| POST | `/board/requests/:requestId/block` | The same |
+
+The board never gives the client a user id, so a person is reported and blocked
+**by the post or the ask they wrote**. The server resolves who and never returns
+it — not in these responses, and not later in `GET /users/blocked`, which lists
+an opaque ref (below). Anything the caller could not have seen, including no
+such post or ask, is the same **404** body as a missing one, so the routes cannot
+be used to probe ids. Your own post is **400**.
+
+**These stay reachable when the board does not.** They are safety actions, so
+neither the doors nor a block closes them: somebody reading a message after the
+night began, or who has just been blocked by its author, can still report it and
+block back. A withdrawn or removed post can be reported too — the person most
+motivated to take a post down is the one about to be reported for it.
+
+- **Reports** take `{ reason, description? }`, with `reason` one of `harassment`,
+  `hate_speech`, `inappropriate_content`, `spam` or `other` (the app's message
+  reasons), and `description` up to 500 characters. They return
+  `201 { reported: true }`. They land in `message_reports` (`message_type`
+  `board_post` / `board_request`), so they show in the admin reports queue beside
+  room messages and DMs, as "Board · offer", "Board · seeking", "Board · chat" or
+  "Board ask", with how many reports name the same thing. An ask is reported
+  about whichever of its two people did not file it.
+- **One report per person per post or ask while it is pending.** A second tap is
+  the same `201` and no new row (a partial unique). Reports are limited to 20 a
+  minute and **30 a day** per person — a queue showing the oldest hundred is
+  otherwise one script away from burying everybody else's.
+- **The evidence is kept.** A report stores the words as they were when it was
+  filed (`excerpt`), and stamps the post `moderation_status = "reported"`.
+  Account erasure deletes only posts with no status, so a reported post is kept
+  (and taken off the board) until it is reviewed, and an ask somebody reported
+  keeps its message until then. Dismissing the last pending report on a post
+  clears the stamp.
+- **Blocking** is exactly `POST /users/:userId/block` once the person is known:
+  the same transaction and the same `{ blocked: true }`. Board asks between the
+  two are left as they are — hidden from the blocker, not acceptable, and read by
+  the asker as an ask on a withdrawn post.
+- **Removal** is the queue's *Remove post* on a board-post report. It marks the
+  post `moderation_status = "removed"` — whether or not its author had already
+  withdrawn it — and sets `deleted_at` if it was still up, which takes it off
+  every board read and lapses the asks filed against it. It records
+  `report.remove_message` in `audit_logs` with the post's id and `removed: true`,
+  or `removed: false` when the post was already removed. A post erased with its
+  author's account cannot be removed (the button is not offered; the action is
+  refused). Asks are not removable: an ask went to one person, like a DM, so the
+  lever there is the person.
 
 #### Asking somebody
 
@@ -1935,11 +2401,17 @@ rather than a check: a request is filed against a post, `board_requests.post_id`
 is required, and the recipient is read off the post. There is no field in which
 to name somebody, so there is no path that forgets the rule.
 
-Refused if they have already **declined** you on that post — the partial unique
-index only stops a second *pending* request, so without it a decline is followed
-by an identical ask a second later, for ever. `withdrawn` is deliberately not
-treated the same way: withdrawing is the asker changing their own mind, and it
-has told the other person nothing.
+**One ask per post, ever.** A second ask on a post you have asked before is
+**409** *"You have already asked — give them a moment"*, whatever became of the
+first — waiting, declined, withdrawn or accepted. It used to be refused only
+after a decline, with *"They have already answered this one"*, and that sentence
+was the decline delivered: the only answer a re-ask can be refused after is a no.
+Refusing after a decline but not after a withdrawal fails the same way one step
+later, since a declined ask can be withdrawn and re-asked. So every re-ask gets
+the sentence a double tap gets.
+
+A request on a **`chat`** post is **422** — it asks nothing of anybody, so there is
+nothing to ask to join.
 
 Blocks are consulted **in both directions**, and the refusal is the same sentence
 as a deleted post. Telling the asker they have been blocked tells them a fact
@@ -1950,6 +2422,57 @@ about somebody else's decision, which is the one thing a block should not leak.
 `accept`, `decline` and `withdraw`. The last is the asker's alone, and
 `withdrawn` is a separate status from `declined` because afterwards, which of the
 two people ended it is the thing worth knowing.
+
+**A decline is never delivered to the asker.** Nothing is pushed, and nothing the
+asker reads changes. In their `GET /board/requests` a declined ask is
+`status: "pending"`, `decidedAt: null`, `live` while its event and post are, and
+it lapses with them like any unanswered ask; it sorts with the pending ones. It
+still counts toward their five outstanding until it lapses — a decline that
+freed a slot would tell somebody at the cap that one of their asks was refused.
+Withdrawing a declined ask succeeds exactly as withdrawing a pending one does,
+and withdrawing twice succeeds again. Only an accepted ask cannot be withdrawn,
+and the asker was told about that one. A withdrawn pending ask becomes
+`withdrawn`; a withdrawn **declined** ask keeps the author's `declined` and
+`decided_at` — their decision is not the asker's to rewrite — and records
+`asker_withdrawn_at`, so the asker sees it `withdrawn` and it frees their slot.
+
+**A block reads as a withdrawn post.** To the asker, an ask to somebody blocked
+either way — pending or declined alike — shows exactly as an ask on a post its
+author took down: `post.body: null`, `live: false`, and it no longer counts
+toward their five. A live ask with the post's words, beside a board that no
+longer lists the post, would tell them which of the two had happened.
+
+**`GET /board/requests` pages by what still matters.** Each direction is the live
+asks first (newest first), then the settled ones (accepted before withdrawn, or
+answered, for the author), then the lapsed ones, up to 50. A lapsed ask stays
+`pending` for ever, because nothing closes one when its night ends, so ordering
+"pending first" let fifty of them push the accepted asks — the ones with a
+conversation behind them — off the page.
+
+**Accepting an offer spends a seat** (SCRUM-514). On an `offer` with a number of
+seats, `spacesLeft` drops by one, in the same transaction as the claim and the
+conversation: of two accepts racing for the last seat exactly one gets it, and
+the other is **409** *"That offer is full"* — said to the author, and the ask
+stays pending. A CHECK keeps it from going below zero. An offer that never named
+its seats (`spacesLeft: null`) has none to run out of. Asking on an offer
+already at `spacesLeft: 0` is the same **409** — the board already shows it
+full.
+
+**Every refusal of an accept** (`PATCH /board/requests/:id` with
+`action: "accept"`):
+
+| Status | Sentence | When |
+|---|---|---|
+| 404 | Request not found | No such ask, or not yours to answer or withdraw |
+| 403 | Only the person who was asked can answer | The asker tried to accept or decline |
+| 409 | That request has already been answered | It is not pending any more (a double tap included) |
+| 409 | That post was taken down | Its post was withdrawn or removed, before or during the accept |
+| 409 | That event has ended | Its event is over |
+| 409 | This request can no longer be accepted | A block either way, **or** a pair whose conversation was closed — one status and one sentence for both, so the answer does not say which |
+| 409 | That offer is full | No seat left on the offer |
+
+The claim, the seat and the conversation are one transaction, so any of the
+last five leaves the ask pending and the seat where it was.
 
 **A decision is still possible after the doors open**, unlike everything else on
 this surface. A pending request holds a slot in the asker's outstanding cap, so
@@ -2060,7 +2583,7 @@ not exist yet; see `docs/MODERATION_RESPONSE.md`.
 | GET | `/categories` | List all categories |
 | GET | `/amenities` | The amenity vocabulary — what an event can say it offers |
 | GET | `/work-fields` | The eighteen coarse fields of work, as `{ slug, label }` |
-| GET | `/checkins/active` | Get user's active check-ins |
+| GET | `/checkins/active` | Get user's active check-ins. Each carries `kind` (`venue_day` is a Go Live: label it by `event.venueName`), `expiresAt` (a Go Live's end; null at an event) and `stay`. A Go Live past its end is never listed, swept or not |
 | POST | `/notifications/token` | Register push token |
 | DELETE | `/notifications/token` | Remove push token |
 | GET | `/notifications` | The notifications centre, newest first |
@@ -2133,6 +2656,9 @@ them any more. Rows written before that are hidden, and retention removes them.
 | An event you RSVP'd to or saved changes time or place, is cancelled, or starts in an hour | Going, maybe, waitlisted and saved | `event:{eventId}`, replaced in place: only the latest state is true |
 | An organiser announcement | Everyone in the room | Stacked with its event, never replaced |
 | Friend request / accepted, match, reveal, board, message request | The person it is about, immediately | One each |
+| A crew invite | The friend invited (`crew_invite`, `crewId`), naming nobody | One each |
+| "We're here" | Every other crew member who has not muted the crew chat or blocked the tapper (`crew_here`, `crewId`, `chatGroupId`), once per person per night; no name, no place | One each |
+| A Blend | Everyone the Blend room lets in, but the person whose like made it (`blend`, `blendId`, `chatGroupId`); no name, nothing about who liked first | One each |
 | An event you checked in to ends | Everyone with a check-in row, once per event, within ~5 minutes of the end (only events that ended in the last 6 hours). `data: { type: "rating_request", eventId }` → the app opens `/rate/[eventId]`. People with a mutual like to rate (blocks excluded) get "rate the people you met"; the rest "rate the night"; somebody who already rated and has nobody to rate is skipped | `rate:{eventId}` on `events`, replaced in place |
 
 A room you muted (`POST /chat/groups/:id/mute`) sends you neither the reply push

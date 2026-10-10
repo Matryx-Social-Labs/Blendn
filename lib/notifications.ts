@@ -333,7 +333,22 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     }
     case 'group_message': {
       if (data.chatGroupId) {
-        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any }
+        /*
+         * A reply in a crew's or a Blend's room opens as that room (the
+         * server's `kind`, step 9 review H2): opened as an event's it said
+         * "Event chat", offered an event's Room info and read a closed Blend
+         * as a load error. Anything else, a venue day's room included, is an event's.
+         */
+        const kind = data.kind === 'crew' || data.kind === 'blend' ? data.kind : null
+        target = {
+          pathname: '/chat/[id]',
+          params: {
+            id: String(data.chatGroupId),
+            ...(kind ? { kind } : {}),
+            ...(kind === 'crew' && data.crewId ? { crewId: String(data.crewId) } : {}),
+            ...(kind === 'blend' && data.blendId ? { blendId: String(data.blendId) } : {}),
+          } as any,
+        }
       } else {
         target = '/(tabs)/chat'
       }
@@ -443,6 +458,33 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     case 'board_request_accepted': {
       target = data.conversationId
         ? { pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any }
+        : '/(tabs)/chat'
+      break
+    }
+    /*
+     * Crews (step 9). None of these names anybody, and none renders a
+     * preview: an invite is answered on the crews screen; "We're here" opens
+     * the crew's chat, where its line is; a Blend opens its room.
+     */
+    case 'crew_invite': {
+      target = '/crews'
+      break
+    }
+    case 'crew_here': {
+      target = data.chatGroupId
+        ? {
+            pathname: '/chat/[id]',
+            params: { id: String(data.chatGroupId), kind: 'crew', ...(data.crewId ? { crewId: String(data.crewId) } : {}) } as any,
+          }
+        : '/crews'
+      break
+    }
+    case 'blend': {
+      target = data.chatGroupId
+        ? {
+            pathname: '/chat/[id]',
+            params: { id: String(data.chatGroupId), kind: 'blend', ...(data.blendId ? { blendId: String(data.blendId) } : {}) } as any,
+          }
         : '/(tabs)/chat'
       break
     }

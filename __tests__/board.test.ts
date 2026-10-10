@@ -348,7 +348,7 @@ describe('the Banter counts board requests as something to show', () => {
 
   it('does not claim an empty inbox under them', () => {
     expect(chat()).toContain(
-      'const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0'
+      'const hasHeaderContent = liveRooms.length > 0 || blendRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0'
     )
     expect(chat()).toContain('onCount={setBoardRequestCount}')
   })

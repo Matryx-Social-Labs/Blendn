@@ -65,6 +65,9 @@ const stripComments = (s: string) =>
  */
 const ALLOWED: Record<string, string> = {
   'app/(tabs)/events.tsx': 'pull-to-refresh and two retry buttons — all user intent',
+  'app/crews/[crewId].tsx':
+    '"We\u2019re here" is a tap, and it names the event you are checked in at now: a cached ' +
+    'check-in from before you left would tell your crew you are somewhere you are not',
   'components/PresenceMonitor.tsx':
     'presence is correctness, not freshness: a stale check-in decides whether ' +
     'somebody is shown as in the room',

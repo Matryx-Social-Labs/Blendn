@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { BOARD_ENABLED } from '../../lib/board'
+import { crewRoomTitle, crewRoomsFrom, type CrewRoomRow } from '../../lib/crews'
 import { useToast } from '../../components/Toast'
 import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { preloadImages } from '../../components/OptimizedImage'
@@ -214,6 +215,8 @@ function ChatInner() {
   const reduceMotion = useReducedMotion()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
+  /** Crew chats and open Blend rooms (`rooms` on `GET /chat/groups`, step 9). */
+  const [crewRooms, setCrewRooms] = useState<CrewRoomRow[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [listFailed, setListFailed] = useState(false)
@@ -297,6 +300,55 @@ function ChatInner() {
     [membership.mutes]
   )
   const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
+  /*
+   * Your open Blends (step 9) sit beside the rooms you are standing in — a
+   * Blend is tonight's, and closes 12 h after the night. Crew chats are
+   * conversations, in the list below.
+   */
+  const blendRooms = useMemo(
+    () => crewRooms.filter((r) => r.kind === 'blend' && !membership.left.has(r.id)),
+    [crewRooms, membership.left]
+  )
+  const openCrewRoom = useCallback((r: CrewRoomRow) => {
+    setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
+    router.push({
+      pathname: '/chat/[id]',
+      params: {
+        id: r.id,
+        roomName: crewRoomTitle(r),
+        kind: r.kind,
+        ...(r.crewId ? { crewId: r.crewId } : {}),
+        ...(r.blendId ? { blendId: r.blendId } : {}),
+      } as never,
+    })
+  }, [])
+
+  /* Crew chats: friends, named by first name, and never the event's anonymity. */
+  const myId = user?.id
+  const crewRows = useMemo<InboxRow[]>(() => {
+    const now = new Date()
+    return crewRooms
+      .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
+      .map((r) => {
+        const last = r.lastMessage
+        const preview = last?.content.trim()
+          ? previewWithSender(last.content, { fromMe: last.user.id === myId, name: last.user.name ?? undefined })
+          : 'No messages yet'
+        return {
+          id: `c:${r.id}`,
+          title: r.name,
+          preview,
+          timeLabel: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
+          avatarUrl: null,
+          kind: 'group' as const,
+          unread: r.unreadCount > 0,
+          muted: roomMuted(r.id),
+          sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
+          searchText: `${r.name} ${preview}`.toLowerCase(),
+          open: () => openCrewRoom(r),
+        }
+      })
+  }, [crewRooms, membership.left, myId, roomMuted, openCrewRoom])
 
   /*
    * The merged list.
@@ -358,9 +410,10 @@ function ChatInner() {
           open: () => handleGroupChatPress(c),
         }
       }),
+      ...crewRows,
     ]
     return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, rooms, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
+  }, [personalChats, rooms, crewRows, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
 
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim().toLowerCase()
@@ -501,8 +554,17 @@ function ChatInner() {
       // Each row carries your mute of it; the store is what the rows read.
       for (const room of rooms) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
 
-      if (loadId === undefined || latestLoadIdRef.current === loadId) setGroupChats(groupChatData)
-      if (cacheKey) queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
+      // Crew chats and open Blends come with page 1 (`rooms`); each carries your mute of it too.
+      const others = crewRoomsFrom(result.data)
+      for (const r of others) rememberRoomMute(r.id, r.mute)
+      if (loadId === undefined || latestLoadIdRef.current === loadId) {
+        setGroupChats(groupChatData)
+        setCrewRooms(others)
+      }
+      if (cacheKey) {
+        queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
+        queryCache.set(`${cacheKey}_rooms`, others, GROUP_CHAT_CACHE_TTL)
+      }
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
       return true
     } catch (error) {
@@ -606,6 +668,8 @@ function ChatInner() {
       : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
 
     if (cachedGroupChats) setGroupChats(cachedGroupChats)
+    const cachedCrewRooms = force ? null : queryCache.get<CrewRoomRow[]>(`${groupCacheKey}_rooms`)
+    if (cachedCrewRooms) setCrewRooms(cachedCrewRooms)
     if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
     if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
 
@@ -947,7 +1011,7 @@ function ChatInner() {
         </Text>
       ) : null}
 
-      {liveRooms.length > 0 ? (
+      {liveRooms.length > 0 || blendRooms.length > 0 ? (
         <View style={styles.section}>
           <BanterHeading title="Live now" />
           <View style={styles.liveList}>
@@ -959,6 +1023,14 @@ function ChatInner() {
                 memberCount={c.participant_count}
                 muted={roomMuted(c.chat_room_id)}
                 onPress={() => handleGroupChatPress(c)}
+              />
+            ))}
+            {blendRooms.map((r) => (
+              <BanterLiveRoom
+                key={r.id}
+                title={crewRoomTitle(r)}
+                muted={roomMuted(r.id)}
+                onPress={() => openCrewRoom(r)}
               />
             ))}
           </View>
@@ -1015,7 +1087,7 @@ function ChatInner() {
    * Live rooms or requests with nothing else is not an empty inbox, so it does
    * not say "No conversations yet" under them.
    */
-  const hasHeaderContent = liveRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
+  const hasHeaderContent = liveRooms.length > 0 || blendRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
 
   return (
     <View style={styles.container}>
