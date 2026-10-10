@@ -26,7 +26,14 @@ jest.mock('../components/ui/PlaceholderBanner', () => ({ PlaceholderBanner: () =
 jest.mock('../components/motion/ScalePress', () => ({ __esModule: true, default: require('react-native').Pressable }))
 jest.mock('../components/ui/Text', () => ({ Text: require('react-native').Text }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null }))
+const mockTrayProps: Array<{ visible: boolean; size?: string; buttons: { label: string }[] }> = []
+jest.mock('../components/ActionTray', () => ({
+  __esModule: true,
+  default: (props: { visible: boolean; size?: string; buttons: { label: string }[] }) => {
+    mockTrayProps.push(props)
+    return null
+  },
+}))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive: jest.fn() } }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
@@ -102,6 +109,16 @@ describe('the place screen', () => {
     expect(router.push).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/chat/[id]', params: expect.objectContaining({ id: 'g1', venueId: 'v1', roomName: 'The Humming Tree' }) })
     )
+  })
+
+  it('opens the Go Live sheet tall enough for every window and Cancel (drive, 2026-10-09)', async () => {
+    ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue({ youAreLive: false, expiresAt: null }))
+    await mount()
+    await act(async () => { fireEvent.press(screen.getByLabelText('Go Live')) })
+    const sheet = mockTrayProps[mockTrayProps.length - 1]
+    expect(sheet.visible).toBe(true)
+    expect(sheet.buttons.map((b) => b.label)).toEqual(['20 minutes', '45 minutes', 'An hour', 'Stay while Blendn is open here', 'Cancel'])
+    expect(sheet.size).toBe('expanded')
   })
 
   it('says a "stay" window for a screen reader, without a countdown', async () => {
