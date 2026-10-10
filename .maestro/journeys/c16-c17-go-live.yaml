@@ -66,7 +66,7 @@ tags:
     timeout: 10000
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "LIVE · .* left"
+    visible: "Live here\\. .* left"
     timeout: 45000
 - assertNotVisible: "Go Live"
 - assertVisible: "You and .* others"
@@ -133,11 +133,11 @@ tags:
     visible: "Go live again.*20 minutes"
     timeout: 30000
 - assertVisible: ".*Only people live here.*"
-- assertNotVisible: "LIVE · .*"
+- assertNotVisible: "Live here.*"
 - takeScreenshot: c16-a-after
 - tapOn: "Go live again.*20 minutes"
 - extendedWaitUntil:
-    visible: "LIVE · .* left"
+    visible: "Live here\\. .* left"
     timeout: 45000
 
 # --- The second window at A tonight: no second prompt (PL-M02, once a night) ---
@@ -159,7 +159,7 @@ tags:
 - tapOn: "Banter"
 # Wait for the list itself, so the absence below is not read off an empty screen.
 - extendedWaitUntil:
-    visible: ".*(Live now|Recent|Requests|No conversations yet).*"
+    visible: ".*(Live now|Recent|Earlier|Requests|No conversations yet).*"
     timeout: 30000
 - assertNotVisible: ".*${PLACE_A}.*"
 - takeScreenshot: c17-banter-after
@@ -178,14 +178,14 @@ tags:
 - tapOn: "Go Live"
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "LIVE · .* left"
+    visible: "Live here\\. .* left"
     timeout: 45000
 - extendedWaitUntil:
     visible: "Still at .*"
     timeout: 1080000
 - tapOn: "Extend 45 min · free"
 - extendedWaitUntil:
-    visible: "LIVE · 4[0-9]:[0-9]{2} left"
+    visible: "Live here\\. 4[0-9] minutes left"
     timeout: 45000
 - takeScreenshot: c16-b-extended
 - tapOn: "Stop being live"

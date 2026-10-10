@@ -1,0 +1,47 @@
+# TQ-C17 (SCRUM-559) PL-M04, as built: someone not live sees the place's count
+# as a bucket and the room locked; five counterparts go live through the API
+# (between the two halves of this flow) and the bucket moves; once you go live
+# the count is the others ("You and 5–9 others"). Also the claim link on an
+# unclaimed place (TQ-C16) and the "stay" wording.
+#
+# Two halves: this one (before), then five lane attendees POST
+# /venues/:id/live through the API (log the lanes on SCRUM-208), then
+# c17-bucket-after.yaml. Signed in already. Env: PLACE (regex of an
+# unclaimed, fenced place's name), LAT, LNG (inside it).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c17
+  - needs-live-place
+---
+- setLocation:
+    latitude: ${LAT}
+    longitude: ${LNG}
+- launchApp
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Places"
+- extendedWaitUntil:
+    notVisible: "Loading places"
+    timeout: 30000
+- tapOn: ".*${PLACE}.*"
+- extendedWaitUntil:
+    visible: "Go Live"
+    timeout: 30000
+- assertVisible: "Under 5 live here"
+- assertVisible: ".*Only people live here.*"
+# The claim page is the server's (dashboard host), shown only while unclaimed.
+- assertVisible: "Own this place\\? Claim it"
+- takeScreenshot: c17-bucket-before
+- tapOn: "Go Live"
+- extendedWaitUntil:
+    visible: "Stay while Blendn is open here"
+    timeout: 10000
+# Close the sheet from its backdrop (Cancel sits below the fold on a small phone).
+- tapOn:
+    point: "50%,15%"
+- extendedWaitUntil:
+    notVisible: "Stay while Blendn is open here"
+    timeout: 10000
+# Then: five counterparts go live through the API, and c17-bucket-after.yaml.
