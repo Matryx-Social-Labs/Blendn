@@ -1,0 +1,15 @@
+appId: com.matryxsociallabs.blendn
+---
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Reveal our crew|Reveal me"
+    timeout: 20000
+- assertVisible: "Blend with Comet S9"
+- takeScreenshot: push-opened-blend
+- tapOn: "Open the chat"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000

@@ -286,6 +286,12 @@ function GroupChatInner() {
    * pair, a crew when it dissolves — and the room becomes one line saying so.
    */
   const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
+  /*
+   * Back, or — opened from a push with nothing underneath — the Banter. A
+   * closed Blend opened from its push offered a Back that went nowhere
+   * (driven on the simulator, pass 2).
+   */
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
   const crewIdParam = typeof params.crewId === 'string' ? params.crewId : roomInfo.crewId
   const blendIdParam = typeof params.blendId === 'string' ? params.blendId : roomInfo.blendId
   const [closedLine, setClosedLine] = useState<string | null>(null)
@@ -1081,7 +1087,7 @@ function GroupChatInner() {
             imageUrl={eventImage || null}
             subtitle={roomSubtitle(roomName || defaultRoomName(roomKind), eventTitle || undefined, memberCount)}
             muted={muted}
-            onBack={() => router.back()}
+            onBack={goBack}
             onInfo={() => blendIdParam
               ? router.push({ pathname: '/blend/[blendId]', params: { blendId: blendIdParam, fromChat: '1' } })
               : crewIdParam
@@ -1097,7 +1103,7 @@ function GroupChatInner() {
             } as never)}
           />
         {closedLine ? (
-          <RoomClosedNotice line={closedLine} onBack={() => router.back()} />
+          <RoomClosedNotice line={closedLine} onBack={goBack} />
         ) : notLive ? (
           <RoomLeftState kind="not_live" rejoining={false} onRejoin={goLiveAgain} />
         ) : outside ? (

@@ -30,7 +30,9 @@ describe('crew and Blend rooms in the chat screen', () => {
     expect(chat).toContain('setClosedLine(null)')
     // Opened without a kind (an older push, a deep link): found in `rooms` (H2).
     expect(chat).toContain('roomKindParam(params.kind) ?? roomInfo.kind')
-    expect(chat).toContain('<RoomClosedNotice line={closedLine}')
+    expect(chat).toContain('<RoomClosedNotice line={closedLine} onBack={goBack} />')
+    // Opened from a push there may be nothing to go back to: then the Banter.
+    expect(chat).toContain("router.canGoBack() ? router.back() : router.replace('/(tabs)/chat')")
   })
 })
 
