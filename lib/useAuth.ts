@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
+import { syncPurchasesUser } from './purchases'
 import { clearRoomSignal } from './roomSignal'
 import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
@@ -96,14 +97,9 @@ const updateAuthState = (newState: Partial<AuthState>) => {
 
   if (globalAuthState.user?.id !== previousUserId) {
     Sentry.setUser(globalAuthState.user ? { id: globalAuthState.user.id } : null)
-    /*
-     * RevenueCat buys as this account and nobody else (step 11): every path
-     * that signs in, restores a session or signs out comes through here.
-     * Loaded when needed, as `goLive` is below: the native SDK has no place on
-     * the auth path's import graph.
-     */
-    const nextUserId = globalAuthState.user?.id ?? null
-    void import('./purchases').then((m) => m.syncPurchasesUser(nextUserId)).catch(() => {})
+    // RevenueCat buys as this account and nobody else (step 11): every path
+    // that signs in, restores a session or signs out comes through here.
+    void syncPurchasesUser(globalAuthState.user?.id ?? null)
   }
 }
 
