@@ -86,11 +86,13 @@ it('tries again on the next change after a refusal, since it was never recorded 
   expect(mockNative.setFeatureState.mock.calls.map((c) => c[0].id).sort()).toEqual([101, 202])
 })
 
-it('stops retrying once unmounted', async () => {
-  mockNative.setFeatureState.mockRejectedValue(new Error('source not ready'))
+it('stops retrying once unmounted, even for a refusal that arrives afterwards', async () => {
+  let refuse: (e: Error) => void = () => undefined
+  mockNative.setFeatureState.mockImplementation(() => new Promise((_, reject) => (refuse = reject)))
   const view = await render(draw([lupa]))
   await flush()
   await view.unmount()
+  await act(async () => refuse(new Error('source not ready')))
   for (let i = 0; i < 5; i++) {
     await act(async () => {
       jest.advanceTimersByTime(5_000)
