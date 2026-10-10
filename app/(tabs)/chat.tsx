@@ -310,7 +310,6 @@ function ChatInner() {
     [crewRooms, membership.left]
   )
   const openCrewRoom = useCallback((r: CrewRoomRow) => {
-    openRoomRef.current = r.id
     setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
     router.push({
       pathname: '/chat/[id]',
@@ -323,6 +322,33 @@ function ChatInner() {
       } as never,
     })
   }, [])
+
+  /* Crew chats: friends, named by first name, and never the event's anonymity. */
+  const myId = user?.id
+  const crewRows = useMemo<InboxRow[]>(() => {
+    const now = new Date()
+    return crewRooms
+      .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
+      .map((r) => {
+        const last = r.lastMessage
+        const preview = last?.content.trim()
+          ? previewWithSender(last.content, { fromMe: last.user.id === myId, name: last.user.name ?? undefined })
+          : 'No messages yet'
+        return {
+          id: `c:${r.id}`,
+          title: r.name,
+          preview,
+          timeLabel: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
+          avatarUrl: null,
+          kind: 'group' as const,
+          unread: r.unreadCount > 0,
+          muted: roomMuted(r.id),
+          sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
+          searchText: `${r.name} ${preview}`.toLowerCase(),
+          open: () => openCrewRoom(r),
+        }
+      })
+  }, [crewRooms, membership.left, myId, roomMuted, openCrewRoom])
 
   /*
    * The merged list.
@@ -384,31 +410,10 @@ function ChatInner() {
           open: () => handleGroupChatPress(c),
         }
       }),
-      // Crew chats: friends, named by first name, and never the event's anonymity.
-      ...crewRooms
-        .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
-        .map((r) => {
-          const last = r.lastMessage
-          const preview = last?.content.trim()
-            ? previewWithSender(last.content, { fromMe: last.user.id === user?.id, name: last.user.name ?? undefined })
-            : 'No messages yet'
-          return {
-            id: `c:${r.id}`,
-            title: r.name,
-            preview,
-            timeLabel: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
-            avatarUrl: null,
-            kind: 'group' as const,
-            unread: r.unreadCount > 0,
-            muted: roomMuted(r.id),
-            sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
-            searchText: `${r.name} ${preview}`.toLowerCase(),
-            open: () => openCrewRoom(r),
-          }
-        }),
+      ...crewRows,
     ]
     return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, rooms, crewRooms, membership.left, user?.id, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress, openCrewRoom])
+  }, [personalChats, rooms, crewRows, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
 
   const [query, setQuery] = useState('')
   const trimmedQuery = query.trim().toLowerCase()
