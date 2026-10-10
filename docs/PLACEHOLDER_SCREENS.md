@@ -905,9 +905,9 @@ Room ─ Crews ─▶ a crew card: up to two crew-held lines ("Both crews are in
 
 | Surface | File | Hemanth ticket |
 |---|---|---|
-| Languages, home, sign & this-or-that | `app/edit-about-you.tsx` | see the step 10 report |
-| The person sheet's shared lines, sign chip and badges | `components/blendn/PersonCard.tsx` | see the step 10 report |
-| The crew card's crew-held lines and nights together | `components/crews/CrewParts.tsx` | see the step 10 report |
+| Languages, home, sign & this-or-that | `app/edit-about-you.tsx` | SCRUM-590 |
+| The person sheet's shared lines, sign chip and badges | `components/blendn/PersonCard.tsx`, `app/user/[id].tsx` | SCRUM-591 |
+| The crew card's crew-held lines and nights together | `components/crews/CrewParts.tsx` | SCRUM-592 |
 
 ### Rules the design must not break
 
