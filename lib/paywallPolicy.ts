@@ -40,9 +40,6 @@ export const RECAP_COOLDOWN_MS = 7 * DAY_MS
 /** A night runs to this local hour, as a venue day does. */
 export const NIGHT_RESETS_AT_HOUR = 6
 
-/** Triggers that only ever open on a tap. */
-const TAP_ONLY: ReadonlySet<PaywallTrigger> = new Set(['perk', 'profile'])
-
 /** When each trigger's paywall was last shown and last dismissed (epoch ms). */
 export type PaywallMemory = {
   shown: Partial<Record<PaywallTrigger, number>>
@@ -82,7 +79,6 @@ export type PaywallContext = {
 /** May this trigger's paywall open now. */
 export function mayOpenPaywall(trigger: PaywallTrigger, memory: PaywallMemory, now: number, ctx: PaywallContext): boolean {
   if (ctx.userInitiated) return true
-  if (TAP_ONLY.has(trigger)) return false
   if (ctx.automaticShownThisSession) return false
   if (isQuietSurface(ctx.pathname, ctx.roomOpen)) return false
   switch (trigger) {
@@ -100,7 +96,9 @@ export function mayOpenPaywall(trigger: PaywallTrigger, memory: PaywallMemory, n
       const shown = memory.shown.recap
       return shown === undefined || now - shown >= RECAP_COOLDOWN_MS
     }
-    default:
+    case 'perk':
+    case 'profile':
+      // Only ever on a tap.
       return false
   }
 }
