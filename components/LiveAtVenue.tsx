@@ -187,6 +187,8 @@ export function LiveAtVenue() {
       buttons={visible?.buttons ?? []}
       onClose={closeTray}
       layout="stack"
+      // Three actions under a two-line title: room for all of them without scrolling.
+      size="expanded"
     />
   )
 }
