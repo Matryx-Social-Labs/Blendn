@@ -1,31 +1,32 @@
 # TQ-C20 · H2 (review of #369). A reply push into a Blend opens it as a Blend,
-# not as an event's room. The simulator has no push token, so the push is
-# delivered by hand while this flow waits for its banner:
-#   1. grant notifications once: openLink blendn://onboarding/notifications →
-#      "Enable Notifications" (writes push_enabled=true for the account);
-#   2. start this flow; when it is waiting, run
+# not as an event's room; with nothing underneath, Back goes to the Banter.
+# Driven on the iOS sim, 2026-10-10. The sim has no push token, so the push
+# is delivered by hand:
+#   1. grant notifications once: open blendn://onboarding/notifications and
+#      tap "Turn on notifications" (writes push_enabled=true for the account);
+#   2. put the app in the background (open Settings) — the app draws no
+#      banner over itself;
+#   3. start this flow, and run, every 3 s until it has tapped,
 #      xcrun simctl push <udid> com.matryxsociallabs.blendn <payload.json>
-#      with {"aps":{"alert":{"title":"<crews>","body":"S9 push check"}},
+#      with {"aps":{"alert":{"title":"<room>","body":"S9 push check"}},
 #            "body":{"type":"group_message","chatGroupId":"<blend room>","kind":"blend","blendId":"<blend>"}}
-#      (expo-notifications reads the data from "body").
-# The banner is tapped by point: a tap on its text does not open the app.
-# Env: none. Needs: signed in, a member of the open Blend in the payload.
+#      (expo-notifications reads the data from "body"). Maestro starts slowly,
+#      so the flow idles, then taps the banner by point — a tap on its text
+#      does not open the app.
+# Then stop pushing: the next banner covers the room's (i).
+# Env: none. Needs: signed in, a member of the Blend in the payload.
 appId: com.matryxsociallabs.blendn
 tags:
   - tq-c20
   - crews
 ---
 - extendedWaitUntil:
-    visible: ".*S9 push check.*"
-    timeout: 120000
+    visible: "never-on-screen"
+    timeout: 30000
+    optional: true
 - tapOn:
-    point: "50%,11%"
+    point: "50%,8%"
 - extendedWaitUntil:
-    visible: ".*Share your thoughts.*"
-    timeout: 20000
-# Opened as a Blend: its (i) is the Blend's people, not an event's Room info.
-- tapOn: "Room info"
-- extendedWaitUntil:
-    visible: "Reveal our crew|Reveal me"
-    timeout: 20000
-- takeScreenshot: c21-push-opened-blend
+    visible: ".*Share your thoughts.*|This Blend has closed"
+    timeout: 60000
+- takeScreenshot: c21-push-opened

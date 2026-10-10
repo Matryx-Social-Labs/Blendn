@@ -1,7 +1,0 @@
-appId: com.matryxsociallabs.blendn
----
-- tapOn: "Turn on notifications"
-- tapOn:
-    text: "Allow"
-    optional: true
-- takeScreenshot: notif-granted
