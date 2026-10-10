@@ -117,10 +117,14 @@ describe('a refused Go Live on screen (PL-CU01)', () => {
     expect(router.push).toHaveBeenCalledWith('/event/e1')
   })
 
-  it('PLUS_REQUIRED is the Plus placeholder, not a failure', () => {
+  it('PLUS_REQUIRED, when the paywall may not come by itself, says why and opens it on a tap (step 11)', () => {
     const showTray = jest.fn()
-    showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.'), place, { showTray, closeTray: jest.fn() })
-    expect(showTray.mock.calls[0][0]).toBe('Blendn+ is coming')
+    const seePlus = jest.fn()
+    showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.'), place, { showTray, closeTray: jest.fn(), seePlus })
+    const [title, , buttons] = showTray.mock.calls[0]
+    expect(title).toBe('Staying live is part of Blendn+')
+    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')?.onPress()
+    expect(seePlus).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -157,8 +161,10 @@ describe('the screens read the server', () => {
     expect(read('lib/activeRoom.ts')).toContain('eventTitle: roomDisplayTitle(checkin)')
   })
 
-  it('the expiry prompt offers the free extension and keeps "stay with Plus" locked', () => {
+  it('the expiry prompt offers the free extension and a real "stay", no locked placeholder (step 11)', () => {
     expect(LIVE).toContain("label: 'Extend 45 min · free'")
-    expect(LIVE).toContain('showPlusPlaceholder(showTray, closeTray)')
+    expect(LIVE).toContain("label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay')")
+    expect(LIVE).toContain("'Stay live till I leave · Blendn+'")
+    expect(LIVE).not.toMatch(/locked|showPlusPlaceholder/i)
   })
 })

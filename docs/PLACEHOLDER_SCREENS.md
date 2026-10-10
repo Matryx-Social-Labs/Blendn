@@ -793,15 +793,21 @@ available).
   Precise Location, a fix); Go Live sends any fix up to the server's 150 m and
   lets the server judge, and "Try Again" on a weak fix runs Go Live again.
   "Stay" is sent as asked: whether it is Blendn+'s is the server's to say
-  (`PLUS_REQUIRED`), which today it is not; it holds only while the app pings
-  from the place, in the foreground.
+  (`PLUS_REQUIRED`, in a city where Blendn+ is gated; in its launch season
+  stay is everyone's); it holds only while the app pings from the place, in
+  the foreground. A `PLUS_REQUIRED` opens the paywall (§13), trigger
+  `go_live_expiry`.
 - **The expiry prompt**: five minutes before a fixed window ends, wherever you
   are in the app, **at most once a night** per place (a "stay" window is never
   prompted — it follows you). "Still at ‹place›?" · "You stop being live at
   9:20 PM." · **Extend 45 min · free** (going live again extends, never
-  shortens) · **Stay with Blendn+ · locked** · Let it end.
-- **"Stay with Blendn+" is a placeholder.** Blendn+ is step 11; the row opens a
-  "Blendn+ is coming" note, never a purchase. So does a `PLUS_REQUIRED` answer.
+  shortens) · **Stay live till I leave · Blendn+** · Let it end.
+- **"Stay live till I leave"** asks the server to stay (step 11). In launch
+  season it just works; where Blendn+ is gated the server answers
+  `PLUS_REQUIRED` and the paywall (§13) opens — at most once a night and once
+  a session by itself, and never over a chat; when its policy says not now, a
+  tray says "Staying live is part of Blendn+" with **See Blendn+**, which
+  always opens it.
 - **When it ends** (`live:ended`), a toast says so — "You're no longer live at
   ‹place›." / "An event just started at ‹place›…" — and the place, the room
   and the Banter re-read. Nothing is said for an end you made.
@@ -812,7 +818,7 @@ available).
 |---|---|
 | **The extension is free** | 20/45/60 stay free (ROADMAP, Pricing); only "stay" may ever be Plus |
 | **Once a night** | A prompt every window would nag; asked once per venue day on this phone |
-| **Never a paywall in the prompt yet** | No purchase exists until step 11; a locked row, not a dead buy button |
+| **The paywall only after the server says so** | The prompt offers staying; only a `PLUS_REQUIRED` from the server opens the paywall. The app never decides who has Plus |
 
 ---
 
@@ -832,10 +838,78 @@ Banter's list at the same moment (the server lists it only while you are live).
 | §10 A place | SCRUM-555 |
 | §11 Go Live sheet, expiry prompt, Plus placeholder | SCRUM-556 |
 | §12 The room when not live (and the place's locked room) | SCRUM-557 |
+| §13 The Blendn+ paywall | SCRUM-582 (Hemanth) |
 
 ---
 
-## 13. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
+## 13. The Blendn+ paywall — `app/plus.tsx`
+
+**Added 2026-10-10 (step 11).** A modal, opened only through `openPaywall`
+(`lib/paywall.ts`) with a trigger the server logs. Placeholder for Hemanth's
+design.
+
+### What it does
+
+- **What Plus is**, exactly what exists: stay live while I'm here; your full
+  night history (free keeps the last 3). Partner perks and crew extras join
+  when they are built (SCRUM-584) — nothing is listed that cannot be used.
+- **Your state**, from `GET /me/plus`: "Blendn+ until 10 Nov 2026" / "Night
+  Pass until 11 Oct 2026, 4:30 AM".
+- **Never sells what is free.** Plans show only in a gated moment — a
+  `PLUS_REQUIRED` (`go_live_expiry`), locked nights (`recap`) — or when the
+  server says Blendn+ is for sale to this person (`gated`). In a launch season
+  the screen says it is free there and lists no plans; Settings' row reads
+  "Blendn+ · free during launch in your city" and opens an info tray instead.
+- **The packages** of RevenueCat's current offering: Monthly (`$rc_monthly`),
+  3 months (`$rc_three_month`), Yearly (`$rc_annual`), and Night Pass · 24
+  hours (`night_pass`) — each with its length and **the store's price string**,
+  the price the most prominent thing on the row (App Store 3.1.2).
+- The renewal sentence, **Terms of Use** and **Privacy Policy** beside the
+  buttons; **Restore purchases** ("No purchases to restore" when there is
+  none); **Manage subscription** (RevenueCat's management URL, else the store's
+  subscriptions page).
+- After a purchase or restore: "Confirming with the store…" while it asks
+  `GET /me/plus` every 3 s for up to a minute, then "You're in." — or "Taking
+  longer than usual — it'll unlock as soon as the store confirms." A
+  **pending** payment (UPI, Ask to Buy) is not polled: it says so, and Settings
+  and Going re-read on return. Each state is announced to VoiceOver.
+- The store's errors in words: already bought (with Manage subscription), a
+  purchase belonging to another Blendn account, purchases not allowed, no
+  connection; "Couldn't load prices" with Try again.
+- **Not now** in the header, always visible ("Done" once something was bought
+  or is confirming).
+- No RevenueCat key in the build: the screen still opens and says "Purchases
+  aren't available yet."
+
+### When it opens
+
+| Trigger | From | Cooldown when it comes by itself |
+|---|---|---|
+| `go_live_expiry` | a `PLUS_REQUIRED` on "stay" (the expiry prompt, the Go Live sheet) | once a night (the venue day, 06:00) |
+| `recap` | the Going tab's "{n} more nights with Blendn+" row | weekly (the row itself is a tap: always opens) |
+| `profile` | Settings → Account → Blendn+ | none: you asked |
+| `second_event` / `first_match` | not wired yet (policy only) | 14 days after a dismiss of either |
+| `perk` | not wired yet (no perk chips yet) | only on a tap |
+
+At most one paywall arrives by itself per app session, and never over
+onboarding, an event screen (the check-in), a chat or the Blend'n room. A tap
+on anything that says Blendn+ always opens it.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The server unlocks, never the store or the app** | The webhook writes the entitlement; the screen only asks `GET /me/plus`. RevenueCat's customer info never decides what you have |
+| **No buying as nobody** | The buttons are off unless RevenueCat's user is this account (`canBuyAs`): an anonymous purchase names nobody the server knows |
+| **Packages stay listed and buyable with Plus on** | App Review signs in with a granted account and must be able to buy every product (guideline 2.1(b)) |
+| **Prices come from the store** | `priceString`, never a number in the app: the store sets the local price and tax |
+| **Never on the never-sold list** | Who liked you, cap bypass, seeing a venue without going live, reveal bypass, boosting — not as features, not as teasers |
+| **The stores only** | No other payment provider and no web checkout (App Store 3.1.1; `__tests__/paywallGuards.test.ts`) |
+| **"Not now" is always visible** | Plan v1: every paywall has a visible way out |
+
+---
+
+## 14. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
 
 **Added 2026-10-09 (step 9 of the product-completion plan).** The server half
 is blendn-admin #630, #631 and #639; the contract is `docs/api/API.md` →

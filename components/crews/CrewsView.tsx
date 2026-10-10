@@ -301,7 +301,7 @@ function useOpenToCrews(eventId: string, checkInKey: string) {
 
 /**
  * The Grid's Crews view, above its cards (placeholder design —
- * docs/PLACEHOLDER_SCREENS.md §13): your crews with "We're here", the
+ * docs/PLACEHOLDER_SCREENS.md §14): your crews with "We're here", the
  * open-to-crews switch when no crew of yours is here, and the state of the
  * list. The cards themselves are rows of the Room's own list (virtualised);
  * `CrewsFooter` is under them.

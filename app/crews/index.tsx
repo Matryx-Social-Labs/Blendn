@@ -36,7 +36,7 @@ const goneInvites = new Set<string>()
 
 /**
  * Your crews, and the crew invites waiting for you (placeholder design —
- * docs/PLACEHOLDER_SCREENS.md §13).
+ * docs/PLACEHOLDER_SCREENS.md §14).
  *
  * An invite is answered here. Accepting shows the consent first — joining a
  * crew is agreeing that anyone in it can reveal the crew — with the

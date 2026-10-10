@@ -133,3 +133,54 @@ describe('useGoLive', () => {
     await act(async () => { release({ success: true, data: live }) })
   })
 })
+
+describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through its policy (step 11, MN-M01)', () => {
+  beforeEach(() => {
+    require('../lib/paywall').resetPaywallSession()
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
+  })
+
+  it('the first time this session: the tray closes and the paywall opens, trigger go_live_expiry', async () => {
+    const { ok, closeTray, showTray } = await run({ stay: true })
+    expect(ok).toBe(false)
+    expect(apiClient.goLive).toHaveBeenCalledWith('v1', expect.objectContaining({ stay: true }))
+    expect(closeTray).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
+    expect(showTray).not.toHaveBeenCalled()
+  })
+
+  it('on iOS, pushes the paywall only once the tray has finished leaving (review MEDIUM)', async () => {
+    const tray = require('../components/ActionTray')
+    let left: () => void = () => {}
+    const waited = jest.spyOn(tray, 'afterTrayDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
+    try {
+      const { result } = await renderHook(() => useGoLive({ place, showTray: jest.fn(), closeTray: jest.fn() }))
+      let pending!: Promise<boolean>
+      await act(async () => {
+        pending = result.current.goLive({ stay: true })
+        await new Promise((r) => setTimeout(r, 0))
+      })
+      expect(router.push).not.toHaveBeenCalled()
+      await act(async () => {
+        left()
+        await pending
+      })
+      expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
+    } finally {
+      waited.mockRestore()
+    }
+  })
+
+  it('never a second automatic paywall that session: the reason instead, and "See Blendn+" opens it on a tap', async () => {
+    await run({ stay: true })
+    ;(router.push as jest.Mock).mockClear()
+
+    const again = await run({ stay: true })
+    expect(router.push).not.toHaveBeenCalled()
+    const [title, , buttons] = again.showTray.mock.calls[0]
+    expect(title).toBe('Staying live is part of Blendn+')
+    const see = (buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')
+    await act(async () => { see?.onPress(); await Promise.resolve() })
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
+  })
+})

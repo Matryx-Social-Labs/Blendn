@@ -35,6 +35,7 @@ people your session creates get a passphrase you choose.
 | `c20-crew-create-chat` | TQ-C19 (CR-M01, CR-CU01) | `EMAIL CREW_NAME FRIEND API MESSAGE` + `MAESTRO_PASSWORD`, `MAESTRO_FRIEND_TOKEN` as environment variables — friends, both 18+; the phone checked in at a live event, the friend not |
 | `c21-blend-room` | TQ-C20 (CR-M02, CR-I11, CR-I14) | `EMAIL MY_CREW THEIR_CREW EVENT_ID API REVEALED_NAME ANON_NAME MESSAGE` + `MAESTRO_PASSWORD`, `MAESTRO_THEIR_TOKEN` — two crews here (two of each checked in), one of theirs keeping themselves anonymous |
 | `c21-blend-push` | TQ-C20 (review H2) | none — signed in, in an open Blend; notifications granted once via `blendn://onboarding/notifications`; fire `xcrun simctl push` with the payload in the file while it waits |
+| `c22-plus-paywall` | TQ-C21 (MN-M01, step 11) | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `PLACE LAT LNG` — a fenced place in a city where Blendn+ is **gated**, an account with no Plus; a fresh launch (one automatic paywall per session); one 20-minute window, ~16 min; StoreKit config on the sim for prices; nothing is bought; the read-back is in the file |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that
