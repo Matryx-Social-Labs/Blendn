@@ -101,6 +101,8 @@ export const MAP_THEME = {
     /** Foot to top. The foot is not a token: a darker step of brand orange, so the wall reads as lit from above. */
     walls: ['#A8330F', TOKEN.brandOrange],
     crown: EMBER.accent,
+    /** A building in our tiles is one colour; live, it is a brighter step of the accent. Not a token. */
+    liveCrown: '#FFB394',
     glow: EMBER_GLOW,
   },
 
@@ -108,6 +110,8 @@ export const MAP_THEME = {
     /** Foot to top. The foot is not a token: a darker step of brand rose. */
     walls: ['#7A3A52', TOKEN.brandRose],
     crown: ORCHID,
+    /** Live, a brighter step of orchid. Not a token. */
+    liveCrown: '#E9A6DE',
     glow: TOKEN.brandRose,
   },
 

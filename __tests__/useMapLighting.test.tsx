@@ -147,11 +147,21 @@ it("lights a pin as live as it is now, not as it was when its building was found
 })
 
 describe('on our own tiles (stage 2, SCRUM-572)', () => {
-  const withId = (id: number, lng: number, lat: number) => ({ ...buildingAt(lng, lat), id })
+  const withId = (id: number | string, lng: number, lat: number) => ({ ...buildingAt(lng, lat), id })
 
   it('lights a building as itself through feature-state, with no GeoJSON copy over it', async () => {
     const pins = venues(2)
     const m = fakeMap(async () => [withId(101, pins[0].longitude, pins[0].latitude)])
+    const { result } = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: true, litBy: 'feature-state' })
+    )
+    await pass(result)
+    expect(result.current.lit.states).toEqual([{ featureId: 101, pinId: pins[0].id, kind: 'venue', live: false }])
+  })
+
+  it("does the same on Android, whose ids come over as strings (review H1)", async () => {
+    const pins = venues(2)
+    const m = fakeMap(async () => [withId('101', pins[0].longitude, pins[0].latitude)])
     const { result } = await renderHook(() =>
       useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: true, litBy: 'feature-state' })
     )
@@ -192,5 +202,45 @@ describe('on our own tiles (stage 2, SCRUM-572)', () => {
     await pass(result)
     expect(m.queryRenderedFeatures).toHaveBeenCalledTimes(2)
     expect(result.current.lit.states.map((s) => s.featureId)).toEqual([101])
+  })
+
+  it('reads our layer, not OpenFreeMap\'s, once our tiles draw the buildings (review M1)', async () => {
+    const pins = venues(1)
+    const m = fakeMap(async () => [withId('101', pins[0].longitude, pins[0].latitude)])
+    await renderHook(() => useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds: true, litBy: 'feature-state' })).then(
+      ({ result }) => pass(result)
+    )
+    expect(m.queryRenderedFeatures).toHaveBeenLastCalledWith(expect.anything(), { layers: ['blendn-buildings-own'] })
+  })
+
+  it('looks again on its own when the tiles flip, with no region change to prompt it (review M1)', async () => {
+    const pins = venues(1)
+    const m = fakeMap(async () => [withId('101', pins[0].longitude, pins[0].latitude)])
+    let featureIds = false
+    const { result, rerender } = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds, litBy: 'feature-state' })
+    )
+    await pass(result)
+    featureIds = true
+    await act(async () => rerender({}))
+    // Only a frame: no relight() from a region change.
+    await act(async () => result.current.onFrame())
+    expect(m.queryRenderedFeatures).toHaveBeenCalledTimes(2)
+    expect(result.current.lit.states.map((s) => s.featureId)).toEqual([101])
+  })
+
+  it('drops a pass that was for the other tiles (review M1)', async () => {
+    const pins = venues(1)
+    const gates: ((v: unknown[]) => void)[] = []
+    const m = fakeMap(() => new Promise<unknown[]>((resolve) => gates.push(resolve)))
+    let featureIds = true
+    const { result, rerender } = await renderHook(() =>
+      useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, featureIds, litBy: 'feature-state' })
+    )
+    await pass(result) // a pass on our tiles, waiting on its read
+    featureIds = false
+    await act(async () => rerender({}))
+    await act(async () => gates[0]([withId('101', pins[0].longitude, pins[0].latitude)])) // it answers after the flip
+    expect(result.current.lit.states).toEqual([])
   })
 })

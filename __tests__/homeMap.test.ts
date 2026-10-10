@@ -206,13 +206,15 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
     // The only geometry read is the city's own buildings; the only coordinates written are a pin's or a building's.
-    const queried = [...code('components/home/useMapLighting.ts').matchAll(/layers:\s*\[([^\]]*)\]/g)].map((m) => m[1].trim())
-    expect(queried).toEqual(['BUILDING_LAYER_ID'])
+    const lighting = code('components/home/useMapLighting.ts')
+    const queried = [...lighting.matchAll(/layers:\s*\[([^\]]*)\]/g)].map((m) => m[1].trim())
+    expect(queried).toEqual(['layer'])
+    expect(lighting).toMatch(/const layer = featureIds \? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID/)
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
   it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
-    expect(CITY_BUILDINGS).toMatchObject({ id: 'building-3d', source: 'openmaptiles', sourceLayer: 'building' })
+    expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)
     expect(EMBER_MAP_STYLE.sources).toHaveProperty('openmaptiles')
     expect(component).toMatch(/\battribution\b(?!=\{false\})/)

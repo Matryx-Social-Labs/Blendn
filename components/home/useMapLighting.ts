@@ -18,7 +18,7 @@ import {
   type LitPlace,
   type LngLat,
 } from '../../lib/mapLit'
-import { BUILDING_LAYER_ID } from '../../lib/mapStyleEmber'
+import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 
 export type Segment = 'events' | 'places'
@@ -34,6 +34,8 @@ export type MapView = { bounds: Bounds | null; centre: LngLat | null; zoom: numb
 type Drawn = { id?: string | number; geometry: { type: string; coordinates: unknown }; properties: Record<string, unknown> | null }
 
 const collection = <F>(features: F[]): Collection<F> => ({ type: 'FeatureCollection', features })
+/** Buildings remembered, at most: a long pan around a city should not grow without end. */
+const SEEN_MAX = 500
 export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [], states: [] }
 
 /**
@@ -86,10 +88,12 @@ export function useMapLighting({
   const pass = useRef(0)
   const seen = useRef(new Map<string, { lng: number; lat: number; building: LitBuilding | null }>())
 
-  // New pins: their buildings are looked for once the tiles under them are drawn.
+  // New pins, or the other tiles drawing the buildings: look again once they are drawn. A pass still
+  // waiting on the bridge was for the old tiles: dropped (review M1).
   useEffect(() => {
+    pass.current += 1
     needsLight.current = true
-  }, [pins])
+  }, [pins, featureIds])
 
   const publish = (shown: Segment, lit: Lit) => {
     const key = JSON.stringify(lit)
@@ -110,6 +114,8 @@ export function useMapLighting({
     const candidates = lightCandidates(pins, v.bounds, v.centre, MAP_THEME.lit.max)
     // Which tiles drew the buildings is part of what was looked up: a building found in one is not one in the other.
     const tiles = featureIds ? 'own' : 'openfreemap'
+    // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
+    const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
     const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}`
     if (signature === lastLit.current) return
     const keyOf = (p: Pin) => `${tiles}:${shown}:${p.id}`
@@ -139,7 +145,7 @@ export function useMapLighting({
           [Math.min(size.width, Math.max(...placed.map(({ s }) => s[0])) + r), Math.min(size.height, Math.max(...placed.map(({ s }) => s[1])) + r)],
         ]
         const drawn = await m
-          .queryRenderedFeatures(box, { layers: [BUILDING_LAYER_ID] })
+          .queryRenderedFeatures(box, { layers: [layer] })
           .then((features) => features as Drawn[])
           .catch((error) => {
             Logger.warn('events', 'Could not read the buildings under the pins', { error: String(error) })
@@ -152,8 +158,10 @@ export function useMapLighting({
           const building = drawn ? litPlaceFor(p, drawn, featureIds).building : null
           fresh.set(p.id, building)
           const wholeBoxOnScreen = s[0] - r >= 0 && s[1] - r >= 0 && s[0] + r <= size.width && s[1] + r <= size.height
-          if (drawn && wholeBoxOnScreen) seen.current.set(keyOf(p), { lng: p.longitude, lat: p.latitude, building })
-          else clean = false
+          if (drawn && wholeBoxOnScreen) {
+            seen.current.set(keyOf(p), { lng: p.longitude, lat: p.latitude, building })
+            if (seen.current.size > SEEN_MAX) seen.current.delete(seen.current.keys().next().value as string)
+          } else clean = false
         }
       }
     }

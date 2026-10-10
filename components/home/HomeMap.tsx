@@ -32,7 +32,15 @@ import {
   type PinQuery,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
-import { drawsOwnBuildings, homeMapStyle, OWN_BUILDINGS_LIT_BY, ownBuildingsUrl, styleHost } from '../../lib/mapStyleEmber'
+import {
+  BUILDING_LAYER_ID,
+  drawsOwnBuildings,
+  homeMapStyle,
+  OWN_BUILDINGS_LAYER_ID,
+  OWN_BUILDINGS_LIT_BY,
+  parseOwnBuildingsUrl,
+  styleHost,
+} from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
@@ -53,7 +61,10 @@ type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { 
 const NO_PINS: Pin[] = []
 
 /** Our building tiles (stage 2), when this build has them; else OpenFreeMap's buildings everywhere. */
-const OWN_BUILDINGS_URL = ownBuildingsUrl()
+const OWN_BUILDINGS_ENV = parseOwnBuildingsUrl(process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL)
+const OWN_BUILDINGS_URL = OWN_BUILDINGS_ENV.url
+/** Before the map reports its bounds: about a zoom-16 view around a point. */
+const roughView = ([lng, lat]: [number, number]): Bounds => [lng - 0.006, lat - 0.006, lng + 0.006, lat + 0.006]
 
 /** `MAP_THEME.light`, as the spec's (mutable) type. */
 const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
@@ -164,9 +175,15 @@ export const HomeMap = memo(function HomeMap({
   const [now, setNow] = useState(() => Date.now())
   const pins = useMemo(() => (loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS), [loaded, segment, now])
 
-  // Which tiles draw the buildings, by where the view is: ours inside a covered city.
+  // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : DEFAULT_CENTRE
-  const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, startAt))
+  const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, roughView(startAt), false))
+  const buildingLayerId = ownTiles ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
+
+  // A tiles URL that is set but cannot be used is a misconfigured build, not a quiet fallback (review M7).
+  useEffect(() => {
+    if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
+  }, [])
   const { lit, onFrame, relight } = useMapLighting({
     map,
     view,
@@ -230,7 +247,7 @@ export const HomeMap = memo(function HomeMap({
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
     if (userInteraction) touched.current = true
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
-    setOwnTiles(drawsOwnBuildings(OWN_BUILDINGS_URL, centre as [number, number]))
+    setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
@@ -247,6 +264,7 @@ export const HomeMap = memo(function HomeMap({
     m.getViewState()
       .then(({ bounds, center: centre, zoom, pitch }) => {
         view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
+        setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
         relight()
         ask(bounds as Bounds)
       })
@@ -349,8 +367,8 @@ export const HomeMap = memo(function HomeMap({
        */}
       <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
         {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
-        <GroundGlow data={lit.glow} visible={glowVisible} />
-        <LitBuildings data={lit.bands} onPress={openPlace} />
+        <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
+        <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
       </Fragment>
       <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
         <Layer

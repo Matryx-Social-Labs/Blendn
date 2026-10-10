@@ -65,7 +65,7 @@ const place = (id: string, cls: string, minzoom: number, size: TextSize): Symbol
 })
 
 /** The id of the extruded building layer: lit buildings are queried from it. */
-export const BUILDING_LAYER_ID = 'building-3d'
+export const BUILDING_LAYER_ID = 'blendn-buildings'
 
 /** The first label layer: the city's buildings go under it, so road names stay readable. */
 export const LABELS_FROM_LAYER_ID = 'highway-name-major'
@@ -122,33 +122,91 @@ export const CITY_BUILDINGS: {
 /* Our own building tiles (stage 2, SCRUM-572)                                */
 /* -------------------------------------------------------------------------- */
 
-/** Credits for our building tiles, shown with OpenFreeMap's (Blendn-Admin `scripts/map-buildings/README.md`). */
-export const OWN_BUILDINGS_ATTRIBUTION = '© OpenStreetMap contributors · Overture Maps Foundation · Google Open Buildings · Microsoft'
+/**
+ * Credits for our building tiles, shown with OpenFreeMap's (Blendn-Admin
+ * `scripts/map-buildings/README.md`: ODbL, with Google's heights under CC BY
+ * 4.0). Each credit is a link: Android's attribution dialog lists only links
+ * (`<a href>`), so plain text left our credits off Android entirely.
+ */
+export const OWN_BUILDINGS_CREDITS: { text: string; href: string }[] = [
+  { text: '© OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright' },
+  { text: 'Overture Maps Foundation', href: 'https://docs.overturemaps.org/attribution/' },
+  { text: 'Google Open Buildings', href: 'https://sites.research.google/gr/open-buildings/' },
+  { text: 'Microsoft', href: 'https://github.com/microsoft/GlobalMLBuildingFootprints' },
+]
+
+/** The credits as the source's attribution HTML, one link each. */
+export const OWN_BUILDINGS_ATTRIBUTION = OWN_BUILDINGS_CREDITS.map(({ text, href }) => `<a href="${href}">${text}</a>`).join(' · ')
 
 /**
  * The cities our tiles cover, by the box they were built for (Blendn-Admin
- * `scripts/map-buildings/cities.json`; only the built and uploaded ones). A
- * view centred outside them draws OpenFreeMap's buildings instead: our tiles
- * have nothing there.
+ * `scripts/map-buildings/cities.json`; only the built and uploaded ones).
+ * Outside them our tiles have nothing, and OpenFreeMap's buildings are drawn.
  */
 export const OWN_BUILDINGS_CITIES: { name: string; bbox: [number, number, number, number] }[] = [{ name: 'bengaluru', bbox: [77.45, 12.83, 77.78, 13.14] }]
 
+/** The zoom our tiles are built at (`build.py`: z14 only); the source overzooms past it. Not a look: the data's shape. */
+export const OWN_BUILDINGS_TILE_ZOOM = 14
+
+/** Our layer's own id: never the OpenFreeMap layer's, so a lookup on one never reads the other's buildings. */
+export const OWN_BUILDINGS_LAYER_ID = 'blendn-buildings-own'
+
 /**
  * Our tiles' URL template, from `EXPO_PUBLIC_BUILDINGS_TILES_URL`
- * (`https://…/map/buildings/v2/{z}/{x}/{y}.pbf`); null when unset or not an
- * https `{z}/{x}/{y}` template, and the map keeps OpenFreeMap's buildings.
+ * (`https://…/map/buildings/v2/{z}/{x}/{y}.pbf`). Null when unset; null with a
+ * reason when set but unusable (not https, not a URL, or not exactly one each
+ * of `{z}`, `{x}`, `{y}`), and the map keeps OpenFreeMap's buildings.
  */
-export function ownBuildingsUrl(raw: string | undefined = process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL): string | null {
+export function parseOwnBuildingsUrl(raw: string | undefined): { url: string | null; problem: string | null } {
   const url = raw?.trim()
-  if (!url || !url.startsWith('https://') || !['{z}', '{x}', '{y}'].every((t) => url.includes(t))) return null
-  return url
+  if (!url) return { url: null, problem: null }
+  let parsed: URL
+  try {
+    parsed = new URL(url.replace(/\{[zxy]\}/g, '0'))
+  } catch {
+    return { url: null, problem: 'not a URL' }
+  }
+  if (parsed.protocol !== 'https:') return { url: null, problem: 'not https' }
+  const once = (t: string) => url.split(t).length === 2
+  if (!once('{z}') || !once('{x}') || !once('{y}')) return { url: null, problem: 'needs exactly one {z}, {x} and {y}' }
+  return { url, problem: null }
 }
 
-/** Whether a view centred here draws our buildings. */
-export function drawsOwnBuildings(url: string | null, centre: [number, number] | null): boolean {
-  if (!url || !centre) return false
-  const [lng, lat] = centre
-  return OWN_BUILDINGS_CITIES.some(({ bbox: [w, s, e, n] }) => lng >= w && lng <= e && lat >= s && lat <= n)
+/** `parseOwnBuildingsUrl` of this build's env. */
+export function ownBuildingsUrl(raw: string | undefined = process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL): string | null {
+  return parseOwnBuildingsUrl(raw).url
+}
+
+type Box = [number, number, number, number]
+const inside = ([w, s, e, n]: Box, [bw, bs, be, bn]: Box, inset: number) => w >= bw + inset && s >= bs + inset && e <= be - inset && n <= bn - inset
+
+/**
+ * Past the edge of a covered city by this much (degrees, about 1 km) before
+ * the map switches to our tiles, so a view that wobbles on the edge does not
+ * flip back and forth.
+ */
+export const OWN_BUILDINGS_ENTER_INSET = 0.01
+
+/**
+ * Whether the view draws our buildings. From the whole view, not its centre: at
+ * a tilt the far half of the screen reaches well past the centre, and our tiles
+ * have nothing outside their city. On, once the view is a kilometre inside a
+ * covered city; off, as soon as any of it leaves the city.
+ */
+export function drawsOwnBuildings(url: string | null, bounds: Box | null, drawingNow: boolean): boolean {
+  if (!url || !bounds) return false
+  const inset = drawingNow ? 0 : OWN_BUILDINGS_ENTER_INSET
+  return OWN_BUILDINGS_CITIES.some(({ bbox }) => inside(bounds, bbox, inset))
+}
+
+/**
+ * A feature's id as a number, or null. iOS gives a vector tile's numeric id as
+ * a number; Android as a string ("101"), so an id check that wanted a number
+ * never lit a building there. Only a whole, safe, non-negative number counts.
+ */
+export function featureIdOf(id: unknown): number | null {
+  const n = typeof id === 'number' ? id : typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : NaN
+  return Number.isSafeInteger(n) && n >= 0 ? n : null
 }
 
 /**
@@ -166,12 +224,14 @@ type ExtrusionHeight = NonNullable<FillExtrusionLayerSpecification['paint']>['fi
 
 /** Which kind lit a building in our tiles, '' when none. */
 const litKind: ['to-string', ['coalesce', ['feature-state', string], string]] = ['to-string', ['coalesce', ['feature-state', 'lit'], '']]
+/** Whether the building's place is live now. */
+const isLive: ['==', ['coalesce', ['feature-state', string], boolean], boolean] = ['==', ['coalesce', ['feature-state', 'live'], false], true]
 
 /**
  * Our buildings: every building its own feature with a numeric id, building
  * parts drawn under their outline's id (no `hide_3d`: filtering on it would cut
- * a tower down to its podium). A lit one takes its crown colour and stands at
- * least the stylised minimum, through feature-state.
+ * a tower down to its podium). A lit one takes its crown colour (a brighter one
+ * while live) and stands at least the stylised minimum, through feature-state.
  */
 export const OWN_BUILDINGS: {
   id: string
@@ -179,11 +239,18 @@ export const OWN_BUILDINGS: {
   minzoom: number
   paint: NonNullable<FillExtrusionLayerSpecification['paint']>
 } = {
-  id: BUILDING_LAYER_ID,
+  id: OWN_BUILDINGS_LAYER_ID,
   sourceLayer: 'building',
-  minzoom: MAP_THEME.city.minZoom,
+  minzoom: OWN_BUILDINGS_TILE_ZOOM,
   paint: {
-    'fill-extrusion-color': ['match', litKind, 'event', MAP_THEME.event.crown, 'venue', MAP_THEME.venue.crown, cityColour()] as unknown as ExtrusionColor,
+    'fill-extrusion-color': [
+      'case',
+      ['==', litKind, 'event'],
+      ['case', isLive, MAP_THEME.event.liveCrown, MAP_THEME.event.crown],
+      ['==', litKind, 'venue'],
+      ['case', isLive, MAP_THEME.venue.liveCrown, MAP_THEME.venue.crown],
+      cityColour(),
+    ] as unknown as ExtrusionColor,
     'fill-extrusion-height': ['case', ['==', litKind, ''], metres(BUILDING_PROPS.height), ['max', metres(BUILDING_PROPS.height), MAP_THEME.lit.minHeightM]] as unknown as ExtrusionHeight,
     'fill-extrusion-base': metres(BUILDING_PROPS.base),
     'fill-extrusion-opacity': 1,
