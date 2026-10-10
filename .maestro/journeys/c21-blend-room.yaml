@@ -150,15 +150,12 @@ tags:
     visible: "This Blend has closed"
     timeout: 20000
 - takeScreenshot: c21-blocked
+# The chat re-reads on focus: closed for you too, no composer.
 - tapOn: "Go back"
-- tapOn: ".*Share your thoughts.*"
-- inputText: "is anyone still here"
-- tapOn:
-    text: "Send"
-    optional: true
 - extendedWaitUntil:
     visible: "This Blend has closed"
     timeout: 20000
+- assertNotVisible: ".*Share your thoughts.*"
 - takeScreenshot: c21-closed
 - tapOn: "Back"
 - extendedWaitUntil:
