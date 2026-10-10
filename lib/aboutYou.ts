@@ -62,9 +62,11 @@ export interface AboutYou {
   /** null: no sign shown. Off by default. */
   sign: { slug: string; system: SignSystem } | null
   showsUpBadge: boolean
+  /** "Show my badges" — on unless turned off. */
+  showBadges: boolean
 }
 
-export const NO_ABOUT_YOU: AboutYou = { languages: [], homeState: null, sign: null, showsUpBadge: false }
+export const NO_ABOUT_YOU: AboutYou = { languages: [], homeState: null, sign: null, showsUpBadge: false, showBadges: true }
 
 /** Read from the caller's own profile payload, defensively: an older server sends none of it. */
 export function aboutYouFrom(profile: Record<string, unknown> | null | undefined): AboutYou {
@@ -77,7 +79,31 @@ export function aboutYouFrom(profile: Record<string, unknown> | null | undefined
     homeState: typeof p.home_state === 'string' ? p.home_state : null,
     sign,
     showsUpBadge: p.shows_up_badge === true,
+    showBadges: p.show_badges !== false,
   }
+}
+
+/**
+ * Only what the server still offers (step 10 review L4). A slug it retired
+ * would otherwise ride along in the next save and be refused with the rest of
+ * the form; dropping it on load means the save carries only live choices.
+ */
+export function withinOptions(about: AboutYou, options: ProfileOptions): AboutYou {
+  const languages = new Set(options.languages.map((l) => l.slug))
+  const states = new Set(options.homeStates.map((s) => s.slug))
+  const signs = new Set(options.signs.map((s) => s.slug))
+  return {
+    ...about,
+    languages: about.languages.filter((l) => languages.has(l)).slice(0, options.maxLanguages),
+    homeState: about.homeState && states.has(about.homeState) ? about.homeState : null,
+    sign: about.sign && signs.has(about.sign.slug) ? about.sign : null,
+  }
+}
+
+/** Answers to questions the server still asks, the rest dropped (L4). */
+export function answersWithin(answers: Readonly<Record<string, Choice>>, options: ProfileOptions): Record<string, Choice> {
+  const asked = new Set(options.thisOrThat.map((q) => q.slug))
+  return Object.fromEntries(Object.entries(answers).filter(([q, c]) => asked.has(q) && (c === 'a' || c === 'b')))
 }
 
 /** Add or remove one language, never past the cap. */
@@ -100,6 +126,7 @@ export function aboutYouUpdate(from: AboutYou, to: AboutYou): Record<string, unk
     body.sign_system = to.sign?.system ?? null
   }
   if (from.showsUpBadge !== to.showsUpBadge) body.shows_up_badge = to.showsUpBadge
+  if (from.showBadges !== to.showBadges) body.show_badges = to.showBadges
   return body
 }
 

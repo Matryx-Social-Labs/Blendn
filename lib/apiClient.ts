@@ -2201,6 +2201,7 @@ class ApiClientClass {
       sun_sign?: string | null
       sign_system?: 'western' | 'rashi' | null
       shows_up_badge?: boolean
+      show_badges?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(

@@ -13,6 +13,8 @@ import {
   aboutYouFrom,
   aboutYouUpdate,
   answersUpdate,
+  answersWithin,
+  withinOptions,
   NO_ABOUT_YOU,
   signName,
   toggleLanguage,
@@ -36,8 +38,10 @@ import { refreshAuthUser, useAuth } from '../lib/useAuth'
  * never sorts a room by any of it. Before a reveal, one of these at most shows
  * on a card, and none in a room under eight people (the server's budget).
  *
- * The sign is off until turned on, and is the person's own pick: the switch
- * prefills the Western sign of their birth date (`suggested_sun_sign`), and
+ * The sign is off until turned on, and is the person's own pick — never
+ * preselected (step 10 review M4): beside an age a sign narrows a birthday to
+ * a month, so the switch says so ("Your sign shows next to your age") and the
+ * Western sign of their birth date is offered as a hint they tap to apply.
  * "My rashi instead" swaps the calendar — a rashi is usually the Moon's sign,
  * which a birth date cannot give, so it is only ever chosen.
  *
@@ -54,6 +58,9 @@ export default function EditAboutYouScreen() {
   const [answersLoaded, setAnswersLoaded] = useState<Record<string, Choice>>({})
   const [answers, setAnswers] = useState<Record<string, Choice>>({})
   const [saving, setSaving] = useState(false)
+  /** The switch, apart from the pick: on with no sign chosen saves no sign. */
+  const [signOn, setSignOn] = useState(false)
+  const [system, setSystem] = useState<SignSystem>('western')
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -73,25 +80,35 @@ export default function EditAboutYouScreen() {
         return
       }
       const p = (profile.data?.profile ?? {}) as Record<string, unknown>
-      const mine = aboutYouFrom(p)
+      // Only what the server still offers: a retired slug never rides along (L4).
+      const mine = withinOptions(aboutYouFrom(p), opts.data)
+      const answered = answersWithin(tot.data?.answers ?? {}, opts.data)
       setOptions(opts.data)
-      setLoaded(mine)
+      setLoaded(aboutYouFrom(p))
       setForm(mine)
+      setSignOn(!!mine.sign)
+      setSystem(mine.sign?.system ?? 'western')
       setSuggestedSign(typeof p.suggested_sun_sign === 'string' ? p.suggested_sun_sign : null)
-      setAnswersLoaded(tot.data?.answers ?? {})
-      setAnswers(tot.data?.answers ?? {})
+      // Retired questions' answers are left as they are: never sent, never read.
+      setAnswersLoaded(answered)
+      setAnswers(answered)
     })()
     return () => {
       cancelled = true
     }
   }, [authUser, attempt])
 
-  const setSignOn = (on: boolean) =>
-    setForm((f) => ({
-      ...f,
-      sign: on ? { slug: f.sign?.slug ?? suggestedSign ?? options?.signs[0]?.slug ?? 'aries', system: f.sign?.system ?? 'western' } : null,
-    }))
-  const setSystem = (system: SignSystem) => setForm((f) => (f.sign ? { ...f, sign: { ...f.sign, system } } : f))
+  // Off clears the pick; on picks nothing until they tap a sign (M4).
+  const toggleSign = (on: boolean) => {
+    setSignOn(on)
+    if (!on) setForm((f) => ({ ...f, sign: null }))
+  }
+  const chooseSystem = (next: SignSystem) => {
+    setSystem(next)
+    setForm((f) => (f.sign ? { ...f, sign: { ...f.sign, system: next } } : f))
+  }
+  const pickSign = (slug: string) => setForm((f) => ({ ...f, sign: { slug, system } }))
+  const hint = suggestedSign ? options?.signs.find((x) => x.slug === suggestedSign) ?? null : null
   const pick = (q: string, c: Choice) =>
     setAnswers((a) => {
       const next = { ...a }
@@ -108,6 +125,11 @@ export default function EditAboutYouScreen() {
     try {
       if (Object.keys(profileBody).length) {
         const r = await apiClient.updateProfile(authUser.id, profileBody)
+        // Three Tier B changes a day: the server's own sentence says when to try again.
+        if (!r.success && r.errorCode === 'RATE_LIMITED' && r.error) {
+          showToast(r.error, 'error')
+          return
+        }
         if (!r.success) throw new Error(r.error || 'profile')
       }
       if (Object.keys(answerBody).length) {
@@ -177,23 +199,29 @@ export default function EditAboutYouScreen() {
 
               <EmberToggle
                 label="Show my sign"
-                helper={'A fun line on cards — "Both Leos ♌". Never used to match you.'}
-                value={!!sign}
-                onValueChange={setSignOn}
+                helper={'Your sign shows next to your age. A fun line on cards — "Both Leos ♌" — never used to match you.'}
+                value={signOn}
+                onValueChange={toggleSign}
               />
-              {sign ? (
+              {signOn ? (
                 <>
                   <EmberChipRow>
-                    <EmberChip label="Western" selected={sign.system === 'western'} onPress={() => setSystem('western')} />
-                    <EmberChip label="My rashi instead" selected={sign.system === 'rashi'} onPress={() => setSystem('rashi')} />
+                    <EmberChip label="Western" selected={system === 'western'} onPress={() => chooseSystem('western')} />
+                    <EmberChip label="My rashi instead" selected={system === 'rashi'} onPress={() => chooseSystem('rashi')} />
                   </EmberChipRow>
+                  {hint && !sign ? (
+                    <EmberChip label={`From your birthday: ${signName(hint, 'western')} — tap to use`} selected={false} onPress={() => {
+                      setSystem('western')
+                      setForm((f) => ({ ...f, sign: { slug: hint.slug, system: 'western' } }))
+                    }} />
+                  ) : null}
                   <EmberChipRow>
                     {options.signs.map((s) => (
                       <EmberChip
                         key={s.slug}
-                        label={signName(s, sign.system)}
-                        selected={sign.slug === s.slug}
-                        onPress={() => setForm((f) => (f.sign ? { ...f, sign: { ...f.sign, slug: s.slug } } : f))}
+                        label={signName(s, system)}
+                        selected={sign?.slug === s.slug}
+                        onPress={() => pickSign(s.slug)}
                       />
                     ))}
                   </EmberChipRow>
@@ -210,6 +238,13 @@ export default function EditAboutYouScreen() {
                   </View>
                 ))}
               </EmberFieldGroup>
+
+              <EmberToggle
+                label="Show my badges"
+                helper="Earned by checking in — like “Regular here”. Off hides every badge on your card."
+                value={form.showBadges}
+                onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
+              />
 
               <EmberToggle
                 label="Show “Shows up” on my card"

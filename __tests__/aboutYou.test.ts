@@ -4,9 +4,12 @@ import {
   aboutYouFrom,
   aboutYouUpdate,
   answersUpdate,
+  answersWithin,
   NO_ABOUT_YOU,
   toggleLanguage,
+  withinOptions,
   type AboutYou,
+  type ProfileOptions,
 } from '../lib/aboutYou'
 import { withheldUnlessVisible } from '../lib/profileIdentity'
 import type { RoomPerson } from '../lib/useRoom'
@@ -22,7 +25,13 @@ jest.mock('../components/blendn/HeartPop', () => ({ HeartPop: () => null }))
  */
 
 describe('the about-you editor (MV-CU01)', () => {
-  const kerala: AboutYou = { languages: ['malayalam'], homeState: 'kerala', sign: { slug: 'leo', system: 'western' }, showsUpBadge: false }
+  const kerala: AboutYou = {
+    languages: ['malayalam'],
+    homeState: 'kerala',
+    sign: { slug: 'leo', system: 'western' },
+    showsUpBadge: false,
+    showBadges: true,
+  }
 
   it('reads the profile defensively, an older server as nothing chosen', () => {
     expect(aboutYouFrom(undefined)).toEqual(NO_ABOUT_YOU)
@@ -44,6 +53,25 @@ describe('the about-you editor (MV-CU01)', () => {
     expect(toggleLanguage(['a', 'b'], 'c', 2)).toEqual(['a', 'b'])
     expect(toggleLanguage(['a', 'b'], 'a', 2)).toEqual(['b'])
     expect(toggleLanguage([], 'a', 5)).toEqual(['a'])
+  })
+
+  it('"Show my badges" is on unless turned off, and sent only when it moves (M3)', () => {
+    expect(aboutYouFrom({}).showBadges).toBe(true)
+    expect(aboutYouFrom({ show_badges: false }).showBadges).toBe(false)
+    expect(aboutYouUpdate(kerala, { ...kerala, showBadges: false })).toEqual({ show_badges: false })
+  })
+
+  it('drops what the server no longer offers before it can be saved (L4)', () => {
+    const options: ProfileOptions = {
+      languages: [{ slug: 'malayalam', label: 'Malayalam' }],
+      maxLanguages: 5,
+      homeStates: [{ slug: 'goa', label: 'Goa' }],
+      signs: [{ slug: 'leo', western: 'Leo', rashi: 'Simha', symbol: '♌' }],
+      thisOrThat: [{ slug: 'coffee_or_chai', a: 'Filter coffee', b: 'Chai' }],
+    }
+    const stale = { ...kerala, languages: ['malayalam', 'klingon'], homeState: 'atlantis', sign: { slug: 'ophiuchus', system: 'western' as const } }
+    expect(withinOptions(stale, options)).toEqual({ ...kerala, languages: ['malayalam'], homeState: null, sign: null })
+    expect(answersWithin({ coffee_or_chai: 'a', retired_question: 'b' }, options)).toEqual({ coffee_or_chai: 'a' })
   })
 
   it('this-or-that: only the answers that moved, null to take one back', () => {
