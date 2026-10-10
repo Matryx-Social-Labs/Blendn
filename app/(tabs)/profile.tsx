@@ -437,6 +437,18 @@ function ProfileInner() {
                 <Ionicons name="person-add" size={ICON.sm} color={EMBER.textPrimary} />
                 <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Add friends</Text>
               </ScalePress>
+              {/* Your crews: made from your friends, so beside the way to add them (step 9). */}
+              <ScalePress
+                onPress={() => router.push('/crews')}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel="Crews"
+                hitSlop={SPACE.sm}
+                style={styles.button}
+              >
+                <Ionicons name="people" size={ICON.sm} color={EMBER.textPrimary} />
+                <Text variant="bodyStrong" color={EMBER.textPrimary} maxFontSizeMultiplier={1.3}>Crews</Text>
+              </ScalePress>
             </View>
           </View>
 

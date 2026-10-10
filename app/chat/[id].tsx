@@ -51,6 +51,8 @@ import { newClientId } from '../../lib/clientId'
 import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
 import { useActiveThread } from '../../lib/notifications'
+import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { RoomClosedNotice } from '../../components/crews/CrewParts'
 import { isMuted, markRoomJoined, markRoomLeft, rememberRoomMute, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { roomDisplayTitle, roomMemberCount, roomRefusalState, roomVenueId } from '../../lib/placeRoom'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
@@ -221,7 +223,16 @@ function GroupChatInner() {
    * is missing — the Room's chat dock opens this with no cover, and the header
    * drew a generic people glyph there while the Banter's path showed the event.
    */
-  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string; venueId?: string; eventId?: string }>({})
+  const [roomInfo, setRoomInfo] = useState<{
+    title?: string
+    image?: string
+    venueId?: string
+    eventId?: string
+    /** A crew's or a Blend's room, found in `rooms` when the opener did not say (step 9 review H2). */
+    kind?: 'crew' | 'blend'
+    crewId?: string
+    blendId?: string
+  }>({})
   const roomName = (params.roomName as string) || roomInfo.title
   const eventTitle = (params.eventTitle as string) || roomInfo.title
   const eventImage = (params.eventImage as string) || roomInfo.image
@@ -269,9 +280,24 @@ function GroupChatInner() {
   /** The place, from the opener (the place screen) or the room's own row (M4). */
   const openedFromPlace = typeof params.venueId === 'string' ? params.venueId : null
   const venueId = openedFromPlace ?? roomInfo.venueId ?? null
+  /*
+   * A crew's or a Blend's room (step 9), told by the opener; null for an
+   * event's. Those close differently — a Blend on its clock or for a blocked
+   * pair, a crew when it dissolves — and the room becomes one line saying so.
+   */
+  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
+  /*
+   * Back, or — opened from a push with nothing underneath — the Banter. A
+   * closed Blend opened from its push offered a Back that went nowhere
+   * (driven on the simulator, pass 2).
+   */
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
+  const crewIdParam = typeof params.crewId === 'string' ? params.crewId : roomInfo.crewId
+  const blendIdParam = typeof params.blendId === 'string' ? params.blendId : roomInfo.blendId
+  const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(String(chatRoomId))
-  const outside = left || outOfRoom || notLive
+  const outside = left || outOfRoom || notLive || closedLine !== null
   const muted = isMuted(useRoomMute(chatRoomId ? String(chatRoomId) : null))
   /** From the room list (`memberCount`), for the header when the title says nothing new. */
   const [memberCount, setMemberCount] = useState<number | null>(null)
@@ -380,6 +406,10 @@ function GroupChatInner() {
          * Refused as somebody not in the room: the left state, not "Couldn't
          * load" — Try again would be refused the same way for ever.
          */
+        // Not while this phone knows you left: a Blend answers a leaver's read with
+        // the 403 it gives somebody it took out, and the leaver can rejoin.
+        const closed = !result.success && roomKind && !left ? roomClosedLine(roomKind, result.errorCode) : null
+        if (closed) { setClosedLine(closed); setLoading(false); return }
         const refused = result.success ? null : roomRefusalState(result.errorCode)
         if (refused) {
           if (refused === 'left') markRoomLeft(String(chatRoomId))
@@ -390,6 +420,8 @@ function GroupChatInner() {
         }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
+        // Served: whatever this screen said about the room being closed, it is open.
+        setClosedLine(null)
         // Served as a member, so whatever this phone thought, you are in.
         setOutOfRoom(false)
         // Live again at the place: the socket was taken out of the room at the end (M3).
@@ -484,6 +516,24 @@ function GroupChatInner() {
       const data = result.data as unknown as Record<string, any>
       const rooms: Record<string, any>[] = Array.isArray(data) ? data : data.groups || data.rooms || data.data || []
       const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
+      /*
+       * A crew's or a Blend's room is in `rooms`, not `groups` (step 9): its
+       * kind is how the screen closes it and where (i) goes, whatever opened it.
+       */
+      const other = !room && Array.isArray(data.rooms)
+        ? (data.rooms as Record<string, any>[]).find((r) => String(r.id) === String(chatRoomId))
+        : null
+      if (other) {
+        rememberRoomMute(String(chatRoomId), other.mute)
+        const kind = roomKindParam(other.kind)
+        setRoomInfo({
+          title: other.name ? String(other.name) : undefined,
+          ...(kind ? { kind } : {}),
+          ...(other.crewId ? { crewId: String(other.crewId) } : {}),
+          ...(other.blendId ? { blendId: String(other.blendId) } : {}),
+        })
+        return
+      }
       if (!room) return
       rememberRoomMute(String(chatRoomId), room.mute)
       // Never for a place's room: an exact count there is a differencing channel (H5).
@@ -677,6 +727,8 @@ function GroupChatInner() {
        * bubble is the one send left -- so its success has to unlock the field.
        */
       applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)
+      const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+      if (closed) setClosedLine(closed)
       // Left on another phone, or here a moment ago: the room becomes the left state.
       // Your Go Live at the place ended: the not-live state.
       const sendRefused = result.success ? null : roomRefusalState(result.errorCode)
@@ -796,6 +848,12 @@ function GroupChatInner() {
     const result = await apiClient.rejoinChatGroup(String(chatRoomId))
     setRejoining(false)
     if (!result.success) {
+      // A crew's or a Blend's room refusing you back is the room closing for you, not "check in".
+      const closed = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+      if (closed) {
+        setClosedLine(closed)
+        return
+      }
       showToast(
         result.errorCode === 'NOT_FOUND'
           ? 'Check in at the event to join its room.'
@@ -1025,12 +1083,16 @@ function GroupChatInner() {
       <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <GroupChatHeader
-            name={roomName || 'Event chat'}
+            name={roomName || defaultRoomName(roomKind)}
             imageUrl={eventImage || null}
-            subtitle={roomSubtitle(roomName || 'Event chat', eventTitle || undefined, memberCount)}
+            subtitle={roomSubtitle(roomName || defaultRoomName(roomKind), eventTitle || undefined, memberCount)}
             muted={muted}
-            onBack={() => router.back()}
-            onInfo={() => router.push({
+            onBack={goBack}
+            onInfo={() => blendIdParam
+              ? router.push({ pathname: '/blend/[blendId]', params: { blendId: blendIdParam, fromChat: '1' } })
+              : crewIdParam
+                ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
+                : router.push({
               pathname: '/chat-info/[id]',
               params: {
                 id: String(chatRoomId),
@@ -1040,7 +1102,9 @@ function GroupChatInner() {
               },
             } as never)}
           />
-        {notLive ? (
+        {closedLine ? (
+          <RoomClosedNotice line={closedLine} onBack={goBack} />
+        ) : notLive ? (
           <RoomLeftState kind="not_live" rejoining={false} onRejoin={goLiveAgain} />
         ) : outside ? (
           <RoomLeftState kind={left ? 'left' : 'out'} rejoining={rejoining} onRejoin={() => void rejoin()} />
