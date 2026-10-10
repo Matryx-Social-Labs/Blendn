@@ -187,6 +187,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/initialViewState=\{\{[\s\S]*?padding: \{ bottom: bottomInset \}/)
   })
 
+  it("draws the person's dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
+    expect(component).toMatch(/<NativeUserLocation mode="default" \/>/)
+  })
+
   it('is tilted between 45° and 60°', () => {
     expect(MAP_THEME.camera.pitch).toBeGreaterThanOrEqual(45)
     expect(MAP_THEME.camera.pitch).toBeLessThanOrEqual(60)

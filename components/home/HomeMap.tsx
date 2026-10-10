@@ -359,7 +359,12 @@ export const HomeMap = memo(function HomeMap({
           padding: { bottom: bottomInset },
         }}
       />
-      {center ? <NativeUserLocation /> : null}
+      {/*
+       * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
+       * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
+       * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+       */}
+      {center ? <NativeUserLocation mode="default" /> : null}
       {/*
        * Remounted together when the building source switches: the glow goes under
        * the buildings and the lit copies over them, so they must be added after
