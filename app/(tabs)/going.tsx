@@ -23,8 +23,10 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { failedSections, goingSections, newFailure, type GoingSection } from '../../lib/goingSections'
 import {
+  lockedNightsLabel,
   rsvpEventRows,
   savedEventRows,
+  withLockedNights,
   type AttendancePayload,
   type GoingItem,
   type RsvpEventRow,
@@ -37,6 +39,7 @@ import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar as addEventToCalendar } from '../../lib/calendar'
+import { openPaywall } from '../../lib/paywall'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -63,6 +66,8 @@ function GoingScreenInner() {
   const [events, setEvents] = useState<EventRow[]>([])
   const [going, setGoing] = useState<RsvpEventRow[]>([])
   const [attended, setAttended] = useState<AttendancePayload['events']>([])
+  /** Older nights the server keeps behind Blendn+ (step 11). */
+  const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const { showToast } = useToast()
@@ -89,6 +94,7 @@ function GoingScreenInner() {
         setEvents([])
         setGoing([])
         setAttended([])
+        setLockedCount(0)
         setLoading(false)
         return
       }
@@ -116,6 +122,8 @@ function GoingScreenInner() {
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
       if (past.success && past.data) setAttended(past.data.events ?? [])
       else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
+      // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
+      if (past.success && past.data) setLockedCount(past.data.lockedCount ?? 0)
 
       const allFailed = !saved.success && !rsvps.success && !past.success
       setLoadFailed(allFailed)
@@ -397,6 +405,26 @@ function GoingScreenInner() {
       )
     }
 
+    if (item.kind === 'locked') {
+      // A tap on something that says Blendn+: the paywall always opens (trigger `recap`).
+      const label = lockedNightsLabel(item.count)
+      return (
+        <ScalePress
+          style={[styles.row, styles.locked]}
+          pressedScale={0.98}
+          haptic={false}
+          onPress={() => void openPaywall('recap', { userInitiated: true })}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          accessibilityHint="Opens Blendn+"
+        >
+          <Ionicons name="lock-closed-outline" size={ICON.md} color={EMBER.textSecondary} />
+          <Text style={styles.lockedText}>{label}</Text>
+          <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+        </ScalePress>
+      )
+    }
+
     if (item.kind === 'past') {
       const row = item.row
       return (
@@ -446,7 +474,10 @@ function GoingScreenInner() {
   }, [openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId])
 
   // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
-  const items = useMemo(() => goingSections(going, events, attended), [going, events, attended])
+  const items = useMemo(
+    () => withLockedNights(goingSections(going, events, attended), lockedCount),
+    [going, events, attended, lockedCount]
+  )
 
   const keyExtractor = useCallback((item: GoingItem) => item.key, [])
 
@@ -636,6 +667,15 @@ const styles = StyleSheet.create({
     borderRadius: EMBER_RADIUS.md,
   },
   skeletonRowText: { flex: 1, gap: SPACE.sm },
+  locked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    padding: SPACE.lg,
+    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: EMBER_RADIUS.md,
+  },
+  lockedText: { ...TYPE.bodyStrong, flex: 1 },
 })
 
 /*

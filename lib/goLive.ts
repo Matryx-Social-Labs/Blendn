@@ -23,7 +23,7 @@ export const GO_LIVE_CHOICES: readonly { choice: GoLiveChoice; label: string }[]
   { choice: { minutes: 20 }, label: '20 minutes' },
   { choice: { minutes: 45 }, label: '45 minutes' },
   { choice: { minutes: 60 }, label: 'An hour' },
-  // The server decides whether "stay" is Blendn+'s (`PLUS_REQUIRED`); today it is everyone's.
+  // The server decides whether "stay" is Blendn+'s (`PLUS_REQUIRED`): in a city's launch season it is everyone's.
   // It holds only while the app pings from inside the place, and it pings in the foreground.
   { choice: { stay: true }, label: 'Stay while Blendn is open here' },
 ]
@@ -41,6 +41,9 @@ export const EXPIRY_PROMPT_LEAD_MS = 5 * 60_000
 
 /** What the expiry prompt's free extension asks for. Going live again while live extends, never shortens. */
 export const EXTEND_CHOICE: GoLiveChoice = { minutes: 45 }
+
+/** What the expiry prompt's "Stay live till I leave" asks for: Blendn+'s where the server gates it. */
+export const STAY_CHOICE: GoLiveChoice = { stay: true }
 
 /** Milliseconds left in a window, never below 0; null with no window to count. */
 export function remainingMs(expiresAt: string | null | undefined, now: number): number | null {
@@ -150,7 +153,7 @@ export type RefusalAction = 'directions' | 'retry' | 'add_age'
 export type GoLiveRefusal =
   /** A sheet that sends you to the event's check-in — a state, never an error toast (PL-CU01). */
   | { kind: 'handoff'; eventId: string; message: string }
-  /** "Stay" while Blendn+ gates it: the Plus placeholder, not a failure. */
+  /** "Stay" while Blendn+ gates it (`PLUS_REQUIRED`): the paywall, not a failure. */
   | { kind: 'plus' }
   | { kind: 'refused'; title: string; message: string; offerDirections: boolean; action?: RefusalAction }
 

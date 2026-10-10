@@ -22,6 +22,7 @@ import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
+import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
@@ -80,6 +81,8 @@ const INTRO_ASSET = require('../assets/logo/intro.webp');
 function RootLayout() {
   const { user, loading, isNewAccount, unreachable } = useAuth();
   const pathname = usePathname();
+  // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
+  useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
@@ -710,6 +713,11 @@ function RootLayout() {
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
       <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
+      <Stack.Screen
+        name="plus"
+        options={{ headerShown: false, presentation: 'modal', animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+      />
       <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*

@@ -16,6 +16,7 @@ import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
+import { openPaywall } from '../lib/paywall'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
@@ -420,6 +421,8 @@ export default function SettingsScreen() {
 
     // Asks first: one stray tap used to end the session on the spot.
     { header: 'Account' },
+    // The paywall, asked for: no cooldown (step 11, trigger `profile`).
+    { icon: 'sparkles-outline', title: 'Blendn+', onPress: () => void openPaywall('profile', { userInitiated: true }) },
     { icon: 'log-out-outline', title: 'Sign out', onPress: () => setSignOutOpen(true) },
 
     /*

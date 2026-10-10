@@ -10,10 +10,13 @@ import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
 import { useInteractionFeedback } from './useInteractionFeedback'
+import { openPaywall } from './paywall'
 
 /**
  * Going live at a place, from wherever the button is: the place screen's Go
- * Live sheet and the expiry prompt's "Extend". Where you are comes through the
+ * Live sheet and the expiry prompt's "Extend" and "Stay live till I leave".
+ * A "stay" refused as Blendn+'s (`PLUS_REQUIRED`) opens the paywall through
+ * its policy (`lib/paywall.ts`). Where you are comes through the
  * check-in's own gates (`lib/locationFix.ts`); the answer is read by its code
  * (`goLiveRefusal`). The trays are the caller's.
  */
@@ -49,21 +52,30 @@ export function useGoLiveBusy(): boolean {
   return useSyncExternalStore(subscribeBusy, () => inFlight)
 }
 
-/** "Stay" behind Blendn+ — a placeholder until the paywall exists (step 11; docs/PLACEHOLDER_SCREENS.md §11). */
-export function showPlusPlaceholder(showTray: ShowTray, closeTray: () => void) {
+/**
+ * "Stay" is Blendn+'s here (`PLUS_REQUIRED`) and the paywall's policy said not
+ * now (it came by itself once tonight, or you are in a chat): the reason, the
+ * free way on, and the paywall on a tap — a tap always opens it.
+ */
+export function showPlusRefusal(showTray: ShowTray, closeTray: () => void, seePlus?: () => void) {
   showTray(
-    'Blendn+ is coming',
-    "Staying live for as long as you're here will be part of Blendn+. Until then, pick a time — you can extend it for free before it ends.",
-    [{ label: 'OK', variant: 'primary', onPress: closeTray }]
+    'Staying live is part of Blendn+',
+    'Pick a time instead — you can extend it for free before it ends.',
+    [
+      { label: 'OK', onPress: closeTray },
+      ...(seePlus
+        ? [{ label: 'See Blendn+', variant: 'primary' as const, onPress: () => { closeTray(); seePlus() } }]
+        : []),
+    ]
   )
 }
 
 export function showGoLiveRefusal(
   refusal: GoLiveRefusal,
   place: GoLivePlace,
-  { showTray, closeTray, retry }: { showTray: ShowTray; closeTray: () => void; retry?: () => void }
+  { showTray, closeTray, retry, seePlus }: { showTray: ShowTray; closeTray: () => void; retry?: () => void; seePlus?: () => void }
 ) {
-  if (refusal.kind === 'plus') return showPlusPlaceholder(showTray, closeTray)
+  if (refusal.kind === 'plus') return showPlusRefusal(showTray, closeTray, seePlus)
   if (refusal.kind === 'handoff') {
     // A state, not an error: an event has the place, and its check-in is the way in (PL-CU01).
     return showTray('Check in to the event instead', refusal.message, [
@@ -166,7 +178,13 @@ export function useGoLive({
       const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
       if (refusal.kind === 'refused') feedback.error()
       Logger.info('events', 'go live refused', { code: result.errorCode })
-      showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again })
+      const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
+      if (refusal.kind === 'plus') {
+        // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11).
+        closeTray()
+        if (await openPaywall('go_live_expiry')) return false
+      }
+      showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
       return false
     } catch (error) {
       Logger.error('events', 'go live failed', { error: String(error) })

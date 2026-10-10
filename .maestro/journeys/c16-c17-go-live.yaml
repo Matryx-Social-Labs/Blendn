@@ -115,13 +115,10 @@ tags:
     visible: "Still at .*"
     timeout: 1080000
 - assertVisible: "Extend 45 min · free"
-- assertVisible: "Stay with Blendn\\+ · locked"
+- assertVisible: "Stay live till I leave · Blendn\\+"
 - takeScreenshot: c16-a-prompt
-- tapOn: "Stay with Blendn\\+ · locked"
-- extendedWaitUntil:
-    visible: "Blendn\\+ is coming"
-    timeout: 10000
-- tapOn: "OK"
+# Staying would hold the window open (it is c22's, step 11): this run lets it end.
+- tapOn: "Let it end"
 - extendedWaitUntil:
     visible: "You're not live here any more"
     timeout: 480000

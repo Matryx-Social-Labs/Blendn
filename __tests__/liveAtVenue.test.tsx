@@ -77,6 +77,17 @@ describe('the expiry prompt (PL-M02), as mounted', () => {
     expect(apiClient.goLive).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45 }))
   })
 
+  it('"Stay live till I leave · Blendn+" asks the server to stay; in launch season it just works (step 11)', async () => {
+    active(at(20))
+    await mount()
+    await act(async () => { jest.advanceTimersByTime(15 * 60_000 + 1) })
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { venueDayId: 'day-1', expiresAt: at(30), stay: true } })
+    await act(async () => { fireEvent.press(screen.getByText('Stay live till I leave · Blendn+')) })
+    expect(apiClient.goLive).toHaveBeenCalledWith('v1', expect.objectContaining({ stay: true }))
+    expect(screen.queryByText('Still at The Humming Tree?')).toBeNull()
+    expect(mockShowToast).toHaveBeenCalledWith("You're live for as long as you're here", 'success')
+  })
+
   it('does not show again once asked tonight, nor for "stay"', async () => {
     await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree' })
     const { markLivePrompted } = require('../lib/goLive')

@@ -6,16 +6,18 @@ import { checkInChanged, subscribeCheckInChanged } from '../lib/checkIn'
 import {
   EXTEND_CHOICE,
   liveEndedMessage,
+  STAY_CHOICE,
   markLivePrompted,
   noteLiveDayEnd,
   promptDelayMs,
   readLiveSession,
+  type GoLiveChoice,
   type LiveSession,
 } from '../lib/goLive'
 import { Logger } from '../lib/logger'
 import { serverNow } from '../lib/serverClock'
 import { subscribeToLiveEnded } from '../lib/socketClient'
-import { showPlusPlaceholder, useGoLive } from '../lib/useGoLive'
+import { useGoLive } from '../lib/useGoLive'
 import { useAuth } from '../lib/useAuth'
 import { useLatest } from '../lib/useLatest'
 import { usePresence } from '../lib/usePresence'
@@ -42,8 +44,10 @@ const timeOf = (iso: string | null) =>
  * - **Pings** the venue day's presence (`usePresence`), which is what carries
  *   a "stay" window on while you are inside, and tells the server you left.
  * - **The expiry prompt**, five minutes before a fixed window ends, at most
- *   once a night (PL-M02): extend for free, "Stay with Blendn+" as a locked
- *   placeholder until the paywall exists (step 11), or let it end.
+ *   once a night (PL-M02): extend for free, "Stay live till I leave", or let
+ *   it end. Staying is Blendn+'s where the server gates it: a `PLUS_REQUIRED`
+ *   opens the paywall through its policy (`useGoLive`, step 11); in a city's
+ *   launch season it just works.
  * - **`live:ended`**: says what happened, closes the prompt, and tells the
  *   tab bar (`checkInChanged`).
  *
@@ -137,7 +141,8 @@ export function LiveAtVenue() {
     place,
     showTray,
     closeTray,
-    onLive: (result) => showToast(`You're live until ${timeOf(result.expiresAt)}`, 'success'),
+    onLive: (result) =>
+      showToast(result.stay ? "You're live for as long as you're here" : `You're live until ${timeOf(result.expiresAt)}`, 'success'),
   })
 
   useEffect(() => {
@@ -159,8 +164,8 @@ export function LiveAtVenue() {
     if (promptedDay && userId) void markLivePrompted(userId, promptedDay)
   }, [promptedDay, userId])
 
-  const extend = () => {
-    void goLive(EXTEND_CHOICE).then((ok) => {
+  const goLiveWith = (choice: GoLiveChoice) => () => {
+    void goLive(choice).then((ok) => {
       if (ok) setTray((t) => (t?.kind === 'prompt' ? null : t))
     })
   }
@@ -171,9 +176,9 @@ export function LiveAtVenue() {
           title: `Still at ${tray.venueName}?`,
           message: `You stop being live at ${timeOf(tray.expiresAt)}.`,
           buttons: [
-            { label: 'Extend 45 min · free', variant: 'primary', onPress: extend, loading: busy, disabled: busy },
-            // Locked: "stay" with Blendn+ is a placeholder until the paywall (step 11).
-            { label: 'Stay with Blendn+ · locked', onPress: () => showPlusPlaceholder(showTray, closeTray), disabled: busy },
+            { label: 'Extend 45 min · free', variant: 'primary', onPress: goLiveWith(EXTEND_CHOICE), loading: busy, disabled: busy },
+            // Blendn+ where the server gates it (PLUS_REQUIRED → the paywall); everyone's in launch season.
+            { label: 'Stay live till I leave · Blendn+', onPress: goLiveWith(STAY_CHOICE), disabled: busy },
             { label: 'Let it end', onPress: closeTray, disabled: busy },
           ],
         }

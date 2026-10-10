@@ -634,6 +634,7 @@ prefix**. Everything below is stored `plaintext` in EAS:
 | `EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED` | no | Dead — the app has no Supabase dependency. Listed so it reads as a leftover, not a mystery |
 | `EXPO_PUBLIC_MAP_STYLE_URL` | no | Optional: moves the home map's style off OpenFreeMap (`lib/mapStyleEmber.ts`) |
 | `EXPO_PUBLIC_BUILDINGS_TILES_URL` | no | Our building tiles for the home map: an https `{z}/{x}/{y}` template, **per environment** — the staging bucket for `development` and `preview`, the production bucket for `production` (after its upload; Blendn-Admin `scripts/map-buildings/README.md`). Unset or unusable: OpenFreeMap's buildings, with a warning in the log when set but unusable |
+| `EXPO_PUBLIC_REVENUECAT_APPLE_KEY` / `EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY` | no | RevenueCat's **public** SDK keys (`appl_…`, `goog_…`) for Blendn+. Never the `sk_` secret key. Unset: purchases are off. See [In-app purchases (Blendn+)](#in-app-purchases-blendn) |
 
 Marking these `secret` in EAS would be worse than useless: it hides them from
 you and your own CLI while leaving them fully readable in the shipped app, and
@@ -779,6 +780,63 @@ source in both directions.
 > renders** — `lib/apiClient.ts` throws at module scope. It does not degrade, it
 > does not show an error screen. If a TestFlight build dies instantly on launch,
 > check this first.
+
+## In-app purchases (Blendn+)
+
+Blendn+ is sold through the App Store and Google Play only, via RevenueCat
+(`react-native-purchases`, plan v2 step 11). **Never Razorpay, never a web
+checkout inside the app** (App Store 3.1.1); `__tests__/paywallGuards.test.ts`
+fails the build on either. The full store and RevenueCat setup — products,
+the entitlement, the webhook, sandbox testers — is in Blendn-Admin
+`docs/IAP-SETUP.md`. What this repo needs:
+
+**The keys, per EAS environment.** RevenueCat's public SDK keys, one per
+platform, in every environment that builds (`development`, `preview`,
+`production`). They are `EXPO_PUBLIC_`, so they ship in the bundle — which is
+what they are for. The `sk_` secret key is the server's and never goes here.
+Plaintext, not `secret`: a secret is unreadable to `ship:local` and protects
+nothing a bundle prints.
+
+```bash
+for E in development preview production; do
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_REVENUECAT_APPLE_KEY  --value appl_… --visibility plaintext
+  npx eas-cli env:set --environment $E --name EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY --value goog_… --visibility plaintext
+done
+```
+
+Unset (or not the platform's `appl_` / `goog_` shape), the SDK is never
+configured: the paywall still opens and says "Purchases aren't available yet",
+and nothing else changes.
+
+**A native rebuild is required.** `react-native-purchases` is a native module
+(the `RNPurchases` pod, Play Billing on Android). A JS bundle swapped into an
+older `.app` has no `RNPurchases`, so the bundle-swap shortcut does not work
+for this change or anything after it — build again.
+
+**Who buys.** RevenueCat's `app_user_id` is the account's id: `lib/useAuth.ts`
+logs RevenueCat in on every sign-in and restored session and out at sign-out
+(`lib/purchases.ts`), and the buy buttons stay off unless RevenueCat's user is
+the signed-in account. The server takes the person from `app_user_id` alone.
+
+**The platforms.**
+
+- iOS: the RevenueCat pods are in `ios/Podfile.lock`; nothing else in `ios/`
+  changed. The In-App Purchase capability is on for the App ID by default.
+- Android: the `BILLING` permission comes from the library's manifest. Google
+  requires Play Billing Library 8+ for updates since 31 August 2026;
+  `react-native-purchases` 10.12.2 → `purchases-hybrid-common` 19.10.0 →
+  `purchases-android` 10.26.0 → `billingClient` 8.3.0.
+- Android `launchMode` is `singleTask` (Expo's default, which the deep links
+  were tested with). RevenueCat recommends `standard` or `singleTop`, because
+  with `singleTask` a purchase waiting in another app — a UPI approval — is
+  cancelled if the person comes back through the launcher icon rather than
+  the payment app. Not changed yet; decide before Blendn+ goes on sale.
+
+**Testing.** Purchases need a store: a StoreKit configuration or a sandbox
+Apple ID on iOS, a licence tester on an internal-track build on Android
+(Blendn-Admin `docs/IAP-SETUP.md`). What unlocks is always the server's
+`GET /api/mobile/me/plus` — after a sandbox purchase, read the `entitlements`
+row back, not the app.
 
 ## Android
 

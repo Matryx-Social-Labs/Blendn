@@ -1,0 +1,174 @@
+/**
+ * RevenueCat on the app (plan v2 step 11): it buys as our user and nobody
+ * else, it is off without a key, and nothing it says unlocks anything. The
+ * SDK is the global mock in `jest.setup.js`; each test drives the calls.
+ */
+jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
+
+type Mod = typeof import('../lib/purchases')
+type RC = { [k: string]: jest.Mock }
+
+/** A fresh module (it holds whether RevenueCat is configured) and the SDK mock it talks to. */
+function load(appleKey: string | null = 'appl_public'): { m: Mod; rc: RC } {
+  if (appleKey === null) delete process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY
+  else process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY = appleKey
+  let m!: Mod
+  let rc!: RC
+  jest.isolateModules(() => {
+    m = require('../lib/purchases')
+    rc = require('react-native-purchases').default
+  })
+  return { m, rc }
+}
+
+const pkg = (identifier: string, priceString: string) => ({ identifier, product: { priceString } }) as never
+
+afterAll(() => {
+  delete process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY
+})
+
+describe('the key', () => {
+  it('takes only the platform\'s public SDK key — never an sk_ secret, never the other platform\'s', () => {
+    expect(load().m.revenueCatKey('ios', 'appl_abc', 'goog_xyz')).toBe('appl_abc')
+    const { m } = load()
+    expect(m.revenueCatKey('android', 'appl_abc', 'goog_xyz')).toBe('goog_xyz')
+    expect(m.revenueCatKey('ios', 'sk_secret', undefined)).toBeNull()
+    expect(m.revenueCatKey('ios', 'goog_xyz', undefined)).toBeNull()
+    expect(m.revenueCatKey('ios', '  ', undefined)).toBeNull()
+    expect(m.revenueCatKey('web', 'appl_abc', 'goog_xyz')).toBeNull()
+  })
+
+  it('unset: never configured, nothing to sell, no buying, the store page for Manage', async () => {
+    const { m, rc } = load(null)
+    expect(m.purchasesAvailable()).toBe(false)
+    await m.syncPurchasesUser('u1')
+    expect(rc.configure).not.toHaveBeenCalled()
+    expect(await m.canBuyAs('u1')).toBe(false)
+    expect(await m.loadPlusOffers()).toEqual([])
+    expect(await m.restore()).toEqual({ kind: 'failed', message: "Purchases aren't available yet." })
+    expect(await m.manageSubscriptionUrl('ios')).toBe('https://apps.apple.com/account/subscriptions')
+    expect(await m.manageSubscriptionUrl('android')).toBe(
+      'https://play.google.com/store/account/subscriptions?package=com.matryxsociallabs.blendn'
+    )
+  })
+})
+
+describe('RevenueCat follows the account', () => {
+  it('configures as the first account (no anonymous id), then logs in and out as it changes', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser(null)
+    expect(rc.configure).not.toHaveBeenCalled()
+
+    await m.syncPurchasesUser('u1')
+    expect(rc.configure).toHaveBeenCalledWith({ apiKey: 'appl_public', appUserID: 'u1' })
+
+    await m.syncPurchasesUser('u2')
+    expect(rc.logIn).toHaveBeenCalledWith('u2')
+
+    rc.isAnonymous.mockResolvedValueOnce(false)
+    await m.syncPurchasesUser(null)
+    expect(rc.logOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips logOut for an anonymous user (it throws there)', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    rc.isAnonymous.mockResolvedValueOnce(true)
+    await m.syncPurchasesUser(null)
+    expect(rc.logOut).not.toHaveBeenCalled()
+  })
+
+  it('in order: a sign-out queued behind a slow sign-in lands after it', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    const order: string[] = []
+    rc.logIn.mockImplementationOnce(async () => { await new Promise((r) => setTimeout(r, 5)); order.push('in') })
+    rc.isAnonymous.mockResolvedValueOnce(false)
+    rc.logOut.mockImplementationOnce(async () => { order.push('out') })
+    void m.syncPurchasesUser('u2')
+    await m.syncPurchasesUser(null)
+    expect(order).toEqual(['in', 'out'])
+  })
+
+  it('a failing SDK never throws into sign-in', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    rc.logIn.mockRejectedValueOnce(new Error('network'))
+    await expect(m.syncPurchasesUser('u2')).resolves.toBeUndefined()
+  })
+})
+
+describe('never buy anonymously (canBuyAs)', () => {
+  it('true only when RevenueCat\'s current user IS this account', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    rc.getAppUserID.mockResolvedValueOnce('u1')
+    expect(await m.canBuyAs('u1')).toBe(true)
+    rc.getAppUserID.mockResolvedValueOnce('$RCAnonymousID:abc')
+    expect(await m.canBuyAs('u1')).toBe(false)
+    rc.getAppUserID.mockResolvedValueOnce('u2')
+    expect(await m.canBuyAs('u1')).toBe(false)
+    expect(await m.canBuyAs(null)).toBe(false)
+  })
+
+  it('false before RevenueCat is configured', async () => {
+    const { m, rc } = load()
+    rc.getAppUserID.mockResolvedValueOnce('u1')
+    expect(await m.canBuyAs('u1')).toBe(false)
+  })
+})
+
+describe('what is sold', () => {
+  it('our four packages in our order, at the store\'s own price strings; anything else is left out', () => {
+    const { m } = load()
+    const offers = m.plusOffers([
+      pkg('night_pass', '₹49.00'),
+      pkg('$rc_annual', '₹1,499.00'),
+      pkg('$rc_lifetime', '₹9,999.00'),
+      pkg('$rc_monthly', '₹199.00'),
+      pkg('$rc_three_month', '₹499.00'),
+    ])
+    expect(offers.map((o) => [o.title, o.length, o.price])).toEqual([
+      ['Blendn+ · Monthly', '1 month, renews monthly', '₹199.00'],
+      ['Blendn+ · 3 months', '3 months, renews every 3 months', '₹499.00'],
+      ['Blendn+ · Yearly', '1 year, renews yearly', '₹1,499.00'],
+      ['Night Pass · 24 hours', '24 hours, does not renew', '₹49.00'],
+    ])
+  })
+
+  it('reads the current offering, falling back to "default"', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    rc.getOfferings.mockResolvedValueOnce({ current: null, all: { default: { availablePackages: [pkg('$rc_monthly', '₹199.00')] } } })
+    expect((await m.loadPlusOffers()).map((o) => o.price)).toEqual(['₹199.00'])
+  })
+})
+
+describe('buying and restoring say what happened, nothing more', () => {
+  it('purchased · cancelled · pending (UPI, Ask to Buy) · failed', async () => {
+    const { m, rc } = load()
+    rc.purchasePackage.mockResolvedValueOnce({})
+    expect(await m.buyPackage(pkg('$rc_monthly', 'x'))).toEqual({ kind: 'purchased' })
+    rc.purchasePackage.mockRejectedValueOnce({ userCancelled: true, code: '1' })
+    expect(await m.buyPackage(pkg('$rc_monthly', 'x'))).toEqual({ kind: 'cancelled' })
+    rc.purchasePackage.mockRejectedValueOnce({ userCancelled: false, code: '20' })
+    expect(await m.buyPackage(pkg('$rc_monthly', 'x'))).toEqual({ kind: 'pending' })
+    rc.purchasePackage.mockRejectedValueOnce({ userCancelled: false, code: '2' })
+    expect((await m.buyPackage(pkg('$rc_monthly', 'x'))).kind).toBe('failed')
+  })
+
+  it('restore: "nothing" when the store account has nothing active', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    expect(await m.restore()).toEqual({ kind: 'nothing' })
+    rc.restorePurchases.mockResolvedValueOnce({ entitlements: { active: { plus: {} } }, activeSubscriptions: ['plus_monthly'] })
+    expect(await m.restore()).toEqual({ kind: 'restored' })
+  })
+
+  it('Manage: RevenueCat\'s management URL when it has one', async () => {
+    const { m, rc } = load()
+    await m.syncPurchasesUser('u1')
+    rc.getCustomerInfo.mockResolvedValueOnce({ managementURL: 'https://apps.apple.com/account/subscriptions?x=1' })
+    expect(await m.manageSubscriptionUrl('ios')).toBe('https://apps.apple.com/account/subscriptions?x=1')
+  })
+})
