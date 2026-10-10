@@ -41,6 +41,7 @@ jest.mock('../lib/crewsApi', () => ({
   crewsApi: { create: jest.fn(), myCrews: jest.fn(), join: jest.fn(), decline: jest.fn(), blends: jest.fn(), reveal: jest.fn() },
 }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
+jest.mock('../lib/roomMembership', () => ({ markRoomLeft: jest.fn() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/logger', () => ({
@@ -54,6 +55,7 @@ import NewCrewScreen from '../app/crews/new'
 import { apiClient } from '../lib/apiClient'
 import { BLEND_CLOSED_LINE, CONSENT_AGREE, CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Blend } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
+import { markRoomLeft } from '../lib/roomMembership'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -225,6 +227,19 @@ describe('a Blend (CR-M02)', () => {
     const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
     await (sheet.actions.find((a) => a.label === 'Block') as { run: () => Promise<unknown> }).run()
     expect(api.blockUser).toHaveBeenCalledWith('rh_p2')
+  })
+
+  it('leaving marks the room left on this phone, so its chat offers Rejoin rather than "closed"', async () => {
+    mockParams.blendId = 'b1'
+    crews.blends.mockResolvedValue({ success: true, data: { blends: [blend] } })
+    api.leaveChatGroup.mockResolvedValue({ success: true, data: { chatGroupId: 'g1', left: true } })
+    await render(<BlendScreen />)
+    await waitFor(() => screen.getByText('Blend with Five'))
+    await fireEvent.press(screen.getByLabelText('Leave this Blend'))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
+    await (sheet.actions.find((a) => a.label === 'Leave') as { run: () => Promise<unknown> }).run()
+    expect(api.leaveChatGroup).toHaveBeenCalledWith('g1')
+    expect(markRoomLeft).toHaveBeenCalledWith('g1')
   })
 
   it('a Blend that is not open reads closed', async () => {

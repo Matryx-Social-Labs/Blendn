@@ -15,6 +15,8 @@ describe('crew and Blend rooms in the chat screen', () => {
     // room refusals, `roomRefusalState`), that drew "You're not in this room —
     // Rejoin", a door that refuses for ever.
     const closed = chat.indexOf('roomClosedLine(roomKind, result.errorCode)')
+    // …and not for somebody who left on their own: they can rejoin a Blend.
+    expect(chat).toContain('roomKind && !left ? roomClosedLine(roomKind, result.errorCode)')
     const forbidden = chat.indexOf('roomRefusalState(result.errorCode)')
     expect(closed).toBeGreaterThan(-1)
     expect(forbidden).toBeGreaterThan(-1)

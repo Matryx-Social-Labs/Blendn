@@ -19,6 +19,7 @@ import {
   type BlendPerson,
 } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
+import { markRoomLeft } from '../../lib/roomMembership'
 import { showSheet } from '../../lib/sheet'
 import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
@@ -124,6 +125,9 @@ export default function BlendScreen() {
           run: async () => {
             const result = await apiClient.leaveChatGroup(blend.chatGroupId)
             if (!result.success) return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t leave. Try again.') }
+            // The chat underneath must offer Rejoin, not "closed": a Blend's door
+            // answers a leaver's read with the same 403 as somebody it took out.
+            markRoomLeft(blend.chatGroupId)
             router.back()
             return { ok: true, toast: 'You left the Blend' }
           },

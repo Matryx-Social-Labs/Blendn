@@ -389,7 +389,9 @@ function GroupChatInner() {
          * Refused as somebody not in the room: the left state, not "Couldn't
          * load" — Try again would be refused the same way for ever.
          */
-        const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+        // Not while this phone knows you left: a Blend answers a leaver's read with
+        // the 403 it gives somebody it took out, and the leaver can rejoin.
+        const closed = !result.success && roomKind && !left ? roomClosedLine(roomKind, result.errorCode) : null
         if (closed) { setClosedLine(closed); setLoading(false); return }
         const refused = result.success ? null : roomRefusalState(result.errorCode)
         if (refused) {
