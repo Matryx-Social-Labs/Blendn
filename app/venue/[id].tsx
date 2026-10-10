@@ -332,6 +332,8 @@ export default function VenueScreen() {
         buttons={tray?.buttons ?? []}
         onClose={closeTray}
         layout={tray?.stack ? 'stack' : 'row'}
+        // Four windows and Cancel: at the default height Cancel sat below the fold (drive, 2026-10-09).
+        size={tray?.stack ? 'expanded' : 'default'}
       />
     </SafeAreaView>
   )
