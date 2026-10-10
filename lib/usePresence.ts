@@ -39,6 +39,15 @@ import { Logger } from './logger'
 /** Fallback if the server does not say. It always does; this is belt and braces. */
 const DEFAULT_INTERVAL_SECONDS = 300
 
+/**
+ * How long a ping waits for a fix. `getCurrentPositionAsync` has no timeout of
+ * its own; a phone that cannot get one left the ping hanging and every later
+ * ping with it (step 5 review, M9).
+ */
+export const PING_FIX_TIMEOUT_MS = 15_000
+
+const IDLE: PresenceStatus = { state: 'idle', shortfallMetres: null, finished: false }
+
 export interface PresenceStatus {
   state: PresencePing['status'] | 'idle'
   shortfallMetres: number | null
@@ -47,11 +56,13 @@ export interface PresenceStatus {
 }
 
 export function usePresence(eventId: string | null | undefined): PresenceStatus {
-  const [status, setStatus] = useState<PresenceStatus>({
-    state: 'idle',
-    shortfallMetres: null,
-    finished: false,
-  })
+  const [status, setStatus] = useState<PresenceStatus>(IDLE)
+  // A new check-in starts from nothing: "finished" was about the last one (M9).
+  const [statusFor, setStatusFor] = useState(eventId)
+  if (statusFor !== eventId) {
+    setStatusFor(eventId)
+    setStatus(IDLE)
+  }
 
   // Refs, not state: changing these must not re-run the effect and restart the
   // timer, which would reset the interval on every ping.
@@ -91,16 +102,21 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
       try {
         const permission = await Location.getForegroundPermissionsAsync()
         if (!permission.granted) {
-          // Without location we cannot prove presence. The sweeper will check
-          // them out, which is the correct outcome, so stop rather than spin.
-          Logger.info('presence', 'Location permission not granted, stopping pings')
-          stopped.current = true
+          // Without location we cannot prove presence. Ask again next tick
+          // rather than never: permission can be granted in Settings while the
+          // check-in is still open (M9). The sweeper ends it if it never is.
+          Logger.info('presence', 'Location permission not granted, skipping this ping')
+          schedule(DEFAULT_INTERVAL_SECONDS)
           return
         }
 
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        })
+        let fixTimer: ReturnType<typeof setTimeout> | undefined
+        const position = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) => {
+            fixTimer = setTimeout(() => reject(new Error('Location timed out')), PING_FIX_TIMEOUT_MS)
+          }),
+        ]).finally(() => clearTimeout(fixTimer))
 
         const result = await apiClient.sendPresencePing(eventId, {
           latitude: position.coords.latitude,

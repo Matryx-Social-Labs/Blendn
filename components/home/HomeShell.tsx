@@ -115,7 +115,16 @@ export function HomeShell({
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        <HomeMap center={browse.location} cityCentre={browse.cityCentre} />
+        <HomeMap
+          center={browse.location}
+          cityCentre={browse.cityCentre}
+          segment={segment}
+          topInset={insets.top + TOP_BAR_HEIGHT}
+          bottomInset={height - points[snap]}
+          focused={focused}
+          // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
+          glowVisible={focused && snap !== 'full' && !screenReader}
+        />
       </View>
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer

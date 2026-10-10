@@ -644,10 +644,33 @@ empty states. Design ticket: SCRUM-541.
 
 ### What it does
 
-- **The map** (`HomeMap.tsx`) fills the screen behind everything. In PR A it is
-  a plain dark 2D map you can pan, centred on the phone's fix. PR B replaces it
-  with the 3D map: MapLibre, the buildings under event and venue pins lit in
-  brand shades, a glow where there is no building.
+- **The map** (`HomeMap.tsx`) fills the screen behind everything: MapLibre
+  over OpenFreeMap, restyled dark (`lib/mapStyleEmber.ts`), at zoom 16 tilted
+  55°, the city's buildings an opaque cool dark grey under one map-anchored
+  moonlight (prototype v2's night). Pins follow the segment — events on
+  Events, venues on Places — for the part of the map on screen. Zoomed out, a
+  pin is a dot (at a venue its glow steps with its live bucket). Zoomed in
+  (step 2c), the twelve pins nearest the centre are lit (`lib/mapLit.ts`,
+  `useMapLighting.ts`): the building a pin stands in stands at least 15 m tall,
+  its walls banded from a dark foot to the brand colour under a bright crown —
+  ember walls and an accent roof for an event, rose walls and an orchid roof
+  for a venue — with a glow on the ground around its pin. A live event's glow
+  breathes for a few seconds after the map settles, then holds (never with
+  Reduce Motion, the drawer full or a screen reader on), and its look wins its
+  building. A pin with no building gets a banded pillar (10 m across, 70 m
+  tall) with a stronger glow at its foot. The nearest four carry a chip above
+  the roof: the name and "LIVE ●" or the start (in India's time, with the date
+  past six days), or a venue glyph and its bucket; a screen reader hears plain
+  words. Tap a pin, a lit building or a chip to open it. An event lights up
+  when its doors open, without a new read. The camera keeps its centre above
+  the drawer from the first frame, follows the picked city and your first
+  location fix (until you move the map yourself), and shows your position.
+  OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
+  top bar; the style can be moved off OpenFreeMap with
+  `EXPO_PUBLIC_MAP_STYLE_URL`. **Every map colour, size, timing, the light and
+  the camera are `lib/mapTheme.ts`, and provisional**: the owner will redesign
+  the app from a design link, and the map's look is that one file
+  (SCRUM-566).
 - **The top bar** (wordmark and bell) floats over the map. The drawer never
   covers it.
 - **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
@@ -659,7 +682,8 @@ empty states. Design ticket: SCRUM-541.
 
 | Rule | Why |
 |---|---|
-| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. `__tests__/home.test.ts` refuses the shapes that would draw one |
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. Every lit shape is a public building outline or a public pin, and every glow a fixed radius from the theme. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, any read of an area, and any circle sized by something a place carries |
+| **The map shows what the server sent** | Pins are the lists' own query for the viewport. Nothing on the phone decides which places are listed |
 | **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
 | **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
@@ -700,11 +724,110 @@ the place (§10). Design ticket: SCRUM-542.
 
 ## 10. A place — `app/venue/[id].tsx`
 
-**A stand-in, until step 5.** Added 2026-10-02 so a row in Places opens
-something true: the place's name, type and area, how many are live (as a
-bucket), and tonight's event, which opens the event. `GET /api/mobile/venues/:venueId`.
-Step 5 replaces it with the real venue screen: Go Live, the live pill and
-countdown, and "Own this place? Claim it".
+**Added 2026-10-02 as a stand-in; filled in 2026-10-09 (step 5 of the
+product-completion plan).** A row in Places opens it. Design ticket:
+SCRUM-555.
+
+### What it does
+
+`GET /api/mobile/venues/:venueId` decides everything on it:
+
+- **The place**: name, type, address.
+- **How many are live** — a bucket, never a number: "Under 5 live here",
+  "5–9 live here", … When you are live it reads as the others ("You and under
+  5 others"): the server's figure never counts you.
+- **Go Live** (`live.open`) opens the Go Live sheet (§11). After a window ends
+  the button becomes **"Go live again · 20 minutes"** — one tap, the same
+  window (PL-M05) — with "Pick another time" under it. Only for the window last
+  chosen at this place on its current venue day, never for "stay", and only for
+  the account that chose it.
+- **Live**: a pill, `LIVE · 18:42 left` ("LIVE · STAYING" for "stay"), counting
+  down from the server's `expiresAt` by the server's clock (the `Date` header);
+  at zero it asks the server every few seconds until the window is gone.
+  "Open the room" (the place's chat), "See who's here" (the Blend'n room — the
+  place screen closes first, so it opens on top), and "Stop being live".
+- **An event has the place** (`closedReason: event_live_here`): instead of Go
+  Live, "‹Event› has this place now" and **Go to the event**, the event's
+  check-in. A Go Live refused with `EVENT_LIVE_HERE` gets the same hand-off as a
+  sheet.
+- **No check-in area** (`no_check_in_area`): a line saying so; no button.
+- **Today's room**: locked until you are live ("Only people live here can see
+  who's here and join the chat"); open while you are.
+- **Tonight's event**, which opens the event.
+- **"Own this place? Claim it"** — only for an unclaimed place whose payload
+  carries `claim: { url }` (read through `claimUrlFrom`, as §7).
+- A page refused as not onboarded / not an adult shows the server's sentence
+  and no Try again: no retry fixes it.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Live is a bucket, never a number, and never who** | D-19: a count that moved 4 → 5 as you watched names an arrival. People are the room, for people live there |
+| **The countdown reads the server's `expiresAt`** | Re-read on focus and on return from the background. A timer from the tap is wrong the moment the window is extended elsewhere or swept (PL-CU02) |
+| **No check-in boundary, anywhere** | No payload carries the area (plan v2 §4) |
+| **`EVENT_LIVE_HERE` is a hand-off, not an error** | The person is at the door of an event; the way in is its check-in (PL-CU01) |
+| **Seeing who is here costs being seen** | The room is locked until you are live. Never sold, never unlocked by Plus |
+| **The claim link is the server's** | Built on the dashboard host for the environment; quiet, leaves the app (§7) |
+
+### Open for design
+
+Everything visual: the pill, where the count sits, the locked room, the hand-off
+panel, whether the place gets an image (it has none; tonight's event cover is
+available).
+
+---
+
+## 11. The Go Live sheet and the expiry prompt — `app/venue/[id].tsx`, `components/LiveAtVenue.tsx`
+
+**Added 2026-10-09 (step 5).** Both are `ActionTray`s for now. Design ticket: SCRUM-556.
+
+- **The sheet**: "Go live at ‹place›", a sentence on what live means (you see
+  who is here and join today's room; they see you by your room name; it ends),
+  then **20 minutes · 45 minutes · An hour · Stay while Blendn is open here**,
+  Cancel. Where you are goes through the check-in's own gates (permission,
+  Precise Location, a fix); Go Live sends any fix up to the server's 150 m and
+  lets the server judge, and "Try Again" on a weak fix runs Go Live again.
+  "Stay" is sent as asked: whether it is Blendn+'s is the server's to say
+  (`PLUS_REQUIRED`), which today it is not; it holds only while the app pings
+  from the place, in the foreground.
+- **The expiry prompt**: five minutes before a fixed window ends, wherever you
+  are in the app, **at most once a night** per place (a "stay" window is never
+  prompted — it follows you). "Still at ‹place›?" · "You stop being live at
+  9:20 PM." · **Extend 45 min · free** (going live again extends, never
+  shortens) · **Stay with Blendn+ · locked** · Let it end.
+- **"Stay with Blendn+" is a placeholder.** Blendn+ is step 11; the row opens a
+  "Blendn+ is coming" note, never a purchase. So does a `PLUS_REQUIRED` answer.
+- **When it ends** (`live:ended`), a toast says so — "You're no longer live at
+  ‹place›." / "An event just started at ‹place›…" — and the place, the room
+  and the Banter re-read. Nothing is said for an end you made.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The extension is free** | 20/45/60 stay free (ROADMAP, Pricing); only "stay" may ever be Plus |
+| **Once a night** | A prompt every window would nag; asked once per venue day on this phone |
+| **Never a paywall in the prompt yet** | No purchase exists until step 11; a locked row, not a dead buy button |
+
+---
+
+## 12. A place's room when you are not live — `app/chat/[id].tsx` (`RoomLeftState kind="not_live"`)
+
+**Added 2026-10-09 (step 5).** Design ticket: SCRUM-557. A place's chat is for the people live there.
+When your window ends the server answers `NOT_LIVE` (and `live:ended` arrives):
+the history and composer go, replaced by "You're not live here any more" ·
+"Today's room is for the people live at this place. Go live there again to
+rejoin it." · **Go live again**, which opens the place. The room leaves the
+Banter's list at the same moment (the server lists it only while you are live).
+
+### Design tickets
+
+| Section | Ticket |
+|---|---|
+| §10 A place | SCRUM-555 |
+| §11 Go Live sheet, expiry prompt, Plus placeholder | SCRUM-556 |
+| §12 The room when not live (and the place's locked room) | SCRUM-557 |
 
 ---
 

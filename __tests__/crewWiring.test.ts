@@ -11,10 +11,11 @@ describe('crew and Blend rooms in the chat screen', () => {
   const chat = src('app/chat/[id].tsx')
 
   it('reads a closed crew or Blend room before the "not in this room" branch', () => {
-    // A Blend answers 403 to somebody it took out; read as FORBIDDEN first, that
-    // drew "You're not in this room — Rejoin", a door that refuses for ever.
+    // A Blend answers 403 to somebody it took out; read as FORBIDDEN first (the
+    // room refusals, `roomRefusalState`), that drew "You're not in this room —
+    // Rejoin", a door that refuses for ever.
     const closed = chat.indexOf('roomClosedLine(roomKind, result.errorCode)')
-    const forbidden = chat.indexOf("result.errorCode === 'FORBIDDEN') { setOutOfRoom(true)")
+    const forbidden = chat.indexOf('roomRefusalState(result.errorCode)')
     expect(closed).toBeGreaterThan(-1)
     expect(forbidden).toBeGreaterThan(-1)
     expect(closed).toBeLessThan(forbidden)

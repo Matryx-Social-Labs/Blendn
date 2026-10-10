@@ -43,10 +43,15 @@ const listeners = new Set<() => void>()
  * SWR-cached detail on focus or on the socket's check-in, was handed the
  * pre-check-in `isCheckedIn: false` and went back to "Blend in".
  */
-export function checkInChanged(eventId: string): void {
+export function checkInChanged(eventId?: string): void {
   apiClient.forgetActiveCheckins()
-  apiClient.forgetEvent(eventId)
-  forgetEventDetailCache(eventId)
+  // A place's page carries your window there (Go Live, step 5).
+  apiClient.forgetVenues()
+  // Without an id — a Go Live whose answer never came — every reader re-reads anyway.
+  if (eventId) {
+    apiClient.forgetEvent(eventId)
+    forgetEventDetailCache(eventId)
+  }
   for (const fn of listeners) fn()
 }
 

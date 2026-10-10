@@ -6,7 +6,7 @@
  * decides, so both doors — and the Blend'n button — agree.
  */
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn(), forgetEvent: jest.fn() },
+  apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
 }))
 jest.mock('../lib/rosterMemory', () => ({ forgetRoster: jest.fn() }))
 jest.mock('../lib/roomVisibilityStorage', () => ({

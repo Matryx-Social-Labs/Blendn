@@ -1,0 +1,195 @@
+# TQ-C16 (SCRUM-558) + TQ-C17 (SCRUM-559), plan v2 step 5: Go Live at a place from Places, open its
+# room and post, the expiry prompt, the window ending (the room's not-live
+# state, the room gone from the Banter), back to the place; then a second
+# place: Go Live, the prompt, "Extend 45 min · free".
+#
+# Real windows: about an hour end to end. Nothing is faked.
+#
+# Env, as MAESTRO_* environment variables (Maestro logs typed text, and -e is
+# visible in ps): MAESTRO_EMAIL, MAESTRO_PASSWORD. The rest with -e:
+#   PLACE_A, LAT_A, LNG_A   a fenced place, found in Places (nearest first)
+#   PLACE_B_ID, LAT_B, LNG_B  a second fenced place, opened by link
+#   MESSAGE                 posted in A's room
+# Delete ~/.maestro/tests/<run> and the --test-output-dir afterwards.
+# The sim's Keychain session wins over MAESTRO_EMAIL: launchApp does not sign
+# out on iOS, so a sim another session signed in to goes live as THAT person.
+# Sign out first, or `xcrun simctl keychain <udid> reset`, and log the lane.
+#
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT v.name AS venue, ps.arrived_at::text AS arrived, ps.departed_at::text AS departed, coalesce(ps.departed_source::text,'open') AS how, ci.expires_at::text AS expires FROM presence_sessions ps JOIN \"User\" u ON u.id = ps.user_id JOIN events e ON e.id = ps.event_id JOIN venues v ON v.id = e.venue_id LEFT JOIN event_check_ins ci ON ci.event_id = ps.event_id AND ci.user_id = ps.user_id WHERE e.kind = 'venue_day' AND u.email = '<email>' ORDER BY ps.arrived_at DESC LIMIT 4"
+#   A: how = expired AND departed = expires. B: expires moved ~+40 min by the extend.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c16
+  - tq-c17
+  - needs-live-place
+---
+- setLocation:
+    latitude: ${LAT_A}
+    longitude: ${LNG_A}
+- launchApp
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    commands:
+      - runFlow:
+          file: ../subflows/sign-in.yaml
+          env:
+            EMAIL: ${MAESTRO_EMAIL}
+            PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+
+# --- Place A, from Places: locked room, Go Live, the pill (PL-M01, PL-M04) ---
+- tapOn: "Places"
+- extendedWaitUntil:
+    notVisible: "Loading places"
+    timeout: 30000
+- tapOn: ".*${PLACE_A}.*"
+- extendedWaitUntil:
+    visible: "Go Live"
+    timeout: 30000
+- assertVisible: ".*live here"
+- assertVisible: ".*Only people live here.*"
+- takeScreenshot: c16-a-not-live
+- tapOn: "Go Live"
+- extendedWaitUntil:
+    visible: "20 minutes"
+    timeout: 10000
+- tapOn: "20 minutes"
+- extendedWaitUntil:
+    visible: "LIVE · .* left"
+    timeout: 45000
+- assertNotVisible: "Go Live"
+- assertVisible: "You and .* others"
+- takeScreenshot: c16-a-live
+
+# --- "See who's here": the Blend'n room opens on top, not under the place (H3) ---
+- tapOn: "See who's here"
+- extendedWaitUntil:
+    visible: "Close Blend'n"
+    timeout: 20000
+- assertNotVisible: ".*Only people live here.*"
+- assertNotVisible: "Today.s room"
+- takeScreenshot: c16-a-blendn-on-top
+- tapOn: "Close Blend'n"
+
+# --- The Banter while live: the place's name, no count (H5, D-19) ---
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: ".*${PLACE_A}.*"
+    timeout: 30000
+- assertNotVisible: ".*${PLACE_A}.*in the room.*"
+- assertNotVisible: ".*Venue day.*"
+- takeScreenshot: c17-banter-live
+
+# --- A's room: post, then the window runs out around it (PL-M02, PL-K01) ---
+- tapOn: ".*${PLACE_A}.*"
+- extendedWaitUntil:
+    visible: ".*(Share your thoughts|Start the room).*"
+    timeout: 30000
+- assertNotVisible: ".*in the room.*"
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- runFlow: ../subflows/keyboard-done.yaml
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*${MESSAGE}.*"
+    timeout: 15000
+# The composer emptied, so the bubble is the message, not the typed text.
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 15000
+- takeScreenshot: c17-a-room
+- extendedWaitUntil:
+    visible: "Still at .*"
+    timeout: 1080000
+- assertVisible: "Extend 45 min · free"
+- assertVisible: "Stay with Blendn\\+ · locked"
+- takeScreenshot: c16-a-prompt
+- tapOn: "Stay with Blendn\\+ · locked"
+- extendedWaitUntil:
+    visible: "Blendn\\+ is coming"
+    timeout: 10000
+- tapOn: "OK"
+- extendedWaitUntil:
+    visible: "You're not live here any more"
+    timeout: 480000
+- takeScreenshot: c17-a-not-live
+# Opened from the Banter, "Go live again" opens the place from the room's own row (M4).
+- tapOn: "Go live again"
+# One tap goes again with the same window, on the same venue day (PL-M05).
+- extendedWaitUntil:
+    visible: "Go live again.*20 minutes"
+    timeout: 30000
+- assertVisible: ".*Only people live here.*"
+- assertNotVisible: "LIVE · .*"
+- takeScreenshot: c16-a-after
+- tapOn: "Go live again.*20 minutes"
+- extendedWaitUntil:
+    visible: "LIVE · .* left"
+    timeout: 45000
+
+# --- The second window at A tonight: no second prompt (PL-M02, once a night) ---
+- tapOn: "Open the room"
+- extendedWaitUntil:
+    visible: "You're not live here any more"
+    timeout: 1320000
+- assertNotVisible: "Still at .*"
+- takeScreenshot: c17-a-second-window-ended
+- tapOn: "Go live again"
+
+# --- The room left the Banter with the window ---
+- repeat:
+    times: 4
+    while:
+      notVisible: "Banter"
+    commands:
+      - tapOn: "Go back"
+- tapOn: "Banter"
+# Wait for the list itself, so the absence below is not read off an empty screen.
+- extendedWaitUntil:
+    visible: ".*(Live now|Recent|Requests|No conversations yet).*"
+    timeout: 30000
+- assertNotVisible: ".*${PLACE_A}.*"
+- takeScreenshot: c17-banter-after
+
+# --- Place B, by link: Go Live, the prompt, extend for free (PL-M02) ---
+- setLocation:
+    latitude: ${LAT_B}
+    longitude: ${LNG_B}
+- openLink: blendn://venue/${PLACE_B_ID}
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Go Live"
+    timeout: 30000
+- tapOn: "Go Live"
+- tapOn: "20 minutes"
+- extendedWaitUntil:
+    visible: "LIVE · .* left"
+    timeout: 45000
+- extendedWaitUntil:
+    visible: "Still at .*"
+    timeout: 1080000
+- tapOn: "Extend 45 min · free"
+- extendedWaitUntil:
+    visible: "LIVE · 4[0-9]:[0-9]{2} left"
+    timeout: 45000
+- takeScreenshot: c16-b-extended
+- tapOn: "Stop being live"
+# The last window chosen here was the extension's.
+- extendedWaitUntil:
+    visible: "Go live again.*45 minutes"
+    timeout: 30000

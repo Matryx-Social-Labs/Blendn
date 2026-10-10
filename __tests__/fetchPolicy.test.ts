@@ -71,9 +71,15 @@ const ALLOWED: Record<string, string> = {
   'components/PresenceMonitor.tsx':
     'presence is correctness, not freshness: a stale check-in decides whether ' +
     'somebody is shown as in the room',
+  'components/LiveAtVenue.tsx':
+    'which window you are live in is correctness, not freshness: a cached answer ' +
+    'would prompt for a Go Live that already ended, or miss one just started',
   'components/home/PlacesList.tsx':
     'opening Places (a tap on the segment or back to the tab), pull-to-refresh and Try again — ' +
     'and a venue an event has taken over must not linger from a cached page',
+  'components/home/HomeMap.tsx':
+    'a viewport the person moved to (or a segment they picked) is the ask; a venue an event ' +
+    'has taken over must not linger as a pin from a cached page',
   'lib/useRoom.ts':
     'load-more raises the limit, which is a different query rather than a ' +
     're-read of the same one',

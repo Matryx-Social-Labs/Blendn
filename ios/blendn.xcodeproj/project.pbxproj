@@ -150,12 +150,16 @@
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				AAD20A93D3174D959F47F171 /* Upload Debug Symbols to Sentry */,
 				476084AE1E3E64FCB33BC558 /* [CP] Embed Pods Frameworks */,
+				55FADB1B47283ACFA627C0E1 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = blendn;
+			packageProductDependencies = (
+				1AC7A31293041730B483EC8D /* MapLibre */,
+			);
 			productName = blendn;
 			productReference = 13B07F961A680F5B00A75B9A /* blendn.app */;
 			productType = "com.apple.product-type.application";
@@ -182,6 +186,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				5FDB414D6D343190171D606D /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -292,6 +299,25 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-blendn/Pods-blendn-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		55FADB1B47283ACFA627C0E1 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[MapLibre React Native] Remove MapLibre.xcframework-ios.signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\"";
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -663,6 +689,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5FDB414D6D343190171D606D /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = exactVersion;
+				version = 6.31.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1AC7A31293041730B483EC8D /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5FDB414D6D343190171D606D /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }
