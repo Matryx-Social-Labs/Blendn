@@ -12,7 +12,7 @@ import { getDistanceKm } from './geo'
 import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
 import { footprintKey, nearestTo, type LitPlace } from './mapLit'
-import { buildingHeights } from './mapStyleEmber'
+import { buildingHeights, featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
 
 /** The server's bound on `radius` for `/events` and `/venues`, in km. */
@@ -207,7 +207,8 @@ export function litPlaceFor<
   const place: LitPlace = { id: pin.id, kind: pin.kind, live: pin.live, at: [pin.longitude, pin.latitude], building: null }
   const building = buildingUnder(pin, drawn)
   if (!building) return place
-  const featureId = featureIds && typeof building.id === 'number' ? building.id : null
+  // Android hands a tile's numeric id over as a string: normalised, or no building on Android was ever lit by id.
+  const featureId = featureIds ? featureIdOf(building.id) : null
   const footprint = building.geometry.coordinates
   return {
     ...place,

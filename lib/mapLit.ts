@@ -20,6 +20,7 @@
  * (`__tests__/homeMap.test.ts` reads it to be sure).
  */
 import { liveNowLabel, type LiveNow } from './home'
+import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
 
 export type Ring = number[][]
@@ -189,6 +190,22 @@ export function nearestTo<T extends { at: LngLat }>(items: T[], [lng, lat]: LngL
   const kx = mPerDegLng(lat)
   const d = (t: T) => Math.hypot((t.at[0] - lng) * kx, (t.at[1] - lat) * M_PER_DEG_LAT)
   return [...items].sort((a, b) => d(a) - d(b)).slice(0, max)
+}
+
+/**
+ * The lit building a tap landed on. A tap's box holds every building around
+ * it, lit or not, in no useful order: the first is usually an unlit
+ * neighbour, so all are checked (review H3). Ids are normalised: Android gives
+ * them as strings (review H1).
+ */
+export function litStateTapped<S extends { featureId: number }>(features: { id?: unknown }[], states: S[]): S | null {
+  const byId = new Map(states.map((s) => [s.featureId, s]))
+  for (const f of features) {
+    const id = featureIdOf(f.id)
+    const hit = id === null ? undefined : byId.get(id)
+    if (hit) return hit
+  }
+  return null
 }
 
 /* -------------------------------------------------------------------------- */

@@ -11,7 +11,7 @@ import {
   type ViewStateChangeEvent,
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
 
 import { eventFromApi } from '../../lib/api'
@@ -32,10 +32,18 @@ import {
   type PinQuery,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
-import { homeMapStyle, styleHost } from '../../lib/mapStyleEmber'
+import {
+  BUILDING_LAYER_ID,
+  drawsOwnBuildings,
+  homeMapStyle,
+  OWN_BUILDINGS_LAYER_ID,
+  OWN_BUILDINGS_LIT_BY,
+  parseOwnBuildingsUrl,
+  styleHost,
+} from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
-import { Chips, CityBuildings, GroundGlow, LitBuildings } from './MapLitLayers'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
 /** Where the map opens before the phone has a fix: central Bengaluru. */
@@ -51,6 +59,12 @@ type Point = { type: 'Point'; coordinates: [number, number] }
 type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
+
+/** Our building tiles (stage 2), when this build has them; else OpenFreeMap's buildings everywhere. */
+const OWN_BUILDINGS_ENV = parseOwnBuildingsUrl(process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL)
+const OWN_BUILDINGS_URL = OWN_BUILDINGS_ENV.url
+/** Before the map reports its bounds: about a zoom-16 view around a point. */
+const roughView = ([lng, lat]: [number, number]): Bounds => [lng - 0.006, lat - 0.006, lng + 0.006, lat + 0.006]
 
 /** `MAP_THEME.light`, as the spec's (mutable) type. */
 const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
@@ -84,6 +98,10 @@ const pinApi = {
  *   for a few seconds, then holds. The nearest few carry a name chip. An event
  *   is live from its start to its end as the clock moves, not as it was at the
  *   last read.
+ * - **The buildings are our own tiles** where they cover the view (a city in
+ *   `OWN_BUILDINGS_CITIES`, with `EXPO_PUBLIC_BUILDINGS_TILES_URL` set): each
+ *   building is its own feature, lit as itself through feature-state.
+ *   Elsewhere, OpenFreeMap's, lit by a copy (stage 1).
  * - **The camera keeps what matters above the drawer**: every move carries the
  *   drawer's height as padding, from the first frame. A move asked for before
  *   the map is ready is made once it is.
@@ -157,7 +175,24 @@ export const HomeMap = memo(function HomeMap({
   const [now, setNow] = useState(() => Date.now())
   const pins = useMemo(() => (loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS), [loaded, segment, now])
 
-  const { lit, onFrame, relight } = useMapLighting({ map, view, pins, segment, size: { width, height } })
+  // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
+  const startAt: [number, number] = center ? [center.longitude, center.latitude] : DEFAULT_CENTRE
+  const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, roughView(startAt), false))
+  const buildingLayerId = ownTiles ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
+
+  // A tiles URL that is set but cannot be used is a misconfigured build, not a quiet fallback (review M7).
+  useEffect(() => {
+    if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
+  }, [])
+  const { lit, onFrame, relight } = useMapLighting({
+    map,
+    view,
+    pins,
+    segment,
+    size: { width, height },
+    featureIds: ownTiles,
+    litBy: OWN_BUILDINGS_LIT_BY,
+  })
 
   // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
@@ -212,6 +247,7 @@ export const HomeMap = memo(function HomeMap({
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
     if (userInteraction) touched.current = true
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
+    setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
@@ -228,6 +264,7 @@ export const HomeMap = memo(function HomeMap({
     m.getViewState()
       .then(({ bounds, center: centre, zoom, pitch }) => {
         view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
+        setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
         relight()
         ask(bounds as Bounds)
       })
@@ -315,17 +352,29 @@ export const HomeMap = memo(function HomeMap({
       <Camera
         ref={camera}
         initialViewState={{
-          center: center ? [center.longitude, center.latitude] : DEFAULT_CENTRE,
+          center: startAt,
           zoom: MAP_THEME.camera.zoom,
           pitch: MAP_THEME.camera.pitch,
           // The drawer covers the bottom of the map: the first frame keeps its centre in the part you can see.
           padding: { bottom: bottomInset },
         }}
       />
-      {center ? <NativeUserLocation /> : null}
-      <CityBuildings />
-      <GroundGlow data={lit.glow} visible={glowVisible} />
-      <LitBuildings data={lit.bands} onPress={openPlace} />
+      {/*
+       * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
+       * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
+       * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+       */}
+      {center ? <NativeUserLocation mode="default" /> : null}
+      {/*
+       * Remounted together when the building source switches: the glow goes under
+       * the buildings and the lit copies over them, so they must be added after
+       * the buildings layer, in this order.
+       */}
+      <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
+        {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
+        <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
+        <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
+      </Fragment>
       <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
         <Layer
           id="pin-glow"

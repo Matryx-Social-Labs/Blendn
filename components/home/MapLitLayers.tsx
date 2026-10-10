@@ -1,15 +1,30 @@
 import { Ionicons } from '@expo/vector-icons'
-import { GeoJSONSource, Layer, Marker, type CircleLayerSpecification, type PressEventWithFeatures } from '@maplibre/maplibre-react-native'
-import { memo, useEffect, useState } from 'react'
+import {
+  GeoJSONSource,
+  Layer,
+  Marker,
+  VectorSource,
+  type CircleLayerSpecification,
+  type PressEventWithFeatures,
+  type VectorSourceRef,
+} from '@maplibre/maplibre-react-native'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { AccessibilityInfo, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
-import { glowBreathes, glowOpacity, glowRadius, type BandFeature, type GlowFeature } from '../../lib/mapLit'
-import { BUILDING_LAYER_ID, CITY_BUILDINGS, LABELS_FROM_LAYER_ID } from '../../lib/mapStyleEmber'
+import { glowBreathes, glowOpacity, glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
+import {
+  CITY_BUILDINGS,
+  LABELS_FROM_LAYER_ID,
+  OWN_BUILDINGS,
+  OWN_BUILDINGS_ATTRIBUTION,
+  OWN_BUILDINGS_TILE_ZOOM,
+  type OwnBuildingState,
+} from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
 import { Text } from '../ui/Text'
-import type { Chip, Collection } from './useMapLighting'
+import type { Chip, Collection, LitState } from './useMapLighting'
 
 /**
  * The home map's layers that are ours, not the basemap's (step 2c): the city's
@@ -38,13 +53,104 @@ export const CityBuildings = memo(function CityBuildings() {
   )
 })
 
+/** Tries at feature-state per building before giving up until the lighting changes again (review M3). */
+const STATE_TRIES = 3
+/** The wait before the first retry; it doubles each time. */
+const STATE_RETRY_MS = 400
+
+/**
+ * The city's buildings from our own tiles (stage 2, SCRUM-572): one feature
+ * per building, each with its own id. A lit one is lit as itself, through
+ * feature-state, applied as a diff: set for the new, removed for the gone, and
+ * counted as applied only once native says so (a refusal is retried a few
+ * times, then left until the lighting changes). Tapping it opens the place it
+ * stands for. Credited, with links, next to OpenFreeMap.
+ */
+export const OwnBuildings = memo(function OwnBuildings({
+  url,
+  states,
+  onOpen,
+}: {
+  url: string
+  states: LitState[]
+  onOpen: (kind: LitState['kind'], id: string) => void
+}) {
+  const source = useRef<VectorSourceRef>(null)
+  // What native holds, per building: `kind:live`.
+  const applied = useRef(new Map<number, string>())
+  const tiles = useMemo(() => [url], [url])
+  useEffect(() => {
+    let alive = true
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const at = (featureId: number) => ({ id: featureId, sourceLayer: OWN_BUILDINGS.sourceLayer })
+    const want = new Map(states.map((s) => [s.featureId, s]))
+    const retry = (tries: number, again: () => void, what: string, error: unknown) => {
+      if (!alive) return
+      if (tries < STATE_TRIES) timers.push(setTimeout(again, STATE_RETRY_MS * 2 ** (tries - 1)))
+      else Logger.warn('events', `Could not ${what} a building`, { error: String(error) })
+    }
+    const set = (s: LitState, tries = 1) => {
+      const key = `${s.kind}:${s.live}`
+      const state: OwnBuildingState = { lit: s.kind, live: s.live }
+      source.current
+        ?.setFeatureState(at(s.featureId), state)
+        .then(() => {
+          if (alive && want.get(s.featureId) === s) applied.current.set(s.featureId, key)
+        })
+        .catch((error) => retry(tries, () => set(s, tries + 1), 'light', error))
+    }
+    const unset = (featureId: number, tries = 1) => {
+      source.current
+        ?.removeFeatureState(at(featureId))
+        .then(() => {
+          if (alive && !want.has(featureId)) applied.current.delete(featureId)
+        })
+        .catch((error) => retry(tries, () => unset(featureId, tries + 1), 'unlight', error))
+    }
+    for (const featureId of applied.current.keys()) if (!want.has(featureId)) unset(featureId)
+    for (const s of states) if (applied.current.get(s.featureId) !== `${s.kind}:${s.live}`) set(s)
+    return () => {
+      alive = false
+      timers.forEach(clearTimeout)
+    }
+  }, [states])
+  const onPress = (e: NativeSyntheticEvent<PressEventWithFeatures>) => {
+    const lit = litStateTapped(e.nativeEvent.features, states)
+    if (lit) onOpen(lit.kind, lit.pinId)
+  }
+  return (
+    <VectorSource
+      id="blendn-buildings"
+      ref={source}
+      tiles={tiles}
+      // Built at one zoom only; MapLibre overzooms past it.
+      minzoom={OWN_BUILDINGS_TILE_ZOOM}
+      maxzoom={OWN_BUILDINGS_TILE_ZOOM}
+      attribution={OWN_BUILDINGS_ATTRIBUTION}
+      onPress={onPress}
+    >
+      <Layer
+        id={OWN_BUILDINGS.id}
+        type="fill-extrusion"
+        source-layer={OWN_BUILDINGS.sourceLayer}
+        minzoom={OWN_BUILDINGS.minzoom}
+        beforeId={LABELS_FROM_LAYER_ID}
+        paint={OWN_BUILDINGS.paint}
+      />
+    </VectorSource>
+  )
+})
+
 /** The lit copies of buildings, and beacons, over the city's. A pin inside a building is hidden by it, so the lit building is the marker: tap it too. */
 export const LitBuildings = memo(function LitBuildings({
   data,
   onPress,
+  over,
 }: {
   data: Collection<BandFeature>
   onPress: (e: NativeSyntheticEvent<PressEventWithFeatures>) => void
+  /** The city's buildings layer showing: the copies go over it. */
+  over: string
 }) {
   return (
     <GeoJSONSource id="lit-buildings" data={data} onPress={onPress}>
@@ -52,7 +158,7 @@ export const LitBuildings = memo(function LitBuildings({
         id="lit-buildings"
         type="fill-extrusion"
         // Over the city's copy, under the road names.
-        afterId={BUILDING_LAYER_ID}
+        afterId={over}
         paint={{
           'fill-extrusion-color': ['get', 'color'],
           'fill-extrusion-height': ['get', 'height'],
@@ -93,7 +199,16 @@ function useReduceMotion(): boolean {
  * the map stops redrawing (review H2, WCAG 2.2.2). It holds steady at once with
  * Reduce Motion, or with the map out of view.
  */
-export const GroundGlow = memo(function GroundGlow({ data, visible }: { data: Collection<GlowFeature>; visible: boolean }) {
+export const GroundGlow = memo(function GroundGlow({
+  data,
+  visible,
+  under,
+}: {
+  data: Collection<GlowFeature>
+  visible: boolean
+  /** The city's buildings layer showing: the glow goes under it. */
+  under: string
+}) {
   const reduceMotion = useReduceMotion()
   const breathing = glowBreathes({ visible, reduceMotion, anyLive: data.features.some((f) => f.properties.pulse) })
   const [phase, setPhase] = useState<'steady' | 'low' | 'high'>('steady')
@@ -123,14 +238,14 @@ export const GroundGlow = memo(function GroundGlow({ data, visible }: { data: Co
       <Layer
         id="glow-still"
         type="circle"
-        beforeId={BUILDING_LAYER_ID}
+        beforeId={under}
         filter={['!=', ['get', 'pulse'], true]}
         paint={{ ...look, 'circle-opacity': ['get', 'opacity'] }}
       />
       <Layer
         id="glow-live"
         type="circle"
-        beforeId={BUILDING_LAYER_ID}
+        beforeId={under}
         filter={['==', ['get', 'pulse'], true]}
         paint={{ ...look, 'circle-opacity': glowOpacity(breathing ? phase : 'steady'), 'circle-opacity-transition': { duration: periodMs / 2, delay: 0 } }}
       />
