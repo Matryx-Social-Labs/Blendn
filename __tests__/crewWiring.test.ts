@@ -24,7 +24,12 @@ describe('crew and Blend rooms in the chat screen', () => {
   })
 
   it('a send refused because the room closed closes the room on screen', () => {
-    expect(chat.match(/roomClosedLine\(roomKind, result\.errorCode\)/g)).toHaveLength(2)
+    // On load, on a send, and on a refused rejoin (H2).
+    expect(chat.match(/roomClosedLine\(roomKind, result\.errorCode\)/g)).toHaveLength(3)
+    // Served: the closed line clears (M10).
+    expect(chat).toContain('setClosedLine(null)')
+    // Opened without a kind (an older push, a deep link): found in `rooms` (H2).
+    expect(chat).toContain('roomKindParam(params.kind) ?? roomInfo.kind')
     expect(chat).toContain('<RoomClosedNotice line={closedLine}')
   })
 })
@@ -41,13 +46,18 @@ describe('a crew card is counts, never people', () => {
 describe('the surfaces are wired', () => {
   it('the Banter lists open Blends under Live now', () => {
     const banter = src('app/(tabs)/chat.tsx')
-    expect(banter).toContain('blends.map((b) =>')
-    expect(banter).toContain("kind: 'blend', blendId: b.blendId")
+    expect(banter).toContain('blendRooms.map((r) =>')
+    expect(banter).toContain('crewRoomsFrom(result.data)')
+    expect(banter).toContain("r.kind === 'crew'")
   })
 
   it('the Grid has a Crews view', () => {
     const room = src('components/blendn/BlendnScreen.tsx')
     expect(room).toContain("gridView === 'crews' && eventId ? (")
-    expect(room).toContain('<CrewsView eventId={eventId} crews={crews} />')
+    expect(room).toContain('<CrewsHeader ')
+    // M13: the tabs are drawn at 32 and reached at 44.
+    expect(room).toContain('hitSlop={TAB_SLOP}')
+    // M12: the cards are rows of the Room's own list, not a mapped column.
+    expect(room).toContain("data={gridView === 'people' ? everyone : crewCards(crews)}")
   })
 })

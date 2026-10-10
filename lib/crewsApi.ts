@@ -129,8 +129,8 @@ export const crewsApi = {
     return apiClient.queuedRequest('/api/mobile/blends')
   },
 
-  /** One tap reveals your crew in this Blend only: `{ revealed, keptPrivate }`. */
-  reveal(blendId: string): Promise<ApiResponse<{ revealed: number; keptPrivate: number }>> {
+  /** One tap reveals your crew in this Blend only. No count comes back — who kept private is not told to your crew. */
+  reveal(blendId: string): Promise<ApiResponse<{ revealed: true }>> {
     return apiClient.queuedRequest(`/api/mobile/blends/${enc(blendId)}/reveal`, post(), true, 2)
   },
 }

@@ -7,6 +7,8 @@ import {
   BLEND_CLOSED_LINE,
   COLLAGE_MAX,
   CREW_GONE_LINE,
+  CREW_REMOVED_LINE,
+  OPEN_TO_CREWS_HELPER,
   CREW_MAX_TAGS,
   CREW_REPORT_REASONS,
   NO_CONSENT,
@@ -15,8 +17,13 @@ import {
   closesLine,
   consentBody,
   createCrewBody,
-  crewsThatMayLikePeople,
   crewMessage,
+  crewRoomTitle,
+  crewRoomsFrom,
+  crewsThatMayLikePeople,
+  friendsToInvite,
+  sizeLine,
+  visibleInvites,
   defaultRoomName,
   hereLine,
   hereNowLine,
@@ -234,6 +241,8 @@ const side = (over: Partial<BlendSide>): BlendSide => ({
   crewId: 'c1',
   name: 'Nebula',
   emblemSeed: 'seed',
+  mine: false,
+  count: 0,
   revealed: 0,
   keptPrivate: 0,
   people: [],
@@ -292,7 +301,7 @@ describe('a side of a Blend: the menagerie, then the collage', () => {
       chatGroupId: 'g1',
       eventId: 'e1',
       closesAt: '2026-10-10T05:00:00Z',
-      sides: [side({ name: 'Two', people: [person({ userId: 'me' })] }), side({ name: 'Five', people: [person({ userId: 'rh_1' })] })],
+      sides: [side({ name: 'Two', mine: true, count: 2, people: [person({ userId: 'me' })] }), side({ name: 'Five', people: [person({ userId: 'rh_1' })] })],
     }
     expect(blendSides(blend, 'me').mine?.name).toBe('Two')
     expect(blendSides(blend, 'me').theirs?.name).toBe('Five')
@@ -354,7 +363,111 @@ describe('the Crews view: paging and liking', () => {
   })
 })
 
+describe('pass 2 (review of #369)', () => {
+  it('C1: a crew is made with at least one friend asked, and a crew of one says it is waiting', () => {
+    const body = createCrewBody(
+      { name: 'Two', bio: '', tags: [], openToSolo: false, inviteUserIds: [] },
+      { consented: true, keepMeAnonymous: false }
+    )
+    expect(body).toEqual({ problem: 'Pick at least one friend to ask.' })
+    expect(sizeLine(1)).toBe('Crew of 1 until a friend accepts')
+    expect(sizeLine(2)).toBe('Crew of 2')
+  })
+
+  it('M10: a ban closes the room — a Blend as closed, a crew chat as you being out of it', () => {
+    expect(roomClosedLine('blend', 'USER_BANNED')).toBe(BLEND_CLOSED_LINE)
+    expect(roomClosedLine('crew', 'USER_BANNED')).toBe(CREW_REMOVED_LINE)
+  })
+
+  it('H3: your own side of a Blend is a count and you — no tile per crewmate, no "keeps it private"', () => {
+    const view = sideView(
+      side({ mine: true, count: 3, revealed: null, keptPrivate: null, people: [person({ userId: 'me', name: 'Dara' })] })
+    )
+    expect(view.mode).toBe('mine')
+    expect(view.faces).toEqual([])
+    expect(view.tiles).toEqual([])
+    expect(view.countLine).toBe('You and 2 of your crew here')
+    expect(sideView(side({ mine: true, count: 1, revealed: null, keptPrivate: null })).countLine).toBe('Just you here')
+  })
+
+  it('H3: yours is the side the server marks mine, even when your id is not on it', () => {
+    const blend: Blend = {
+      blendId: 'b',
+      chatGroupId: 'g',
+      eventId: 'e',
+      closesAt: '2026-10-10T05:00:00Z',
+      sides: [side({ name: 'Theirs', people: [person({ userId: 'me' })] }), side({ name: 'Mine', mine: true, count: 2 })],
+    }
+    expect(blendSides(blend, 'me').mine?.name).toBe('Mine')
+    expect(blendSides(blend, 'me').theirs?.name).toBe('Theirs')
+  })
+
+  it('M5: the picker leaves out a friend already in the crew — matched once, never guessed', () => {
+    const friends = [
+      { userId: 'u-rohan', name: 'Rohan Desai', photo: 'r.jpg' },
+      { userId: 'u-kavya', name: 'Kavya', photo: null },
+      { userId: 'u-kavya2', name: 'Kavya N', photo: null },
+      { userId: 'u-meera', name: 'Meera', photo: null },
+    ]
+    const members = [
+      { isFriend: true, name: 'Rohan', photo: 'r.jpg' },
+      // Two friends could be this Kavya: neither is hidden.
+      { isFriend: true, name: 'Kavya', photo: null },
+      // Not a friend: never matched against the friends list.
+      { isFriend: false, name: 'Meera', photo: null },
+    ]
+    expect(friendsToInvite(friends, members).map((f) => f.userId)).toEqual(['u-kavya', 'u-kavya2', 'u-meera'])
+  })
+
+  it('H4: an invite that answered 404 stays off the screen', () => {
+    const invites = [{ crewId: 'a' }, { crewId: 'b' }]
+    expect(visibleInvites(invites, new Set(['a']))).toEqual([{ crewId: 'b' }])
+  })
+
+  it('M7: the open-to-crews copy says what the server does — nobody is told, it lets crews like you', () => {
+    expect(OPEN_TO_CREWS_HELPER).toMatch(/^Nobody is told/)
+    expect(OPEN_TO_CREWS_HELPER).toMatch(/likes of you count/)
+    expect(OPEN_TO_CREWS_HELPER).not.toMatch(/can see you/)
+  })
+
+  it('S5: crew and Blend rooms from GET /chat/groups, and only those', () => {
+    const rows = crewRoomsFrom({
+      groups: [{ id: 'e1', kind: 'event' }],
+      rooms: [
+        { id: 'g1', kind: 'crew', name: 'Lot S9', crewId: 'c1', blendId: null, unreadCount: 2, lastMessageAt: '2026-10-10T02:00:00Z', lastMessage: { content: 'hi', user: { id: 'rh_1', name: 'Ishan' } } },
+        { id: 'g2', kind: 'blend', name: 'Lot S9 × Nebula S9', crewId: null, blendId: 'b1', closesAt: '2026-10-10T23:00:00Z', unreadCount: 0, lastMessage: null },
+        { id: 'g3', kind: 'board_post', name: 'nope' },
+        { kind: 'crew' },
+      ],
+    })
+    expect(rows.map((r) => [r.id, r.kind])).toEqual([
+      ['g1', 'crew'],
+      ['g2', 'blend'],
+    ])
+    expect(rows[0].lastMessage?.user.name).toBe('Ishan')
+    expect(rows[0].unreadCount).toBe(2)
+    expect(crewRoomTitle(rows[1])).toBe('Blend · Lot S9 × Nebula S9')
+    expect(crewRoomTitle(rows[0])).toBe('Lot S9')
+    expect(crewRoomsFrom({ groups: [] })).toEqual([])
+  })
+})
+
 describe('crew pushes land where they mean something, and name nobody', () => {
+  it('H2: a reply in a crew or Blend room opens as that room; an event or venue day reply as an event room', () => {
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g1', kind: 'blend', blendId: 'b1' })).toEqual({
+      pathname: '/chat/[id]',
+      params: { id: 'g1', kind: 'blend', blendId: 'b1' },
+    })
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g2', kind: 'crew', crewId: 'c1' })).toEqual({
+      pathname: '/chat/[id]',
+      params: { id: 'g2', kind: 'crew', crewId: 'c1' },
+    })
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g3', kind: 'event' })).toEqual({
+      pathname: '/chat/[id]',
+      params: { id: 'g3' },
+    })
+  })
+
   it('an invite opens the crews screen', () => {
     expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toBe('/crews')
   })

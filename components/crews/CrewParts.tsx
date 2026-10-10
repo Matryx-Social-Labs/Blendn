@@ -81,7 +81,10 @@ export function ConsentFields({ value, onChange }: { value: ConsentState; onChan
   )
 }
 
-/** A friend you can tick to invite. Real names: these are your friends. */
+/**
+ * A friend you can tick to invite. Real names: these are your friends.
+ * Announced as a checkbox with its state (M13), the row being the target.
+ */
 export function FriendPickRow({
   person,
   picked,
@@ -92,18 +95,27 @@ export function FriendPickRow({
   onToggle: () => void
 }) {
   return (
-    <PersonRow
-      person={person}
-      detail={picked ? 'Will be asked' : undefined}
+    <Pressable
       onPress={onToggle}
-      trailing={
-        <Ionicons
-          name={picked ? 'checkmark-circle' : 'ellipse-outline'}
-          size={ICON.lg}
-          color={picked ? EMBER.textPrimary : EMBER.textTertiary}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: picked }}
+      accessibilityLabel={`Ask ${person.name}`}
+      style={({ pressed }) => pressed && styles.pressed}
+    >
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <PersonRow
+          person={person}
+          detail={picked ? 'Will be asked' : undefined}
+          trailing={
+            <Ionicons
+              name={picked ? 'checkmark-circle' : 'ellipse-outline'}
+              size={ICON.lg}
+              color={picked ? EMBER.textPrimary : EMBER.textTertiary}
+            />
+          }
         />
-      }
-    />
+      </View>
+    </Pressable>
   )
 }
 
@@ -218,7 +230,7 @@ export function BlendSideCard({
         disabled={!tappable}
         onPress={() => onPerson?.(p)}
         accessibilityRole={tappable ? 'button' : 'text'}
-        accessibilityLabel={tappable ? `${label}. Block or report` : label}
+        accessibilityLabel={p.userId === myId ? 'You' : tappable ? `${label}. Block` : label}
         style={styles.person}
       >
         <Face name={p.pseudonym} photo={photo} size={SIDE_FACE} />
@@ -232,16 +244,23 @@ export function BlendSideCard({
     <View style={styles.side}>
       <View style={styles.sideHead}>
         {side.kind === 'crew' && side.emblemSeed ? <CrewEmblem seed={side.emblemSeed} size={CONTROL.sm} /> : null}
-        <Text variant="bodyStrong" numberOfLines={1} style={styles.flex}>
+        <Text variant="bodyStrong" numberOfLines={1} style={styles.flex} accessibilityRole="header">
           {view.title}
         </Text>
       </View>
       {view.countLine ? <Text variant="meta">{view.countLine}</Text> : null}
+      {/*
+        Your own side is a count and you (the server sends nothing more): a tile
+        for each crewmate would show the crew who kept themselves anonymous.
+      */}
+      {view.mode === 'mine' ? (
+        <View style={styles.people}>{side.people.filter((p) => p.userId === myId).map((p) => person(p, 'You', p.photo))}</View>
+      ) : (
       <View style={styles.people}>
         {/* Revealed: photo and first name. The server's `name` is the reveal — a photo alone is not. */}
         {view.faces.map((p) => person(p, p.name ?? p.pseudonym, p.photo))}
         {view.more > 0 ? (
-          <View style={styles.person}>
+          <View style={styles.person} accessible accessibilityLabel={`${view.more} more revealed`}>
             <View style={styles.moreFaces}>
               <Text variant="bodyStrong">+{view.more}</Text>
             </View>
@@ -250,6 +269,7 @@ export function BlendSideCard({
         {/* Anonymous, or kept private: tonight's pseudonym, and its creature. Never their photo. */}
         {view.tiles.map((p) => person(p, p.pseudonym, null))}
       </View>
+      )}
     </View>
   )
 }

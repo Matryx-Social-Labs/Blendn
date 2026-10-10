@@ -63,9 +63,23 @@ export const KEEP_ANONYMOUS_HELPER =
 
 export const BLEND_CLOSED_LINE = 'This Blend has closed'
 export const CREW_GONE_LINE = 'This crew isn’t around any more'
+/** A crew chat that removed you (a ban written into it): you, not the crew, are gone. */
+export const CREW_REMOVED_LINE = 'You’re no longer in this crew’s chat'
 export const OPEN_TO_CREWS_LABEL = 'Open to joining a crew tonight'
+/*
+ * What the switch does, as the server does it (`lib/crews/like.ts`): you see
+ * crews here with room for one more, you can like them, and their likes of
+ * you count. Nobody is told you turned it on — a crew's like of somebody who
+ * did not answers exactly like one that stood.
+ */
 export const OPEN_TO_CREWS_HELPER =
-  'Crews with room for one more can see you’re open, and you can like them. It switches itself off when tonight ends.'
+  'Nobody is told you turned this on. It shows you crews here with room for one more, lets you like them, and lets their likes of you count. It switches itself off when tonight ends.'
+/**
+ * After a reveal. The server says no count back — who of your crew revealed
+ * and who kept private is never told to your own crew.
+ */
+export const REVEALED_LINE =
+  'Your crew is revealed in this Blend. Anybody who chose to stay anonymous stays that way.'
 
 export type CrewIntent = 'dating' | 'networking' | 'friendship' | 'just_here'
 
@@ -78,6 +92,8 @@ export interface CrewTag {
 export interface CrewMember {
   /** Yours is your own id; anyone else's is their handle in the crew's room. */
   userId: string
+  /** One of your friends — the invite picker leaves them out. Never true for you. */
+  isFriend: boolean
   name: string
   photo: string | null
   role: 'owner' | 'member'
@@ -148,8 +164,14 @@ export interface BlendSide {
   crewId: string | null
   name: string | null
   emblemSeed: string | null
-  revealed: number
-  keptPrivate: number
+  /** Your own side: a count and you alone — never which crewmate revealed or kept private. */
+  mine: boolean
+  /** How many on this side are shown to you (you included, on yours). */
+  count: number
+  /** Their side only; null on yours. */
+  revealed: number | null
+  keptPrivate: number | null
+  /** Their side: each person. Yours: you alone. */
   people: BlendPerson[]
 }
 
@@ -235,8 +257,14 @@ export function crewMessage(result: Refusal, surface: CrewSurface, fallback: str
  */
 export function roomClosedLine(kind: 'crew' | 'blend', errorCode: string | null | undefined): string | null {
   if (kind === 'blend') {
-    return errorCode === 'NOT_FOUND' || errorCode === 'FORBIDDEN' || errorCode === 'CHAT_CLOSED' ? BLEND_CLOSED_LINE : null
+    return errorCode === 'NOT_FOUND' ||
+      errorCode === 'FORBIDDEN' ||
+      errorCode === 'CHAT_CLOSED' ||
+      errorCode === 'USER_BANNED'
+      ? BLEND_CLOSED_LINE
+      : null
   }
+  if (errorCode === 'USER_BANNED') return CREW_REMOVED_LINE
   return errorCode === 'NOT_FOUND' ? CREW_GONE_LINE : null
 }
 
@@ -308,6 +336,8 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
   }
   if (characters(bio) > CREW_BIO_MAX) return { problem: `A crew bio is at most ${CREW_BIO_MAX} characters.` }
   if (form.tags.length > CREW_MAX_TAGS) return { problem: `Pick up to ${CREW_MAX_TAGS} tags.` }
+  // A crew is friends who go out together: one person with nobody asked is not one.
+  if (form.inviteUserIds.length === 0) return { problem: 'Pick at least one friend to ask.' }
   if (form.inviteUserIds.length > CREW_MAX_MEMBERS - 1) {
     return { problem: `A crew has at most ${CREW_MAX_MEMBERS} people.` }
   }
@@ -348,8 +378,9 @@ export function hereLine(result: { repeated: boolean }): string {
   return result.repeated ? 'Your crew already knows you’re here tonight' : 'Told your crew you’re here 👋'
 }
 
+/** "Crew of 4". A crew of one is waiting for its friends — the server keeps it while invites are open. */
 export function sizeLine(size: number): string {
-  return `Crew of ${size}`
+  return size <= 1 ? 'Crew of 1 until a friend accepts' : `Crew of ${size}`
 }
 
 /** "Here now · 3 of 5". */
@@ -381,8 +412,12 @@ export function closesLine(closesAt: string, now: number = Date.now()): string |
 export const COLLAGE_MAX = 4
 
 export interface SideView {
-  /** `menagerie` until somebody on the side is revealed; then `collage`. */
-  mode: 'menagerie' | 'collage'
+  /**
+   * Theirs: `menagerie` until somebody on it is revealed, then `collage`.
+   * Yours: `mine` — a count line and you, never per-person tiles: a tile for
+   * the crewmate who kept anonymous would tell the crew who did.
+   */
+  mode: 'menagerie' | 'collage' | 'mine'
   /** Revealed people, at most `COLLAGE_MAX`, drawn as photos with first names. */
   faces: BlendPerson[]
   /** Revealed people beyond the collage: "+3". */
@@ -405,6 +440,18 @@ export interface SideView {
  * app infers: a photo without a name is not a reveal.
  */
 export function sideView(side: BlendSide): SideView {
+  if (side.mine) {
+    const others = Math.max(0, side.count - 1)
+    return {
+      mode: 'mine',
+      faces: [],
+      more: 0,
+      tiles: [],
+      countLine:
+        side.kind === 'crew' ? (others === 0 ? 'Just you here' : `You and ${others} of your crew here`) : null,
+      title: side.kind === 'crew' ? side.name || 'Your crew' : 'You',
+    }
+  }
   const revealed = side.people.filter((p) => !!p.name)
   const tiles = side.people.filter((p) => !p.name)
   const first = side.people[0]
@@ -413,14 +460,15 @@ export function sideView(side: BlendSide): SideView {
     faces: revealed.slice(0, COLLAGE_MAX),
     more: Math.max(0, revealed.length - COLLAGE_MAX),
     tiles,
-    countLine: side.kind === 'crew' ? revealCountLine(side.revealed, side.keptPrivate) : null,
+    countLine: side.kind === 'crew' ? revealCountLine(side.revealed ?? 0, side.keptPrivate ?? 0) : null,
     title: side.kind === 'crew' ? side.name || 'A crew' : first?.name || first?.pseudonym || 'Someone',
   }
 }
 
-/** Your side and theirs: yours is the one with your own id in it. */
+/** Your side and theirs: the server marks yours (`mine`); your own id is the fallback. */
 export function blendSides(blend: Blend, myId: string | null | undefined): { mine: BlendSide | null; theirs: BlendSide | null } {
-  const mine = blend.sides.find((s) => s.people.some((p) => p.userId === myId)) ?? null
+  const mine =
+    blend.sides.find((s) => s.mine) ?? blend.sides.find((s) => s.people.some((p) => p.userId === myId)) ?? null
   const theirs = blend.sides.find((s) => s !== mine) ?? null
   return { mine, theirs }
 }
@@ -429,6 +477,101 @@ export function blendSides(blend: Blend, myId: string | null | undefined): { min
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
   const { theirs } = blendSides(blend, myId)
   return theirs ? `Blend with ${sideView(theirs).title}` : 'Your Blend'
+}
+
+/* -------------------------------------------------------------------------- */
+/* Crew and Blend rooms in the Banter                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A crew's chat or an open Blend's room, as `GET /chat/groups` lists it in `rooms`. */
+export interface CrewRoomRow {
+  id: string
+  kind: 'crew' | 'blend'
+  name: string
+  crewId: string | null
+  blendId: string | null
+  /** A Blend's clock; null for a crew's chat. */
+  closesAt: string | null
+  unreadCount: number
+  lastMessageAt: string | null
+  /** Named as the room names people: a crewmate's first name, a Blend's pseudonyms. */
+  lastMessage: { content: string; user: { id: string; name: string | null } } | null
+  mute: unknown
+}
+
+/**
+ * The crew and Blend rooms out of a `GET /chat/groups` answer (`rooms`, page 1
+ * only). Anything that is not a crew's or a Blend's room is left out: a row
+ * opened as the wrong kind of room is the defect this list exists to avoid.
+ */
+export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
+  const rooms = (payload as { rooms?: unknown } | null)?.rooms
+  if (!Array.isArray(rooms)) return []
+  return rooms.flatMap((r: Record<string, any>) => {
+    const kind = roomKindParam(r?.kind)
+    if (!kind || typeof r.id !== 'string') return []
+    const last = r.lastMessage
+    return [
+      {
+        id: r.id,
+        kind,
+        name: typeof r.name === 'string' ? r.name : kind === 'crew' ? 'Crew chat' : 'Blend',
+        crewId: typeof r.crewId === 'string' ? r.crewId : null,
+        blendId: typeof r.blendId === 'string' ? r.blendId : null,
+        closesAt: typeof r.closesAt === 'string' ? r.closesAt : null,
+        unreadCount: Number(r.unreadCount) || 0,
+        lastMessageAt: typeof r.lastMessageAt === 'string' ? r.lastMessageAt : null,
+        lastMessage:
+          last && typeof last.content === 'string'
+            ? { content: last.content, user: { id: String(last.user?.id ?? ''), name: last.user?.name ?? null } }
+            : null,
+        mute: r.mute,
+      },
+    ]
+  })
+}
+
+/** "Blend · Lot S9 × Nebula S9" — a Blend says what it is in the list; a crew's chat is its name. */
+export function crewRoomTitle(row: Pick<CrewRoomRow, 'kind' | 'name'>): string {
+  return row.kind === 'blend' ? `Blend · ${row.name}` : row.name
+}
+
+/* -------------------------------------------------------------------------- */
+/* Invites                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const firstWord = (name: string) => name.trim().split(/\s+/)[0] ?? ''
+
+/**
+ * Your friends who could be asked into this crew.
+ *
+ * The crew names its members by their room handles, never their account
+ * ids, so a friend already in it is found by what the server does say:
+ * `isFriend`, their first name and their photo. A friend is left out only
+ * when exactly one of your friends matches that member — two friends with
+ * the same first name and no photo stay in the list (the server skips the
+ * one already in, without a word), rather than hiding a friend who is not.
+ */
+export function friendsToInvite<F extends { userId: string; name: string; photo: string | null }>(
+  friends: readonly F[],
+  members: readonly Pick<CrewMember, 'isFriend' | 'name' | 'photo'>[]
+): F[] {
+  const inCrew = new Set<string>()
+  for (const m of members) {
+    if (!m.isFriend) continue
+    const matches = friends.filter((f) => firstWord(f.name) === firstWord(m.name) && (f.photo ?? null) === (m.photo ?? null))
+    if (matches.length === 1) inCrew.add(matches[0].userId)
+  }
+  return friends.filter((f) => !inCrew.has(f.userId))
+}
+
+/**
+ * Invites still worth showing. One that answered 404 to an accept is gone
+ * (lapsed, withdrawn, its crew dissolved) and stays off the screen for the
+ * session, even if a cached list still has it.
+ */
+export function visibleInvites<I extends { crewId: string }>(invites: readonly I[], gone: ReadonlySet<string>): I[] {
+  return invites.filter((i) => !gone.has(i.crewId))
 }
 
 /* -------------------------------------------------------------------------- */

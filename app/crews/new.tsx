@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -45,35 +45,46 @@ export default function NewCrewScreen() {
   const [bio, setBio] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [openToSolo, setOpenToSolo] = useState(false)
-  const [friends, setFriends] = useState<Friend[] | null>(null)
+  /** null while loading; 'failed' is not "no friends" — it offers a retry. */
+  const [friends, setFriends] = useState<Friend[] | null | 'failed'>(null)
   const [picked, setPicked] = useState<string[]>([])
   const [consent, setConsent] = useState<ConsentState>(NO_CONSENT)
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  /** One create at a time: `sending` lags a fast second tap by a render. */
+  const inFlight = useRef(false)
 
+  const loadFriends = useCallback(
+    () => apiClient.getFriends().then((r) => (r.success && r.data ? r.data.friends : ('failed' as const))),
+    []
+  )
   useEffect(() => {
     let live = true
-    void apiClient.getFriends().then((r) => {
-      if (live) setFriends(r.success && r.data ? r.data.friends : [])
-    })
+    void loadFriends().then((f) => live && setFriends(f))
     return () => {
       live = false
     }
-  }, [])
+  }, [loadFriends])
+  const retryFriends = () => {
+    setFriends(null)
+    void loadFriends().then(setFriends)
+  }
 
   const togglePick = (userId: string) =>
     setPicked((p) => (p.includes(userId) ? p.filter((id) => id !== userId) : p.length < CREW_MAX_MEMBERS - 1 ? [...p, userId] : p))
 
   const make = async () => {
-    if (sending) return
+    if (inFlight.current) return
     const body = createCrewBody({ name, bio, tags, openToSolo, inviteUserIds: picked }, consent)
     if ('problem' in body) {
       setProblem(body.problem)
       return
     }
+    inFlight.current = true
     setSending(true)
     setProblem(null)
     const result = await crewsApi.create(body)
+    inFlight.current = false
     setSending(false)
     if (!result.success || !result.data) {
       // The server's sentence names what it found (a phone number in the bio, the daily cap).
@@ -128,9 +139,14 @@ export default function NewCrewScreen() {
             value={openToSolo}
             onValueChange={setOpenToSolo}
           />
-          <EmberFieldGroup label="Invite friends" helper="They get an invite to accept. Nobody is told who else was asked.">
+          <EmberFieldGroup
+            label="Invite friends"
+            helper="Pick at least one. Until a friend accepts, the crew is just you. Nobody is told who else was asked."
+          >
             {friends === null ? (
               <Text variant="meta">Loading your friends…</Text>
+            ) : friends === 'failed' ? (
+              <EmberButton label="Your friends didn’t load — try again" variant="secondary" onPress={retryFriends} />
             ) : friends.length === 0 ? (
               <Text variant="meta">Add friends first — a crew is made from your friends.</Text>
             ) : (
@@ -150,7 +166,7 @@ export default function NewCrewScreen() {
           <EmberButton
             label="Make the crew"
             onPress={() => void make()}
-            disabled={!consent.consented || name.trim().length === 0}
+            disabled={!consent.consented || name.trim().length === 0 || picked.length === 0}
             busy={sending}
           />
         </ScrollView>

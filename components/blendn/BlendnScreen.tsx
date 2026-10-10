@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
-import { crewMessage, crewsThatMayLikePeople, likeAs } from '../../lib/crews'
+import { crewMessage, crewsThatMayLikePeople, likeAs, type CrewCard } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
@@ -24,7 +24,8 @@ import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
-import { chooseCrew, CrewsView, openBlend, useCrewsHere } from '../crews/CrewsView'
+import { CrewCardView } from '../crews/CrewParts'
+import { chooseCrew, crewCards, CrewsFooter, CrewsHeader, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
 import ScalePress from '../motion/ScalePress'
@@ -209,8 +210,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
   const crews = useCrewsHere(mode === 'room' ? eventId : null)
+  const crewActions = useCrewActions(eventId, crews)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
   const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
+  /** One like on a crew's behalf at a time: a fast second tap sends nothing. */
+  const likingForCrew = useRef(false)
 
   // --- people ---------------------------------------------------------------
   const [open, setOpen] = useState<RoomPerson | null>(null)
@@ -272,22 +276,27 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const likeForCrew = async (p: RoomPerson) => {
     const as = likeAs(soloCrews)
-    if (as.as === 'me' || !eventId) return
-    // The card closes first: a toast drawn under its sheet is one nobody sees.
-    setOpen(null)
-    let crewId: string | null = as.as === 'crew' ? as.crewId : null
-    if (as.as === 'choose') {
-      await sheetClosed()
-      crewId = await chooseCrew(soloCrews, `Like ${p.name} for…`)
+    if (as.as === 'me' || !eventId || likingForCrew.current) return
+    likingForCrew.current = true
+    try {
+      // The card closes first: a toast drawn under its sheet is one nobody sees.
+      setOpen(null)
+      let crewId: string | null = as.as === 'crew' ? as.crewId : null
+      if (as.as === 'choose') {
+        await sheetClosed()
+        crewId = await chooseCrew(soloCrews, `Like ${p.name} for…`)
+      }
+      if (!crewId) return
+      const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
+      if (!result.success || !result.data) {
+        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+        return
+      }
+      if (result.data.blend) openBlend(result.data.blend, `Blend with ${p.name}`)
+      else showToast('Liked for your crew', 'success')
+    } finally {
+      likingForCrew.current = false
     }
-    if (!crewId) return
-    const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
-    if (!result.success || !result.data) {
-      showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
-      return
-    }
-    if (result.data.blend) openBlend(result.data.blend, `Blend with ${p.name}`)
-    else showToast('Liked for your crew', 'success')
   }
 
   // --- the room chat ----------------------------------------------------------
@@ -373,15 +382,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {mode === 'room' && room.event ? (
         <Animated.View key="room" style={styles.fill} entering={reduceMotion ? FadeIn : FadeInUp.duration(320)} exiting={FadeOut.duration(160)}>
           <GestureDetector gesture={native}>
-            <Animated.FlatList
-              data={gridView === 'people' ? everyone : []}
-              keyExtractor={(p) => p.id}
-              numColumns={3}
+            <Animated.FlatList<RoomPerson | CrewCard>
+              // Faces in threes, crews one to a row: a new list per view, since numColumns cannot change in place.
+              key={gridView}
+              data={gridView === 'people' ? everyone : crewCards(crews)}
+              keyExtractor={(item) => ('crewId' in item ? item.crewId : item.id)}
+              numColumns={gridView === 'people' ? 3 : 1}
               onScroll={onScroll}
               scrollEventThrottle={scrollEventThrottle}
               bounces={false}
               showsVerticalScrollIndicator={false}
-              columnWrapperStyle={styles.gridRow}
+              columnWrapperStyle={gridView === 'people' ? styles.gridRow : undefined}
               contentContainerStyle={{ paddingTop: topInset, paddingBottom: insets.bottom + SPACE.xxxl * 3 }}
               ListHeaderComponent={
                 <View style={styles.header}>
@@ -412,7 +423,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   </View>
                   <GridTabs value={gridView} onChange={setGridView} />
                   {gridView === 'crews' && eventId ? (
-                    <CrewsView eventId={eventId} crews={crews} />
+                    <CrewsHeader eventId={eventId} checkInKey={room.checkedInAt ?? ''} crews={crews} actions={crewActions} />
                   ) : (
                     <>
                       <MeetNext picks={shuffle.picks} nextShuffleAt={shuffle.nextShuffleAt} onOpen={setOpen} />
@@ -426,18 +437,31 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   )}
                 </View>
               }
-              renderItem={({ item, index }) => (
-                <GridFace
-                  person={item}
-                  size={cell}
-                  index={index}
-                  animateIn={index < 12 && !pickIds.has(item.id)}
-                  onOpen={setOpen}
-                  onLike={like}
-                />
-              )}
+              renderItem={({ item, index }) =>
+                'crewId' in item ? (
+                  <View style={styles.crewRow}>
+                    <CrewCardView
+                      card={item}
+                      liking={crewActions.liking === item.crewId}
+                      onLike={() => void crewActions.like(item)}
+                      onMore={() => crewActions.report(item)}
+                    />
+                  </View>
+                ) : (
+                  <GridFace
+                    person={item}
+                    size={cell}
+                    index={index}
+                    animateIn={index < 12 && !pickIds.has(item.id)}
+                    onOpen={setOpen}
+                    onLike={like}
+                  />
+                )
+              }
               ListFooterComponent={
-                gridView === 'people' && room.hasMore && everyone.length > 0 ? (
+                gridView === 'crews' ? (
+                  <CrewsFooter crews={crews} />
+                ) : room.hasMore && everyone.length > 0 ? (
                   <FaceGridMore loading={room.loadingMore} onMore={() => void room.loadMore()} />
                 ) : null
               }
@@ -637,6 +661,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   )
 }
 
+const TAB_SLOP = { top: (CONTROL.md - CONTROL.sm) / 2, bottom: (CONTROL.md - CONTROL.sm) / 2 }
+
 /** People | Crews — the Grid's two views (step 9). */
 function GridTabs({ value, onChange }: { value: 'people' | 'crews'; onChange: (v: 'people' | 'crews') => void }) {
   return (
@@ -645,6 +671,8 @@ function GridTabs({ value, onChange }: { value: 'people' | 'crews'; onChange: (v
         <Pressable
           key={v}
           onPress={() => onChange(v)}
+          // Drawn at 32, reached at 44.
+          hitSlop={TAB_SLOP}
           accessibilityRole="tab"
           accessibilityState={{ selected: value === v }}
           style={({ pressed }) => [styles.tab, value === v && styles.tabOn, pressed && styles.pressed]}
@@ -669,6 +697,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabOn: { backgroundColor: EMBER.textPrimary },
+  crewRow: { paddingHorizontal: GUTTER, marginBottom: SPACE.md },
   header: { gap: SPACE.xl, marginBottom: SPACE.xs },
   banner: { paddingHorizontal: GUTTER },
   statusBanner: { marginHorizontal: GUTTER },

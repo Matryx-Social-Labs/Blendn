@@ -333,7 +333,22 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     }
     case 'group_message': {
       if (data.chatGroupId) {
-        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any }
+        /*
+         * A reply in a crew's or a Blend's room opens as that room (the
+         * server's `kind`, step 9 review H2): opened as an event's it said
+         * "Event chat", offered an event's Room info and read a closed Blend
+         * as a load error. Anything else, a venue day's room included, is an event's.
+         */
+        const kind = data.kind === 'crew' || data.kind === 'blend' ? data.kind : null
+        target = {
+          pathname: '/chat/[id]',
+          params: {
+            id: String(data.chatGroupId),
+            ...(kind ? { kind } : {}),
+            ...(kind === 'crew' && data.crewId ? { crewId: String(data.crewId) } : {}),
+            ...(kind === 'blend' && data.blendId ? { blendId: String(data.blendId) } : {}),
+          } as any,
+        }
       } else {
         target = '/(tabs)/chat'
       }

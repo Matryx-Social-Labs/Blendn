@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -12,11 +12,27 @@ import { EmberButton } from '../../components/onboarding/EmberControls'
 import { useToast } from '../../components/Toast'
 import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
-import { consentBody, crewMessage, NO_CONSENT, sizeLine, type ConsentState, type Crew, type CrewInvite } from '../../lib/crews'
+import {
+  consentBody,
+  crewMessage,
+  NO_CONSENT,
+  sizeLine,
+  visibleInvites,
+  type ConsentState,
+  type Crew,
+  type CrewInvite,
+} from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
+import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 
 type Row = { type: 'invite'; invite: CrewInvite } | { type: 'crew'; crew: Crew }
+
+/**
+ * Invites an accept answered 404 to, for this session: gone (lapsed, withdrawn,
+ * the crew dissolved) and not offered again even if a read still lists one.
+ */
+const goneInvites = new Set<string>()
 
 /**
  * Your crews, and the crew invites waiting for you (placeholder design —
@@ -36,6 +52,8 @@ export default function CrewsScreen() {
   const [joining, setJoining] = useState<{ crewId: string; consent: ConsentState } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<{ crewId: string; text: string } | null>(null)
+  /** One join or decline at a time: state lags a fast second tap by a render. */
+  const inFlight = useRef(false)
 
   const load = useCallback(async () => {
     const result = await crewsApi.myCrews()
@@ -62,15 +80,23 @@ export default function CrewsScreen() {
 
   const join = async (invite: CrewInvite) => {
     const agreed = joining && consentBody(joining.consent)
-    if (!agreed || busy) return
+    if (!agreed || inFlight.current) return
+    inFlight.current = true
     setBusy(invite.crewId)
     setRefusal(null)
     const result = await crewsApi.join(invite.crewId, agreed)
+    inFlight.current = false
     setBusy(null)
     if (!result.success) {
+      if (result.errorCode === 'NOT_FOUND') {
+        // Gone: off the screen for the session, and the list re-read.
+        goneInvites.add(invite.crewId)
+        setJoining(null)
+        showToast(crewMessage(result, 'join', 'That invite isn’t open any more.'), 'info')
+        void load()
+        return
+      }
       setRefusal({ crewId: invite.crewId, text: crewMessage(result, 'join', 'Couldn’t join the crew. Try again.') })
-      // A 404 means the invite went away: show the list as it is now.
-      if (result.errorCode === 'NOT_FOUND') void load()
       return
     }
     setJoining(null)
@@ -78,10 +104,27 @@ export default function CrewsScreen() {
     router.push({ pathname: '/crews/[crewId]', params: { crewId: invite.crewId } })
   }
 
+  /*
+   * Declining asks first: it is told to nobody, and for 30 days the same
+   * invite is neither re-sent nor re-notified — a stray tap would cost a month.
+   */
+  const confirmDecline = (invite: CrewInvite) =>
+    showSheet({
+      kind: 'actions',
+      title: `Decline ${invite.name}?`,
+      message: `${invite.invitedBy} isn’t told. They can’t ask you into this crew again for 30 days.`,
+      actions: [
+        { label: 'Decline', variant: 'destructive', then: () => void decline(invite) },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
+
   const decline = async (invite: CrewInvite) => {
-    if (busy) return
+    if (inFlight.current) return
+    inFlight.current = true
     setBusy(invite.crewId)
     const result = await crewsApi.decline(invite.crewId)
+    inFlight.current = false
     setBusy(null)
     if (!result.success && result.errorCode !== 'NOT_FOUND') {
       showToast(crewMessage(result, 'join', 'Couldn’t decline. Try again.'), 'error')
@@ -92,7 +135,7 @@ export default function CrewsScreen() {
   }
 
   const rows: Row[] = [
-    ...(data?.invites ?? []).map((invite) => ({ type: 'invite' as const, invite })),
+    ...visibleInvites(data?.invites ?? [], goneInvites).map((invite) => ({ type: 'invite' as const, invite })),
     ...(data?.crews ?? []).map((crew) => ({ type: 'crew' as const, crew })),
   ]
 
@@ -134,7 +177,7 @@ export default function CrewsScreen() {
               onAccept={() => setJoining({ crewId: item.invite.crewId, consent: NO_CONSENT })}
               onConsent={(consent) => setJoining({ crewId: item.invite.crewId, consent })}
               onJoin={() => void join(item.invite)}
-              onDecline={() => void decline(item.invite)}
+              onDecline={() => confirmDecline(item.invite)}
             />
           ) : (
             <CrewRow crew={item.crew} />

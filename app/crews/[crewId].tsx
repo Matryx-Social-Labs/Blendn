@@ -19,6 +19,7 @@ import {
   KEEP_ANONYMOUS_HELPER,
   KEEP_ANONYMOUS_LABEL,
   crewMessage,
+  friendsToInvite,
   hereLine,
   invitedLine,
   sizeLine,
@@ -40,7 +41,7 @@ type Load = { kind: 'loading' } | { kind: 'ready'; crew: Crew } | { kind: 'gone'
  * more friends, "We're here", your own "keep me anonymous", and leaving.
  */
 export default function CrewScreen() {
-  const params = useLocalSearchParams<{ crewId: string; asked?: string }>()
+  const params = useLocalSearchParams<{ crewId: string; asked?: string; fromChat?: string }>()
   const crewId = String(params.crewId)
   const { user } = useAuth()
   const myId = user?.id ?? ''
@@ -51,7 +52,7 @@ export default function CrewScreen() {
   const [asked, setAsked] = useState<string | null>(() => invitedLine(Number(params.asked)))
   const [line, setLine] = useState<string | null>(null)
   const [busy, setBusy] = useState<'here' | 'anon' | 'invite' | 'solo' | null>(null)
-  const [inviting, setInviting] = useState<{ friends: Friend[]; picked: string[] } | null>(null)
+  const [inviting, setInviting] = useState<{ friends: Friend[] | 'failed'; picked: string[] } | null>(null)
 
   const fetchCrew = useCallback(async () => {
     const result = await crewsApi.crew(crewId)
@@ -90,15 +91,23 @@ export default function CrewScreen() {
   }
 
   const crew = load.crew
-  const memberIds = new Set(crew.members.map((m) => m.userId))
 
   const openChat = () => {
     if (!crew.chatGroupId) return
+    // Opened from the crew chat's (i): back to it, rather than a second copy on the stack.
+    if (params.fromChat) {
+      router.back()
+      return
+    }
     router.push({
       pathname: '/chat/[id]',
       params: { id: crew.chatGroupId, roomName: crew.name, kind: 'crew', crewId: crew.crewId } as never,
     })
   }
+
+  /** A change to this crew, applied to the crew as it is now — never to the one this render saw. */
+  const patchCrew = (change: (c: Crew) => Crew) =>
+    setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', crew: change(prev.crew) } : prev))
 
   /*
    * "We're here" names the event you are checked in at now. It checks nobody
@@ -109,7 +118,10 @@ export default function CrewScreen() {
     setBusy('here')
     setLine(null)
     const active = await apiClient.getActiveCheckins({ force: true })
-    const eventId = active.success ? active.data?.checkIns?.[0]?.eventId : undefined
+    // An event's check-in, not a place's Go Live: "We're here" is about a night out together.
+    const eventId = active.success
+      ? active.data?.checkIns?.find((c) => c.kind !== 'venue_day')?.eventId
+      : undefined
     if (!eventId) {
       setBusy(null)
       setLine('Check in at the event first — each of you checks in with your own location.')
@@ -121,7 +133,7 @@ export default function CrewScreen() {
   }
 
   const setAnonymous = async (next: boolean) => {
-    if (busy) return
+    if (busy || !myId) return
     setBusy('anon')
     const result = await crewsApi.setKeepMeAnonymous(crew.crewId, myId, next)
     setBusy(null)
@@ -130,7 +142,7 @@ export default function CrewScreen() {
       return
     }
     const keep = result.data.keepMeAnonymous
-    setLoad({ kind: 'ready', crew: { ...crew, you: crew.you ? { ...crew.you, keepMeAnonymous: keep } : crew.you } })
+    patchCrew((c) => ({ ...c, you: c.you ? { ...c.you, keepMeAnonymous: keep } : c.you }))
   }
 
   /** The owner's "Room for one more": what lets the crew like one person who is open to crews. */
@@ -143,12 +155,19 @@ export default function CrewScreen() {
       showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
       return
     }
-    setLoad({ kind: 'ready', crew: result.data })
+    const fresh = result.data
+    patchCrew(() => fresh)
   }
 
+  /*
+   * Friends not already in the crew. The crew names members by their room
+   * handles, never their ids, so a crewmate is found by the server's
+   * `isFriend` and their name and photo (`friendsToInvite`). A failed read
+   * is not "no friends": it says so and offers the retry.
+   */
   const startInvite = async () => {
     const result = await apiClient.getFriends()
-    const friends = result.success && result.data ? result.data.friends.filter((f) => !memberIds.has(f.userId)) : []
+    const friends = result.success && result.data ? friendsToInvite(result.data.friends, crew.members) : ('failed' as const)
     setInviting({ friends, picked: [] })
   }
 
@@ -175,6 +194,7 @@ export default function CrewScreen() {
           label: 'Leave crew',
           variant: 'destructive',
           run: async () => {
+            if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
             const result = await crewsApi.leave(crew.crewId, myId)
             if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
             router.back()
@@ -190,6 +210,7 @@ export default function CrewScreen() {
       <AppHeader title={crew.name} onBack={() => router.back()} />
       <ScrollView
         contentContainerStyle={styles.content}
+        testID="crew-scroll"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
       >
         <PlaceholderBanner />
@@ -230,7 +251,9 @@ export default function CrewScreen() {
         {crew.size < CREW_MAX_MEMBERS ? (
           inviting ? (
             <EmberFieldGroup label="Invite friends" helper="Nobody is told who else was asked.">
-              {inviting.friends.length === 0 ? (
+              {inviting.friends === 'failed' ? (
+                <EmberButton label="Your friends didn’t load — try again" variant="secondary" onPress={() => void startInvite()} />
+              ) : inviting.friends.length === 0 ? (
                 <Text variant="meta">Every friend of yours is in this crew, or you have none to ask yet.</Text>
               ) : (
                 inviting.friends.map((f) => (
@@ -268,6 +291,7 @@ export default function CrewScreen() {
             helper="Somebody on their own who’s open to a crew can match with you — only while you’re 6 or fewer."
             value={crew.openToSolo}
             onValueChange={(next) => void setOpenToSolo(next)}
+            disabled={busy === 'solo'}
           />
         ) : null}
 
@@ -278,6 +302,7 @@ export default function CrewScreen() {
             helper={KEEP_ANONYMOUS_HELPER}
             value={crew.you?.keepMeAnonymous ?? false}
             onValueChange={(next) => void setAnonymous(next)}
+            disabled={busy === 'anon'}
           />
         </View>
 

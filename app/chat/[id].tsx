@@ -223,7 +223,16 @@ function GroupChatInner() {
    * is missing — the Room's chat dock opens this with no cover, and the header
    * drew a generic people glyph there while the Banter's path showed the event.
    */
-  const [roomInfo, setRoomInfo] = useState<{ title?: string; image?: string; venueId?: string; eventId?: string }>({})
+  const [roomInfo, setRoomInfo] = useState<{
+    title?: string
+    image?: string
+    venueId?: string
+    eventId?: string
+    /** A crew's or a Blend's room, found in `rooms` when the opener did not say (step 9 review H2). */
+    kind?: 'crew' | 'blend'
+    crewId?: string
+    blendId?: string
+  }>({})
   const roomName = (params.roomName as string) || roomInfo.title
   const eventTitle = (params.eventTitle as string) || roomInfo.title
   const eventImage = (params.eventImage as string) || roomInfo.image
@@ -276,7 +285,9 @@ function GroupChatInner() {
    * event's. Those close differently — a Blend on its clock or for a blocked
    * pair, a crew when it dissolves — and the room becomes one line saying so.
    */
-  const roomKind = roomKindParam(params.kind)
+  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
+  const crewIdParam = typeof params.crewId === 'string' ? params.crewId : roomInfo.crewId
+  const blendIdParam = typeof params.blendId === 'string' ? params.blendId : roomInfo.blendId
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(String(chatRoomId))
@@ -403,6 +414,8 @@ function GroupChatInner() {
         }
         if (!result.success || !result.data) { setLoadError(true); setLoading(false); return }
         setLoadError(false)
+        // Served: whatever this screen said about the room being closed, it is open.
+        setClosedLine(null)
         // Served as a member, so whatever this phone thought, you are in.
         setOutOfRoom(false)
         // Live again at the place: the socket was taken out of the room at the end (M3).
@@ -497,6 +510,24 @@ function GroupChatInner() {
       const data = result.data as unknown as Record<string, any>
       const rooms: Record<string, any>[] = Array.isArray(data) ? data : data.groups || data.rooms || data.data || []
       const room = rooms.find((g) => String(g.id || g.chat_room_id || g.chatRoomId || '') === String(chatRoomId))
+      /*
+       * A crew's or a Blend's room is in `rooms`, not `groups` (step 9): its
+       * kind is how the screen closes it and where (i) goes, whatever opened it.
+       */
+      const other = !room && Array.isArray(data.rooms)
+        ? (data.rooms as Record<string, any>[]).find((r) => String(r.id) === String(chatRoomId))
+        : null
+      if (other) {
+        rememberRoomMute(String(chatRoomId), other.mute)
+        const kind = roomKindParam(other.kind)
+        setRoomInfo({
+          title: other.name ? String(other.name) : undefined,
+          ...(kind ? { kind } : {}),
+          ...(other.crewId ? { crewId: String(other.crewId) } : {}),
+          ...(other.blendId ? { blendId: String(other.blendId) } : {}),
+        })
+        return
+      }
       if (!room) return
       rememberRoomMute(String(chatRoomId), room.mute)
       // Never for a place's room: an exact count there is a differencing channel (H5).
@@ -811,6 +842,12 @@ function GroupChatInner() {
     const result = await apiClient.rejoinChatGroup(String(chatRoomId))
     setRejoining(false)
     if (!result.success) {
+      // A crew's or a Blend's room refusing you back is the room closing for you, not "check in".
+      const closed = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+      if (closed) {
+        setClosedLine(closed)
+        return
+      }
       showToast(
         result.errorCode === 'NOT_FOUND'
           ? 'Check in at the event to join its room.'
@@ -1045,10 +1082,10 @@ function GroupChatInner() {
             subtitle={roomSubtitle(roomName || defaultRoomName(roomKind), eventTitle || undefined, memberCount)}
             muted={muted}
             onBack={() => router.back()}
-            onInfo={() => typeof params.blendId === 'string'
-              ? router.push({ pathname: '/blend/[blendId]', params: { blendId: params.blendId } })
-              : typeof params.crewId === 'string'
-                ? router.push({ pathname: '/crews/[crewId]', params: { crewId: params.crewId } })
+            onInfo={() => blendIdParam
+              ? router.push({ pathname: '/blend/[blendId]', params: { blendId: blendIdParam, fromChat: '1' } })
+              : crewIdParam
+                ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
                 : router.push({
               pathname: '/chat-info/[id]',
               params: {

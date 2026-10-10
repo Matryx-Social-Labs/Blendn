@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
 import { BlendSideCard } from '../../components/crews/CrewParts'
+import { LoadError } from '../../components/LoadError'
 import { EmberButton } from '../../components/onboarding/EmberControls'
 import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
@@ -15,12 +16,12 @@ import {
   blendTitle,
   closesLine,
   crewMessage,
-  revealCountLine,
+  REVEALED_LINE,
   type BlendPerson,
 } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { markRoomLeft } from '../../lib/roomMembership'
-import { showSheet } from '../../lib/sheet'
+import { showSheet, type SheetOutcome } from '../../lib/sheet'
 import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useBlends } from '../../lib/useBlends'
@@ -35,12 +36,23 @@ import { useBlends } from '../../lib/useBlends'
  * and leave it on your own.
  */
 export default function BlendScreen() {
-  const { blendId } = useLocalSearchParams<{ blendId: string }>()
+  const { blendId, fromChat } = useLocalSearchParams<{ blendId: string; fromChat?: string }>()
   const { user } = useAuth()
   const myId = user?.id
-  const { blends, loaded, reload } = useBlends()
+  const { blends, loaded, failed, reload } = useBlends()
   const [refreshing, setRefreshing] = useState(false)
   const [revealedLine, setRevealedLine] = useState<string | null>(null)
+  /** One write at a time: a second tap while the first is in flight sends nothing. */
+  const inFlight = useRef(false)
+  const once = async (work: () => Promise<SheetOutcome>): Promise<SheetOutcome> => {
+    if (inFlight.current) return { ok: true }
+    inFlight.current = true
+    try {
+      return await work()
+    } finally {
+      inFlight.current = false
+    }
+  }
 
   const blend = blends.find((b) => b.blendId === String(blendId)) ?? null
 
@@ -55,8 +67,13 @@ export default function BlendScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <AppHeader title="Blend" onBack={() => router.back()} />
         <View style={styles.centred}>
-          {/* Not in my open Blends: closed, left, or a block across the sides. One line for all. */}
-          <Text variant="bodyStrong">{loaded ? BLEND_CLOSED_LINE : 'Loading…'}</Text>
+          {failed ? (
+            // A failed read is not a closed Blend: say so, and offer the retry.
+            <LoadError title="This Blend didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+          ) : (
+            // Not in my open Blends: closed, left, or a block across the sides. One line for all.
+            <Text variant="bodyStrong">{loaded ? BLEND_CLOSED_LINE : 'Loading…'}</Text>
+          )}
         </View>
       </SafeAreaView>
     )
@@ -76,15 +93,17 @@ export default function BlendScreen() {
         {
           label: 'Reveal',
           variant: 'primary',
-          run: async () => {
-            const result = await crewsApi.reveal(blend.blendId)
-            if (!result.success || !result.data) {
-              return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t reveal. Try again.') }
-            }
-            setRevealedLine(revealCountLine(result.data.revealed, result.data.keptPrivate))
-            void reload()
-            return { ok: true }
-          },
+          run: () =>
+            once(async () => {
+              const result = await crewsApi.reveal(blend.blendId)
+              if (!result.success) {
+                return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t reveal. Try again.') }
+              }
+              // No count comes back, by design: never who on your crew kept private.
+              setRevealedLine(isCrew ? REVEALED_LINE : 'You’re revealed in this Blend.')
+              void reload()
+              return { ok: true }
+            }),
         },
         { label: 'Cancel', cancel: true },
       ],
@@ -101,12 +120,13 @@ export default function BlendScreen() {
         {
           label: 'Block',
           variant: 'destructive',
-          run: async () => {
-            const result = await apiClient.blockUser(person.userId)
-            if (!result.success) return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t block them. Try again.') }
-            void reload()
-            return { ok: true, toast: `${who} is blocked` }
-          },
+          run: () =>
+            once(async () => {
+              const result = await apiClient.blockUser(person.userId)
+              if (!result.success) return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t block them. Try again.') }
+              void reload()
+              return { ok: true, toast: `${who} is blocked` }
+            }),
         },
         { label: 'Cancel', cancel: true },
       ],
@@ -122,7 +142,7 @@ export default function BlendScreen() {
         {
           label: 'Leave',
           variant: 'destructive',
-          run: async () => {
+          run: () => once(async () => {
             const result = await apiClient.leaveChatGroup(blend.chatGroupId)
             if (!result.success) return { ok: false, error: crewMessage(result, 'blend', 'Couldn’t leave. Try again.') }
             // The chat underneath must offer Rejoin, not "closed": a Blend's door
@@ -130,7 +150,7 @@ export default function BlendScreen() {
             markRoomLeft(blend.chatGroupId)
             router.back()
             return { ok: true, toast: 'You left the Blend' }
-          },
+          }),
         },
         { label: 'Cancel', cancel: true },
       ],
@@ -150,10 +170,13 @@ export default function BlendScreen() {
         <EmberButton
           label="Open the chat"
           onPress={() =>
-            router.push({
-              pathname: '/chat/[id]',
-              params: { id: blend.chatGroupId, roomName: title, kind: 'blend', blendId: blend.blendId } as never,
-            })
+            // Opened from the chat's (i): back to it, rather than a second copy on the stack.
+            fromChat
+              ? router.back()
+              : router.push({
+                  pathname: '/chat/[id]',
+                  params: { id: blend.chatGroupId, roomName: title, kind: 'blend', blendId: blend.blendId } as never,
+                })
           }
         />
         {theirs ? <BlendSideCard side={theirs} myId={myId} onPerson={safety} /> : null}

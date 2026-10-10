@@ -13,13 +13,20 @@ import { crewsApi } from './crewsApi'
  * A failed read keeps what is on screen: an empty list would say "no Blends"
  * about a network error.
  */
-export function useBlends(): { blends: Blend[]; loaded: boolean; reload: () => Promise<void> } {
+export function useBlends(): { blends: Blend[]; loaded: boolean; failed: boolean; reload: () => Promise<void> } {
   const [blends, setBlends] = useState<Blend[]>([])
   const [loaded, setLoaded] = useState(false)
+  /** The last read failed: a screen must not read "closed" into a network error. */
+  const [failed, setFailed] = useState(false)
 
   const reload = useCallback(async () => {
     const result = await crewsApi.blends()
-    if (result.success && result.data) setBlends(result.data.blends)
+    if (result.success && result.data) {
+      setBlends(result.data.blends)
+      setFailed(false)
+    } else {
+      setFailed(true)
+    }
     setLoaded(true)
   }, [])
 
@@ -29,5 +36,5 @@ export function useBlends(): { blends: Blend[]; loaded: boolean; reload: () => P
     }, [reload])
   )
 
-  return { blends, loaded, reload }
+  return { blends, loaded, failed, reload }
 }
