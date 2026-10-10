@@ -49,10 +49,13 @@ tags:
 - inputText: ${CREW_NAME}
 - runFlow: ../subflows/keyboard-done.yaml
 - scrollUntilVisible:
-    element: ${FRIEND}
+    element: "Ask ${FRIEND}"
     direction: DOWN
-- tapOn: ${FRIEND}
-- assertVisible: "${FRIEND}, Will be asked"
+# Make stays off until a friend is picked (a crew is friends who go out together).
+- tapOn: "Ask ${FRIEND}"
+- assertVisible:
+    text: "Ask ${FRIEND}"
+    checked: true
 # CR-CU01: the consent and the anonymity switch sit above the Make button,
 # untapped — and the button is off until the consent is ticked.
 - scrollUntilVisible:

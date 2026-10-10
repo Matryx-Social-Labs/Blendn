@@ -61,11 +61,12 @@ tags:
       LIKE_CREW: ${MY_CREW}
 - tapOn: "Close Blend'n"
 - tapOn: "Banter"
+# Live now lists the Blend from GET /chat/groups rooms: "Blend · <both crews>".
 - extendedWaitUntil:
-    visible: "Blend with ${THEIR_CREW}.*"
+    visible: ".*Blend · .*${THEIR_CREW}.*"
     timeout: 30000
 - takeScreenshot: c21-banter-live-now
-- tapOn: "Blend with ${THEIR_CREW}.*"
+- tapOn: ".*Blend · .*${THEIR_CREW}.*"
 - extendedWaitUntil:
     visible: ".*Share your thoughts.*"
     timeout: 20000
@@ -85,14 +86,17 @@ tags:
     timeout: 20000
 - assertNotVisible: ".*${REVEALED_NAME}.*"
 - assertNotVisible: ".*${ANON_NAME}.*"
+# Your own side is a count and you — never a tile per crewmate.
+- assertVisible: "You and .* of your crew here"
 - takeScreenshot: c21-menagerie
 - scrollUntilVisible:
     element: "Reveal our crew"
     direction: DOWN
 - tapOn: "Reveal our crew"
 - tapOn: "Reveal"
+# No count comes back about your own crew: one line.
 - extendedWaitUntil:
-    visible: ".*revealed.*"
+    visible: "Your crew is revealed in this Blend.*"
     timeout: 20000
 - runScript:
     file: ../scripts/blend-reveal.js
@@ -143,7 +147,7 @@ tags:
     visible: "Open the chat"
     timeout: 20000
 - tapOn:
-    text: ".*Block or report"
+    text: ".*\\. Block"
     index: 1
 - tapOn: "Block"
 - extendedWaitUntil:
@@ -161,7 +165,7 @@ tags:
 - extendedWaitUntil:
     visible: "The Banter"
     timeout: 20000
-- assertNotVisible: "Blend with ${THEIR_CREW}.*"
+- assertNotVisible: ".*Blend · .*${THEIR_CREW}.*"
 # Read back (blendn-admin):
 #   npm run -s qa sq "SELECT b.id, b.closes_at::text AS closes, b.closed_at IS NULL AS open_, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.blend_id = b.id ORDER BY b.created_at DESC LIMIT 1"
 #   npm run -s qa sq "SELECT from_crew_id, to_crew_id, liked_by_user_id FROM crew_likes WHERE occurrence_id = '<occ>'"

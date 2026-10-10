@@ -1,0 +1,31 @@
+# TQ-C20 · H2 (review of #369). A reply push into a Blend opens it as a Blend,
+# not as an event's room. The simulator has no push token, so the push is
+# delivered by hand while this flow waits for its banner:
+#   1. grant notifications once: openLink blendn://onboarding/notifications →
+#      "Enable Notifications" (writes push_enabled=true for the account);
+#   2. start this flow; when it is waiting, run
+#      xcrun simctl push <udid> com.matryxsociallabs.blendn <payload.json>
+#      with {"aps":{"alert":{"title":"<crews>","body":"S9 push check"}},
+#            "body":{"type":"group_message","chatGroupId":"<blend room>","kind":"blend","blendId":"<blend>"}}
+#      (expo-notifications reads the data from "body").
+# The banner is tapped by point: a tap on its text does not open the app.
+# Env: none. Needs: signed in, a member of the open Blend in the payload.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c20
+  - crews
+---
+- extendedWaitUntil:
+    visible: ".*S9 push check.*"
+    timeout: 120000
+- tapOn:
+    point: "50%,11%"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# Opened as a Blend: its (i) is the Blend's people, not an event's Room info.
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Reveal our crew|Reveal me"
+    timeout: 20000
+- takeScreenshot: c21-push-opened-blend
