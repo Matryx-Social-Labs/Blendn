@@ -15,6 +15,7 @@ import {
   closesLine,
   consentBody,
   createCrewBody,
+  crewsThatMayLikePeople,
   crewMessage,
   defaultRoomName,
   hereLine,
@@ -323,6 +324,22 @@ describe('the Crews view: paging and liking', () => {
   it('the next page starts where the server’s last page ended, not where the dedupe left the list', () => {
     expect(nextCrewOffset(30, [card('b'), card('c')])).toBe(32)
     expect(nextCrewOffset(0, [])).toBe(0)
+  })
+
+  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person', () => {
+    const here = [
+      { crewId: 'open6', name: 'Open six', presentCount: 2 },
+      { crewId: 'closed', name: 'Closed', presentCount: 2 },
+      { crewId: 'big', name: 'Big', presentCount: 3 },
+      { crewId: 'unknown', name: 'Not in my list', presentCount: 2 },
+    ]
+    const mine = [
+      { crewId: 'open6', openToSolo: true, size: 6 },
+      { crewId: 'closed', openToSolo: false, size: 2 },
+      { crewId: 'big', openToSolo: true, size: 7 },
+    ]
+    expect(crewsThatMayLikePeople(here, mine).map((c) => c.crewId)).toEqual(['open6'])
+    expect(crewsThatMayLikePeople(here, [])).toEqual([])
   })
 
   it('a like is from you, your one crew here, or a crew you choose — never one the app picks', () => {

@@ -44,6 +44,8 @@ export type CrewsHere =
 export function useCrewsHere(eventId: string | null) {
   const [state, setState] = useState<CrewsHere>({ status: 'loading' })
   const [loadingMore, setLoadingMore] = useState(false)
+  /** Your crews, all of them (`GET /crews`): "We're here", and which may like a person. */
+  const [mine, setMine] = useState<Crew[] | null>(null)
 
   /** One page's answer onto what is loaded. A failed later page leaves the list as it was. */
   const apply = useCallback((result: Awaited<ReturnType<typeof crewsApi.crewsAt>>, offset: number) => {
@@ -70,6 +72,7 @@ export function useCrewsHere(eventId: string | null) {
     if (!eventId) return
     let live = true
     void crewsApi.crewsAt(eventId, { limit: PAGE, offset: 0 }).then((r) => live && apply(r, 0))
+    void crewsApi.myCrews().then((r) => live && setMine(r.success && r.data ? r.data.crews : []))
     return () => {
       live = false
     }
@@ -91,7 +94,7 @@ export function useCrewsHere(eventId: string | null) {
     )
   }, [])
 
-  return { state, reload: () => load(0), loadMore, loadingMore, markLiked }
+  return { state, mine, reload: () => load(0), loadMore, loadingMore, markLiked }
 }
 
 /** Into a Blend that a like just made. */
@@ -128,16 +131,14 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
  */
 export function CrewsView({ eventId, crews }: { eventId: string; crews: ReturnType<typeof useCrewsHere> }) {
   const { showToast } = useToast()
-  const [mine, setMine] = useState<Crew[] | null>(null)
   const [openToCrews, setOpenToCrews] = useState<boolean | null>(null)
   const [liking, setLiking] = useState<string | null>(null)
   const [hereBusy, setHereBusy] = useState<string | null>(null)
   const [hereLines, setHereLines] = useState<Record<string, string>>({})
-  const { state, reload, loadMore, loadingMore, markLiked } = crews
+  const { state, mine, reload, loadMore, loadingMore, markLiked } = crews
 
   useEffect(() => {
     let live = true
-    void crewsApi.myCrews().then((r) => live && setMine(r.success && r.data ? r.data.crews : []))
     // An empty PUT answers the current value: there is no GET, and it lapses on its own.
     void crewsApi.openToCrews(eventId).then((r) => live && r.success && r.data && setOpenToCrews(r.data.openToCrews))
     return () => {

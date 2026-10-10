@@ -50,7 +50,7 @@ export default function CrewScreen() {
   /** "Asked 3 friends" — the count you asked for, from the screen that made the crew or the last invite. */
   const [asked, setAsked] = useState<string | null>(() => invitedLine(Number(params.asked)))
   const [line, setLine] = useState<string | null>(null)
-  const [busy, setBusy] = useState<'here' | 'anon' | 'invite' | null>(null)
+  const [busy, setBusy] = useState<'here' | 'anon' | 'invite' | 'solo' | null>(null)
   const [inviting, setInviting] = useState<{ friends: Friend[]; picked: string[] } | null>(null)
 
   const fetchCrew = useCallback(async () => {
@@ -131,6 +131,19 @@ export default function CrewScreen() {
     }
     const keep = result.data.keepMeAnonymous
     setLoad({ kind: 'ready', crew: { ...crew, you: crew.you ? { ...crew.you, keepMeAnonymous: keep } : crew.you } })
+  }
+
+  /** The owner's "Room for one more": what lets the crew like one person who is open to crews. */
+  const setOpenToSolo = async (next: boolean) => {
+    if (busy) return
+    setBusy('solo')
+    const result = await crewsApi.update(crew.crewId, { openToSolo: next })
+    setBusy(null)
+    if (!result.success || !result.data) {
+      showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
+      return
+    }
+    setLoad({ kind: 'ready', crew: result.data })
   }
 
   const startInvite = async () => {
@@ -247,6 +260,15 @@ export default function CrewScreen() {
           ) : (
             <EmberButton label="Invite friends" variant="secondary" onPress={() => void startInvite()} />
           )
+        ) : null}
+
+        {crew.you?.role === 'owner' ? (
+          <EmberToggle
+            label="Room for one more"
+            helper="Somebody on their own who’s open to a crew can match with you — only while you’re 6 or fewer."
+            value={crew.openToSolo}
+            onValueChange={(next) => void setOpenToSolo(next)}
+          />
         ) : null}
 
         <View style={styles.privacy}>

@@ -38,7 +38,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriends: jest.fn(), blockUser: jest.fn(), leaveChatGroup: jest.fn(), queuedRequest: jest.fn() },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { create: jest.fn(), myCrews: jest.fn(), join: jest.fn(), decline: jest.fn(), blends: jest.fn(), reveal: jest.fn() },
+  crewsApi: { create: jest.fn(), myCrews: jest.fn(), join: jest.fn(), decline: jest.fn(), blends: jest.fn(), reveal: jest.fn(), crew: jest.fn(), update: jest.fn() },
 }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/roomMembership', () => ({ markRoomLeft: jest.fn() }))
@@ -50,10 +50,11 @@ jest.mock('../lib/logger', () => ({
 
 import { router } from 'expo-router'
 import BlendScreen from '../app/blend/[blendId]'
+import CrewScreen from '../app/crews/[crewId]'
 import CrewsScreen from '../app/crews/index'
 import NewCrewScreen from '../app/crews/new'
 import { apiClient } from '../lib/apiClient'
-import { BLEND_CLOSED_LINE, CONSENT_AGREE, CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Blend } from '../lib/crews'
+import { BLEND_CLOSED_LINE, CONSENT_AGREE, CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Blend, type Crew } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 import { markRoomLeft } from '../lib/roomMembership'
 import { showSheet, type ActionSheet } from '../lib/sheet'
@@ -158,6 +159,41 @@ describe('an invite', () => {
     await fireEvent.press(screen.getByLabelText('Decline'))
     await waitFor(() => expect(screen.queryByText('Vikram asked you · Crew of 4')).toBeNull())
     expect(crews.decline).toHaveBeenCalledWith('c5')
+  })
+})
+
+describe('a crew', () => {
+  const crew = (role: 'owner' | 'member'): Crew => ({
+    crewId: 'c2',
+    name: 'Two',
+    bio: null,
+    intent: [],
+    tags: [],
+    emblemSeed: 's',
+    openToSolo: false,
+    createdAt: '2026-10-09T10:00:00Z',
+    chatGroupId: 'g2',
+    size: 2,
+    you: { role, keepMeAnonymous: false },
+    members: [],
+  })
+
+  it('its owner can turn on "Room for one more" — what lets the crew like one person', async () => {
+    mockParams.crewId = 'c2'
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.update.mockResolvedValue({ success: true, data: { ...crew('owner'), openToSolo: true } })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByRole('switch', { name: 'Room for one more' }))
+    await fireEvent.press(screen.getByRole('switch', { name: 'Room for one more' }))
+    await waitFor(() => expect(crews.update).toHaveBeenCalledWith('c2', { openToSolo: true }))
+  })
+
+  it('a member does not get the owner’s switch', async () => {
+    mockParams.crewId = 'c2'
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Open crew chat'))
+    expect(screen.queryByRole('switch', { name: 'Room for one more' })).toBeNull()
   })
 })
 

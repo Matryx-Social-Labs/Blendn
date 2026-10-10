@@ -34,6 +34,16 @@ export const crewsApi = {
     return apiClient.queuedRequest('/api/mobile/crews', post(body), true, 2)
   },
 
+  /** The owner's settings. Only "Room for one more" has a control so far. */
+  update(crewId: string, patch: { openToSolo: boolean }): Promise<ApiResponse<Crew>> {
+    return apiClient.queuedRequest(
+      `/api/mobile/crews/${enc(crewId)}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+      true,
+      2
+    )
+  },
+
   /** `invited` is how many you asked for — never who got one. */
   invite(crewId: string, userIds: string[]): Promise<ApiResponse<{ invited: number }>> {
     return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/invites`, post({ userIds }), true, 2)

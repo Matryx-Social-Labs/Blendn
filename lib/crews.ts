@@ -451,6 +451,24 @@ export function nextCrewOffset(offset: number, page: readonly CrewCard[]): numbe
   return offset + page.length
 }
 
+/** Crews larger than this match crews only, never one person (the server's `CREW.MAX_SOLO_MATCH`). */
+export const CREW_MAX_SOLO_MATCH = 6
+
+/**
+ * Your crews here that may like one person on their behalf: "Room for one
+ * more" on, and 6 or fewer. The server refuses the rest with a 403 about your
+ * own crew, so offering them the button only offers a refusal.
+ */
+export function crewsThatMayLikePeople(
+  here: CrewsAtEvent['myCrews'],
+  mine: readonly Pick<Crew, 'crewId' | 'openToSolo' | 'size'>[]
+): CrewsAtEvent['myCrews'] {
+  return here.filter((c) => {
+    const crew = mine.find((m) => m.crewId === c.crewId)
+    return !!crew && crew.openToSolo && crew.size <= CREW_MAX_SOLO_MATCH
+  })
+}
+
 /**
  * Who a like of a crew is sent as. With no crew of yours here it is you
  * (crew ↔ person, which needs "Open to joining a crew tonight"); with one,

@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
-import { crewMessage, likeAs } from '../../lib/crews'
+import { crewMessage, crewsThatMayLikePeople, likeAs } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
@@ -210,6 +210,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
   const crews = useCrewsHere(mode === 'room' ? eventId : null)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
+  const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
 
   // --- people ---------------------------------------------------------------
   const [open, setOpen] = useState<RoomPerson | null>(null)
@@ -270,13 +271,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * — so all this may say is that the like went, unless it made a Blend.
    */
   const likeForCrew = async (p: RoomPerson) => {
-    const as = likeAs(myCrewsHere)
+    const as = likeAs(soloCrews)
     if (as.as === 'me' || !eventId) return
+    // The card closes first: a toast drawn under its sheet is one nobody sees.
+    setOpen(null)
     let crewId: string | null = as.as === 'crew' ? as.crewId : null
     if (as.as === 'choose') {
-      setOpen(null)
       await sheetClosed()
-      crewId = await chooseCrew(myCrewsHere, `Like ${p.name} for…`)
+      crewId = await chooseCrew(soloCrews, `Like ${p.name} for…`)
     }
     if (!crewId) return
     const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
@@ -284,12 +286,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
       return
     }
-    if (result.data.blend) {
-      setOpen(null)
-      openBlend(result.data.blend, `Blend with ${p.name}`)
-    } else {
-      showToast('Liked for your crew', 'success')
-    }
+    if (result.data.blend) openBlend(result.data.blend, `Blend with ${p.name}`)
+    else showToast('Liked for your crew', 'success')
   }
 
   // --- the room chat ----------------------------------------------------------
@@ -572,9 +570,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onOpenProfile={openProfile}
         waveState={openLive ? waves[openLive.id] ?? null : null}
         crewLike={
-          myCrewsHere.length
+          soloCrews.length
             ? {
-                label: myCrewsHere.length === 1 ? `Like for ${myCrewsHere[0].name}` : 'Like for your crew',
+                label: soloCrews.length === 1 ? `Like for ${soloCrews[0].name}` : 'Like for your crew',
                 onPress: (p) => void likeForCrew(p),
               }
             : null
