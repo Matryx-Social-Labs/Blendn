@@ -882,6 +882,46 @@ Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, 
 
 ---
 
+## 14. Matching v2 — languages, home, sign, this-or-that; what cards share — `app/edit-about-you.tsx`, the person and crew cards
+
+**Added 2026-10-10 (step 10 of the product-completion plan).** The server half
+is blendn-admin step 10 (`lib/overlaps.ts`, `lib/about-you.ts`,
+`GET /profile-options`, `GET|PUT /me/this-or-that`); the contract is
+`docs/api/API.md` → Matches and "Matching inputs on the profile". The owner's
+rulings: **rank on what people chose and did, display what they are**; zodiac
+is an opt-in chip, never a ranking; never kundli, caste, religion or veg /
+non-veg.
+
+```
+Me ─ Edit profile ─ YOU AND MATCHING ─▶ "Languages, home, sign & this-or-that"
+                                          languages (≤5) · where you're from · Show my sign
+                                          (Western | My rashi instead) · 12 this-or-that · "Shows up"
+Room ─ a face ─▶ the person sheet: reasons now include the server's lines
+                 ("Both CSK — in RCB country 💛", "You both speak Malayalam"),
+                 their sign chip, badges ("Regular here", "5+ nights this month")
+Room ─ Crews ─▶ a crew card: up to two crew-held lines ("Both crews are into Techno"),
+                "6 nights out together"
+```
+
+| Surface | File | Hemanth ticket |
+|---|---|---|
+| Languages, home, sign & this-or-that | `app/edit-about-you.tsx` | see the step 10 report |
+| The person sheet's shared lines, sign chip and badges | `components/blendn/PersonCard.tsx` | see the step 10 report |
+| The crew card's crew-held lines and nights together | `components/crews/CrewParts.tsx` | see the step 10 report |
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Shown, never ranked** | Nothing on the editor may suggest it changes who you see. Ranking by language or state would sort rooms by region; by sign, by stars — which Tinder's own data says predicts nothing |
+| **The sign is off until turned on** | The switch prefills the Western sign of your birth date (`suggested_sun_sign`); "My rashi instead" swaps the calendar. A rashi is usually the Moon's sign, which a birth date cannot give, so it is only ever picked |
+| **Print the server's lines as sent** | The budget is the server's: before a reveal at most one language / home / sign line per card, none in a room under eight. A client that composed its own "Both from Kerala" from profiles would break the budget. The app never derives an overlap |
+| **Positive only** | No mismatch, no "incompatible", no "doesn't speak Kannada" — the server never sends one, and no design may add one |
+| **A crew card names no member** | Its lines are what the crew holds (two members and a third of it); never "3 of 4", never who |
+| **Badges are earned, not typed** | From GPS check-ins. "Shows up" only for those who turned it on. No streaks |
+
+---
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
