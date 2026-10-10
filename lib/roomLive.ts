@@ -58,6 +58,9 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
     age: m.age ?? undefined,
     insideNow: m.insideNow,
     youLiked: m.youLiked,
+    overlaps: m.overlaps ?? [],
+    sign: m.sign ?? null,
+    badges: m.badges ?? [],
   }
 }
 

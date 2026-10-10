@@ -745,6 +745,20 @@ export default function EditProfile() {
               onChangeInterestedIn={setInterestedIn}
               offerDating={mayDate(liveAge)}
             />
+            {/*
+              Languages, home state, sign and this-or-that: display only, saved
+              on their own screen so this form's save stays what it was.
+            */}
+            <TouchableOpacity
+              style={styles.linkRow}
+              onPress={() => router.push('/edit-about-you')}
+              accessibilityRole="button"
+              accessibilityLabel="Languages, home state, sign and this or that"
+              accessibilityHint="Shown on cards when you share one with someone. Never used to rank."
+            >
+              <Text style={styles.linkText}>Languages, home, sign &amp; this-or-that</Text>
+              <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {/* Goals Card */}
@@ -934,6 +948,16 @@ const styles = StyleSheet.create({
 
   bottomPadding: {
     height: SPACE.xxl,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: CONTROL.md,
+    marginTop: SPACE.lg,
+  },
+  linkText: {
+    ...TYPE.bodyStrong,
   },
 
   // Modal

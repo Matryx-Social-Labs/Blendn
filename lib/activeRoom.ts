@@ -36,6 +36,7 @@
  * honest failure beats a spinner that never stops.
  */
 
+import type { Badge, Overlap } from './aboutYou'
 import { roomDisplayTitle } from './placeRoom'
 
 export interface RoomAttendee {
@@ -72,6 +73,10 @@ export interface RoomAttendee {
   age?: number | null
   insideNow?: boolean
   youLiked?: boolean
+  /** Matching v2: display-only shared lines, the sign chip and badges (see `MatchCard`). */
+  overlaps?: Overlap[]
+  sign?: string | null
+  badges?: Badge[]
 }
 
 export interface CheckinLike {
