@@ -632,6 +632,8 @@ prefix**. Everything below is stored `plaintext` in EAS:
 | `EXPO_PUBLIC_SENTRY_DSN` | no | A DSN only permits *writing* events; it is meant to ship in clients |
 | `EXPO_PUBLIC_APP_ENV` | no | A label on Sentry events |
 | `EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED` | no | Dead — the app has no Supabase dependency. Listed so it reads as a leftover, not a mystery |
+| `EXPO_PUBLIC_MAP_STYLE_URL` | no | Optional: moves the home map's style off OpenFreeMap (`lib/mapStyleEmber.ts`) |
+| `EXPO_PUBLIC_BUILDINGS_TILES_URL` | no | Our building tiles for the home map: an https `{z}/{x}/{y}` template, **per environment** — the staging bucket for `development` and `preview`, the production bucket for `production` (after its upload; Blendn-Admin `scripts/map-buildings/README.md`). Unset or unusable: OpenFreeMap's buildings, with a warning in the log when set but unusable |
 
 Marking these `secret` in EAS would be worse than useless: it hides them from
 you and your own CLI while leaving them fully readable in the shipped app, and
@@ -744,6 +746,12 @@ set -a; source .env; set +a     # the client ids, without retyping them
 # The one value that differs between the two — the whole point of the split
 npx eas-cli env:set --environment preview    --name EXPO_PUBLIC_API_BASE_URL --value https://staging-api.blendn.app --visibility plaintext
 npx eas-cli env:set --environment production --name EXPO_PUBLIC_API_BASE_URL --value https://api.blendn.app          --visibility plaintext
+
+# The home map's building tiles: one bucket per environment, never the staging bucket in production.
+# A rebuild goes to a new version prefix (v2 → v3); bump the value then. Production: set it once the
+# production upload exists (scripts/map-buildings/README.md in Blendn-Admin).
+npx eas-cli env:set --environment development --name EXPO_PUBLIC_BUILDINGS_TILES_URL --value 'https://blendn-media-staging.fly.storage.tigris.dev/map/buildings/v2/{z}/{x}/{y}.pbf' --visibility plaintext
+npx eas-cli env:set --environment preview     --name EXPO_PUBLIC_BUILDINGS_TILES_URL --value 'https://blendn-media-staging.fly.storage.tigris.dev/map/buildings/v2/{z}/{x}/{y}.pbf' --visibility plaintext
 
 # Identical in both
 for E in preview production; do

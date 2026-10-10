@@ -18,21 +18,25 @@ import {
   type LitPlace,
   type LngLat,
 } from '../../lib/mapLit'
-import { BUILDING_LAYER_ID } from '../../lib/mapStyleEmber'
+import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 
 export type Segment = 'events' | 'places'
 export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
 export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number }
-export type Lit = { bands: Collection<BandFeature>; glow: Collection<GlowFeature>; chips: Chip[] }
+/** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */
+export type LitState = { featureId: number; pinId: string; kind: Pin['kind']; live: boolean }
+export type Lit = { bands: Collection<BandFeature>; glow: Collection<GlowFeature>; chips: Chip[]; states: LitState[] }
 /** The settled camera, as the last region change reported it. */
 export type MapView = { bounds: Bounds | null; centre: LngLat | null; zoom: number; pitch: number }
 
 type Drawn = { id?: string | number; geometry: { type: string; coordinates: unknown }; properties: Record<string, unknown> | null }
 
 const collection = <F>(features: F[]): Collection<F> => ({ type: 'FeatureCollection', features })
-export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [] }
+/** Buildings remembered, at most: a long pan around a city should not grow without end. */
+const SEEN_MAX = 500
+export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [], states: [] }
 
 /**
  * Lighting the pins on the home map (step 2c): which building each one stands
@@ -52,6 +56,10 @@ export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips:
  * overtaken drops its result, and a pass counts as done only when it finished
  * cleanly (review H4). An unchanged result is not published again, so the map
  * is not handed the same GeoJSON on every settle (review M9).
+ *
+ * On our own building tiles (`featureIds`), a building has its own id: with
+ * `litBy: 'feature-state'` it is lit as itself (`states`), and no GeoJSON
+ * copy is drawn over it; beacons, glows and chips are the same either way.
  */
 export function useMapLighting({
   map,
@@ -60,6 +68,7 @@ export function useMapLighting({
   segment,
   size,
   featureIds = false,
+  litBy = 'copy',
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -70,6 +79,8 @@ export function useMapLighting({
   size: { width: number; height: number }
   /** Whether the building tiles give each building its own id (our tiles), so it is lit by id. */
   featureIds?: boolean
+  /** With `featureIds`: light a building through feature-state on itself, or by a GeoJSON copy over it. */
+  litBy?: 'feature-state' | 'copy'
 }): { lit: Lit; onFrame: () => void; relight: () => void } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -77,10 +88,12 @@ export function useMapLighting({
   const pass = useRef(0)
   const seen = useRef(new Map<string, { lng: number; lat: number; building: LitBuilding | null }>())
 
-  // New pins: their buildings are looked for once the tiles under them are drawn.
+  // New pins, or the other tiles drawing the buildings: look again once they are drawn. A pass still
+  // waiting on the bridge was for the old tiles: dropped (review M1).
   useEffect(() => {
+    pass.current += 1
     needsLight.current = true
-  }, [pins])
+  }, [pins, featureIds])
 
   const publish = (shown: Segment, lit: Lit) => {
     const key = JSON.stringify(lit)
@@ -99,9 +112,13 @@ export function useMapLighting({
       return
     }
     const candidates = lightCandidates(pins, v.bounds, v.centre, MAP_THEME.lit.max)
-    const signature = lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })
+    // Which tiles drew the buildings is part of what was looked up: a building found in one is not one in the other.
+    const tiles = featureIds ? 'own' : 'openfreemap'
+    // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
+    const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}`
     if (signature === lastLit.current) return
-    const keyOf = (p: Pin) => `${shown}:${p.id}`
+    const keyOf = (p: Pin) => `${tiles}:${shown}:${p.id}`
     const known = (p: Pin) => {
       const s = seen.current.get(keyOf(p))
       return s !== undefined && s.lng === p.longitude && s.lat === p.latitude
@@ -128,7 +145,7 @@ export function useMapLighting({
           [Math.min(size.width, Math.max(...placed.map(({ s }) => s[0])) + r), Math.min(size.height, Math.max(...placed.map(({ s }) => s[1])) + r)],
         ]
         const drawn = await m
-          .queryRenderedFeatures(box, { layers: [BUILDING_LAYER_ID] })
+          .queryRenderedFeatures(box, { layers: [layer] })
           .then((features) => features as Drawn[])
           .catch((error) => {
             Logger.warn('events', 'Could not read the buildings under the pins', { error: String(error) })
@@ -141,8 +158,10 @@ export function useMapLighting({
           const building = drawn ? litPlaceFor(p, drawn, featureIds).building : null
           fresh.set(p.id, building)
           const wholeBoxOnScreen = s[0] - r >= 0 && s[1] - r >= 0 && s[0] + r <= size.width && s[1] + r <= size.height
-          if (drawn && wholeBoxOnScreen) seen.current.set(keyOf(p), { lng: p.longitude, lat: p.latitude, building })
-          else clean = false
+          if (drawn && wholeBoxOnScreen) {
+            seen.current.set(keyOf(p), { lng: p.longitude, lat: p.latitude, building })
+            if (seen.current.size > SEEN_MAX) seen.current.delete(seen.current.keys().next().value as string)
+          } else clean = false
         }
       }
     }
@@ -154,8 +173,11 @@ export function useMapLighting({
       places.push({ id: p.id, kind: p.kind, live: p.live, at: [p.longitude, p.latitude], building, pin: p })
     }
     const kept = dedupeLit(places)
+    const byState = (p: LitPlace) => featureIds && litBy === 'feature-state' && p.building?.featureId != null
     publish(shown, {
-      bands: collection(kept.flatMap(bandsFor)),
+      // A building lit through feature-state needs no copy drawn over it.
+      bands: collection(kept.flatMap((p) => (byState(p) && p.building ? bandsFor({ ...p, building: { ...p.building, footprint: null } }) : bandsFor(p)))),
+      states: kept.filter(byState).map((p) => ({ featureId: p.building?.featureId as number, pinId: p.id, kind: p.kind, live: p.live })),
       glow: collection(kept.map(glowFor)),
       chips: nearestTo(kept, v.centre, MAP_THEME.chip.max).map((p) => ({
         id: p.id,
