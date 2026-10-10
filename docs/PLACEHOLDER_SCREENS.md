@@ -838,7 +838,7 @@ Banter's list at the same moment (the server lists it only while you are live).
 | §10 A place | SCRUM-555 |
 | §11 Go Live sheet, expiry prompt, Plus placeholder | SCRUM-556 |
 | §12 The room when not live (and the place's locked room) | SCRUM-557 |
-| §13 The Blendn+ paywall | to be filed (step 11) |
+| §13 The Blendn+ paywall | SCRUM-582 (Hemanth) |
 
 ---
 
@@ -850,11 +850,16 @@ design.
 
 ### What it does
 
-- **What Plus is**, exactly: stay live while I'm here; your full night history
-  (free keeps the last 3); partner perks (coming soon); crew extras (coming
-  soon).
+- **What Plus is**, exactly what exists: stay live while I'm here; your full
+  night history (free keeps the last 3). Partner perks and crew extras join
+  when they are built (SCRUM-584) — nothing is listed that cannot be used.
 - **Your state**, from `GET /me/plus`: "Blendn+ until 10 Nov 2026" / "Night
-  Pass until 4:30 AM".
+  Pass until 11 Oct 2026, 4:30 AM".
+- **Never sells what is free.** Plans show only in a gated moment — a
+  `PLUS_REQUIRED` (`go_live_expiry`), locked nights (`recap`) — or when the
+  server says Blendn+ is for sale to this person (`gated`). In a launch season
+  the screen says it is free there and lists no plans; Settings' row reads
+  "Blendn+ · free during launch in your city" and opens an info tray instead.
 - **The packages** of RevenueCat's current offering: Monthly (`$rc_monthly`),
   3 months (`$rc_three_month`), Yearly (`$rc_annual`), and Night Pass · 24
   hours (`night_pass`) — each with its length and **the store's price string**,
@@ -865,8 +870,14 @@ design.
   subscriptions page).
 - After a purchase or restore: "Confirming with the store…" while it asks
   `GET /me/plus` every 3 s for up to a minute, then "You're in." — or "Taking
-  longer than usual — it'll unlock as soon as the store confirms."
-- **Not now** in the header, always visible ("Done" once something was bought).
+  longer than usual — it'll unlock as soon as the store confirms." A
+  **pending** payment (UPI, Ask to Buy) is not polled: it says so, and Settings
+  and Going re-read on return. Each state is announced to VoiceOver.
+- The store's errors in words: already bought (with Manage subscription), a
+  purchase belonging to another Blendn account, purchases not allowed, no
+  connection; "Couldn't load prices" with Try again.
+- **Not now** in the header, always visible ("Done" once something was bought
+  or is confirming).
 - No RevenueCat key in the build: the screen still opens and says "Purchases
   aren't available yet."
 
@@ -898,7 +909,7 @@ on anything that says Blendn+ always opens it.
 
 ---
 
-## 13. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
+## 14. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
 
 **Added 2026-10-09 (step 9 of the product-completion plan).** The server half
 is blendn-admin #630, #631 and #639; the contract is `docs/api/API.md` →

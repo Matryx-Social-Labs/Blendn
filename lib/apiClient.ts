@@ -2305,7 +2305,8 @@ class ApiClientClass {
       '/api/mobile/me/plus/paywall-events',
       { method: 'POST', body: JSON.stringify({ event, trigger }) },
       true,
-      5
+      // Last in the queue: lower runs first, and nothing waits on this.
+      10
     )
   }
 

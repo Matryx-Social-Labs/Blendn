@@ -14,7 +14,11 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }))
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), push: jest.fn() },
+  // A screen's focus, run once as on mount.
+  useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
+}))
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
@@ -31,7 +35,7 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -48,12 +52,21 @@ import { apiClient } from '../lib/apiClient'
 import { deleteAccount, signOut } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
+const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
+  active: false,
+  gated: true,
+  product: o.active ? 'plus' : null,
+  source: null,
+  expiresAt: null,
+  ...o,
+})
 const permissions = Notifications.getPermissionsAsync as jest.Mock
 
 beforeEach(() => {
   jest.clearAllMocks()
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
+  api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
 })
 
@@ -171,6 +184,50 @@ describe('Delete account', () => {
     await openTray()
     fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
     expect(deleteAccount).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['apple', 'App Store'],
+    ['google', 'Google Play'],
+  ] as const)('says to cancel a %s subscription first, with Manage subscription (review H1)', async (source, store) => {
+    const opened = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+    await render(<SettingsScreen />)
+    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
+    await openTray()
+    expect(
+      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn't cancel it.`)
+    ).toBeTruthy()
+    fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
+    await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
+    opened.mockRestore()
+  })
+
+  it('says nothing about the store for a grant, or no Plus', async () => {
+    await render(<SettingsScreen />)
+    for (const data of [plusStatus({ active: true, source: 'grant' }), plusStatus()]) {
+      api.getMyPlus.mockResolvedValue({ success: true, data } as never)
+      await openTray()
+      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+      expect(screen.queryByText(/Deleting your account doesn't cancel it/)).toBeNull()
+      fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+    }
+  })
+})
+
+describe('Blendn+ row (review H2)', () => {
+  it('in a launch season says it is free and opens an info tray that sells nothing', async () => {
+    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
+    await render(<SettingsScreen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+ · free during launch in your city' }))
+    expect(await screen.findByText('Blendn+ is free here for now')).toBeTruthy()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('where it is sold, opens the paywall', async () => {
+    await render(<SettingsScreen />)
+    await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+' }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
   })
 })
 

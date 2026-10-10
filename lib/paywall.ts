@@ -43,11 +43,34 @@ export function notePaywallEvent(event: PaywallEvent, trigger: PaywallTrigger): 
     .catch((error) => Logger.warn('plus', 'Could not note the paywall', { error: String(error) }))
 }
 
+/** Listeners for the paywall closing (the expiry prompt comes back without "Stay" after it). */
+const closedListeners = new Set<() => void>()
+export function subscribePaywallClosed(fn: () => void): () => void {
+  closedListeners.add(fn)
+  return () => {
+    closedListeners.delete(fn)
+  }
+}
+/** Called by `app/plus.tsx` as it unmounts. */
+export function notePaywallClosed(): void {
+  for (const fn of [...closedListeners]) fn()
+}
+
+/**
+ * Where the paywall never goes, even when asked: on top of itself (a second
+ * tap, a deep link while open) or over onboarding.
+ */
+export function paywallBlockedAt(pathname: string | null): boolean {
+  return pathname === '/plus' || (pathname?.startsWith('/onboarding') ?? false)
+}
+
 /**
  * Opens the paywall if the policy allows it, and says whether it did. A tap
- * on something that says Blendn+ passes `userInitiated` and always opens it.
+ * on something that says Blendn+ passes `userInitiated` and always opens it —
+ * except on top of itself or over onboarding (`paywallBlockedAt`).
  */
 export async function openPaywall(trigger: PaywallTrigger, { userInitiated = false }: { userInitiated?: boolean } = {}): Promise<boolean> {
+  if (paywallBlockedAt(currentPathname)) return false
   if (!userInitiated) {
     const memory = await readPaywallMemory()
     const ctx = { userInitiated, automaticShownThisSession, pathname: currentPathname, roomOpen: isBlendnOpen() }

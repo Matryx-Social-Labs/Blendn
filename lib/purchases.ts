@@ -59,7 +59,8 @@ async function applyUser(userId: string | null): Promise<void> {
     if (!configured) {
       // Nobody signed in and never configured: there is no one to forget.
       if (!userId) return
-      Purchases.configure({ apiKey: key, appUserID: userId })
+      // No device identifiers for attribution networks: we use none (App Privacy, Data safety).
+      Purchases.configure({ apiKey: key, appUserID: userId, automaticDeviceIdentifierCollectionEnabled: false })
       configured = true
       return
     }
@@ -73,11 +74,18 @@ async function applyUser(userId: string | null): Promise<void> {
   }
 }
 
-/** True only when RevenueCat is configured AND its current user is this account. */
+/**
+ * True only when RevenueCat is configured AND its current user is this
+ * account. A mismatch (a sign-in whose `logIn` failed) gets one more `logIn`
+ * before the answer is no. Asked again at every purchase and restore, not
+ * once when the screen opened: the account can change underneath it.
+ */
 export async function canBuyAs(userId: string | null | undefined): Promise<boolean> {
   if (!userId || !configured) return false
   try {
     await syncChain
+    if ((await Purchases.getAppUserID()) === userId) return true
+    await syncPurchasesUser(userId)
     return (await Purchases.getAppUserID()) === userId
   } catch {
     return false
@@ -94,15 +102,19 @@ export const PLUS_PACKAGES = [
 
 export type PlusOffer = { pkg: PurchasesPackage; title: string; length: string; price: string }
 
-/** The current offering's packages we sell, priced by the store. Empty when purchases are off or the store has none. */
-export async function loadPlusOffers(): Promise<PlusOffer[]> {
+/**
+ * The current offering's packages we sell, priced by the store. Empty when
+ * purchases are off or the store has none; null when the store could not be
+ * reached ("Couldn't load prices", with a retry).
+ */
+export async function loadPlusOffers(): Promise<PlusOffer[] | null> {
   if (!configured) return []
   try {
     const offerings = await Purchases.getOfferings()
     return plusOffers((offerings.current ?? offerings.all.default)?.availablePackages ?? [])
   } catch (error) {
     Logger.warn('plus', 'Could not load the offering', { error: String(error) })
-    return []
+    return null
   }
 }
 
@@ -118,18 +130,41 @@ export function plusOffers(packages: readonly PurchasesPackage[]): PlusOffer[] {
  * `pending`: the store took the order and the payment is not through yet — a
  * UPI approval, Ask to Buy. It unlocks when the store confirms, like a purchase.
  */
-export type PurchaseOutcome = { kind: 'purchased' } | { kind: 'pending' } | { kind: 'cancelled' } | { kind: 'failed'; message: string }
+export type PurchaseOutcome =
+  | { kind: 'purchased' }
+  | { kind: 'pending' }
+  | { kind: 'cancelled' }
+  | { kind: 'failed'; message: string; manage?: boolean }
 
-export async function buyPackage(pkg: PurchasesPackage): Promise<PurchaseOutcome> {
+const NOT_SIGNED_IN = "We couldn't connect your account to the store. Close this and try again."
+
+/** What the store said, in words a person can act on. `manage`: point them at Manage subscription. */
+export function purchaseFailure(code: string | undefined): { message: string; manage?: boolean } {
+  switch (code) {
+    case PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR:
+      return { message: 'You already have this. See it under Manage subscription.', manage: true }
+    case PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR:
+      return { message: "This store account's purchase belongs to another Blendn account. Sign in to that one to use it." }
+    case PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR:
+      return { message: "Purchases aren't allowed on this device. Check Screen Time or your store's settings." }
+    case PURCHASES_ERROR_CODE.NETWORK_ERROR:
+      return { message: "No connection to the store. Check your connection and try again." }
+    default:
+      return { message: "The purchase didn't go through. Try again." }
+  }
+}
+
+export async function buyPackage(pkg: PurchasesPackage, userId: string | null | undefined): Promise<PurchaseOutcome> {
+  if (!(await canBuyAs(userId))) return { kind: 'failed', message: NOT_SIGNED_IN }
   try {
     await Purchases.purchasePackage(pkg)
     return { kind: 'purchased' }
   } catch (error) {
     const e = error as { userCancelled?: boolean | null; code?: string }
-    if (e?.userCancelled) return { kind: 'cancelled' }
+    if (e?.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR || e?.userCancelled) return { kind: 'cancelled' }
     if (e?.code === PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR) return { kind: 'pending' }
     Logger.warn('plus', 'Purchase failed', { code: e?.code })
-    return { kind: 'failed', message: "The purchase didn't go through. Try again." }
+    return { kind: 'failed', ...purchaseFailure(e?.code) }
   }
 }
 
@@ -140,14 +175,16 @@ export type RestoreOutcome = { kind: 'restored' } | { kind: 'nothing' } | { kind
  * anything decides only what is said; what unlocks is the server's, once the
  * store tells RevenueCat and RevenueCat tells the server.
  */
-export async function restore(): Promise<RestoreOutcome> {
+export async function restore(userId: string | null | undefined): Promise<RestoreOutcome> {
   if (!configured) return { kind: 'failed', message: "Purchases aren't available yet." }
+  if (!(await canBuyAs(userId))) return { kind: 'failed', message: NOT_SIGNED_IN }
   try {
     const info = await Purchases.restorePurchases()
     return hasSomethingActive(info) ? { kind: 'restored' } : { kind: 'nothing' }
   } catch (error) {
-    Logger.warn('plus', 'Restore failed', { code: (error as { code?: string })?.code })
-    return { kind: 'failed', message: "Couldn't reach the store. Try again." }
+    const code = (error as { code?: string })?.code
+    Logger.warn('plus', 'Restore failed', { code })
+    return { kind: 'failed', message: code === PURCHASES_ERROR_CODE.NETWORK_ERROR ? purchaseFailure(code).message : "Couldn't reach the store. Try again." }
   }
 }
 
@@ -160,13 +197,30 @@ const STORE_SUBSCRIPTIONS = {
   android: 'https://play.google.com/store/account/subscriptions?package=com.matryxsociallabs.blendn',
 } as const
 
-/** Where "Manage subscription" goes: RevenueCat's management URL when it has one, else the store's page. */
+/** The only hosts "Manage subscription" may open: the stores' own pages. */
+const STORE_HOSTS = new Set(['apps.apple.com', 'play.google.com'])
+
+/** A management URL we will open: https, on a store's own host. Anything else is ignored. */
+export function isStoreUrl(url: string | null | undefined): url is string {
+  try {
+    const u = new URL(url ?? '')
+    return u.protocol === 'https:' && STORE_HOSTS.has(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+/** Where "Manage subscription" goes: RevenueCat's management URL when it is a store's page, else the store's page. */
 export async function manageSubscriptionUrl(os: string = Platform.OS): Promise<string> {
   const fallback = os === 'android' ? STORE_SUBSCRIPTIONS.android : STORE_SUBSCRIPTIONS.ios
   if (!configured) return fallback
   try {
-    return (await Purchases.getCustomerInfo()).managementURL ?? fallback
+    const url = (await Purchases.getCustomerInfo()).managementURL
+    return isStoreUrl(url) ? url : fallback
   } catch {
     return fallback
   }
 }
+
+/** The store's own subscriptions page for this platform (the delete-account warning). */
+export const storeSubscriptionsUrl = (os: string = Platform.OS) => (os === 'android' ? STORE_SUBSCRIPTIONS.android : STORE_SUBSCRIPTIONS.ios)

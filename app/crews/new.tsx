@@ -34,7 +34,7 @@ import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 
 /**
- * Make a crew, from your friends (placeholder design — docs/PLACEHOLDER_SCREENS.md §13).
+ * Make a crew, from your friends (placeholder design — docs/PLACEHOLDER_SCREENS.md §14).
  *
  * The consent is part of the form, not a step after it: making a crew is
  * joining it, and joining is agreeing that anyone in it can reveal the crew.

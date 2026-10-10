@@ -12,18 +12,19 @@ import { lockedNightsLabel, withLockedNights, type GoingItem } from '../lib/save
 /* eslint-enable import/first */
 
 const getMyPlus = apiClient.getMyPlus as jest.Mock
-const inactive = { success: true, data: { active: false, product: null, source: null, expiresAt: null } }
-const active = { success: true, data: { active: true, product: 'plus', source: 'apple', expiresAt: '2026-11-10T10:00:00.000Z' } }
+const inactive = { success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } }
+const active = { success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', expiresAt: '2026-11-10T10:00:00.000Z' } }
 
 describe('the status line', () => {
   it('says nothing without Plus; names the product and when it ends', () => {
     expect(plusStatusLine(null)).toBeNull()
     expect(plusStatusLine(inactive.data as never)).toBeNull()
     expect(plusStatusLine(active.data as never)).toMatch(/^Blendn\+ until .*2026/)
-    expect(plusStatusLine({ active: true, product: 'night_pass', source: 'grant', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatch(
-      /^Night Pass until \d{1,2}:\d{2}/
+    // A pass shows its day as well as its time: passes stack, and the hour alone could be any day's (review LOW).
+    expect(plusStatusLine({ active: true, gated: true, product: 'night_pass', source: 'grant', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatch(
+      /^Night Pass until .*2026, \d{1,2}:\d{2}/
     )
-    expect(plusStatusLine({ active: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blendn+')
+    expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blendn+')
   })
 })
 
@@ -53,6 +54,13 @@ describe('after a purchase, the server is asked until the webhook has landed', (
     expect(getMyPlus.mock.calls.length).toBeLessThanOrEqual(21)
   })
 
+  it('takes a failed ask as "not yet", never as the end of the wait (review MEDIUM)', async () => {
+    getMyPlus.mockRejectedValueOnce(new Error('queue cleared')).mockResolvedValue(active)
+    const done = waitForPlus()
+    await jest.advanceTimersByTimeAsync(3000)
+    await expect(done).resolves.toEqual(active.data)
+  })
+
   it('stops when the screen has closed', async () => {
     getMyPlus.mockResolvedValue(inactive)
     let closed = false
@@ -66,13 +74,9 @@ describe('after a purchase, the server is asked until the webhook has landed', (
 })
 
 describe('what Plus is said to be', () => {
-  it('exactly the four things, and nothing from the never-sold list', () => {
-    expect(PLUS_FEATURES.map((f) => f.title)).toEqual([
-      "Stay live while I'm here",
-      'Your full night history',
-      'Partner perks',
-      'Crew extras',
-    ])
+  it('only what exists today — no "coming soon" — and nothing from the never-sold list (review H2)', () => {
+    expect(PLUS_FEATURES.map((f) => f.title)).toEqual(["Stay live while I'm here", 'Your full night history'])
+    expect(PLUS_FEATURES.map((f) => f.detail).join(' ').toLowerCase()).not.toContain('coming soon')
     const said = PLUS_FEATURES.map((f) => `${f.title} ${f.detail}`).join(' ').toLowerCase()
     for (const never of ['liked you', 'likes', 'unlimited', 'boost', 'reveal', 'without going live', 'more asks', 'more waves']) {
       expect(said).not.toContain(never)
@@ -101,3 +105,12 @@ describe('nights kept behind Blendn+ (lockedCount)', () => {
     expect(lockedNightsLabel(1)).toBe('1 more night with Blendn+')
   })
 })
+
+describe('Going re-reads when the app comes back (review MEDIUM: a pending payment confirmed while away)', () => {
+  it('reloads on focus and on AppState active', () => {
+    const going = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
+    expect(going).toMatch(/useFocusEffect\(\s*useCallback\(\(\) => \{\s*if \(authUser\) void loadInterestedEvents\(\)/)
+    expect(going).toMatch(/AppState\.addEventListener\('change', \(state\) => \{\s*if \(state === 'active' && authUser\) void loadInterestedEvents\(\)/)
+  })
+})
+

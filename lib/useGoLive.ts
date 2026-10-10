@@ -10,6 +10,7 @@ import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
 import { useInteractionFeedback } from './useInteractionFeedback'
+import { afterTrayDismissed } from '../components/ActionTray'
 import { openPaywall } from './paywall'
 
 /**
@@ -138,11 +139,18 @@ export function useGoLive({
   showTray,
   closeTray,
   onLive,
+  onPlusRequired,
 }: {
   place: GoLivePlace | null
   showTray: ShowTray
   closeTray: () => void
   onLive?: (result: GoLiveResult) => void
+  /**
+   * "Stay" was refused as Blendn+'s. Given, the caller decides what comes
+   * after (the expiry prompt comes back without Stay, so the free Extend is
+   * still there); `paywallOpened` says whether the paywall is now on screen.
+   */
+  onPlusRequired?: (paywallOpened: boolean) => void
 }) {
   const feedback = useInteractionFeedback()
   const { user } = useAuth()
@@ -180,9 +188,16 @@ export function useGoLive({
       Logger.info('events', 'go live refused', { code: result.errorCode })
       const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
       if (refusal.kind === 'plus') {
-        // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11).
+        // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11) —
+        // once the tray has finished leaving (iOS will not present over a dismissing modal).
         closeTray()
-        if (await openPaywall('go_live_expiry')) return false
+        await afterTrayDismissed()
+        const opened = await openPaywall('go_live_expiry')
+        if (onPlusRequired) {
+          onPlusRequired(opened)
+          return false
+        }
+        if (opened) return false
       }
       showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
       return false

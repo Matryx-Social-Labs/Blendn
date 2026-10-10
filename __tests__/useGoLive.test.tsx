@@ -149,6 +149,28 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
     expect(showTray).not.toHaveBeenCalled()
   })
 
+  it('on iOS, pushes the paywall only once the tray has finished leaving (review MEDIUM)', async () => {
+    const tray = require('../components/ActionTray')
+    let left: () => void = () => {}
+    const waited = jest.spyOn(tray, 'afterTrayDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
+    try {
+      const { result } = await renderHook(() => useGoLive({ place, showTray: jest.fn(), closeTray: jest.fn() }))
+      let pending!: Promise<boolean>
+      await act(async () => {
+        pending = result.current.goLive({ stay: true })
+        await new Promise((r) => setTimeout(r, 0))
+      })
+      expect(router.push).not.toHaveBeenCalled()
+      await act(async () => {
+        left()
+        await pending
+      })
+      expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
+    } finally {
+      waited.mockRestore()
+    }
+  })
+
   it('never a second automatic paywall that session: the reason instead, and "See Blendn+" opens it on a tap', async () => {
     await run({ stay: true })
     ;(router.push as jest.Mock).mockClear()

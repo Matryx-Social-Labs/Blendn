@@ -53,6 +53,18 @@ describe('Blendn+ on the wire', () => {
     expect(seen).toEqual([{ method: 'POST', path: '/api/mobile/me/plus/paywall-events', body: { event: 'dismissed', trigger: 'go_live_expiry' } }])
   })
 
+  it('puts paywall events last in the queue, behind everything a person waits on (review LOW)', async () => {
+    const queued = jest.spyOn(apiClient, 'queuedRequest').mockResolvedValue({ success: true } as never)
+    try {
+      await apiClient.logPaywallEvent('shown', 'profile')
+      await apiClient.getMyPlus()
+      expect(queued.mock.calls[0][3]).toBe(10)
+      expect(queued.mock.calls[1][3]).toBeUndefined()
+    } finally {
+      queued.mockRestore()
+    }
+  })
+
   it('Go Live "stay" refused with 403 PLUS_REQUIRED reads as the paywall, not a failure', async () => {
     server(() => json(403, { success: false, error: 'Staying live is part of Blendn+.', errorCode: 'PLUS_REQUIRED' }))
     const result = await apiClient.goLive('v1', { latitude: 1, longitude: 2, stay: true })

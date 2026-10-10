@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+    AppState,
     FlatList,
     Share,
     StyleSheet,
@@ -168,6 +169,13 @@ function GoingScreenInner() {
       if (authUser) void loadInterestedEvents()
     }, [authUser, loadInterestedEvents])
   )
+  // And on returning to the app: a pending Blendn+ payment confirmed while away unlocks the older nights.
+  useEffect(() => {
+    const app = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && authUser) void loadInterestedEvents()
+    })
+    return () => app.remove()
+  }, [authUser, loadInterestedEvents])
 
   // Note: Real-time interest updates work per-event (when viewing event details).
   // For the favorites list, we rely on pull-to-refresh and the focus refresh

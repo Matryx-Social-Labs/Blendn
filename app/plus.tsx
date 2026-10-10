@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../components/AppHeader'
@@ -16,9 +16,19 @@ import { PLUS_FEATURES, plusStatusLine, waitForPlus, type PlusStatus } from '../
 import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer } from '../lib/purchases'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
-import { notePaywallEvent } from '../lib/paywall'
+import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
 
-type Phase = 'idle' | 'confirming' | 'slow' | 'done'
+type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
+
+/** Said aloud as the screen's state changes: iOS VoiceOver ignores `accessibilityLiveRegion`. */
+const say = (text: string) => AccessibilityInfo.announceForAccessibility(text)
+
+/**
+ * Triggers that are themselves a gated moment: the server refused "stay"
+ * (`go_live_expiry`) or locked nights (`recap`). Anywhere else, plans show
+ * only when the server says Blendn+ is for sale to this person (`gated`).
+ */
+const GATED_TRIGGERS = new Set(['go_live_expiry', 'recap'])
 
 /**
  * Blendn+ — PLACEHOLDER DESIGN (plan v2 step 11; docs/PLACEHOLDER_SCREENS.md §13).
@@ -38,13 +48,16 @@ export default function PlusScreen() {
   const { showToast } = useToast()
 
   const [status, setStatus] = useState<PlusStatus | null>(null)
-  const [offers, setOffers] = useState<PlusOffer[] | null>(null)
+  /** undefined: loading; null: the store could not be reached; []: nothing to sell. */
+  const [offers, setOffers] = useState<PlusOffer[] | null | undefined>(undefined)
   const [buyable, setBuyable] = useState(false)
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ text: string; manage?: boolean } | null>(null)
   /** What happened here, so closing after a purchase is not logged as a dismissal. */
   const outcome = useRef<'purchased' | 'pending' | 'restored' | null>(null)
+  /** A tap guard that holds within one frame — state would let a double tap through. */
+  const working = useRef(false)
   const mounted = useRef(true)
 
   // Shown on arrival; dismissed on leaving by any door (Not now, a swipe, back) unless something was bought.
@@ -54,55 +67,104 @@ export default function PlusScreen() {
     return () => {
       mounted.current = false
       if (!outcome.current) notePaywallEvent('dismissed', trigger)
+      notePaywallClosed()
     }
   }, [trigger])
 
-  useEffect(() => {
-    void apiClient.getMyPlus().then((res) => {
-      if (mounted.current && res.success && res.data) setStatus(res.data)
-    })
-    void Promise.all([loadPlusOffers(), canBuyAs(userId)]).then(([loaded, ok]) => {
-      if (!mounted.current) return
-      setOffers(loaded)
-      setBuyable(ok)
-    })
+  const fetchOffers = useCallback(() => {
+    void Promise.all([loadPlusOffers(), canBuyAs(userId)])
+      .then(([loaded, ok]) => {
+        if (!mounted.current) return
+        setOffers(loaded)
+        setBuyable(ok)
+      })
+      .catch(() => {
+        if (mounted.current) setOffers(null)
+      })
   }, [userId])
+  const retryOffers = () => {
+    setOffers(undefined)
+    fetchOffers()
+  }
+
+  useEffect(() => {
+    apiClient
+      .getMyPlus()
+      .then((res) => {
+        if (mounted.current && res.success && res.data) setStatus(res.data)
+      })
+      .catch(() => {})
+    fetchOffers()
+  }, [fetchOffers])
 
   const confirm = async () => {
     setPhase('confirming')
-    const granted = await waitForPlus(() => !mounted.current)
-    if (!mounted.current) return
-    if (granted) setStatus(granted)
-    setPhase(granted ? 'done' : 'slow')
+    say('Confirming with the store')
+    let granted: PlusStatus | null = null
+    try {
+      granted = await waitForPlus(() => !mounted.current)
+    } catch {
+      granted = null
+    } finally {
+      if (mounted.current) {
+        if (granted) setStatus(granted)
+        setPhase(granted ? 'done' : 'slow')
+        say(granted ? "You're in." : 'Taking longer than usual.')
+      }
+    }
   }
 
   const buy = async (offer: PlusOffer) => {
-    if (!buyable || busy) return
+    if (working.current || !buyable) return
+    working.current = true
     setBusy('buy')
     setNotice(null)
     notePaywallEvent('purchase_started', trigger)
-    const result = await buyPackage(offer.pkg)
-    if (!mounted.current) return
-    setBusy(null)
-    if (result.kind === 'cancelled') return
-    if (result.kind === 'failed') return setNotice(result.message)
-    outcome.current = result.kind
-    if (result.kind === 'purchased') notePaywallEvent('purchased', trigger)
-    void confirm()
+    try {
+      const result = await buyPackage(offer.pkg, userId)
+      if (!mounted.current) return
+      if (result.kind === 'cancelled') return
+      if (result.kind === 'failed') {
+        setNotice({ text: result.message, manage: result.manage })
+        say(result.message)
+        return
+      }
+      outcome.current = result.kind
+      if (result.kind === 'pending') {
+        // Not polled: a UPI approval or Ask to Buy can take hours. Settings and Going re-read on return.
+        setPhase('pending')
+        say('Payment pending')
+        return
+      }
+      notePaywallEvent('purchased', trigger)
+      await confirm()
+    } finally {
+      working.current = false
+      if (mounted.current) setBusy(null)
+    }
   }
 
   const restoreAll = async () => {
-    if (!buyable || busy) return
+    if (working.current || !buyable) return
+    working.current = true
     setBusy('restore')
     setNotice(null)
-    const result = await restore()
-    if (!mounted.current) return
-    setBusy(null)
-    if (result.kind === 'nothing') return setNotice('No purchases to restore')
-    if (result.kind === 'failed') return setNotice(result.message)
-    outcome.current = 'restored'
-    notePaywallEvent('restored', trigger)
-    void confirm()
+    try {
+      const result = await restore(userId)
+      if (!mounted.current) return
+      if (result.kind === 'nothing' || result.kind === 'failed') {
+        const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
+        setNotice({ text })
+        say(text)
+        return
+      }
+      outcome.current = 'restored'
+      notePaywallEvent('restored', trigger)
+      await confirm()
+    } finally {
+      working.current = false
+      if (mounted.current) setBusy(null)
+    }
   }
 
   const open = (url: string) => Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
@@ -110,12 +172,15 @@ export default function PlusScreen() {
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events' as never))
 
   const statusLine = plusStatusLine(status)
+  // Never sell what is free: plans only in a gated moment, or where the server says Plus is for sale (review H2).
+  const forSale = GATED_TRIGGERS.has(trigger) || status?.gated === true
   const sellable = purchasesAvailable() && buyable && (offers?.length ?? 0) > 0
-  const settled = phase === 'done' || phase === 'slow'
+  // Anything bought or restored moves the phase on (pending, confirming, …): from then the way out is Done.
+  const finished = phase !== 'idle'
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Blendn+" rightTextButton={{ label: settled ? 'Done' : 'Not now', onPress: close }} />
+      <AppHeader title="Blendn+" rightTextButton={{ label: finished ? 'Done' : 'Not now', onPress: close }} />
       <ScrollView contentContainerStyle={styles.content}>
         <PlaceholderBanner />
 
@@ -140,6 +205,12 @@ export default function PlusScreen() {
           ))}
         </View>
 
+        {!forSale && status ? (
+          <Text variant="bodyStrong">
+            {"Blendn+ is free during launch in your city. Staying live and your full night history are everyone's for now — nothing to buy."}
+          </Text>
+        ) : null}
+
         {phase === 'confirming' ? (
           <View style={styles.inline} accessibilityLiveRegion="polite">
             <ActivityIndicator color={EMBER.textSecondary} />
@@ -148,6 +219,10 @@ export default function PlusScreen() {
         ) : phase === 'slow' ? (
           <Text variant="meta" accessibilityLiveRegion="polite">
             {"Taking longer than usual — it'll unlock as soon as the store confirms."}
+          </Text>
+        ) : phase === 'pending' ? (
+          <Text variant="meta" accessibilityLiveRegion="polite">
+            {"Your payment is pending. Blendn+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we'll pick it up when it does."}
           </Text>
         ) : phase === 'done' ? (
           <Text variant="bodyStrong" accessibilityLiveRegion="polite">{"You're in."}</Text>
@@ -158,12 +233,19 @@ export default function PlusScreen() {
           App Review signs in with a granted account and must be able to buy
           every product (guideline 2.1(b)); the status line says what you have.
         */}
-        {offers === null ? (
+        {!forSale ? null : offers === undefined ? (
           <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading prices" />
+        ) : offers === null ? (
+          <View style={styles.inline}>
+            <Text variant="meta">{"Couldn't load prices."}</Text>
+            <Pressable onPress={retryOffers} accessibilityRole="button" style={styles.quiet}>
+              <Text variant="meta" style={styles.underline}>Try again</Text>
+            </Pressable>
+          </View>
         ) : (
           <View style={styles.offers}>
             {offers.map((offer) => {
-              const disabled = !sellable || busy !== null || phase === 'confirming'
+              const disabled = !sellable || busy !== null
               return (
                 <ScalePress
                   key={offer.pkg.identifier}
@@ -188,15 +270,24 @@ export default function PlusScreen() {
         )}
 
         {notice ? (
-          <Text variant="bodyStrong" accessibilityLiveRegion="polite">{notice}</Text>
+          <View style={styles.inline}>
+            <Text variant="bodyStrong" accessibilityLiveRegion="polite">{notice.text}</Text>
+            {notice.manage ? (
+              <Pressable onPress={() => void manage()} accessibilityRole="button" style={styles.quiet}>
+                <Text variant="meta" style={styles.underline}>Manage subscription</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         {/* App Store 3.1.2: what renews, how to cancel, and the terms — beside the buttons. */}
-        <Text variant="caption" color={EMBER.textSecondary}>
-          Subscriptions renew automatically at the price shown until you cancel, at least 24 hours before the period
-          ends. Cancel any time in your App Store or Google Play account settings. The Night Pass is a one-time purchase
-          for 24 hours and does not renew.
-        </Text>
+        {forSale ? (
+          <Text variant="caption" color={EMBER.textSecondary}>
+            Subscriptions renew automatically at the price shown until you cancel, at least 24 hours before the period
+            ends. Cancel any time in your App Store or Google Play account settings. The Night Pass is a one-time purchase
+            for 24 hours and does not renew.
+          </Text>
+        ) : null}
         <View style={styles.links}>
           <Pressable onPress={() => void open(BLENDN_LINKS.terms)} accessibilityRole="link" style={styles.quiet}>
             <Text variant="meta" style={styles.underline}>Terms of Use</Text>
@@ -209,6 +300,7 @@ export default function PlusScreen() {
         <View style={styles.links}>
           <Pressable
             onPress={() => void restoreAll()}
+            // Off while buying, restoring or confirming either: `busy` holds until the confirmation ends.
             disabled={!buyable || busy !== null}
             accessibilityRole="button"
             accessibilityState={{ disabled: !buyable || busy !== null, busy: busy === 'restore' }}

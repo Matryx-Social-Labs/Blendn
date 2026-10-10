@@ -15,6 +15,8 @@ import {
   type LiveSession,
 } from '../lib/goLive'
 import { Logger } from '../lib/logger'
+import { subscribePaywallClosed } from '../lib/paywall'
+import { usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
 import { subscribeToLiveEnded } from '../lib/socketClient'
 import { useGoLive } from '../lib/useGoLive'
@@ -27,7 +29,7 @@ import { useToast } from './Toast'
 type ActiveLive = { venueDayId: string; expiresAt: string | null; stay: boolean; venueName: string | null }
 
 type Tray =
-  | { kind: 'prompt'; venueDayId: string; expiresAt: string | null; venueName: string }
+  | { kind: 'prompt'; venueDayId: string; expiresAt: string | null; venueName: string; noStay?: boolean }
   | { kind: 'other'; title: string; message: string; buttons: ActionTrayButton[] }
 
 /** A failed read of `/checkins/active` is tried again this soon — it is not "not live" (H1). */
@@ -69,6 +71,9 @@ export function LiveAtVenue() {
     []
   )
   const nameRef = useLatest(active?.venueName ?? session?.venueName ?? null)
+  const { status: plus } = usePlusStatus()
+  /** Which of the prompt's two Go Live buttons was pressed: its spinner, not the other's. */
+  const [pressed, setPressed] = useState<'extend' | 'stay' | null>(null)
   /** Asked tonight, on this run — before the asking is on disk. */
   const askedRef = useRef(new Set<string>())
 
@@ -137,10 +142,31 @@ export function LiveAtVenue() {
   // The place this phone went live at — needed to extend (the active check-in names the day, not the venue).
   const mine = active && session?.venueDayId === active.venueDayId ? session : null
   const place = mine ? { id: mine.venueId, name: mine.venueName, latitude: null, longitude: null } : null
+  /*
+   * "Stay" refused as Blendn+'s: the prompt comes back WITHOUT Stay, so the
+   * free Extend is still a tap away — at once if the paywall did not open, or
+   * as soon as it closes if it did (review: declining Plus must not cost the
+   * free extension for the night).
+   */
+  const promptRef = useLatest(active && mine ? { venueDayId: active.venueDayId, expiresAt: active.expiresAt, venueName: mine.venueName } : null)
+  const onPlusRequired = useCallback(
+    (paywallOpened: boolean) => {
+      const prompt = promptRef.current
+      if (!prompt) return
+      const reshow = () => setTray({ kind: 'prompt', ...prompt, noStay: true })
+      if (!paywallOpened) return reshow()
+      const off = subscribePaywallClosed(() => {
+        off()
+        reshow()
+      })
+    },
+    [promptRef]
+  )
   const { goLive, busy } = useGoLive({
     place,
     showTray,
     closeTray,
+    onPlusRequired,
     onLive: (result) =>
       showToast(result.stay ? "You're live for as long as you're here" : `You're live until ${timeOf(result.expiresAt)}`, 'success'),
   })
@@ -164,21 +190,36 @@ export function LiveAtVenue() {
     if (promptedDay && userId) void markLivePrompted(userId, promptedDay)
   }, [promptedDay, userId])
 
-  const goLiveWith = (choice: GoLiveChoice) => () => {
-    void goLive(choice).then((ok) => {
-      if (ok) setTray((t) => (t?.kind === 'prompt' ? null : t))
-    })
+  const goLiveWith = (choice: GoLiveChoice, which: 'extend' | 'stay') => () => {
+    setPressed(which)
+    void goLive(choice)
+      .then((ok) => {
+        if (ok) setTray((t) => (t?.kind === 'prompt' ? null : t))
+      })
+      .finally(() => setPressed(null))
   }
 
+  // "· Blendn+" only where it is sold and you don't have it: in a launch season, or to a holder, staying is just staying.
+  const stayLabel = plus?.gated && !plus.active ? 'Stay live till I leave · Blendn+' : 'Stay live till I leave'
   const visible: { title: string; message: string; buttons: ActionTrayButton[] } | null =
     tray?.kind === 'prompt'
       ? {
           title: `Still at ${tray.venueName}?`,
-          message: `You stop being live at ${timeOf(tray.expiresAt)}.`,
+          message: tray.noStay
+            ? `Staying live is part of Blendn+ here. You stop being live at ${timeOf(tray.expiresAt)} — extend for free?`
+            : `You stop being live at ${timeOf(tray.expiresAt)}.`,
           buttons: [
-            { label: 'Extend 45 min · free', variant: 'primary', onPress: goLiveWith(EXTEND_CHOICE), loading: busy, disabled: busy },
+            {
+              label: 'Extend 45 min · free',
+              variant: 'primary',
+              onPress: goLiveWith(EXTEND_CHOICE, 'extend'),
+              loading: busy && pressed === 'extend',
+              disabled: busy,
+            },
             // Blendn+ where the server gates it (PLUS_REQUIRED → the paywall); everyone's in launch season.
-            { label: 'Stay live till I leave · Blendn+', onPress: goLiveWith(STAY_CHOICE), disabled: busy },
+            ...(tray.noStay
+              ? []
+              : [{ label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay'), loading: busy && pressed === 'stay', disabled: busy }]),
             { label: 'Let it end', onPress: closeTray, disabled: busy },
           ],
         }

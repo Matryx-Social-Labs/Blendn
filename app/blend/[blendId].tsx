@@ -27,7 +27,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useBlends } from '../../lib/useBlends'
 
 /**
- * A Blend's people (placeholder design — docs/PLACEHOLDER_SCREENS.md §13).
+ * A Blend's people (placeholder design — docs/PLACEHOLDER_SCREENS.md §14).
  *
  * Both sides, as the server sends them: tonight's pseudonyms, and first names
  * only for whoever was revealed **in this Blend** — never anything the chat

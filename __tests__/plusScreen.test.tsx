@@ -5,13 +5,15 @@
  */
 import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { AccessibilityInfo } from 'react-native'
 
+const mockTrigger = { value: 'go_live_expiry' }
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
-  useLocalSearchParams: () => ({ trigger: 'go_live_expiry' }),
+  useLocalSearchParams: () => ({ trigger: mockTrigger.value }),
 }))
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: require('react-native').View }))
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
@@ -43,13 +45,15 @@ jest.mock('../lib/purchases', () => ({
 import { router } from 'expo-router'
 import PlusScreen from '../app/plus'
 import { apiClient } from '../lib/apiClient'
+import { subscribePaywallClosed } from '../lib/paywall'
 import { buyPackage, canBuyAs, loadPlusOffers, restore } from '../lib/purchases'
 /* eslint-enable import/first */
 
 const monthly = { pkg: { identifier: '$rc_monthly' }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
 const nightPass = { pkg: { identifier: 'night_pass' }, title: 'Night Pass · 24 hours', length: '24 hours, does not renew', price: '₹49.00' }
-const none = { success: true, data: { active: false, product: null, source: null, expiresAt: null } }
-const granted = { success: true, data: { active: true, product: 'plus', source: 'grant', expiresAt: '2026-11-10T10:00:00.000Z' } }
+const none = { success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } }
+const granted = { success: true, data: { active: true, gated: true, product: 'plus', source: 'grant', expiresAt: '2026-11-10T10:00:00.000Z' } }
+const launch = { success: true, data: { ...none.data, gated: false } }
 const logged = () => (apiClient.logPaywallEvent as jest.Mock).mock.calls.map((c) => c[0])
 
 async function mount() {
@@ -59,7 +63,10 @@ async function mount() {
 }
 
 beforeEach(() => {
-  ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(none)
+  mockTrigger.value = 'go_live_expiry'
+  ;(apiClient.getMyPlus as jest.Mock).mockReset().mockResolvedValue(none)
+  ;(buyPackage as jest.Mock).mockReset()
+  ;(restore as jest.Mock).mockReset()
   ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, nightPass])
   ;(canBuyAs as jest.Mock).mockResolvedValue(true)
 })
@@ -92,7 +99,7 @@ it('a purchase is logged, then the SERVER is asked until it says active', async 
   await mount()
   await act(async () => { fireEvent.press(screen.getByText('Blendn+ · Monthly')) })
   await act(async () => { await Promise.resolve() })
-  expect(buyPackage).toHaveBeenCalledWith(monthly.pkg)
+  expect(buyPackage).toHaveBeenCalledWith(monthly.pkg, 'u1')
   expect(logged()).toEqual(['shown', 'purchase_started', 'purchased'])
   expect(screen.getByText("You're in.")).toBeTruthy()
   expect(screen.getByText(/^Blendn\+ until /)).toBeTruthy()
@@ -138,3 +145,107 @@ it('"Not now" closes, and leaving without buying is logged as dismissed; after a
   await act(async () => { second.unmount() })
   expect(logged()).not.toContain('dismissed')
 })
+
+describe('never sells what is free (review H2)', () => {
+  it('opened from the profile in a launch season: says Plus is free here and lists no plans', async () => {
+    mockTrigger.value = 'profile'
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(launch)
+    await mount()
+    expect(screen.getByText(/free during launch in your city/)).toBeTruthy()
+    expect(screen.queryByText('Blendn+ · Monthly')).toBeNull()
+    expect(screen.queryByText(/renew automatically/)).toBeNull()
+  })
+
+  it('opened from the profile where it is sold: lists the plans', async () => {
+    mockTrigger.value = 'profile'
+    await mount()
+    expect(screen.getByText('Blendn+ · Monthly')).toBeTruthy()
+  })
+
+  it('a gated moment (a PLUS_REQUIRED) always lists them', async () => {
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(launch)
+    await mount()
+    expect(screen.getByText('Blendn+ · Monthly')).toBeTruthy()
+  })
+})
+
+describe('the store, honestly (review MEDIUM, LOW)', () => {
+  it('"Couldn\'t load prices" with Try again, which asks again', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValueOnce(null).mockResolvedValue([monthly])
+    await mount()
+    expect(screen.getByText("Couldn't load prices.")).toBeTruthy()
+    await act(async () => { fireEvent.press(screen.getByText('Try again')) })
+    expect(screen.getByText('Blendn+ · Monthly')).toBeTruthy()
+  })
+
+  it('a double tap buys once', async () => {
+    let land: (v: unknown) => void = () => {}
+    ;(buyPackage as jest.Mock).mockReturnValue(new Promise((r) => { land = r }))
+    await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByText('Blendn+ · Monthly'))
+      fireEvent.press(screen.getByText('Night Pass · 24 hours'))
+    })
+    expect(buyPackage).toHaveBeenCalledTimes(1)
+    await act(async () => { land({ kind: 'cancelled' }) })
+  })
+
+  it('a pending payment is not polled, and says so; the header reads Done', async () => {
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'pending' })
+    await mount()
+    ;(apiClient.getMyPlus as jest.Mock).mockClear()
+    await act(async () => { fireEvent.press(screen.getByText('Blendn+ · Monthly')) })
+    expect(screen.getByText(/Your payment is pending/)).toBeTruthy()
+    expect(apiClient.getMyPlus).not.toHaveBeenCalled()
+    expect(screen.getByText('Done')).toBeTruthy()
+  })
+
+  it('while confirming: Restore is off, the header reads Done, and a failed ask never strands the spinner', async () => {
+    jest.useFakeTimers()
+    try {
+      ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
+      await mount()
+      ;(apiClient.getMyPlus as jest.Mock).mockRejectedValue(new Error('queue cleared'))
+      await act(async () => { fireEvent.press(screen.getByText('Blendn+ · Monthly')) })
+      expect(screen.getByText('Confirming with the store…')).toBeTruthy()
+      expect(screen.getByText('Done')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Restore purchases' }).props.accessibilityState).toMatchObject({ disabled: true })
+      await act(async () => { fireEvent.press(screen.getByText('Restore purchases')) })
+      expect(restore).not.toHaveBeenCalled()
+      await act(async () => { await jest.advanceTimersByTimeAsync(61_000) })
+      expect(screen.getByText(/Taking longer than usual/)).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('says each state aloud for VoiceOver', async () => {
+    const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValueOnce(none).mockResolvedValue(granted)
+    await mount()
+    await act(async () => { fireEvent.press(screen.getByText('Blendn+ · Monthly')) })
+    await act(async () => { await Promise.resolve() })
+    expect(say).toHaveBeenCalledWith('Confirming with the store')
+    expect(say).toHaveBeenCalledWith("You're in.")
+    say.mockRestore()
+  })
+
+  it('"already bought" points at Manage subscription', async () => {
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'failed', message: 'You already have this. See it under Manage subscription.', manage: true })
+    await mount()
+    await act(async () => { fireEvent.press(screen.getByText('Blendn+ · Monthly')) })
+    expect(screen.getByText('You already have this. See it under Manage subscription.')).toBeTruthy()
+    expect(screen.getAllByText('Manage subscription')).toHaveLength(2)
+  })
+
+  it('tells the expiry prompt it has closed', async () => {
+    const closed = jest.fn()
+    const off = subscribePaywallClosed(closed)
+    const view = await mount()
+    await act(async () => { view.unmount() })
+    expect(closed).toHaveBeenCalledTimes(1)
+    off()
+  })
+})
+

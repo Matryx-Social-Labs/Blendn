@@ -826,11 +826,21 @@ the signed-in account. The server takes the person from `app_user_id` alone.
   requires Play Billing Library 8+ for updates since 31 August 2026;
   `react-native-purchases` 10.12.2 → `purchases-hybrid-common` 19.10.0 →
   `purchases-android` 10.26.0 → `billingClient` 8.3.0.
-- Android `launchMode` is `singleTask` (Expo's default, which the deep links
-  were tested with). RevenueCat recommends `standard` or `singleTop`, because
-  with `singleTask` a purchase waiting in another app — a UPI approval — is
-  cancelled if the person comes back through the launcher icon rather than
-  the payment app. Not changed yet; decide before Blendn+ goes on sale.
+- **Risk, owner's decision — Android `launchMode`.** It is `singleTask` (Expo's
+  default, which the deep links were tested with). RevenueCat recommends
+  `standard` or `singleTop`, because with `singleTask` a purchase waiting in
+  another app — a UPI approval — is cancelled if the person comes back through
+  the launcher icon rather than the payment app. Left as is on purpose; the
+  switch to `singleTop` (and a re-test of every deep link) is put to the owner
+  before Blendn+ goes on sale.
+
+**Store privacy declarations.** RevenueCat is configured with
+`automaticDeviceIdentifierCollectionEnabled: false` (no IDFA/IDFV or Android ad
+id for attribution), so what Blendn+ adds is: **App Store → App Privacy**:
+Purchases → Purchase History, linked to the user, used for App Functionality
+(RevenueCat as a processor); **Play Console → Data safety**: Financial info →
+Purchase history, collected, not shared, required for app functionality,
+processed by RevenueCat. Nothing for tracking or advertising.
 
 **Testing.** Purchases need a store: a StoreKit configuration or a sandbox
 Apple ID on iOS, a licence tester on an internal-track build on Android

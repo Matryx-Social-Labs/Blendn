@@ -5,6 +5,7 @@ import {
   Easing,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,6 +28,30 @@ export type ActionTrayButton = {
   variant?: 'primary' | 'secondary' | 'destructive'
   loading?: boolean
   disabled?: boolean
+}
+
+/*
+ * iOS cannot present a native modal (a router modal: the paywall) while an RN
+ * Modal is still leaving — the push silently does nothing. Whoever closes a
+ * tray and then opens such a screen waits for this first. Android has no such
+ * rule, so there it resolves at once; on iOS it resolves on the Modal's
+ * onDismiss, or after `fallbackMs` if no tray was showing.
+ */
+const dismissWaiters = new Set<() => void>()
+export function afterTrayDismissed(fallbackMs = 600): Promise<void> {
+  if (Platform.OS !== 'ios') return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = () => {
+      dismissWaiters.delete(done)
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(done, fallbackMs)
+    dismissWaiters.add(done)
+  })
+}
+const notifyDismissed = () => {
+  for (const done of [...dismissWaiters]) done()
 }
 
 type ActionTrayProps = {
@@ -140,6 +165,7 @@ export default function ActionTray({
       animationType="fade"
       transparent
       statusBarTranslucent
+      onDismiss={notifyDismissed}
       onRequestClose={() => {
         if (canDismiss) onClose()
       }}

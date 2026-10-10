@@ -163,7 +163,8 @@ describe('the screens read the server', () => {
 
   it('the expiry prompt offers the free extension and a real "stay", no locked placeholder (step 11)', () => {
     expect(LIVE).toContain("label: 'Extend 45 min · free'")
-    expect(LIVE).toContain("label: 'Stay live till I leave · Blendn+', onPress: goLiveWith(STAY_CHOICE)")
+    expect(LIVE).toContain("label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay')")
+    expect(LIVE).toContain("'Stay live till I leave · Blendn+'")
     expect(LIVE).not.toMatch(/locked|showPlusPlaceholder/i)
   })
 })

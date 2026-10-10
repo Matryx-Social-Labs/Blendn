@@ -25,5 +25,14 @@ jest.mock('react-native-purchases', () => {
     restorePurchases: jest.fn(async () => ({ entitlements: { active: {} }, activeSubscriptions: [] })),
     getCustomerInfo: jest.fn(async () => ({ managementURL: null })),
   }
-  return { __esModule: true, default: Purchases, PURCHASES_ERROR_CODE: { PAYMENT_PENDING_ERROR: '20' } }
+  // The SDK's own codes (purchases-typescript-internal, generated/error-codes).
+  const PURCHASES_ERROR_CODE = {
+    PURCHASE_CANCELLED_ERROR: '1',
+    PURCHASE_NOT_ALLOWED_ERROR: '3',
+    PRODUCT_ALREADY_PURCHASED_ERROR: '6',
+    RECEIPT_ALREADY_IN_USE_ERROR: '7',
+    NETWORK_ERROR: '10',
+    PAYMENT_PENDING_ERROR: '20',
+  }
+  return { __esModule: true, default: Purchases, PURCHASES_ERROR_CODE }
 })

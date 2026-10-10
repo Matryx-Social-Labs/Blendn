@@ -79,3 +79,26 @@ describe('MN-G03: Blendn+ is never sold outside the stores', () => {
     expect(hits.map((f) => relative(ROOT, join(ROOT, f)))).toEqual([])
   })
 })
+
+describe("the server's RevenueCat secret key never ships (review LOW)", () => {
+  /** A RevenueCat secret API key: `sk_` and a long token. The public keys are `appl_` / `goog_`. */
+  const SECRET_KEY = /\bsk_[A-Za-z0-9]{12,}/
+
+  it('the pattern catches one', () => {
+    expect(SECRET_KEY.test('EXPO_PUBLIC_REVENUECAT_APPLE_KEY=sk_live0123456789abcd')).toBe(true)
+    expect(SECRET_KEY.test('appl_0123456789abcdef')).toBe(false)
+  })
+
+  it('in no source, script, env example or build config', () => {
+    const files = [
+      ...walk('app'),
+      ...walk('components'),
+      ...walk('lib'),
+      ...walk('scripts'),
+      ...['.env.example', 'eas.json', 'app.json', 'app.config.js'].filter((f) => existsSync(join(ROOT, f))),
+    ]
+    expect(files.length).toBeGreaterThan(50)
+    expect(files.filter((f) => SECRET_KEY.test(read(f)))).toEqual([])
+  })
+})
+
