@@ -15,6 +15,7 @@ import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
+import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
@@ -403,6 +404,18 @@ export interface MatchCard {
   age?: number | null
   insideNow: boolean
   youLiked: boolean
+  /**
+   * Matching v2: display-only lines you share, as sentences the server wrote
+   * ("Both CSK — in RCB country 💛", "You both speak Malayalam"). Never a
+   * ranking: the order of the deck is unchanged by them. At most one
+   * origin-like line before a reveal, none in a small room — the server's
+   * budget, never re-derived here. Optional: a client outlives a deploy.
+   */
+  overlaps?: Overlap[]
+  /** Their own sign, "Leo ♌", only when they chose to show it and the card allows. */
+  sign?: string | null
+  /** "Regular here", "Shows up", "5+ nights this month" — earned by check-ins. */
+  badges?: Badge[]
 }
 
 export interface LikeOutcome {
@@ -2179,6 +2192,15 @@ class ApiClientClass {
       share_location?: boolean
       /** Off by default: friends see a pseudonym in rooms unless this is on. */
       friends_see_me_in_rooms?: boolean
+      /*
+       * Matching v2, display only — slugs from `getProfileOptions()`. A sign
+       * travels with its calendar: both set, or both null to take it off.
+       */
+      languages?: string[]
+      home_state?: string | null
+      sun_sign?: string | null
+      sign_system?: 'western' | 'rashi' | null
+      shows_up_badge?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(
@@ -2695,6 +2717,26 @@ class ApiClientClass {
    * differently and never match on. Same cache treatment as categories — it is
    * eighteen strings, identical for everybody, and changes about once a year.
    */
+  /** Matching v2's vocabulary: languages, home states, signs, this-or-that. Static; cached like work fields. */
+  async getProfileOptions(): Promise<ApiResponse<ProfileOptions>> {
+    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', { ttl: CATEGORIES_SWR_TTL, swr: true })
+  }
+
+  /** Your this-or-that answers, question slug → "a" | "b". */
+  async getThisOrThat(): Promise<ApiResponse<{ answers: Record<string, Choice> }>> {
+    return this.queuedRequest<{ answers: Record<string, Choice> }>('/api/mobile/me/this-or-that')
+  }
+
+  /** Set (`"a"`/`"b"`) or take back (`null`) answers; questions not sent are left alone. */
+  async putThisOrThat(answers: Record<string, Choice | null>): Promise<ApiResponse<{ answers: Record<string, Choice> }>> {
+    return this.queuedRequest<{ answers: Record<string, Choice> }>(
+      '/api/mobile/me/this-or-that',
+      { method: 'PUT', body: JSON.stringify({ answers }) },
+      true,
+      2
+    )
+  }
+
   async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
     return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
       '/api/mobile/work-fields',
