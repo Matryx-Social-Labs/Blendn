@@ -15,7 +15,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }))
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), push: jest.fn() },
+  useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
+}))
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
@@ -31,7 +34,10 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(async () => ({ success: true, data: { profile: {} } })) },
+  apiClient: {
+    getProfile: jest.fn(async () => ({ success: true, data: { profile: {} } })),
+    getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })),
+  },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(),

@@ -171,7 +171,7 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
     })
   })
 
-  it('PLUS_REQUIRED opens the Plus placeholder', () => {
+  it('PLUS_REQUIRED is the paywall, not a failure', () => {
     expect(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.')).toEqual({ kind: 'plus' })
   })
 

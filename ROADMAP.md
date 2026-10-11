@@ -821,7 +821,7 @@ Step 1 is under *Now*. Each step starts once its server half is on staging.
 | 6 | **The Board.** Off event detail; compose, ask to join, the inbox in Banter; accepting opens a conversation without the match opener; a 409 shown as a state, not an error. The server is already built |
 | 9 | **Crews.** Create from friends, invite, crew chat, "We're here", the Crews view in the Grid, crew cards (anonymous menagerie, revealed collage), the Blend room in Banter's "Live now", the join-time consent copy and the "Keep me anonymous" switch |
 | 10 | **Matching v2 cards and profile fields.** Person and crew cards with one sentence of overlap; profile editor fields for languages, home state, this-or-that and an opt-in sign (Western or rashi), and IPL teams as interests. Languages, home state and sign are display only, never a ranking signal |
-| 11 | **Blendn+.** `react-native-purchases` (RevenueCat) in a dev build, the paywall, triggers and cooldowns logged to `product_events`, Night Pass, restore and manage |
+| 11 | **Blendn+.** `react-native-purchases` (RevenueCat) in a dev build, the paywall, triggers and cooldowns logged to `product_events`, Night Pass, restore and manage. **Client built, in review** (`feat/step-11-blendn-plus`; placeholder paywall, docs/PLACEHOLDER_SCREENS.md §13); not yet driven — needs a native build and the RevenueCat keys (docs/RELEASING.md) |
 | 12 | **Regulars.** The door pass — live, animated, one per day, staff tap "Redeemed" — and the per-venue "Let this venue know I'm a regular" opt-in, revocable at any time |
 
 ### Blendn+ — superseding the PRO tier cut

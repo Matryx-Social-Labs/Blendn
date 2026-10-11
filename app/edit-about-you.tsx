@@ -31,7 +31,7 @@ import { refreshAuthUser, useAuth } from '../lib/useAuth'
 
 /**
  * Languages, home state, your sign and this-or-that — matching v2's "about
- * you" (placeholder design — docs/PLACEHOLDER_SCREENS.md §14).
+ * you" (placeholder design — docs/PLACEHOLDER_SCREENS.md §15).
  *
  * Everything here is **shown, never ranked**: a card says "You both speak
  * Malayalam" or "Both from Kerala" when two people share one, and the server

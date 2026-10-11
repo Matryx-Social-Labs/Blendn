@@ -34,7 +34,7 @@ import { useAuth } from '../../lib/useAuth'
 type Load = { kind: 'loading' } | { kind: 'ready'; crew: Crew } | { kind: 'gone' } | { kind: 'error' }
 
 /**
- * One of your crews (placeholder design — docs/PLACEHOLDER_SCREENS.md §13).
+ * One of your crews (placeholder design — docs/PLACEHOLDER_SCREENS.md §14).
  *
  * Inside a crew people are named — first name and one photo — because they
  * are friends and each joined by consent. From here: the crew chat, inviting
