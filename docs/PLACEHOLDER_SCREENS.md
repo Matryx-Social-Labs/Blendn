@@ -1023,6 +1023,13 @@ who, and **the venue never learns who**: it sees how many opened and redeemed.
   "This offer has ended" (past its end, or the place changed hands).
 - **Once, under the pass:** "Let <place> know you're a regular?" — **Yes, let
   them know** sends `known: true`; **Maybe later** sends nothing.
+- **Beside the pass:** "Stop offers from <place>" (the same mute as the
+  place's page) and "Report this offer" (into the reports queue). The yes
+  prompt names who sees it: "<organisation>, who runs <place> on Blendn, will
+  see your first name…". "Maybe later" is remembered per place on the phone.
+  A code two seconds past its turn with no fresh answer is hidden.
+- **Settings → Notifications → "Offers from places":** one switch for every
+  place, kept on the server.
 - **On a claimed place's page:** two switches — "Let <place> know I'm a
   regular" (they see your first name and your nights there in the last 30,
   nothing else) and "No offers from <place>". Each sends only itself; the
