@@ -720,6 +720,8 @@ function RootLayout() {
       <Stack.Screen name="blend/[blendId]" options={{ headerShown: false, animation: routeTransition }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
       <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
+      <Stack.Screen name="offer/[id]" options={{ headerShown: false, animation: routeTransition }} />
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"

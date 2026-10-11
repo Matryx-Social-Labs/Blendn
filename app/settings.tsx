@@ -9,6 +9,7 @@ import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
+import { offersApi } from '../lib/offers'
 import { apiClient } from '../lib/apiClient'
 import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
@@ -414,6 +415,8 @@ export default function SettingsScreen() {
 
     { header: 'Notifications' },
     { icon: 'notifications-outline', title: 'Push notifications', keyName: 'pushEnabled' as const },
+    // Offers from the places you keep going back to (step 12): its own switch, kept on the server.
+    { offersFromPlaces: true },
 
     /*
      * Blocked users leads Safety. Blocking somebody is the most consequential
@@ -459,6 +462,7 @@ export default function SettingsScreen() {
   ]), [openExternal, deletingAccount, handleDeleteAccount, plus])
 
   const renderItem = (item: any, idx: number) => {
+    if (item.offersFromPlaces) return <OffersFromPlacesRow key={idx} />
     if (item.header) {
       return (
         <Text
@@ -724,3 +728,66 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
 })
+
+/**
+ * "Offers from places" (step 12 review M6): one switch for every place's
+ * offers. The server keeps it (`/me/offers`) and leaves you out of every
+ * audience while it is off; the switch shows what the server saved.
+ */
+function OffersFromPlacesRow() {
+  const { showToast } = useToast()
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    Promise.resolve()
+      .then(() => offersApi.offersFromPlaces())
+      .then((res) => {
+        if (res.success && res.data) setEnabled(res.data.enabled)
+      })
+      .catch(() => {})
+  }, [])
+  const flip = async () => {
+    if (enabled === null || saving) return
+    setSaving(true)
+    try {
+      const res = await offersApi.setOffersFromPlaces(!enabled)
+      if (res.success && res.data) setEnabled(res.data.enabled)
+      else showToast(res.error || "That didn't save. Try again.", 'error')
+    } catch {
+      showToast("That didn't save. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const hint = 'Offers places you keep going back to send their regulars. They never learn who gets them.'
+  return (
+    <Pressable
+      onPress={flip}
+      disabled={enabled === null || saving}
+      accessibilityRole="switch"
+      accessibilityLabel="Offers from places"
+      accessibilityHint={hint}
+      accessibilityState={{ checked: enabled === true, disabled: enabled === null || saving, busy: saving }}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <View style={styles.rowLeft}>
+        <Ionicons name="pricetag-outline" size={ICON.md} color={EMBER.textPrimary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Offers from places</Text>
+          <Text style={styles.rowHint}>{hint}</Text>
+        </View>
+      </View>
+      <View style={styles.switchWrap}>
+        <Switch
+          value={enabled === true}
+          onValueChange={flip}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          disabled={enabled === null || saving}
+          {...SWITCH_COLORS}
+        />
+      </View>
+    </Pressable>
+  )
+}
+

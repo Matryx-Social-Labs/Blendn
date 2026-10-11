@@ -35,7 +35,7 @@ jest.mock('../components/ActionTray', () => ({
   },
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive: jest.fn() } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
@@ -73,6 +73,27 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers())
 
 describe('the place screen', () => {
+  it('a claimed place offers the two regulars switches as the server has them, and a tap sends only that choice (step 12)', async () => {
+    ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue({}, null, true))
+    const request = apiClient.queuedRequest as jest.Mock
+    request.mockReset()
+    request.mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve({ success: true, data: init?.method === 'PUT' ? { known: true, offersMuted: false } : { known: false, offersMuted: false } })
+    )
+    await mount()
+    const known = screen.getByLabelText("Let The Humming Tree know I'm a regular")
+    expect(known.props.accessibilityState).toMatchObject({ checked: false })
+    await act(async () => { fireEvent.press(known) })
+    expect(request).toHaveBeenLastCalledWith('/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"known":true}' }, true, 2)
+    expect(screen.getByLabelText("Let The Humming Tree know I'm a regular").props.accessibilityState).toMatchObject({ checked: true })
+  })
+
+  it('an unclaimed place has nobody to tell: no regulars switches', async () => {
+    ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue())
+    await mount()
+    expect(screen.queryByLabelText("Let The Humming Tree know I'm a regular")).toBeNull()
+  })
+
   it('counts down on screen, a second at a time', async () => {
     ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue())
     await mount()

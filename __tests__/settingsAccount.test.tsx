@@ -5,7 +5,7 @@
  * Behavioural, against mocked auth, API and notification permission, because
  * each is a branch a source grep would pass by name alone.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { Linking } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -35,7 +35,7 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -68,6 +68,9 @@ beforeEach(() => {
   api.updateProfile.mockResolvedValue({ success: true } as never)
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
+  ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
+    Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
+  )
 })
 
 describe('Sign out', () => {
