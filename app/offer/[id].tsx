@@ -46,6 +46,8 @@ export default function OfferScreen() {
   const [reporting, setReporting] = useState(false)
 
   const seq = useRef(0)
+  /** Bumped by every answer, good or bad, so the refresh below re-arms even when the code has not turned yet. */
+  const [answers, setAnswers] = useState(0)
   const load = useCallback(() => {
     if (!id) return
     const mine = ++seq.current
@@ -65,6 +67,9 @@ export default function OfferScreen() {
         Logger.warn('offers', 'Offer load threw', { error: String(error) })
         setFailed("This offer didn't load.")
       })
+      .finally(() => {
+        if (mine === seq.current) setAnswers((n) => n + 1)
+      })
   }, [id])
   useFocusEffect(load)
 
@@ -77,12 +82,14 @@ export default function OfferScreen() {
   }, [load])
 
   // While the pass is up, ask again before the code turns — and so see "Redeemed" soon after staff tap it.
+  // Re-armed after every answer: the ask a second before the turn still gets the current code (same
+  // rotatesAt), and a failed ask changes nothing — keyed on rotatesAt alone, either one ended the chain.
   const rotatesAt = offer?.pass?.rotatesAt ?? null
   useEffect(() => {
     if (!focused || offer?.state !== 'live') return
     const timer = setTimeout(load, nextRefreshMs(rotatesAt, serverNow()))
     return () => clearTimeout(timer)
-  }, [focused, offer?.state, rotatesAt, load])
+  }, [focused, offer?.state, rotatesAt, answers, load])
 
   const venueId = offer?.venue.id ?? null
   useEffect(() => {

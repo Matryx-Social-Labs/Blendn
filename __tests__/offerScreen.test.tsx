@@ -77,6 +77,11 @@ beforeEach(async () => {
 })
 afterEach(() => jest.useRealTimers())
 
+/** The clock a second at a time, each answer landing (and its effects running) before the next, as on a phone. */
+async function seconds(n: number) {
+  for (let i = 0; i < n; i++) await act(async () => { await jest.advanceTimersByTimeAsync(1_000) })
+}
+
 async function mount() {
   await render(<OfferScreen />)
   await act(async () => { await Promise.resolve() })
@@ -117,6 +122,33 @@ it('hides a code past its turn when no fresh one came (L2)', async () => {
   await act(async () => { jest.advanceTimersByTime(22_000) })
   expect(screen.queryByText('K7Q 4M2')).toBeNull()
   expect(screen.getByText('Getting a fresh code…')).toBeTruthy()
+})
+
+/*
+ * Found driving it on the simulator (2026-10-11): the ask a second before the
+ * turn is answered with the code that is still current — same code, same
+ * rotatesAt — and nothing asked again, so the pass sat on "Getting a fresh
+ * code…" for as long as the screen was open.
+ */
+it('keeps asking until the code has turned, when the ask before the turn returns the same code', async () => {
+  const fresh = offer('live', { code: 'P3W8R5', rotatesAt: '2026-10-11T20:01:00.000Z' })
+  const current = offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' })
+  // The open, then the ask a second before the turn (still the current step), then the turned code.
+  reads = [current, current, fresh]
+  await mount()
+  await seconds(25)
+  expect(screen.getByText('P3W 8R5')).toBeTruthy()
+  expect(screen.queryByText('Getting a fresh code…')).toBeNull()
+})
+
+it('a refresh that failed is tried again, and the pass comes back when the server does', async () => {
+  await mount()
+  request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
+  await seconds(22)
+  expect(screen.getByText('Getting a fresh code…')).toBeTruthy()
+  request.mockImplementation(() => Promise.resolve(offer('live', { code: 'P3W8R5', rotatesAt: '2026-10-11T20:01:00.000Z' })))
+  await seconds(3)
+  expect(screen.getByText('P3W 8R5')).toBeTruthy()
 })
 
 it('"Maybe later" is remembered for the place (L9)', async () => {
