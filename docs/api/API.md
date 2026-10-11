@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/API.md.
-  From Blendn-Admin @ 34658d0 (v0.69.0, 2026-10-09).
+  From Blendn-Admin @ 257e570c (v0.69.0, 2026-10-11).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
@@ -23,7 +23,7 @@ All endpoints require `Authorization: Bearer <access_token>` unless noted.
 { "success": false, "error": "Validation failed", "errorCode": "VALIDATION_FAILED", "errors": [{ "field": "email", "message": "Required" }] }
 ```
 
-Error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `SERVER_ERROR`, `EVENT_FULL`, `EVENT_NOT_STARTED`, `EVENT_ENDED`, `OUT_OF_RANGE`, `ALREADY_CHECKED_IN`, `STORAGE_UNAVAILABLE`, `USER_MUTED`, `USER_BANNED`, `CHAT_LOCKED`, `NOT_CHECKED_IN`, `SPAM_BLOCKED`, `NOT_LIVE`, `EVENT_LIVE_HERE`, `PLUS_REQUIRED` (the last three: Go Live, below)
+Error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `SERVER_ERROR`, `EVENT_FULL`, `EVENT_NOT_STARTED`, `EVENT_ENDED`, `OUT_OF_RANGE`, `ALREADY_CHECKED_IN`, `STORAGE_UNAVAILABLE`, `USER_MUTED`, `USER_BANNED`, `CHAT_LOCKED`, `NOT_CHECKED_IN`, `SPAM_BLOCKED`, `NOT_LIVE`, `EVENT_LIVE_HERE`, `PLUS_REQUIRED`, `NO_CHECK_IN_AREA`, `GPS_TOO_VAGUE` (the last five: Go Live, below)
 
 A refusal that names no specific code carries the one its status stands for:
 401 `UNAUTHORIZED`, 403 `FORBIDDEN`, 404 `NOT_FOUND`, 409 `CONFLICT`,
@@ -315,9 +315,17 @@ holds a row per person per occurrence, so a three-day conference is three rows
 and one event. `attendedAt` is the **first** check-in for that event — when you
 arrived, not when you last turned up.
 
-**`totalCount` is the same figure as `stats.eventsAttended`** on the profile, by
-construction: the list and the count share one predicate, so they cannot
-disagree. Working an event as staff is not attending it, and appears in neither.
+**`totalCount` plus `lockedCount` is the same figure as `stats.eventsAttended`**
+on the profile, by construction: the list and the count share one predicate, so
+they cannot disagree. Working an event as staff is not attending it, and
+appears in neither.
+
+**Your latest 3 nights are free; the rest are Blendn+** where it is gated (the
+city of your latest night). This list is what "night history" means for
+Blendn+; a room's own messages follow the room's rules, not Plus. Without Plus there, `events` stops at the third,
+the pages stop with it (`totalCount` is 3), and `lockedCount` says how many more
+there are — show "‹n› more nights with Blendn+". `lockedCount` is 0 whenever
+nothing is hidden.
 
 An event the platform has since deleted is in neither the list nor the count,
 so every page is full and `totalCount` is the number of events listed
@@ -487,6 +495,46 @@ with you, and rank lower rather than disappearing.
 `youLiked` says whether *you* liked them. **Nothing anywhere says whether they
 liked you** — a mutual like is the only thing that reveals it, and there is no
 endpoint that leaks it early.
+
+**Matching v2 (plan v2 §8): `overlaps`, `sign`, `badges`.** "Rank on what
+people chose and did; display what they are."
+
+```json
+{ "overlaps": [ { "kind": "ipl", "text": "Both CSK — in RCB country 💛" },
+                { "kind": "language", "text": "You both speak Malayalam" } ],
+  "sign": null,
+  "badges": [ { "kind": "regular_here", "label": "Regular here" } ] }
+```
+
+- `overlaps` are display-only lines you share, as sentences, rarest in the
+  room first: an IPL team (an interest leaf, so it also **ranks**, by rarity —
+  two CSK fans in a room of RCB fans outrank two RCB fans), a this-or-that
+  answer (`You both picked filter coffee over chai`), and **Tier B** — a
+  language, a home state or a sign (`Both from Kerala`, `Both Leos ♌ — the
+  stars approve`, `Leo and Simha — same sign, two calendars ♌`). Language,
+  state, sign and this-or-that are **never scored**: the room ranks the same
+  whatever they are. Before a reveal: at most two lines, **at most one Tier B
+  fact per card, and none in a room below eight people**. The work field is
+  Tier B too: a shared field competes for the slot (shown as `sharedWorkField`,
+  not a line), and when no shared line took it their own `workField` does;
+  only then the sign chip — so a card carries one of language / home state /
+  sign / work field before a reveal, never two. The floor counts the people
+  **inside now plus you**, not everyone who came. After a reveal
+  (`visibleInRoom`), up to four, unbudgeted. Positive only: never a mismatch.
+  "In RCB country" only in a room past the floor, when the leading team has at
+  least three fans and more than twice the runner-up's; otherwise "Both CSK
+  fans". **Your own** languages, home state, sign and work field count only if
+  you set them before you checked in (`tier_b_changed_at`): editing them
+  mid-event changes no card in that room.
+- `sign` is their own sign, `"Leo ♌"` or `"Simha ♌"`, only if they chose to
+  show one, and only when the card has Tier B left — never beside a Tier B
+  line before a reveal, never below eight people.
+- `badges` come from GPS check-ins, never typed: `Regular here` (3+ nights at
+  this event's venue in 60 days, only at that venue), `Shows up` (80% of RSVPs
+  in 90 days attended, at least 3 — only if they turned on `shows_up_badge`),
+  `5+ nights this month` (a tier, never a count). Attendance facts, so empty
+  below the eight-person floor, like `sharedEvents`; none for anyone who turned
+  off `show_badges`. Computed for the page returned only.
 
 `POST .../likes` takes `{ "userId": "<this event's room handle>" }` — the card's
 own `userId` — and returns
@@ -662,6 +710,7 @@ vocabulary, meaning exactly what it means there.
   "city": "Bengaluru", "latitude": 12.97, "longitude": 77.59,
   "capacity": 300,
   "venueType": "live_music_venue", "venueTypeLabel": "Live music venue",
+  "floors": 3,
   "distance": 1.4,
   "upcomingEventCount": 2,
   "liveNow": "quiet",
@@ -679,6 +728,11 @@ vocabulary, meaning exactly what it means there.
 | `radius` | km. **No default.** Only bites when you send it |
 | `venueType` | One of the 35 slugs; anything else is a 400 |
 | `sortBy` | `name` (default) or `distance` |
+
+`floors` is the 3D map's height override for the venue's building, set by its
+owner or an admin on the dashboard (1–200): draw it `floors × 3.2` m tall,
+the rule our building tiles are baked with (scripts/map-buildings). `null` means
+the map's own height. The same field is on `GET /venues/:venueId`.
 
 60 a minute per person, then 429 — every row carries a live count, as on the
 venue page.
@@ -751,13 +805,14 @@ for one with no known adult age (as at its door). 60 a minute per person, then
   "venue": { "id": "…", "name": "The Humming Tree", "address": "…", "city": "Bengaluru",
              "latitude": 12.97, "longitude": 77.64,
              "venueType": "live_music_venue", "venueTypeLabel": "Live music venue",
-             "claimed": false },
+             "floors": null, "claimed": false },
   "live": { "open": true, "closedReason": null, "eventId": null,
             "liveNow": "quiet",
             "youAreLive": true, "expiresAt": "2026-10-02T21:20:00.000Z", "stay": false,
             "venueDayId": "…", "chatGroupId": "…" },
   "tonight": { "id": "…", "title": "Friday session", "slug": "…", "coverImageUrl": null,
-               "startTime": "…", "endTime": "…" }
+               "startTime": "…", "endTime": "…" },
+  "claim": { "url": "https://dashboard.blendn.app/claim/venue/…" }
 } }
 ```
 
@@ -768,6 +823,7 @@ for one with no known adult age (as at its door). 60 a minute per person, then
 | `live.liveNow` | `quiet` (fewer than 5, none included), `5-9`, `10-19` or `20+`. **Never a number** (D-19, D-x2): a count that moved from 4 to 5 as you watched would tell you somebody just walked in. Guests only (not the venue's staff), never counting you, read at most once a minute per venue, and slow to fall (it drops a bucket only once one more person would not hold it) |
 | `live.youAreLive` … `chatGroupId` | Your own window. Count down from `expiresAt`, never from the tap; open the room by `venueDayId` / `chatGroupId` |
 | `venue.claimed` | False: the app may offer "Own this place? Claim it" |
+| `claim` | `{ url }` for an unclaimed venue: the public claim page (`/claim/venue/:venueId`) on the dashboard host, built for the environment the app talks to — open it as given. Null once claimed. As `claim` on `GET /events/:eventId` |
 | `tonight` | The next public event here before the venue's day resets (06:00 local by default), age-filtered for you, or null |
 
 **Not on it:** the check-in area (no payload draws the boundary), and who is
@@ -821,11 +877,13 @@ today (choosing it again does not restart the four hours). Anything else is
 
 | Refusal | When |
 |---|---|
-| 403 `PLUS_REQUIRED` | `stay` while Plus gating is on (off today: "stay" is everyone's) |
 | 404 | Unknown, archived or deleted venue, or today's room there was deleted |
 | 403 `FORBIDDEN` / `AGE_RESTRICTED` | Not onboarded / no known adult age (an unknown age is refused here) |
 | 409 `EVENT_LIVE_HERE` | A public event at this venue (link confirmed, or its own area at the venue) is on, or starts within the hour. The body carries `eventId`: hand off to that event's check-in. Checked before the fence |
-| 400 `OUT_OF_RANGE` | A fix worse than 150 m, a venue with no check-in area, or a position outside it — "You're not at ‹venue› yet.", never a distance. A refusal writes nothing: no venue day is made for it |
+| 400 `GPS_TOO_VAGUE` | A fix worse than 150 m (`deviceInfo.gpsAccuracy`): a better fix where you stand, not directions |
+| 400 `NO_CHECK_IN_AREA` | Nobody has drawn this venue's area: no position fixes it |
+| 400 `OUT_OF_RANGE` | A position outside the area — "You're not at ‹venue› yet.", never a distance. Before step 5 this code also covered the two rows above; the event check-in still uses it for all three. A refusal writes nothing: no venue day is made for it |
+| 403 `PLUS_REQUIRED` | `stay` where Blendn+ is gated in the venue's city and you hold neither Plus nor a live Night Pass — open the paywall. Asked last, so it only stands where "stay" would otherwise have worked. In a city's launch season "stay" is everyone's (see Blendn+, below) |
 | 429 `RATE_LIMITED` | 20 a minute per person; ceilings per address and per venue |
 
 ```json
@@ -859,9 +917,19 @@ now — see Crews), and a Blend's (see Blends). The `/chat/groups/:chatGroupId/.
 admit whoever its owner admits — for a room that is not an event's, a
 membership row alone is not enough, and a refusal reads exactly as "not a
 member". Every id they send is a handle in that room's own scope (see Room
-handles). `GET /chat/groups` still lists event rooms only, so every row keeps
-its `event`; other kinds get their place in the list with the app that shows
-them. In a board post's room the roster (`/participants`) lists only the
+handles). `GET /chat/groups` lists event rooms in `groups` (each
+`kind: "event"`, with its `event`) and crew and Blend rooms in `rooms` — see
+below; a board post's room is not listed. A board post gets its room on the
+accept that brings its second asker in (`PATCH /board/requests/:id`
+`accept`, step 10): the room and a member row for the author and every
+accepted asker, under the event room's pseudonyms, in the accept's own
+transaction; each later accept adds its asker, and a row somebody left or was
+banned from is never put back. **Nobody is seated beside somebody they are kept
+apart from** — a block either way or a closed conversation, between any two
+people in it: in accept order, such an asker is accepted 1:1 as usual and
+silently not seated. A suspended or erased asker is not seated. In a board
+post's room the history, live delivery, typing and roster also leave out
+anybody you closed a conversation with, as they do anybody in a block. In a board post's room the roster (`/participants`) lists only the
 people its owner admits, an asker in a block with the author is out, writes
 stop 12 hours after the event ends (`CHAT_CLOSED`), and a withdrawn or
 taken-down post closes the room (404). To block or report somebody there, use
@@ -873,6 +941,33 @@ removed is out of the room at once, their row kept `left` for the history.
 
 ### GET /chat/groups
 Lists every **event** room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organiser reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
+
+**`rooms`: crews' and Blends' rooms (step 9).** Beside the paged `groups`, the
+response carries `rooms` — the caller's crews' chats and their Blends' rooms,
+each `{ id, kind: "crew" | "blend", name, crewId, blendId, closesAt,
+unreadCount, mute, lastMessageAt, lastMessage, membership, status }`, newest
+message first, not paged (at most ten crews and a night's few Blends) — sent
+with the first page, and `[]` on later pages. Each is
+listed as its door admits the caller now: a crew's while they are in the crew;
+a Blend's only while it is open (`closesAt` is its clock — gone from the list
+then, sweeper or not) and never to two people a block across it parted.
+`lastMessage.user` is named as that room names people: a crewmate's first
+name; in a Blend, tonight's pseudonym (a reveal names people on `GET /blends`,
+never in the chat). Own list rather
+than more `groups` rows because an installed app reads `event` off every
+`groups` row, and these rooms have none. A hidden crew's chat stays listed to
+its members — hiding takes a crew off every surface outside it, not its own
+chat (C12) — while a Blend with a hidden side is gone for everyone.
+
+**Nothing in a row comes from somebody in a block with you.** On every row,
+`groups` and `rooms` alike, `lastMessage` and `unreadCount` leave out messages
+from anybody you blocked or who blocked you — the same filter the room's
+history applies — so a blocked person's line is never previewed, named or
+counted. Your own messages are never unread. Reading a room's newest page
+(`GET /chat/groups/:chatGroupId/messages` without `before`) marks it read, as
+`GET /events/:eventId/chat` does for an event's room. On `rooms`, `lastMessageAt` is the time of the newest message you can
+see, and the list is ordered by it. (A `groups` row's `lastMessageAt`, and the
+paging order, are still the room's own last message.)
 
 ### POST /message-requests
 **`message` is required.** A request with no message is indistinguishable from a
@@ -952,7 +1047,12 @@ the venue's reset (`closesAt` is the reset, not a day later).
 ### GET /chat/groups
 A venue's room (a venue day) is listed only while your Go Live there is open;
 once it ends the room leaves the list — its last message and counts are not
-readable from outside a room you can no longer open.
+readable from outside a room you can no longer open. Its row's `event.kind` is
+`venue_day` (an event's room says `event`): name it by the row's `name`, which
+is the place, not by `event.title` ("Venue day · ‹place› · ‹date›", bookkeeping).
+`event.venueId` is the place ("Go live again" opens it). Its `memberCount` is
+**null**: an exact count of a venue's room, moving as people go live and
+expire, is the differencing the venue's bucket exists to stop (D-19).
 
 Each group carries `isCheckedIn` — the caller is `checked_in` to that event with
 no `check_out_time`, so the room is live for them right now. The app lifts those
@@ -1355,7 +1455,7 @@ at an event. `lib/crews/`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/crews` | My crews `{ crews, invites }` — open invites waiting for me, by the inviting friend's first name |
+| GET | `/crews` | My crews `{ crews, invites }` — open invites waiting for me that an accept would take, by the inviting friend's first name |
 | POST | `/crews` | Make one: `{ name, bio?, intent?, tags?, openToSolo?, inviteUserIds?, revealConsent: true, keepMeAnonymous? }` → 201 `{ crewId, chatGroupId, invited }` |
 | GET | `/crews/:crewId` | One of my crews: members by first name and photo, each by their handle in the crew's room |
 | PATCH | `/crews/:crewId` | The owner edits `name`, `bio`, `intent`, `tags`, `openToSolo` |
@@ -1389,7 +1489,9 @@ sent again. One invite push per inviter and invitee a day, whatever the crew
 **Accepting asks again**, under the crew's lock: the invite open; whoever sent
 it still in the crew and still your friend; nobody in the crew kept apart from
 you. Any of those failing is the same 404 as no invite. A block or an unfriend
-also withdraws the invites between the two people at once.
+also withdraws the invites between the two people at once. `GET /crews` lists
+only an invite that would pass these checks now: one the accept would refuse is
+not on the screen, so a 404 after a listed invite never says a block is there.
 
 **Caps.** You can own 3 standing crews and be in 10 (409 past either), and make
 3 new crews in 24 hours (429).
@@ -1403,7 +1505,15 @@ the rest are let go, open invites are withdrawn. A crew without an active owner
 passes to the active member who has been in it longest — when its owner leaves,
 is erased or is suspended. The chat sweeper repairs any crew left below two or
 without an owner every 15 minutes, so a suspension (which writes no crew row)
-or a failed erasure settle is not left standing.
+or a failed erasure settle is not left standing. **Except a crew still waiting
+on its friends:** every crew starts as its owner and the invites out, and the
+sweeper leaves a crew of one standing while it has an open invite or is younger
+than an invite lives (14 days) and has only ever had the one member row. An
+invite counts while it is open and its sender is still an active member — the
+accept's own rule. Once every invite has lapsed, been declined or lost its
+sender, and the crew is past 14 days old (or had a second member, now
+suspended), the next pass dissolves it. A departure is not a
+wait: a crew somebody leaves down to one dissolves at once.
 
 **Joining is consent.** Creating or joining requires `revealConsent: true`. The
 app shows, beside it: *"Anyone in this crew can reveal the crew — your name and
@@ -1438,8 +1548,13 @@ name — on `/crews` and in the crew's room. Member ids are handles in the crew'
 room (yours is your own id); `DELETE /crews/:crewId/members/:userId` takes that
 handle back, and a raw id or another room's handle names nobody (404). Two
 members kept apart (a block or a closed conversation) are not listed to each
-other on `/crews`, and the crew chat already hides each one's messages and
-roster entry from the other; `size` still counts everybody active.
+other on `/crews`, and not counted to each other either — `size` is the
+members that viewer is shown, so a size one bigger than the list never says
+somebody is hiding — and the crew chat already hides each one's messages and
+roster entry from the other. Each member carries **`isFriend`** — one of the
+viewer's friends (never true for the viewer) — so an invite picker can leave
+out a friend already in without the client ever holding another member's
+account id.
 
 **"We're here"** needs the tapper checked in at the event now (403 otherwise)
 and checks **nobody else** in: every member checks in by their own GPS. It
@@ -1462,9 +1577,19 @@ crews here, never your own (those are `myCrews`, what a like is sent as). A
 card is the emblem seed, name, bio, `size` ("Crew of N", active members),
 `presentCount`, tags and intent — **counts, never people**: no name, photo,
 id or pseudonym of anybody on it (a list of pseudonyms beside a crew that later
-reveals would single out the ones who stayed anonymous). Most here first, then
-by id; `limit` 30 by default, at most 50, `offset`, with `total` and
-`hasMore`. Hidden from you: a hidden crew, and any crew with a member kept
+reveals would single out the ones who stayed anonymous). Matching v2 adds
+`overlaps` and `badges`: up to two lines of what the crew **holds** (at least
+two of its active members and a third of the crew — members, not only those
+here, so a line does not change as each one walks in) in common with your crew here or, alone,
+with you — `Both crews are into Techno`, `Two RCB crews ❤️`, `This crew picks
+chai over filter coffee, like you` — never a member and never a count;
+languages and home states only between crews of four or more here in a room of
+eight or more, one line at most. `badges` is `N nights out together` (nights
+two or more members checked in at the same occurrence, since they joined) from
+2. Ranked from your side: crew-held interests by rarity across the crews here,
+plus shared intent, damped by half when one crew is more than twice the
+other's size here (crew ↔ crew only); then most here, then by id; `limit` 30
+by default, at most 50, `offset`, with `total` and `hasMore`. Hidden from you: a hidden crew, and any crew with a member kept
 apart — a block or a closed conversation, either way — from you or from any
 member of your crews here. Here without a crew of your own, you see crews only
 after opting in ("Open to joining a crew tonight", `open_to_crews_until`: it
@@ -1489,7 +1614,7 @@ messages in a crew chat stay, as in any room.
 | POST | `/events/:eventId/crews/:crewId/like` | Like a crew here: `{ asCrewId? }` — as one of your crews here, or as yourself → `{ liked: true, blend }` |
 | POST | `/events/:eventId/matches/likes` | With `asCrewId`: like one person on your crew's behalf → `{ liked: true, blend }` |
 | PUT | `/events/:eventId/matches/preferences` | `openToCrews` — "Open to joining a crew tonight" (until the end of your occurrence) |
-| POST | `/blends/:blendId/reveal` | One tap reveals your crew **in this Blend** → `{ revealed, keptPrivate }` |
+| POST | `/blends/:blendId/reveal` | One tap reveals your crew **in this Blend** → `{ revealed: true }` |
 | GET | `/blends` | My open Blends: room, clock, both sides' people |
 
 **No voting.** Any member of a crew that is here (two or more checked in) likes
@@ -1553,7 +1678,11 @@ again as the reveal is written) — consent was given on joining — is revealed
 **to that Blend's people only** (`blend_reveals`): first name and one photo on
 `GET /blends`. Not to the event's room, its roster or deck, not in any DM, not
 in another Blend. The matched person in a crew ↔ person Blend reveals only
-themselves. `GET /blends` says *"N revealed · M keep it private"* per crew.
+themselves. `GET /blends` says *"N revealed · M keep it private"* for the
+**other** side only. Your own side is you and a count (`mine: true`, `count`,
+`people` = you alone, `revealed` and `keptPrivate` null), and the reveal
+answers `{ revealed: true }` with no count: your crewmates' faces beside one
+pseudonym, or "1 keeps it private", would tell your crew which of you said no.
 Switching "keep me anonymous" on afterwards applies from then on (D-10): a
 reveal already made is not undone. Deleting your account deletes your reveals.
 
@@ -1570,6 +1699,44 @@ reveal already made is not undone. Deleting your account deletes your reveals.
 | `interested_in` | array of the same values | **nobody but the owner** |
 | `orientations` | array of `straight` · `gay` · `lesbian` · `bisexual` · `pansexual` · `queer` · `asexual` · `prefer_not_to_say` — **up to three**, distinct, and `prefer_not_to_say` alone | **nobody but the owner**, unless `show_orientation` *and* `maySeeIdentity` |
 | `work_field` | a slug from `GET /work-fields` | anyone who can see the profile |
+| `languages` | up to five slugs from `GET /profile-options` (besides English; `kannada_learning` is "Learning Kannada") | as a shared line on a card (Tier B); the labels to whoever can see who you are |
+| `home_state` | a state / union territory slug, or `abroad` | the same |
+| `sun_sign` + `sign_system` | opt-in: a sign slug and `western` or `rashi`, **both or neither** (400 otherwise; `profiles_sign_shape` in the table). Null both to take it off | the same, plus your own `sign` chip on cards |
+| `shows_up_badge` | boolean, default false | turns on the "Shows up" badge |
+| `show_badges` | boolean, default true | off: no badges on your card at all |
+
+**Changing them is limited.** A real change to `languages`, `home_state`,
+`sun_sign`/`sign_system` or `work_field` (once onboarded) is allowed three
+times a day — the fourth is 429 `RATE_LIMITED`, "You can change your languages,
+home state, sign or field of work three times a day. Try again tomorrow." —
+and stamps `tier_b_changed_at`: in a room you checked into before the change,
+your new values print no shared line. Otherwise a viewer could edit their own
+facts and read which cards light up, learning every card's Tier B one edit at
+a time.
+
+**Display only, never ranked (plan v2 §8.1).** Languages, home state and sign
+are printed when two people share them and never enter a score: ranking by
+origin would sort a room by region, and by sign, by stars. Your own profile
+returns the slugs plus `suggested_sun_sign` — the Western sign of your birth
+date, for the editor to prefill, never stored until you pick it. Nothing on the
+profile is, or will become, caste, community, religion, kundli or veg /
+non-veg (`__tests__/never-build-fields.test.ts`).
+
+`GET /profile-options` serves the vocabulary (languages, home states, the
+twelve signs with Western and rashi names, the this-or-that questions).
+`GET /me/this-or-that` returns `{ answers: { [question]: "a" | "b" } }`;
+`PUT /me/this-or-that` takes `{ answers: { [question]: "a" | "b" | null } }` —
+a choice sets, `null` takes back, an unknown question or choice refuses the
+whole request (400), 409 `PROFILE_REQUIRED` before a profile exists.
+
+**Interest leaves.** The ten IPL teams are leaves under `IPL` (`ipl-csk` …,
+named by code) and food-and-drink loves (Cafe hopping, Street food, Desserts,
+Bakeries, Italian, Pan-Asian — ways of going out, never a named dish, a diet or
+alcohol) under `Food & Drink`. They are ordinary interests: picked through
+`/profiles/:id/interests`, ranked by rarity, filterable as event categories.
+The dashboard refuses to create or rename a category into a diet, faith,
+caste, community, income, height, college or neighbourhood word
+(`lib/never-build.ts`).
 
 `intent_default` is the person-level default; the per-event override lives in
 `event_match_preferences`, written by
@@ -2583,7 +2750,7 @@ not exist yet; see `docs/MODERATION_RESPONSE.md`.
 | GET | `/categories` | List all categories |
 | GET | `/amenities` | The amenity vocabulary — what an event can say it offers |
 | GET | `/work-fields` | The eighteen coarse fields of work, as `{ slug, label }` |
-| GET | `/checkins/active` | Get user's active check-ins. Each carries `kind` (`venue_day` is a Go Live: label it by `event.venueName`), `expiresAt` (a Go Live's end; null at an event) and `stay`. A Go Live past its end is never listed, swept or not |
+| GET | `/checkins/active` | Get user's active check-ins. Each carries `kind` (`venue_day` is a Go Live: label it by `event.venueName`), `venueId` (the venue a Go Live is at, to extend or go again; null at an event), `expiresAt` (a Go Live's end; null at an event) and `stay`. A Go Live past its end is never listed, swept or not |
 | POST | `/notifications/token` | Register push token |
 | DELETE | `/notifications/token` | Remove push token |
 | GET | `/notifications` | The notifications centre, newest first |
@@ -2651,7 +2818,7 @@ them any more. Rows written before that are hidden, and retention removes them.
 |---|---|---|
 | A DM | The recipient, when the conversation goes from read to unread; while it stays unread, at most once every 5 minutes, as "N new messages" | One notification per conversation, replaced in place (`dm:{conversationId}`) |
 | A room message | **Nobody** | — |
-| A reply to your room message | Its author, if still in the room and not in a block with the sender; at most once per room every 3 minutes | `room:{chatGroupId}`, replaced in place |
+| A reply to your room message | Its author, if still in the room and not in a block with the sender; at most once per room every 3 minutes. `data: { type: "group_message", chatGroupId, senderId, kind }` — `kind` is the room's: `event` (a venue day's room too), `crew` (with `crewId`), `blend` (with `blendId`) or `board_post`; open the tap as that room | `room:{chatGroupId}`, replaced in place |
 | A check-in | **Nobody** — the live roster carries arrivals | — |
 | An event you RSVP'd to or saved changes time or place, is cancelled, or starts in an hour | Going, maybe, waitlisted and saved | `event:{eventId}`, replaced in place: only the latest state is true |
 | An organiser announcement | Everyone in the room | Stacked with its event, never replaced |
@@ -2722,3 +2889,62 @@ Kept for 180 days, then purged (IT Rules 2021): a copy of what they registered
 with (name, email, phone, date of birth, sign-up method), written in the same
 transaction before the scrub. No route returns it. Their board posts that
 moderation hid are kept too. See `docs/RETENTION.md`.
+
+---
+
+## Blendn+ (step 11)
+
+Blendn+ is bought in the App Store or Google Play through RevenueCat — never
+Razorpay, never in a web view. The app passes **our user id** to
+`Purchases.logIn` at sign-in (and `logOut` at sign-out), and RevenueCat's
+webhook (`POST /api/webhooks/revenuecat`, server to server, not part of this
+API) is the only thing that grants it. The app saying "bought" unlocks nothing:
+after a purchase or restore, poll `GET /me/plus` until `active`.
+
+What Plus is: staying live while you're here (Go Live `stay`), your full night
+history (`/me/attendance` beyond the latest 3), partner perks and crew extras
+(not built yet). A Night Pass is Plus for 24 hours (a second one starts when
+the first ends). Never sold: who liked you, more than the caps allow, seeing a
+venue without going live, a reveal bypass, boosting.
+
+Where: Blendn+ is gated per city. A city that is not gated is in its launch
+season and every Plus feature is everyone's — "stay" simply works. The first
+time a gated city's gate would stop somebody whose account was here, and out,
+in the 90 days before that city flipped,
+they get a 14-day trial instead (once per account); and three new people who
+joined through your invite link and have each been to a different event with
+others there earn a month (each friend counts once; at most 3 a year).
+
+### GET /me/plus
+
+```json
+{ "success": true, "data": {
+  "active": true,
+  "gated": true,
+  "product": "plus",
+  "source": "apple",
+  "expiresAt": "2026-11-10T09:00:00.000Z"
+} }
+```
+
+`gated` says whether Blendn+ is for sale to this person at all: gated in the
+city of their latest night (where they are checked in now counts as that). When it is false
+(a launch season) the app sells nothing and says Plus is free there; plans
+show only after `PLUS_REQUIRED`, a `lockedCount`, or `gated: true`.
+`product` is `plus` or `night_pass`; `source` is `apple`, `google` or `grant`
+(the trial, a referral month). `expiresAt` is when the row that lasts longest
+ends. `no-store`: never cache it; 60 a minute per person (the paywall polls every 3 s for a minute at most). It is not a gate — every Plus feature is
+checked on the server.
+
+### POST /me/plus/paywall-events
+
+```json
+{ "event": "shown", "trigger": "go_live_expiry" }
+```
+
+`event`: `shown`, `dismissed`, `purchase_started`, `purchased`, `restored`.
+`trigger`: `go_live_expiry`, `second_event`, `first_match`, `recap`, `perk`,
+`profile`. Measurement only (`product_events`, one row per person, day, step and
+trigger). The cooldowns are the app's: at most one automatic paywall a session,
+never during onboarding, check-in or chat. 400 for anything off these lists.
+
