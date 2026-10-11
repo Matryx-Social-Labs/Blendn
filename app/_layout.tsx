@@ -711,6 +711,8 @@ function RootLayout() {
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
+      <Stack.Screen name="edit-about-you" options={{ headerShown: false, animation: routeTransition }} />
       {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="crews/new" options={{ headerShown: false, animation: routeTransition }} />

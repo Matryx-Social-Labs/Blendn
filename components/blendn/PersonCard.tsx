@@ -144,13 +144,36 @@ export function PersonCard({
           </View>
         ) : null}
 
-        {p.interests.length ? (
+        {p.interests.length || p.sign ? (
           <View style={styles.chips}>
             {p.interests.slice(0, 8).map((i) => (
               <View key={i} style={styles.chip}>
                 <Text variant="meta" color={EMBER.textPrimary}>
                   {i}
                 </Text>
+              </View>
+            ))}
+            {/* Their sign, only if they chose to show it and the card's budget allows (server). */}
+            {p.sign ? (
+              <View style={styles.chip} accessibilityLabel={`Their sign: ${p.sign}`}>
+                <Text variant="meta" color={EMBER.textPrimary}>
+                  {p.sign}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/*
+          Earned by GPS check-ins, never typed or bought (matching v2 §8.6).
+          Muted, under the chips: a fact about showing up, not a ranking.
+        */}
+        {p.badges.length ? (
+          <View style={styles.chips} accessibilityLabel={`Badges: ${p.badges.map((b) => b.label).join(', ')}`}>
+            {p.badges.map((b) => (
+              <View key={b.kind} style={[styles.chip, styles.badge]}>
+                <Ionicons name="ribbon-outline" size={ICON.sm} color={EMBER.textSecondary} />
+                <Text variant="meta">{b.label}</Text>
               </View>
             ))}
           </View>
@@ -265,7 +288,18 @@ export function allReasons(p: RoomPerson): Reason[] {
   if (p.sharedEvents > 0)
     out.push({ icon: 'time-outline', text: `Both at ${p.sharedEvents} ${p.sharedEvents === 1 ? 'night' : 'nights'} before` })
   if (p.sharedWorkField && p.workField) out.push({ icon: 'construct-outline', text: `You both work in ${p.workField}` })
+  // Matching v2: the server's own sentences, already budgeted and positive only.
+  for (const o of p.overlaps) out.push({ icon: OVERLAP_ICON[o.kind] ?? 'sparkles-outline', text: o.text })
   return out
+}
+
+const OVERLAP_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  ipl: 'baseball-outline',
+  interest: 'sparkles-outline',
+  this_or_that: 'swap-horizontal-outline',
+  language: 'chatbubbles-outline',
+  home_state: 'home-outline',
+  sign: 'star-outline',
 }
 
 const styles = StyleSheet.create({
@@ -308,6 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
     justifyContent: 'center',
   },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, backgroundColor: EMBER.surfaceSunken },
   actions: { flexDirection: 'row', gap: SPACE.sm },
   action: {
     height: CONTROL.lg,

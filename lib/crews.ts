@@ -18,6 +18,8 @@
  */
 
 /** The server's `CREW` constants (blendn-admin lib/constants.ts). */
+import type { Badge, Overlap } from './aboutYou'
+
 export const CREW_MAX_MEMBERS = 12
 export const CREW_NAME_MIN = 2
 export const CREW_NAME_MAX = 32
@@ -139,6 +141,14 @@ export interface CrewCard {
   intent: CrewIntent[]
   /** Your side liked them tonight. Never whether they liked you. */
   youLiked: boolean
+  /**
+   * Up to two lines of what this crew holds in common with your side —
+   * "Both crews are into Techno", "Two RCB crews". Crew-held, never a member
+   * and never a count (matching v2). Optional: a client outlives a deploy.
+   */
+  overlaps?: Overlap[]
+  /** "6 nights out together". */
+  badges?: Badge[]
 }
 
 export interface CrewsAtEvent {
