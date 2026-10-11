@@ -1,0 +1,96 @@
+import React from 'react'
+import { act, render, screen, fireEvent } from '@testing-library/react-native'
+
+const NOW = Date.parse('2026-10-11T20:00:10.000Z')
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+)
+jest.mock('expo-router', () => {
+  const R = require('react')
+  return {
+    router: { push: jest.fn(), back: jest.fn() },
+    useLocalSearchParams: () => ({ id: 'o1' }),
+    useFocusEffect: (cb: () => void) => R.useEffect(cb, [cb]),
+    useIsFocused: () => true,
+  }
+})
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: require('react-native').View }))
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
+jest.mock('../components/AppHeader', () => ({ AppHeader: () => null }))
+jest.mock('../components/ui/PlaceholderBanner', () => ({ PlaceholderBanner: () => null }))
+jest.mock('../components/motion/ScalePress', () => ({ __esModule: true, default: require('react-native').Pressable }))
+jest.mock('../components/ui/Text', () => ({ Text: require('react-native').Text }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
+
+/* eslint-disable import/first */
+import OfferScreen from '../app/offer/[id]'
+import { apiClient } from '../lib/apiClient'
+/* eslint-enable import/first */
+
+/**
+ * The offer screen (step 12): the pass is live and is the server's code; it
+ * asks again before the code turns and shows "Redeemed" when the server says
+ * so; "Maybe later" sends nothing (RG-I02).
+ */
+const request = apiClient.queuedRequest as jest.Mock
+const offer = (state: string, pass: unknown) => ({
+  success: true,
+  data: {
+    offer: {
+      id: 'o1',
+      venue: { id: 'v1', name: 'The Humming Tree' },
+      text: 'First drink on the house',
+      sentAt: '2026-10-11T12:00:00.000Z',
+      endsAt: '2026-10-18T12:00:00.000Z',
+      state,
+      pass,
+    },
+  },
+})
+let reads: unknown[] = []
+
+beforeEach(() => {
+  jest.useFakeTimers({ now: NOW })
+  reads = [offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' })]
+  request.mockReset()
+  request.mockImplementation((url: string, init?: RequestInit) => {
+    if (url.endsWith('/regular')) return Promise.resolve({ success: true, data: { known: false, offersMuted: false } })
+    if (init?.method) return Promise.resolve({ success: false })
+    return Promise.resolve(reads.length > 1 ? reads.shift() : reads[0])
+  })
+})
+afterEach(() => jest.useRealTimers())
+
+async function mount() {
+  await render(<OfferScreen />)
+  await act(async () => { await Promise.resolve() })
+}
+
+it('shows the server’s code on a live pass, and turns to "Redeemed" when the server says so', async () => {
+  await mount()
+  expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+  expect(screen.getByLabelText(/Door pass for The Humming Tree\. Code K 7 Q 4 M 2/)).toBeTruthy()
+  reads = [offer('redeemed', null)]
+  // The code turns at :30; the screen asks a second before.
+  await act(async () => { jest.advanceTimersByTime(10_000) })
+  expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
+  expect(screen.queryByText('K7Q 4M2')).toBeNull()
+})
+
+it('"Maybe later" sends nothing; "Yes" sends known: true', async () => {
+  await mount()
+  await act(async () => { fireEvent.press(screen.getByText('Maybe later')) })
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0)
+  expect(screen.queryByText('Yes, let them know')).toBeNull()
+})
+
+it('a yes is one explicit PUT', async () => {
+  await mount()
+  await act(async () => { fireEvent.press(screen.getByText('Yes, let them know')) })
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'PUT')).toEqual([
+    ['/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"known":true}' }, true, 2],
+  ])
+})

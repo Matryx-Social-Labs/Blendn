@@ -488,6 +488,17 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
         : '/(tabs)/chat'
       break
     }
+    /*
+     * A place's offer (step 12). The push names no place — a lock screen is
+     * read by others — so it opens the offer, where the place and its words
+     * come from the server, and the door pass with them.
+     */
+    case 'venue_offer': {
+      target = data.offerId
+        ? { pathname: '/offer/[id]', params: { id: String(data.offerId) } as any }
+        : '/(tabs)/events'
+      break
+    }
     case 'friend_request': {
       /*
        * Where requests are answered. Not the asker's profile: a friend's

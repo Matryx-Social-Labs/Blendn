@@ -956,6 +956,45 @@ Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, 
 
 ---
 
+## 15. An offer and its door pass — `app/offer/[id].tsx`; regulars' choices on `app/venue/[id].tsx`
+
+**Added 2026-10-11 (step 12).** Placeholder for Hemanth's design.
+
+A venue on Venue Pro can send an offer to its **regulars** — people who came on
+3 or more nights in the last 30. The venue picks the words, the server picks
+who, and **the venue never learns who**: it sees how many opened and redeemed.
+
+### What it does
+
+- **Opened from the push or the bell.** The push names no place — "An offer for
+  you" / "A place you keep going back to sent you something" — because a lock
+  screen is read by others. The place and its words come from
+  `GET /offers/:id` here, and opening is what the venue's "opened" counts.
+- **The door pass, while the offer can be used:** the server's six-character
+  code (two groups of three), a clock that runs to the second, a bar that
+  drains to the code's next turn (every 30 s), and a pulse. A screenshot is
+  visibly dead and its code stops working within a minute. The screen asks the
+  server again before each turn, and at least every 10 s, so "Redeemed" appears
+  soon after staff tap it on their dashboard. Reduced motion stills the pulse;
+  the clock and the bar still move.
+- **States:** Redeemed; "You've used a pass at <place> tonight — one a night";
+  "This offer has ended" (past its end, or the place changed hands).
+- **Once, under the pass:** "Let <place> know you're a regular?" — **Yes, let
+  them know** sends `known: true`; **Maybe later** sends nothing.
+- **On a claimed place's page:** two switches — "Let <place> know I'm a
+  regular" (they see your first name and your nights there in the last 30,
+  nothing else) and "No offers from <place>". Each sends only itself; the
+  switch shows what the server saved.
+
+### Rules a redesign must keep
+
+- Never put the place's name or the offer's words in anything drawn from the
+  push payload; read them from the server after the app opens.
+- The pass must stay visibly live: something that moves every second, and the
+  code from the server — never a code the app could compute or cache.
+- One accent per screen: the pass is it ("Yes" is bordered).
+- "Maybe later" must never send a request; only an explicit yes turns it on.
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.

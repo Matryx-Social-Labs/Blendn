@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
@@ -28,11 +28,12 @@ import {
 } from '../../lib/goLive'
 import { tonightLine } from '../../lib/home'
 import { Logger } from '../../lib/logger'
+import { offersApi, type RegularPrefs } from '../../lib/offers'
 import { subscribeToLiveEnded } from '../../lib/socketClient'
 import { useGoLive } from '../../lib/useGoLive'
 import { serverNow } from '../../lib/serverClock'
 import { useAuth } from '../../lib/useAuth'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, tint } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, tint } from '../../lib/theme'
 
 /** Refusals of the page itself that no retry fixes: not onboarded, no known adult age. */
 const FINAL_REFUSALS = new Set(['FORBIDDEN', 'AGE_RESTRICTED', 'NOT_FOUND'])
@@ -295,6 +296,9 @@ export default function VenueScreen() {
               </ScalePress>
             ) : null}
 
+            {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
+            {detail.venue.claimed ? <RegularChoices venueId={detail.venue.id} venueName={detail.venue.name} /> : null}
+
             {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
             {claimUrl ? (
               <Pressable
@@ -336,6 +340,80 @@ export default function VenueScreen() {
         size={tray?.stack ? 'expanded' : 'default'}
       />
     </SafeAreaView>
+  )
+}
+
+/**
+ * Your two choices about this place (step 12): be known here as a regular —
+ * the place sees your first name and your nights here in the last 30, nothing
+ * else — and no offers from it. Each switch sends only itself, and the switch
+ * shows what the server saved, never what was tapped.
+ */
+function RegularChoices({ venueId, venueName }: { venueId: string; venueName: string }) {
+  const { showToast } = useToast()
+  const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
+  const [saving, setSaving] = useState<keyof RegularPrefs | null>(null)
+  const read = useCallback(() => {
+    offersApi
+      .prefs(venueId)
+      .then((res) => {
+        if (res.success && res.data) setPrefs(res.data)
+      })
+      .catch(() => {})
+  }, [venueId])
+  useFocusEffect(read)
+
+  const flip = async (key: keyof RegularPrefs) => {
+    if (!prefs || saving) return
+    setSaving(key)
+    try {
+      const res = await offersApi.setPrefs(venueId, { [key]: !prefs[key] })
+      if (res.success && res.data) setPrefs(res.data)
+      else showToast(res.error || "That didn't save. Try again.", 'error')
+    } catch {
+      showToast("That didn't save. Try again.", 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  if (!prefs) return null
+  const rows: { key: keyof RegularPrefs; title: string; hint: string }[] = [
+    {
+      key: 'known',
+      title: `Let ${venueName} know I'm a regular`,
+      hint: "They see your first name and how many nights you've come in the last 30. Nothing else.",
+    },
+    { key: 'offersMuted', title: `No offers from ${venueName}`, hint: 'Offers go to people who come here often. You can stop them.' },
+  ]
+  return (
+    <View style={styles.panel}>
+      {rows.map((row) => (
+        <Pressable
+          key={row.key}
+          onPress={() => flip(row.key)}
+          disabled={saving !== null}
+          accessibilityRole="switch"
+          accessibilityLabel={row.title}
+          accessibilityHint={row.hint}
+          accessibilityState={{ checked: prefs[row.key], disabled: saving !== null, busy: saving === row.key }}
+          style={styles.choice}
+        >
+          <View style={styles.choiceText}>
+            <Text variant="bodyStrong">{row.title}</Text>
+            <Text variant="meta">{row.hint}</Text>
+          </View>
+          <Switch
+            value={prefs[row.key]}
+            onValueChange={() => flip(row.key)}
+            disabled={saving !== null}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            {...SWITCH_COLORS}
+          />
+        </Pressable>
+      ))}
+    </View>
   )
 }
 
@@ -420,6 +498,8 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
     backgroundColor: EMBER.surfaceSunken,
   },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: CONTROL.lg },
+  choiceText: { flex: 1, gap: SPACE.xxs },
   claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start', minHeight: CONTROL.md },
   underline: { textDecorationLine: 'underline' },
 })
