@@ -23,6 +23,7 @@ import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
+import { aboutLine } from '../../lib/aboutYou'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -63,6 +64,12 @@ interface UserProfileView {
     eventsOrganized: number
   }
   memberSince?: string
+  /**
+   * "Speaks Malayalam · From Kerala · Leo ♌" (matching v2). The server sends
+   * languages, home state and sign only when you may see who this is — they
+   * are origin-like, so before a reveal a card shows at most one of them.
+   */
+  about?: string | null
   /** The server's `identityVisible`, or your own profile. Nothing else sets it. */
   identityVisible: boolean
 }
@@ -263,6 +270,7 @@ function UserProfileInner() {
               : [],
             stats: data.stats,
             memberSince: data.memberSince,
+            about: aboutLine(data as { languages?: string[]; homeState?: string | null; sign?: string | null }),
             identityVisible: data.identityVisible === true || data.isOwnProfile === true,
           }
         } else {
@@ -538,6 +546,12 @@ function UserProfileInner() {
                 reading as a table. Either can be absent; both are behind the
                 identity gate.
               */}
+              {profile?.about ? (
+                <View style={styles.details}>
+                  <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" />
+                </View>
+              ) : null}
+
               {profile?.occupation || profile?.education ? (
                 <View style={styles.details}>
                   {profile.occupation ? (

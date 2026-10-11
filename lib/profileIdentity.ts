@@ -22,13 +22,15 @@ export interface ProfileFields {
   occupation?: string
   education?: string
   photos?: string[]
+  /** Languages, home state, sign — sent only when identified; withheld here too. */
+  about?: string | null
   identityVisible: boolean
 }
 
 /** The payload with every identity field removed unless the server said you may see it. */
 export function withheldUnlessVisible<T extends ProfileFields>(profile: T): T {
   if (profile.identityVisible === true) return profile
-  return { ...profile, photos: [], bio: undefined, occupation: undefined, education: undefined }
+  return { ...profile, photos: [], bio: undefined, occupation: undefined, education: undefined, about: undefined }
 }
 
 export interface ProfileIdentity {

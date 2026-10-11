@@ -711,6 +711,8 @@ function RootLayout() {
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §16). */}
+      <Stack.Screen name="edit-about-you" options={{ headerShown: false, animation: routeTransition }} />
       {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false, animation: routeTransition }} />
       <Stack.Screen name="crews/new" options={{ headerShown: false, animation: routeTransition }} />
@@ -718,7 +720,7 @@ function RootLayout() {
       <Stack.Screen name="blend/[blendId]" options={{ headerShown: false, animation: routeTransition }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
       <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
-      {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §15). */}
+      {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
       <Stack.Screen name="offer/[id]" options={{ headerShown: false, animation: routeTransition }} />
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen

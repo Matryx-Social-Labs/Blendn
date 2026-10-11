@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
+import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
@@ -71,6 +72,10 @@ export interface RoomPerson {
   workField: string | null
   sharedEvents: number
   sharedPlans: number
+  /** Matching v2: shared display lines, their sign chip, their badges (server-budgeted). */
+  overlaps: Overlap[]
+  sign: string | null
+  badges: Badge[]
   insideNow: boolean
   arrivedAt: string | null
   liked: boolean
@@ -575,6 +580,9 @@ export function useRoom(): RoomState & RoomActions {
         workField: a.workField ?? null,
         sharedEvents: a.sharedEvents ?? 0,
         sharedPlans: a.sharedPlans ?? 0,
+        overlaps: a.overlaps ?? [],
+        sign: a.sign ?? null,
+        badges: a.badges ?? [],
         insideNow: a.insideNow !== false,
         arrivedAt,
         liked: status !== 'none',

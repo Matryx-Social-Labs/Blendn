@@ -1,3 +1,5 @@
+import type { Badge, Overlap } from './aboutYou'
+
 /**
  * One person on a room's roster, as the app holds them.
  *
@@ -49,4 +51,8 @@ export interface AttendeeProfile {
   insideNow?: boolean
   /** You already liked them. The reverse is never disclosed. */
   youLiked?: boolean
+  /** Matching v2's shared lines, sign chip and badges — as the server budgeted them. */
+  overlaps?: Overlap[]
+  sign?: string | null
+  badges?: Badge[]
 }

@@ -956,7 +956,49 @@ Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, 
 
 ---
 
-## 15. An offer and its door pass — `app/offer/[id].tsx`; regulars' choices on `app/venue/[id].tsx`
+## 15. Matching v2 — languages, home, sign, this-or-that; what cards share — `app/edit-about-you.tsx`, the person and crew cards
+
+**Added 2026-10-10 (step 10 of the product-completion plan).** The server half
+is blendn-admin step 10 (`lib/overlaps.ts`, `lib/about-you.ts`,
+`GET /profile-options`, `GET|PUT /me/this-or-that`); the contract is
+`docs/api/API.md` → Matches and "Matching inputs on the profile". The owner's
+rulings: **rank on what people chose and did, display what they are**; zodiac
+is an opt-in chip, never a ranking; never kundli, caste, religion or veg /
+non-veg.
+
+```
+Me ─ Edit profile ─ YOU AND MATCHING ─▶ "Languages, home, sign & this-or-that"
+                                          languages (≤5) · where you're from · Show my sign
+                                          (Western | My rashi instead) · 12 this-or-that · Show my badges · "Shows up"
+Room ─ a face ─▶ the person sheet: reasons now include the server's lines
+                 ("Both CSK — in RCB country 💛", "You both speak Malayalam"),
+                 their sign chip, badges ("Regular here", "5+ nights this month")
+Room ─ Crews ─▶ a crew card: up to two crew-held lines ("Both crews are into Techno"),
+                "6 nights out together"
+```
+
+| Surface | File | Hemanth ticket |
+|---|---|---|
+| Languages, home, sign & this-or-that | `app/edit-about-you.tsx` | SCRUM-590 |
+| The person sheet's shared lines, sign chip and badges | `components/blendn/PersonCard.tsx`, `app/user/[id].tsx` | SCRUM-591 |
+| The crew card's crew-held lines and nights together | `components/crews/CrewParts.tsx` | SCRUM-592 |
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Shown, never ranked** | Nothing on the editor may suggest it changes who you see. Ranking by language or state would sort rooms by region; by sign, by stars — which Tinder's own data says predicts nothing |
+| **The sign is off until turned on, and never preselected** | Beside an age a sign narrows a birthday to a month, so the switch says "Your sign shows next to your age" and nothing is picked for you: the Western sign of your birth date (`suggested_sun_sign`) is a hint you tap to use. "My rashi instead" swaps the calendar — a rashi is usually the Moon's sign, which a birth date cannot give, so it is only ever picked |
+| **Three changes a day** | Languages, home, sign and field of work change at most three times a day (the server's 429 sentence is shown as is), and a change made after you checked in somewhere prints nothing in that room — otherwise editing them would read other people's cards |
+| **Badges are yours to hide** | "Show my badges" (on by default) hides every badge on your card; "Shows up" is separately opt-in |
+| **Print the server's lines as sent** | The budget is the server's: before a reveal at most one language / home / sign line per card, none in a room under eight. A client that composed its own "Both from Kerala" from profiles would break the budget. The app never derives an overlap |
+| **Positive only** | No mismatch, no "incompatible", no "doesn't speak Kannada" — the server never sends one, and no design may add one |
+| **A crew card names no member** | Its lines are what the crew holds (two members and a third of it); never "3 of 4", never who |
+| **Badges are earned, not typed** | From GPS check-ins. "Shows up" only for those who turned it on. No streaks |
+
+---
+
+## 16. An offer and its door pass — `app/offer/[id].tsx`; regulars' choices on `app/venue/[id].tsx`
 
 **Added 2026-10-11 (step 12).** Placeholder for Hemanth's design.
 

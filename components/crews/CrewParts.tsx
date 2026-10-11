@@ -162,13 +162,32 @@ export function CrewCardView({
         </Pressable>
       </View>
       {card.bio ? <Text variant="body">{card.bio}</Text> : null}
-      {card.tags.length ? (
+      {/*
+        What this crew holds in common with your side, crew-held and counts-free
+        ("Both crews are into Techno") — the server's lines, never a member.
+      */}
+      {card.overlaps?.length ? (
+        <View style={styles.overlaps}>
+          {card.overlaps.map((o) => (
+            <Text key={o.text} variant="body" color={EMBER.textSecondary}>
+              {o.text}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {card.tags.length || card.badges?.length ? (
         <View style={styles.chips}>
           {card.tags.map((t) => (
             <View key={t.slug} style={styles.chip}>
               <Text variant="meta" color={EMBER.textPrimary}>
                 {t.label}
               </Text>
+            </View>
+          ))}
+          {card.badges?.map((b) => (
+            <View key={b.kind} style={[styles.chip, styles.badge]}>
+              <Ionicons name="ribbon-outline" size={ICON.sm} color={EMBER.textSecondary} />
+              <Text variant="meta">{b.label}</Text>
             </View>
           ))}
         </View>
@@ -310,6 +329,8 @@ const styles = StyleSheet.create({
   cardTitle: { flex: 1, gap: SPACE.xxs },
   more: { width: CONTROL.sm, height: CONTROL.sm, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  overlaps: { gap: SPACE.xxs },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   chip: {
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.xs,

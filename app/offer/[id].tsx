@@ -17,7 +17,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint } from '../../l
 
 /**
  * An offer and its door pass — PLACEHOLDER DESIGN (plan v2 step 12;
- * docs/PLACEHOLDER_SCREENS.md §15).
+ * docs/PLACEHOLDER_SCREENS.md §16).
  *
  * Opened from the push or the bell. The place and its words come from the
  * server here, never from the push (a lock screen names nothing). While the

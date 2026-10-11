@@ -181,6 +181,9 @@ describe('attendeeFromMatch', () => {
         age: null,
         insideNow: true,
         youLiked: false,
+        overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
+        sign: 'Leo ♌',
+        badges: [{ kind: 'regular_here', label: 'Regular here' }],
       })
     ).toEqual({
       user_id: 'u',
@@ -195,6 +198,14 @@ describe('attendeeFromMatch', () => {
       age: undefined,
       insideNow: true,
       youLiked: false,
+      overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
+      sign: 'Leo ♌',
+      badges: [{ kind: 'regular_here', label: 'Regular here' }],
     })
+  })
+
+  it('reads an older server with no matching v2 fields as none of them', () => {
+    const a = attendeeFromMatch({ userId: 'u', displayName: 'Blue Heron', photo: null, sharedInterests: [] })
+    expect([a.overlaps, a.sign, a.badges]).toEqual([[], null, []])
   })
 })
