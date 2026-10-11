@@ -28,7 +28,7 @@ import {
 } from '../../lib/goLive'
 import { tonightLine } from '../../lib/home'
 import { Logger } from '../../lib/logger'
-import { offersApi, type RegularPrefs } from '../../lib/offers'
+import { knownLine, offersApi, type RegularPrefs } from '../../lib/offers'
 import { subscribeToLiveEnded } from '../../lib/socketClient'
 import { useGoLive } from '../../lib/useGoLive'
 import { serverNow } from '../../lib/serverClock'
@@ -352,7 +352,8 @@ export default function VenueScreen() {
 function RegularChoices({ venueId, venueName }: { venueId: string; venueName: string }) {
   const { showToast } = useToast()
   const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
-  const [saving, setSaving] = useState<keyof RegularPrefs | null>(null)
+  type Choice = 'known' | 'offersMuted'
+  const [saving, setSaving] = useState<Choice | null>(null)
   const read = useCallback(() => {
     offersApi
       .prefs(venueId)
@@ -363,7 +364,7 @@ function RegularChoices({ venueId, venueName }: { venueId: string; venueName: st
   }, [venueId])
   useFocusEffect(read)
 
-  const flip = async (key: keyof RegularPrefs) => {
+  const flip = async (key: Choice) => {
     if (!prefs || saving) return
     setSaving(key)
     try {
@@ -378,12 +379,9 @@ function RegularChoices({ venueId, venueName }: { venueId: string; venueName: st
   }
 
   if (!prefs) return null
-  const rows: { key: keyof RegularPrefs; title: string; hint: string }[] = [
-    {
-      key: 'known',
-      title: `Let ${venueName} know I'm a regular`,
-      hint: "They see your first name and how many nights you've come in the last 30. Nothing else.",
-    },
+  const rows: { key: Choice; title: string; hint: string }[] = [
+    // Names who sees it: the organisation that runs the place now (review M2).
+    { key: 'known', title: `Let ${venueName} know I'm a regular`, hint: knownLine(prefs, venueName) },
     { key: 'offersMuted', title: `No offers from ${venueName}`, hint: 'Offers go to people who come here often. You can stop them.' },
   ]
   return (

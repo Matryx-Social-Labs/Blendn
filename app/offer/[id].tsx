@@ -11,7 +11,10 @@ import { useToast } from '../../components/Toast'
 import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
 import { Text } from '../../components/ui/Text'
 import { Logger } from '../../lib/logger'
-import { codeLife, nextRefreshMs, offersApi, offerStateLine, spacedCode, type OpenedOffer, type RegularPrefs } from '../../lib/offers'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+import ActionTray from '../../components/ActionTray'
+import { codeIsFresh, codeLife, knownLine, maybeLaterKey, nextRefreshMs, offersApi, offerStateLine, spacedCode, type OfferReportReason, type OpenedOffer, type RegularPrefs } from '../../lib/offers'
 import { serverNow } from '../../lib/serverClock'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint } from '../../lib/theme'
 
@@ -37,8 +40,10 @@ export default function OfferScreen() {
   const [offer, setOffer] = useState<OpenedOffer | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
-  const [later, setLater] = useState(false)
+  /** "Maybe later" for this place, remembered on this phone (L9): null while it is being read. */
+  const [later, setLater] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
+  const [reporting, setReporting] = useState(false)
 
   const seq = useRef(0)
   const load = useCallback(() => {
@@ -82,6 +87,9 @@ export default function OfferScreen() {
   const venueId = offer?.venue.id ?? null
   useEffect(() => {
     if (!venueId) return
+    AsyncStorage.getItem(maybeLaterKey(venueId))
+      .then((v) => setLater(v === '1'))
+      .catch(() => setLater(false))
     offersApi
       .prefs(venueId)
       .then((res) => {
@@ -100,6 +108,34 @@ export default function OfferScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const maybeLater = () => {
+    setLater(true)
+    if (venueId) AsyncStorage.setItem(maybeLaterKey(venueId), '1').catch(() => {})
+  }
+
+  // "Stop offers from <place>", beside the pass (review M6): the same switch as on the place's page.
+  const stopOffers = async () => {
+    if (!venueId || saving) return
+    setSaving(true)
+    try {
+      const res = await offersApi.setPrefs(venueId, { offersMuted: true })
+      if (res.success && res.data) {
+        setPrefs(res.data)
+        showToast(`No more offers from ${offer?.venue.name ?? 'this place'}. Turn them back on from its page.`, 'success')
+      } else showToast(res.error || "That didn't save. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const report = async (reason: OfferReportReason) => {
+    setReporting(false)
+    if (!id) return
+    const res = await offersApi.report(id, reason)
+    if (res.success) showToast('Reported. Thanks — we look at every report.', 'success')
+    else showToast(res.error || "That report didn't go through. Try again.", 'error')
   }
 
   const stateLine = offer ? offerStateLine(offer.state, offer.venue.name) : null
@@ -132,17 +168,21 @@ export default function OfferScreen() {
               </View>
             )}
 
-            {prefs && !prefs.known && !later ? (
+            {prefs && !prefs.offersMuted ? (
+              <Pressable onPress={stopOffers} disabled={saving} accessibilityRole="button" style={styles.quiet}>
+                <Text variant="meta">{`Stop offers from ${offer.venue.name}`}</Text>
+              </Pressable>
+            ) : null}
+
+            {prefs && !prefs.known && later === false ? (
               <View style={styles.panel}>
                 <Text variant="bodyStrong">{`Let ${offer.venue.name} know you're a regular?`}</Text>
-                <Text variant="meta">
-                  {"They'll see your first name and how many nights you've come in the last 30 — nothing else. You can take it back on the place's page."}
-                </Text>
+                <Text variant="meta">{`${knownLine(prefs, offer.venue.name)} You can take it back on the place's page.`}</Text>
                 <View style={styles.row}>
                   <ScalePress style={styles.secondary} onPress={sayYes} disabled={saving} accessibilityRole="button" accessibilityState={{ busy: saving }}>
                     <Text variant="button">Yes, let them know</Text>
                   </ScalePress>
-                  <Pressable onPress={() => setLater(true)} accessibilityRole="button" style={styles.quiet}>
+                  <Pressable onPress={maybeLater} accessibilityRole="button" style={styles.quiet}>
                     <Text variant="meta">Maybe later</Text>
                   </Pressable>
                 </View>
@@ -152,6 +192,9 @@ export default function OfferScreen() {
 
             <Pressable onPress={() => router.push(`/venue/${offer.venue.id}` as never)} accessibilityRole="link" style={styles.quiet}>
               <Text variant="meta" color={EMBER.textPrimary} style={styles.underline}>{`See ${offer.venue.name}`}</Text>
+            </Pressable>
+            <Pressable onPress={() => setReporting(true)} accessibilityRole="button" style={styles.quiet}>
+              <Text variant="meta">Report this offer</Text>
             </Pressable>
           </View>
         ) : failed ? (
@@ -165,6 +208,22 @@ export default function OfferScreen() {
           <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading the offer" />
         )}
       </ScrollView>
+      <ActionTray
+        visible={reporting}
+        title="Report this offer"
+        message="What's wrong with it? We look at every report; the place isn't told who sent it."
+        buttons={[
+          { label: 'Offensive', onPress: () => void report('offensive') },
+          { label: 'Misleading', onPress: () => void report('misleading') },
+          { label: 'Spam', onPress: () => void report('spam') },
+          { label: 'Feels unsafe', onPress: () => void report('unsafe') },
+          { label: 'Something else', onPress: () => void report('other') },
+          { label: 'Cancel', onPress: () => setReporting(false) },
+        ]}
+        onClose={() => setReporting(false)}
+        layout="stack"
+        size="expanded"
+      />
     </SafeAreaView>
   )
 }
@@ -195,7 +254,11 @@ function DoorPass({ code, rotatesAt, venueName }: { code: string; rotatesAt: str
       style={styles.pass}
       accessible
       accessibilityRole="text"
-      accessibilityLabel={`Door pass for ${venueName}. Code ${code.split('').join(' ')}. Show it to the staff.`}
+      accessibilityLabel={
+        codeIsFresh(rotatesAt, now)
+          ? `Door pass for ${venueName}. Code ${code.split('').join(' ')}. Show it to the staff.`
+          : `Door pass for ${venueName}. Getting a fresh code.`
+      }
     >
       <View style={styles.row}>
         <Animated.View style={[styles.liveDot, pulseStyle]} />
@@ -203,10 +266,17 @@ function DoorPass({ code, rotatesAt, venueName }: { code: string; rotatesAt: str
           {`LIVE PASS · ${clock}`}
         </Text>
       </View>
-      {/* design-exception: the code is read across a door, so it is set wider than any role. */}
-      <Text variant="display" color={EMBER.onGradient} style={styles.code}>
-        {spacedCode(code)}
-      </Text>
+      {/* A code past its turn with no fresh one is hidden, never shown stale (L2). */}
+      {codeIsFresh(rotatesAt, now) ? (
+        // design-exception: the code is read across a door, so it is set wider than any role.
+        <Text variant="display" color={EMBER.onGradient} style={styles.code}>
+          {spacedCode(code)}
+        </Text>
+      ) : (
+        <Text variant="bodyStrong" color={EMBER.onGradient}>
+          Getting a fresh code…
+        </Text>
+      )}
       <View style={styles.track}>
         <View style={[styles.bar, { width: `${Math.round(codeLife(rotatesAt, now) * 100)}%` }]} />
       </View>

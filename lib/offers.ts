@@ -30,10 +30,15 @@ export type OpenedOffer = Offer & {
 }
 
 export type RegularPrefs = {
-  /** "Let this place know I'm a regular": an explicit yes, off until given. */
+  /** "Let this place know I'm a regular": an explicit yes to whoever runs it now, off until given. */
   known: boolean
   offersMuted: boolean
+  /** Who would see it: the organisation that runs the place on Blendn now; null while nobody does. */
+  ownerName: string | null
 }
+
+export type OfferReportReason = 'offensive' | 'misleading' | 'spam' | 'unsafe' | 'other'
+
 
 const enc = encodeURIComponent
 
@@ -52,10 +57,39 @@ export const offersApi = {
   },
 
   /** Only what changed: a choice not given is left as it is ("Maybe later" sends nothing). */
-  setPrefs(venueId: string, change: Partial<RegularPrefs>): Promise<ApiResponse<RegularPrefs>> {
+  setPrefs(venueId: string, change: Partial<Pick<RegularPrefs, 'known' | 'offersMuted'>>): Promise<ApiResponse<RegularPrefs>> {
     return apiClient.queuedRequest(`/api/mobile/venues/${enc(venueId)}/regular`, { method: 'PUT', body: JSON.stringify(change) }, true, 2)
   },
+
+  /** Into the reports queue with the offer's words as they read. 409 while an earlier report is pending. */
+  report(offerId: string, reason: OfferReportReason): Promise<ApiResponse<{ reported: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/offers/${enc(offerId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) }, true, 2)
+  },
+
+  /** "Offers from places": one switch for every place. */
+  offersFromPlaces(): Promise<ApiResponse<{ enabled: boolean }>> {
+    return apiClient.queuedRequest('/api/mobile/me/offers')
+  },
+
+  setOffersFromPlaces(enabled: boolean): Promise<ApiResponse<{ enabled: boolean }>> {
+    return apiClient.queuedRequest('/api/mobile/me/offers', { method: 'PUT', body: JSON.stringify({ enabled }) }, true, 2)
+  },
 }
+
+/** Who sees a yes, in the app's words: the organisation, and the place it runs. */
+export function knownLine(prefs: Pick<RegularPrefs, 'ownerName'>, venueName: string): string {
+  const who = prefs.ownerName ? `${prefs.ownerName}, who runs ${venueName} on Blendn,` : venueName
+  return `${who} will see your first name and how many nights you've come in the last 30 — nothing else.`
+}
+
+/** The code on the pass is shown only while it is fresh: two seconds past its turn with no new one, it is hidden (L2). */
+export const STALE_GRACE_MS = 2_000
+export function codeIsFresh(rotatesAt: string | null | undefined, now: number): boolean {
+  return !!rotatesAt && now < new Date(rotatesAt).getTime() + STALE_GRACE_MS
+}
+
+/** "Maybe later" is remembered per place, on this phone (L9). Nothing is sent. */
+export const maybeLaterKey = (venueId: string) => `blendn.offers.maybeLater.${venueId}`
 
 /** What the screen says under the offer, by state. Null while the pass can be shown. */
 export function offerStateLine(state: OfferState, venueName: string): string | null {

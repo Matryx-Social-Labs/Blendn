@@ -24,9 +24,18 @@ jest.mock('../components/ui/Text', () => ({ Text: require('react-native').Text }
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
+const mockTrays: Array<{ visible: boolean; buttons: { label: string; onPress: () => void }[] }> = []
+jest.mock('../components/ActionTray', () => ({
+  __esModule: true,
+  default: (props: { visible: boolean; buttons: { label: string; onPress: () => void }[] }) => {
+    mockTrays.push(props)
+    return null
+  },
+}))
 
 /* eslint-disable import/first */
 import OfferScreen from '../app/offer/[id]'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
@@ -52,12 +61,16 @@ const offer = (state: string, pass: unknown) => ({
 })
 let reads: unknown[] = []
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.useFakeTimers({ now: NOW })
+  mockTrays.length = 0
+  await AsyncStorage.clear()
   reads = [offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' })]
   request.mockReset()
   request.mockImplementation((url: string, init?: RequestInit) => {
-    if (url.endsWith('/regular')) return Promise.resolve({ success: true, data: { known: false, offersMuted: false } })
+    if (url.endsWith('/regular') && init?.method === 'PUT') return Promise.resolve({ success: true, data: { known: false, offersMuted: true, ownerName: 'Indiranagar Hospitality' } })
+    if (url.endsWith('/regular')) return Promise.resolve({ success: true, data: { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality' } })
+    if (url.endsWith('/report')) return Promise.resolve({ success: true, data: { reported: true } })
     if (init?.method) return Promise.resolve({ success: false })
     return Promise.resolve(reads.length > 1 ? reads.shift() : reads[0])
   })
@@ -66,6 +79,7 @@ afterEach(() => jest.useRealTimers())
 
 async function mount() {
   await render(<OfferScreen />)
+  await act(async () => { await Promise.resolve() })
   await act(async () => { await Promise.resolve() })
 }
 
@@ -94,3 +108,47 @@ it('a yes is one explicit PUT', async () => {
     ['/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"known":true}' }, true, 2],
   ])
 })
+
+it('hides a code past its turn when no fresh one came (L2)', async () => {
+  await mount()
+  expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+  // The refresh fails: the server cannot be reached.
+  request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
+  await act(async () => { jest.advanceTimersByTime(22_000) })
+  expect(screen.queryByText('K7Q 4M2')).toBeNull()
+  expect(screen.getByText('Getting a fresh code…')).toBeTruthy()
+})
+
+it('"Maybe later" is remembered for the place (L9)', async () => {
+  await mount()
+  await act(async () => { fireEvent.press(screen.getByText('Maybe later')) })
+  expect(await AsyncStorage.getItem('blendn.offers.maybeLater.v1')).toBe('1')
+})
+
+it('a place someone already said "Maybe later" to does not ask again (L9)', async () => {
+  await AsyncStorage.setItem('blendn.offers.maybeLater.v1', '1')
+  await mount()
+  expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+  expect(screen.queryByText('Yes, let them know')).toBeNull()
+  await AsyncStorage.removeItem('blendn.offers.maybeLater.v1')
+})
+
+it('names who would see a yes (M2)', async () => {
+  await mount()
+  expect(screen.getByText(/Indiranagar Hospitality, who runs The Humming Tree on Blendn, will see your first name/)).toBeTruthy()
+})
+
+it('"Stop offers" beside the pass mutes the place; "Report this offer" files a report (M5, M6)', async () => {
+  await mount()
+  await act(async () => { fireEvent.press(screen.getByText('Stop offers from The Humming Tree')) })
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'PUT')).toEqual([
+    ['/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"offersMuted":true}' }, true, 2],
+  ])
+  expect(screen.queryByText('Stop offers from The Humming Tree')).toBeNull()
+  await act(async () => { fireEvent.press(screen.getByText('Report this offer')) })
+  const tray = mockTrays[mockTrays.length - 1]
+  expect(tray.visible).toBe(true)
+  await act(async () => { tray.buttons.find((b) => b.label === 'Misleading')!.onPress() })
+  expect(request).toHaveBeenCalledWith('/api/mobile/offers/o1/report', { method: 'POST', body: '{"reason":"misleading"}' }, true, 2)
+})
+
