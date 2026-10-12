@@ -5,7 +5,8 @@
  * Room applied it. But the same event marks the room dirty, and the sync that
  * follows re-seeds the count from `getRoomPreview` — through its 15-second SWR
  * cache, which still held the number from before the check-out. So the header
- * went 7 → 6 → 7 inside one frame, and stayed 7 while the database said 4.
+ * went 7 → 6 and back to 7 as soon as that sync landed, and stayed at 7 while
+ * the database said 4.
  *
  * Real `apiClient` (fetch faked), real `socketClient` (socket faked), real
  * `useRoom`: the bug lived between the three, so the test does too.
