@@ -61,6 +61,11 @@
               "scheme": "https",
               "host": "www.blendn.app",
               "pathPrefix": "/f/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.blendn.app",
+              "pathPrefix": "/event/"
             }
           ],
           "category": [

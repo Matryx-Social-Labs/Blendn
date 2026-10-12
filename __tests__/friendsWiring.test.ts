@@ -52,7 +52,7 @@ describe('an invite link', () => {
   it('opened while signed out is held and opened once they are in', () => {
     const layout = read('app/_layout.tsx')
     const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))
-    expect(signedOut).toContain("if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);")
+    expect(signedOut).toContain("if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);")
     // Held BEFORE the bounce to sign-in, or the path is gone.
     expect(signedOut.indexOf('openWhenReady')).toBeLessThan(signedOut.indexOf("replaceIfNeeded('/')"))
   })
@@ -62,6 +62,20 @@ describe('an invite link', () => {
     for (const name of ['friends/index', 'friends/add', 'friends/[userId]', 'f/[token]']) {
       expect(layout).toContain(`<Stack.Screen name="${name}"`)
     }
+  })
+})
+
+describe('an event\'s public link (https://www.blendn.app/event/<id>, the organiser\'s QR code)', () => {
+  it('opened while signed out is held and opened once they are in, like an invite', () => {
+    const layout = read('app/_layout.tsx')
+    const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))
+    const hold = signedOut.split('\n').find((line) => line.includes('openWhenReady(pathname as Href)'))
+    expect(hold).toContain("pathname.startsWith('/event/')")
+    expect(signedOut.indexOf('openWhenReady')).toBeLessThan(signedOut.indexOf("replaceIfNeeded('/')"))
+  })
+
+  it('lands on the app\'s own event screen, the route the link mirrors', () => {
+    expect(read('app/event/[id].tsx')).toContain('EventDetailScreen')
   })
 })
 
@@ -105,14 +119,21 @@ describe('the links open the app', () => {
     expect(read('ios/blendn/Info.plist')).toMatch(/<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>blendn<\/string>/)
   })
 
-  it('on Android, verified, for /f/ only', () => {
+  it('on Android, verified, for /f/ and /event/ only, the same in app.json and the committed manifest', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
-    expect(manifest).toMatch(
-      /<intent-filter android:autoVerify="true">[\s\S]*?<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="\/f\/"\/>[\s\S]*?<\/intent-filter>/
-    )
+    const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
+    expect(verified).toHaveLength(1)
+    const manifestPaths = [...verified[0].matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
+    expect(manifestPaths).toEqual(['/f/', '/event/'])
     const filters = JSON.parse(read('app.json')).expo.android.intentFilters
     expect(filters).toContainEqual(
-      expect.objectContaining({ autoVerify: true, data: [{ scheme: 'https', host: 'www.blendn.app', pathPrefix: '/f/' }] })
+      expect.objectContaining({
+        autoVerify: true,
+        data: [
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/f/' },
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/event/' },
+        ],
+      })
     )
   })
 })
