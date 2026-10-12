@@ -123,7 +123,7 @@ describe('the links open the app', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
     const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
     expect(verified).toHaveLength(1)
-    const manifestPaths = [...verified[0].matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
+    const manifestPaths = [...(verified[0] ?? '').matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
     expect(manifestPaths).toEqual(['/f/', '/event/'])
     const filters = JSON.parse(read('app.json')).expo.android.intentFilters
     expect(filters).toContainEqual(
