@@ -248,11 +248,12 @@ function RootLayout() {
         // a signed-out user is meant to be
         if (!isAuthRoute) {
           /*
-           * An invite link tapped while signed out: hold it, and it opens the
-           * moment they are in — after sign-in, or after onboarding for a new
-           * account. Without this the link was lost at the sign-in screen.
+           * An invite link or an event's public link (the organiser's QR code)
+           * tapped while signed out: hold it, and it opens the moment they are
+           * in — after sign-in, or after onboarding for a new account. Without
+           * this the link was lost at the sign-in screen.
            */
-          if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);
+          if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort. Not while the server is merely

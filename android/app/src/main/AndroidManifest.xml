@@ -61,6 +61,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/f/"/>
+        <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/event/"/>
       </intent-filter>
       <intent-filter data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
