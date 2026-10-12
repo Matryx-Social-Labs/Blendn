@@ -1142,10 +1142,17 @@ class ApiClientClass {
    * The event marks the room dirty, and the sync that follows read the
    * 30-second SWR entry from before it — which put somebody who had just walked
    * back in down as "Was here" again (SCRUM-502).
+   *
+   * The room's preview goes too: it is the same question asked as a number.
+   * That sync also re-seeds the Room's "here now" from `getRoomPreview`, whose
+   * 15-second entry still held the count from before the event, and put it
+   * back over the `hereCount` the event had just set. The open Room stayed at
+   * 7 while the database said 4 (SCRUM-617).
    */
   forgetEventMatches(eventId: string): void {
-    const matches = `:/api/mobile/events/${eventId}/matches`
-    const isRoom = (key: string) => key.includes(`${matches}:`) || key.includes(`${matches}?`)
+    const room = `:/api/mobile/events/${eventId}`
+    const isRoom = (key: string) =>
+      key.includes(`${room}/matches:`) || key.includes(`${room}/matches?`) || key.includes(`${room}/room-preview:`)
     this.cacheEpoch++
     for (const key of this.responseCache.keys()) if (isRoom(key)) this.responseCache.delete(key)
     // A read already on the wire was answered before the event: the next one
