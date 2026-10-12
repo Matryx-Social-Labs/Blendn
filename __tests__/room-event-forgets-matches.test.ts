@@ -80,6 +80,18 @@ describe('forgetEventMatches', () => {
     await apiClient.getEvent('e2')
     expect(asked).toEqual([])
   })
+
+  // Its "here now" is the same question as a number (SCRUM-617).
+  it("drops the room's preview with it, and only that room's", async () => {
+    await apiClient.getRoomPreview('e6')
+    await apiClient.getRoomPreview('e66')
+    asked.length = 0
+
+    apiClient.forgetEventMatches('e6')
+    await apiClient.getRoomPreview('e6')
+    await apiClient.getRoomPreview('e66')
+    expect(asked).toEqual(['/api/mobile/events/e6/room-preview'])
+  })
 })
 
 /*
