@@ -165,6 +165,25 @@ function RootLayout() {
     }, 200);
   };
 
+  /*
+   * `lastRedirectRef` only stops a redirect being sent twice while it is in
+   * flight: the guard below re-runs on auth changes before the pathname has
+   * moved. Once the pathname moves, that redirect is over and must not block
+   * the next one, so the ref is cleared here, for every caller at once.
+   *
+   * Nothing cleared it on the signed-out side (SCRUM-616). Signing out
+   * redirected to `/` and left `/` in the ref, so the next link opened with the
+   * app still running (an event's QR code, a friend invite, any screen) was
+   * never sent to sign-in and showed "Couldn't load this event". A cold start
+   * was fine only because the ref starts empty.
+   *
+   * Declared before the guard so it runs first on the same pathname change.
+   * `__tests__/rootGuardSignedOut.test.tsx` drives it.
+   */
+  useEffect(() => {
+    lastRedirectRef.current = null;
+  }, [pathname]);
+
   useEffect(() => {
     // Set up notification listeners once
     const notificationListener = setupNotificationListener();
@@ -377,8 +396,6 @@ function RootLayout() {
             return;
           }
         }
-        // Clear last target if user navigated to a normal screen
-        lastRedirectRef.current = null;
         /*
          * Signed in and on an ordinary screen: the one moment a waiting
          * notification target can open. Reached after the redirect to the
