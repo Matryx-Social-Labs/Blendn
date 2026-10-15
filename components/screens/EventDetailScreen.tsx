@@ -10,7 +10,6 @@ import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore }
 import {
   ActivityIndicator,
   Pressable,
-  Dimensions,
   InteractionManager,
   Linking,
   Modal,
@@ -174,8 +173,6 @@ type EventDetailTrayState = {
   message?: string
   buttons: ActionTrayButton[]
 }
-
-const { width } = Dimensions.get('window')
 
 /*
  * The Scene's entrance. The hero crossfades over the skeleton (a fade is the
@@ -1372,11 +1369,7 @@ export default function EventDetail() {
               area={event.address || event.city || ''}
               map={
                 showMapImage && event.latitude && event.longitude ? (
-                  <SceneMap
-                    latitude={event.latitude}
-                    longitude={event.longitude}
-                    width={width - 2 * SCENE_PADDING_HORIZONTAL}
-                  />
+                  <SceneMap latitude={event.latitude} longitude={event.longitude} />
                 ) : null
               }
             />

@@ -82,18 +82,21 @@ export function LoadState({
  */
 export function LoadError({
   title,
-  message = 'Check your connection and try again.',
   onRetry,
   retrying,
-  icon = 'cloud-offline-outline',
 }: {
   title: string
-  message?: string
   onRetry: () => void
   retrying?: boolean
-  icon?: React.ComponentProps<typeof Ionicons>['name']
 }) {
-  return <LoadState icon={icon} title={title} message={message} action={{ label: 'Try again', onPress: onRetry, busy: retrying }} />
+  return (
+    <LoadState
+      icon="cloud-offline-outline"
+      title={title}
+      message="Check your connection and try again."
+      action={{ label: 'Try again', onPress: onRetry, busy: retrying }}
+    />
+  )
 }
 
 const styles = StyleSheet.create({

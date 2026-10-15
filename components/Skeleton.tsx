@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Animated, Easing, StyleProp, StyleSheet, ViewStyle } from 'react-native'
+import { Animated, Easing, StyleProp, ViewStyle } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
 import { EMBER, EMBER_RADIUS } from '../lib/theme'
@@ -9,7 +9,6 @@ type SkeletonProps = {
   height?: number
   borderRadius?: number
   style?: StyleProp<ViewStyle>
-  color?: string
 }
 
 /*
@@ -50,7 +49,7 @@ function useSharedPulse(enabled: boolean) {
   }, [enabled])
 }
 
-export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = EMBER_RADIUS.sm, style, color }) => {
+export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = EMBER_RADIUS.sm, style }) => {
   // Reduce Motion: a still block at the pulse's resting opacity.
   const reduceMotion = useReducedMotion()
   useSharedPulse(!reduceMotion)
@@ -58,13 +57,12 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
   return (
     <Animated.View
       style={[
-        styles.base,
         {
           width,
           height,
           borderRadius,
           opacity: reduceMotion ? PULSE_LOW : pulse,
-          backgroundColor: color || EMBER.skeleton,
+          backgroundColor: EMBER.skeleton,
         } as any,
         style,
       ]}
@@ -72,23 +70,13 @@ export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12,
   )
 }
 
-export const SkeletonLine: React.FC<Pick<SkeletonProps, 'width' | 'style' | 'color'>> = ({ width = '100%', style, color }) => (
-  <Skeleton width={width} height={12} borderRadius={EMBER_RADIUS.pill} style={style} color={color} />
+export const SkeletonLine: React.FC<Pick<SkeletonProps, 'width' | 'style'>> = ({ width = '100%', style }) => (
+  <Skeleton width={width} height={12} borderRadius={EMBER_RADIUS.pill} style={style} />
 )
 
-export const SkeletonCircle: React.FC<Pick<SkeletonProps, 'width' | 'style' | 'color'>> = ({ width = 40, style, color }) => (
-  <Skeleton width={width} height={Number(width)} borderRadius={EMBER_RADIUS.pill} style={style} color={color} />
+export const SkeletonCircle: React.FC<Pick<SkeletonProps, 'width' | 'style'>> = ({ width = 40, style }) => (
+  <Skeleton width={width} height={Number(width)} borderRadius={EMBER_RADIUS.pill} style={style} />
 )
 
-export const SkeletonBlock: React.FC<SkeletonProps> = (props) => (
-  <Skeleton {...props} />
-)
-
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: EMBER.skeleton,
-  },
-})
-
-export default Skeleton
+export const SkeletonBlock = Skeleton
 

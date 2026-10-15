@@ -34,7 +34,7 @@ function TimeBadge({ event, now }: { event: TonightEvent; now: number }) {
   const s = startsLabel(event, now)
   const live = s.kind === 'live'
   return (
-    <View style={[styles.badge, live && styles.badgeLive]}>
+    <View style={styles.badge}>
       {live ? <View style={styles.liveDot} /> : null}
       <Text variant="caption" color={live ? EMBER.textPrimary : EMBER.textSecondary} numberOfLines={1}>
         {s.text}
@@ -463,12 +463,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACE.xs,
   },
-  badgeLive: {},
   liveDot: { width: SPACE.sm - 2, height: SPACE.sm - 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
   thumb: { width: THUMB, height: THUMB, borderRadius: EMBER_RADIUS.sm },
-  thumbEmpty: { backgroundColor: EMBER.surface },
   rowText: { flex: 1, gap: SPACE.xxs },
-  count: { alignItems: 'flex-end' },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xxs },
   empty: { alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER, paddingTop: SPACE.xxl },
   centre: { textAlign: 'center' },

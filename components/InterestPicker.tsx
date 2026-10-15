@@ -52,21 +52,9 @@ export const MAX_INTERESTS = 10
 export function InterestPicker({
   selected,
   onChange,
-  max = MAX_INTERESTS,
-  onLoadStateChange,
 }: {
   selected: string[]
   onChange: (next: string[]) => void
-  max?: number
-  /**
-   * Told to the caller so a Continue button can avoid becoming a dead end.
-   *
-   * Onboarding gated Continue on `selected.length === 0` alone, which meant an
-   * empty category list — a flaky network, a bad deploy, an unseeded database —
-   * left the user with nothing to tap and no way forward, in a flow with no
-   * skip and no back. Whatever the cause, they were stuck in the app forever.
-   */
-  onLoadStateChange?: (state: { loading: boolean; available: number }) => void
 }) {
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,20 +86,13 @@ export function InterestPicker({
 
   const available = useMemo(() => pickableItems(groups).length, [groups])
 
-  useEffect(() => {
-    onLoadStateChange?.({ loading, available })
-    // `onLoadStateChange` is intentionally not a dependency: callers pass an
-    // inline arrow, and including it would re-fire on every parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, available])
-
   const toggle = (id: string) => {
     if (selected.includes(id)) {
       Haptics.selectionAsync().catch(() => {})
       onChange(selected.filter((i) => i !== id))
       return
     }
-    if (selected.length >= max) {
+    if (selected.length >= MAX_INTERESTS) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
       return
     }
@@ -122,7 +103,7 @@ export function InterestPicker({
   return (
     <View>
       <Text style={styles.counter}>
-        Selected: {selected.length}/{max}
+        Selected: {selected.length}/{MAX_INTERESTS}
       </Text>
 
       {loading ? (

@@ -3,7 +3,6 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -332,13 +331,9 @@ const MAP_FADE_IN = FadeIn.duration(MOTION_DURATION.normal)
 export function SceneMap({
   latitude,
   longitude,
-  width,
-  onPress,
 }: {
   latitude: number
   longitude: number
-  width: number
-  onPress?: () => void
 }) {
   /*
    * 0,0 is in the Gulf of Guinea and is what an unset coordinate looks like in
@@ -393,17 +388,7 @@ export function SceneMap({
     </Animated.View>
   ) : null
 
-  if (!onPress) return <View style={styles.map}>{body}</View>
-  return (
-    <Pressable
-      style={styles.map}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Open in Maps"
-    >
-      {body}
-    </Pressable>
-  )
+  return <View style={styles.map}>{body}</View>
 }
 
 /**

@@ -165,27 +165,22 @@ interface Props {
   city: CityArtKey
   width: number
   height: number
-  /**
-   * `meet` shows the whole drawing. `slice` fills the frame and crops, keeping
-   * the ground: a short banner loses sky, never the street.
-   */
-  fit?: 'meet' | 'slice'
   /** Pin the light, for previews and tests. Omitted, it follows the city's clock. */
   tod?: TimeOfDay
 }
 
-export function CityScene({ city, width, height, fit = 'meet', tod: override }: Props) {
+export function CityScene({ city, width, height, tod: override }: Props) {
   const tod = useSceneTime(cityArtInfo(city).timeZone, override)
   const reduceMotion = useReducedMotion()
   const layers = useMemo(() => buildScene(city, SCENE_PALETTES[tod]), [city, tod])
 
   if (width <= 0 || height <= 0) return <View style={{ width, height }} />
 
-  const scale = fit === 'meet'
-    ? Math.min(width / SCENE_W, height / SCENE_H)
-    : Math.max(width / SCENE_W, height / SCENE_H)
+  // Fills the frame and crops, keeping the ground: a short banner loses sky,
+  // never the street.
+  const scale = Math.max(width / SCENE_W, height / SCENE_H)
   const offsetX = (width - SCENE_W * scale) / 2
-  const offsetY = fit === 'meet' ? (height - SCENE_H * scale) / 2 : height - SCENE_H * scale
+  const offsetY = height - SCENE_H * scale
 
   return (
     <View

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 import { Text } from './ui/Text'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE } from '../lib/theme'
 
@@ -23,8 +23,6 @@ interface AppHeaderProps {
   onBack?: () => void
   rightIconButton?: RightIconButton
   rightTextButton?: RightTextButton
-  centerTitle?: boolean
-  containerStyle?: StyleProp<ViewStyle>
 }
 
 /**
@@ -42,14 +40,12 @@ export function AppHeader(props: AppHeaderProps) {
     onBack,
     rightIconButton,
     rightTextButton,
-    centerTitle = false,
-    containerStyle,
   } = props
 
   const textButtonInactive = !!rightTextButton?.disabled || !!rightTextButton?.loading
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={styles.container}>
       <View style={styles.row}>
         {/* Back button or left spacer */}
         {onBack ? (
@@ -64,7 +60,7 @@ export function AppHeader(props: AppHeaderProps) {
         ) : null}
 
         {/* Title */}
-        <View style={[styles.titleWrap, centerTitle && styles.centerTitle]}>
+        <View style={styles.titleWrap}>
           {/*
             The screen's name, announced as a header so a screen reader can
             jump to it. One line: a long name ("Contact support" at a large
@@ -144,9 +140,6 @@ const styles = StyleSheet.create({
   titleWrap: {
     flex: 1,
   },
-  centerTitle: {
-    alignItems: 'center',
-  },
   subtitle: {
     marginTop: SPACE.xxs,
   },
@@ -166,5 +159,3 @@ const styles = StyleSheet.create({
     opacity: OPACITY.pressed,
   },
 })
-
-export { AppHeader as default }

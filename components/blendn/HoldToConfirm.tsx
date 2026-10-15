@@ -14,7 +14,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { MOTION_SPRING } from '../../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, tint } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, tint } from '../../lib/theme'
 import { Text } from '../ui/Text'
 
 /** Long enough to be a decision, short enough not to feel like a wait. */
@@ -44,10 +44,8 @@ export const HOLD_MS = 900
  */
 export function HoldToConfirm({
   label,
-  holdingLabel = 'Keep holding…',
   busyLabel,
   busy = false,
-  disabled = false,
   onConfirm,
   accessibilityHint,
   icon,
@@ -55,11 +53,9 @@ export function HoldToConfirm({
   label: string
   /** Leading glyph — a fingerprint says "press" before a word is read. */
   icon?: keyof typeof Ionicons.glyphMap
-  holdingLabel?: string
   /** Shown with a spinner while the confirmed action runs. */
   busyLabel?: string
   busy?: boolean
-  disabled?: boolean
   onConfirm: () => void
   accessibilityHint?: string
 }) {
@@ -88,7 +84,7 @@ export function HoldToConfirm({
     }
   )
 
-  const inactive = disabled || busy
+  const inactive = busy
 
   /*
    * The request behind the hold can fail (out of range, weak GPS). When `busy`
@@ -133,13 +129,13 @@ export function HoldToConfirm({
     transform: [{ scale: 1 - pressed.get() * 0.03 }],
   }))
 
-  const text = busy ? busyLabel ?? label : holding ? holdingLabel : label
+  const text = busy ? busyLabel ?? label : holding ? 'Keep holding…' : label
 
   return (
     <GestureDetector gesture={hold}>
       <Animated.View
         onLayout={onLayout}
-        style={[styles.pill, inactive && !busy && styles.disabled, pillStyle]}
+        style={[styles.pill, pillStyle]}
         accessible
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -187,7 +183,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
   },
-  disabled: { opacity: OPACITY.disabled },
   labelRow: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

@@ -60,7 +60,6 @@ export function PulseTopBar({
   leading,
   actions,
   title = "Blend'n",
-  topInset,
 }: {
   leading?: React.ReactNode
   actions?: React.ReactNode
@@ -74,18 +73,6 @@ export function PulseTopBar({
    * every screen that reused this bar claim to be the home screen.
    */
   title?: string
-  /**
-   * Override the safe-area top the bar pads itself by.
-   *
-   * `useSafeAreaInsets()` reads the nearest provider, and the app's lives at the
-   * root — so inside a `presentation: 'modal'` screen it reports the *device's*
-   * inset even though iOS has already dropped the sheet below the notch. The
-   * bar then pads by a notch that is not there, and any content offsetting
-   * itself by `insets.top + TOP_BAR_HEIGHT` double-counts the same 62pt.
-   *
-   * That is what put a black band above the Grid's header. A sheet passes 0.
-   */
-  topInset?: number
 } = {}) {
   const insets = useSafeAreaInsets()
   const interactive = Boolean(leading || actions)
@@ -94,7 +81,7 @@ export function PulseTopBar({
     <View
       style={[
         styles.bar,
-        { paddingTop: topInset ?? insets.top, height: (topInset ?? insets.top) + TOP_BAR_HEIGHT },
+        { paddingTop: insets.top, height: insets.top + TOP_BAR_HEIGHT },
       ]}
       pointerEvents={interactive ? 'box-none' : 'none'}
     >
