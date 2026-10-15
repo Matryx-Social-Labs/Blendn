@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router'
+import { Redirect, Stack } from 'expo-router'
 
 /**
  * The fixture harnesses, as plain routes.
@@ -14,10 +14,11 @@ import { Stack } from 'expo-router'
  * with people in it. So they are their own stack, reached at
  * `exp+blendn:///preview/<name>`.
  *
- * Not gated behind `__DEV__`: they render fixtures and reach no network, and a
- * route that only exists in development is one nobody can check a release
- * build against.
+ * Dev builds only (docs/redesign/ROUND3.md, D2): a release build sent here
+ * lands on `/`. This used to stay open in release so a build could be checked
+ * against the fixtures; the ruling is that nothing ships a fixture screen.
  */
 export default function PreviewLayout() {
+  if (!__DEV__) return <Redirect href="/" />
   return <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
 }

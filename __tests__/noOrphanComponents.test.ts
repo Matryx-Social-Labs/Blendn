@@ -61,13 +61,24 @@ const KNOWN_ORPHANS: Record<string, string> = {
    */
   'Material.tsx': 'redesign Phase 1 foundation; the tab bar adopts it first (DESIGN-BRIEF §5.3), after the native rebuild that adds expo-glass-effect',
   'GradientFill.tsx': 'redesign Phase 1 foundation; the primary button and the centre disc adopt it with their redesign (§4.3, §11)',
+  'Creature.tsx': 'redesign P5 set (ROUND3 B7); the pseudonym discs (Face, ChatBubble, Banter, Room info, the profile hero) move to it from the emoji with their redesign',
+  'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
+  'Disc.tsx': 'the redesign centre button (§11), built ahead of its slot; Flow 4 swaps it in for RoomButton in app/(tabs)/_layout.tsx',
+  'DiscMark.tsx': 'the monogram drawn from its vector; on a screen with the disc (Flow 4), later the splash and the Live Activity (§11.6)',
 }
 
 const sources = walk(join(ROOT, 'app'))
   .concat(walk(join(ROOT, 'components')))
   .concat(walk(join(ROOT, 'lib')))
 
-const nonPreview = sources.filter((f) => !f.includes(`${'app'}/preview/`))
+/*
+ * Importers that are not a screen: the preview harness, and a component on the
+ * ledger — `VenuePlate` drawing an `<Icon>` puts no Icon on a screen, and
+ * counting it would read Icon's entry as stale while nothing ships either.
+ */
+const nonPreview = sources.filter(
+  (f) => !f.includes(`${'app'}/preview/`) && !Object.hasOwn(KNOWN_ORPHANS, basename(f))
+)
 
 const componentFiles = walk(join(ROOT, 'components')).filter((f) => f.endsWith('.tsx'))
 
