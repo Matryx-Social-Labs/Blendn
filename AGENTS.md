@@ -174,7 +174,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 - `components/screens/EventDetailScreen.tsx` — full event detail rendered inside the `event/[id]` modal sheet
 - `components/screens/MatchScreen.tsx` — people discovery UI
 - `components/OptimizedImage.tsx` — `expo-image` wrapper with placeholder and fallback
-- `components/motion/ScalePress.tsx` — use this for all tappable elements (haptic feedback + scale animation)
+- `components/motion/ScalePress.tsx` — use this for all tappable elements: a scale on `M.press`, on the UI thread, kept under Reduce Motion. No haptic unless you pass one from `lib/haptics.ts` (`haptic={H.primary}`); most taps are silent (DESIGN-BRIEF §10)
 - `components/Skeleton.tsx` — loading shimmer placeholder
 - `components/Toast.tsx` — global toast system (provider in `_layout.tsx`)
 - `components/RealtimeStatusBanner.tsx` — surfaces socket connection state
