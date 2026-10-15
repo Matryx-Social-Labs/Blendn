@@ -17,6 +17,7 @@ import { AccessibilityInfo } from 'react-native'
 import { MomentPour } from '../components/ds/MomentPour'
 import { apiClient } from '../lib/apiClient'
 import { askIntentRoute, intentAnswered, revealOffer, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { checkInRefusal } from '../lib/checkInRefusal'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
 
@@ -168,7 +169,7 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
-  it('"You were already in" is a quiet way in: no pour, no success haptic', async () => {
+  it('"You were already in" is a quiet way in: no sheet, no pour, no haptic, straight into the room (ROUND3 C12)', async () => {
     const already: CheckInOutcome = {
       kind: 'refused',
       refusal: { title: 'Already checked in', message: 'You’re already in.', offerDirections: false },
@@ -177,10 +178,57 @@ describe('a check-in', () => {
     } as CheckInOutcome
     expect(await (await checkIn(already)).done).toBe('checkedIn')
     expect(props.onCheckedIn).toHaveBeenCalledWith(already)
+    expect(props.showTray).not.toHaveBeenCalled()
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
     await advance(1000)
     expect(success).not.toHaveBeenCalled()
     expect(error).not.toHaveBeenCalled()
+  })
+})
+
+describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
+  const refused = (errorCode: string, title: string, offerDirections = false): CheckInOutcome =>
+    ({ kind: 'refused', refusal: { ...checkInRefusal(errorCode, 'The server’s sentence.'), title, offerDirections }, errorCode, alreadyCheckedIn: false }) as CheckInOutcome
+  const buttons = () => (props.showTray.mock.calls[0][2] as { label: string; kind?: string }[]).map((b) => [b.label, b.kind])
+
+  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (strong) and Close, one H.error', async () => {
+    const { done } = await checkIn(refused('OUT_OF_RANGE', 'Not quite there yet', true))
+    expect(await done).toBe('refused')
+    expect(props.showTray).toHaveBeenCalledWith('Not quite there yet', 'The server’s sentence.', expect.any(Array), { icon: 'map-pin' })
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'strong']])
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(success).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['EVENT_NOT_STARTED', 'Doors aren’t open', 'door-closed'],
+    ['EVENT_ENDED', 'This one’s over', 'moon'],
+    ['AGE_RESTRICTED', 'Not open to you', 'circle-slash'],
+  ])('%s: its glyph and one Close', async (code, title, icon) => {
+    await checkIn(refused(code, title))
+    expect(props.showTray).toHaveBeenCalledWith(title, 'The server’s sentence.', expect.any(Array), { icon })
+    expect(buttons()).toEqual([['Close', 'secondary']])
+  })
+
+  it('a failure on our side offers Try again, which runs the check-in again', async () => {
+    await checkIn(refused('INTERNAL', 'Check-in failed'))
+    expect(props.showTray).toHaveBeenCalledWith('Check-in failed', 'The server’s sentence.', expect.any(Array), { icon: 'cloud-off' })
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Try again', 'primary']])
+    submit.mockClear()
+    await act(async () => (props.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[])[1].onPress())
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('the server timing out: "Still checking you in", hourglass, Retry resumes it', async () => {
+    await checkIn({ kind: 'timeout' } as CheckInOutcome)
+    expect(props.showTray).toHaveBeenCalledWith(
+      'Still checking you in',
+      'The server hasn’t answered yet. Your hold still counts.',
+      expect.any(Array),
+      { icon: 'hourglass' }
+    )
+    expect(buttons()).toEqual([['Cancel', 'tertiary'], ['Retry', 'primary']])
   })
 })
 

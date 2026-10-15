@@ -1,96 +1,85 @@
-import { Ionicons } from '@expo/vector-icons'
-import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, {
-  FadeInDown,
-  FadeOut,
-  LinearTransition,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
-import { useRoomMembership } from '../../lib/roomMembership'
+import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { MOTION_SPRING } from '../../lib/motion'
+import { useRoomMembership } from '../../lib/roomMembership'
 import { subscribeToChatMessage } from '../../lib/socketClient'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { Badge } from '../ds/MonoFamily'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
-import { Grabber } from '../ui/Grabber'
-import { Text } from '../ui/Text'
+import { Icon } from '../ui/Icon'
+import { Material } from '../ui/Material'
 
-/** A line in the dock: somebody's message, or something the room did. */
-export interface DockLine {
-  id: string
-  kind: 'message' | 'system'
-  who?: string
-  text: string
-  at: number
-}
+/** The dock's last line: the room's last message, or a wave to you (a row that opens their card, R3-D4 4.2). */
+export type DockLine =
+  | { kind: 'message'; id: string; who: string; text: string; at: number }
+  | { kind: 'wave'; id: string; fromUserId: string; fromName: string; at: number }
 
 /** How far up the dock must be pulled before it opens the chat. */
-const OPEN_DRAG = 48
-const SHOWN = 2
+const OPEN_DRAG = SPACE.xxxl
+const OPEN_VELOCITY = 700
 
-function fromHistory(raw: unknown, myId?: string): DockLine[] {
-  const list = Array.isArray(raw)
-    ? raw
-    : ((raw as { messages?: unknown[] } | null)?.messages ?? [])
-  return (list as Record<string, any>[])
+function lastFromHistory(raw: unknown, myId?: string): DockLine | null {
+  const list = Array.isArray(raw) ? raw : ((raw as { messages?: unknown[] } | null)?.messages ?? [])
+  const lines = (list as Record<string, any>[])
     .filter((m) => !m.moderation_hidden && (m.content || m.message_text))
-    .map((m) => {
+    .map((m): DockLine => {
       const sender = m.user_id || m.userId || m.sender_id
       return {
+        kind: 'message',
         id: String(m.id),
-        kind: 'message' as const,
         who: sender === myId ? 'You' : m.user?.name || m.sender_name || 'Attendee',
         text: String(m.content || m.message_text),
         at: Date.parse(m.created_at || m.createdAt) || 0,
       }
     })
+    .sort((a, b) => a.at - b.at)
+  return lines[lines.length - 1] ?? null
 }
 
 /**
- * The room's chat, docked under the people — not a second screen you toggle to.
+ * The room's chat, docked as one row (Flow 4 Room, R3-0 02′, R3-D4 13′): a
+ * 64 pt capsule on the bar glass, 16 in from the edges at the safe area. The
+ * bubble glyph, "Room chat" and its last line, and at the end "3 new", a
+ * chevron, "Try again" or "Rejoin".
  *
- * X Spaces keeps the conversation one tap away with a count pill; TikTok LIVE
- * runs it under the people with the room's own events inline. This is both:
- * the last two lines of the chat, interleaved with what the room just did
- * ("Priya walked in", "You matched with Cosmic Panda"), over a composer-shaped
- * pill. Pull it up, or tap it, and the full chat opens on top.
+ * The last line is the newest of the room's last message ("Cosmic Panda:
+ * Rumours side two.") and a wave to you ("Night Cat waved at you", white, with
+ * a chevron): that row opens their card, so the toast is never the only way to
+ * answer (R3-D4 4.2). Nothing names an arrival (ROUND3 C1). Tap or pull up for
+ * the full chat, pushed over the overlay; no haptic.
  *
- * **Why the full chat is still its own screen.** `app/chat/[id]` owns the
- * socket subscription, moderation, replies, reactions and the composer, and a
- * second mount of a live room is where subscription leaks live (`app/room.tsx`
- * learned that). The dock only *reads*: history once, then new messages over
- * the same shared subscription map, so opening the chat does not join twice.
- *
- * New lines rise in from below (`FadeInDown`) and the older one slides up to
- * make room; the dock never changes height, so nothing above it moves.
+ * The dock only reads: the last message once, then new ones over the shared
+ * subscription map, so opening the chat does not join twice. "N new" counts
+ * what arrived while you were here, and clears when you open the chat.
  */
 export function ChatDock({
   chatGroupId,
   myId,
-  system,
+  wave,
   onOpen,
+  onOpenPerson,
   bottomInset,
 }: {
   chatGroupId: string | null
   myId?: string
-  /** The room's own events, newest last. */
-  system: DockLine[]
+  /** The newest wave to you, while it is fresh. */
+  wave: Extract<DockLine, { kind: 'wave' }> | null
   onOpen: () => void
+  onOpenPerson: (userId: string) => void
   bottomInset: number
 }) {
-  const reduceMotion = useReducedMotion()
-  const [messages, setMessages] = useState<DockLine[]>([])
-  const [count, setCount] = useState(0)
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const [message, setMessage] = useState<DockLine | null>(null)
+  const [fresh, setFresh] = useState(0)
   // The history request failed: not the same as a quiet room, so it says so.
-  const [historyFailed, setHistoryFailed] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   // Left: the server refuses the history and the socket, so neither is asked.
   const left = useRoomMembership().left.has(chatGroupId ?? '')
@@ -102,36 +91,19 @@ export function ChatDock({
       .getChatMessages(chatGroupId, { limit: 8 })
       .then((r) => {
         if (cancelled) return
-        if (!r.success) {
-          setHistoryFailed(true)
-          return
-        }
-        setHistoryFailed(false)
-        const lines = fromHistory(r.data, myId)
-        setMessages(lines.sort((a, b) => a.at - b.at).slice(-SHOWN))
-        const total = (r.data as { pagination?: { total?: number } } | null)?.pagination?.total
-        setCount(typeof total === 'number' ? total : lines.length)
+        setFailed(!r.success)
+        if (r.success) setMessage(lastFromHistory(r.data, myId))
       })
       .catch((e) => {
         Logger.debug('chat', 'dock history failed', { error: e })
-        if (!cancelled) setHistoryFailed(true)
+        if (!cancelled) setFailed(true)
       })
     const unsubscribe = subscribeToChatMessage(chatGroupId, (data) => {
       if (data.chatGroupId !== chatGroupId) return
       const m = data.message
-      setMessages((prev) =>
-        [
-          ...prev.filter((p) => p.id !== m.id),
-          {
-            id: m.id,
-            kind: 'message' as const,
-            who: m.userId === myId ? 'You' : m.userName || 'Attendee',
-            text: m.content,
-            at: Date.parse(m.createdAt) || Date.now(),
-          },
-        ].slice(-SHOWN)
-      )
-      setCount((c) => c + 1)
+      const mine = m.userId === myId
+      setMessage({ kind: 'message', id: m.id, who: mine ? 'You' : m.userName || 'Attendee', text: m.content, at: Date.parse(m.createdAt) || Date.now() })
+      if (!mine) setFresh((n) => n + 1)
     })
     return () => {
       cancelled = true
@@ -139,93 +111,83 @@ export function ChatDock({
     }
   }, [chatGroupId, myId, left, attempt])
 
-  const lines = useMemo(
-    () => [...messages, ...system].sort((a, b) => a.at - b.at).slice(-SHOWN),
-    [messages, system]
-  )
+  const last = useMemo(() => (wave && (!message || wave.at >= message.at) ? wave : message), [wave, message])
+  const open = () => {
+    setFresh(0)
+    onOpen()
+  }
 
   // Pull up to open: the dock follows the finger a little, then hands off.
   const lift = useSharedValue(0)
   const pull = Gesture.Pan()
-    .activeOffsetY(-8)
-    .failOffsetY(8)
+    .activeOffsetY(-SPACE.sm)
+    .failOffsetY(SPACE.sm)
     .onUpdate((e) => {
-      lift.set(Math.max(-OPEN_DRAG * 1.5, Math.min(0, e.translationY * 0.5)))
+      lift.set(Math.max(-OPEN_DRAG, Math.min(0, e.translationY * 0.5)))
     })
     .onEnd((e) => {
-      if (e.translationY < -OPEN_DRAG || e.velocityY < -700) scheduleOnRN(onOpen)
-      lift.set(withSpring(0, MOTION_SPRING.snappy))
+      if (e.translationY < -OPEN_DRAG || e.velocityY < -OPEN_VELOCITY) scheduleOnRN(open)
+      lift.set(withSpring(0, SPRING.snap))
     })
   const liftStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.get() }] }))
 
-  const label = chatGroupId ? `Room chat${count ? ` · ${count}` : ''}` : 'Room chat'
+  const state = left ? 'left' : failed && !last ? 'failed' : last ? 'line' : 'quiet'
+  const line =
+    state === 'left'
+      ? 'You left this chat. Open it to rejoin.'
+      : state === 'failed'
+        ? 'Couldn’t load messages.'
+        : state === 'quiet'
+          ? 'Nobody has said anything yet. Be the first.'
+          : last!.kind === 'wave'
+            ? `${last!.fromName} waved at you`
+            : `${last!.who}: ${last!.text}`
+  const waveRow = state === 'line' && last?.kind === 'wave'
+  const label = ['Room chat', line, fresh && !waveRow ? `${fresh} new` : null].filter(Boolean).join('. ')
 
   return (
     <GestureDetector gesture={pull}>
-      <Animated.View style={[styles.dock, { paddingBottom: bottomInset + SPACE.md }, liftStyle]}>
-        <Grabber style={styles.handle} />
-        <View style={styles.lines} accessibilityLiveRegion="polite">
-          {left ? (
-            <Text variant="meta" color={EMBER.textTertiary}>
-              You left this room&apos;s chat. Open it to rejoin.
-            </Text>
-          ) : lines.length === 0 && historyFailed ? (
-            <View style={styles.failed}>
-              <Text variant="meta" color={EMBER.textTertiary} style={styles.placeholder} numberOfLines={1}>
-                Couldn&apos;t load messages.
-              </Text>
-              <Pressable
-                onPress={() => setAttempt((n) => n + 1)}
-                hitSlop={SPACE.md}
-                accessibilityRole="button"
-                accessibilityLabel="Try loading the room chat again"
-              >
-                <Text variant="label" color={EMBER.textPrimary}>
-                  TRY AGAIN
-                </Text>
-              </Pressable>
-            </View>
-          ) : lines.length === 0 ? (
-            <Text variant="meta" color={EMBER.textTertiary}>
-              Nobody has said anything yet. Be the first.
-            </Text>
-          ) : (
-            lines.map((l) => (
-              <Animated.View
-                key={l.id}
-                entering={reduceMotion ? undefined : FadeInDown.duration(220)}
-                exiting={FadeOut.duration(120)}
-                layout={reduceMotion ? undefined : LinearTransition.duration(220)}
-                style={styles.line}
-              >
-                {l.kind === 'system' ? (
-                  <Text variant="meta" color={EMBER.textTertiary} numberOfLines={1}>
-                    {l.text}
-                  </Text>
-                ) : (
-                  <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1}>
-                    <Text variant="meta" color={EMBER.textSecondary}>
-                      {l.who}{'  '}
-                    </Text>
-                    {l.text}
-                  </Text>
-                )}
-              </Animated.View>
-            ))
-          )}
-        </View>
+      <Animated.View style={[styles.place, { bottom: bottomInset }, liftStyle]}>
         <ScalePress
-          onPress={onOpen}
-          haptic={false}
-          style={styles.composer}
+          testID="room-dock"
+          onPress={() => (waveRow ? onOpenPerson((last as Extract<DockLine, { kind: 'wave' }>).fromUserId) : open())}
+          pressedScale={PRESS.scale}
           accessibilityRole="button"
-          accessibilityLabel={`Open the room chat${count ? `, ${count} ${count === 1 ? 'message' : 'messages'}` : ''}`}
+          accessibilityLabel={label}
+          accessibilityHint={waveRow ? 'Opens their card' : 'Opens the room chat'}
+          accessibilityLiveRegion="polite"
         >
-          <Ionicons name="chatbubbles-outline" size={ICON.md} color={EMBER.textSecondary} />
-          <Text variant="body" color={EMBER.textPlaceholder} style={styles.placeholder} numberOfLines={1}>
-            Say something to the room
-          </Text>
-          <Text variant="caption">{label}</Text>
+          <Material role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>
+            <Icon name={state === 'failed' ? 'cloud-off' : 'message-circle'} size={ICON.nav} />
+            <View style={styles.text}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+                Room chat
+              </Text>
+              <Text
+                testID="room-dock-line"
+                numberOfLines={1}
+                maxFontSizeMultiplier={CONTROL_FONT_CAP}
+                style={[font('caption', bold, FONT_FAMILY.brand[400]), waveRow ? styles.ink : styles.secondary]}
+              >
+                {line}
+              </Text>
+            </View>
+            {waveRow ? (
+              <Icon name="chevron-right" size={ICON.control} color={COLOR.textSecondary} />
+            ) : state === 'failed' || state === 'left' ? (
+              <Pressable
+                onPress={state === 'failed' ? () => setAttempt((n) => n + 1) : open}
+                hitSlop={(minTarget() - SPACE.xl) / 2}
+                accessibilityRole="button"
+                accessibilityLabel={state === 'failed' ? 'Try again' : 'Rejoin'}
+                testID="room-dock-action"
+              >
+                <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{state === 'failed' ? 'Try again' : 'Rejoin'}</Text>
+              </Pressable>
+            ) : fresh > 0 ? (
+              <Badge text={`${fresh} new`} size={22} testID="room-dock-new" />
+            ) : null}
+          </Material>
         </ScalePress>
       </Animated.View>
     </GestureDetector>
@@ -233,27 +195,18 @@ export function ChatDock({
 }
 
 const styles = StyleSheet.create({
+  place: { position: 'absolute', left: SPACE.lg, right: SPACE.lg },
   dock: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderTopLeftRadius: EMBER_RADIUS.lg,
-    borderTopRightRadius: EMBER_RADIUS.lg,
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.sm,
-    gap: SPACE.sm,
-  },
-  handle: { marginBottom: SPACE.xs },
-  failed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  // Two lines' worth, always: the dock never resizes, so the page above never moves.
-  lines: { height: 2 * TYPE.meta.lineHeight + SPACE.xs, justifyContent: 'flex-end', gap: SPACE.xs },
-  line: { flexDirection: 'row' },
-  composer: {
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    paddingHorizontal: SPACE.lg,
+    height: SIZE.tabBar,
+    borderRadius: RADIUS.tabBar,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.sm,
+    gap: SPACE.md,
+    paddingLeft: SPACE.xl - SPACE.xs,
+    paddingRight: SPACE.lg,
+    overflow: 'hidden',
   },
-  placeholder: { flex: 1 },
+  text: { flex: 1, minWidth: 0 },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
 })

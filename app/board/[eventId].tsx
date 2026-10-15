@@ -353,7 +353,8 @@ export function BoardScreen() {
         icon="lock-closed-outline"
         title="The board's closed"
         message="The doors are open — the room is open instead."
-        action={{ label: 'Open the room', onPress: openBlendn }}
+        // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
+        action={{ label: 'Open the room', onPress: openRoomFromBoard }}
       />
     )
   } else if (load.kind === 'loading') {
@@ -447,3 +448,8 @@ const styles = StyleSheet.create({
   },
   skeleton: { gap: SPACE.lg },
 })
+
+function openRoomFromBoard() {
+  if (router.canDismiss()) router.dismissAll()
+  openBlendn()
+}

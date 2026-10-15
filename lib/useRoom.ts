@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useToast } from '../components/Toast'
 import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
@@ -8,7 +7,7 @@ import { apiClient } from './apiClient'
 import { H } from './haptics'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
-import { likeRefusal } from './likeRefusal'
+import { likeRefusal, type LikeRefusal } from './likeRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
@@ -28,7 +27,6 @@ import {
   subscribeToEventCheckOut,
   subscribeToEventRoomCheckIn,
   subscribeToRoomMatch,
-  subscribeToRoomWave,
   type SocketConnectionStatus,
 } from './socketClient'
 import { useAuth } from './useAuth'
@@ -57,8 +55,10 @@ import { useLiveSync } from './useLiveSync'
  *   and a refused like says why without ever mentioning the other person
  *   (`lib/likeRefusal.ts`).
  *
- * Presentation is the caller's: this navigates nowhere and renders nothing.
- * The one exception is the refusal toast, which belongs with the refusal rule.
+ * Presentation is the caller's: this navigates nowhere and renders nothing. A
+ * refused like or wave comes back as its sentence (`lib/likeRefusal.ts`), for
+ * the card's one neutral line (R3-D4 4.3) or a toast when no card is open.
+ * Waves *to* you are `lib/roomWaves.ts`'s, heard at the tab layout.
  */
 
 export interface RoomPerson {
@@ -120,7 +120,6 @@ export interface RoomState {
    * like response said; the socket event does not carry it.
    */
   match: { person: RoomPerson | null; name: string; you: string | null; conversationId: string; at: number } | null
-  wave: { fromUserId: string; fromName: string; at: number } | null
   /**
    * Why the room failed to load, when `status` is `error`. For diagnosis: the
    * screen says a fixed sentence and never prints this raw.
@@ -130,21 +129,20 @@ export interface RoomState {
   connection: SocketConnectionStatus
 }
 
+/** A like's or a wave's answer: what happened, or the sentence that says it didn't. */
+export type RoomAnswer<T extends string> = { kind: T } | { kind: 'refused'; refusal: LikeRefusal }
+
 export interface RoomActions {
   refresh(): Promise<void>
   loadMore(): Promise<void>
   retry(): void
-  like(id: string): Promise<'liked' | 'matched' | 'refused' | 'already'>
-  /**
-   * Wave at somebody. Named `sendWave` rather than `wave` because `wave` is
-   * already the incoming wave on `RoomState`, and one name can't be both.
-   */
-  sendWave(id: string): Promise<'sent' | 'too-soon' | 'refused'>
+  like(id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>>
+  /** Wave at somebody. "Too soon" is the server's once-per-ten-minutes rule: said as "Waved", never as an error. */
+  sendWave(id: string): Promise<RoomAnswer<'sent' | 'too-soon'>>
   connect(id: string, note?: string): Promise<boolean>
   /** After a block or report: gone from every list for the rest of the session. */
   remove(id: string): void
   clearMatch(): void
-  clearWave(): void
 }
 
 /** The roster is ranked, not paged — see `loadMore`. */
@@ -162,7 +160,6 @@ type RoomEvent = NonNullable<RoomState['event']>
 
 export function useRoom(): RoomState & RoomActions {
   const { user: authUser, initialized: authInitialized } = useAuth()
-  const { showToast } = useToast()
   const userId = authUser?.id ?? null
 
   const [loading, setLoading] = useState(true)
@@ -193,10 +190,8 @@ export function useRoom(): RoomState & RoomActions {
   const [requested, setRequested] = useState<Record<string, boolean>>({})
   /** Blocked or reported this session. Survives refetches until the next load's block list catches up. */
   const [removed, setRemoved] = useState<Record<string, true>>({})
-  const removedRef = useLatest(removed)
 
   const [match, setMatch] = useState<RoomState['match']>(null)
-  const [wave, setWave] = useState<RoomState['wave']>(null)
 
   /*
    * The loader is stable (`useCallback(..., [])`) because `useLiveSync` holds
@@ -640,13 +635,13 @@ export function useRoom(): RoomState & RoomActions {
    * response was lost.
    */
   const like = useCallback(
-    async (id: string): Promise<'liked' | 'matched' | 'refused' | 'already'> => {
+    async (id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>> => {
       const roomId = eventRef.current?.id
       const attendee = findAttendee(id)
-      if (!roomId || !attendee) return 'refused'
+      if (!roomId || !attendee) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
 
       const status = likeStatusFor(attendee.youLiked, likeState[id])
-      if (!shouldSendLike(status)) return 'already'
+      if (!shouldSendLike(status)) return { kind: 'already' }
 
       setLikeState((prev) => ({ ...prev, [id]: 'sending' }))
       const forget = () =>
@@ -664,9 +659,7 @@ export function useRoom(): RoomState & RoomActions {
 
         if (!result.success) {
           // Never silent, and never about them — see lib/likeRefusal.ts.
-          const refusal = likeRefusal(result.errorCode, result.error)
-          showToast(refusal.message, refusal.variant)
-          return 'refused'
+          return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
         }
 
         const conversationId = result.data?.mutual ? result.data.conversationId : undefined
@@ -678,48 +671,38 @@ export function useRoom(): RoomState & RoomActions {
             you: result.data?.pseudonyms?.you ?? null,
             conversationId,
           })
-          return 'matched'
+          return { kind: 'matched' }
         }
-        return 'liked'
+        return { kind: 'liked' }
       } catch (e) {
         Logger.error('match', 'like failed', { error: e })
         forget()
         // A throw (timeout, no network) un-fills the heart like a refusal
         // does, so it is said like one — see lib/likeRefusal.ts.
-        const refusal = likeRefusal(undefined, undefined)
-        showToast(refusal.message, refusal.variant)
-        return 'refused'
+        return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
       }
     },
-    [findAttendee, likeState, showToast, celebrate, toPerson]
+    [findAttendee, likeState, celebrate, toPerson]
   )
 
   /**
    * Wave at somebody. Unlike a like it isn't private — they're told who — so
    * it is never optimistic: nothing claims a wave was sent until it was.
-   * "Too soon" is the server's once-per-ten-minutes rule, and the caller shows
-   * it as "already waved", not as an error.
    */
-  const sendWave = useCallback(
-    async (id: string): Promise<'sent' | 'too-soon' | 'refused'> => {
-      const roomId = eventRef.current?.id
-      if (!roomId) return 'refused'
-      try {
-        const result = await apiClient.sendWave(roomId, id)
-        // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
-        if (result.success) return 'sent'
-        if (result.errorCode === 'WAVE_TOO_SOON') return 'too-soon'
-        const refusal = likeRefusal(result.errorCode, result.error)
-        showToast(refusal.message, refusal.variant)
-        return 'refused'
-      } catch (e) {
-        Logger.error('match', 'wave failed', { error: e })
-        showToast("Couldn't send the wave. Try again.", 'error')
-        return 'refused'
-      }
-    },
-    [showToast]
-  )
+  const sendWave = useCallback(async (id: string): Promise<RoomAnswer<'sent' | 'too-soon'>> => {
+    const roomId = eventRef.current?.id
+    if (!roomId) return { kind: 'refused', refusal: likeRefusal('NOT_CHECKED_IN', undefined) }
+    try {
+      const result = await apiClient.sendWave(roomId, id)
+      // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
+      if (result.success) return { kind: 'sent' }
+      if (result.errorCode === 'WAVE_TOO_SOON') return { kind: 'too-soon' }
+      return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
+    } catch (e) {
+      Logger.error('match', 'wave failed', { error: e })
+      return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
+    }
+  }, [])
 
   /**
    * A message request — the action that reveals you.
@@ -774,19 +757,7 @@ export function useRoom(): RoomState & RoomActions {
     })
   }, [userId, findAttendee, celebrate, toPersonRef])
 
-  useEffect(() => {
-    if (!userId) return
-    return subscribeToRoomWave((data) => {
-      // Only from this room, and never from somebody you blocked or removed.
-      if (data.eventId !== eventRef.current?.id) return
-      if (blockedRef.current.has(data.fromUserId) || removedRef.current[data.fromUserId]) return
-      // No haptic here: the Room plays `H.arrive` when it shows the wave (BlendnScreen).
-      setWave({ fromUserId: data.fromUserId, fromName: data.fromName, at: Date.now() })
-    })
-  }, [userId, removedRef])
-
   const clearMatch = useCallback(() => setMatch(null), [])
-  const clearWave = useCallback(() => setWave(null), [])
 
   /*
    * Auth still restoring is "loading", not "none": signed-out and
@@ -816,7 +787,6 @@ export function useRoom(): RoomState & RoomActions {
     refreshing,
     chatGroupId,
     match,
-    wave,
     error: loadError,
     connection,
     refresh,
@@ -827,6 +797,5 @@ export function useRoom(): RoomState & RoomActions {
     connect,
     remove,
     clearMatch,
-    clearWave,
   }
 }

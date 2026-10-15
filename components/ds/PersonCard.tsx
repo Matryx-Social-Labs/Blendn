@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
@@ -10,8 +10,8 @@ import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { InterestChip } from './Chip'
+import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
-import { Spinner } from './Loader'
 import { PresenceDot } from './MonoFamily'
 import { Sheet } from './Sheet'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -45,6 +45,12 @@ export type PersonCardContentProps = {
   wavedAtYou?: string
   /** A like or wave the server refused (4.3): one neutral line, never naming the action, maybe with its action. No haptic. */
   refusal?: { text: string; action?: { label: string; onPress: () => void } }
+  /**
+   * A crew of yours is here (R2-D1, Flow 10 §10.7): the like is the crew's,
+   * "Like for {crew}" with its emblem, and "Like as yourself" (`onLike`) under
+   * the row. The note says who they would see.
+   */
+  crewLike?: { name: string; emblemSeed: string; onPress: () => void }
   onLike?: () => void
   onWave?: () => void
   /** The ConnectSheet: a request that reveals you; a friend's DM for a friend. */
@@ -96,6 +102,7 @@ export function PersonCardContent({
   state = 'none',
   wavedAtYou,
   refusal,
+  crewLike,
   onLike,
   onWave,
   onMessage,
@@ -148,7 +155,9 @@ export function PersonCardContent({
           ? `Message opens your chat with ${name}.`
           : state === 'requested'
             ? `Request sent to ${name}. They’ll see your name and photo.`
-            : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
+            : crewLike && state !== 'liked' && (variant === 'here' || variant === 'was')
+              ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
+              : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
 
   const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
     <Control
@@ -161,7 +170,8 @@ export function PersonCardContent({
       accessibilityState={{ busy, disabled: busy }}
       style={[styles.circle, { backgroundColor: panel }]}
     >
-      {busy ? <Spinner /> : <Icon name={icon} size={ICON.control} />}
+      {/* Sending a wave: the hand waves (#51, owner-approved for the busy state), never a spinner. */}
+      {busy ? <WavingHand testID={id('hand-waving')} /> : <Icon name={icon} size={ICON.control} />}
     </Control>
   )
 
@@ -244,6 +254,19 @@ export function PersonCardContent({
                 Liked
               </Text>
             </Animated.View>
+          ) : crewLike ? (
+            <Button
+              label={`Like for ${crewLike.name}`}
+              leading={<CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} />}
+              pressHaptic={false}
+              accessibilityHint={`${name} sees ${crewLike.name}, never you, and only if they like back.`}
+              onPress={() => {
+                H.like()
+                crewLike.onPress()
+              }}
+              style={styles.grow}
+              testID={id('like-crew')}
+            />
           ) : (
             <Button
               label="Like"
@@ -301,6 +324,19 @@ export function PersonCardContent({
         <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
       </View>
 
+      {crewLike && state !== 'liked' && (variant === 'here' || variant === 'was') ? (
+        <View style={styles.center}>
+          <TextAction
+            label="Like as yourself"
+            onPress={() => {
+              H.like()
+              onLike?.()
+            }}
+            testID={id('like-as-yourself')}
+          />
+        </View>
+      ) : null}
+
       {refusal ? (
         <View style={styles.refusal}>
           <Text style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
@@ -314,6 +350,25 @@ export function PersonCardContent({
         <TextAction label="View profile" onPress={onViewProfile} testID={id('view-profile')} />
       </View>
     </View>
+  )
+}
+
+/** #51: a wave's hand rotates ±14° twice over 600 ms, once. Reduce Motion: still. */
+const WAVE_DEGREES = 14
+const WAVE_MS = 600
+const WAVE_TURNS = 2
+
+function WavingHand({ testID }: { testID?: string }) {
+  const reduceMotion = useReducedMotion()
+  const t = useSharedValue(0)
+  useEffect(() => {
+    if (!reduceMotion) t.set(withTiming(1, { duration: WAVE_MS, easing: Easing.linear }))
+  }, [reduceMotion, t])
+  const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${WAVE_DEGREES * Math.sin(t.get() * Math.PI * 2 * WAVE_TURNS)}deg` }] }))
+  return (
+    <Animated.View testID={testID} style={turn}>
+      <Icon name="hand" size={ICON.control} />
+    </Animated.View>
   )
 }
 

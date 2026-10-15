@@ -21,20 +21,56 @@ import { useSyncExternalStore } from 'react'
  */
 
 let open = false
+/** A PersonCard to open once the Room is there: a wave's banner opens the overlay at its sender (SCRUM-630). */
+let pendingPerson: string | null = null
 const listeners = new Set<() => void>()
+
+function notify() {
+  for (const fn of listeners) fn()
+}
 
 function set(next: boolean) {
   if (open === next) return
   open = next
-  for (const fn of listeners) fn()
+  notify()
 }
 
-export function openBlendn(): void {
+/** Open the overlay; with `personId`, at that person's card in the Room. */
+export function openBlendn(personId?: string): void {
+  if (personId) {
+    pendingPerson = personId
+    if (open) notify()
+  }
   set(true)
+}
+
+/** The card the overlay was asked to open at, once: reading it clears it. */
+export function takePendingPerson(): string | null {
+  const id = pendingPerson
+  pendingPerson = null
+  return id
+}
+
+export function peekPendingPerson(): string | null {
+  return pendingPerson
+}
+
+/**
+ * Whether the disc last said "live" (checked in): while the Room has not
+ * loaded yet, the overlay draws the Room's skeleton (Flow 4 Room #01) rather
+ * than Tonight's. A hint only; the Room's own load decides.
+ */
+let liveHint = false
+export function setLiveHint(live: boolean): void {
+  liveHint = live
+}
+export function isLiveHint(): boolean {
+  return liveHint
 }
 
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
+  pendingPerson = null
   set(false)
 }
 
@@ -51,4 +87,9 @@ function subscribe(fn: () => void) {
 
 export function useBlendnOpen(): boolean {
   return useSyncExternalStore(subscribe, isBlendnOpen, isBlendnOpen)
+}
+
+/** The pending card's id, re-read whenever the overlay is asked to open at one. */
+export function usePendingPerson(): string | null {
+  return useSyncExternalStore(subscribe, peekPendingPerson, peekPendingPerson)
 }

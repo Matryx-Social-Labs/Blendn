@@ -162,7 +162,7 @@ export function useGoLive({
     setInFlight(true)
     const again = () => void goLive(choice)
     try {
-      const at = await getCurrentLocation({ showTray, closeTray, maxAccuracyM: GO_LIVE_MAX_ACCURACY_M, onRetry: again })
+      const at = await getCurrentLocation({ showTray, closeTray, maxAccuracyM: GO_LIVE_MAX_ACCURACY_M, onRetry: again, purpose: 'goLive' })
       if (!at) return false
       const result = await apiClient.goLive(place.id, {
         latitude: at.latitude,

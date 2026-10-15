@@ -49,9 +49,22 @@ describe("a refused like", () => {
     )
   })
 
-  it("falls back to a sentence when the server sends none", () => {
-    expect(likeRefusal(undefined, undefined).message).toMatch(/try again/i)
-    expect(likeRefusal(undefined, "  ").message).toMatch(/try again/i)
+  it("falls back to a sentence when the server sends none (R3-D4 4.3)", () => {
+    expect(likeRefusal(undefined, undefined).message).toBe("That didn’t go through.")
+    expect(likeRefusal(undefined, "  ").message).toBe("That didn’t go through.")
+  })
+
+  it("never passes through a sentence that names them, or a 404 (R3-D4 4.3)", () => {
+    expect(likeRefusal("RECIPIENT_NOT_HERE", "They're not in the room right now").message).toBe("That didn’t go through.")
+    expect(likeRefusal("NOT_FOUND", "User not found").message).toBe("That didn’t go through.")
+  })
+
+  it("offers Check in beside a lapsed check-in, in the server's words", () => {
+    expect(likeRefusal("NOT_CHECKED_IN", "Check in to wave at people here")).toEqual({
+      message: "Check in to wave at people here",
+      variant: "info",
+      checkIn: true,
+    })
   })
 })
 

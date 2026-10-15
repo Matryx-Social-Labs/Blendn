@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
 
@@ -80,6 +80,8 @@ export type ButtonProps = {
   size?: ButtonSize
   /** A leading glyph: 20 pt, 16 at `sm`. */
   icon?: IconName
+  /** A leading mark that is not a glyph, in its place: a crew's emblem on "Like for Nebula" (R2-D1). Decorative. */
+  leading?: ReactNode
   disabled?: boolean
   /** Busy: the label stays (for width, and as the name read), a spinner covers it after 300 ms. */
   loading?: boolean
@@ -121,6 +123,7 @@ export function Button({
   kind = 'primary',
   size = 'lg',
   icon,
+  leading,
   disabled = false,
   loading = false,
   refused = false,
@@ -189,7 +192,7 @@ export function Button({
         {kind === 'primary' ? <GradientFill style={StyleSheet.absoluteFill} /> : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {icon ? <Icon name={icon} size={sm ? ICON.inline : ICON.control} color={ink} /> : null}
+          {leading ?? (icon ? <Icon name={icon} size={sm ? ICON.inline : ICON.control} color={ink} /> : null)}
           <Text
             style={[labelFont, { color: ink }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
