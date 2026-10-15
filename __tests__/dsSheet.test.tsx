@@ -219,3 +219,27 @@ describe('<Sheet>', () => {
     expect(StyleSheet.flatten(screen.getByText(/sign in again/).props.style).color).toBe(COLOR.textPrimary)
   })
 })
+
+describe('onDismissed: the next sheet waits for this one to have left', () => {
+  it('iOS: it is the Modal’s own onDismiss, so a sheet opened after it is not dropped', async () => {
+    const onDismissed = jest.fn()
+    await render(signOut({ onDismissed }))
+    const modal = screen.getByTestId('s-modal', { includeHiddenElements: true })
+    expect(onDismissed).not.toHaveBeenCalled()
+    await act(async () => modal.props.onDismiss())
+    expect(onDismissed).toHaveBeenCalledTimes(1)
+  })
+
+  it('Android: once it has unmounted, after its fade', async () => {
+    on('android')
+    jest.useFakeTimers()
+    const onDismissed = jest.fn()
+    const view = await render(signOut({ onDismissed }))
+    expect(screen.getByTestId('s-modal', { includeHiddenElements: true }).props.onDismiss).toBeUndefined()
+    await view.rerender(signOut({ onDismissed, visible: false }))
+    expect(onDismissed).not.toHaveBeenCalled()
+    await act(async () => jest.advanceTimersByTime(1000))
+    expect(onDismissed).toHaveBeenCalledTimes(1)
+    jest.useRealTimers()
+  })
+})

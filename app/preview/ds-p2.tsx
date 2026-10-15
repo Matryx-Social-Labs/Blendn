@@ -377,7 +377,6 @@ function Holds() {
     ['25', { previewProgress: 0.25 }],
     ['50', { previewProgress: 0.5 }],
     ['75', { previewProgress: 0.75 }],
-    ['60', { previewProgress: 0.6 }],
     ['100', { previewProgress: 1 }],
     ['disabled', { disabled: true, label: 'Go live when you’re here · 350 m' }],
     ['refused', { refused: true }],
@@ -385,7 +384,7 @@ function Holds() {
     ['confirmed', { confirmedLabel: 'You’re in' }],
   ] as const
   return (
-    <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75, where the quarter marks turn ink · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">
+    <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-hold-${state}`}>
           <HoldToConfirm label="Hold to blend in" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
