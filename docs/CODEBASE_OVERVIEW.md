@@ -405,39 +405,7 @@ In-flight dedup prevents overlapping fetches.
 
 **File:** `lib/theme.ts`
 
-All colors, spacing, radius, shadows, motion, and CTA styles are exported as `const` objects. **Never use raw hex values in components.**
-
-### Colors (`APP_COLORS`)
-
-| Token | Value | Use |
-|-------|-------|-----|
-| `backgroundBase` | `#000000` | Screen background |
-| `backgroundElevated` | `#1C1C1E` | Cards, modals |
-| `backgroundCard` | `#2C2C2E` | List items |
-| `separator` | `rgba(255,255,255,0.14)` | Dividers |
-| `textPrimary` | `#FFFFFF` | Main text |
-| `textSecondary` | `#EBEBF599` | Secondary text |
-| `textTertiary` | `#EBEBF54D` | Placeholder, hints |
-| `accent` | `#0A84FF` | Primary CTA, links |
-| `accentPressed` | `#0060DF` | Pressed state |
-| `destructive` | `#FF3B30` | Delete, errors |
-| `success` | `#34C759` | Confirmations |
-
-### Spacing (`APP_SPACING`)
-`xxs=4, xs=8, sm=12, md=16, lg=20, xl=24, 2xl=32, 3xl=40, 4xl=48`
-
-### Border radius (`APP_RADIUS`)
-`xs=8, sm=12, md=16, lg=20, xl=24, pill=999`
-
-### Sizes (`APP_SIZE`)
-`touchTarget=44px, iconSm=16, iconMd=20, iconLg=24`
-
-### Motion (`APP_MOTION`)
-Durations: `instant=90ms, fast=160ms, normal=220ms, slow=300ms`  
-Easings: `entrance`, `exit`, `standard` (cubic-bezier arrays)
-
-### CTA styles (`APP_CTA`)
-`primary`, `secondary`, `destructive` — each has `background`, `text`, `pressed`, `disabled`.
+`EMBER` (palette), `TYPE`, `SPACE`, `GUTTER`, `ICON`, `CONTROL` and `EMBER_RADIUS`; motion tokens are in `lib/motion.ts`. See `docs/DESIGN_SYSTEM.md`. **Never use raw hex values in components.** The legacy `APP_*` tokens are deleted.
 
 ---
 
