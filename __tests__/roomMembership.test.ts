@@ -145,8 +145,10 @@ describe('the screens', () => {
   })
 
   it('the room answers LEFT_ROOM and a plain 403 with the left state and Rejoin', () => {
-    expect(CHAT).toContain("result.errorCode === 'LEFT_ROOM'")
-    expect(CHAT).toContain("result.errorCode === 'FORBIDDEN'")
+    // LEFT_ROOM → left, FORBIDDEN → out (and NOT_LIVE → not live): roomRefusalState, table-tested in placeRoom.test.ts.
+    expect(CHAT).toContain('roomRefusalState(result.errorCode)')
+    expect(CHAT).toContain("if (refused === 'left') markRoomLeft(String(chatRoomId))")
+    expect(CHAT).toContain("else if (refused === 'out') setOutOfRoom(true)")
     expect(CHAT).toContain('<RoomLeftState')
     expect(CHAT).toContain('apiClient.rejoinChatGroup(')
   })

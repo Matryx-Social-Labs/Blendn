@@ -329,6 +329,8 @@ interface ToggleProps {
   helper: string
   value: boolean
   onValueChange: (next: boolean) => void
+  /** A write in flight: the switch holds still until it settles. */
+  disabled?: boolean
 }
 
 /**
@@ -345,16 +347,17 @@ interface ToggleProps {
  * looks like every other switch on the phone); the row around it is the
  * target and carries the `switch` role and its `checked` state.
  */
-export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps) {
+export function EmberToggle({ label, helper, value, onValueChange, disabled }: ToggleProps) {
   // The row is the target, as in Settings: a tap anywhere on it flips the
   // switch, and it is announced once, as a switch.
   return (
     <Pressable
       onPress={() => onValueChange(!value)}
+      disabled={disabled}
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityHint={helper}
-      accessibilityState={{ checked: value }}
+      accessibilityState={{ checked: value, disabled: !!disabled }}
       style={({ pressed }) => [styles.toggleRow, pressed && styles.pressed]}
     >
       <View style={styles.toggleText}>
@@ -363,6 +366,7 @@ export function EmberToggle({ label, helper, value, onValueChange }: ToggleProps
       </View>
       <Switch
         value={value}
+        disabled={disabled}
         onValueChange={onValueChange}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"

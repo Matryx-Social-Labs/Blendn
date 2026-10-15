@@ -83,7 +83,8 @@ export function PresenceMonitor() {
     const loadFence = async () => {
       try {
         const active = await apiClient.getActiveCheckins({ force: true })
-        const checkIn = active.success ? active.data?.checkIns?.[0] : null
+        // A Go Live's venue day is LiveAtVenue's: its presence, its end (step 5 review, L4).
+        const checkIn = active.success ? active.data?.checkIns?.find((c) => c.kind !== 'venue_day') : null
         if (!checkIn?.eventId) {
           setFence(null)
           return

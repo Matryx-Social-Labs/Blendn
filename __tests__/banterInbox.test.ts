@@ -173,7 +173,9 @@ describe('the room you are standing in', () => {
      * It read `participant_count` / `participantCount` / `participants`, none
      * of which `GET /chat/groups` has ever sent, so every room had 0 people.
      */
-    expect(SCREEN()).toContain('room.memberCount')
+    // Read through `roomMemberCount` (lib/placeRoom.ts), which takes `memberCount` and
+    // never shows one for a place's room (step 5, D-19) — table-tested in placeRoom.test.ts.
+    expect(SCREEN()).toContain('participant_count: roomMemberCount(room) ?? 0')
     expect(SCREEN()).toContain('memberCount={c.participant_count}')
   })
 })

@@ -23,6 +23,8 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 const LIST_SURFACES = [
   ['components', 'pulse', 'FeedMedia.tsx'],
   ['components', 'pulse', 'UpcomingCard.tsx'],
+  // Every Going and Pulse row's thumb draws through it (SCRUM-480).
+  ['components', 'EventCover.tsx'],
   // The Blend'n room's face grid is a FlatList; every face draws through `Face`.
   ['components', 'blendn', 'Face.tsx'],
   ['components', 'blendn', 'TonightView.tsx'],
@@ -49,7 +51,7 @@ describe('image recycling', () => {
     const missing: string[] = []
     for (const parts of LIST_SURFACES) {
       const src = read(...parts)
-      const images = (src.match(/<OptimizedImage/g) ?? []).length
+      const images = (src.match(/<(OptimizedImage|ExpoImage)\b/g) ?? []).length
       const keys = (src.match(/recyclingKey=/g) ?? []).length
       if (keys < images) missing.push(`${parts.join('/')} (${keys}/${images})`)
     }

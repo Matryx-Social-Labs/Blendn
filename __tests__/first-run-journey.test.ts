@@ -38,7 +38,7 @@ describe('an onboarding save that fails stays on the step', () => {
 
   it('marks the step done only after the server has it', () => {
     const firstWrite = commit.indexOf('await writeOnboarding(userId, { progress, draft: merged })')
-    const doneWrite = commit.indexOf('await writeOnboarding(userId, { progress: nextProgress, draft: merged })')
+    const doneWrite = commit.indexOf('await writeOnboarding(userId, { progress: nextProgress, draft: saved })')
     expect(firstWrite).toBeGreaterThan(-1)
     expect(doneWrite).toBeGreaterThan(commit.indexOf('if (failure) {'))
   })

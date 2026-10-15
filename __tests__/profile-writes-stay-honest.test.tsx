@@ -61,7 +61,7 @@ describe('adding a photo', () => {
     await screen.findByText('Add photo')
     fireEvent.press(screen.getByText('Add photo'))
 
-    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']))
+    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg'], 'https://cdn/a.jpg'))
     // The server's own sentence, not a generic retry.
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error'))
     // Two tiles, not three: the one the server does not have is not shown.
@@ -88,7 +88,7 @@ describe('making a photo the main one', () => {
     await screen.findByLabelText('Photo 2 of 2')
     fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
 
-    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/b.jpg', 'https://cdn/a.jpg']))
+    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/b.jpg', 'https://cdn/a.jpg'], 'https://cdn/a.jpg'))
     // b is now first and carries the main-photo label; nothing was alerted.
     await screen.findByLabelText('Photo 1 of 2, main photo')
     expect(mockShowToast).not.toHaveBeenCalled()
@@ -136,6 +136,6 @@ describe('removing a photo', () => {
     confirmRemove()
 
     await waitFor(() => expect(pu.deletePhoto).toHaveBeenCalledWith('https://cdn/b.jpg'))
-    expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg'])
+    expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg'], 'https://cdn/a.jpg')
   })
 })

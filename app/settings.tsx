@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -9,6 +9,7 @@ import ActionTray from '../components/ActionTray'
 import { AppHeader } from '../components/AppHeader'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
+import { offersApi } from '../lib/offers'
 import { apiClient } from '../lib/apiClient'
 import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
@@ -16,6 +17,9 @@ import { clearPushDeclined } from '../lib/pushDecline'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
+import { openPaywall } from '../lib/paywall'
+import { usePlusStatus, type PlusStatus } from '../lib/plus'
+import { manageSubscriptionUrl } from '../lib/purchases'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
@@ -102,6 +106,12 @@ export default function SettingsScreen() {
   const [deleteStep, setDeleteStep] = useState<'explain' | 'confirm' | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [signOutOpen, setSignOutOpen] = useState(false)
+  /** Blendn+ as the server says it: the row's words, and the delete tray's warning. */
+  const { status: plus, refresh: refreshPlus } = usePlusStatus()
+  useFocusEffect(refreshPlus)
+  const [plusInfoOpen, setPlusInfoOpen] = useState(false)
+  /** A store subscription found when the delete tray opened: deleting the account does not cancel it. */
+  const [storePlus, setStorePlus] = useState<PlusStatus['source'] | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [osPush, setOsPush] = useState<OsPush>('askable')
   const [pushBlockedOpen, setPushBlockedOpen] = useState(false)
@@ -309,7 +319,16 @@ export default function SettingsScreen() {
 
   const handleDeleteAccount = useCallback(() => {
     setDeleteError(null)
+    setStorePlus(null)
     setDeleteStep('explain')
+    // A running store subscription keeps billing after the account is gone: say so first (review H1).
+    apiClient
+      .getMyPlus()
+      .then((res) => {
+        const source = res.success ? res.data?.source : null
+        if (res.success && res.data?.active && (source === 'apple' || source === 'google')) setStorePlus(source)
+      })
+      .catch(() => {})
   }, [])
 
   const closeDelete = useCallback(() => {
@@ -396,6 +415,8 @@ export default function SettingsScreen() {
 
     { header: 'Notifications' },
     { icon: 'notifications-outline', title: 'Push notifications', keyName: 'pushEnabled' as const },
+    // Offers from the places you keep going back to (step 12): its own switch, kept on the server.
+    { offersFromPlaces: true },
 
     /*
      * Blocked users leads Safety. Blocking somebody is the most consequential
@@ -420,6 +441,11 @@ export default function SettingsScreen() {
 
     // Asks first: one stray tap used to end the session on the spot.
     { header: 'Account' },
+    // The paywall, asked for: no cooldown (step 11, trigger `profile`).
+    // Free during launch where you go out: a row that says so and sells nothing (review H2).
+    plus && !plus.gated && !plus.active
+      ? { icon: 'sparkles-outline', title: 'Blendn+ · free during launch in your city', onPress: () => setPlusInfoOpen(true) }
+      : { icon: 'sparkles-outline', title: 'Blendn+', onPress: () => void openPaywall('profile', { userInitiated: true }) },
     { icon: 'log-out-outline', title: 'Sign out', onPress: () => setSignOutOpen(true) },
 
     /*
@@ -433,9 +459,10 @@ export default function SettingsScreen() {
      */
     { header: 'Danger zone', spaced: true },
     { icon: 'trash-outline', title: deletingAccount ? 'Deleting account…' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
-  ]), [openExternal, deletingAccount, handleDeleteAccount])
+  ]), [openExternal, deletingAccount, handleDeleteAccount, plus])
 
   const renderItem = (item: any, idx: number) => {
+    if (item.offersFromPlaces) return <OffersFromPlacesRow key={idx} />
     if (item.header) {
       return (
         <Text
@@ -613,12 +640,34 @@ export default function SettingsScreen() {
               ]
         }
       >
+        {storePlus ? (
+          <View style={styles.storeWarning} accessibilityLiveRegion="polite">
+            <Text style={styles.storeWarningText}>
+              {`Cancel Blendn+ in your ${storePlus === 'apple' ? 'App Store' : 'Google Play'} subscriptions first. Deleting your account doesn't cancel it.`}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void manageSubscriptionUrl().then(openExternal)}
+              style={styles.storeWarningButton}
+            >
+              <Text style={styles.storeWarningLink}>Manage subscription</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {deleteError ? (
           <Text style={styles.prefsError} accessibilityLiveRegion="polite">
             {deleteError}
           </Text>
         ) : null}
       </ActionTray>
+
+      <ActionTray
+        visible={plusInfoOpen}
+        title="Blendn+ is free here for now"
+        message="During launch in your city, staying live while you're here and your full night history are everyone's. There's nothing to buy."
+        onClose={() => setPlusInfoOpen(false)}
+        buttons={[{ label: 'Got it', variant: 'primary', onPress: () => setPlusInfoOpen(false) }]}
+      />
 
       <ActionTray
         visible={pushBlockedOpen}
@@ -644,6 +693,10 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   prefsErrorWrap: { paddingHorizontal: SPACE.lg, paddingTop: SPACE.lg, gap: SPACE.sm, alignItems: 'flex-start' },
   prefsError: { ...TYPE.meta, color: EMBER.destructive },
+  storeWarning: { gap: SPACE.xs },
+  storeWarningText: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
+  storeWarningButton: { minHeight: CONTROL.md, justifyContent: 'center', alignSelf: 'flex-start' },
+  storeWarningLink: { ...TYPE.meta, color: EMBER.textPrimary, textDecorationLine: 'underline' },
   // 48pt: the one way out of a failed load is not a 32pt target.
   retry: {
     height: CONTROL.md,
@@ -675,3 +728,66 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
 })
+
+/**
+ * "Offers from places" (step 12 review M6): one switch for every place's
+ * offers. The server keeps it (`/me/offers`) and leaves you out of every
+ * audience while it is off; the switch shows what the server saved.
+ */
+function OffersFromPlacesRow() {
+  const { showToast } = useToast()
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    Promise.resolve()
+      .then(() => offersApi.offersFromPlaces())
+      .then((res) => {
+        if (res.success && res.data) setEnabled(res.data.enabled)
+      })
+      .catch(() => {})
+  }, [])
+  const flip = async () => {
+    if (enabled === null || saving) return
+    setSaving(true)
+    try {
+      const res = await offersApi.setOffersFromPlaces(!enabled)
+      if (res.success && res.data) setEnabled(res.data.enabled)
+      else showToast(res.error || "That didn't save. Try again.", 'error')
+    } catch {
+      showToast("That didn't save. Try again.", 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const hint = 'Offers places you keep going back to send their regulars. They never learn who gets them.'
+  return (
+    <Pressable
+      onPress={flip}
+      disabled={enabled === null || saving}
+      accessibilityRole="switch"
+      accessibilityLabel="Offers from places"
+      accessibilityHint={hint}
+      accessibilityState={{ checked: enabled === true, disabled: enabled === null || saving, busy: saving }}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <View style={styles.rowLeft}>
+        <Ionicons name="pricetag-outline" size={ICON.md} color={EMBER.textPrimary} />
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Offers from places</Text>
+          <Text style={styles.rowHint}>{hint}</Text>
+        </View>
+      </View>
+      <View style={styles.switchWrap}>
+        <Switch
+          value={enabled === true}
+          onValueChange={flip}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          disabled={enabled === null || saving}
+          {...SWITCH_COLORS}
+        />
+      </View>
+    </Pressable>
+  )
+}
+

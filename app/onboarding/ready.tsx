@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
-import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
@@ -26,10 +25,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
  */
 export default function ReadyScreen() {
   const { draft, saving, finish, goBack, jumpTo } = useOnboarding('ready')
-  const [failed, setFailed] = useState(false)
 
   const complete = async () => {
-    setFailed(false)
     if (await finish()) {
       // Once per account, and it lands with the fade into the tabs.
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
@@ -40,8 +37,9 @@ export default function ReadyScreen() {
       // Kept here rather than pushed on regardless. This is the write that
       // decides whether the account is finished, and letting someone through
       // on a failure would leave them permanently mid-funnel with no screen
-      // left that could fix it.
-      setFailed(true)
+      // left that could fix it. `finish()` has said why, in a toast: this
+      // screen's own sentence sat below the fold, so the button looked dead
+      // (SCRUM-492).
     }
   }
 
@@ -133,13 +131,6 @@ export default function ReadyScreen() {
       ) : null}
       {draft.looking_for?.length ? (
         <Summary icon="people" label="Looking for" value={draft.looking_for.join(' · ')} />
-      ) : null}
-
-      {failed ? (
-        <Text style={styles.error}>
-          We could not finish setting up your profile. Check your connection and try again — nothing
-          you entered has been lost.
-        </Text>
       ) : null}
     </OnboardingScreen>
   )
@@ -251,6 +242,4 @@ const styles = StyleSheet.create({
   summaryText: { flex: 1, gap: SPACE.xxs },
   summaryLabel: TYPE.meta,
   summaryValue: TYPE.bodyStrong,
-
-  error: { ...TYPE.meta, color: EMBER.destructive },
 })

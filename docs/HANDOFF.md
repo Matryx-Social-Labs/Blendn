@@ -163,7 +163,9 @@ guards the ratio staying near 1.
 - **No background location.** Foreground only. iOS `always` is an App Review
   liability and buys least where a false eviction is least recoverable.
 - **Cut, for now:** voice/video calling, voice messages, PRO membership tier,
-  the `@handle`, the second "Appreciate" button.
+  the `@handle`, the second "Appreciate" button. The PRO tier cut is superseded
+  by the owner's ruling of 2026-10-01 — see *Blendn+ — superseding the PRO tier
+  cut* in [`ROADMAP.md`](../ROADMAP.md).
 
 ## Still open — the user needs to answer
 

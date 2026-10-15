@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { MOTION_SPRING, MOTION_STAGGER } from '../../lib/motion'
-import { reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
+import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 import { RollingNumber } from '../profile/RollingNumber'
@@ -86,10 +86,9 @@ export const RoomHero = memo(function RoomHero({
 }) {
   const reduceMotion = useReducedMotion()
   const now = useNow(30_000)
-  const latest = arrivals[0]
+  const latest = arrivals.find((a) => a.insideNow !== false)
   const fresh = latest?.arrivedAt && now - Date.parse(latest.arrivedAt) < 5 * 60_000 ? latest : null
-  const seen = new Set(arrivals.map((a) => a.id))
-  const stack = [...arrivals, ...people.filter((p) => !seen.has(p.id))].slice(0, STACK)
+  const stack = hereNowStack(arrivals, people, STACK)
   const others = Math.max(0, hereCount - stack.length - 1)
   const time = checkedInAt ? timeHereLabel(checkedInAt, now) : null
 
@@ -116,7 +115,7 @@ export const RoomHero = memo(function RoomHero({
             here now
           </Text>
         </View>
-        {stack.length ? (
+        {stack.length || others > 0 ? (
           <View style={styles.stackRow}>
             <View style={styles.stack}>
               {stack.map((p, i) => (
@@ -297,7 +296,12 @@ export const GridFace = memo(function GridFace({
           ) : null}
         </Animated.View>
       </GestureDetector>
-      <Text variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.centre}>
+      {/*
+        One line, ellipsised — not shrink-to-fit. iOS sometimes laid the shrunk
+        name out on first render at a fraction of its size, below the 0.75
+        floor, until something re-rendered the room (SCRUM-503).
+      */}
+      <Text variant="bodyStrong" numberOfLines={1} style={styles.centre}>
         {person.name}
       </Text>
       <Text variant="caption" numberOfLines={1} style={styles.centre}>
@@ -319,11 +323,11 @@ export const GridFace = memo(function GridFace({
  * ScrollView was one 98ms commit — and faces are cheaper but a busy night is
  * still a hundred of them. This is only the heading.
  */
-export function FaceGridHead({ count, empty }: { count: number; empty: boolean }) {
+export function FaceGridHead({ title, count, empty }: { title: string; count: number; empty: boolean }) {
   return (
     <View style={[styles.section, styles.gridHead]}>
       <View style={styles.sectionHead}>
-        <Text variant="heading">Everyone here</Text>
+        <Text variant="heading">{title}</Text>
         {count > 0 ? <Text variant="meta">{count}</Text> : null}
       </View>
       {empty ? (

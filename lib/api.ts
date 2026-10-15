@@ -59,6 +59,8 @@ export function eventFromApi(e: EventPayload) {
       description: e.description || '',
       short_description: e.shortDescription || '',
       venue_name: e.venueName || '',
+      /** The linked venue the card names ("at …"), or null — `placeLabel`. */
+      venue: e.venue ?? null,
       address: e.address || '',
       start_time: e.startTime,
       end_time: e.endTime,
@@ -225,17 +227,6 @@ export async function getEventInterestCounts(eventIds: string[]) {
 }
 
 // ============== CHAT ==============
-
-export async function ensureUserInEventChat(eventId: string, _eventTitle?: string) {
-  const result = await apiClient.getEventChat(eventId)
-  if (result.success && result.data) {
-    return {
-      chatRoomId: result.data.id,
-      roomName: result.data.name || 'Event Chat',
-    }
-  }
-  return null
-}
 
 export async function sendChatMessage(
   chatGroupId: string,

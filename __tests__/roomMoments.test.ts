@@ -1,6 +1,8 @@
 import {
   JUST_ARRIVED_MS,
   REASON_MAX,
+  everyoneHead,
+  hereNowStack,
   meetNext,
   pickTonight,
   reasonLine,
@@ -59,8 +61,10 @@ describe('reasonLine', () => {
     expect(reasonLine({ arrivedAt: 'not a date' }, NOW)).toBe('Here now')
   })
 
-  it('does not say "Here now" about somebody presence says stepped out', () => {
-    expect(reasonLine({ insideNow: false }, NOW)).toBe('Checked in')
+  it('says somebody who checked out was here, never that they are checked in (SCRUM-495)', () => {
+    expect(reasonLine({ insideNow: false }, NOW)).toBe('Was here')
+    // Not "Just walked in" either, for the ten minutes after they arrived.
+    expect(reasonLine({ insideNow: false, arrivedAt: minutesAgo(3) }, NOW)).toBe('Was here')
     expect(reasonLine({}, NOW)).toBe('Here now')
   })
 
@@ -144,6 +148,61 @@ describe('meetNext', () => {
     expect(a.picks.map((p) => p.id)).toEqual(['p0', 'p1'])
     expect(b.picks).toEqual(a.picks)
     expect(meetNext([], { now: NOW, eventId: 'e1' }).picks).toEqual([])
+  })
+})
+
+/*
+ * The room's pool is everyone who checked in to the event at all, so somebody
+ * who has gone home is still in `people` with `insideNow: false` (SCRUM-495).
+ * "1 here now" sat over the face of the one person who had left.
+ */
+describe('who is here now', () => {
+  const here = (id: string) => ({ id, insideNow: true })
+  const left = (id: string) => ({ id, insideNow: false })
+  const ids = (xs: { id: string }[]) => xs.map((p) => p.id)
+
+  it('puts only people inside under "here now", arrivals first, without repeats', () => {
+    const stack = hereNowStack([here('x'), here('a'), left('b')], [left('c'), here('a'), here('d')], 5)
+    expect(ids(stack)).toEqual(['x', 'a', 'd'])
+  })
+
+  it('fills the stack from people inside, however many ahead of them left', () => {
+    const people = [left('a'), left('b'), here('c'), left('d'), left('e'), here('f'), here('g')]
+    expect(ids(hereNowStack([], people, 3))).toEqual(['c', 'f', 'g'])
+  })
+
+  it('counts somebody presence says nothing about as inside', () => {
+    expect(ids(hereNowStack([], [{ id: 'a' }], 3))).toEqual(['a'])
+    expect(everyoneHead([{}], { hasMore: false, hereCount: 2 }).title).toBe('Everyone here')
+  })
+
+  it('never suggests meeting somebody who has left, and still finds three who are here', () => {
+    // Eight who left rank above four who are here: the rotation's pool of nine
+    // must be nine people inside, not nine people with one inside among them.
+    const people = [...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(left), ...['i', 'j', 'k', 'l'].map(here)]
+    for (let w = 0; w < 8; w++) {
+      const { picks } = meetNext(people, { now: NOW + w * 15 * 60_000, eventId: 'e1' })
+      expect(picks).toHaveLength(3)
+      expect(picks.every((p) => p.insideNow)).toBe(true)
+    }
+    expect(ids(meetNext([left('a'), here('b')], { now: NOW, eventId: 'e1' }).picks)).toEqual(['b'])
+  })
+
+  it('calls the grid "Everyone here" only while everyone in it is', () => {
+    const head = (people: { insideNow?: boolean }[]) => everyoneHead(people, { hasMore: false, hereCount: 9 })
+    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 2 })
+    expect(head([])).toEqual({ title: 'Everyone here', count: 0 })
+    expect(head([here('a'), left('b')])).toEqual({ title: 'Everyone who came', count: 2 })
+  })
+
+  it("gives the room's number only where it is the right kind of number", () => {
+    // With more to load, the number is the room's count of people inside:
+    // true of "Everyone here", the wrong number for "Everyone who came".
+    expect(everyoneHead([here('a')], { hasMore: true, hereCount: 30 })).toEqual({ title: 'Everyone here', count: 29 })
+    expect(everyoneHead([here('a'), left('b')], { hasMore: true, hereCount: 30 })).toEqual({
+      title: 'Everyone who came',
+      count: 0,
+    })
   })
 })
 

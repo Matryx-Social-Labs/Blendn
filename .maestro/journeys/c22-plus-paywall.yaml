@@ -1,0 +1,117 @@
+# TQ-C21 · MN-M01 (plan v2 step 11): the Blendn+ paywall from the Go Live
+# expiry prompt — "Stay live till I leave · Blendn+" refused as Blendn+'s
+# (PLUS_REQUIRED) opens the paywall; "Not now" is visible and closes it; a
+# second refusal in the same app session gets the reason, never a second
+# paywall.
+#
+# Needs: a fenced place in a city where Blendn+ is GATED (not its launch
+# season), and an account with neither Plus nor a live Night Pass. In a launch
+# season "stay" just works and this journey cannot run. iOS sim with a StoreKit
+# configuration file for the prices (UI only; nothing is bought here). One real
+# 20-minute window: about 16 minutes end to end.
+#
+# Env, as MAESTRO_* environment variables (Maestro logs typed text, and -e is
+# visible in ps): MAESTRO_EMAIL, MAESTRO_PASSWORD. The rest with -e:
+#   PLACE, LAT, LNG   the gated place, found in Places (nearest first)
+# Delete ~/.maestro/tests/<run> and the --test-output-dir afterwards.
+# Launch fresh (a new app session): an automatic paywall earlier in the same
+# session suppresses the first one here, by design.
+#
+# Read back (blendn-admin): one shown and one dismissed, trigger go_live_expiry;
+# no paywall_purchase_* row:
+#   npm run -s qa sq "SELECT pe.name, pe.entity_kind AS trigger, pe.occurred_at::text AS at FROM product_events pe JOIN \"User\" u ON u.id = pe.user_id WHERE u.email = '<email>' AND pe.name LIKE 'paywall_%' ORDER BY pe.occurred_at DESC LIMIT 5"
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c21
+  - needs-gated-city
+---
+- setLocation:
+    latitude: ${LAT}
+    longitude: ${LNG}
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    commands:
+      - runFlow:
+          file: ../subflows/sign-in.yaml
+          env:
+            EMAIL: ${MAESTRO_EMAIL}
+            PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+
+# --- Go live for 20 minutes at the gated place ---
+- tapOn: "Places"
+- extendedWaitUntil:
+    notVisible: "Loading places"
+    timeout: 30000
+- tapOn: ".*${PLACE}.*"
+- extendedWaitUntil:
+    visible: "Go Live"
+    timeout: 30000
+- tapOn: "Go Live"
+- extendedWaitUntil:
+    visible: "20 minutes"
+    timeout: 10000
+- tapOn: "20 minutes"
+- extendedWaitUntil:
+    visible: "Live here\\. .* left"
+    timeout: 45000
+
+# --- The expiry prompt, five minutes before the end: stay → the paywall ---
+- extendedWaitUntil:
+    visible: "Still at .*"
+    timeout: 1080000
+- assertVisible: "Extend 45 min · free"
+- assertVisible: "Stay live till I leave · Blendn\\+"
+- takeScreenshot: c22-prompt
+- tapOn: "Stay live till I leave · Blendn\\+"
+- extendedWaitUntil:
+    visible: "Not now"
+    timeout: 30000
+- assertVisible: "Stay live while I'm here"
+- assertVisible: "Your full night history"
+- assertVisible: "Restore purchases"
+- assertVisible: "Terms of Use"
+- assertVisible: "Privacy Policy"
+- takeScreenshot: c22-paywall
+- tapOn: "Not now"
+- extendedWaitUntil:
+    notVisible: "Restore purchases"
+    timeout: 10000
+# Still live on the free window: the paywall changed nothing.
+- assertVisible: "Live here\\. .* left"
+
+# --- A second refusal this session: the reason, never a second paywall ---
+- tapOn: "Stop being live"
+- extendedWaitUntil:
+    visible: "Go live again.*20 minutes|Go Live"
+    timeout: 30000
+- tapOn:
+    text: "Pick another time"
+    optional: true
+- tapOn:
+    text: "Go Live"
+    optional: true
+- extendedWaitUntil:
+    visible: "Stay while Blendn is open here"
+    timeout: 10000
+- tapOn: "Stay while Blendn is open here"
+- extendedWaitUntil:
+    visible: "Staying live is part of Blendn\\+"
+    timeout: 45000
+- assertVisible: "See Blendn\\+"
+- assertNotVisible: "Restore purchases"
+- takeScreenshot: c22-no-second-paywall
+- tapOn: "OK"
+- assertNotVisible: "Restore purchases"

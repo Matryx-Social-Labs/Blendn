@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
+import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS } from '../lib/theme'
 
 const monogram = require('../assets/logo/monogram-gradient.png')
@@ -52,7 +53,14 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
           // already failed on just because it rendered again.
           key={attempt}
           source={{ uri }}
-          onError={() => setFailedAttempt(attempt)}
+          // Lists reuse native views; without this a row can flash the last one's picture.
+          recyclingKey={uri}
+          onError={() => {
+            // Said out loud: a host that starts refusing the app (SCRUM-285) is
+            // otherwise a screen of quiet placeholders.
+            Logger.warn('general', 'Event cover failed to load', { uri })
+            setFailedAttempt(attempt)
+          }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={150}
@@ -64,13 +72,22 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
 
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
-      <Image source={monogram} style={styles.mark} resizeMode="contain" accessible={false} accessibilityIgnoresInvertColors />
+      <Image
+        testID="event-cover-mark"
+        source={monogram}
+        style={[styles.mark, { width: markSize(height), height: markSize(height) }]}
+        resizeMode="contain"
+        accessible={false}
+        accessibilityIgnoresInvertColors
+      />
     </View>
   )
 }
 
 /** The placeholder's logo mark: faint, so it reads as a mark and not as content. */
 const MARK_OPACITY = 0.35
+/** 72pt on the 180pt card, and the same share of a smaller box (a list row's thumb). */
+const markSize = (height: number) => Math.min(72, Math.round(height * 0.4))
 
 const styles = StyleSheet.create({
   frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
@@ -81,5 +98,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // Faint, so it reads as a mark and not as content.
-  mark: { width: 72, height: 72, opacity: MARK_OPACITY },
+  mark: { opacity: MARK_OPACITY },
 })

@@ -36,6 +36,9 @@
  * honest failure beats a spinner that never stops.
  */
 
+import type { Badge, Overlap } from './aboutYou'
+import { roomDisplayTitle } from './placeRoom'
+
 export interface RoomAttendee {
   userId: string
   displayName: string
@@ -70,11 +73,17 @@ export interface RoomAttendee {
   age?: number | null
   insideNow?: boolean
   youLiked?: boolean
+  /** Matching v2: display-only shared lines, the sign chip and badges (see `MatchCard`). */
+  overlaps?: Overlap[]
+  sign?: string | null
+  badges?: Badge[]
 }
 
 export interface CheckinLike {
   revealed?: boolean
-  event?: { id?: string; title?: string } | null
+  /** `venue_day`: a Go Live at a place, named for the place (`event.venueName`). */
+  kind?: string
+  event?: { id?: string; title?: string; venueName?: string | null } | null
   eventId?: string
   event_id?: string
   checkInTime?: string | number | Date | null
@@ -185,7 +194,8 @@ export async function pickActiveRoom(
     return {
       kind: 'room',
       eventId,
-      eventTitle: checkin.event?.title,
+      // A place's day is titled for bookkeeping ("Venue day · …"); the room is the place.
+      eventTitle: roomDisplayTitle(checkin) ?? undefined,
       // Absent reads as anonymous: that matches the server default and is the
       // safe thing to claim about somebody's own visibility.
       revealed: checkin.revealed === true,

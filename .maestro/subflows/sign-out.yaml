@@ -2,9 +2,11 @@
 appId: com.matryxsociallabs.blendn
 ---
 - runFlow: dismiss-tip.yaml
-- tapOn: "Me tab"
-- extendedWaitUntil:
-    visible: "Settings"
+# The tab reads "Me" (#323), and Settings is the last row, below the fold.
+- tapOn: "Me"
+- scrollUntilVisible:
+    element: "Settings"
+    direction: DOWN
     timeout: 20000
 - tapOn: "Settings"
 - scrollUntilVisible:
@@ -12,9 +14,11 @@ appId: com.matryxsociallabs.blendn
     direction: DOWN
     timeout: 15000
 - tapOn: ".*[Ss]ign out.*"
-- tapOn:
-    text: ".*[Ss]ign out.*"
-    optional: true
+# It asks first: "Sign out?" with Cancel / Sign out.
+- extendedWaitUntil:
+    visible: "Sign out?"
+    timeout: 10000
+- tapOn: "Sign out"
 - extendedWaitUntil:
     visible: "Continue with email"
     timeout: 30000

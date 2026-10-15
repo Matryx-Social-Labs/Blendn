@@ -49,7 +49,8 @@ describe('the entry screen says why', () => {
   it('carries errorCode out of signInWithGoogle and signInWithApple', () => {
     // Literal, not a regex over an object literal (see eventDetails-wired).
     const auth = read('lib/useAuth.ts')
-    const carried = "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode }"
+    const carried =
+      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }"
     expect(auth.split(carried).length - 1).toBe(2)
   })
 })

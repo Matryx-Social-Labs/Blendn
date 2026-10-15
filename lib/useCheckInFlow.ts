@@ -90,7 +90,8 @@ export function useCheckInFlow({
    */
   const [celebrations, setCelebrations] = useState(0)
 
-  const getCurrentLocation = () => getLocationFix({ showTray, closeTray })
+  // "Try Again" on a weak fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
+  const getCurrentLocation = () => getLocationFix({ showTray, closeTray, onRetry: () => void start({ skipRules: true }) })
 
   /**
    * Run the check-in. Without `skipRules` the rules tray comes first, and the

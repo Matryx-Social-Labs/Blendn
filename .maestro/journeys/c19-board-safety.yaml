@@ -1,0 +1,91 @@
+# SCRUM-126 / SCRUM-322, the board's safety legs on a phone: report an ask
+# from the Banter's More, then report and block a post from its ⋯ on the
+# board. Both by the post or the ask — the app never has a user id.
+# Set up by API first (blendn-admin `qa token`): the other person asks on one
+# of your posts, and has a post of their own on the same board.
+# Needs a build with the board on. Env: EMAIL, PASSWORD (you); EVENT (a regex
+# for the event's title on Going); AUTHOR (their handle at that event);
+# THEIR_POST (a regex for their post's words).
+# Undo after: the block, by unblocking from Settings › Blocked (or the API).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c19
+  - board
+  - destructive
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+# Report the ask, from the Banter.
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: "More options for the request from ${AUTHOR}"
+    timeout: 30000
+- tapOn: "More options for the request from ${AUTHOR}"
+- tapOn: "Report"
+- extendedWaitUntil:
+    visible: "Why are you reporting this ask?"
+    timeout: 10000
+- tapOn: "Spam or scam"
+- tapOn: "Send report"
+- extendedWaitUntil:
+    visible: "Report sent. Our team will review it."
+    timeout: 15000
+- takeScreenshot: c19-ask-reported
+# Report, then block, their post, from the board.
+- tapOn: "Going"
+- extendedWaitUntil:
+    visible: ${EVENT}
+    timeout: 30000
+- tapOn: ${EVENT}
+- scrollUntilVisible:
+    element: "The Board.*"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "The Board.*"
+- extendedWaitUntil:
+    visible: ${THEIR_POST}
+    timeout: 20000
+# Their post sorts below yours: its ⋯ may be under the fold.
+- scrollUntilVisible:
+    element: "More options for ${AUTHOR}'s post"
+    direction: DOWN
+    timeout: 20000
+    # Found at the very bottom edge, a tap there lands on nothing.
+    centerElement: true
+- tapOn: "More options for ${AUTHOR}'s post"
+- tapOn: "Report"
+- extendedWaitUntil:
+    visible: "Why are you reporting this post?"
+    timeout: 10000
+- tapOn: "Harassment or threats"
+- tapOn: "Send report"
+- extendedWaitUntil:
+    visible: "Report sent. Our team will review it."
+    timeout: 15000
+- tapOn: "More options for ${AUTHOR}'s post"
+- tapOn: "Block"
+- extendedWaitUntil:
+    visible: "Block ${AUTHOR}\\?"
+    timeout: 10000
+- tapOn: "Block"
+- extendedWaitUntil:
+    notVisible: ${THEIR_POST}
+    timeout: 15000
+- takeScreenshot: c19-post-blocked
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT mr.message_type::text AS type, mr.reason::text AS reason, mr.status::text AS status FROM message_reports mr JOIN \"User\" u ON u.id = mr.reporter_id WHERE u.email = '<EMAIL>' ORDER BY mr.created_at DESC LIMIT 2"
+#   npm run -s qa sq "SELECT count(*) AS n FROM blocked_users b JOIN \"User\" u ON u.id = b.blocker_id WHERE u.email = '<EMAIL>'"

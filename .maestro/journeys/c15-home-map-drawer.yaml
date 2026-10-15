@@ -1,0 +1,129 @@
+# TQ-C15 (SCRUM-540), HM-M01. The home screen: a map, and a drawer holding
+# Events | Places (plan v2 step 2). Signs in, opens Places and Events ten times
+# between them, steps the drawer up and back, finds the event card that names
+# its venue, checks that venue is not in Places while its event has it, and
+# opens a place.
+#
+# Env: EMAIL, PASSWORD (or MAESTRO_PASSWORD, which keeps it off the command
+# line), PLACE (a regex for a venue Places lists), and, for the hiding check
+# (HM-D01): EVENT (a regex for the event's title, found by search),
+# HIDDEN_VENUE (its venue's name — "The Humming Tree" for blr-hiding-soon).
+# PIN_POINT (optional, e.g. "50%,25%") and PIN_OPENS (a regex for what it opens,
+# e.g. the event's title): a screen point over a pin, a lit building, a beacon or
+# a name chip with the drawer at half — set the device's location to the pin and
+# the camera centres it at about 50%,25% — for the pin tap, which ends the run
+# there. Chips are tapped by point: on iOS a map marker's view is not in the
+# hierarchy Maestro reads, so its text cannot be matched (step 2c drive).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c15
+  - home-map
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+# A fresh launch draws the entry screen before it takes taps; under host load the
+# first tap otherwise lands on nothing.
+- waitForAnimationToEnd:
+    timeout: 10000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+    env:
+      PASSWORD: ${PASSWORD || MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+# The drawer and its two segments.
+# The handle's description carries its state on Android ("Events and places,
+# Expanded"), hence the trailing .*. Under Maestro on Android, React Native
+# reports a screen reader (UiAutomation), so the drawer opens at full there —
+# by design for a screen reader; a person without one gets half.
+- assertVisible: "Events and places.*"
+- assertVisible: "Events"
+- assertVisible: "Places"
+# Ten switches without a crash.
+- repeat:
+    times: 5
+    commands:
+      - tapOn: "Places"
+      # Loaded, whatever the list holds: the live chip is shown only to somebody who may go live.
+      - extendedWaitUntil:
+          notVisible: "Loading places"
+          timeout: 30000
+      - tapOn: "Events"
+      - assertVisible: "The Pulse"
+# Up to full and back down: the handle steps it.
+- tapOn: "Events and places.*"
+- tapOn: "Events and places.*"
+- assertVisible: "The Pulse"
+- tapOn: "Events and places.*"
+# The keyboard never covers the search: typing opens the drawer fully (the
+# screenshot is the evidence; Maestro cannot see what the keyboard covers).
+- tapOn: "Search events"
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: c15-keyboard-open
+- runFlow: ../subflows/keyboard-done.yaml
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: c15-keyboard-closed
+# The event that has its venue names it ("at The Humming Tree")…
+- runFlow:
+    when:
+      true: ${EVENT != undefined && EVENT != ''}
+    commands:
+      - tapOn: "Search events"
+      - inputText: ${EVENT}
+      - runFlow: ../subflows/keyboard-done.yaml
+      - extendedWaitUntil:
+          visible: ".*at ${HIDDEN_VENUE}.*"
+          timeout: 30000
+      # …and Places does not list that venue while it does (the negative control).
+      - tapOn: "Places"
+      - extendedWaitUntil:
+          notVisible: "Loading places"
+          timeout: 30000
+      - assertNotVisible: "${HIDDEN_VENUE}.*"
+      - tapOn: "Events"
+# Open a place.
+- tapOn: "Places"
+- scrollUntilVisible:
+    element: "${PLACE}.*"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "${PLACE}.*"
+- extendedWaitUntil:
+    visible: "PLACEHOLDER DESIGN.*"
+    timeout: 30000
+- takeScreenshot: c15-place
+- tapOn: "Go back"
+- assertVisible: "Places"
+# A pin (or the building it lights) opens what it stands for. Last: iOS has no
+# Maestro `back` to come home from it.
+- runFlow:
+    when:
+      true: ${PIN_POINT != undefined && PIN_POINT != ''}
+    commands:
+      - tapOn: "Events"
+      # The keyboard left the drawer full; one step down to half shows the map above it.
+      - tapOn: "Events and places.*"
+      - waitForAnimationToEnd:
+          timeout: 8000
+      - takeScreenshot: c15-map-half
+      - tapOn:
+          point: ${PIN_POINT}
+      - extendedWaitUntil:
+          visible: ${PIN_OPENS}
+          timeout: 30000
+      - takeScreenshot: c15-pin-opened
+# Read back (HM-D01), from blendn-admin:
+#   npm run -s qa sq "SELECT e.slug, e.status::text AS status, e.visibility::text AS vis, coalesce(e.venue_link_status::text,'null') AS link, e.kind::text AS kind, e.start_time::text AS starts, e.end_time::text AS ends FROM events e JOIN venues v ON v.id = e.venue_id WHERE v.name = 'The Humming Tree' AND e.deleted_at IS NULL AND e.end_time > now() ORDER BY e.start_time LIMIT 5"
+#   curl -s -H "Authorization: Bearer $(npm run -s qa token <EMAIL>)" "https://staging-api.blendn.app/api/mobile/venues?lat=12.9716&lon=77.5946&radius=5" | jq -r '.. | objects | select(has("upcomingEventCount")) | .name'   # HIDDEN_VENUE absent

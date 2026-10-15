@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
+import { forgotPasswordMessage } from '../lib/signInRefusal'
 import { EmberButton } from '../components/onboarding/EmberControls'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
@@ -105,7 +106,7 @@ export default function ForgotPassword() {
        * forever.
        */
       if (!result.success) {
-        setError(result.error || "Couldn't send the reset link. Try again.")
+        setError(forgotPasswordMessage(result))
         return false
       }
       setCooldown(RESEND_COOLDOWN_S)

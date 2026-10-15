@@ -1,0 +1,37 @@
+# TQ-C17 (SCRUM-559) PL-M04, second half: after five counterparts went live
+# at PLACE through the API, the bucket moves to "5–9" — read at most once a
+# minute per venue, so the place is reopened until it does — and once you go
+# live it reads as the others. Env: PLACE, LAT, LNG. Signed in, on the place.
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c17
+  - needs-live-place
+---
+- setLocation:
+    latitude: ${LAT}
+    longitude: ${LNG}
+- repeat:
+    times: 10
+    while:
+      notVisible: "5–9 live here"
+    commands:
+      - tapOn: "Go back"
+      - extendedWaitUntil:
+          notVisible: "Loading places"
+          timeout: 30000
+      - tapOn: ".*${PLACE}.*"
+      - extendedWaitUntil:
+          visible: "5–9 live here"
+          timeout: 20000
+          optional: true
+- assertVisible: "5–9 live here"
+- assertNotVisible: ".*\\b[0-4] live.*"
+- takeScreenshot: c17-bucket-after
+- tapOn: "Go Live"
+- tapOn: "20 minutes"
+- extendedWaitUntil:
+    visible: "Live here\\. .* left"
+    timeout: 45000
+# The pill is one accessible element: Maestro reads its label ("Live here. 19 minutes left").
+- assertVisible: "You and 5–9 others"
+- takeScreenshot: c17-bucket-live

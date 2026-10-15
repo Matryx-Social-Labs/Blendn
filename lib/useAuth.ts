@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
+import { syncPurchasesUser } from './purchases'
 import { clearRoomSignal } from './roomSignal'
+import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
@@ -95,6 +97,9 @@ const updateAuthState = (newState: Partial<AuthState>) => {
 
   if (globalAuthState.user?.id !== previousUserId) {
     Sentry.setUser(globalAuthState.user ? { id: globalAuthState.user.id } : null)
+    // RevenueCat buys as this account and nobody else (step 11): every path
+    // that signs in, restores a session or signs out comes through here.
+    void syncPurchasesUser(globalAuthState.user?.id ?? null)
   }
 }
 
@@ -258,6 +263,12 @@ const clearAuthState = async () => {
    * background refresh reaches this path without going through it.
    */
   clearRoomSignal()
+  /*
+   * A Go Live remembered on this phone is that account's (step 5 review, M5).
+   * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on
+   * the auth path does.
+   */
+  void import('./goLive').then((m) => m.clearLiveSession()).catch(() => {})
   updateAuthState({
     session: null,
     user: null,
@@ -360,7 +371,7 @@ export const isAuthenticated = (): boolean => {
 export const signInWithGoogle = async (
   idToken: string,
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string; errorCode?: string; isNewUser?: boolean }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
   try {
     Logger.info('auth', 'Signing in with Google...')
     updateAuthState({ loading: true })
@@ -387,7 +398,7 @@ export const signInWithGoogle = async (
     } else {
       Logger.error('auth', 'Google sign in failed', { error: result.error })
       updateAuthState({ loading: false })
-      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode }
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }
     }
   } catch (error) {
     Logger.error('auth', 'Google sign in exception', { error })
@@ -401,7 +412,7 @@ export const signInWithApple = async (
   identityToken: string,
   fullName?: { givenName?: string | null; familyName?: string | null },
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string; errorCode?: string; isNewUser?: boolean }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
   try {
     Logger.info('auth', 'Signing in with Apple...')
     updateAuthState({ loading: true })
@@ -428,7 +439,7 @@ export const signInWithApple = async (
     } else {
       Logger.error('auth', 'Apple sign in failed', { error: result.error })
       updateAuthState({ loading: false })
-      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode }
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }
     }
   } catch (error) {
     Logger.error('auth', 'Apple sign in exception', { error })
@@ -442,7 +453,7 @@ export const signInWithEmail = async (
   email: string,
   password: string,
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
   try {
     Logger.info('auth', 'Signing in with email...')
     updateAuthState({ loading: true })
@@ -468,6 +479,14 @@ export const signInWithEmail = async (
     } else {
       Logger.error('auth', 'Email sign in failed', { error: result.error })
       updateAuthState({ loading: false })
+      // The server's "Too many requests" drops the wait it sent (SCRUM-487).
+      if (result.errorCode === 'RATE_LIMITED') {
+        return {
+          success: false,
+          error: rateLimitedMessage('sign-in attempts', result.retryAfter),
+          errorCode: result.errorCode,
+        }
+      }
       return { success: false, error: result.error || 'Sign in failed' }
     }
   } catch (error) {
@@ -484,7 +503,7 @@ export const signUp = async (
   name?: string,
   deviceInfo?: { platform?: string; device?: string; appVersion?: string },
   age?: number
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
   try {
     Logger.info('auth', 'Signing up...')
     updateAuthState({ loading: true })
@@ -510,6 +529,10 @@ export const signUp = async (
     } else {
       Logger.error('auth', 'Sign up failed', { error: result.error })
       updateAuthState({ loading: false })
+      // The server's "Too many requests" drops the wait it sent (SCRUM-487).
+      if (result.errorCode === 'RATE_LIMITED') {
+        return { success: false, error: rateLimitedMessage('sign-ups from this network', result.retryAfter), errorCode: result.errorCode }
+      }
       return { success: false, error: result.error || 'Sign up failed' }
     }
   } catch (error) {

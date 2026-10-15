@@ -1,0 +1,173 @@
+# TQ-C20 · CR-M02, CR-I11, CR-I14. Crew ↔ crew on a phone: the Grid's Crews
+# view, like the other crew as yours, they like back (API) — the Blend under
+# the Banter's Live now — its chat, reveal, the other crew reveals (API), a
+# member who kept themselves anonymous stays a pseudonym, leave and rejoin,
+# then block them by the Blend's handle — which takes the pair out, so the
+# Blend reads "This Blend has closed" here and goes on for the others.
+# Needs: a live event with crews on; the phone's crew (two of them checked in)
+# and THEIR_CREW (two or more checked in, one member with "keep me anonymous");
+# no block between anybody on the two sides.
+# Env: EMAIL; MAESTRO_PASSWORD (environment variable; delete the run dir after); MESSAGE;
+# MY_CREW; THEIR_CREW; MAESTRO_THEIR_TOKEN (an environment variable: a THEIR_CREW member’s `qa token`);
+# EVENT_ID; API; REVEALED_NAME (a THEIR_CREW first name that reveals);
+# ANON_NAME (the first name of the member who stays anonymous — must NOT appear).
+appId: com.matryxsociallabs.blendn
+tags:
+  - tq-c20
+  - crews
+  - needs-live-event
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+    env:
+      PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: ../subflows/dismiss-tip.yaml
+- tapOn: "Open the room.*"
+- extendedWaitUntil:
+    visible: "Crews"
+    timeout: 30000
+- tapOn: "Crews"
+# The cards sit under "Your crews"; the room's chat dock covers the bottom,
+# so bring the card to the middle before tapping.
+- scrollUntilVisible:
+    element: "Like ${THEIR_CREW}"
+    direction: DOWN
+    centerElement: true
+    timeout: 30000
+- assertVisible: "Crew of 2 · Here now · 2 of 2"
+- takeScreenshot: c21-crews-view
+- tapOn: "Like ${THEIR_CREW}"
+- extendedWaitUntil:
+    visible: "You liked ${THEIR_CREW}"
+    timeout: 20000
+- runScript:
+    file: ../scripts/crew-like-back.js
+    env:
+      API: ${API}
+      TOKEN: ${MAESTRO_THEIR_TOKEN}
+      EVENT_ID: ${EVENT_ID}
+      LIKE_CREW: ${MY_CREW}
+- tapOn: "Close Blend'n"
+- tapOn: "Banter"
+# Live now lists the Blend from GET /chat/groups rooms: "Blend · <both crews>".
+- extendedWaitUntil:
+    visible: ".*Blend · .*${THEIR_CREW}.*"
+    timeout: 30000
+- takeScreenshot: c21-banter-live-now
+- tapOn: ".*Blend · .*${THEIR_CREW}.*"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+- tapOn: ".*Share your thoughts.*"
+- inputText: ${MESSAGE}
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 15000
+- assertVisible: ".*${MESSAGE}.*"
+# The room's (i): the Blend's people — tonight's pseudonyms, nobody named yet.
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Open the chat"
+    timeout: 20000
+- assertNotVisible: ".*${REVEALED_NAME}.*"
+- assertNotVisible: ".*${ANON_NAME}.*"
+# Your own side is a count and you — never a tile per crewmate.
+- assertVisible: "You and .* of your crew here"
+- takeScreenshot: c21-menagerie
+- scrollUntilVisible:
+    element: "Reveal our crew"
+    direction: DOWN
+- tapOn: "Reveal our crew"
+- tapOn: "Reveal"
+# No count comes back about your own crew: one line.
+- extendedWaitUntil:
+    visible: "Your crew is revealed in this Blend.*"
+    timeout: 20000
+- runScript:
+    file: ../scripts/blend-reveal.js
+    env:
+      API: ${API}
+      TOKEN: ${MAESTRO_THEIR_TOKEN}
+      BLEND_ID: ${output.blendId}
+# Pull to refresh: their reveal arrives with GET /blends. The member who kept
+# themselves anonymous stays a pseudonym tile (CR-I11).
+- scrollUntilVisible:
+    element: "Open the chat"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+- extendedWaitUntil:
+    visible: ".*${REVEALED_NAME}.*"
+    timeout: 20000
+- assertNotVisible: ".*${ANON_NAME}.*"
+- assertVisible: ".*keeps it private.*"
+- takeScreenshot: c21-revealed
+# Leave on your own: only you go (CR-I14); the chat underneath offers Rejoin.
+- scrollUntilVisible:
+    element: "Leave this Blend"
+    direction: DOWN
+- tapOn: "Leave this Blend"
+- tapOn: "Leave"
+- tapOn:
+    text: ".*Share your thoughts.*"
+    optional: true
+- inputText: "after leaving"
+- tapOn:
+    text: "Send"
+    optional: true
+- extendedWaitUntil:
+    visible: "Rejoin"
+    timeout: 20000
+- takeScreenshot: c21-left
+- tapOn: "Rejoin"
+- extendedWaitUntil:
+    visible: ".*Share your thoughts.*"
+    timeout: 20000
+# Block the anonymous member by their handle in this Blend (the second
+# person on their side). A block across the sides takes that pair out —
+# you included — and the Blend goes on for the rest (D-9). From here it reads closed.
+- tapOn: "Room info"
+- extendedWaitUntil:
+    visible: "Open the chat"
+    timeout: 20000
+- tapOn:
+    text: ".*\\. Block"
+    index: 1
+- tapOn: "Block"
+- extendedWaitUntil:
+    visible: "This Blend has closed"
+    timeout: 20000
+- takeScreenshot: c21-blocked
+# The chat re-reads on focus: closed for you too, no composer.
+- tapOn: "Go back"
+- extendedWaitUntil:
+    visible: "This Blend has closed"
+    timeout: 20000
+- assertNotVisible: ".*Share your thoughts.*"
+- takeScreenshot: c21-closed
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "The Banter"
+    timeout: 20000
+- assertNotVisible: ".*Blend · .*${THEIR_CREW}.*"
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT b.id, b.closes_at::text AS closes, b.closed_at IS NULL AS open_, g.kind::text AS kind, g.status::text AS room FROM blends b JOIN chat_groups g ON g.blend_id = b.id ORDER BY b.created_at DESC LIMIT 1"
+#   npm run -s qa sq "SELECT from_crew_id, to_crew_id, liked_by_user_id FROM crew_likes WHERE occurrence_id = '<occ>'"
+#   npm run -s qa sq "SELECT user_id, revealed_at::text AS at FROM blend_reveals WHERE blend_id = '<blend>'"   # never the anonymous member
+#   npm run -s qa sq "SELECT user_id, status::text AS status, left_at IS NOT NULL AS left_ FROM chat_group_members WHERE chat_group_id = '<blend group>'"

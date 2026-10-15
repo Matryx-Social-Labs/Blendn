@@ -21,6 +21,8 @@ import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRo
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
+import { LiveAtVenue } from '../components/LiveAtVenue';
+import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
@@ -79,6 +81,8 @@ const INTRO_ASSET = require('../assets/logo/intro.webp');
 function RootLayout() {
   const { user, loading, isNewAccount, unreachable } = useAuth();
   const pathname = usePathname();
+  // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
+  useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
@@ -98,7 +102,8 @@ function RootLayout() {
    * bad but working fallback, so a failure counts as done below.
    */
   const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
-  const assetsReady = imagesReady && (fontsLoaded || !!fontError);
+  const fontsReady = fontsLoaded || !!fontError;
+  const assetsReady = imagesReady && fontsReady;
   const [showIntro, setShowIntro] = useState(true);
 
   /*
@@ -137,6 +142,9 @@ function RootLayout() {
    * reflows to Plus Jakarta Sans a beat later, and at 56pt with -2.8 tracking
    * that reflow moves the headline by most of a line.
    *
+   * Hiding the paint is not enough on its own, which is why no route renders
+   * before the fonts either (`fontsReady`, at the return below).
+   *
    * Auth resolution is a network round trip. Gating the splash on it means a
    * user on bad wifi stares at a frozen splash for as long as the request
    * takes, and a user with no connection stares at it until the timeout. The
@@ -160,6 +168,25 @@ function RootLayout() {
       isNavigatingRef.current = false;
     }, 200);
   };
+
+  /*
+   * `lastRedirectRef` only stops a redirect being sent twice while it is in
+   * flight: the guard below re-runs on auth changes before the pathname has
+   * moved. Once the pathname moves, that redirect is over and must not block
+   * the next one, so the ref is cleared here, for every caller at once.
+   *
+   * Nothing cleared it on the signed-out side (SCRUM-616). Signing out
+   * redirected to `/` and left `/` in the ref, so the next link opened with the
+   * app still running (an event's QR code, a friend invite, any screen) was
+   * never sent to sign-in and showed "Couldn't load this event". A cold start
+   * was fine only because the ref starts empty.
+   *
+   * Declared before the guard so it runs first on the same pathname change.
+   * `__tests__/rootGuardSignedOut.test.tsx` drives it.
+   */
+  useEffect(() => {
+    lastRedirectRef.current = null;
+  }, [pathname]);
 
   useEffect(() => {
     // Set up notification listeners once
@@ -244,11 +271,12 @@ function RootLayout() {
         // a signed-out user is meant to be
         if (!isAuthRoute) {
           /*
-           * An invite link tapped while signed out: hold it, and it opens the
-           * moment they are in — after sign-in, or after onboarding for a new
-           * account. Without this the link was lost at the sign-in screen.
+           * An invite link or an event's public link (the organiser's QR code)
+           * tapped while signed out: hold it, and it opens the moment they are
+           * in — after sign-in, or after onboarding for a new account. Without
+           * this the link was lost at the sign-in screen.
            */
-          if (pathname.startsWith('/f/')) openWhenReady(pathname as Href);
+          if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort. Not while the server is merely
@@ -372,8 +400,6 @@ function RootLayout() {
             return;
           }
         }
-        // Clear last target if user navigated to a normal screen
-        lastRedirectRef.current = null;
         /*
          * Signed in and on an ordinary screen: the one moment a waiting
          * notification target can open. Reached after the redirect to the
@@ -465,6 +491,27 @@ function RootLayout() {
    * What must still be cleared on **sign-out** is a different question with a
    * different answer, and `clearResponseCache` is still there for it.
    */
+
+  /*
+   * Nothing renders until the fonts are in (SCRUM-619).
+   *
+   * Text is measured when it mounts, and React Native caches the measurement
+   * by the family *name*, not by the font that name resolved to. A screen
+   * mounted under the splash before Plus Jakarta Sans registered was measured
+   * in the system font, which is narrower, and every later text with the same
+   * string and style was handed that cached box for the life of the process:
+   * the wordmark drew as "Blend'r" and "I'm going" as "I'm goi…", on every
+   * screen, until the app was killed.
+   *
+   * Only a cold start by a link hit it. A plain launch opens on `/`, which
+   * shows a logo and no text until auth resolves, and the fonts (local files)
+   * are in long before a network round trip. A link opens straight on its
+   * screen, with all its text, on the first render.
+   *
+   * The splash is still not gated on auth, and this costs no visible time:
+   * the native splash already waits on the fonts (`assetsReady`).
+   */
+  if (!fontsReady) return null;
 
   return (
     <ErrorBoundary
@@ -705,6 +752,24 @@ function RootLayout() {
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
       {/* A room's info, from the options button in its header. */}
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
+      <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
+      <Stack.Screen name="edit-about-you" options={{ headerShown: false, animation: routeTransition }} />
+      {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
+      <Stack.Screen name="crews/index" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="crews/new" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="crews/[crewId]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="blend/[blendId]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
+      <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
+      <Stack.Screen name="offer/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
+      <Stack.Screen
+        name="plus"
+        options={{ headerShown: false, presentation: 'modal', animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+      />
       <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           {/*
@@ -719,6 +784,8 @@ function RootLayout() {
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
           {user ? <PresenceMonitor /> : null}
+          {/* Your Go Live at a place: its pings, the expiry prompt, and `live:ended` (step 5). */}
+          {user ? <LiveAtVenue /> : null}
           {/*
             The one sheet the safety flows and message menus open from
             anywhere (`lib/sheet.ts`). Inside the toast provider, so a

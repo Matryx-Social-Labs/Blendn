@@ -142,11 +142,18 @@ export function nextUpLabel(
  * claim: it says the organiser has not chosen one yet, when what actually
  * happened is that this response did not carry the field. Saying nothing is the
  * only honest option for an absent value.
+ *
+ * "at The Humming Tree" when the server names the venue the event is linked to
+ * (`venue`, null when the venue disputed the link): while the event has the
+ * place, Places leaves the venue out, and the card is where it is still named.
  */
 export function placeLabel(event: {
+  venue?: { name: string } | null
   venue_name?: string | null
   city?: string | null
 }): string | null {
+  const linked = event.venue?.name?.trim()
+  if (linked) return `at ${linked}`
   const venue = event.venue_name?.trim()
   if (venue) return venue
   const city = event.city?.trim()

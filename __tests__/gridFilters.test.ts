@@ -173,7 +173,8 @@ describe('the rebuilt room kept what the old Grid had', () => {
      */
     const src = SCREEN()
     expect(src).toContain('<Animated.FlatList')
-    expect(src).toContain('numColumns={3}')
+    // Three to a row for faces; the Crews view (step 9) is one card to a row in the same list.
+    expect(src).toContain("numColumns={gridView === 'people' ? 3 : 1}")
     expect(src).toContain('renderItem=')
     expect(src).not.toMatch(/everyone\.map\(|people\.map\(/)
   })
@@ -230,5 +231,37 @@ describe('Join Chat is a door, not a pane', () => {
     // Otherwise the dock is a control that sometimes does nothing, which reads
     // as the app being broken rather than the chat not existing yet.
     expect(SCREEN()).toContain('The chat for this event is not open yet.')
+  })
+})
+
+describe('the room says who is here now (SCRUM-495)', () => {
+  it('builds the face stack under "here now" from people inside only', () => {
+    expect(SECTIONS()).toContain('hereNowStack(arrivals, people, STACK)')
+  })
+
+  it('heads the face grid with what is true of everyone in it', () => {
+    expect(SCREEN()).toMatch(/const head = everyoneHead\(everyone, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
+    expect(SCREEN()).toContain('<FaceGridHead title={head.title} count={head.count}')
+    expect(SECTIONS()).toContain('<Text variant="heading">{title}</Text>')
+  })
+
+  it('names as just walked in only somebody who is still here', () => {
+    expect(SECTIONS()).toContain('const latest = arrivals.find((a) => a.insideNow !== false)')
+  })
+})
+
+describe('the face grid names people at a readable size (SCRUM-503)', () => {
+  it('does not shrink the name to fit', () => {
+    /*
+     * On iOS the grid name's first render sometimes came out at a fraction of
+     * its size — far below minimumFontScale — and stayed that way until
+     * something else re-rendered the room. Seen on fresh launches with the
+     * grid under no Meet next. One line, ellipsised, is always legible.
+     * Meet next's card keeps shrink-to-fit: full size in every drive so far.
+     */
+    const src = SECTIONS()
+    const grid = src.slice(src.indexOf('export const GridFace'), src.indexOf('export function FaceGridHead'))
+    expect(grid).toMatch(/<Text variant="bodyStrong" numberOfLines=\{1\} style=\{styles\.centre\}>\s*\{person\.name\}/)
+    expect(grid).not.toContain('adjustsFontSizeToFit')
   })
 })

@@ -21,7 +21,31 @@ export type ShowTray = (title: string, message: string, buttons?: ActionTrayButt
 export type CheckInTrays = {
   showTray: ShowTray
   closeTray: () => void
+  /**
+   * The weakest fix to accept, in metres. The event door asks 50; Go Live sends
+   * up to the server's own ceiling (`MAX_GPS_ACCURACY_METERS`, 150) and lets
+   * the server judge (step 5 review, H4).
+   */
+  maxAccuracyM?: number
+  /**
+   * What "Try Again" on the weak-fix tray does. A fix on its own goes nowhere:
+   * the action that wanted it must run again, or the retry is a dead end
+   * (step 5 review, H4).
+   */
+  onRetry?: () => void
 }
+
+/** The event door's floor for a usable fix. */
+export const CHECK_IN_MAX_ACCURACY_M = 50
+
+/**
+ * iOS "Precise Location" switched off: every fix is kilometres wide, so
+ * "move somewhere with better signal" is the wrong advice; the switch is.
+ */
+export const PRECISE_OFF = {
+  title: 'Turn on Precise Location',
+  message: "Blend'n only has your approximate location, which can't tell which place you're at. Turn on Precise Location for Blend'n in Settings.",
+} as const
 
 export type CheckInLocation = {
   latitude: number
@@ -32,7 +56,12 @@ export type CheckInLocation = {
 /**
  * A fix good enough to check in with, or `null` after a tray has said why not.
  */
-export async function getCurrentLocation({ showTray, closeTray }: CheckInTrays): Promise<CheckInLocation | null> {
+export async function getCurrentLocation({
+  showTray,
+  closeTray,
+  maxAccuracyM = CHECK_IN_MAX_ACCURACY_M,
+  onRetry,
+}: CheckInTrays): Promise<CheckInLocation | null> {
   try {
     // Fallback if expo-location is not available
     if (!Location) {
@@ -67,7 +96,23 @@ export async function getCurrentLocation({ showTray, closeTray }: CheckInTrays):
     }
 
     // Request permission with better messaging
-    const { status } = await Location.requestForegroundPermissionsAsync()
+    const permission = await Location.requestForegroundPermissionsAsync()
+    const { status } = permission
+    if (status === 'granted' && permission.ios?.accuracy === 'reduced') {
+      Logger.warn('events', 'location:preciseOff')
+      showTray(PRECISE_OFF.title, PRECISE_OFF.message, [
+        { label: 'Cancel', onPress: closeTray },
+        {
+          label: 'Open Settings',
+          variant: 'primary',
+          onPress: () => {
+            closeTray()
+            Linking.openSettings().catch(() => {})
+          },
+        },
+      ])
+      return null
+    }
     if (status !== 'granted') {
       Logger.warn('events', 'location:permissionDenied')
       showTray(
@@ -112,7 +157,7 @@ export async function getCurrentLocation({ showTray, closeTray }: CheckInTrays):
 
     // Validate GPS accuracy for production
     const accuracy = location.coords.accuracy || 999
-    if (accuracy > 50) {
+    if (accuracy > maxAccuracyM) {
       Logger.warn('events', 'location:lowAccuracy', { accuracy })
       showTray(
         'GPS signal weak',
@@ -124,7 +169,8 @@ export async function getCurrentLocation({ showTray, closeTray }: CheckInTrays):
             variant: 'primary',
             onPress: () => {
               closeTray()
-              getCurrentLocation({ showTray, closeTray }).catch(() => {})
+              if (onRetry) onRetry()
+              else getCurrentLocation({ showTray, closeTray, maxAccuracyM }).catch(() => {})
             },
           },
         ]

@@ -5,15 +5,21 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
+import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
+import type { PlusStatus } from './plus'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
+import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
+import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
+import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 
 // API Configuration
@@ -400,6 +406,18 @@ export interface MatchCard {
   age?: number | null
   insideNow: boolean
   youLiked: boolean
+  /**
+   * Matching v2: display-only lines you share, as sentences the server wrote
+   * ("Both CSK — in RCB country 💛", "You both speak Malayalam"). Never a
+   * ranking: the order of the deck is unchanged by them. At most one
+   * origin-like line before a reveal, none in a small room — the server's
+   * budget, never re-derived here. Optional: a client outlives a deploy.
+   */
+  overlaps?: Overlap[]
+  /** Their own sign, "Leo ♌", only when they chose to show it and the card allows. */
+  sign?: string | null
+  /** "Regular here", "Shows up", "5+ nights this month" — earned by check-ins. */
+  badges?: Badge[]
 }
 
 export interface LikeOutcome {
@@ -517,6 +535,11 @@ export interface ApiResponse<T = unknown> {
    * the rejoin (`rejoinChatGroup`) without a second lookup.
    */
   chatGroupId?: string
+  /**
+   * The event a refusal hands off to. Go Live answers `EVENT_LIVE_HERE` with
+   * it (`POST /venues/:venueId/live`): check in to that event instead.
+   */
+  eventId?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -598,6 +621,12 @@ export interface EventApiItem {
   visibility: string
   venueName: string | null
   venue_name?: string | null
+  /**
+   * The venue the event is linked to, `{ id, name }`, or null when its owner
+   * disputed the link, it is archived, or there is none (then say `venueName`).
+   * Absent from an older server.
+   */
+  venue?: { id: string; name: string } | null
   address: string | null
   city: string | null
   state: string | null
@@ -645,6 +674,13 @@ export interface EventApiItem {
     image?: string | null
     email?: string
   }
+  /**
+   * "Running this event? Claim it" — detail endpoint only. `{ url }` for a
+   * curated event nobody has claimed, null otherwise (or absent from an older
+   * server). The URL is the dashboard's public claim page; read it through
+   * `claimUrlFrom`.
+   */
+  claim?: { url: string } | null
   details?: {
     fullDescription?: string
     houseRules?: string | null
@@ -721,6 +757,83 @@ export interface EventsListResponse {
   pagination: PaginationMeta
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
   profile?: UserProfileData
+}
+
+/** One place in the Places list — `GET /api/mobile/venues`. */
+export interface VenueListItem {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  latitude: number | null
+  longitude: number | null
+  venueType: string | null
+  venueTypeLabel: string
+  /** Kilometres from the `lat`/`lon` sent, or null. */
+  distance: number | null
+  upcomingEventCount: number
+  /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
+  liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
+  nextEvent: {
+    id: string
+    title: string
+    slug: string | null
+    coverImageUrl: string | null
+    startTime: string
+    endTime: string
+  } | null
+}
+
+export interface VenuesListResponse {
+  venues: VenueListItem[]
+  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
+}
+
+/** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
+export interface VenueDetail {
+  venue: {
+    id: string
+    name: string
+    address: string | null
+    city: string | null
+    latitude: number | null
+    longitude: number | null
+    venueTypeLabel: string
+    /** False: "Own this place? Claim it" applies. */
+    claimed: boolean
+  }
+  live: {
+    /** Whether going live here would be accepted now, the fence aside. */
+    open: boolean
+    closedReason: 'event_live_here' | 'no_check_in_area' | null
+    /** The event that has the place, when `closedReason` is `event_live_here`. */
+    eventId: string | null
+    liveNow: VenueListItem['liveNow']
+    youAreLive: boolean
+    /** Your window's end. Count down from this, never from a tap. */
+    expiresAt?: string | null
+    stay?: boolean
+    venueDayId?: string | null
+    chatGroupId?: string | null
+  }
+  /**
+   * The public claim page, when the place is unclaimed and the server offers
+   * one (`{ url }`, built on the dashboard host). Read through `claimUrlFrom`.
+   */
+  claim?: { url?: unknown } | null
+  tonight: { id: string; title: string; startTime: string; endTime: string } | null
+}
+
+/** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
+export interface GoLiveResult {
+  venueDayId: string
+  chatGroupId: string | null
+  expiresAt: string
+  stay: boolean
+  stayUntil: string | null
+  checkIn: { id: string; status: string; checkInTime: string }
+  revealSuggestion: boolean
+  intentNeeded: boolean
 }
 
 export interface CheckinPagination {
@@ -930,6 +1043,16 @@ let rejectedReason: string | undefined
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
+  /**
+   * Bumped by `forgetEventMatches`. A response to a request sent before the
+   * bump answers an older question than the event that forgot it, so it is
+   * returned to its caller but not cached.
+   *
+   * ponytail: one counter for every key, so a forget also stops unrelated reads
+   * in flight at that moment from caching — each costs one extra fetch later.
+   * Per-key epochs if that ever shows up.
+   */
+  private cacheEpoch = 0
   private responseCache = new Map<string, { data: ApiResponse<unknown>; timestamp: number; ttl: number }>()
 
   /**
@@ -972,9 +1095,27 @@ class ApiClientClass {
    * room was answered from the cache that still had you in it.
    */
   forgetActiveCheckins(): void {
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(':/api/mobile/checkins/active:')) this.responseCache.delete(key)
-    }
+    this.forgetMatching((key) => key.includes(':/api/mobile/checkins/active:'))
+  }
+
+  /**
+   * Drop what is known about places' detail, so the next `getVenue` asks the
+   * server. Not cached, but a read already on the wire was answered before
+   * the change (a Go Live, an extend, `live:ended`) and must not be joined.
+   */
+  forgetVenues(): void {
+    this.forgetMatching((key) => /:\/api\/mobile\/venues\/[^/:?]+:/.test(key))
+  }
+
+  /**
+   * Forget every cached and in-flight read `matches` picks, and make a read
+   * that started before now unable to refill the cache — `forgetEventMatches`'s
+   * rule, for every list a change makes stale (step 5 review, H2).
+   */
+  private forgetMatching(matches: (key: string) => boolean): void {
+    this.cacheEpoch++
+    for (const key of this.responseCache.keys()) if (matches(key)) this.responseCache.delete(key)
+    for (const key of this.inFlight.keys()) if (matches(key)) this.inFlight.delete(key)
   }
 
   /**
@@ -992,6 +1133,31 @@ class ApiClientClass {
     for (const key of this.responseCache.keys()) {
       if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
     }
+  }
+
+  /**
+   * Drop one room's cached matches, so the next `getEventMatches` asks the server.
+   *
+   * Called when somebody checks in or out of that room (`lib/socketClient.ts`).
+   * The event marks the room dirty, and the sync that follows read the
+   * 30-second SWR entry from before it — which put somebody who had just walked
+   * back in down as "Was here" again (SCRUM-502).
+   *
+   * The room's preview goes too: it is the same question asked as a number.
+   * That sync also re-seeds the Room's "here now" from `getRoomPreview`, whose
+   * 15-second entry still held the count from before the event, and put it
+   * back over the `hereCount` the event had just set. The open Room stayed at
+   * 7 while the database said 4 (SCRUM-617).
+   */
+  forgetEventMatches(eventId: string): void {
+    const room = `:/api/mobile/events/${eventId}`
+    const isRoom = (key: string) =>
+      key.includes(`${room}/matches:`) || key.includes(`${room}/matches?`) || key.includes(`${room}/room-preview:`)
+    this.cacheEpoch++
+    for (const key of this.responseCache.keys()) if (isRoom(key)) this.responseCache.delete(key)
+    // A read already on the wire was answered before the event: the next one
+    // must not join it.
+    for (const key of this.inFlight.keys()) if (isRoom(key)) this.inFlight.delete(key)
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
@@ -1042,15 +1208,16 @@ class ApiClientClass {
     key: string,
     ttl: number
   ) {
+    const epoch = this.cacheEpoch
     this.queuedRequest<T>(endpoint, options, requireAuth, priority).then((result) => {
-      if (result.success) {
+      if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
     }).catch(() => {})
   }
 
   private buildErrorMessage(
-    response: Response,
+    response: ResponseHead,
     payload: unknown,
     endpoint: string
   ): string {
@@ -1072,10 +1239,12 @@ class ApiClientClass {
   }
 
   private async parseResponse<T>(
-    response: Response,
+    response: ResponseHead,
+    raw: string,
     endpoint: string
   ): Promise<ApiResponse<T>> {
-    const raw = await response.text()
+    // A Go Live counts down to the server's clock, not this phone's (lib/serverClock.ts).
+    noteServerDate(response.headers?.get?.('date'))
     if (!raw) {
       if (response.ok) {
         return { success: true } as ApiResponse<T>
@@ -1108,6 +1277,7 @@ class ApiClientClass {
           ? parsed.retryAfter
           : Number(response.headers.get('Retry-After')) || undefined,
         ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
+        ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -1163,7 +1333,7 @@ class ApiClientClass {
       try {
         // Every fetch in this class goes through fetchWithTimeout. A deadline
         // on the first call alone still hangs the queue on the other two.
-        const response = await fetchWithTimeout(url, { ...options, headers })
+        const { response, body } = await fetchWithTimeout(url, { ...options, headers })
 
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
@@ -1173,8 +1343,8 @@ class ApiClientClass {
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
-            const retryResponse = await fetchWithTimeout(url, { ...options, headers })
-            return this.parseResponse<T>(retryResponse, endpoint)
+            const retry = await fetchWithTimeout(url, { ...options, headers })
+            return this.parseResponse<T>(retry.response, retry.body, endpoint)
           }
           if (refreshed === 'failed') {
             // Not signed out: the server never answered. Reported as the
@@ -1193,7 +1363,7 @@ class ApiClientClass {
           continue
         }
 
-        const result = await this.parseResponse<T>(response, endpoint)
+        const result = await this.parseResponse<T>(response, body, endpoint)
         if (result.success) markOnline()
         return result
       } catch (error) {
@@ -1257,7 +1427,7 @@ class ApiClientClass {
         // of this bug: `isRefreshing` gates every other caller behind one
         // promise, so a single stalled refresh silently blocks re-auth for the
         // whole app until it is killed.
-        const response = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
+        const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
@@ -1270,15 +1440,14 @@ class ApiClientClass {
           // in the attendee app. Keep the sentence for the entry screen.
           if (response.status === 403) {
             try {
-              const body = (await response.json()) as { error?: unknown }
+              const body = JSON.parse(raw) as { error?: unknown }
               if (typeof body?.error === 'string') rejectedReason = body.error
             } catch {}
           }
           return 'rejected'
         }
 
-        const data: ApiResponse<{ accessToken: string; refreshToken: string }> =
-          await response.json()
+        const data: ApiResponse<{ accessToken: string; refreshToken: string }> = JSON.parse(raw)
 
         if (data.success && data.data) {
           await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
@@ -1346,7 +1515,8 @@ class ApiClientClass {
     if (isGet) {
       this.inFlight.set(key, promise as Promise<ApiResponse<unknown>>)
       promise.finally(() => {
-        this.inFlight.delete(key)
+        // Only its own entry: a forget may have let a newer read take the key.
+        if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
       })
     }
 
@@ -1379,8 +1549,9 @@ class ApiClientClass {
       }
     }
 
+    const epoch = this.cacheEpoch
     const result = await this.queuedRequest<T>(endpoint, options, requireAuth, priority)
-    if (result.success) {
+    if (result.success && epoch === this.cacheEpoch) {
       this.setCache(key, result, cache.ttl)
     }
     return result
@@ -1644,6 +1815,47 @@ class ApiClientClass {
   }
 
   /**
+   * Places — `GET /venues`. Takes the Pulse's vocabulary (`city`, `lat`/`lon`,
+   * no default radius). A venue an event has taken over is not in it; its
+   * event's card names the venue instead.
+   */
+  async getVenues(
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance' },
+    options?: { force?: boolean }
+  ): Promise<ApiResponse<VenuesListResponse>> {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) searchParams.append(key, String(value))
+    })
+    const query = searchParams.toString()
+    const endpoint = `/api/mobile/venues${query ? `?${query}` : ''}`
+    if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
+    return this.cachedRequest<VenuesListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+  }
+
+  /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
+  async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
+    return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /**
+   * Go Live at a place for 20, 45 or 60 minutes, or "stay". Going live again
+   * while live extends, never shortens. `gpsAccuracy` rides in `deviceInfo`,
+   * the key the server reads (as for check-in). A mutation: never retried.
+   */
+  async goLive(
+    venueId: string,
+    body: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> } & ({ minutes: 20 | 45 | 60 } | { stay: true })
+  ): Promise<ApiResponse<GoLiveResult>> {
+    return this.queuedRequest<GoLiveResult>(
+      `/api/mobile/venues/${encodeURIComponent(venueId)}/live`,
+      { method: 'POST', body: JSON.stringify(body) },
+      true,
+      2
+    )
+  }
+
+  /**
    * The cities that currently have events, busiest first.
    *
    * Server-owned rather than derived on the device: a reverse-geocode on the
@@ -1654,8 +1866,8 @@ class ApiClientClass {
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: { city: string; eventCount: number }[] }>> {
-    return this.cachedRequest<{ cities: { city: string; eventCount: number }[] }>(
+  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
+    return this.cachedRequest<{ cities: CityOption[] }>(
       '/api/mobile/events/cities',
       { ttl: 5 * 60 * 1000, swr: true }
     )
@@ -1926,6 +2138,8 @@ class ApiClientClass {
       education?: string
       interests?: string[]
       photos?: string[]
+      /** The blurred copy of `photos[0]`, sent with every new primary (SCRUM-478). */
+      blur_photo?: string | null
       goals?: string[]
       looking_for?: string[]
       onboarded?: boolean
@@ -1987,6 +2201,16 @@ class ApiClientClass {
       share_location?: boolean
       /** Off by default: friends see a pseudonym in rooms unless this is on. */
       friends_see_me_in_rooms?: boolean
+      /*
+       * Matching v2, display only — slugs from `getProfileOptions()`. A sign
+       * travels with its calendar: both set, or both null to take it off.
+       */
+      languages?: string[]
+      home_state?: string | null
+      sun_sign?: string | null
+      sign_system?: 'western' | 'rashi' | null
+      shows_up_badge?: boolean
+      show_badges?: boolean
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(
@@ -2098,6 +2322,22 @@ class ApiClientClass {
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
   async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
     return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
+  }
+
+  /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */
+  async getMyPlus(): Promise<ApiResponse<PlusStatus>> {
+    return this.queuedRequest<PlusStatus>('/api/mobile/me/plus')
+  }
+
+  /** The paywall's analytics. Lowest priority; nothing waits on it. */
+  async logPaywallEvent(event: PaywallEvent, trigger: PaywallTrigger): Promise<ApiResponse<{ recorded: true }>> {
+    return this.queuedRequest<{ recorded: true }>(
+      '/api/mobile/me/plus/paywall-events',
+      { method: 'POST', body: JSON.stringify({ event, trigger }) },
+      true,
+      // Last in the queue: lower runs first, and nothing waits on this.
+      10
+    )
   }
 
   // === CHAT ENDPOINTS ===
@@ -2295,9 +2535,7 @@ class ApiClientClass {
    * SWR-cached, and answering from the old copy would put a left room back.
    */
   forgetChatGroups(): void {
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(':/api/mobile/chat/groups:')) this.responseCache.delete(key)
-    }
+    this.forgetMatching((key) => key.includes(':/api/mobile/chat/groups:'))
   }
 
   /**
@@ -2505,6 +2743,26 @@ class ApiClientClass {
    * differently and never match on. Same cache treatment as categories — it is
    * eighteen strings, identical for everybody, and changes about once a year.
    */
+  /** Matching v2's vocabulary: languages, home states, signs, this-or-that. Static; cached like work fields. */
+  async getProfileOptions(): Promise<ApiResponse<ProfileOptions>> {
+    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', { ttl: CATEGORIES_SWR_TTL, swr: true })
+  }
+
+  /** Your this-or-that answers, question slug → "a" | "b". */
+  async getThisOrThat(): Promise<ApiResponse<{ answers: Record<string, Choice> }>> {
+    return this.queuedRequest<{ answers: Record<string, Choice> }>('/api/mobile/me/this-or-that')
+  }
+
+  /** Set (`"a"`/`"b"`) or take back (`null`) answers; questions not sent are left alone. */
+  async putThisOrThat(answers: Record<string, Choice | null>): Promise<ApiResponse<{ answers: Record<string, Choice> }>> {
+    return this.queuedRequest<{ answers: Record<string, Choice> }>(
+      '/api/mobile/me/this-or-that',
+      { method: 'PUT', body: JSON.stringify({ answers }) },
+      true,
+      2
+    )
+  }
+
   async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
     return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
       '/api/mobile/work-fields',
@@ -2830,6 +3088,13 @@ class ApiClientClass {
        * is wrong about your own anonymity is worse than no chip.
        */
       revealed?: boolean
+      /** `venue_day`: a Go Live at a place — name it by `event.venueName`, count down to `expiresAt`. */
+      kind?: 'event' | 'venue_day'
+      /** The place a Go Live is at (`venue_day` only), to extend or go again from anywhere. */
+      venueId?: string | null
+      /** A Go Live's end; null at an event. */
+      expiresAt?: string | null
+      stay?: boolean
       event: {
         id: string
         title: string
@@ -3077,6 +3342,111 @@ class ApiClientClass {
     return this.queuedRequest(
       `/api/mobile/friends/requests/${encodeURIComponent(requestId)}`,
       { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  // === THE BOARD ===
+  // See lib/board.ts. Uncached, like the friends lists: a board is read to
+  // decide, and a stale one offers a seat that has gone. Every refusal on these
+  // routes is a sentence for the person (`boardMessage`).
+
+  async getBoard(eventId: string): Promise<ApiResponse<{ posts: BoardPost[] }>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board`)
+  }
+
+  async postToBoard(
+    eventId: string,
+    post: { kind: 'offer' | 'seeking'; body: string; spacesLeft?: number }
+  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'>>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board`,
+      { method: 'POST', body: JSON.stringify(post) },
+      true,
+      2
+    )
+  }
+
+  async withdrawBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ id: string; withdrawn: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`,
+      { method: 'DELETE' },
+      true,
+      2
+    )
+  }
+
+  /** No message: asking is one tap, and "can I join?" needs no essay. */
+  async askOnBoard(eventId: string, postId: string): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/requests`,
+      { method: 'POST', body: JSON.stringify({}) },
+      true,
+      2
+    )
+  }
+
+  async getBoardRequests(): Promise<ApiResponse<BoardRequests>> {
+    return this.queuedRequest('/api/mobile/board/requests')
+  }
+
+  /** `conversationId` comes back on accept: the pseudonymous DM it opened. */
+  async answerBoardRequest(
+    requestId: string,
+    action: 'accept' | 'decline' | 'withdraw'
+  ): Promise<ApiResponse<{ id: string; status: BoardRequestStatus; conversationId?: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}`,
+      { method: 'PATCH', body: JSON.stringify({ action }) },
+      true,
+      2
+    )
+  }
+
+  /*
+   * Report and block on the board are **by the post or the ask** a person
+   * wrote: the board never hands the client a user id, and the server never
+   * returns the one it resolves. Reasons are the message-report reasons.
+   */
+  async reportBoardPost(
+    eventId: string,
+    postId: string,
+    report: { reason: BoardReportReason; description?: string }
+  ): Promise<ApiResponse<{ reported: true }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/report`,
+      { method: 'POST', body: JSON.stringify(report) },
+      true,
+      2
+    )
+  }
+
+  async blockBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
+      { method: 'POST' },
+      true,
+      2
+    )
+  }
+
+  async reportBoardRequest(
+    requestId: string,
+    report: { reason: BoardReportReason; description?: string }
+  ): Promise<ApiResponse<{ reported: true }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/report`,
+      { method: 'POST', body: JSON.stringify(report) },
+      true,
+      2
+    )
+  }
+
+  async blockBoardRequest(requestId: string): Promise<ApiResponse<{ blocked: boolean }>> {
+    return this.queuedRequest(
+      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
+      { method: 'POST' },
       true,
       2
     )

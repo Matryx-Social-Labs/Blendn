@@ -143,7 +143,7 @@ Two modes, chosen from your active check-in (`lib/useRoom.ts`):
 | Mode | What |
 |---|---|
 | **Tonight** | A swipeable deck of what is on, yours first then nearest (the Me tab's photo stack, `SwipeDeck`). At a venue, a docked pass: **hold to check in** (`HoldToConfirm`), which runs the event screen's own flow (`lib/useCheckInFlow.ts`) and turns into the Room. A "N here share your taste" teaser with blank faces (`room-preview`, never under 3 people). |
-| **Room** | LIVE, a rolling headcount, the faces who just walked in, and your time in the room set around your photo. **Meet next**: the server's top picks, three at a time, reshuffled every 15 minutes on a clock every phone agrees on. **Everyone here**: a 3-column face grid (virtualised), one reason per face; tap for the person card, double-tap to like. The room chat is docked at the bottom (last two lines + arrivals/waves/matches), pull up for the full chat. |
+| **Room** | LIVE, a rolling headcount, the faces who just walked in, and your time in the room set around your photo. **Meet next**: the server's top picks, three at a time, reshuffled every 15 minutes on a clock every phone agrees on. **Everyone here** ("Everyone who came" once somebody in it has checked out, captioned "Was here"): a 3-column face grid (virtualised), one reason per face; tap for the person card, double-tap to like. The room chat is docked at the bottom (last two lines + arrivals/waves/matches), pull up for the full chat. |
 
 The person card has three verbs: **Like** (private until mutual; the accent),
 **Wave** (they are told at once, as they see you; one per pair per 10 min) and

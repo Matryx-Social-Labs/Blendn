@@ -19,6 +19,7 @@ import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { toggleIntent } from '../../lib/intents'
 
 /**
  * Why you are here tonight, and whether people can see who you are.
@@ -153,17 +154,9 @@ export default function EventPreferences() {
     }
   }, [user])
 
-  const toggleIntent = useCallback((value: Intent) => {
+  const onToggleIntent = useCallback((value: Intent) => {
     setIntentTouched(true)
-    setIntent((prev) => {
-      // "Just here" is exclusive: it means not looking, so it cannot sit
-      // alongside an answer that says you are.
-      if (value === 'just_here') return prev.includes('just_here') ? [] : ['just_here']
-      const withoutJustHere = prev.filter((i) => i !== 'just_here')
-      return withoutJustHere.includes(value)
-        ? withoutJustHere.filter((i) => i !== value)
-        : [...withoutJustHere, value]
-    })
+    setIntent((prev) => toggleIntent(prev, value))
   }, [])
 
   const save = useCallback(async () => {
@@ -208,7 +201,7 @@ export default function EventPreferences() {
     return (
       <ScalePress
         key={opt.value}
-        onPress={() => toggleIntent(opt.value)}
+        onPress={() => onToggleIntent(opt.value)}
         accessibilityRole="button"
         accessibilityLabel={`${opt.label}. ${opt.hint}`}
         accessibilityState={{ selected }}

@@ -26,6 +26,7 @@ ScrollView
   SceneBody         description, entity-accented
   SceneGallery      only when there is more than the cover
   SceneAttendees    label + count
+  BoardEntry        "The Board", before doors only (components/board — not in the harness)
   SceneLocationCard venue, area
   SceneMap          static map, tapping opens Maps
 SceneCTA            floating, outside the scroll

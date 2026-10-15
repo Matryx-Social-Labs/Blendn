@@ -531,6 +531,519 @@ currently in the selected city.
 
 ---
 
+## 6. The Board — `app/board/[eventId].tsx`, and its requests in the Banter
+
+**Route:** `/board/{eventId}` — the title and the doors come from the server,
+never the link · **Reached from:** the event screen's "The Board" row, **before
+the run's first doors only** (`!boardClosed(event.start_time)`, not the day's
+window). Requests are answered in the Banter
+(`components/board/BoardRequestsSection.tsx`, under message requests), which is
+also where a `board_request` push lands.
+
+**On since its server half shipped** (step 6b, admin #608 and #614: block and
+report by post or request, blocked authors filtered out of the board, a decline
+never sent to the asker, spaces that go down). `BOARD_ENABLED` in `lib/board.ts`
+gates the event row, the Banter section and the route, which sends a deep link
+home when it is off; a build can switch it off with
+`EXPO_PUBLIC_BOARD_ENABLED=false`, and reverting the one commit that turned it on
+is the other way back.
+
+**What it does.** Going alone, and looking for somebody to go with. People who
+are going post an **offer** (a car, a table — with spaces) or a **seeking**.
+Anyone who RSVP'd or saved the event reads the board. Asking is one tap; the
+author answers in the Banter; accepting opens a pseudonymous conversation.
+Design of record: "Part 3b — the board, designed" in the client plan.
+
+```
+Event screen ──▶ The Board                       Banter
+  "The Board"     ├─ Write a post (offer|seeking)  ├─ The Board: asks waiting on you
+  (pre-doors)     ├─ offers (spaces left) first    │    Decline · Accept ──▶ the DM
+                  ├─ seekings, text first          └─ YOU ASKED (quieter)
+                  └─ Ask to join ──▶ "Waiting on them"    Waiting on them · Withdraw
+                                                          They said yes / Closed
+```
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Pseudonyms only — never a name, never a photo** | The board is read by people deciding whether to travel with a stranger. A name or a face here hands over identity before anybody agreed to it. Marks are `boardMarkSeed(handle, eventId, id)` — the handle, never a user id (the server does not even send one) |
+| **Offer and seeking are two shapes, one accent** | An offer's spaces-left is the board's only real-time signal; it is the loudest line on its card and offers sort above seekings. Identical cards bury it. The accent is the screen's one primary action (Write a post / Post) |
+| **The counter is never the only difference** | Each card also says "Offering" / "Looking" in words — for a screen reader, and at the largest text size, where every line wraps rather than truncates |
+| **Two empty states, not one** | "Nobody's posted yet" is the common case and invites the first post. "The board's closed" is a different fact (the doors opened) and offers the room instead |
+| **A refusal names its gate, in the server's words** | Not going, profile incomplete, five asks waiting, the weekly limit, the content filter — each has a different fix. It stays on screen (not a toast) until the next try |
+| **A 409 is a state, never an error** | "You have already asked", "That request has already been answered" are what a double tap on a slow connection looks like. Never red, never an error toast |
+| **No confirm on Ask** | Asking is the moment someone feels most exposed; "Are you sure?" says it is dangerous. An inline spinner, then the card says what happened |
+| **A decline is never delivered, or inferable** | There is no decline push and no "declined" anywhere. The server sends the asker their declined ask as pending and live until the night lapses, and an ask to somebody blocked as an ask on a withdrawn post; the lines follow what it sends. A 409 on an ask reads "Waiting on them" (one ask per post, ever) or "Full"; never the server's sentence |
+| **Report and block are by the post or the ask** | The board never gives the app a user id. ⋯ on a post and More on an incoming ask open Report (the message reasons, an optional note) and Block (confirmed first); the server resolves who. A blocked post or ask leaves the screen at once. A rate-limited report says so rather than "try again" |
+| **An accept that cannot go through is a quiet line** | "Your offer is full", "Already answered", or "Closed" (taken down, ended, or a block or closed pair — one line for all three, as the server gives one sentence) under the ask; never a red toast |
+| **Accepting never draws the match opener** | The conversation carries `origin_board_request_id`, so the server answers `fromMatch: false`. Greeting two people who agreed to share a car with "You both said yes" is the silent failure this rule exists for (`__tests__/boardConversationNoOpener.test.tsx`) |
+| **Pushes carry no text** | `board_request` and `board_request_accepted` say only that something happened — a lock screen is read by other people. Nothing renders a preview from them |
+| **Before doors only** | After them the room is the place, gated on presence. A board left open would be a second room with a weaker gate |
+
+### Data each screen reads and writes
+
+| Surface | Reads | Writes |
+|---|---|---|
+| Event screen row | the event's `start_time` (hidden from doors on) | — |
+| The Board | `GET /events/:id/board` (posts: `kind`, `body`, `spacesLeft`, `author` handle, `mine`, `requestCount`); `GET /board/requests` (which posts already carry your ask) | `POST /events/:id/board` `{kind, body, spacesLeft?}`; `DELETE /events/:id/board/:postId` (take down your own); `POST /events/:id/board/:postId/requests` (ask, no message) |
+| Banter, The Board | `GET /board/requests` → incoming that are `live`; outgoing that are live, or closed until a day after their doors; your withdrawals hidden | `PATCH /board/requests/:id` `{accept \| decline \| withdraw}`; accept returns the `conversationId` the screen opens; `POST /board/requests/:id/report` `{reason, description?}`, `POST /board/requests/:id/block` |
+| A post's ⋯ | — | `POST /events/:id/board/:postId/report` `{reason, description?}`, `POST /events/:id/board/:postId/block` |
+
+### Still open — decisions and work, not styling
+
+| | |
+|---|---|
+| **A board conversation looks like any other in the inbox** | The conversations payload says `fromMatch: false` but not "from the board", so the Banter row cannot say where it came from. Needs `originBoardRequestId` (or a kind) on `GET /conversations` |
+| **`chat` posts** | The server accepts a third kind that asks nothing of anybody. The composer offers only offer and seeking; a `chat` post renders in the seeking shape |
+
+---
+
+## 7. "Running this event? Claim it" — event detail (`components/screens/EventDetailScreen.tsx`)
+
+**A link, not a screen, and the first of two.** Added 2026-10-01 (step 1 of the
+product-completion plan). The venue half, "Own this place? Claim it", lands with
+the venue detail screen (step 5).
+
+### What it does
+
+On an event **added by Blend'n** (curated) that nobody has claimed, a line under
+the location card reads *Running this event? Claim it*. Tapping it opens the
+public claim page in the browser — `https://<dashboard host>/claim/<eventId>`.
+
+### Rules the design must keep
+
+- **The server decides whether it shows.** `GET /events/:eventId` sends
+  `claim: { url }` only for a curated, unclaimed event; otherwise `null`. Never
+  show it from anything the app infers (the host name "Blendn" is not the
+  rule: a legacy event with no organiser reads the same).
+- **Open the URL as given.** It is built on the dashboard host for the
+  environment the app is talking to. The API host has no page there, and a
+  hard-coded host sends staging users to production.
+- **It leaves the app, on purpose.** The app refuses organiser and venue
+  accounts, and the claim page needs no account. Filing there grants nothing:
+  a person reviews every claim. Say nothing that promises ownership.
+- **Quiet.** Most people reading this screen are attendees; the line is for the
+  one organiser in a thousand who finds their own event. Never a button, never
+  in the CTA dock.
+
+### Open for design
+
+Placement (currently the last line of the page), wording, and whether it
+belongs beside the host byline instead.
+
+---
+
+## 8. The home screen — a map, and a drawer of Events | Places (`components/home/HomeShell.tsx`)
+
+**Added 2026-10-02 (step 2 of the product-completion plan, PR A).** The Pulse
+tab (`app/(tabs)/events.tsx`) is now a map with a pull-up drawer. The drawer
+holds a segmented control, **Events | Places**. Events is The Pulse exactly as
+it was — the same component, moved, with its sections, search, city picker and
+empty states. Design ticket: SCRUM-541.
+
+### What it does
+
+- **The map** (`HomeMap.tsx`) fills the screen behind everything: MapLibre
+  over OpenFreeMap, restyled dark (`lib/mapStyleEmber.ts`), at zoom 16 tilted
+  55°, the city's buildings an opaque cool dark grey under one map-anchored
+  moonlight (prototype v2's night). Pins follow the segment — events on
+  Events, venues on Places — for the part of the map on screen. Zoomed out, a
+  pin is a dot (at a venue its glow steps with its live bucket). Zoomed in
+  (step 2c), the twelve pins nearest the centre are lit (`lib/mapLit.ts`,
+  `useMapLighting.ts`): the building a pin stands in stands at least 15 m tall,
+  its walls banded from a dark foot to the brand colour under a bright crown —
+  ember walls and an accent roof for an event, rose walls and an orchid roof
+  for a venue — with a glow on the ground around its pin. A live event's glow
+  breathes for a few seconds after the map settles, then holds (never with
+  Reduce Motion, the drawer full or a screen reader on), and its look wins its
+  building. A pin with no building gets a banded pillar (10 m across, 70 m
+  tall) with a stronger glow at its foot. The nearest four carry a chip above
+  the roof: the name and "LIVE ●" or the start (in India's time, with the date
+  past six days), or a venue glyph and its bucket; a screen reader hears plain
+  words. Tap a pin, a lit building or a chip to open it. An event lights up
+  when its doors open, without a new read. The camera keeps its centre above
+  the drawer from the first frame, follows the picked city and your first
+  location fix (until you move the map yourself), and shows your position.
+  OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
+  top bar; the style can be moved off OpenFreeMap with
+  `EXPO_PUBLIC_MAP_STYLE_URL`. Inside a city our own building tiles cover
+  (`EXPO_PUBLIC_BUILDINGS_TILES_URL`; Bengaluru today), the buildings are ours
+  — real outlines with baked heights, each its own feature — and a lit one is
+  lit as itself (feature-state) in its crown colour, with their credits in the
+  map's attribution. **Every map colour, size, timing, the light and
+  the camera are `lib/mapTheme.ts`, and provisional**: the owner will redesign
+  the app from a design link, and the map's look is that one file
+  (SCRUM-566).
+- **The top bar** (wordmark and bell) floats over the map. The drawer never
+  covers it.
+- **The drawer** (`HomeDrawer.tsx`) rests at three heights: `peek` (only its
+  header, above the tab bar), `half` (the default) and `full` (under the top
+  bar). Drag its header, or tap the handle to step it up. The list inside
+  scrolls on its own and never moves the drawer.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **No check-in boundary is drawn, anywhere on the map** | The owner's ruling (plan v2 §4). No payload carries the area; a drawn outline is a map of where to stand to be counted. Every lit shape is a public building outline or a public pin, and every glow a fixed radius from the theme. `__tests__/homeMap.test.ts` refuses any fill or line layer on the home map, any read of an area, and any circle sized by something a place carries |
+| **The map shows what the server sent** | Pins are the lists' own query for the viewport. Nothing on the phone decides which places are listed |
+| **The segmented control is always reachable** | It is in the drawer's header, which is what `peek` leaves showing |
+| **Events is The Pulse, not a copy** | One component; a redesign of the Pulse is a redesign of this pane |
+| **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
+| **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
+| **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
+| **44pt targets** | The handle and each segment |
+| **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |
+| **The map follows the city** | Picking a city moves the map to it (`/events/cities` `centre`) |
+
+### Open for design
+
+Everything visual: the drawer's heights and edge, the segmented control, the
+handle, whether `peek` shows a summary line, what the map shows at each height.
+
+---
+
+## 9. Places — the list in the drawer (`components/home/PlacesList.tsx`)
+
+**Added 2026-10-02 (step 2, PR A).** The venues in the Pulse's city, nearest
+first when the phone has a fix. Each row: the name, the type, the area, the
+distance, how many are live, and tonight's event if there is one. A tap opens
+the place (§10). Design ticket: SCRUM-542.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **A place an event has taken over is not in the list, and the app does not decide that** | From an hour before a real event at a venue starts until it ends, the server leaves the venue out, and the event's card in Events says "at ‹Venue›" instead. One rule, on the server (`lib/venue-visibility.ts` in blendn-admin). The list filters nothing by time; a second rule here is how the list and the map come to disagree |
+| **Live is a bucket, never a number** | "Under 5 live", "5–9 live", "10–19 live", "20+ live" — the server's `liveNow`. A count that moved from 4 to 5 as you watched would tell you somebody just walked in (D-19) |
+| **Never who** | The list says how many, never which people. People are the venue's room, which only somebody live there may see |
+
+### Data it needs
+
+`GET /api/mobile/venues?city=…&lat=…&lon=…&sortBy=distance` — `apiClient.getVenues`.
+
+---
+
+## 10. A place — `app/venue/[id].tsx`
+
+**Added 2026-10-02 as a stand-in; filled in 2026-10-09 (step 5 of the
+product-completion plan).** A row in Places opens it. Design ticket:
+SCRUM-555.
+
+### What it does
+
+`GET /api/mobile/venues/:venueId` decides everything on it:
+
+- **The place**: name, type, address.
+- **How many are live** — a bucket, never a number: "Under 5 live here",
+  "5–9 live here", … When you are live it reads as the others ("You and under
+  5 others"): the server's figure never counts you.
+- **Go Live** (`live.open`) opens the Go Live sheet (§11). After a window ends
+  the button becomes **"Go live again · 20 minutes"** — one tap, the same
+  window (PL-M05) — with "Pick another time" under it. Only for the window last
+  chosen at this place on its current venue day, never for "stay", and only for
+  the account that chose it.
+- **Live**: a pill, `LIVE · 18:42 left` ("LIVE · STAYING" for "stay"), counting
+  down from the server's `expiresAt` by the server's clock (the `Date` header);
+  at zero it asks the server every few seconds until the window is gone.
+  "Open the room" (the place's chat), "See who's here" (the Blend'n room — the
+  place screen closes first, so it opens on top), and "Stop being live".
+- **An event has the place** (`closedReason: event_live_here`): instead of Go
+  Live, "‹Event› has this place now" and **Go to the event**, the event's
+  check-in. A Go Live refused with `EVENT_LIVE_HERE` gets the same hand-off as a
+  sheet.
+- **No check-in area** (`no_check_in_area`): a line saying so; no button.
+- **Today's room**: locked until you are live ("Only people live here can see
+  who's here and join the chat"); open while you are.
+- **Tonight's event**, which opens the event.
+- **"Own this place? Claim it"** — only for an unclaimed place whose payload
+  carries `claim: { url }` (read through `claimUrlFrom`, as §7).
+- A page refused as not onboarded / not an adult shows the server's sentence
+  and no Try again: no retry fixes it.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Live is a bucket, never a number, and never who** | D-19: a count that moved 4 → 5 as you watched names an arrival. People are the room, for people live there |
+| **The countdown reads the server's `expiresAt`** | Re-read on focus and on return from the background. A timer from the tap is wrong the moment the window is extended elsewhere or swept (PL-CU02) |
+| **No check-in boundary, anywhere** | No payload carries the area (plan v2 §4) |
+| **`EVENT_LIVE_HERE` is a hand-off, not an error** | The person is at the door of an event; the way in is its check-in (PL-CU01) |
+| **Seeing who is here costs being seen** | The room is locked until you are live. Never sold, never unlocked by Plus |
+| **The claim link is the server's** | Built on the dashboard host for the environment; quiet, leaves the app (§7) |
+
+### Open for design
+
+Everything visual: the pill, where the count sits, the locked room, the hand-off
+panel, whether the place gets an image (it has none; tonight's event cover is
+available).
+
+---
+
+## 11. The Go Live sheet and the expiry prompt — `app/venue/[id].tsx`, `components/LiveAtVenue.tsx`
+
+**Added 2026-10-09 (step 5).** Both are `ActionTray`s for now. Design ticket: SCRUM-556.
+
+- **The sheet**: "Go live at ‹place›", a sentence on what live means (you see
+  who is here and join today's room; they see you by your room name; it ends),
+  then **20 minutes · 45 minutes · An hour · Stay while Blendn is open here**,
+  Cancel. Where you are goes through the check-in's own gates (permission,
+  Precise Location, a fix); Go Live sends any fix up to the server's 150 m and
+  lets the server judge, and "Try Again" on a weak fix runs Go Live again.
+  "Stay" is sent as asked: whether it is Blendn+'s is the server's to say
+  (`PLUS_REQUIRED`, in a city where Blendn+ is gated; in its launch season
+  stay is everyone's); it holds only while the app pings from the place, in
+  the foreground. A `PLUS_REQUIRED` opens the paywall (§13), trigger
+  `go_live_expiry`.
+- **The expiry prompt**: five minutes before a fixed window ends, wherever you
+  are in the app, **at most once a night** per place (a "stay" window is never
+  prompted — it follows you). "Still at ‹place›?" · "You stop being live at
+  9:20 PM." · **Extend 45 min · free** (going live again extends, never
+  shortens) · **Stay live till I leave · Blendn+** · Let it end.
+- **"Stay live till I leave"** asks the server to stay (step 11). In launch
+  season it just works; where Blendn+ is gated the server answers
+  `PLUS_REQUIRED` and the paywall (§13) opens — at most once a night and once
+  a session by itself, and never over a chat; when its policy says not now, a
+  tray says "Staying live is part of Blendn+" with **See Blendn+**, which
+  always opens it.
+- **When it ends** (`live:ended`), a toast says so — "You're no longer live at
+  ‹place›." / "An event just started at ‹place›…" — and the place, the room
+  and the Banter re-read. Nothing is said for an end you made.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The extension is free** | 20/45/60 stay free (ROADMAP, Pricing); only "stay" may ever be Plus |
+| **Once a night** | A prompt every window would nag; asked once per venue day on this phone |
+| **The paywall only after the server says so** | The prompt offers staying; only a `PLUS_REQUIRED` from the server opens the paywall. The app never decides who has Plus |
+
+---
+
+## 12. A place's room when you are not live — `app/chat/[id].tsx` (`RoomLeftState kind="not_live"`)
+
+**Added 2026-10-09 (step 5).** Design ticket: SCRUM-557. A place's chat is for the people live there.
+When your window ends the server answers `NOT_LIVE` (and `live:ended` arrives):
+the history and composer go, replaced by "You're not live here any more" ·
+"Today's room is for the people live at this place. Go live there again to
+rejoin it." · **Go live again**, which opens the place. The room leaves the
+Banter's list at the same moment (the server lists it only while you are live).
+
+### Design tickets
+
+| Section | Ticket |
+|---|---|
+| §10 A place | SCRUM-555 |
+| §11 Go Live sheet, expiry prompt, Plus placeholder | SCRUM-556 |
+| §12 The room when not live (and the place's locked room) | SCRUM-557 |
+| §13 The Blendn+ paywall | SCRUM-582 (Hemanth) |
+
+---
+
+## 13. The Blendn+ paywall — `app/plus.tsx`
+
+**Added 2026-10-10 (step 11).** A modal, opened only through `openPaywall`
+(`lib/paywall.ts`) with a trigger the server logs. Placeholder for Hemanth's
+design.
+
+### What it does
+
+- **What Plus is**, exactly what exists: stay live while I'm here; your full
+  night history (free keeps the last 3). Partner perks and crew extras join
+  when they are built (SCRUM-584) — nothing is listed that cannot be used.
+- **Your state**, from `GET /me/plus`: "Blendn+ until 10 Nov 2026" / "Night
+  Pass until 11 Oct 2026, 4:30 AM".
+- **Never sells what is free.** Plans show only in a gated moment — a
+  `PLUS_REQUIRED` (`go_live_expiry`), locked nights (`recap`) — or when the
+  server says Blendn+ is for sale to this person (`gated`). In a launch season
+  the screen says it is free there and lists no plans; Settings' row reads
+  "Blendn+ · free during launch in your city" and opens an info tray instead.
+- **The packages** of RevenueCat's current offering: Monthly (`$rc_monthly`),
+  3 months (`$rc_three_month`), Yearly (`$rc_annual`), and Night Pass · 24
+  hours (`night_pass`) — each with its length and **the store's price string**,
+  the price the most prominent thing on the row (App Store 3.1.2).
+- The renewal sentence, **Terms of Use** and **Privacy Policy** beside the
+  buttons; **Restore purchases** ("No purchases to restore" when there is
+  none); **Manage subscription** (RevenueCat's management URL, else the store's
+  subscriptions page).
+- After a purchase or restore: "Confirming with the store…" while it asks
+  `GET /me/plus` every 3 s for up to a minute, then "You're in." — or "Taking
+  longer than usual — it'll unlock as soon as the store confirms." A
+  **pending** payment (UPI, Ask to Buy) is not polled: it says so, and Settings
+  and Going re-read on return. Each state is announced to VoiceOver.
+- The store's errors in words: already bought (with Manage subscription), a
+  purchase belonging to another Blendn account, purchases not allowed, no
+  connection; "Couldn't load prices" with Try again.
+- **Not now** in the header, always visible ("Done" once something was bought
+  or is confirming).
+- No RevenueCat key in the build: the screen still opens and says "Purchases
+  aren't available yet."
+
+### When it opens
+
+| Trigger | From | Cooldown when it comes by itself |
+|---|---|---|
+| `go_live_expiry` | a `PLUS_REQUIRED` on "stay" (the expiry prompt, the Go Live sheet) | once a night (the venue day, 06:00) |
+| `recap` | the Going tab's "{n} more nights with Blendn+" row | weekly (the row itself is a tap: always opens) |
+| `profile` | Settings → Account → Blendn+ | none: you asked |
+| `second_event` / `first_match` | not wired yet (policy only) | 14 days after a dismiss of either |
+| `perk` | not wired yet (no perk chips yet) | only on a tap |
+
+At most one paywall arrives by itself per app session, and never over
+onboarding, an event screen (the check-in), a chat or the Blend'n room. A tap
+on anything that says Blendn+ always opens it.
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The server unlocks, never the store or the app** | The webhook writes the entitlement; the screen only asks `GET /me/plus`. RevenueCat's customer info never decides what you have |
+| **No buying as nobody** | The buttons are off unless RevenueCat's user is this account (`canBuyAs`): an anonymous purchase names nobody the server knows |
+| **Packages stay listed and buyable with Plus on** | App Review signs in with a granted account and must be able to buy every product (guideline 2.1(b)) |
+| **Prices come from the store** | `priceString`, never a number in the app: the store sets the local price and tax |
+| **Never on the never-sold list** | Who liked you, cap bypass, seeing a venue without going live, reveal bypass, boosting — not as features, not as teasers |
+| **The stores only** | No other payment provider and no web checkout (App Store 3.1.1; `__tests__/paywallGuards.test.ts`) |
+| **"Not now" is always visible** | Plan v1: every paywall has a visible way out |
+
+---
+
+## 14. Crews and Blends — `app/crews/*`, `app/blend/[blendId].tsx`, the Grid's Crews view
+
+**Added 2026-10-09 (step 9 of the product-completion plan).** The server half
+is blendn-admin #630, #631 and #639; the contract is `docs/api/API.md` →
+Crews and Blends. Owner decision (a): one member's tap reveals the crew,
+consent is taken at join time, and each member can keep themselves anonymous.
+
+```
+Me ─ Crews ─▶ Your crews + invites ──▶ a crew: chat · We're here · invite · keep me anonymous · leave
+               └─ Make a crew (name, bio, tags, room for one more, friends, consent)
+Room (Blend'n) ─ People | Crews ─▶ your crews (We're here), "Open to joining a crew tonight",
+                                   crews here as cards: Like (as your crew, or you) · Report
+Banter ─ Live now ─▶ a Blend's chat ─ (i) ─▶ the Blend: both sides, Reveal our crew, Block, Leave
+```
+
+| Screen | File | Hemanth ticket |
+|---|---|---|
+| Your crews and invites | `app/crews/index.tsx` | SCRUM-567 |
+| Make a crew | `app/crews/new.tsx` | SCRUM-569 |
+| A crew | `app/crews/[crewId].tsx` | SCRUM-571 |
+| The Grid's Crews view and the crew card | `components/crews/CrewsView.tsx`, `CrewParts.tsx` | SCRUM-573 |
+| A Blend: its sides, reveal, block, leave | `app/blend/[blendId].tsx` | SCRUM-574 |
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **The consent is beside every way in, and starts unticked** | Create and accept both show *"Anyone in this crew can reveal the crew — your name and photos — to people you match with."* with an "I understand" the person ticks, and the "Keep me anonymous even when my crew reveals" switch under it. Never behind a "more" (CR-CU01). The server refuses a join without `revealConsent: true`; a client that defaulted it would consent for them |
+| **A crew card is counts, never people** | The Grid's card is the emblem, the name, "Crew of N", "Here now · 3 of 5", tags and bio. The server sends no pseudonym on it on purpose: a list of tonight's pseudonyms beside a crew that later reveals singles out the ones who stayed anonymous. The menagerie (pseudonym animals) appears inside a Blend, where the server sends it |
+| **In a Blend, names come only from `GET /blends`** | A side is a menagerie until its crew reveals; then the revealed are a collage of faces and first names, and anybody who kept themselves anonymous stays a pseudonym tile — never a blank and never their photo. "N revealed · M keep it private" says how many, never who |
+| **`invited` is a count of who you asked** | "Asked 3 friends", never "Invited Rohan" or "2 of 3 invited": the server skips people silently (a block, a decline in the last 30 days) so inviting can't be used to learn about them |
+| **One line for every "not yours"** | A crew that dissolved, an invite that lapsed, a Blend that closed or a block across its sides each read as one plain line ("This Blend has closed") — never a reason |
+| **"We're here" checks nobody in** | It tells the crew; the second tap of the night says "Your crew already knows you're here tonight". Each member checks in with their own GPS |
+| **A crew like of a person tells you nothing about them** | The answer is always "Liked for your crew" unless it made a Blend — not here, not open to crews and blocked all look the same |
+| **"Open to joining a crew tonight" lapses** | It ends with the night, so the switch is read from the server each time the Crews view opens (an empty `PUT …/matches/preferences` answers it; there is no GET) |
+| **Block from a Blend uses the Blend's handle** | `POST /users/<rh_ handle>/block`; the room goes on for everyone else |
+
+### Still open — decisions and work, not styling
+
+| | |
+|---|---|
+| **Crew chats in the Banter list** | `GET /chat/groups` lists event rooms only, so a crew's chat is reached from the crew and from its "We're here" push. A row per crew needs the last message on `GET /crews` |
+| **Owner tools** | Editing the crew (`PATCH /crews/:id`) and removing a member are on the server and not on a screen yet |
+| **Crew history and badges** | "Nights out together", "Regulars at Toit" (plan §6) wait for the showcase work |
+
+---
+
+## 15. Matching v2 — languages, home, sign, this-or-that; what cards share — `app/edit-about-you.tsx`, the person and crew cards
+
+**Added 2026-10-10 (step 10 of the product-completion plan).** The server half
+is blendn-admin step 10 (`lib/overlaps.ts`, `lib/about-you.ts`,
+`GET /profile-options`, `GET|PUT /me/this-or-that`); the contract is
+`docs/api/API.md` → Matches and "Matching inputs on the profile". The owner's
+rulings: **rank on what people chose and did, display what they are**; zodiac
+is an opt-in chip, never a ranking; never kundli, caste, religion or veg /
+non-veg.
+
+```
+Me ─ Edit profile ─ YOU AND MATCHING ─▶ "Languages, home, sign & this-or-that"
+                                          languages (≤5) · where you're from · Show my sign
+                                          (Western | My rashi instead) · 12 this-or-that · Show my badges · "Shows up"
+Room ─ a face ─▶ the person sheet: reasons now include the server's lines
+                 ("Both CSK — in RCB country 💛", "You both speak Malayalam"),
+                 their sign chip, badges ("Regular here", "5+ nights this month")
+Room ─ Crews ─▶ a crew card: up to two crew-held lines ("Both crews are into Techno"),
+                "6 nights out together"
+```
+
+| Surface | File | Hemanth ticket |
+|---|---|---|
+| Languages, home, sign & this-or-that | `app/edit-about-you.tsx` | SCRUM-590 |
+| The person sheet's shared lines, sign chip and badges | `components/blendn/PersonCard.tsx`, `app/user/[id].tsx` | SCRUM-591 |
+| The crew card's crew-held lines and nights together | `components/crews/CrewParts.tsx` | SCRUM-592 |
+
+### Rules the design must not break
+
+| Rule | Why |
+|---|---|
+| **Shown, never ranked** | Nothing on the editor may suggest it changes who you see. Ranking by language or state would sort rooms by region; by sign, by stars — which Tinder's own data says predicts nothing |
+| **The sign is off until turned on, and never preselected** | Beside an age a sign narrows a birthday to a month, so the switch says "Your sign shows next to your age" and nothing is picked for you: the Western sign of your birth date (`suggested_sun_sign`) is a hint you tap to use. "My rashi instead" swaps the calendar — a rashi is usually the Moon's sign, which a birth date cannot give, so it is only ever picked |
+| **Three changes a day** | Languages, home, sign and field of work change at most three times a day (the server's 429 sentence is shown as is), and a change made after you checked in somewhere prints nothing in that room — otherwise editing them would read other people's cards |
+| **Badges are yours to hide** | "Show my badges" (on by default) hides every badge on your card; "Shows up" is separately opt-in |
+| **Print the server's lines as sent** | The budget is the server's: before a reveal at most one language / home / sign line per card, none in a room under eight. A client that composed its own "Both from Kerala" from profiles would break the budget. The app never derives an overlap |
+| **Positive only** | No mismatch, no "incompatible", no "doesn't speak Kannada" — the server never sends one, and no design may add one |
+| **A crew card names no member** | Its lines are what the crew holds (two members and a third of it); never "3 of 4", never who |
+| **Badges are earned, not typed** | From GPS check-ins. "Shows up" only for those who turned it on. No streaks |
+
+---
+
+## 16. An offer and its door pass — `app/offer/[id].tsx`; regulars' choices on `app/venue/[id].tsx`
+
+**Added 2026-10-11 (step 12).** Placeholder for Hemanth's design.
+
+A venue on Venue Pro can send an offer to its **regulars** — people who came on
+3 or more nights in the last 30. The venue picks the words, the server picks
+who, and **the venue never learns who**: it sees how many opened and redeemed.
+
+### What it does
+
+- **Opened from the push or the bell.** The push names no place — "An offer for
+  you" / "A place you keep going back to sent you something" — because a lock
+  screen is read by others. The place and its words come from
+  `GET /offers/:id` here, and opening is what the venue's "opened" counts.
+- **The door pass, while the offer can be used:** the server's six-character
+  code (two groups of three), a clock that runs to the second, a bar that
+  drains to the code's next turn (every 30 s), and a pulse. A screenshot is
+  visibly dead and its code stops working within a minute. The screen asks the
+  server again before each turn, and at least every 10 s, so "Redeemed" appears
+  soon after staff tap it on their dashboard. Reduced motion stills the pulse;
+  the clock and the bar still move.
+- **States:** Redeemed; "You've used a pass at <place> tonight — one a night";
+  "This offer has ended" (past its end, or the place changed hands).
+- **Once, under the pass:** "Let <place> know you're a regular?" — **Yes, let
+  them know** sends `known: true`; **Maybe later** sends nothing.
+- **Beside the pass:** "Stop offers from <place>" (the same mute as the
+  place's page) and "Report this offer" (into the reports queue). The yes
+  prompt names who sees it: "<organisation>, who runs <place> on Blendn, will
+  see your first name…". "Maybe later" is remembered per place on the phone.
+  A code two seconds past its turn with no fresh answer is hidden.
+- **Settings → Notifications → "Offers from places":** one switch for every
+  place, kept on the server.
+- **On a claimed place's page:** two switches — "Let <place> know I'm a
+  regular" (they see your first name and your nights there in the last 30,
+  nothing else) and "No offers from <place>". Each sends only itself; the
+  switch shows what the server saved.
+
+### Rules a redesign must keep
+
+- Never put the place's name or the offer's words in anything drawn from the
+  push payload; read them from the server after the app opens.
+- The pass must stay visibly live: something that moves every second, and the
+  code from the server — never a code the app could compute or cache.
+- One accent per screen: the pass is it ("Yes" is bordered).
+- "Maybe later" must never send a request; only an explicit yes turns it on.
+
 ## Screens that do not exist at all
 
 Named so the gap is visible, not to imply they are next.
@@ -539,8 +1052,8 @@ Named so the gap is visible, not to imply they are next.
 |---|---|
 | **Presence prompt** — "are you still here?" | Logic exists in `lib/usePresence.ts`, which knows when the server says you are outside the geofence. Nothing renders it |
 | ~~**First-check-in screen**~~ | **Built as `app/about-you.tsx`, and moved.** It is asked once at signup rather than at every check-in — see section 4 below |
-| **Group check-in / group matching** | Deliberately gated behind the interests fix landing and one real event. See `ROADMAP.md` |
-| **Map, notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like |
+| ~~**Group check-in / group matching**~~ | **Built as crews (step 9, 2026-10-09)** — see section 13 |
+| **Notifications centre, search, profile strength** | In the Figma. Profile strength is **cut** — it contradicts a product that hides profiles until a mutual like. The map is §8 |
 | **`/join` attendee landing page** | Deferred by decision. Spec in `BlendnLanding/docs/JOIN_PAGE_BRIEF.md` |
 
 ---

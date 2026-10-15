@@ -24,6 +24,10 @@ export type NotificationKind =
   | 'match'
   | 'reveal_request'
   | 'reveal'
+  /** Somebody asked to join your board post. No handle, no text. */
+  | 'board_request'
+  /** Your board ask was accepted. Carries `conversationId`. */
+  | 'board_request_accepted'
   | 'friend_request'
   | 'friend_accepted'
   /** An event you checked in to has ended: rate it. Carries `eventId`. */

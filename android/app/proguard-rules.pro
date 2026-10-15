@@ -29,3 +29,8 @@
 # 'ErrorBoundary' of undefined". expo/expo#28010 answered it with -dontoptimize
 # for the whole app; keeping the annotation types is enough.
 -keep @interface expo.modules.** { *; }
+
+# MapLibre (home map, plan v2 step 2): the native SDK reaches its own classes by
+# reflection and JNI; its consumer rules cover today's release, this keeps a
+# future one from being optimised into a crash on a release build only.
+-keep class org.maplibre.** { *; }

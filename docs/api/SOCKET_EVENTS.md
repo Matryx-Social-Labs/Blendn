@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/SOCKET_EVENTS.md.
-  From Blendn-Admin @ 8d22d34 (v0.56.0, 2026-08-08).
+  From Blendn-Admin @ 257e570c (v0.69.0, 2026-10-11).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
@@ -21,7 +21,7 @@ On connect, server emits:
 ## Rooms
 
 - `user:{userId}` — personal room, auto-joined on connect
-- `chat:{chatGroupId}` — event chat rooms (joined via `join:chat`)
+- `chat:{chatGroupId}` — chat rooms of every kind (joined via `join:chat`): an event's room, a board post's, a crew's and a Blend's (step 8)
 - `event:{eventId}` — event-level updates (joined via `join:event`)
 - `conversation:{conversationId}` — private conversations (joined via `join:conversation`)
 
@@ -35,12 +35,25 @@ the database before the socket is added to the room (`lib/socket-auth.ts`):
 
 | Room | Who may join |
 |------|--------------|
-| `chat:{chatGroupId}` | Members of the chat group, excluding `banned` |
+| `chat:{chatGroupId}` | Members of the chat group, excluding `banned` and anyone who left by choice — **and** whoever the room's owner admits (`lib/room-kind.ts`, step 7). An event's room: as before. A board post's: its author, or an asker the author accepted and not in a block with the author either way; a member row alone is not enough. Closed with its post, its event, and 12 h after the event ends. A crew's: its members now — not suspended, the crew not dissolved; a member who leaves or is removed is taken out at once. A Blend's: the people checked in on either side when it matched (its member rows, a snapshot — a late arrival has none) still on their side, or the matched person — never somebody kept apart (a block or a closed conversation) from anyone on the other side: that pair is taken out at once and the room goes on for the rest; closed 12 h after the occurrence ends, or early when a side's crew dissolves or is hidden, which empties its sockets. Names: first names in a crew's room, tonight's event-room pseudonyms in a Blend's (`namesInRoom`). An unknown kind or a missing owner: nobody |
 | `conversation:{conversationId}` | The two participants only |
 | `event:{eventId}` | Anyone, for `public`/`unlisted` events. For `private`: the organizer, or a user with an RSVP |
 
 Public events stay open so a client can subscribe to live check-in counts from
 an event detail screen without checking in first.
+
+**A venue's live room (a venue day) is for the people live in it.**
+`chat:{chatGroupId}`, `event:room:{venueDayId}` and `event:{venueDayId}` admit
+only somebody whose Go Live window is open now (`liveInVenueDay`,
+`inRoomWhere`). The counter room is closed too: its exact `hereCount` would let
+a watcher read each arrival off the number, and the venue's public count is the
+bucket on `GET /venues/:venueId`. When a window ends — expiry, a switch, a
+checkout, an event starting there — the person's sockets get `live:ended` and
+are taken out of all three rooms; a rejoin is refused. The end is scheduled at
+the window's second (`lib/live-timers.ts`, with a 30 s backstop), and every
+emit to those rooms goes only to members still live, so a socket the eviction
+has not reached yet hears nothing either. Across replicas the eviction needs
+the Redis adapter (`REDIS_URL`).
 
 On refusal the server emits `error` and the socket is **not** added to the room:
 
@@ -55,13 +68,21 @@ malformed ID, and a room you simply lack access to all return the same
 Authorization is re-checked on every join, including the automatic rejoins the
 client performs after a reconnect.
 
+**A room that is not an event's is re-checked on every delivery, too** (step 7).
+Every `chat:*` event into such a room asks the owner again for each recipient:
+whoever it no longer admits (the post withdrawn or taken down, the ask undone,
+a block with the author) gets nothing and is taken out of the room. And every
+writer that closes one — withdraw, moderation takedown, account erasure, the
+12-hour sweep — empties the room at once (`lib/room-close.ts`). A rejoin meets
+the door. An event's room is unchanged: its door is the join.
+
 ## Client → Server Events
 
 | Event | Payload | Description |
 |-------|---------|-------------|
 | `join:event` | `eventId: string` | Join an event room (authorized) |
 | `leave:event` | `eventId: string` | Leave an event room |
-| `join:chat` | `chatGroupId: string` | Join an event chat room (authorized) |
+| `join:chat` | `chatGroupId: string` | Join a chat room of any kind (authorized per kind — see above) |
 | `leave:chat` | `chatGroupId: string` | Leave a chat room |
 | `join:conversation` | `conversationId: string` | Join a private conversation (authorized) |
 | `leave:conversation` | `conversationId: string` | Leave a private conversation |
@@ -70,6 +91,7 @@ client performs after a reconnect.
 | `private:startTyping` | `conversationId: string` | Typing in private conversation |
 | `private:stopTyping` | `conversationId: string` | Stop typing in private conversation |
 | `private:markRead` | `conversationId: string, messageIds: string[]` | Mark messages as read |
+| `private:delivered` | `conversationId: string, messageIds: string[]` | Ack messages this app received (sets `delivered_at`; only messages sent to you, not yet delivered) |
 | `ping` | — | Connection health check |
 
 > **Chat messages are not sent over the socket.** There is no inbound
@@ -80,9 +102,41 @@ client performs after a reconnect.
 
 `chat:startTyping`/`chat:stopTyping` are silently dropped for members who are
 `muted` or `banned`, so a member banned mid-session stops broadcasting typing
-state without being disconnected.
+state without being disconnected. They also never reach anyone the typist has
+blocked or been blocked by. That is the same exclusion `chat:message` applies
+(SCRUM-338). The same goes for `event:room:checkin`, the roster's live "just
+arrived" event, which the push for that arrival and `GET …/participants`
+already left out.
 
 ## Server → Client Events
+
+### Ids in room payloads: yours real, everyone else's a room handle
+
+Every `userId` / `otherUserId` / `fromUserId` on a `chat:*`, `event:*` or
+`room:*` event is **your own real id** when it is you, and otherwise that
+person's **room handle** for the event: `rh_` + an opaque string
+(`lib/room-handle.ts`, SCRUM-371). Field names and shapes are unchanged.
+
+- A handle is stable for one person in one room, so the roster, the match
+  deck, chat history and these events all use the same string for them.
+  The same person at another event has a different, unrelated handle.
+- **A handle belongs to one room, of one kind** (step 7). An event's room is
+  scoped by its event, exactly as before, so every handle a client already
+  holds still resolves. A room of another kind (a board post's, a crew's or a
+  Blend's) is scoped by its own id and its kind, so a handle from it is
+  refused in every other room, an event's included, and names nobody on the
+  profile, friend or block routes. Treat it as opaque, as now.
+- Compare with your own id exactly as before: your bubbles, your own check-in
+  and your own typing still arrive under your real id.
+- Every REST endpoint that takes a user id accepts a handle (see `docs/API.md`,
+  "Room handles"), so a handle from a socket event can be used to like, wave,
+  block, report or open a message request. Likes and waves take **only** that
+  event's handles — not a raw id, not another event's handle.
+
+Because the payload now differs per reader, room events are sent **per socket**
+(`fetchSockets()` on the room, then one emit each) rather than as one broadcast.
+`private:*` events are unchanged: a conversation is between two people who
+already know each other's ids.
 
 ### Chat Events (room: `chat:{chatGroupId}`)
 
@@ -90,18 +144,32 @@ state without being disconnected.
 |-------|---------|-------------|
 | `chat:message` | `{ id, chatGroupId, userId, userName, userImage, content, type, parentId, createdAt }` | New message in chat |
 | `chat:typing` | `{ chatGroupId, userId, userName, isTyping }` | Typing state changed. `userName` is the sender's anonymous name, never their real identity. |
-| `chat:reaction` | `{ chatGroupId, messageId, userId, emoji, action }` | Reaction added/removed |
-| `chat:messageDeleted` | `{ chatGroupId, messageId, moderation?, userId? }` | Message deleted. When `moderation: true`, it was auto-hidden by moderation — `userId` identifies the sender so the client can show a placeholder to them instead of removing. |
-| `chat:memberBanned` | `{ chatGroupId, userId, banned }` | Member ban status changed |
+| `chat:reaction` | `{ chatGroupId, messageId, tally: [{ emoji, count }] }` | Reactions changed on a message. **Counts only — never who reacted**, which the room must not disclose. The whole tally rather than a delta, so two reactions in the same tick cannot race and a dropped packet self-corrects. `mine` is per-viewer and absent by design: a client knows its own reaction from its own request. |
+| `chat:messageDeleted` | `{ chatGroupId, messageId, moderation?, userId? }` | Message deleted. When `moderation: true`, it was auto-hidden by moderation — `userId` identifies the sender (their real id to them, a handle to everyone else) so the sender's client can show a placeholder instead of removing. |
+| `chat:memberBanned` | `{ chatGroupId, userId, banned }` | Member ban status changed. The banned person receives it under their own id, then their sockets leave the room. |
+| `chat:memberLeft` | `{ chatGroupId, userId }` | Somebody left the room themselves (`POST /chat/groups/:id/leave`) — drop them from the roster. `userId` is their handle in this event; the leaver's own sockets get their real id, then leave the room. Not sent to anyone in a block with the leaver. |
 | `chat:memberMuted` | `{ chatGroupId, userId, muted, reason? }` | Member mute status changed. `muted: true` = auto-muted (3+ violations in 1hr) or admin-muted. `muted: false` = auto-unmute expired or admin-unmuted. |
 
-### Event Events (room: `event:{eventId}`)
+### Event Events (room: `event:{eventId}`, joinable by anyone who can open the event)
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `event:checkin` | `{ eventId, userId, userName, userImage?, checkInTime }` | Someone checked in |
-| `event:checkout` | `{ eventId, userId }` | Someone checked out |
-| `event:interestUpdate` | `{ eventId, userId, interested, favoriteCount }` | Interest toggled |
+| `event:checkin` | `{ eventId, userId, checkInTime, hereCount? }` | Someone checked in. No name: this room is open to anyone viewing the event. |
+| `event:checkout` | `{ eventId, userId, checkOutTime, hereCount? }` | Someone checked out |
+| `event:interestUpdate` | `{ eventId, userId, interested, interestCount }` | Interest toggled |
+
+### Roster Events (room: `event:room:{eventId}`, checked-in attendees only)
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `event:room:checkin` | `{ eventId, userId, userName, userImage?, checkInTime, hereCount? }` | Who arrived, by pseudonym. Never sent to the arriver's block counterparties. |
+
+### Room Events (room: `user:{userId}`)
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `room:match` | `{ eventId, otherUserId, conversationId, name }` | A like became mutual. `otherUserId` is the other person's handle in `eventId` — the same string the roster and deck show. |
+| `room:wave` | `{ eventId, fromUserId, fromName }` | Somebody in the room waved. `fromUserId` is their handle in `eventId`. |
 
 ### Private Message Events
 
@@ -110,10 +178,12 @@ state without being disconnected.
 | `private:message` | `conversation:{id}` & `user:{recipientId}` | `{ id, conversationId, senderId, senderName, senderImage, messageText, mediaUrl, mediaType, createdAt }` |
 | `private:typing` | `conversation:{id}` | `{ conversationId, userId, userName }` |
 | `private:read` | `conversation:{id}` | `{ conversationId, userId }` |
+| `private:delivered` | `conversation:{id}` | `{ conversationId, messageIds }`. The recipient's app has these messages (✓✓ delivered). Sent whatever the read-receipt setting |
 
 ### User Events (room: `user:{userId}`)
 
 | Event | Payload | Description |
 |-------|---------|-------------|
 | `private:message` | Same as above | Notification when not in conversation room |
-| Custom events via `emitToUser()` | Varies | Server-initiated user notifications |
+| `notification:new` | `{ kind }` | A row landed in the notifications bell; the app refreshes its badge. Never sent for messages, which write no row |
+| `live:ended` | `{ eventId, reason }` | Your Go Live at a venue ended and your sockets left its rooms. `eventId` is the venue day; `reason` is `expired` (the window ran out, or the venue's day reset), `event_started` (a real event took the venue over; the push names it), `switched_event`, `manual`, or `left_area` |

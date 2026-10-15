@@ -27,7 +27,6 @@ import {
   FEATURED_CARD_GAP,
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
-import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
@@ -35,7 +34,8 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { DayHeading } from '../../components/ui/DayHeading'
-import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
+import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
+import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
 import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -271,13 +271,17 @@ const proximityFor = (
   return proximityMap
 }
 
-function EventsInner() {
+function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean }) {
   const { user, loading: authLoading } = useAuth()
   const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
+  // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
+  const cardInsets = useMemo(() => ({ top: insets.top + DRAWER_HEADER_HEIGHT, bottom: insets.bottom }), [insets.top, insets.bottom])
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  // Pull-to-refresh count: a failed Upcoming thumb tries its cover again (SCRUM-480).
+  const [pulls, setPulls] = useState(0)
   const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number, accuracy?: number | null} | null>(null)
   const proximityData = useMemo(
     () => (userLocation ? proximityFor(events, userLocation) : {}),
@@ -354,9 +358,16 @@ function EventsInner() {
    */
   const [selection, setSelection] = useState<StoredCity | null>(null)
   const selectedCity = selection?.city ?? null
+  // Decided once the city list has been read: stored, inferred, or none at all.
+  const [cityResolved, setCityResolved] = useState(false)
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  // Places browses the same city from the same spot (components/home/HomeShell.tsx).
+  useEffect(
+    () => onBrowse({ city: selectedCity, location: userLocation, ready: cityResolved, cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null }),
+    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions]
+  )
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
@@ -783,12 +794,14 @@ function EventsInner() {
 
       // Get event chat and offer navigation
       const chatResult = await apiClient.getEventChat(event.id)
-      if (chatResult.success && chatResult.data?.id) {
-        // Captured before the closure: the guard above narrows `data` here, but
-        // TypeScript drops that narrowing inside `onPress`, which runs later and
-        // could in principle see a reassigned value.
-        const chatId = chatResult.data.id
-        const chatName = chatResult.data.name || 'Event chat'
+      /*
+       * The room is `chatGroupId` / `chatGroupName`: `GET /events/:id/chat` has
+       * never sent `id` or `name`, so this never offered "Go to chat" after a
+       * check-in (SCRUM-457). The app's other callers already read it this way.
+       */
+      const chatId = chatResult.success ? (chatResult.data?.chatGroupId ?? chatResult.data?.id) : undefined
+      if (chatId) {
+        const chatName = chatResult.data?.chatGroupName || chatResult.data?.name || 'Event chat'
         showTray({
           title: 'Checked in',
           message: 'You have been checked in and added to the event chat.',
@@ -1343,6 +1356,7 @@ function EventsInner() {
    */
   const onRefresh = async () => {
     setRefreshing(true)
+    setPulls((n) => n + 1)
     await fetchEvents({ silent: true, force: true })
     setRefreshing(false)
   }
@@ -1480,6 +1494,7 @@ function EventsInner() {
         // Never overwrite a choice the user made while this was in flight.
         current ?? resolveBrowseCity({ stored, deviceCity: null, available })
       )
+      setCityResolved(true)
     })()
     return () => {
       cancelled = true
@@ -1777,6 +1792,7 @@ function EventsInner() {
             title={event.title}
             category={event.category || null}
             imageUrl={event.cover_image_url}
+            retry={pulls}
             timeLabel={nextUpLabel(live.start_time, live.end_time)}
             placeLabel={placeLabel(event)}
             joinedCount={joinedCount(event)}
@@ -1791,7 +1807,7 @@ function EventsInner() {
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest, pulls])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -1946,7 +1962,7 @@ function EventsInner() {
      * screen opens on, that is sized to clear it.
      */
     const featured = featuredCardLayout(
-      insets,
+      cardInsets,
       tabBarTop(SCREEN_HEIGHT, insets.bottom),
       featuredItems.length === 1,
       bannersHeight
@@ -1973,7 +1989,7 @@ function EventsInner() {
               title={featuredItems[0].title}
               tag={featuredItems[0].category || null}
               playlist={feedPlaylist(featuredItems[0].media, featuredItems[0].cover_image_url)}
-              isActive
+              isActive={visible}
               dateLabel={featuredDateLabel(featuredItems[0].start_time)}
               placeLabel={placeLabel(featuredItems[0])}
               width={featured.width}
@@ -2013,7 +2029,7 @@ function EventsInner() {
                 title={item.title}
                 tag={item.tag}
                 playlist={item.playlist}
-                isActive={index === featuredActiveIndex}
+                isActive={visible && index === featuredActiveIndex}
                 dateLabel={item.dateLabel}
                 placeLabel={item.placeLabel}
                 width={featured.width}
@@ -2055,6 +2071,7 @@ function EventsInner() {
                   title={item.title}
                   category={item.category || null}
                   imageUrl={item.cover_image_url}
+                  retry={pulls}
                   timeLabel={timeLabel(item.start_time)}
                   placeLabel={placeLabel(item)}
                   joinedCount={joinedCount(item)}
@@ -2361,7 +2378,7 @@ function EventsInner() {
    * as a prop would couple two render paths that would otherwise stay
    * independent.
    */
-  const featuredSkeleton = featuredCardLayout(insets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
+  const featuredSkeleton = featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
 
   const emptyKind = pulseEmptyKind({
     searching: isSearching,
@@ -2382,28 +2399,6 @@ function EventsInner() {
      * and ends clear of the hardware.
      */
     <View style={styles.container}>
-      {/*
-        No panel around the list, and the bar is an overlay.
-
-        This screen used to be two things stacked: a sticky bar, and a rounded
-        bordered elevated sheet holding everything else — `sectionBg`, absolutely
-        positioned below the bar with its own background, its own border and its
-        own gradient. A homepage mounted as a screen inside a screen, which is
-        why nothing lined up with the frame: the frame has one flat surface and
-        this had three.
-
-        The frame is one background, `#0F0E0E`, edge to edge, with the content
-        sitting directly on it. So the list is the page now, and `PulseTopBar`
-        floats over it holding nothing but the wordmark — it reserves no height
-        and the feed scrolls under it.
-
-        The old bar's other two controls did not come back with it. The avatar
-        is the Me tab, where a profile picture is the more usual place to find
-        yourself; settings is reached through it, as it already was from the
-        profile screen; and the city picker had already moved into the headline.
-      */}
-        <PulseTopBar actions={<NotificationBell />} />
-
         <VirtualizedList
           forwardedRef={listRef as any}
           data={showLoadingSkeleton ? [] : mainListData}
@@ -2418,12 +2413,12 @@ function EventsInner() {
           contentContainerStyle={[
             styles.listContainer,
             {
-              // The status bar and the overlay header at the top; the floating
-              // nav plus the home indicator at the bottom. Padding, not layout,
-              // so the feed still scrolls under all four.
+              // The drawer's header above (the top bar and the status bar are
+              // above the drawer); the floating nav plus the home indicator at
+              // the bottom, which the feed still scrolls under.
               //
               // Kept in step with `CHROME_ABOVE_CARD`, which sizes the hero card.
-              paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.lg,
+              paddingTop: SPACE.lg,
               // The frame's 128 already clears the 88pt nav. `Math.max` so it
               // still does if the nav grows — the bar's height has changed
               // twice, and a feed that ends underneath it is not a visible
@@ -3263,7 +3258,13 @@ const styles = StyleSheet.create({
 export default function Events() {
   return (
     <ScreenProfiler id="pulse">
-      <EventsInner />
+      <HomeShell renderEvents={renderPulse} />
     </ScreenProfiler>
   )
 }
+
+/**
+ * The Pulse, as the home drawer's Events pane. Module-level, so only `visible`
+ * (its pane showing, the drawer past peek) re-renders it, never a drag.
+ */
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => <EventsInner onBrowse={onBrowse} visible={visible} />
