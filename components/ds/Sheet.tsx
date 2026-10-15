@@ -65,7 +65,8 @@ export type SheetProps = {
   visible: boolean
   /** Asked for by the handle, the scrim, a drag or system back. Set `visible` false; the sheet animates out. */
   onClose: () => void
-  title: string
+  /** Omitted only when the content carries its own header (the PersonCard's name beside its face). */
+  title?: string
   /** The consequence, above the buttons. */
   body?: string
   /** A decorative glyph well above the title. */
@@ -255,9 +256,11 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                       <Icon name={icon} />
                     </View>
                   ) : null}
-                  <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title]}>
-                    {title}
-                  </Text>
+                  {title ? (
+                    <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title]}>
+                      {title}
+                    </Text>
+                  ) : null}
                   {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
               </GestureDetector>

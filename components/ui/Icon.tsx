@@ -148,6 +148,7 @@ import Utensils from 'lucide-react-native/icons/utensils'
 import Volume2 from 'lucide-react-native/icons/volume-2'
 import VolumeX from 'lucide-react-native/icons/volume-x'
 import Wifi from 'lucide-react-native/icons/wifi'
+import WifiOff from 'lucide-react-native/icons/wifi-off'
 import Wind from 'lucide-react-native/icons/wind'
 import Wine from 'lucide-react-native/icons/wine'
 import Wrench from 'lucide-react-native/icons/wrench'
@@ -284,6 +285,7 @@ const ICONS = {
   'volume-2': Volume2,
   'volume-x': VolumeX,
   wifi: Wifi,
+  'wifi-off': WifiOff,
   wind: Wind,
   wine: Wine,
   wrench: Wrench,

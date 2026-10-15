@@ -80,7 +80,7 @@ export function PresenceDot({ kind = 'unread', size = DOT[kind], ring, testID }:
 const PILL_HEIGHT = 28
 const PILL_HAIRLINE = 0.5
 
-function ScrimPill({ testID, children }: { testID?: string; children: ReactNode }) {
+export function ScrimPill({ testID, children }: { testID?: string; children: ReactNode }) {
   const contrast = useIncreaseContrast()
   return (
     <View
