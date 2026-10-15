@@ -89,14 +89,7 @@ export function LoadError({
   onRetry: () => void
   retrying?: boolean
 }) {
-  return (
-    <LoadState
-      icon="cloud-offline-outline"
-      title={title}
-      message="Check your connection and try again."
-      action={{ label: 'Try again', onPress: onRetry, busy: retrying }}
-    />
-  )
+  return <LoadState icon="cloud-offline-outline" title={title} message="Check your connection and try again." action={{ label: 'Try again', onPress: onRetry, busy: retrying }} />
 }
 
 const styles = StyleSheet.create({

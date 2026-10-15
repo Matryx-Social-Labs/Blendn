@@ -283,41 +283,57 @@ export default function NearbyEventsScreen() {
           ))}
         </View>
       ) : locationDenied ? (
-        <Empty
-          icon="location-outline"
-          title="Location access needed"
-          sub="Turn on location to see events near you."
-          label="Open Settings"
-          onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
-        />
+        <FadeInUp style={styles.empty}>
+          <Ionicons name="location-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>Location access needed</Text>
+          <Text style={styles.emptySub}>Turn on location to see events near you.</Text>
+          <ScalePress
+            style={styles.settingsBtn}
+            onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Open Settings</Text>
+          </ScalePress>
+        </FadeInUp>
       ) : locationFailed ? (
-        <Empty
-          icon="navigate-outline"
-          title="Location unavailable"
-          sub="Couldn't find where you are. Try again in a moment."
-          label="Try again"
-          onPress={retryLocation}
-        />
+        <FadeInUp style={styles.empty}>
+          <Ionicons name="navigate-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>Location unavailable</Text>
+          <Text style={styles.emptySub}>Couldn&apos;t find where you are. Try again in a moment.</Text>
+          <ScalePress style={styles.settingsBtn} onPress={retryLocation} accessibilityRole="button">
+            <Text style={styles.settingsBtnText}>Try again</Text>
+          </ScalePress>
+        </FadeInUp>
       ) : events.length === 0 && loadFailed ? (
-        <Empty
-          icon="cloud-offline-outline"
-          title="Couldn't load events"
-          sub="Check your connection and try again."
-          label="Try again"
-          onPress={() => {
-            setLoading(true)
-            void loadEvents(true)
-          }}
-        />
+        <FadeInUp style={styles.empty}>
+          <Ionicons name="cloud-offline-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
+          <ScalePress
+            style={styles.settingsBtn}
+            onPress={() => {
+              setLoading(true)
+              void loadEvents(true)
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Try again</Text>
+          </ScalePress>
+        </FadeInUp>
       ) : events.length === 0 ? (
-        // A way on from a dead end: everything in the city, not just nearby.
-        <Empty
-          icon="calendar-outline"
-          title="No nearby events"
-          sub="There are no events near your current location."
-          label="Browse events"
-          onPress={() => router.navigate('/(tabs)/events' as any)}
-        />
+        <FadeInUp style={styles.empty}>
+          <Ionicons name="calendar-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>No nearby events</Text>
+          <Text style={styles.emptySub}>There are no events near your current location.</Text>
+          {/* A way on from a dead end: everything in the city, not just nearby. */}
+          <ScalePress
+            style={styles.settingsBtn}
+            onPress={() => router.navigate('/(tabs)/events' as any)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.settingsBtnText}>Browse events</Text>
+          </ScalePress>
+        </FadeInUp>
       ) : (
         <FlatList
           data={events}
@@ -329,32 +345,6 @@ export default function NearbyEventsScreen() {
         />
       )}
     </SafeAreaView>
-  )
-}
-
-/** A full-screen empty or failed state with one way on. */
-function Empty({
-  icon,
-  title,
-  sub,
-  label,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name']
-  title: string
-  sub: string
-  label: string
-  onPress: () => void
-}) {
-  return (
-    <FadeInUp style={styles.empty}>
-      <Ionicons name={icon} size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptySub}>{sub}</Text>
-      <ScalePress style={styles.settingsBtn} onPress={onPress} accessibilityRole="button">
-        <Text style={styles.settingsBtnText}>{label}</Text>
-      </ScalePress>
-    </FadeInUp>
   )
 }
 
