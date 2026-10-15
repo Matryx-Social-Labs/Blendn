@@ -17,20 +17,20 @@ export type DirectHeaderAvatar =
  * generated mark seeded on the pseudonym — the same disc the Banter row draws
  * for them (`PseudonymDisc`), so the thread and the inbox agree about who this
  * is. Otherwise the photo the server resolved (`getConversation`'s
- * `otherUser.image`), or the route's avatar as a first paint before the
- * conversation record lands. Initials for a named person with no photo.
+ * `otherUser.image`); the creature until it has answered.
+ *
+ * Never a URL from the route: `blendn://private-chat/x?otherUserAvatar=…` is
+ * anybody's link, and drawing it fetched a host the server never named (IP
+ * disclosure, Flow 5 security review). Initials for a named person with no photo.
  */
 export function directHeaderAvatar(
   reveal: { displayName: string; pseudonymous?: boolean; theyRevealed: boolean } | null,
-  serverImage: string | null,
-  routeImage: string | null
+  serverImage: string | null
 ): DirectHeaderAvatar {
   if (reveal && reveal.pseudonymous && !reveal.theyRevealed) {
     return { kind: 'mark', seed: reveal.displayName }
   }
-  // The route param only before the server has answered: after, the server decides.
-  const url = reveal ? serverImage : serverImage || routeImage
-  return url ? { kind: 'photo', url } : { kind: 'initials' }
+  return reveal && serverImage ? { kind: 'photo', url: serverImage } : { kind: 'initials' }
 }
 
 /**
@@ -113,3 +113,28 @@ export function settleDirectMessage(list: PrivateMessage[], localId: string, sen
     ? list.filter((m) => m.id !== localId)
     : list.map((m) => (m.id === localId ? sent : m))
 }
+
+/** A message as the server sends it (history, the send's answer, the socket), as the thread holds it. */
+export const directMessageFrom = (msg: any): PrivateMessage => ({
+  id: msg.id,
+  conversationId: msg.conversationId,
+  senderId: msg.senderId,
+  sender: msg.sender,
+  text: msg.text,
+  isRead: msg.isRead,
+  deliveredAt: msg.deliveredAt ?? null,
+  replyTo: msg.replyTo ?? null,
+  createdAt: msg.createdAt,
+  mediaUrl: msg.mediaUrl ?? null,
+  mediaType: msg.mediaType ?? null,
+  ...(msg.moderation_hidden ? { removed: true } : {}),
+})
+
+/** A local quote for a message being replied to, before the server's arrives. */
+export const quoteFrom = (m: PrivateMessage): DmReplyQuote => ({
+  id: m.id,
+  senderName: m.sender?.name || '',
+  text: m.text,
+  mediaType: m.mediaUrl || m.localUri ? 'image' : null,
+  unavailable: false,
+})

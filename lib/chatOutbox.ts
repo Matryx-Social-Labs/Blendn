@@ -9,15 +9,24 @@ import { useSyncExternalStore } from 'react'
  * it. Kept here, the thread puts it back as "Not sent · Tap to retry", and the
  * Banter row says so too — failed first, then a draft, then the last message.
  *
- * Keyed `room:<id>` or `dm:<id>`. Each screen stores its own message shape;
- * the Banter only asks whether there is one.
+ * Keyed by the signed-in account as well as the thread (`<userId>:room:<id>`,
+ * `<userId>:dm:<id>`), and emptied on sign-out (`clearAuthState`): a phone
+ * passed to somebody else never shows them the last account's drafts or
+ * "Not sent" rows, and never retries that account's message as theirs —
+ * rooms are shared, so a room key alone collided (Flow 5 security review).
+ * With nobody signed in there is no thread, and a write is dropped: a screen
+ * unmounting after the sign-out cannot put a draft back. Each screen stores
+ * its own message shape; the Banter only asks whether there is one.
  *
  * ponytail: in memory, so a relaunch forgets both. Persist to AsyncStorage
  * when a draft surviving a relaunch is asked for.
  */
 
-export const roomThread = (chatGroupId: string) => `room:${chatGroupId}`
-export const dmThread = (conversationId: string) => `dm:${conversationId}`
+/** A thread is an account's; without one there is none. */
+export type Thread = string | null
+
+export const roomThread = (chatGroupId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:room:${chatGroupId}` : null)
+export const dmThread = (conversationId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:dm:${conversationId}` : null)
 
 type State = { drafts: ReadonlyMap<string, string>; failed: ReadonlyMap<string, readonly unknown[]> }
 
@@ -26,7 +35,8 @@ const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((listener) => listener())
 
 /** The composer's text as you leave the thread. Empty forgets it. */
-export function setDraft(thread: string, text: string): void {
+export function setDraft(thread: Thread, text: string): void {
+  if (!thread) return
   const draft = text.trim() ? text : ''
   if ((state.drafts.get(thread) ?? '') === draft) return
   const drafts = new Map(state.drafts)
@@ -36,12 +46,13 @@ export function setDraft(thread: string, text: string): void {
   emit()
 }
 
-export function draftOf(thread: string): string {
-  return state.drafts.get(thread) ?? ''
+export function draftOf(thread: Thread): string {
+  return (thread && state.drafts.get(thread)) || ''
 }
 
 /** The thread's failed sends, as the screen holds them. Empty forgets them. */
-export function keepFailed<M>(thread: string, messages: readonly M[]): void {
+export function keepFailed<M>(thread: Thread, messages: readonly M[]): void {
+  if (!thread) return
   const before = state.failed.get(thread)
   if (!messages.length && !before) return
   if (before && before.length === messages.length && before.every((m, i) => m === messages[i])) return
@@ -52,14 +63,15 @@ export function keepFailed<M>(thread: string, messages: readonly M[]): void {
   emit()
 }
 
-export function failedOf<M>(thread: string): M[] {
-  return [...((state.failed.get(thread) as M[] | undefined) ?? [])]
+export function failedOf<M>(thread: Thread): M[] {
+  return thread ? [...((state.failed.get(thread) as M[] | undefined) ?? [])] : []
 }
 
 /** What a Banter row says instead of its last message, if anything (5.8's precedence). */
 export type OutboxLine = { kind: 'failed' } | { kind: 'draft'; text: string }
 
-export function outboxLine(outbox: State, thread: string): OutboxLine | null {
+export function outboxLine(outbox: State, thread: Thread): OutboxLine | null {
+  if (!thread) return null
   if (outbox.failed.get(thread)?.length) return { kind: 'failed' }
   const draft = outbox.drafts.get(thread)
   return draft ? { kind: 'draft', text: draft.replace(/\s+/g, ' ').trim() } : null
@@ -81,8 +93,8 @@ export function useOutbox(): State {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
-/** Tests only. */
-export function resetOutbox(): void {
+/** Forget every account's drafts and failed sends: sign-out and session end (`lib/useAuth.ts`). */
+export function clearOutbox(): void {
   state = { drafts: new Map(), failed: new Map() }
   emit()
 }

@@ -3,7 +3,9 @@ import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { syncPurchasesUser } from './purchases'
+import { clearOutbox } from './chatOutbox'
 import { clearRoomSignal } from './roomSignal'
+import { resetRoomMembership } from './roomMembership'
 import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
@@ -270,6 +272,13 @@ const clearAuthState = async () => {
    * background refresh reaches this path without going through it.
    */
   clearRoomSignal()
+  /*
+   * So are a thread's draft and unsent messages, and the rooms you left or
+   * muted: the next account on this phone saw them, and could retry the last
+   * one's message as their own (Flow 5 security review).
+   */
+  clearOutbox()
+  resetRoomMembership()
   /*
    * A Go Live remembered on this phone is that account's (step 5 review, M5).
    * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on

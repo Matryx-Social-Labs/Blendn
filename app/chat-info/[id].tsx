@@ -57,7 +57,7 @@ const roleLabel = (role: string) => (role === 'admin' ? 'Organiser' : role === '
  * pseudonym (`markSeed`).
  */
 export default function ChatInfo() {
-  const params = useLocalSearchParams<{ id: string; roomName?: string; eventTitle?: string; eventImage?: string }>()
+  const params = useLocalSearchParams<{ id: string; roomName?: string; eventTitle?: string }>()
   const chatGroupId = String(params.id)
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -110,9 +110,10 @@ export default function ChatInfo() {
     [chatGroupId]
   )
 
-  const title = params.roomName || row?.title || params.eventTitle || 'Event chat'
-  const eventTitle = params.eventTitle || row?.eventTitle
-  const cover = params.eventImage || row?.image || null
+  // The server's row wins; the route's names are a first paint and never an image (see app/chat/[id].tsx).
+  const title = row?.title || params.roomName || params.eventTitle || 'Event chat'
+  const eventTitle = row?.eventTitle || params.eventTitle
+  const cover = row?.image || null
   const count = row?.memberCount ?? (total || null)
 
   const openGuidelines = () => {

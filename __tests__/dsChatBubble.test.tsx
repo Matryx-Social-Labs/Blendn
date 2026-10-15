@@ -57,6 +57,9 @@ describe('the rules', () => {
     ])
     expect(linkParts('Till midnight. Stairs by the bar.')).toEqual([{ text: 'Till midnight. Stairs by the bar.' }])
     expect(domainOf('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
+    // The link sheet names where the link goes, not the userinfo in front of it.
+    expect(domainOf('https://toit.in@evil.example/vinyl')).toBe('evil.example')
+    expect(domainOf('toit.in:8080@evil.example')).toBe('evil.example')
   })
 
   it('links: a whole multi-part domain, never cut to a different one', () => {

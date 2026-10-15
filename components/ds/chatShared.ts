@@ -105,8 +105,12 @@ export function linkParts(text: string): TextPart[] {
   if (at < text.length) parts.push({ text: text.slice(at) })
   return parts
 }
-/** "toit.in" from "https://toit.in/vinyl": what the link sheet and its action name. */
-export const domainOf = (url: string) => url.replace(/^https?:\/\//i, '').split(/[/?#]/)[0]
+/**
+ * "toit.in" from "https://toit.in/vinyl": what the link sheet and its action
+ * name — the host the link really goes to, so `https://toit.in@evil.example/`
+ * is evil.example, never toit.in.
+ */
+export const domainOf = (url: string) => url.replace(/^https?:\/\//i, '').split(/[/?#]/)[0].split('@').pop() ?? ''
 
 /** #35: the drag tracks 1:1 to 56 pt, arms there, then rubber-bands at 0.5× to 96 pt. */
 export const REPLY_SWIPE = { trigger: 56, max: 96, rubber: 0.5 } as const

@@ -104,11 +104,16 @@ function GroupChatInner() {
   useActiveThread(`room:${roomId}`)
   /* The opener's knowledge of the room, filled in from the room's row in the Banter's list when it is missing. */
   const roomInfo: Partial<RoomRow> = useRoomRow(chatRoomId ? roomId : null) ?? {}
-  const roomName = (params.roomName as string) || roomInfo.title
-  const eventTitle = (params.eventTitle as string) || roomInfo.title
-  const eventImage = (params.eventImage as string) || roomInfo.image
+  /*
+   * The server's row wins; the route's names are a first paint, and a route
+   * never supplies an image — `blendn://chat/x?eventImage=…` is anybody's link,
+   * and drawing it fetched a host the server never named (Flow 5 security review).
+   */
+  const roomName = roomInfo.title || (params.roomName as string)
+  const eventTitle = roomInfo.title || (params.eventTitle as string)
+  const eventImage = roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
-  const thread = roomThread(roomId)
+  const thread = roomThread(roomId, authUser?.id)
   // A failed send survives leaving the room (SCRUM-633): put back what this phone kept.
   const [messages, setMessages] = useState<Message[]>(() => failedOf<Message>(thread))
   // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
@@ -193,7 +198,8 @@ function GroupChatInner() {
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const cacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const messagesCacheKey = chatRoomId ? `chat_messages_${chatRoomId}` : null
+  // Per account: the cached page labels its reader's own messages "You" and carries their reactions.
+  const messagesCacheKey = chatRoomId && authUser?.id ? `chat_messages_${authUser.id}_${chatRoomId}` : null
 
   const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated)
   /* Follows the end as content lays out, until a real drag: the newest stays pinned as the keyboard moves (#34). */
@@ -842,7 +848,7 @@ function GroupChatInner() {
               ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
               : router.push({
                   pathname: '/chat-info/[id]',
-                  params: { id: roomId, roomName: roomName || '', eventTitle: eventTitle || '', eventImage: eventImage || '' },
+                  params: { id: roomId, roomName: roomName || '', eventTitle: eventTitle || '' },
                 } as never)
         }
       />

@@ -66,7 +66,7 @@ export function BanterHeader({
 }
 
 /** The header's height under the status bar: the frames' 116 on a 402 pt iPhone. */
-export const bannerHeaderHeight = (insetTop: number) => insetTop + SPACE.sm + SIZE.circleButton + SPACE.md
+export const banterHeaderHeight = (insetTop: number) => insetTop + SPACE.sm + SIZE.circleButton + SPACE.md
 
 /**
  * The room you're standing in (Flow 5 #03): its cover full-bleed under a

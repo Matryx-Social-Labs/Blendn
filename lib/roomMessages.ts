@@ -35,15 +35,17 @@ export const isTemp = (m: Pick<RoomMessage, 'message_id'>) => m.message_id.start
 export const isSpeech = (m: Pick<RoomMessage, 'sender_id' | 'message_type'>) =>
   m.sender_id !== 'system' && m.message_type !== 'announcement' && m.message_type !== 'sponsored' && m.message_type !== 'poll'
 
-/** A sponsored message's media, from the scheduler's metadata: an image, or a video with its poster. */
+/**
+ * A sponsored message's media, from the scheduler's metadata: an image, or a
+ * video. Only `media_url`, which the server stores after its upload-grant
+ * check; no poster field is read, since none is written and an unchecked one
+ * would be a URL the phone loads unasked (Flow 5 security review).
+ */
 export function mediaOf(msg: any): RoomMessage['media'] {
   const url = msg.metadata?.media_url || msg.media_url || msg.mediaUrl
   if (!url) return undefined
   const type = String(msg.metadata?.media_type || msg.media_type || msg.type || '').toLowerCase()
-  if (type.includes('video')) {
-    const poster = msg.metadata?.poster_url || msg.metadata?.thumbnail_url
-    return { kind: 'video', uri: String(url), ...(poster ? { poster: String(poster) } : {}), duration: String(msg.metadata?.duration ?? '') }
-  }
+  if (type.includes('video')) return { kind: 'video', uri: String(url), duration: String(msg.metadata?.duration ?? '') }
   return { kind: 'image', uri: String(url) }
 }
 

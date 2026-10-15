@@ -14,7 +14,7 @@ import {
   RequestCard,
   RequestFace,
   rowLabel,
-  bannerHeaderHeight,
+  banterHeaderHeight,
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
@@ -31,7 +31,7 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { BOARD_ENABLED } from '../../lib/board'
-import { dmThread, outboxLine, roomThread, useOutbox } from '../../lib/chatOutbox'
+import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
 import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -46,7 +46,6 @@ import { TAB_BAR_CLEARANCE } from './_layout'
 /** A conversation as the Banter draws it, and what it takes to open, find and swipe it. */
 type Row = {
   key: string
-  thread: string
   title: string
   face: RowFace
   line: RowLine
@@ -112,7 +111,7 @@ function ChatInner() {
       setGroupChats((prev) => prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c)))
       router.push({
         pathname: '/chat/[id]',
-        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title, eventImage: chat.event_image ?? '' } as never,
+        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
       })
     },
     [inbox, setGroupChats]
@@ -126,7 +125,6 @@ function ChatInner() {
           conversationId: chat.conversation_id,
           otherUserName: chat.other_user_name,
           otherUserId: chat.other_user_id,
-          otherUserAvatar: chat.other_user_avatar ?? '',
         } as never,
       })
     },
@@ -162,7 +160,7 @@ function ChatInner() {
 
   /** Line 2, by 5.8's precedence: not sent, then a draft, then the last message. */
   const lineFor = useCallback(
-    (thread: string, fallback: RowLine): RowLine => {
+    (thread: Thread, fallback: RowLine): RowLine => {
       const held = outboxLine(outbox, thread)
       return held ? (held.kind === 'failed' ? { kind: 'failed' } : { kind: 'draft', text: held.text }) : fallback
     },
@@ -179,10 +177,9 @@ function ChatInner() {
         const text = last?.content.trim() ? previewWithSender(last.content, { fromMe: last.user.id === user?.id, name: last.user.name ?? undefined }) : 'No messages yet'
         return {
           key: `c:${r.id}`,
-          thread: roomThread(r.id),
           title: r.name,
           face: { kind: 'crew', seed: crews.seedFor(r.id) },
-          line: lineFor(roomThread(r.id), { kind: 'text', text }),
+          line: lineFor(roomThread(r.id, user?.id), { kind: 'text', text }),
           time: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
           unread: r.unreadCount > 0,
           muted: roomMuted(r.id),
@@ -202,10 +199,9 @@ function ChatInner() {
         const line: RowLine = asked ? { kind: 'chip', icon: 'eye', text: 'Asked to reveal names' } : { kind: 'text', text }
         return {
           key: `p:${c.conversation_id}`,
-          thread: dmThread(c.conversation_id),
           title: c.other_user_name,
           face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name },
-          line: asked ? line : lineFor(dmThread(c.conversation_id), line),
+          line: asked ? line : lineFor(dmThread(c.conversation_id, user?.id), line),
           time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,
           // DMs can't be muted (ROUND3 C5).
@@ -229,10 +225,9 @@ function ChatInner() {
           : null
         return {
           key: `g:${c.chat_room_id}`,
-          thread: roomThread(c.chat_room_id),
           title: c.event_title,
           face: { kind: 'room', cover: c.event_image },
-          line: state ?? lineFor(roomThread(c.chat_room_id), { kind: 'text', text }),
+          line: state ?? lineFor(roomThread(c.chat_room_id, user?.id), { kind: 'text', text }),
           time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,
           muted: roomMuted(c.chat_room_id),
@@ -342,7 +337,7 @@ function ChatInner() {
     )
   }
 
-  const headerHeight = bannerHeaderHeight(insets.top)
+  const headerHeight = banterHeaderHeight(insets.top)
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
   const invites = crews.invites
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0

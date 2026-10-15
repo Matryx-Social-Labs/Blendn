@@ -33,7 +33,7 @@ tags:
     timeout: 30000
 - tapOn: ${PEER}
 - extendedWaitUntil:
-    visible: ".*Share your thoughts.*"
+    visible: "Message .*"
     timeout: 20000
 # An older page above the newest, so a refresh that replaced the list whole
 # would shrink it.
@@ -55,7 +55,7 @@ tags:
 - extendedWaitUntil:
     visible: ".*Replying to.*"
     timeout: 5000
-- tapOn: ".*Share your thoughts.*"
+- tapOn: "Message .*"
 - inputText: ${MESSAGE}
 - waitForAnimationToEnd:
     timeout: 1000
@@ -63,7 +63,7 @@ tags:
 # Sent means the composer emptied: the text alone also matches the input box,
 # and a tap that lands before the typed text reaches state sends nothing.
 - extendedWaitUntil:
-    visible: ".*Share your thoughts.*"
+    visible: "Message .*"
     timeout: 10000
 - extendedWaitUntil:
     visible: ".*${MESSAGE}.*"

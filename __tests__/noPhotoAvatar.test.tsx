@@ -49,7 +49,7 @@ describe('the Banter row', () => {
   it('the DM header draws them the same way', () => {
     const src = read('app', 'private-chat', '[conversationId].tsx')
     // directHeaderAvatar decides (socialPolish.test.ts); "initials" draws the creature.
-    expect(src).toContain('directHeaderAvatar(reveal, otherImage,')
+    expect(src).toContain('directHeaderAvatar(reveal, otherImage)')
     expect(src).toContain("head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature'")
   })
 })

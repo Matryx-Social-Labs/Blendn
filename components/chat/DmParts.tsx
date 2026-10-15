@@ -3,7 +3,8 @@ import { memo, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 
-import { COLOR, DURATION, RADIUS, SPACE } from '../../lib/design/tokens'
+import { revealConfirmation } from '../../lib/conversationReveal'
+import { COLOR, DURATION, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { PrivateMessage } from '../../lib/directThread'
 import { chatClock } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
@@ -15,6 +16,7 @@ import type { Receipt } from '../ds/ReceiptMark'
 import { font, useBoldText } from '../ds/shared'
 import { Sheet } from '../ds/Sheet'
 import { TextField } from '../ds/TextField'
+import { Icon } from '../ui/Icon'
 
 /** The photo preview's height (R3-D5 5.9 #32). */
 const PREVIEW_HEIGHT = 280
@@ -86,7 +88,8 @@ export function PhotoPreviewSheet({
       onClose={onClose}
       title={`Send to ${name}`}
       actions={[
-        { label: 'Send', kind: 'primary', onPress: () => onSend(caption.trim()) },
+        // H.send is the send's own (the composer's rule), so no press haptic on top.
+        { label: 'Send', kind: 'primary', onPress: () => onSend(caption.trim()), pressHaptic: false, testID: 'dm-photo-send' },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="dm-photo-preview"
@@ -95,6 +98,77 @@ export function PhotoPreviewSheet({
       <TextField value={caption} onChangeText={setCaption} placeholder="Add a caption" />
       <Text style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
     </Sheet>
+  )
+}
+
+/** The header's reveal line (Flow 5 DM #01–#05): an eye (seen) or eye-off and the sentence. */
+export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
+  const bold = useBoldText()
+  return (
+    <>
+      <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={COLOR.textSecondary} />
+      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+        {text}
+      </Text>
+    </>
+  )
+}
+
+/** "{name} asked to know who you are", under the bar (Flow 5 DM #02). */
+export function NudgeLine({ text }: { text: string }) {
+  const bold = useBoldText()
+  return <Text style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
+}
+
+/**
+ * Showing them who you are (Flow 5 DM #06–#07): the confirm says it can't be
+ * undone before the tap — Show them is the strong white, never the gradient
+ * (Send is this screen's primary), and its haptic is the server's H.success.
+ * Refused for want of a photo, Not yet says the server's sentence.
+ */
+export function RevealSheets({
+  name,
+  sheet,
+  busy,
+  onShow,
+  onClose,
+  onAddPhoto,
+}: {
+  name: string
+  sheet: 'confirm' | { notYet: string } | null
+  busy: boolean
+  onShow: () => void
+  onClose: () => void
+  onAddPhoto: () => void
+}) {
+  const copy = revealConfirmation(name)
+  return (
+    <>
+      <Sheet
+        visible={sheet === 'confirm'}
+        onClose={onClose}
+        icon="eye"
+        title={copy.title}
+        body={copy.body}
+        actions={[
+          { label: copy.confirm, kind: 'strong', onPress: onShow, loading: busy, pressHaptic: false },
+          { label: 'Not now', kind: 'tertiary', onPress: onClose },
+        ]}
+        testID="dm-reveal-sheet"
+      />
+      <Sheet
+        visible={!!sheet && sheet !== 'confirm'}
+        onClose={onClose}
+        icon="image"
+        title="Not yet"
+        body={sheet && sheet !== 'confirm' ? sheet.notYet : undefined}
+        actions={[
+          { label: 'Add a photo', kind: 'strong', onPress: onAddPhoto },
+          { label: 'Close', kind: 'tertiary', onPress: onClose },
+        ]}
+        testID="dm-not-yet"
+      />
+    </>
   )
 }
 
@@ -202,4 +276,5 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   centre: { textAlign: 'center' },
+  shrink: { flexShrink: 1 },
 })

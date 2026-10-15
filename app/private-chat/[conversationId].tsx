@@ -1,12 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native'
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ChatHeader, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
-import { DmMessageRow, MatchOpenerCard, PhotoPreviewSheet, quoteText, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
+import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
 import type { Rect } from '../../components/ds/chatShared'
@@ -17,23 +17,29 @@ import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
 import { Orbs } from '../../components/ds/Orbs'
 import { RevealBar } from '../../components/ds/RevealBar'
-import { font, useBoldText } from '../../components/ds/shared'
-import { Sheet } from '../../components/ds/Sheet'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill, UnreadDivider as UnreadRule } from '../../components/ds/UnreadDivider'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
-import { Icon } from '../../components/ui/Icon'
 import { apiClient } from '../../lib/apiClient'
 import { runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/chatOutbox'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { newClientId } from '../../lib/clientId'
-import { revealConfirmation, revealView, type ConversationRevealState } from '../../lib/conversationReveal'
-import { COLOR, DURATION, EASING, ICON, SIZE, SPACE } from '../../lib/design/tokens'
-import { directHeaderAvatar, emptyThreadLine, isLocalMessage, optimisticDirectMessage, settleDirectMessage, type PrivateMessage } from '../../lib/directThread'
+import { revealView, type ConversationRevealState } from '../../lib/conversationReveal'
+import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
+import {
+  directHeaderAvatar,
+  directMessageFrom,
+  emptyThreadLine,
+  isLocalMessage,
+  optimisticDirectMessage,
+  quoteFrom,
+  settleDirectMessage,
+  type PrivateMessage,
+} from '../../lib/directThread'
 import { H } from '../../lib/haptics'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -71,30 +77,6 @@ import { userMessage } from '../../lib/userMessage'
 
 type ChatListItem = ({ kind: 'message' } & PrivateMessage) | { kind: 'separator'; id: string; label: string } | UnreadDivider
 
-const mapMessage = (msg: any): PrivateMessage => ({
-  id: msg.id,
-  conversationId: msg.conversationId,
-  senderId: msg.senderId,
-  sender: msg.sender,
-  text: msg.text,
-  isRead: msg.isRead,
-  deliveredAt: msg.deliveredAt ?? null,
-  replyTo: msg.replyTo ?? null,
-  createdAt: msg.createdAt,
-  mediaUrl: msg.mediaUrl ?? null,
-  mediaType: msg.mediaType ?? null,
-  ...(msg.moderation_hidden ? { removed: true } : {}),
-})
-
-/** A local quote for a message being replied to, before the server's arrives. */
-const quoteFrom = (m: PrivateMessage) => ({
-  id: m.id,
-  senderName: m.sender?.name || '',
-  text: m.text,
-  mediaType: m.mediaUrl || m.localUri ? 'image' : null,
-  unavailable: false,
-})
-
 const AT_END = 80
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 /** #23: the reveal resolves in with one M.settle-length crossfade. */
@@ -110,15 +92,15 @@ const revealOut = FadeOut.duration(DURATION.base)
  * "Message {name}", and once you can both see each other it takes a photo.
  */
 function PrivateChatInner() {
-  const { conversationId, otherUserName, otherUserId, otherUserAvatar, draft } = useLocalSearchParams()
+  const { conversationId, otherUserName, otherUserId, draft } = useLocalSearchParams()
   const conversation = String(conversationId)
-  const thread = dmThread(conversation)
   const insets = useSafeAreaInsets()
   const keyboardUp = useKeyboardShown()
   // A push for this conversation is not shown over it (`lib/notifications.ts`).
   useActiveThread(`dm:${conversation}`)
   const { user: authUser } = useAuth()
   const myId = authUser?.id
+  const thread = dmThread(conversation, myId)
   // A failed send survives leaving the thread (SCRUM-633).
   const [messages, setMessages] = useState<PrivateMessage[]>(() => failedOf<PrivateMessage>(thread))
   // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
@@ -256,7 +238,7 @@ function PrivateChatInner() {
         if (!result.success && !cursor) return setLoadError(true)
         if (!result.success || !result.data) return
         if (!cursor) setLoadError(false)
-        const msgs = result.data.messages.map(mapMessage).reverse()
+        const msgs = result.data.messages.map(directMessageFrom).reverse()
         let keptOlder = false
         if (cursor) {
           setMessages((prev) => {
@@ -295,7 +277,7 @@ function PrivateChatInner() {
     for (let page = 0; page < 3 && next; page++) {
       const r = await apiClient.getConversationMessages(conversation, { limit: 50, before: next })
       if (!r.success || !r.data) return
-      const older = r.data.messages.map(mapMessage).reverse()
+      const older = r.data.messages.map(directMessageFrom).reverse()
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id))
         return [...older.filter((m) => !ids.has(m.id)), ...prev]
@@ -343,7 +325,7 @@ function PrivateChatInner() {
         if (prev.some((m) => m.id === data.message.id)) return prev
         // Your own send echoed before the request resolved is still yours; the first into an empty thread takes over from Say hi.
         if (prev.length === 0 || data.message.senderId === myId) markArriving(data.message.id)
-        return [...prev, mapMessage(data.message)]
+        return [...prev, directMessageFrom(data.message)]
       })
       setIsOtherTyping(false)
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
@@ -423,7 +405,7 @@ function PrivateChatInner() {
       }
       if (result.data) {
         // The socket can echo your own message first: then the local copy goes.
-        setMessages((prev) => settleDirectMessage(prev, local.id, mapMessage(result.data)))
+        setMessages((prev) => settleDirectMessage(prev, local.id, directMessageFrom(result.data)))
         markDomainsDirty(['chat'])
       }
     } catch (error) {
@@ -619,8 +601,8 @@ function PrivateChatInner() {
 
   const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
   /* Faces only where they have been earned: theirs a photo once they revealed, yours once you did. */
-  // Their mark until they reveal; then the server's photo (the route's only as a first paint).
-  const head = ended ? null : directHeaderAvatar(reveal, otherImage, (otherUserAvatar as string) || null)
+  // Their mark until they reveal; then the server's photo — never one from the route.
+  const head = ended ? null : directHeaderAvatar(reveal, otherImage)
   const themFace: Face =
     head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature', pseudonym: head?.kind === 'mark' ? head.seed : ended ? 'Conversation' : name }
   const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
@@ -841,59 +823,19 @@ function PrivateChatInner() {
         }}
       />
 
-      <Sheet
-        visible={revealSheet === 'confirm'}
+      <RevealSheets
+        name={name}
+        sheet={revealSheet}
+        busy={revealBusy}
+        onShow={showThem}
         onClose={() => setRevealSheet(null)}
-        icon="eye"
-        title={revealConfirmation(name).title}
-        body={revealConfirmation(name).body}
-        actions={[
-          // Strong white, never the gradient: Send is this screen's primary. Its haptic is the server's H.success.
-          { label: revealConfirmation(name).confirm, kind: 'strong', onPress: showThem, loading: revealBusy },
-          { label: 'Not now', kind: 'tertiary', onPress: () => setRevealSheet(null) },
-        ]}
-        testID="dm-reveal-sheet"
-      />
-      <Sheet
-        visible={!!revealSheet && revealSheet !== 'confirm'}
-        onClose={() => setRevealSheet(null)}
-        icon="image"
-        title="Not yet"
-        body={revealSheet && revealSheet !== 'confirm' ? revealSheet.notYet : undefined}
-        actions={[
-          {
-            label: 'Add a photo',
-            kind: 'strong',
-            onPress: () => {
-              setRevealSheet(null)
-              router.push('/edit-profile')
-            },
-          },
-          { label: 'Close', kind: 'tertiary', onPress: () => setRevealSheet(null) },
-        ]}
-        testID="dm-not-yet"
+        onAddPhoto={() => {
+          setRevealSheet(null)
+          router.push('/edit-profile')
+        }}
       />
     </View>
   )
-}
-
-/** The header's reveal line: an eye (seen) or eye-off and the sentence. */
-function RevealLine({ seen, text }: { seen: boolean; text: string }) {
-  const bold = useBoldText()
-  return (
-    <>
-      <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={COLOR.textSecondary} />
-      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-        {text}
-      </Text>
-    </>
-  )
-}
-
-/** "{name} asked to know who you are", under the bar (Flow 5 DM #02). */
-function NudgeLine({ text }: { text: string }) {
-  const bold = useBoldText()
-  return <Text style={[font('meta', bold), styles.nudge]}>{text}</Text>
 }
 
 const styles = StyleSheet.create({
@@ -905,8 +847,6 @@ const styles = StyleSheet.create({
   centre: { flexGrow: 1, justifyContent: 'center' },
   dock: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: 0 },
   banner: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
-  secondary: { color: COLOR.textSecondary, flexShrink: 1 },
-  nudge: { color: COLOR.textPrimary, textAlign: 'center' },
 })
 
 /*

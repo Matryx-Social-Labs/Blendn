@@ -59,10 +59,14 @@ export function settleDetent(heights: number[], from: number, height: number, dr
   return nearest
 }
 
-export type SheetAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean } & Pick<
-  ButtonProps,
-  'pressHaptic' | 'icon'
->
+export type SheetAction = {
+  label: string
+  onPress: () => void
+  kind?: ButtonKind
+  loading?: boolean
+  disabled?: boolean
+  testID?: string
+} & Pick<ButtonProps, 'pressHaptic' | 'icon'>
 
 export type SheetProps = {
   visible: boolean

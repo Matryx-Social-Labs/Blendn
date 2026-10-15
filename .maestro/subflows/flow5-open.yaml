@@ -1,0 +1,28 @@
+# Flow 5's way in: launch, sign in if the sim is signed out (MAESTRO_EMAIL,
+# MAESTRO_PASSWORD as environment variables — never -e), dismiss the first-run
+# tip, and open the Banter tab.
+appId: com.matryxsociallabs.blendn
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL}
+      PASSWORD: ${MAESTRO_PASSWORD}
+# iOS offers to save the password over the first screen.
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible: "The Pulse"
+    timeout: 60000
+- runFlow: dismiss-tip.yaml
+- tapOn: "Banter"
+- extendedWaitUntil:
+    visible: "Search conversations"
+    timeout: 30000

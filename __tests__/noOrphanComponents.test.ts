@@ -79,7 +79,7 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
   'MomentRecap.tsx': 'redesign P5 moment (#43); replaces components/blendn/RoomRecap.tsx with the Room redesign (Flow 4)',
   /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
-  'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room, adopted when the room renders polls (Flow 15 #8)',
+  'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room — the room says a poll as a notice until a `poll` message carries its poll id (server; docs/CHAT.md) (Flow 15 #8)',
   'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
