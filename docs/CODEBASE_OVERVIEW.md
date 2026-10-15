@@ -133,17 +133,14 @@ blendn/
 │   ├── notifications.ts        # Push notification setup
 │   ├── photoUtils.ts           # Image resize/upload helpers
 │   ├── networkStatus.ts        # Online/offline state
-│   ├── globalText.ts           # Global Text component overrides
 │   ├── logger.ts               # Structured logger
 │   ├── motion.ts               # Animation presets
 │   ├── safetyUtils.ts          # User blocking/safety helpers
 │   ├── supabase.ts             # Supabase client (legacy, largely superseded by apiClient)
 │   ├── time.ts                 # Date/time formatting helpers
 │   ├── typography.ts           # Font scale constants
-│   ├── unread.ts               # Unread count tracking
 │   ├── useInteractionFeedback.ts
-│   ├── useMinimumVisible.ts
-│   └── uxStandards.ts          # UX guideline constants
+│   └── useMinimumVisible.ts
 │
 ├── assets/
 │   ├── fonts/SpaceMono-Regular.ttf
@@ -480,14 +477,11 @@ Easings: `entrance`, `exit`, `standard` (cubic-bezier arrays)
 | `lib/notifications.ts` | Expo push token registration, notification listeners, and deep-link handling from notification taps. |
 | `lib/photoUtils.ts` | Resize images with `expo-image-manipulator`, get presigned S3 URLs, and upload via PUT. |
 | `lib/networkStatus.ts` | Lightweight `isOnline` flag with `markOnline()` / `markOffline()` and subscriber callbacks. |
-| `lib/globalText.ts` | Imported once in `_layout.tsx` — monkey-patches the global `Text` component for font overrides and disables font scaling. |
 | `lib/logger.ts` | `Logger.debug/info/warn/error('module', 'message', data?)` — structured, filterable logging. |
 | `lib/motion.ts` | Animation utility functions wrapping Reanimated (timing helpers, spring configs). |
 | `lib/safetyUtils.ts` | Block/unblock user helpers and blocked-user list management. |
-| `lib/unread.ts` | Unread message/notification count tracking across chat groups and conversations. |
 | `lib/time.ts` | `formatRelativeTime`, `formatEventDate`, and other date helpers. |
 | `lib/typography.ts` | Font size scale constants used across `Typography` component. |
-| `lib/uxStandards.ts` | UX guideline constants (min tap targets, animation thresholds, etc). |
 | `lib/supabase.ts` | Legacy Supabase client — retained but mostly superseded by `apiClient`. |
 
 ---

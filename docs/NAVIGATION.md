@@ -109,8 +109,8 @@ states would be a dead control in the most prominent position on the screen.
 knows about messages, not check-ins, and a check-out can happen on another
 device or from the presence monitor. The other two come from `lib/roomSignal.ts`,
 published by The Pulse out of a fetch it was already making: that screen asks for
-events with a location and gets `distance` back on every one. Same shape as
-`lib/unread.ts`. Deriving them in the bar would mean a second location permission
+events with a location and gets `distance` back on every one. Deriving them in
+the bar would mean a second location permission
 dance and a second copy of the events list on a timer.
 
 **Two unit systems meet here.** `distance` is kilometres and `check_in_radius` is

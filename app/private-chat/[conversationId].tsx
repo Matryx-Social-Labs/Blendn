@@ -56,7 +56,6 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
-import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
 import { initialsOf } from '../../lib/initials'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
@@ -553,9 +552,6 @@ function PrivateChatInner() {
           if (!keptOlder) {
             setHasMore(result.data.hasMore)
             setOldestCursor(result.data.nextCursor)
-          }
-          if (conversationId && !cursor) {
-            setConversationLastRead(String(conversationId)).catch(() => {})
           }
         }
       })

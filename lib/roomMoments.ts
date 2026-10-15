@@ -50,7 +50,7 @@ function shortest(long: string, short: string): string {
 /**
  * One short reason to walk over.
  *
- * The same priority as the Grid card's box (`lib/gridCardContent.ts`) —
+ * The same priority the old Grid card's box used —
  * rarest and most actionable first — with dating ahead of it, because it only
  * appears when the server has already checked that it is mutual and it is the
  * one thing somebody would most want to know before crossing a room.

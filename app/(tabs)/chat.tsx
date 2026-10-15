@@ -54,7 +54,6 @@ import {
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
 import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
-import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -269,7 +268,6 @@ function ChatInner() {
   }, [])
 
   const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
-    setConversationLastRead(chat.conversation_id).catch(() => {})
     if (chat.reveal_requested) {
       setRevealSeen((prev) => new Set(prev).add(chat.conversation_id))
     }
@@ -448,7 +446,6 @@ function ChatInner() {
     const before = personalChats
     const cleared = personalChats.map((c) => ({ ...c, unread_count: 0 }))
     setPersonalChats(cleared)
-    await Promise.all(personalChats.map((c) => setConversationLastRead(c.conversation_id)))
 
     try {
       const result = await apiClient.markAllConversationsRead()
@@ -457,7 +454,6 @@ function ChatInner() {
     } catch (e) {
       Logger.warn('chat', 'mark all read failed', { error: e })
       setPersonalChats(before)
-      syncUnreadCache(before)
       showToast("Couldn't mark your chats as read. Try again.", 'error')
     }
   }, [personalChats, user, showToast])
@@ -623,7 +619,6 @@ function ChatInner() {
         }).filter((conv: PersonalChat) => !!conv.conversation_id)
 
         setPersonalChats(personalChatData)
-        syncUnreadCache(conversations)
         if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
         try {
           const firstScreenUrls = personalChatData

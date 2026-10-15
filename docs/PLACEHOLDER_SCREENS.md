@@ -263,7 +263,7 @@ hint, and a hint does not fit in a chip.
 
 `lib/matchBand.ts` (Strong / Good / Some) was never wired into a screen and has
 been deleted. The card's shared-interest copy is built in
-`lib/gridCardContent.ts` and `components/blendn/PersonCard.tsx`. If a band is
+`components/blendn/PersonCard.tsx`. If a band is
 wanted again, design it first: it should not resemble a score, a percentage or
 a rank, and "Some" must not read as failure.
 
