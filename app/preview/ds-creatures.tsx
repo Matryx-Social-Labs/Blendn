@@ -1,7 +1,8 @@
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Creature, CREATURE_GLYPHS, creatureFor, type CreatureGlyph, VenuePlate } from '../../components/ds'
+import { Creature, CREATURE_GLYPHS, creatureFor, type CreatureGlyph } from '../../components/ds/Creature'
+import { VenuePlate } from '../../components/ds/VenuePlate'
 import { Text } from '../../components/ui/Text'
 import { COLOR, CREATURE_PALETTES, RADIUS, SPACE, VENUE_PLATES } from '../../lib/design/tokens'
 

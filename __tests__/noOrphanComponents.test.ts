@@ -71,14 +71,12 @@ const sources = walk(join(ROOT, 'app'))
   .concat(walk(join(ROOT, 'lib')))
 
 /*
- * Importers that are not a screen: the preview harness, a barrel
- * (`components/ds/index.ts`), and a component on the ledger (`VenuePlate`
- * drawing an `<Icon>` puts no Icon on a screen).
- * ponytail: an import *through* the barrel is not traced either; when a screen
- * adopts a ds component that way, resolve the barrel's re-exports here.
+ * Importers that are not a screen: the preview harness, and a component on the
+ * ledger — `VenuePlate` drawing an `<Icon>` puts no Icon on a screen, and
+ * counting it would read Icon's entry as stale while nothing ships either.
  */
 const nonPreview = sources.filter(
-  (f) => !f.includes(`${'app'}/preview/`) && basename(f) !== 'index.ts' && !Object.hasOwn(KNOWN_ORPHANS, basename(f))
+  (f) => !f.includes(`${'app'}/preview/`) && !Object.hasOwn(KNOWN_ORPHANS, basename(f))
 )
 
 const componentFiles = walk(join(ROOT, 'components')).filter((f) => f.endsWith('.tsx'))

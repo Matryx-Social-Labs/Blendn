@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Svg, { Circle, Path } from 'react-native-svg'
 
@@ -128,22 +129,24 @@ const SECOND_HALF = 'M0 24A24 24 0 0 0 48 24Z'
  *
  * Decorative: the pseudonym beside it ("Cosmic Panda") is what is read out.
  *
+ * Memoised: a room grid or a facepile re-renders only the discs that changed.
+ *
  * ponytail: no Increase Contrast hairline yet, as in <Material>; it comes with
  * the one hook both need.
  */
-export function Creature({
+export const Creature = memo(function Creature({
   glyph,
   palette,
   size = 48,
   ring,
 }: {
   glyph: CreatureGlyph
-  /** 0–7, from `creatureFor`. */
+  /** 0–7, from `creatureFor`; anything else wraps onto one, never throws. */
   palette: number
   size?: number
   ring?: string
 }) {
-  const [a, b] = CREATURE_PALETTES[palette % CREATURE_PALETTES.length]
+  const [a, b] = CREATURE_PALETTES[paletteIndex(palette)]
   return (
     <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {/* A 48 box, so the glyph's 24 at its centre is half the disc and its stroke scales with it. */}
@@ -163,6 +166,12 @@ export function Creature({
       {ring ? <View testID="creature-ring" style={[styles.ring, { borderColor: ring }]} /> : null}
     </View>
   )
+})
+
+/** -1 → 7, 2.7 → 2, NaN → 0: a bad index draws a palette rather than throwing. */
+function paletteIndex(palette: number): number {
+  const n = CREATURE_PALETTES.length
+  return Number.isFinite(palette) ? ((Math.trunc(palette) % n) + n) % n : 0
 }
 
 const styles = StyleSheet.create({

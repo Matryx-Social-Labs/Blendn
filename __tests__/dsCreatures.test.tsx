@@ -3,7 +3,7 @@
  * (2026-10-15): guidelines/creatures/creatures.js (`window.BNC`), and
  * guidelines/components/{Creatures,VenuePlates}.html with sets.js.
  */
-import { fireEvent, render, screen } from '@testing-library/react-native'
+import { render, screen } from '@testing-library/react-native'
 import { createHash } from 'crypto'
 import React from 'react'
 import { processColor, StyleSheet } from 'react-native'
@@ -170,6 +170,21 @@ describe('<Creature>', () => {
     expect(StyleSheet.flatten(screen.getByTestId('creature-ring', HIDDEN).props.style)).toMatchObject({ borderColor: '#0D0C0C', borderWidth: 2 })
   })
 
+  it.each([
+    [-1, 7],
+    [2.7, 2],
+    [8, 0],
+    [NaN, 0],
+    [Infinity, 0],
+  ])('normalises a palette of %p to %i rather than throwing', async (palette, index) => {
+    await render(<Creature glyph="fox" palette={palette} />)
+    expect(all(tree(), 'RNSVGCircle')[0].props.fill).toEqual(paint(CREATURE_PALETTES[index][0]))
+  })
+
+  it('is memoised: a list of discs re-renders only the ones that changed', () => {
+    expect((Creature as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'))
+  })
+
   it('is decorative: the pseudonym beside it is the label', async () => {
     await render(<Creature glyph="panda" palette={1} />)
     expect(tree().props).toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' })
@@ -189,6 +204,9 @@ describe('<VenuePlate>', () => {
     })
   })
 
+  /** The second colour: the half of the plate past its 135° split. */
+  const half = () => (tree().children as Node[])[0]
+
   const glyphOf = async (type: string, size?: number) => {
     await render(<VenuePlate type={type} size={size} />)
     return JSON.stringify(all(tree(), 'RNSVGSvgView').at(-1))
@@ -202,7 +220,7 @@ describe('<VenuePlate>', () => {
     const [a, b] = VENUE_PLATES[type]
     await render(<VenuePlate type={type} size={120} />)
     expect(StyleSheet.flatten(tree().props.style as object)).toMatchObject({ width: 120, height: 120, borderRadius: 24, backgroundColor: a })
-    expect(all(tree(), 'RNSVGRect')[0].props.fill).toEqual(paint(b))
+    expect(StyleSheet.flatten(half().props.style as object)).toMatchObject({ backgroundColor: b })
     expect(await glyphOf(type, 120)).toBe(await icon(VENUE_PLATE_GLYPHS[type], 48))
   })
 
@@ -218,19 +236,27 @@ describe('<VenuePlate>', () => {
     expect(StyleSheet.flatten(tree().props.style as object)).toMatchObject({ backgroundColor: VENUE_PLATES.bar[0] })
   })
 
-  it('fills its parent with no size, splitting at 135° through the centre of the box it gets', async () => {
+  it('fills its parent with no size, split at 135° through its centre from the first frame', async () => {
     await render(<VenuePlate type="liveMusic" />)
     expect(StyleSheet.flatten(tree().props.style as object)).toMatchObject({ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 0 })
-    await fireEvent(screen.getByTestId('venue-plate', HIDDEN), 'layout', { nativeEvent: { layout: { width: 402, height: 220 } } })
-    const rect = all(tree(), 'RNSVGRect')[0]
-    // A half-plane right of the centre, turned 45° about it: x + y > (w + h) / 2, as CSS draws 135deg.
-    expect(rect.props).toMatchObject({ x: 201 })
-    const [cos, sin, , , e, f] = rect.props.matrix as number[]
-    expect(cos).toBeCloseTo(Math.SQRT1_2)
-    expect(sin).toBeCloseTo(Math.SQRT1_2)
-    expect(201 * cos - 110 * sin + e).toBeCloseTo(201)
-    expect(201 * sin + 110 * cos + f).toBeCloseTo(110)
+    // No layout pass: the half-plane right of the centre, turned 45° about the
+    // centre, is x + y > (w + h) / 2 at any aspect, as CSS draws 135deg.
+    expect(StyleSheet.flatten(half().props.style as object)).toMatchObject({
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      transformOrigin: 'left center',
+      transform: [{ rotate: '45deg' }],
+      backgroundColor: VENUE_PLATES.liveMusic[1],
+    })
     expect(await glyphOf('liveMusic')).toBe(await icon('music-2', 48))
+  })
+
+  it('takes a testID, and has none unless given one', async () => {
+    await render(<VenuePlate type="cafe" size={56} />)
+    expect(tree().props.testID).toBeUndefined()
+    await render(<VenuePlate type="cafe" size={56} testID="koshys-art" />)
+    expect(screen.getByTestId('koshys-art', HIDDEN)).toBeTruthy()
   })
 
   it('is decorative: the venue’s name and type are the label', async () => {
