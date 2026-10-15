@@ -942,7 +942,7 @@ export default function EventDetail() {
   }, [eventChatGroupId, eventTitle, id])
 
   // The check-in itself, shared with the Blend'n room's hold-to-check-in.
-  const { checkingIn, pours, pourDone, dismissTray, start: startCheckIn } = useCheckInFlow({
+  const { checkingIn, pours, pourDone, asks, dismissTray, start: startCheckIn } = useCheckInFlow({
     eventId: String(id),
     showTray,
     closeTray,
@@ -1615,7 +1615,7 @@ export default function EventDetail() {
         </View>
       </Modal>
 
-      {pours > 0 ? <MomentPour key={pours} venue={event?.venue_name ?? ''} onDone={pourDone} /> : null}
+      {pours > 0 ? <MomentPour key={pours} venue={event?.venue_name ?? ''} asks={asks} onDone={pourDone} /> : null}
 
       <ActionTray
         visible={trayState.visible}

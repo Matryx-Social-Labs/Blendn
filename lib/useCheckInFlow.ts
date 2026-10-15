@@ -218,7 +218,9 @@ export function useCheckInFlow({
         // not after the pour, so the button turns as it starts.
         onCheckedIn?.(outcome)
         // The pour is the one ceremony (motion #9); it hands off at 700 ms, or
-        // later if the caller holds it for its room.
+        // later if the caller holds it for its room. With a question to ask it
+        // plays out to ASK_AT and hands off once its fade is done, so the
+        // sheet never rises over a pour still on screen.
         await new Promise<void>((handOff) => {
           pourHandedOff.current = handOff
           setPours((n) => n + 1)

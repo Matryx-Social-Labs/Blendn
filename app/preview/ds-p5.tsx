@@ -52,6 +52,7 @@ const PLAYS = [
   'ready',
   'pour',
   'pour-held',
+  'pour-asks',
   'pour-pass',
 ] as const
 
@@ -187,8 +188,8 @@ function Moment({ play, onEnd }: { play: (typeof PLAYS)[number]; onEnd: () => vo
   }
   if (play === 'ready') return <MomentReady testID="ds-moment-ready" name="Sam" onDone={onEnd} />
   // The pour clears itself and lets touches through; the next Play replaces it.
-  // Held: no Room to hand off to yet, so it stays filled until a tap.
-  if (play !== 'pour-pass') return <MomentPour testID="ds-moment-pour" venue="Toit" ready={play !== 'pour-held'} onDone={noop} />
+  // Held: no Room to hand off to yet, so it stays filled until a tap. Asks: a question follows, so it plays out to ASK_AT and clears.
+  if (play !== 'pour-pass') return <MomentPour testID="ds-moment-pour" venue="Toit" ready={play !== 'pour-held'} asks={play === 'pour-asks'} onDone={noop} />
   return <PourInPass />
 }
 

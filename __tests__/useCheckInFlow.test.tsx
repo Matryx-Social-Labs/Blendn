@@ -14,7 +14,8 @@ import { join } from 'path'
 import React from 'react'
 import { AccessibilityInfo } from 'react-native'
 
-import { MomentPour } from '../components/ds/MomentPour'
+import { ASK_AT, MomentPour, ROOM_AT } from '../components/ds/MomentPour'
+import { DURATION } from '../lib/design/tokens'
 import { apiClient } from '../lib/apiClient'
 import { askIntentRoute, intentAnswered, revealOffer, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
@@ -55,7 +56,7 @@ let flow: ReturnType<typeof useCheckInFlow>
 /** A door as the two screens draw one: the hook, and its pour while `pours` is above 0. */
 function Door(props: UseCheckInFlowOptions) {
   flow = useCheckInFlow(props)
-  return flow.pours > 0 ? <MomentPour key={flow.pours} venue="Toit" onDone={flow.pourDone} testID="pour" /> : null
+  return flow.pours > 0 ? <MomentPour key={flow.pours} venue="Toit" asks={flow.asks} onDone={flow.pourDone} testID="pour" /> : null
 }
 
 let props: jest.Mocked<Required<Pick<UseCheckInFlowOptions, 'showTray' | 'closeTray' | 'onCheckedIn' | 'onEnterRoom'>>>
@@ -123,11 +124,28 @@ describe('a check-in', () => {
     expect(success).toHaveBeenCalledTimes(1)
   })
 
-  it('asks "Why do you go out?" after the pour and enters the room only once it is answered', async () => {
+  it('a tap skips to the hand-off before a question too, and the pour still clears before the sheet', async () => {
+    await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    expect(router.push).not.toHaveBeenCalled()
+    await advance(DURATION.base)
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+    expect(success).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks "Why do you go out?" only once the pour has played out and cleared, then the room once it is answered', async () => {
     const { done } = await checkIn(fresh({ askIntent: true }))
     expect(flow.asks).toBe(true)
     expect(router.push).not.toHaveBeenCalled()
-    await advance(700)
+    // Not at the Room's 700 ms: "You're in." is held readable to ASK_AT, then the pour fades.
+    await advance(ROOM_AT)
+    expect(router.push).not.toHaveBeenCalled()
+    await advance(ASK_AT - ROOM_AT)
+    // The fade has started, not finished: the question waits for it.
+    expect(router.push).not.toHaveBeenCalled()
+    await advance(DURATION.base - 1)
+    expect(router.push).not.toHaveBeenCalled()
+    await advance(1)
     expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
     // Flow 4 Tonight #14: the sheet is over the screen the pour cleared onto; the room waits for it.
     await advance(5000)
@@ -138,11 +156,14 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
-  it('offers the reveal after the pour, then the intent, then the room', async () => {
+  it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {
     offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
     const { done } = await checkIn(fresh({ revealSuggestion: true, askIntent: true }))
     expect(props.showTray).not.toHaveBeenCalled()
-    await advance(700)
+    await advance(ASK_AT)
+    await advance(DURATION.base - 1)
+    expect(props.showTray).not.toHaveBeenCalled()
+    await advance(1)
     expect(props.showTray).toHaveBeenCalledTimes(1)
     const [title, , buttons] = props.showTray.mock.calls[0]
     expect(title).toBe('Show who you are?')
@@ -161,7 +182,8 @@ describe('a check-in', () => {
   it('a reveal offer closed from its backdrop is a "no", and the room still comes', async () => {
     offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
     const { done } = await checkIn(fresh({ revealSuggestion: true }))
-    await advance(700)
+    await advance(ASK_AT)
+    await advance(DURATION.base)
     expect(props.showTray).toHaveBeenCalledTimes(1)
     await act(async () => flow.dismissTray())
     await done
@@ -244,6 +266,8 @@ describe('every door is this flow', () => {
       const src = read(file)
       expect(src).toContain('useCheckInFlow({')
       expect(src).toMatch(/<MomentPour[^>]*key=\{(checkIn\.)?pours\}[^>]*onDone=\{(checkIn\.)?pourDone\}/)
+      // Without it a question comes up over a pour still on screen (the bug ASK_AT fixed).
+      expect(src).toMatch(/<MomentPour[^>]*asks=\{(checkIn\.)?asks\}/)
       expect(src).toMatch(/onClose=\{(checkIn\.)?dismissTray\}/)
     }
   )
