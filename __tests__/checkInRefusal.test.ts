@@ -113,14 +113,11 @@ describe("the screen consults the code, not the sentence", () => {
     }
   })
 
-  // The event screen's refusal tray lives in `lib/useCheckInFlow.ts`; the
-  // screen supplies the map through `onOpenMaps`.
-  it.each(["lib/useCheckInFlow.ts", "app/(tabs)/events.tsx"])(
-    "%s keeps Open Maps behind the refusal that a map can fix",
-    (file) => {
-      expect(read(file)).toContain("refusal.offerDirections")
-    }
-  )
+  // Every door's refusal tray lives in `lib/useCheckInFlow.ts`; the screen
+  // supplies the map through `onOpenMaps`.
+  it("keeps Open Maps behind the refusal that a map can fix", () => {
+    expect(read("lib/useCheckInFlow.ts")).toContain("refusal.offerDirections")
+  })
 
   it("the event screen gives the shared flow its map", () => {
     expect(read("components/screens/EventDetailScreen.tsx")).toContain("onOpenMaps: openInMaps")

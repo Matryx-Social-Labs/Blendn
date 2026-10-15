@@ -4,7 +4,6 @@ import FadeInUp from '../motion/FadeInUp'
 import { H } from '../../lib/haptics'
 import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
 import { HeartIcon } from '../motion/HeartIcon'
-import { ConfettiBurst } from '../motion/ConfettiBurst'
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -36,6 +35,7 @@ import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { featuredDateLabel, timeLabel as pulseTimeLabel } from '../../lib/pulse'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
+import { MomentPour } from '../ds/MomentPour'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
@@ -936,12 +936,13 @@ export default function EventDetail() {
   }, [eventChatGroupId, eventTitle, id])
 
   // The check-in itself, shared with the Blend'n room's hold-to-check-in.
-  const { checkingIn, celebrations, start: startCheckIn } = useCheckInFlow({
+  const { checkingIn, pours, pourDone, start: startCheckIn } = useCheckInFlow({
     eventId: String(id),
     showTray,
     closeTray,
     onLocated: setUserLocation,
     onOpenMaps: openInMaps,
+    // Where the pour hands off: this screen is not the room, its chat is.
     onOpenChat: openEventChat,
     // Update check-in status directly - no need for another API call
     onCheckedIn: (outcome) =>
@@ -1608,12 +1609,7 @@ export default function EventDetail() {
         </View>
       </Modal>
 
-      {/* Out of the CTA pill: the dock's bottom padding, then half the pill. */}
-      <ConfettiBurst
-        trigger={celebrations}
-        originBottom={insets.bottom + SPACE.lg + SCENE_CTA_HEIGHT / 2}
-        originWidth={200}
-      />
+      {pours > 0 ? <MomentPour key={pours} venue={event?.venue_name ?? ''} onDone={pourDone} /> : null}
 
       <ActionTray
         visible={trayState.visible}
