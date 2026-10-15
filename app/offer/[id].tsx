@@ -105,17 +105,21 @@ export default function OfferScreen() {
       .catch(() => {})
   }, [venueId])
 
-  const sayYes = async () => {
+  const savePrefs = async (body: Parameters<typeof offersApi.setPrefs>[1], saved?: string) => {
     if (!venueId || saving) return
     setSaving(true)
     try {
-      const res = await offersApi.setPrefs(venueId, { known: true })
-      if (res.success && res.data) setPrefs(res.data)
-      else showToast(res.error || "That didn't save. Try again.", 'error')
+      const res = await offersApi.setPrefs(venueId, body)
+      if (res.success && res.data) {
+        setPrefs(res.data)
+        if (saved) showToast(saved, 'success')
+      } else showToast(res.error || "That didn't save. Try again.", 'error')
     } finally {
       setSaving(false)
     }
   }
+
+  const sayYes = () => savePrefs({ known: true })
 
   const maybeLater = () => {
     setLater(true)
@@ -123,19 +127,11 @@ export default function OfferScreen() {
   }
 
   // "Stop offers from <place>", beside the pass (review M6): the same switch as on the place's page.
-  const stopOffers = async () => {
-    if (!venueId || saving) return
-    setSaving(true)
-    try {
-      const res = await offersApi.setPrefs(venueId, { offersMuted: true })
-      if (res.success && res.data) {
-        setPrefs(res.data)
-        showToast(`No more offers from ${offer?.venue.name ?? 'this place'}. Turn them back on from its page.`, 'success')
-      } else showToast(res.error || "That didn't save. Try again.", 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const stopOffers = () =>
+    savePrefs(
+      { offersMuted: true },
+      `No more offers from ${offer?.venue.name ?? 'this place'}. Turn them back on from its page.`
+    )
 
   const report = async (reason: OfferReportReason) => {
     setReporting(false)

@@ -38,8 +38,8 @@ import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
-import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
-import { addToCalendar as addEventToCalendar } from '../../lib/calendar'
+import { openInMaps } from '../../lib/openInMaps'
+import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
@@ -240,17 +240,11 @@ function GoingScreenInner() {
     })
   }, [events, restoreRow, showToast])
 
-  const openInMaps = useCallback((event: EventRow) => {
-    void openPlaceInMaps(event)
-  }, [])
-
   const shareEvent = useCallback(async (event: EventRow) => {
     try {
       await Share.share({ title: event.title, message: `${event.title}\n${event.venue_name}\n${event.address}` })
     } catch {}
   }, [])
-
-  const addToCalendar = useCallback((event: EventRow) => addEventToCalendar(event), [])
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
@@ -333,7 +327,7 @@ function GoingScreenInner() {
             style={[styles.heroAction, styles.heroActionWide]}
             pressedScale={0.95}
             haptic={false}
-            onPress={() => openInMaps(row)}
+            onPress={() => void openInMaps(row)}
             accessibilityRole="button"
             accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
           >
@@ -363,7 +357,7 @@ function GoingScreenInner() {
         </View>
       </View>
     )
-  }, [addToCalendar, openEvent, openInMaps, refreshCount, shareEvent])
+  }, [openEvent, refreshCount, shareEvent])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
