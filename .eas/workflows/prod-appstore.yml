@@ -23,10 +23,10 @@
 # "How long a build actually takes" in docs/RELEASING.md.
 
 # Satoshi: these builds check out from GitHub, where the gitignored Satoshi
-# fonts never are (ITF licence, public repo), so `eas-build-pre-install`
-# (scripts/check-satoshi.sh) stops each build in its first minute with
-# "Satoshi fonts missing". Until the owner decides how a cloud build may get
-# them, ship from a Mac: docs/RELEASING.md, "Satoshi".
+# fonts never are (ITF licence, public repo). `eas-build-pre-install`
+# (scripts/check-satoshi.sh) restores them from the SATOSHI_FONTS_PART_*
+# secret files, or stops the build in its first minute with "Satoshi fonts
+# missing". docs/RELEASING.md, "Satoshi".
 
 name: prod -> App Store Connect + Play (draft)
 

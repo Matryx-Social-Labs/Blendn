@@ -93,19 +93,54 @@ mkdir -p assets/fonts/satoshi
 cp <export>/uploads/Satoshi_Complete/Fonts/OTF/Satoshi-{Regular,Medium,Bold,Black}.otf assets/fonts/satoshi/
 ```
 
-Without them a build stops in its first minute: `scripts/check-satoshi.sh`
-runs as EAS's `eas-build-pre-install` hook and in `npm run ship:local`'s
-guards, and names the missing files. (Development-client builds are let
-through: they embed no bundle.) `npm test`, typecheck and lint do not need the
-fonts — Jest maps them to a stub — so the GitHub `verify` check is unaffected.
+`npm test`, typecheck and lint do not need the fonts — Jest maps them to a
+stub — so the GitHub `verify` check is unaffected.
 
-**Which builds get them, and which cannot:**
+**Every build gets them, or stops in its first minute.** `scripts/check-satoshi.sh`
+runs as EAS's `eas-build-pre-install` hook and in `npm run ship:local`'s guards.
+If the four files are not in `assets/fonts/satoshi/` it restores them from the
+EAS secrets below; if it cannot, it fails with "Satoshi fonts missing — see
+docs/RELEASING.md" and the files it could not find. (A development-client build
+is let through without them: it embeds no bundle.)
 
-| Build | Satoshi |
+| Build | Where Satoshi comes from |
 |---|---|
-| `eas build --local`, `npm run ship:local` | Yes, from this checkout. EAS copies the project by `.gitignore` unless `.easignore` exists; `.easignore` is the root and nested (`ios/`, `android/`) `.gitignore` rules minus the Satoshi line, and `fonts.test.ts` fails if they drift. `ship:local`'s iOS smoke test copies the folder into its fresh worktree |
-| `eas build` run from a machine that has them | Yes: a CLI upload goes by `.easignore` the same way |
-| The EAS workflows (`stage-testflight.yml`, `prod-appstore.yml`) | **No.** They check out from GitHub, where the fonts never are, and `.easignore` plays no part. They fail at the pre-install check with the message above. Feeding them the fonts (an EAS secret file, say) is a licence decision the owner has not made; until then, ship from a Mac |
+| `eas build --local`, `npm run ship:local` | This checkout. EAS copies the project by `.gitignore` unless `.easignore` exists; `.easignore` is the root and nested (`ios/`, `android/`) `.gitignore` rules minus the Satoshi line, and `fonts.test.ts` fails if they drift. Local builds are not given secret variables, so this is the only way. `ship:local`'s iOS smoke test copies the folder into its fresh worktree |
+| `eas build` run from a machine that has them | The upload, the same way |
+| The EAS workflows (`stage-testflight.yml`, `prod-appstore.yml`), any build from GitHub | The **`SATOSHI_FONTS_PART_1` … `_4`** secrets |
+
+**The secrets.** `SATOSHI_FONTS_PART_1` to `_4` are EAS project variables, type
+file, visibility **secret** (no UI or CLI can read them back; only an EAS builder
+can), in `production`, `preview` and `development`. Together they are one
+gzipped tar of the four unmodified OTFs, split into 32,000-byte pieces because
+EAS refuses a secret file over 32 KiB. The hook joins them in order, refuses an
+archive that does not check out whole (a part missing or stale), and extracts
+only the four named files. The owner decided cloud builds may carry the fonts
+this way (2026-10-15); it never puts them anywhere public.
+
+**Rotating them** (a new Satoshi release, or the parts changing count) — from a
+checkout with the export at hand, never in a shared or synced folder:
+
+```bash
+umask 077; T=$(mktemp -d)
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs --format ustar -czf "$T/satoshi.tar.gz" \
+  -C <export>/uploads/Satoshi_Complete/Fonts/OTF \
+  Satoshi-Regular.otf Satoshi-Medium.otf Satoshi-Bold.otf Satoshi-Black.otf
+(cd "$T" && split -b 32000 satoshi.tar.gz part_)
+i=1; for part in "$T"/part_*; do
+  npx eas-cli env:set --name "SATOSHI_FONTS_PART_$i" --value "$part" --type file --visibility secret \
+    --environment production --environment preview --environment development --non-interactive
+  i=$((i + 1))
+done
+rm -rf "$T"
+```
+
+If there are now fewer parts than before, delete the leftovers
+(`npx eas-cli env:delete production --variable-name SATOSHI_FONTS_PART_5`, and
+the same for `preview` and `development`): a stale extra part makes the hook
+refuse the archive. Rehearse the hook without a build: move the folder aside,
+point `SATOSHI_FONTS_PART_*` at the parts, run `bash scripts/check-satoshi.sh`,
+and compare checksums with the export.
 
 Geist Mono is OFL and comes from npm.
 
